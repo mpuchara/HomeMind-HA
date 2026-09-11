@@ -1,4 +1,4 @@
-ARG BUILD_VERSION=0.6.0
+ARG BUILD_VERSION=0.7.2
 ARG BUILD_ARCH=amd64
 FROM python:3.13-alpine
 
@@ -11,15 +11,14 @@ LABEL \
   io.hass.arch="${BUILD_ARCH}"
 
 WORKDIR /app
-COPY rootfs/app/ /app/
-RUN if ls /app/main.py.gz.b64.part* >/dev/null 2>&1; then \
-      cat /app/main.py.gz.b64.part* | base64 -d > /tmp/main.py.gz \
-      && gunzip -c /tmp/main.py.gz > /app/main.py; \
-    elif [ -f /app/main.py.gz ]; then \
-      gunzip -f /app/main.py.gz; \
-    fi \
+COPY runtime.zip.b64.part* /tmp/adaptive-runtime/
+RUN cat /tmp/adaptive-runtime/runtime.zip.b64.part* | base64 -d > /tmp/runtime.zip \
+    && python -c "import zipfile; zipfile.ZipFile('/tmp/runtime.zip').extractall('/tmp/runtime')" \
+    && cp -R /tmp/runtime/rootfs/app/. /app/ \
+    && python -m py_compile /app/main.py /app/control.py \
     && pip install --no-cache-dir websockets==15.0.1 \
-    && chmod +x /app/run.sh
+    && chmod +x /app/run.sh \
+    && rm -rf /tmp/runtime.zip /tmp/runtime /tmp/adaptive-runtime
 
 EXPOSE 8099
 CMD ["/app/run.sh"]

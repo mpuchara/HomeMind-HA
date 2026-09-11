@@ -1,5 +1,5 @@
 name: "Adaptive AI"
-version: "0.6.0"
+version: "0.7.2"
 slug: "adaptive_ai"
 description: >-
   History-first local reinforcement-learning policies for Home Assistant. Imports
