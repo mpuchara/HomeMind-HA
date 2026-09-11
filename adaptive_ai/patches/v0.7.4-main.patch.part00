@@ -1,0 +1,176 @@
+--- main.py
++++ main.py
+@@ -27,9 +27,9 @@
+ except Exception:
+     ws_connect = None
+ 
+-APP_VERSION = "0.7.3"
++APP_VERSION = "0.7.4"
+ HISTORY_BOOTSTRAP_REVISION = "target-attrs-v2"
+-TRAINING_REVISION = "local-trigger-causal-replay-v8"
++TRAINING_REVISION = "non-actuator-context-v9"
+ DATA_DIR = Path(os.environ.get("ADAPTIVE_AI_DATA", "/data"))
+ DB_PATH = DATA_DIR / "adaptive_ai.db"
+ OPTIONS_PATH = DATA_DIR / "options.json"
+@@ -1075,23 +1075,18 @@
+ def context_scalar(entity_id, state, agent=None):
+     """Scalar used in an explicit entity slot.
+ 
+-    For the controlled entity, represent the controlled property itself (brightness,
+-    setpoint, cover position, etc.) instead of only the HA domain state such as ``on``
+-    or ``heat``. This makes the policy aware of its current actuator position and its
+-    temporal deltas. Other entities use their HA state, which is also what the imported
+-    low-impact Recorder context contains reliably.
++    v0.7.4 never feeds a directly controllable Home Assistant entity into an agent.
++    This is a hard safety guard in addition to context selection, so an old/stale schema
++    cannot accidentally reintroduce another actuator as an input. Device-sibling entities
++    are filtered by the Entity Registry in ``controllable_context_exclusions``.
+     """
+     if state is None:
+         return None
+-    if agent and entity_id == agent.get("target_entity"):
+-        try:
+-            value = target_value(state, agent.get("target_property"))
+-            if value is not None:
+-                lo = float(agent.get("min_value", 0.0)); hi = float(agent.get("max_value", 1.0))
+-                if hi > lo:
+-                    return clamp(2.0 * (float(value) - lo) / (hi - lo) - 1.0, -1.0, 1.0)
+-        except Exception:
+-            pass
++    try:
++        if target_options_for_state(state):
++            return None
++    except Exception:
++        pass
+     return state_scalar(state)
+ 
+ 
+@@ -1149,6 +1144,43 @@
+     }
+ 
+ 
++def controllable_context_exclusions(state_map, registry):
++    """Return all context entities that belong to currently controllable devices.
++
++    The exclusion is intentionally global: if any entity is a supported control target,
++    that entity and every Entity Registry sibling on the same physical device are removed
++    from the candidate input pool of *every* agent. Device-less HA helpers are excluded
++    directly when they are controllable. This prevents policies from learning actuator-to-
++    actuator shortcuts (for example one light predicting another light) instead of causal
++    environmental signals.
++    """
++    registry = registry or {}
++    controllable_entities = set()
++    controllable_devices = set()
++    for eid, st in (state_map or {}).items():
++        try:
++            is_controllable = bool(target_options_for_state(st))
++        except Exception:
++            is_controllable = False
++        if not is_controllable:
++            continue
++        controllable_entities.add(eid)
++        device_id = (registry.get(eid) or {}).get("device_id")
++        if device_id:
++            controllable_devices.add(device_id)
++
++    excluded = set(controllable_entities)
++    if controllable_devices:
++        for eid, reg in registry.items():
++            if (reg or {}).get("device_id") in controllable_devices:
++                excluded.add(eid)
++    return excluded, {
++        "detected_controllable_entities": len(controllable_entities),
++        "detected_controllable_devices": len(controllable_devices),
++        "excluded_controllable_context_entities": len(excluded),
++    }
++
++
+ def select_context_entities(agent, state_map, registry, hint_entities, max_entities=None, relevance_scores=None):
+     """Select explicit context while reserving local sensors for fast devices.
+ 
+@@ -1165,6 +1197,7 @@
+     need_caps = {x[0] for x in SENSOR_NEEDS.get(domain, [])}
+     hints = set(hint_entities or ())
+     requested = set(agent.get("input_entities") or ["*"])
++    excluded_control_entities, exclusion_meta = controllable_context_exclusions(state_map, registry)
+     limit_by_dims = max(4, (int(OPTIONS.get("feature_dimensions", 128)) - 9) // 4)
+     limit = min(int(max_entities or OPTIONS.get("max_context_entities", 28)), limit_by_dims)
+     fast = is_fast_reactive_agent(agent)
+@@ -1174,6 +1207,8 @@
+         if "*" not in requested and eid not in requested:
+             continue
+         edomain = eid.split(".", 1)[0]
++        if eid in excluded_control_entities:
++            continue
+         if edomain not in CONTEXT_DOMAINS:
+             continue
+         if parse_state_value(st) is None:
+@@ -1242,10 +1277,11 @@
+         "primary_local_sensor": primary_local[0] if primary_local else None,
+         "upstream_sensors": upstream[:8],
+         "fast_local_profile": bool(fast),
++        **exclusion_meta,
+     }
+ 
+ class ExplicitFeatureSchema:
+-    VERSION = 5
++    VERSION = 6
+     def __init__(self, dims, entities):
+         self.dims = int(dims)
+         self.entities = list(entities)
+@@ -1377,7 +1413,7 @@
+         return None
+ 
+ 
+-def build_explicit_features(schema, state_map, temporal, at_ts=None, agent=None):
++def build_explicit_features(schema, state_map, temporal, at_ts=None, agent=None, excluded_entities=None):
+     at_ts = float(at_ts if at_ts is not None else now_ts())
+     dt = datetime.fromtimestamp(at_ts).astimezone()
+     hour = dt.hour + dt.minute / 60 + dt.second / 3600
+@@ -1396,9 +1432,10 @@
+     base_values = {}
+     idx = 5
+     usable = 0
++    excluded_entities = set(excluded_entities or ())
+     for eid in schema.entities:
+         st = state_map.get(eid)
+-        cur = context_scalar(eid, st, agent) if st else None
++        cur = None if eid in excluded_entities else (context_scalar(eid, st, agent) if st else None)
+         if cur is None:
+             cur = 0.0
+         else:
+@@ -1408,13 +1445,19 @@
+         short_s = float(OPTIONS.get("fast_temporal_short_seconds", 2)) if sharp else default_short_s
+         long_s = float(OPTIONS.get("fast_temporal_long_seconds", 12)) if sharp else default_long_s
+         recent_tau = float(OPTIONS.get("fast_recent_change_seconds", 3)) if sharp else max(30.0, long_s)
+-        short_st = temporal.previous(eid, at_ts - short_s) if temporal else None
+-        long_st = temporal.previous(eid, at_ts - long_s) if temporal else None
+-        short_v = context_scalar(eid, short_st, agent) if short_st else cur
+-        long_v = context_scalar(eid, long_st, agent) if long_st else cur
+-        changed_ts = temporal.last_change_ts(eid, st) if temporal else parse_ts((st or {}).get("last_changed"))
+-        age = max(0.0, at_ts - float(changed_ts)) if changed_ts else 86400.0
+-        recent = math.exp(-age / max(0.25, recent_tau))
++        if eid in excluded_entities:
++            short_st = long_st = None
++            short_v = long_v = cur
++            changed_ts = None
++            recent = 0.0
++        else:
++            short_st = temporal.previous(eid, at_ts - short_s) if temporal else None
++            long_st = temporal.previous(eid, at_ts - long_s) if temporal else None
++            short_v = context_scalar(eid, short_st, agent) if short_st else cur
++            long_v = context_scalar(eid, long_st, agent) if long_st else cur
++            changed_ts = temporal.last_change_ts(eid, st) if temporal else parse_ts((st or {}).get("last_changed"))
++            age = max(0.0, at_ts - float(changed_ts)) if changed_ts else 86400.0
++            recent = math.exp(-age / max(0.25, recent_tau))
+         vals = (cur, cur - (short_v if short_v is not None else cur), cur - (long_v if long_v is not None else cur), recent)
+         base_values[eid] = cur
+         if agent and eid == agent.get("target_entity"):
+@@ -1437,7 +1480,10 @@
+             idx += 1
+         if idx >= schema.dims:
+             break
+-    return vec, labels, {"usable_entities": usable, "selected_entities": len(schema.entities), "dimensions": schema.dims}
++    return vec, labels, {
++        "usable_entities"
