@@ -1,38 +1,72 @@
 # Adaptive AI v0.6.0
 
-Adaptive AI is a Home Assistant App that learns local desired-state policies from Home Assistant history and live reward. It calls Home Assistant services directly; it does not generate YAML automations.
+Adaptive AI is an experimental Home Assistant App that learns local control policies from Home Assistant history and live feedback, then acts directly through HA service calls. It does not generate YAML automations.
 
-## v0.6: reactive desired-state RL
+## v0.6: reactive 1-second control
 
-The goal is **not** to predict a light change 30–60 seconds in advance. The goal is to react to a precursor event (presence, motion, lux, door, media state, etc.) fast enough that the desired device state is applied roughly **one second before a person would normally act manually**.
+The default interaction horizon is now **~1 second**. The goal is not to guess that someone will enter a room tens of seconds in advance. The goal is:
 
-The runtime subscribes to Home Assistant `state_changed` events and evaluates agents after a short 75 ms debounce. Historical learning uses the environmental context at the action boundary; the controlled actuator itself is excluded from policy inputs.
+```text
+occupancy / motion / other precursor changes
+                ↓
+Home Assistant WebSocket event
+                ↓
+Adaptive AI inference (~75 ms debounce)
+                ↓
+desired state
+                ↓
+HA service call
+```
 
-## Calibrated confidence
+For example, when occupancy becomes `ON`, the lighting agent should have a chance to turn the light on before the user reaches for the switch.
 
-v0.6 fixes the problem where a policy could show 80–90% confidence while making obviously wrong desired-state predictions. Confidence is now capped by chronological, pre-update validation on historical accepted dwells. Validation is action-specific, so an agent that is good at predicting OFF but poor at ON cannot borrow confidence from the easier action.
+## Confidence is now calibrated
 
-The UI exposes:
+A large Q-value margin is no longer enough to show high confidence. During policy rebuild, the newest part of local history is held out chronologically and used as a backtest before those samples are folded into final training.
 
-- **Confidence** — conservative calibrated confidence used by Control.
-- **Validation** — empirical historical hit rate and sample count for the currently desired action.
-- **Support** — amount/similarity of historical evidence.
-- **Novelty** — how unfamiliar the current context is.
+The UI therefore separates:
 
-A mathematically certain model with poor validation remains low-confidence.
+- **Calibrated confidence** — capped by held-out reliability.
+- **Structural confidence** — certainty of the linear RL model itself.
+- **Held-out accuracy** and sample count.
+- **Historical support** and **context novelty**.
 
-## Context representation
+A policy that is systematically wrong on recent unseen history should not be able to display 90% confidence.
 
-All usable HA entities remain candidates. Each agent selects up to 28 relevant entities using automation structure, Entity Registry relations, expected sensor classes, semantic locality and historical precursor timing. Selected entities get explicit temporal features (current value, ~1 minute delta, ~5 minute delta and time since change) in a 128-dimensional collision-free vector.
+## Desired-state learning
+
+The controlled actuator itself is excluded from policy inputs. Stable accepted states reinforce the desired state rather than only teaching the next transition.
+
+Historical reward is domain-aware. A light that stays on for 15 seconds is not considered a failed action merely because it changed within the old 90-second correction window. Strong negative historical evidence is primarily a rapid explicit user correction of an automatic/external action.
+
+Binary/categorical context is centred (`ON=+1`, `OFF=-1`) so presence and motion transitions are strong signals rather than tiny numeric differences.
+
+Manual historical actions use roughly one-second precursor context. Actions produced by existing Home Assistant automations use event-time context, because an immediate automation may react to the same presence/motion event that the agent should learn from.
+
+## Context
+
+Every usable HA entity remains a candidate. Each agent selects a compact relevant subset from the whole installation using:
+
+- automation trigger/condition structure,
+- Entity Registry area/device relationships,
+- sensor capability fit,
+- semantic locality,
+- historical precursor timing.
+
+The live model uses 128 explicit dimensions with current value, temporal deltas, recency and selected interactions.
 
 ## Safety
 
-Auto-created agents start in **Shadow**. Existing automation conflicts are shown and Control is blocked by default while enabled HA automations still target the same entity. Micro-exploration is OFF by default.
+Auto-created agents start in **Shadow**. Control is gated by calibrated confidence, historical support and context novelty. Existing HA automations that target the same entity are shown as conflicts and block Control by default.
+
+Use **Verify control** to confirm that an agent can reach the target through the same Home Assistant service path used by live Control.
 
 ## Install
 
-Add this repository in **Settings → Apps → App Store → Repositories**:
+1. Open **Settings → Apps → App Store** in Home Assistant.
+2. Add repository: `https://github.com/mpuchara/HomeMind-HA`
+3. Refresh the App Store.
+4. Install or update **Adaptive AI**.
+5. Start the App and optionally enable **Show in sidebar**.
 
-`https://github.com/mpuchara/HomeMind-HA`
-
-Then install **Adaptive AI**. When upgrading, update in place and keep `/data` to preserve the long-term local archive.
+When upgrading, update in place. **Do not uninstall the App or delete `/data`** if you want to preserve the long-term local history archive.
