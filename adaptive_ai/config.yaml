@@ -1,5 +1,5 @@
 name: "Adaptive AI"
-version: "0.5.2"
+version: "0.6.0"
 slug: "adaptive_ai"
 description: >-
   History-first local reinforcement-learning policies for Home Assistant. Imports
@@ -20,9 +20,9 @@ backup: hot
 options:
   poll_seconds: 30
   proactive_tick_seconds: 1
-  realtime_inference_debounce_ms: 150
-  prediction_lead_seconds: 20
-  prediction_horizons_seconds: "5,15,30,60"
+  realtime_inference_debounce_ms: 75
+  prediction_lead_seconds: 1
+  prediction_horizons_seconds: "1"
   correction_window_seconds: 90
   reward_window_seconds: 90
   feature_dimensions: 128
@@ -31,6 +31,8 @@ options:
   temporal_long_seconds: 300
   min_historical_support: 0.20
   max_context_novelty: 0.85
+  confidence_validation_fraction: 0.20
+  confidence_min_validation_samples: 12
   block_control_on_automation_conflict: true
   action_bins: 31
   rl_alpha: 0.65
@@ -64,6 +66,8 @@ schema:
   temporal_long_seconds: "int(30,3600)"
   min_historical_support: "float(0.0,1.0)"
   max_context_novelty: "float(0.0,1.0)"
+  confidence_validation_fraction: "float(0.05,0.40)"
+  confidence_min_validation_samples: "int(4,100)"
   block_control_on_automation_conflict: "bool"
   action_bins: "int(5,61)"
   rl_alpha: "float(0.05,2.0)"

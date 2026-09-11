@@ -1,61 +1,38 @@
-# Adaptive AI v0.5.2
+# Adaptive AI v0.6.0
 
-> **v0.5.2 desired-state fix:** the controlled actuator value is no longer used as a policy input. Offline replay trains both anticipatory transition contexts and a bounded set of stable-dwell contexts, so a light that is correctly ON in an occupied room reinforces ON rather than making ON look like a precursor to the next OFF transition.
+Adaptive AI is a Home Assistant App that learns local desired-state policies from Home Assistant history and live reward. It calls Home Assistant services directly; it does not generate YAML automations.
 
-Adaptive AI is a Home Assistant App that learns local device-control policies from Home Assistant history and live rewards. It acts directly through Home Assistant service calls; it does not generate YAML automations.
+## v0.6: reactive desired-state RL
 
-## v0.5: selective temporal multi-horizon RL
+The goal is **not** to predict a light change 30–60 seconds in advance. The goal is to react to a precursor event (presence, motion, lux, door, media state, etc.) fast enough that the desired device state is applied roughly **one second before a person would normally act manually**.
 
-v0.5 replaces the old 192-bucket whole-home feature hash with a smaller **128-dimensional explicit context** built separately for every agent.
+The runtime subscribes to Home Assistant `state_changed` events and evaluates agents after a short 75 ms debounce. Historical learning uses the environmental context at the action boundary; the controlled actuator itself is excluded from policy inputs.
 
-1. Every usable Home Assistant entity is still considered as a context candidate.
-2. Each agent selects up to 28 relevant entities using automation structure, Entity Registry area/device relationships, expected sensor classes, semantic locality and historical precursor timing.
-3. Selected entities get explicit temporal features: current value, ~1 minute delta, ~5 minute delta and time since the last change.
-4. The controlled actuator itself is excluded from policy context to avoid target leakage; its current value is used only when deciding whether the desired state requires a Home Assistant service call.
-5. A small set of interaction features captures common combinations without a heavyweight neural network.
-6. Separate contextual-RL heads learn several prediction horizons (default 5, 15, 30 and 60 seconds; slower targets automatically add 120 s, 300 s and/or 900 s horizons).
-7. Control is gated by **confidence + historical support + context novelty**, not confidence alone.
+## Calibrated confidence
 
-Existing `/data/adaptive_ai.db` history is reused. Upgrading from v0.4.x rebuilds policies from the local archive and does **not** repeat the full 10-day Recorder import.
+v0.6 fixes the problem where a policy could show 80–90% confidence while making obviously wrong desired-state predictions. Confidence is now capped by chronological, pre-update validation on historical accepted dwells. Validation is action-specific, so an agent that is good at predicting OFF but poor at ON cannot borrow confidence from the easier action.
 
-## Why this is better than 192 hashed dimensions
+The UI exposes:
 
-The previous hash bounded memory use but unrelated entities could collide in the same bucket. In v0.5, feature slots have explicit meanings and are agent-specific, so `Current learned influences` becomes readable and cross-entity hash collisions disappear.
+- **Confidence** — conservative calibrated confidence used by Control.
+- **Validation** — empirical historical hit rate and sample count for the currently desired action.
+- **Support** — amount/similarity of historical evidence.
+- **Novelty** — how unfamiliar the current context is.
 
-The vector is smaller because the relevance selector removes unrelated context before inference. With hundreds of HA entities, an agent can still consider the whole home when choosing candidates, while the live policy typically operates on only a few dozen meaningful signals.
+A mathematically certain model with poor validation remains low-confidence.
 
-## Predictive behavior
+## Context representation
 
-Historical actions are replayed against the state that existed *before* the action for each horizon. A 15-second head therefore learns which context tends to precede an accepted action by about 15 seconds, while an HVAC head can learn much longer lead times.
-
-Stable dwell periods are also sampled during offline replay. This teaches the policy that a state which remained accepted for a meaningful period is itself evidence of a desirable state, rather than treating every current state merely as a precursor to the opposite transition.
-
-This does not guarantee that every manual action is predictable. The UI shows the currently selected prediction horizon so the behavior can be evaluated in Shadow first.
-
-## Support and novelty
-
-A high model score is not enough for Control:
-
-- **Confidence** — certainty of the policy decision.
-- **Support** — how much comparable historical evidence exists for the current context/action.
-- **Novelty** — how unfamiliar the current context is compared with contexts observed during learning.
-
-Defaults require support >= 20% and novelty <= 85%, in addition to the per-agent confidence threshold.
-
-## Sensor recommendations
-
-Recommendations are based on the context actually selected by a given agent, rather than on whether a sensor class exists somewhere else in the house. This makes suggestions such as illuminance, occupancy, CO2 or window sensing more useful for the target being controlled.
+All usable HA entities remain candidates. Each agent selects up to 28 relevant entities using automation structure, Entity Registry relations, expected sensor classes, semantic locality and historical precursor timing. Selected entities get explicit temporal features (current value, ~1 minute delta, ~5 minute delta and time since change) in a 128-dimensional collision-free vector.
 
 ## Safety
 
-Auto-created agents remain in **Shadow**. Micro-exploration remains OFF by default. Existing automation conflicts are shown before Control. Control diagnostics report ACTED / HOLD / BLOCKED / WAITING / ERROR and the exact Home Assistant service path used.
+Auto-created agents start in **Shadow**. Existing automation conflicts are shown and Control is blocked by default while enabled HA automations still target the same entity. Micro-exploration is OFF by default.
 
-## Install in Home Assistant
+## Install
 
-1. Open **Settings → Apps → App Store**.
-2. Open the repositories menu and add this repository URL: `https://github.com/mpuchara/HomeMind-HA`.
-3. Refresh the App Store.
-4. Install **Adaptive AI**.
-5. Start the App and enable **Show in sidebar**.
+Add this repository in **Settings → Apps → App Store → Repositories**:
 
-When upgrading, update the App in place. **Do not uninstall it and do not delete `/data`** if you want to preserve the local history archive and learned policies.
+`https://github.com/mpuchara/HomeMind-HA`
+
+Then install **Adaptive AI**. When upgrading, update in place and keep `/data` to preserve the long-term local archive.

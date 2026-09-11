@@ -1,70 +1,38 @@
-# Adaptive AI v0.5 architecture
+# Adaptive AI v0.6 architecture
 
 ```text
-Home Assistant entities (whole-home candidate pool)
-                 │
-                 ├── Entity Registry / area / device relation
-                 ├── existing automation trigger/condition hints
-                 ├── target-domain sensor needs
-                 └── historical precursor timing
-                 ↓
-        per-agent relevance selector
-                 ↓
-      up to 28 explicit HA entities
-                 ↓
- current value + Δ1m + Δ5m + change recency
- + small interactions (controlled actuator excluded)
-                 ↓
-       128 explicit dimensions
-                 ↓
-   multi-horizon contextual RL ensemble
-  5s / 15s / 30s / 60s (+ slower heads)
-                 ↓
- confidence + historical support + novelty
-                 ↓
-       Shadow / guarded direct Control
-                 ↓
-          Home Assistant service call
-                 ↓
- user correction / accepted outcome → reward
+Home Assistant state_changed event
+            │
+            ├── presence / motion / lux / door / media / weather / ...
+            ▼
+      ~75 ms debounce
+            ▼
+agent-specific explicit context (up to 28 entities / 128 dims)
+            ▼
+reactive desired-state contextual RL
+            ▼
+raw policy certainty
+      ∩ chronological action-specific validation
+            ▼
+calibrated confidence + support + novelty
+            ▼
+Shadow / guarded Control
+            ▼
+Home Assistant service call
 ```
 
-## Context selection
+## One-second manual lead target
 
-The whole Home Assistant state space remains a candidate pool. Selection is agent-specific and combines:
+The `1 s` target is relative to a human manual action, not a request to extrapolate the environment one second into the future. When a precursor sensor changes, inference runs immediately. Historical replay therefore trains from the newest environmental context at the action boundary, with the target actuator excluded from inputs.
 
-- existing automation trigger/condition entities for the target,
-- same-device and same-area Entity Registry relationships,
-- sensor classes expected for the target domain,
-- semantic locality,
-- historical entities that repeatedly change shortly before target actions.
+## Confidence calibration
 
-Selection changes representation only; it never creates a reward or supervised target.
+For accepted historical dwells, each agent performs a chronological pre-update prediction before learning from that dwell. The result is recorded separately for the action the model chose. Displayed/control confidence is capped by a conservative Wilson lower bound of this empirical action-specific hit rate. This prevents frequent OFF states or an overconfident linear model from producing misleading 80–90% confidence.
 
-## Temporal representation
+## Desired-state replay
 
-Each selected entity receives four explicit slots: current value, short delta, long delta and recent-change strength. The controlled actuator property is excluded from the policy context to prevent target leakage. Time-of-day/day-of-week and a few top-context interaction terms fill the remaining slots; the actuator value is read only by the HOLD/deadband/control gate.
+Stable dwells still provide bounded persistence samples, so the policy learns that `presence=ON + low lux` can mean `desired light=ON`, not merely that ON eventually precedes an OFF transition.
 
-## Multi-horizon offline RL
+## Upgrade
 
-Historical target actions are replayed against the state that existed before the action separately for every prediction horizon. The same inferred outcome reward updates each horizon head. At runtime, heads compete using expected reward, confidence, support and novelty, with a small penalty against unnecessarily long lead times.
-
-## Context support and novelty
-
-A high policy score is insufficient for Control. Each head tracks historical context statistics and reports:
-
-- **Confidence** — certainty of the action ranking.
-- **Historical support** — comparable evidence for the current context/action.
-- **Novelty** — distance from contexts observed during learning.
-
-Default Control gates are support >= 20% and novelty <= 85%, in addition to the agent confidence threshold.
-
-## Upgrade behavior
-
-v0.5 keeps the existing long-term SQLite archive. A training-revision migration clears old policy models/historical-experience projections and deterministically rebuilds them from raw archived HA history. Recorder does not need to be fully re-imported.
-
-## Desired-state replay (v0.5.1)
-
-The controlled actuator property is intentionally excluded from policy inputs. It is an action variable, not an environmental observation. Feeding it back creates next-transition leakage (e.g. historical ON states precede OFF transitions). The runtime still reads the current actuator value for HOLD/deadband decisions.
-
-Each historical dwell contributes the normal anticipatory onset sample plus at most three bounded persistence samples per prediction horizon. This makes the policy estimate the state that should be maintained in a context, not merely the next transition event.
+v0.6 changes the training revision and rebuilds policies from the existing local SQLite archive. It does not require a full Recorder re-import.
