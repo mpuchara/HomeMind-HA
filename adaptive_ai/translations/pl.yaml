@@ -1,0 +1,34 @@
+configuration:
+  poll_seconds:
+    name: Interwał synchronizacji
+    description: Interwał awaryjnej synchronizacji REST; decyzje realtime zwykle korzystają ze strumienia zdarzeń Home Assistanta.
+  correction_window_seconds:
+    name: Okno korekty
+    description: Czas po akcji RL, w którym jawna zmiana użytkownika jest traktowana jako feedback/korekta.
+  reward_window_seconds:
+    name: Okno akceptacji
+    description: Czas bez korekty potrzebny, aby akcja RL dostała dodatnią nagrodę.
+  feature_dimensions:
+    name: Jawne wymiary kontekstu
+    description: Maksymalny rozmiar bezkolizyjnego, czasowego wektora kontekstu dla pojedynczego agenta.
+  max_context_entities:
+    name: Encje kontekstu na agenta
+    description: Maksymalna liczba istotnych encji HA reprezentowanych jawnie przez jednego agenta.
+  prediction_horizons_seconds:
+    name: Horyzonty predykcji
+    description: Horyzonty predykcji w sekundach rozdzielone przecinkami; wolniejsze domeny automatycznie dostają dłuższe horyzonty.
+  min_historical_support:
+    name: Minimalne wsparcie historyczne
+    description: Sterowanie jest blokowane, gdy podobnych danych historycznych jest zbyt mało.
+  max_context_novelty:
+    name: Maksymalna nowość kontekstu
+    description: Sterowanie jest blokowane, gdy bieżący kontekst zbyt mocno różni się od historii treningowej.
+  block_control_on_automation_conflict:
+    name: Bezpieczeństwo konfliktu automatyzacji
+    description: Blokuj Control, gdy włączone automatyzacje Home Assistanta również sterują tą samą encją. Shadow działa bez zmian.
+  action_bins:
+    name: Poziomy akcji numerycznych
+    description: Liczba dyskretnych poziomów akcji dla numerycznych polityk kontekstowych.
+  rl_alpha:
+    name: Siła eksploracji
+    description: Współczynnik niepewności LinUCB używany wyłącznie przez opcjonalną mikroeeksplorację celowaną.
