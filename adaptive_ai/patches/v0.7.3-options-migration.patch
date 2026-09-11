@@ -1,0 +1,13 @@
+--- main.py
++++ main.py
+@@ -240,6 +240,10 @@
+                 options["auto_agent_recent_days"] = 10
+             if data.get("feature_dimensions") == 192:
+                 options["feature_dimensions"] = 128
++            # v0.7.3: migrate the old shipped realtime debounce so existing installs
++            # actually receive the local-first fast-light latency improvement.
++            if data.get("realtime_inference_debounce_ms") == 75:
++                options["realtime_inference_debounce_ms"] = 25
+     except Exception as exc:
+         print(f"[options] Failed to read options: {exc}", flush=True)
+     return options
