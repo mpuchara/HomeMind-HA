@@ -13,6 +13,7 @@ LABEL \
 WORKDIR /app
 COPY runtime.zip.b64.part* /tmp/adaptive-runtime/
 COPY patches/v0.7.3-main.patch.part* /tmp/adaptive-patches/
+COPY patches/v0.7.3-options-migration.patch /tmp/adaptive-patches/
 COPY patches/v0.7.3-appjs.patch /tmp/adaptive-patches/
 RUN apk add --no-cache patch \
     && cat /tmp/adaptive-runtime/runtime.zip.b64.part* | base64 -d > /tmp/runtime.zip \
@@ -21,6 +22,7 @@ RUN apk add --no-cache patch \
     && cat /tmp/adaptive-patches/v0.7.3-main.patch.part* > /tmp/adaptive-patches/main.patch \
     && cd /app \
     && patch -p0 < /tmp/adaptive-patches/main.patch \
+    && patch -p0 < /tmp/adaptive-patches/v0.7.3-options-migration.patch \
     && patch -p0 < /tmp/adaptive-patches/v0.7.3-appjs.patch \
     && python -m py_compile /app/main.py /app/control.py \
     && pip install --no-cache-dir websockets==15.0.1 \
