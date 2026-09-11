@@ -1,0 +1,140 @@
+= {eid: reasons for _, eid, reasons, _ in ranked if eid in selected_set}
++    primary_local = [eid for _, eid, _, loc in ranked if eid in selected_set and loc["local"] and loc["occupancy"]]
++    upstream = [eid for _, eid, reasons, loc in ranked if eid in selected_set and not loc["local"] and ("automation" in reasons or "historical-precursor" in reasons)]
++    return selected, {
++        "considered_entities": considered, "selected_entities": len(selected),
++        "selection_reasons": rationale,
++        "primary_local_sensors": primary_local[:4],
++        "primary_local_sensor": primary_local[0] if primary_local else None,
++        "upstream_sensors": upstream[:8],
++        "fast_local_profile": bool(fast),
++    }
+ 
+ class ExplicitFeatureSchema:
+-    VERSION = 4
++    VERSION = 5
+     def __init__(self, dims, entities):
+         self.dims = int(dims)
+         self.entities = list(entities)
+@@ -1206,7 +1261,7 @@
+         out = {0: ["bias"], 1: ["time:hour_sin"], 2: ["time:hour_cos"], 3: ["time:dow_sin"], 4: ["time:dow_cos"]}
+         idx = 5
+         for eid in self.entities:
+-            for suffix in ("value", "delta_1m", "delta_5m", "recent_change"):
++            for suffix in ("value", "delta_short", "delta_long", "recent_change"):
+                 if idx >= self.dims: break
+                 out[idx] = [f"{eid}:{suffix}"]; idx += 1
+         # Use every remaining slot for deterministic pairwise interactions between the
+@@ -1283,6 +1338,40 @@
+                 self.state_map[eid] = states[end - 1]
+                 self.history.samples[eid] = deque(zip(times[max(0,end-64):end], states[max(0,end-64):end]), maxlen=64)
+ 
++    def directional_transition_before(self, entity_id, at_ts, positive, window):
++        data = self.index.get(entity_id)
++        if not data:
++            return None
++        times, states = data
++        end = bisect_right(times, float(at_ts))
++        start = max(1, bisect_right(times, float(at_ts) - float(window)) - 1)
++        for i in range(end - 1, start - 1, -1):
++            cur = state_scalar(states[i]); prev = state_scalar(states[i - 1])
++            if cur is None or prev is None:
++                continue
++            if positive and cur > 0.25 and prev <= 0.25:
++                return times[i]
++            if not positive and cur < -0.25 and prev >= -0.25:
++                return times[i]
++        return None
++
++    def first_directional_transition_after(self, entity_id, start_ts, end_ts, positive):
++        data = self.index.get(entity_id)
++        if not data:
++            return None
++        times, states = data
++        start = max(1, bisect_right(times, float(start_ts)))
++        end = bisect_right(times, float(end_ts))
++        for i in range(start, end):
++            cur = state_scalar(states[i]); prev = state_scalar(states[i - 1])
++            if cur is None or prev is None:
++                continue
++            if positive and cur > 0.25 and prev <= 0.25:
++                return times[i]
++            if not positive and cur < -0.25 and prev >= -0.25:
++                return times[i]
++        return None
++
+ 
+ def build_explicit_features(schema, state_map, temporal, at_ts=None, agent=None):
+     at_ts = float(at_ts if at_ts is not None else now_ts())
+@@ -1297,8 +1386,9 @@
+         4: math.cos(2 * math.pi * dow / 7),
+     }
+     labels = schema.labels()
+-    short_s = float(OPTIONS.get("temporal_short_seconds", 60))
+-    long_s = float(OPTIONS.get("temporal_long_seconds", 300))
++    default_short_s = float(OPTIONS.get("temporal_short_seconds", 60))
++    default_long_s = float(OPTIONS.get("temporal_long_seconds", 300))
++    fast_profile = bool(agent and is_fast_reactive_agent(agent))
+     base_values = {}
+     idx = 5
+     usable = 0
+@@ -1309,18 +1399,23 @@
+             cur = 0.0
+         else:
+             usable += 1
++        caps = entity_capability_tags(eid, st or {})
++        sharp = fast_profile and (eid.split(".", 1)[0] == "binary_sensor" or "occupancy" in caps)
++        short_s = float(OPTIONS.get("fast_temporal_short_seconds", 2)) if sharp else default_short_s
++        long_s = float(OPTIONS.get("fast_temporal_long_seconds", 12)) if sharp else default_long_s
++        recent_tau = float(OPTIONS.get("fast_recent_change_seconds", 3)) if sharp else max(30.0, long_s)
+         short_st = temporal.previous(eid, at_ts - short_s) if temporal else None
+         long_st = temporal.previous(eid, at_ts - long_s) if temporal else None
+         short_v = context_scalar(eid, short_st, agent) if short_st else cur
+         long_v = context_scalar(eid, long_st, agent) if long_st else cur
+         changed_ts = temporal.last_change_ts(eid, st) if temporal else parse_ts((st or {}).get("last_changed"))
+         age = max(0.0, at_ts - float(changed_ts)) if changed_ts else 86400.0
+-        recent = math.exp(-age / max(30.0, long_s))
++        recent = math.exp(-age / max(0.25, recent_tau))
+         vals = (cur, cur - (short_v if short_v is not None else cur), cur - (long_v if long_v is not None else cur), recent)
+         base_values[eid] = cur
+         if agent and eid == agent.get("target_entity"):
+             target_name = str(agent.get("target_property") or "target")
+-            for off, suffix in enumerate((target_name, f"{target_name}_delta_1m", f"{target_name}_delta_5m", "recent_change")):
++            for off, suffix in enumerate((target_name, f"{target_name}_delta_short", f"{target_name}_delta_long", "recent_change")):
+                 if idx + off < schema.dims:
+                     labels[idx + off] = [f"{eid}:{suffix}"]
+         for v in vals:
+@@ -1530,22 +1625,28 @@
+ 
+ 
+ class MultiHorizonPolicy:
+-    VERSION = 5
++    VERSION = 6
+     def __init__(self, agent, state_map, registry, hint_entities, model=None, relevance_scores=None):
+         self.agent = agent
+         self.dims = int(OPTIONS.get("feature_dimensions", 128))
+         self.actions = action_values(agent)
+         self.alpha = float(OPTIONS.get("rl_alpha", 0.65))
+         self.horizons = parse_horizons(agent)
+-        raw_schema = (model or {}).get("schema") if model and int(model.get("version", 0)) == self.VERSION else None
++        valid_model = bool(model and int(model.get("version", 0)) == self.VERSION)
++        raw_schema = (model or {}).get("schema") if valid_model else None
+         self.schema = ExplicitFeatureSchema.from_export(raw_schema, self.dims)
+-        selection_meta = {}
++        selection_meta = dict((model or {}).get("selection_meta") or {}) if valid_model else {}
+         if self.schema is None:
+             selected, selection_meta = select_context_entities(agent, state_map, registry, hint_entities, relevance_scores=relevance_scores)
+             self.schema = ExplicitFeatureSchema(self.dims, selected)
+-        if not selection_meta:
+-            considered = sum(1 for eid, st in state_map.items() if eid.split(".", 1)[0] in CONTEXT_DOMAINS and parse_state_value(st) is not None)
+-            selection_meta = {"considered_entities": considered, "selected_entities": len(self.schema.entities)}
++        if not selection_meta or not selection_meta.get("selection_reasons"):
++            _, fresh_meta = select_context_entities(agent, state_map, registry, hint_entities, max_entities=len(self.schema.entities), relevance_scores=relevance_scores)
++            fresh_meta["selected_entities"] = len(self.schema.entities)
++            fresh_meta["selection_reasons"] = {k: v for k, v in fresh_meta.get("selection_reasons", {}).items() if k in set(self.schema.entities)}
++            fresh_meta["primary_local_sensors"] = [x for x in fresh_meta.get("primary_local_sensors", []) if x in set(self.schema.entities)]
++            fresh_meta["primary_local_sensor"] = next(iter(fresh_meta["primary_local_sensors"]), None)
++            fresh_meta["upstream_sensors"] = [x for x in fresh_meta.get("upstream_sensors", []) if x in set(self.schema.entities)]
++            selection_meta = fresh_meta
+         self.selection_meta = selection_meta
+         raw_heads = (
