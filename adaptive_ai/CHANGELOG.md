@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.7.4
+- Exclude every directly controllable Home Assistant entity from every agent input context.
+- Exclude all Entity Registry siblings that belong to a detected controllable physical device, including sensor/diagnostic-style entities exposed by that actuator device.
+- Keep the exclusion global across agents: one actuator may never become another agent's predictor.
+- Apply a hard runtime zeroing guard for excluded entities so a stale schema cannot reintroduce actuator features.
+- Clear in-memory policy schemas when Entity Registry device membership changes.
+- Bump the feature/policy/training revision and rebuild policies from the existing local archive without re-importing Recorder history.
+
 ## 0.7.3
 - Prioritize dedicated same-area / same-device occupancy sensors for fast light and switch agents.
 - Keep neighbouring-room sensors as weaker upstream cues that may accelerate ON, but do not let them define OFF timing.
