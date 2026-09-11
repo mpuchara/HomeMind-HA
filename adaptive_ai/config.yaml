@@ -1,5 +1,5 @@
 name: "Adaptive AI"
-version: "0.7.2"
+version: "0.7.3"
 slug: "adaptive_ai"
 description: >-
   History-first local reinforcement-learning policies for Home Assistant. Imports
@@ -20,7 +20,7 @@ backup: hot
 options:
   poll_seconds: 30
   proactive_tick_seconds: 1
-  realtime_inference_debounce_ms: 75
+  realtime_inference_debounce_ms: 25
   prediction_lead_seconds: 1
   prediction_horizons_seconds: "1"
   correction_window_seconds: 90
@@ -29,6 +29,13 @@ options:
   max_context_entities: 28
   temporal_short_seconds: 60
   temporal_long_seconds: 300
+  fast_temporal_short_seconds: 2
+  fast_temporal_long_seconds: 12
+  fast_recent_change_seconds: 3
+  fast_precursor_on_seconds: 8
+  fast_precursor_off_seconds: 120
+  fast_upstream_lead_seconds: 4
+  primary_local_sensor_reserve: 4
   min_historical_support: 0.20
   max_context_novelty: 0.85
   confidence_validation_fraction: 0.20
@@ -55,7 +62,7 @@ options:
 schema:
   poll_seconds: "int(5,120)"
   proactive_tick_seconds: "int(1,10)"
-  realtime_inference_debounce_ms: "int(50,2000)"
+  realtime_inference_debounce_ms: "int(10,2000)"
   prediction_lead_seconds: "int(0,300)"
   prediction_horizons_seconds: "str"
   correction_window_seconds: "int(10,600)"
@@ -64,6 +71,13 @@ schema:
   max_context_entities: "int(4,80)"
   temporal_short_seconds: "int(10,600)"
   temporal_long_seconds: "int(30,3600)"
+  fast_temporal_short_seconds: "int(1,30)"
+  fast_temporal_long_seconds: "int(2,120)"
+  fast_recent_change_seconds: "int(1,30)"
+  fast_precursor_on_seconds: "int(1,30)"
+  fast_precursor_off_seconds: "int(10,300)"
+  fast_upstream_lead_seconds: "int(1,15)"
+  primary_local_sensor_reserve: "int(1,12)"
   min_historical_support: "float(0.0,1.0)"
   max_context_novelty: "float(0.0,1.0)"
   confidence_validation_fraction: "float(0.05,0.40)"
