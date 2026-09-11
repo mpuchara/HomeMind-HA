@@ -1,45 +1,19 @@
-# HomeMind / Adaptive AI 0.7.2
+# HomeMind / Adaptive AI 0.7.3
 
-## Poprawka wykonania poleceń w 0.7.2
+Adaptive AI is a local Home Assistant App that learns desired device states from Recorder history and live human corrections, then calls Home Assistant services directly.
 
-Ta aktualizacja z 0.7.1 zachowuje model, dobór sensorów, progi oraz rewizję nauki.
-Nie wymaga Rebuild ani ponownego trenowania. Nie zmieniaj poprawnie działającej predykcji.
+## 0.7.3 — local-first fast lighting
 
-Usuwa błąd, w którym potwierdzenie własnego polecenia z HA `user_id` stawało się
-ręcznym nadpisaniem i blokowało Control na 5 minut. Zamiar polecenia jest zapisywany
-przed wysłaniem, a konteksty odpowiedzi są rozpoznawane jako własne. Anonimowe zmiany
-stanu nie zakładają już automatycznie ręcznego nadpisania.
+This release fixes a timing problem visible on fast lighting targets such as stairs and corridors.
 
-Stare zapisane blokady, których pochodzenia nie można potwierdzić, nie są odtwarzane
-po aktualizacji. Nowe jednoznaczne ręczne zmiany użytkownika zachowują pierwszeństwo.
-Ponowne kliknięcie Control jawnie oddaje sterowanie agentowi i zwalnia ręczną blokadę.
+For binary light/switch agents, the policy now reserves and strongly prioritizes dedicated same-area / same-device occupancy and presence sensors. A neighbouring-room sensor may still be useful as an early upstream cue for turning a light ON, but it is deliberately weaker and does not determine when the local room becomes vacant.
 
-Osiem niezależnych wykonawców obsługuje różne encje; każde urządzenie ma najwyżej jedno
-zadanie w toku. Polling HA odbywa się osobno. Starszy odczyt REST lub zdarzenie nie
-nadpisuje nowszego stanu. Światło może zastąpić niepotwierdzone przeciwne polecenie
-najnowszą decyzją, nadal respektując skonfigurowany minimalny odstęp i czas stabilizacji.
-Control nadal wyłącza rozpoznane automatyzacje i zachowuje swoje pozostałe bramki.
+Fast binary context uses second-scale temporal features (2 s / 12 s windows and ~3 s edge recency) instead of carrying occupancy influence for minutes. Historical replay is also causal: if an old Home Assistant automation switched the light OFF a minute after the dedicated stairs sensor became vacant, training is anchored to the local vacancy edge rather than learning that one-minute delay.
 
-Test wykonawczy sprawdza 20 cykli ON/OFF z `user_id` w potwierdzeniach (40 poleceń,
-bez fałszywych ręcznych blokad). Nie jest to pomiar opóźnienia fizycznych lamp w HA.
-W diagnostyce są źródło ostatniej zmiany, czas wywołania HA oraz czas potwierdzenia.
+The realtime inference debounce is 25 ms and event-driven evaluation schedules only agents affected by the changed context entity. Actual end-to-end latency still includes the Home Assistant event path and the physical device/network latency.
 
+Upgrading from 0.7.2 changes the training revision, so policies are rebuilt automatically from the existing local Adaptive AI archive. A full Recorder re-import is not required. Keep `/data` when updating.
 
-Local Home Assistant app that learns preferred device settings from Recorder history and
-live human corrections. Shared control lifecycle, device-specific settling times, calibrated
-action confidence, and direct Home Assistant service calls.
+Diagnostics expose the primary local sensor, the last context trigger, upstream early cues, HA service latency and device acknowledgement time.
 
-New in 0.7: immediate manual demonstrations in Shadow, persistent manual priority, separate
-acknowledgement and settling, timing/settings editor, device-step-aware limits, strict cooldowns,
-causal historical snapshots, action-specific validation, and readable Python sources.
-
-See [Polish installation guide](../INSTALACJA_PL.md), [release notes](../RELEASE_0_7.md),
-[architecture](ARCHITECTURE.md) and [test report](../TEST_REPORT.md).
-
-This is a Supervisor app, not a custom_components integration. New agents start in Shadow.
-Keep existing data when upgrading. A locally installed copy does not automatically inherit
-the data of an app installed from a GitHub repository.
-
-Run regression tests with `python -m unittest discover -s tests -v`.
-The learner is a contextual bandit with delayed preference feedback, not a learned thermal
-plant or a guarantee that all automations can safely be replaced.
+See `CHANGELOG.md` for release details. New agents start in Shadow; validate the rebuilt policy there before enabling Control on safety-sensitive or high-impact targets.
