@@ -1,0 +1,80 @@
+: usable, "selected_entities": len(schema.entities), "dimensions": schema.dims,
++        "excluded_controllable_inputs": len(set(schema.entities) & excluded_entities),
++    }
+ 
+ 
+ def action_values(agent):
+@@ -1629,13 +1675,15 @@
+ 
+ 
+ class MultiHorizonPolicy:
+-    VERSION = 6
++    VERSION = 7
+     def __init__(self, agent, state_map, registry, hint_entities, model=None, relevance_scores=None):
+         self.agent = agent
+         self.dims = int(OPTIONS.get("feature_dimensions", 128))
+         self.actions = action_values(agent)
+         self.alpha = float(OPTIONS.get("rl_alpha", 0.65))
+         self.horizons = parse_horizons(agent)
++        self.registry = dict(registry or {})
++        self.excluded_context_entities, self.context_exclusion_meta = controllable_context_exclusions(state_map, self.registry)
+         valid_model = bool(model and int(model.get("version", 0)) == self.VERSION)
+         raw_schema = (model or {}).get("schema") if valid_model else None
+         self.schema = ExplicitFeatureSchema.from_export(raw_schema, self.dims)
+@@ -1651,6 +1699,7 @@
+             fresh_meta["primary_local_sensor"] = next(iter(fresh_meta["primary_local_sensors"]), None)
+             fresh_meta["upstream_sensors"] = [x for x in fresh_meta.get("upstream_sensors", []) if x in set(self.schema.entities)]
+             selection_meta = fresh_meta
++        selection_meta.update(self.context_exclusion_meta)
+         self.selection_meta = selection_meta
+         raw_heads = (model or {}).get("heads", {}) if model and int(model.get("version", 0)) == self.VERSION else {}
+         self.heads = {h: DiagonalLinUCB(self.dims, self.actions, self.alpha, raw_heads.get(str(h))) for h in self.horizons}
+@@ -1660,7 +1709,14 @@
+         return max([h.total_updates for h in self.heads.values()] or [0])
+ 
+     def features(self, state_map, temporal, at_ts=None):
+-        return build_explicit_features(self.schema, state_map, temporal, at_ts, self.agent)
++        # Re-evaluate direct controllability from the live map on every inference. The
++        # registry snapshot covers sibling entities; registry updates clear policy caches.
++        excluded, _ = controllable_context_exclusions(state_map, self.registry)
++        self.excluded_context_entities = excluded
++        return build_explicit_features(
++            self.schema, state_map, temporal, at_ts, self.agent,
++            excluded_entities=self.excluded_context_entities,
++        )
+ 
+     def choose(self, features, explore=False, allowed_indices=None):
+         # v0.6 defaults to one reactive head. Multiple heads remain configurable for
+@@ -2200,6 +2256,18 @@
+         if not current:
+             return
+ 
++        # Device-level actuator exclusion needs Entity Registry device_id metadata. On a
++        # healthy realtime connection this normally arrives immediately; give it a brief
++        # head start before rebuilding the v0.7.4 policy schemas. Direct controllable
++        # entities are filtered even if registry metadata is unavailable.
++        if self.engine.ws_connected:
++            deadline = time.monotonic() + 5.0
++            while not self.stop_event.is_set() and time.monotonic() < deadline:
++                with self.engine.lock:
++                    if self.engine.entity_registry:
++                        break
++                self.stop_event.wait(0.10)
++
+         self.start_cycle()
+         end_ts = now_ts()
+         # Prime live temporal deltas/trends from the local archive so a restart does not
+@@ -2935,7 +3003,13 @@
+     def update_entity_registry(self, entries):
+         registry = {e.get("entity_id"): e for e in entries if isinstance(e, dict) and e.get("entity_id")}
+         with self.lock:
++            changed = registry != self.entity_registry
+             self.entity_registry = registry
++            if changed:
++                # Context membership depends on device_id. Recreate in-memory policies so
++                # a newly detected controllable device cannot leave sibling entities in
++                # an old schema. Stored weights remain available for the history rebuild.
++                self.models.clear()
+         STORE.event(None, "info", "entity_registry", f"Loaded {len(registry)} Entity Registry entries for cleaner agent discovery", None)
+ 
+     def registry_entry(self, entity_id):
