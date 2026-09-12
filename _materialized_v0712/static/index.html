@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <base href="./">
+  <title>Adaptive AI</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="shell">
+  <header>
+    <div><div class="eyebrow">HISTORY-FIRST LOCAL REINFORCEMENT LEARNING</div><h1>Adaptive AI</h1><p>Home Assistant history becomes offline RL experience. Per-agent temporal context, predictive horizons, direct local control.</p></div>
+    <div id="connection" class="pill">Connecting…</div>
+  </header>
+
+  <section class="overview" id="overview"></section>
+
+  <section class="hero card">
+    <div><strong>History → Selective context → Predictive RL → Shadow → Control</strong><span>Fast start discovers actively used controllable devices first; agents become available in Shadow while older whole-home context continues importing in the background.</span></div>
+    <button id="newAgentBtn" class="primary">+ Manual agent</button>
+  </section>
+
+  <section id="historyPanel" class="history-panel card"></section>
+
+  <div class="notice good-note"><b>Experiments are optional.</b> Agents learn primarily from historical/logged rewards. Micro-exploration is OFF by default and can only make small, infrequent changes when explicitly enabled.</div>
+
+  <main>
+    <section>
+      <div class="section-title agent-toolbar">
+        <div><h2>Device agents</h2><span id="agentCount"></span></div>
+        <div class="toolbar-controls">
+          <input id="agentSearch" class="toolbar-input" type="search" placeholder="Search agents…" aria-label="Search agents">
+          <select id="agentSort" class="toolbar-select" aria-label="Sort agents">
+            <option value="confidence_desc">Confidence ↓</option>
+            <option value="confidence_asc">Confidence ↑</option>
+            <option value="name_asc">Name A–Z</option>
+            <option value="name_desc">Name Z–A</option>
+            <option value="history_desc">Most history</option>
+          </select>
+          <button class="ghost" id="rescanBtn">Rescan devices</button>
+        </div>
+      </div>
+      <div id="agents" class="agents"></div>
+    </section>
+
+    <section>
+      <div class="section-title"><h2>Recent activity</h2><button class="ghost" id="refreshBtn">Refresh</button></div>
+      <div id="events" class="events card"></div>
+    </section>
+  </main>
+</div>
+
+<dialog id="agentDialog">
+<form id="agentForm" method="dialog">
+  <div class="dialog-head"><div><div class="eyebrow">MANUAL POLICY</div><h2>Create agent</h2></div><button type="button" class="icon" id="closeDialog">×</button></div>
+  <label>Name<input name="name" required placeholder="Salon brightness"></label>
+  <label>Target entity<select name="target_entity" id="targetEntity" required></select></label>
+  <label>Controlled property<select name="target_property" id="targetProperty" required></select></label>
+  <div class="context-all"><b>Context: whole-home candidate pool → agent-specific context</b><span>All usable HA entities are considered. Each agent keeps an explicit, collision-free subset of the most relevant context and adds temporal deltas/trends automatically.</span></div>
+  <div class="two"><label>Minimum<input name="min_value" type="number" step="any" required></label><label>Maximum<input name="max_value" type="number" step="any" required></label></div>
+  <label>Maximum optional micro-exploration step <span class="hint">Exploration is disabled by default.</span><input name="exploration_step" type="number" min="0.01" step="any" required></label>
+  <details open><summary>Safety & policy</summary>
+    <div class="two"><label>Control confidence threshold<input name="confidence_threshold" type="number" min="0" max="0.99" step="0.05" value="0.78"></label><label>Deadband<input name="deadband" type="number" min="0" step="any" value="3"></label></div>
+    <label>Minimum seconds between control actions<input name="action_interval" type="number" min="1" value="60"></label>
+  </details>
+  <div class="dialog-actions"><button type="button" class="ghost" id="cancelDialog">Cancel</button><button type="submit" class="primary">Create in Shadow</button></div>
+</form>
+</dialog>
+
+<script src="app.js"></script>
+<script src="settings.js"></script>
+</body></html>
