@@ -1,0 +1,62 @@
+name: Materialize Adaptive AI runtime
+
+on:
+  push:
+    branches:
+      - adaptive-ai-v0.7.13-work
+    paths:
+      - 'adaptive_ai/**'
+      - '.github/workflows/materialize-adaptive-ai.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  materialize:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: adaptive-ai-v0.7.13-work
+      - name: Rebuild final 0.7.12 runtime tree
+        shell: bash
+        run: |
+          set -euxo pipefail
+          rm -rf /tmp/adaptive-runtime /tmp/adaptive-patches /tmp/runtime /tmp/runtime.zip _materialized_v0712
+          mkdir -p /tmp/adaptive-runtime /tmp/adaptive-patches /tmp/runtime _materialized_v0712
+          cp adaptive_ai/runtime.zip.b64.part* /tmp/adaptive-runtime/
+          cp adaptive_ai/patches/v0.7.3-main.patch.part* /tmp/adaptive-patches/
+          cp adaptive_ai/patches/v0.7.3-options-migration.patch /tmp/adaptive-patches/
+          cp adaptive_ai/patches/v0.7.3-appjs.patch /tmp/adaptive-patches/
+          cp adaptive_ai/patches/v0.7.4-main.patch.part* /tmp/adaptive-patches/
+          cp adaptive_ai/patches/v0.7.4-appjs.patch /tmp/adaptive-patches/
+          cp adaptive_ai/patches/v0.7.12-app.patch.gz.b64.part* /tmp/adaptive-patches/
+          cat /tmp/adaptive-runtime/runtime.zip.b64.part* | base64 -d > /tmp/runtime.zip
+          python - <<'PY'
+          import zipfile
+          zipfile.ZipFile('/tmp/runtime.zip').extractall('/tmp/runtime')
+          PY
+          cp -R /tmp/runtime/rootfs/app/. _materialized_v0712/
+          cat /tmp/adaptive-patches/v0.7.3-main.patch.part* > /tmp/adaptive-patches/main-073.patch
+          cat /tmp/adaptive-patches/v0.7.4-main.patch.part* > /tmp/adaptive-patches/main-074.patch
+          cat /tmp/adaptive-patches/v0.7.12-app.patch.gz.b64.part* | base64 -d | gzip -dc > /tmp/adaptive-patches/app-0712.patch
+          cd _materialized_v0712
+          patch -p0 < /tmp/adaptive-patches/main-073.patch
+          patch -p0 < /tmp/adaptive-patches/v0.7.3-options-migration.patch
+          patch -p0 < /tmp/adaptive-patches/v0.7.3-appjs.patch
+          patch -p0 < /tmp/adaptive-patches/main-074.patch
+          patch -p0 < /tmp/adaptive-patches/v0.7.4-appjs.patch
+          patch -p1 < /tmp/adaptive-patches/app-0712.patch
+          python -m py_compile main.py control.py
+      - name: Commit materialized text sources
+        shell: bash
+        run: |
+          set -euxo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add _materialized_v0712
+          if git diff --cached --quiet; then
+            exit 0
+          fi
+          git commit -m 'Materialize Adaptive AI 0.7.12 runtime sources'
+          git push origin HEAD:adaptive-ai-v0.7.13-work
