@@ -1,0 +1,93 @@
+name: Prepare Adaptive AI 0.8.0
+
+on:
+  push:
+    branches:
+      - release-0.8.0
+    paths:
+      - '.github/workflows/prepare-0.8.0.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: release-0.8.0
+          fetch-depth: 0
+
+      - name: Promote latest tested low-memory tree to 0.8.0
+        shell: bash
+        run: |
+          set -euxo pipefail
+          git fetch origin adaptive-ai-v0.7.14-work
+          rm -rf adaptive_ai _release_v0714
+          git checkout origin/adaptive-ai-v0.7.14-work -- _release_v0714/adaptive_ai
+          mv _release_v0714/adaptive_ai adaptive_ai
+          rm -rf _release_v0714
+
+          # 0.7.14 was the tested implementation candidate; 0.8.0 is the feature-complete baseline.
+          grep -rlZ '0\.7\.14' adaptive_ai | xargs -0 -r sed -i 's/0\.7\.14/0.8.0/g'
+
+          python - <<'PY'
+          from pathlib import Path
+          import json
+
+          build = Path('adaptive_ai/BUILD_INFO.json')
+          data = json.loads(build.read_text())
+          data['version'] = '0.8.0'
+          data['release_status'] = 'feature-complete baseline'
+          data['release_date'] = '2026-09-12'
+          build.write_text(json.dumps(data, indent=2, ensure_ascii=False) + '\n')
+
+          readme = Path('adaptive_ai/README.md')
+          text = readme.read_text()
+          text = text.replace('# Adaptive AI 0.7.12', '# Adaptive AI 0.8.0')
+          text = text.replace('Wersja 0.7.12 pozwala', 'Wersja 0.8.0 pozwala')
+          text = text.replace(
+              '2. Pozostaw istniejące automatyzacje aktywne podczas pierwszego `TRAINING`.\n3. Poczekaj, aż agent przejdzie całą dostępną historię.',
+              '2. Pozostaw istniejące automatyzacje aktywne podczas uczenia.\n3. Wybierz konkretnego agenta i uruchom **Train**. W trybie low-memory tylko jeden agent trenuje się jednocześnie.'
+          )
+          text = text.replace(
+              '- sterowalne aktuatory oraz encje należące do ich fizycznych urządzeń,',
+              '- bezpośrednio sterowalne aktuatory; sensory ESPHome (`sensor`/`binary_sensor`) pozostają kandydatami nawet wtedy, gdy współdzielą urządzenie z encjami konfiguracyjnymi lub aktuatorami,'
+          )
+          readme.write_text(text)
+
+          changelog = Path('adaptive_ai/CHANGELOG.md')
+          text = changelog.read_text()
+          marker = '## 0.8.0 — low-memory manual training\n'
+          if marker in text:
+              text = text.replace(
+                  marker,
+                  '## 0.8.0 — feature-complete baseline (2026-09-12)\n\n'
+                  'This release promotes the tested 0.7.14 implementation to the first relatively feature-complete 0.8.x baseline. '
+                  'The focus is predictable per-agent training, low Raspberry Pi resource use, broad Home Assistant context and safe Shadow→Control operation.\n',
+                  1,
+              )
+          changelog.write_text(text)
+          PY
+
+          # Release source is now directly readable; obsolete packed runtime/patch files from main are intentionally gone.
+          python -m py_compile adaptive_ai/src/main.py adaptive_ai/src/control.py
+          grep -q 'APP_VERSION = "0.8.0"' adaptive_ai/src/main.py
+          grep -q 'version: "0.8.0"' adaptive_ai/config.yaml
+          grep -q 'manual_agent_training: true' adaptive_ai/config.yaml
+          grep -q 'def archive_iter' adaptive_ai/src/main.py
+          grep -q 'is_esphome_sensor_entity' adaptive_ai/src/main.py
+
+          # Temporary release-preparation workflow must not become part of the product tree.
+          rm -f .github/workflows/prepare-0.8.0.yml
+
+      - name: Commit 0.8.0 release candidate
+        shell: bash
+        run: |
+          set -euxo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'release: Adaptive AI 0.8.0 feature-complete baseline [skip ci]'
+          git push origin HEAD:release-0.8.0
