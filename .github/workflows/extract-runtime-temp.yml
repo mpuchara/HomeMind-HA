@@ -1,0 +1,54 @@
+name: Temporary extract Adaptive AI runtime
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  extract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: hm-0.7.13-fix
+      - name: Reconstruct current runtime
+        run: |
+          set -euxo pipefail
+          rm -rf extracted_runtime /tmp/adaptive-runtime /tmp/adaptive-patches /tmp/runtime /tmp/runtime.zip
+          mkdir -p /tmp/adaptive-runtime /tmp/adaptive-patches extracted_runtime
+          cp adaptive_ai/runtime.zip.b64.part* /tmp/adaptive-runtime/
+          cp adaptive_ai/patches/v0.7.3-main.patch.part* /tmp/adaptive-patches/
+          cp adaptive_ai/patches/v0.7.3-options-migration.patch /tmp/adaptive-patches/
+          cp adaptive_ai/patches/v0.7.3-appjs.patch /tmp/adaptive-patches/
+          cp adaptive_ai/patches/v0.7.4-main.patch.part* /tmp/adaptive-patches/
+          cp adaptive_ai/patches/v0.7.4-appjs.patch /tmp/adaptive-patches/
+          cp adaptive_ai/patches/v0.7.12-app.patch.gz.b64.part* /tmp/adaptive-patches/
+          cat /tmp/adaptive-runtime/runtime.zip.b64.part* | base64 -d > /tmp/runtime.zip
+          python - <<'PY'
+          import zipfile
+          zipfile.ZipFile('/tmp/runtime.zip').extractall('/tmp/runtime')
+          PY
+          cp -R /tmp/runtime/rootfs/app/. extracted_runtime/
+          cat /tmp/adaptive-patches/v0.7.3-main.patch.part* > /tmp/adaptive-patches/main-073.patch
+          cat /tmp/adaptive-patches/v0.7.4-main.patch.part* > /tmp/adaptive-patches/main-074.patch
+          cat /tmp/adaptive-patches/v0.7.12-app.patch.gz.b64.part* | base64 -d | gzip -dc > /tmp/adaptive-patches/app-0712.patch
+          cd extracted_runtime
+          patch -p0 < /tmp/adaptive-patches/main-073.patch
+          patch -p0 < /tmp/adaptive-patches/v0.7.3-options-migration.patch
+          patch -p0 < /tmp/adaptive-patches/v0.7.3-appjs.patch
+          patch -p0 < /tmp/adaptive-patches/main-074.patch
+          patch -p0 < /tmp/adaptive-patches/v0.7.4-appjs.patch
+          patch -p1 < /tmp/adaptive-patches/app-0712.patch
+          python -m py_compile main.py control.py
+          cd ..
+      - name: Commit extracted runtime to fix branch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add extracted_runtime
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m "chore: expose reconstructed runtime for 0.7.13 review"
+          git push origin HEAD:hm-0.7.13-fix
