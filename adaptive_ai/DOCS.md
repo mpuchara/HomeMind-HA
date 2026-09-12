@@ -1,44 +1,42 @@
-# Adaptive AI v0.6
+# Adaptive AI — instrukcja użytkownika 0.7.12
 
-Adaptive AI v0.6 changes the interaction model from multi-second speculative prediction to **fast reactive desired-state control**.
+Adaptive AI uczy się na historii Home Assistant Recorder i bieżącym kontekście domu. Po pełnym treningu agent jest kwalifikowany na podstawie historycznego benchmarku zachowania.
 
-The intended behavior for a light is:
+## Pierwsze uruchomienie
 
-```text
-presence / motion / lux changes
-        ↓
-~75 ms inference debounce
-        ↓
-desired state inferred immediately
-        ↓
-Home Assistant service call
-        ↓
-light changes before the user would normally reach the switch
-```
+1. **Nie wyłączaj istniejących automatyzacji.** Są punktem odniesienia dla uczenia.
+2. Poczekaj na zakończenie `TRAINING` i dojście kursora do danych bieżących.
+3. Otwórz kartę agenta i sprawdź:
+   - `Behaviour benchmark`,
+   - `Candidate confidence`,
+   - `Per-action benchmark`,
+   - `Selected context`,
+   - `Primary behavioural driver`,
+   - `Context candidates screened`.
+4. Agent z benchmarkiem **>78%** i wystarczającą liczbą próbek przechodzi do `QUALIFIED + Shadow`.
+5. Słabszy agent przechodzi do `PAUSED` i nie zużywa normalnie CPU na bieżący trening/inference.
+6. Obserwuj `Desired` w Shadow i porównaj z zachowaniem istniejącej automatyki.
+7. Uruchom `Verify control`.
+8. Dopiero po weryfikacji przełącz wybrany agent do `Control`.
 
-The `~1 s` lead target is relative to the human manual action. The agent does not attempt to predict the physical world one second into the future; it reacts to precursor signals as soon as Home Assistant reports them.
+## Resume i Rebuild
 
-## Confidence in v0.6
+- **Resume** — kontynuuje uczenie od zapisanego kursora; nie czyści modelu ani dotychczasowych doświadczeń.
+- **Rebuild** — zeruje model i benchmark danego agenta, odświeża potrzebną historię i przechodzi ją od początku. Użyj np. po dodaniu nowego sensora, który powinien mieć wpływ na politykę.
 
-The displayed Confidence is no longer only internal model certainty. Offline replay performs chronological pre-update validation and tracks correctness separately for each desired action. Runtime confidence is capped by a conservative lower bound of that historical validation performance.
+## Jakie encje mogą być wejściem
 
-The agent card now exposes:
+Domyślnie kandydatem może być praktycznie każda parsowalna encja HA, m.in. presence/motion, ESPHome radar, camera/AI score, dane telefonu, `person`, `device_tracker`, samochód, pogoda, helpery, template sensors i encje wirtualne.
 
-- **Confidence** — calibrated confidence used for Control.
-- **Validation** — empirical hit rate and sample count for the currently desired action.
-- **Support** — amount/similarity of historical evidence.
-- **Novelty** — how unfamiliar the current context is.
+Wykluczane są aktuatory oraz encje z jednoznacznie elektryczną jednostką (`W`, `V`, `A`, `VA`, `var`, `Wh`, `kWh`, `Ah`, `Ω` itd.). Filtr działa po jednostce, nie po nazwie: `Still Energy` w `%` pozostaje dozwolony.
 
-This prevents a model that frequently predicts an easy/common state such as OFF from showing high confidence for a poorly learned ON decision.
+## Pełna dokumentacja
 
-## Context
-
-All usable Home Assistant entities remain candidates. Each agent selects an explicit subset, normally no more than 28. The controlled actuator is excluded from policy inputs to avoid target leakage. Temporal features include current environmental value, short/long deltas and change recency.
-
-## Existing data
-
-Keep the App data directory when updating. v0.6 changes the training revision, so policies are rebuilt from `/data/adaptive_ai.db`. It does not need another complete Recorder bootstrap.
-
-## Existing automations
-
-Keep existing automations while evaluating agents in Shadow. By default Control is blocked if an enabled Home Assistant automation still targets the same entity, preventing two controllers from fighting each other.
+- [Instalacja i aktualizacja](../docs/INSTALLATION_PL.md)
+- [Szybki start](../docs/QUICK_START_PL.md)
+- [Obsługa aplikacji](../docs/USER_GUIDE_PL.md)
+- [Jak działa Adaptive AI](../docs/HOW_IT_WORKS_PL.md)
+- [Lifecycle agentów](../docs/AGENT_LIFECYCLE_PL.md)
+- [Ustawienia](../docs/SETTINGS_REFERENCE_PL.md)
+- [Troubleshooting](../docs/TROUBLESHOOTING_PL.md)
+- [Bezpieczeństwo i ograniczenia](../docs/SAFETY_AND_LIMITATIONS_PL.md)
