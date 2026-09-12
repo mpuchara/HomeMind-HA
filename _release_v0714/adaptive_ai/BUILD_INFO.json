@@ -1,0 +1,8 @@
+{
+  "version": "0.7.14",
+  "profile": "rpi4-low-memory-manual-training",
+  "manual_agent_training": true,
+  "max_concurrent_training_jobs": 1,
+  "archive_screening": "sqlite-streaming",
+  "replay_scope": "active-agent-selected-context"
+}
