@@ -1,0 +1,34 @@
+configuration:
+  poll_seconds:
+    name: Poll interval
+    description: REST resync interval; realtime decisions normally use the Home Assistant event stream.
+  correction_window_seconds:
+    name: Correction window
+    description: Time after an RL action during which an explicit user change is treated as feedback/correction.
+  reward_window_seconds:
+    name: Acceptance window
+    description: Time an RL action must remain uncorrected before receiving a positive reward.
+  feature_dimensions:
+    name: Explicit context dimensions
+    description: Maximum size of the collision-free per-agent temporal context vector.
+  max_context_entities:
+    name: Context entities per agent
+    description: Maximum number of relevant HA entities represented explicitly by one agent.
+  prediction_horizons_seconds:
+    name: Prediction horizons
+    description: Comma-separated prediction horizons in seconds; slow domains add longer horizons automatically.
+  min_historical_support:
+    name: Minimum historical support
+    description: Control is blocked when comparable historical evidence is below this value.
+  max_context_novelty:
+    name: Maximum context novelty
+    description: Control is blocked when the current context is too unlike the training history.
+  block_control_on_automation_conflict:
+    name: Automation conflict safety
+    description: Block Control while enabled Home Assistant automations also target the same entity. Shadow is unaffected.
+  action_bins:
+    name: Numeric action bins
+    description: Number of discrete action levels used by numeric contextual policies.
+  rl_alpha:
+    name: Exploration strength
+    description: LinUCB uncertainty coefficient used only by optional targeted micro-exploration.

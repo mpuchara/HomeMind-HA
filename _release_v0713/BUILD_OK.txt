@@ -1,0 +1,1 @@
+Adaptive AI 0.7.13 built successfully. ZIP bytes=92777; b64 parts=16

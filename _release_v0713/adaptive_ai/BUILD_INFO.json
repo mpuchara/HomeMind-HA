@@ -1,0 +1,6 @@
+{
+  "version": "0.7.13",
+  "base": "0.7.12 materialized runtime",
+  "regression": "ESPHome LD2411 sensor siblings must remain training context",
+  "install": "replace the existing adaptive_ai directory with this adaptive_ai directory, then rebuild/reinstall the Home Assistant app"
+}
