@@ -1,19 +1,13 @@
-# HomeMind / Adaptive AI 0.7.4
+# HomeMind / Adaptive AI 0.7.12
 
-Adaptive AI is a local Home Assistant App that learns desired device states from Recorder history and live human corrections, then calls Home Assistant services directly instead of generating YAML automations.
+Adaptive AI is a local Home Assistant App that learns desired device states from Recorder history and live corrections, then calls Home Assistant services directly.
 
-## 0.7.4 — actuator-free context
+## 0.7.12 — broad all-entity context, unit-only electrical filter
 
-Agent inputs are now strictly sensor/environment context. Any Home Assistant entity that is itself controllable is excluded from learning and inference for every agent. When Entity Registry metadata identifies a physical device as controllable, all sibling entities on that same device are excluded as well.
+This release removes semantic/domain/device blacklists from the learning candidate pool. Every parseable Home Assistant entity is allowed to compete as historical context unless it belongs to a detected controllable device or its `unit_of_measurement` is explicitly electrical (for example V, A, W, VA, var, Wh/kWh, Ah or ohm).
 
-This prevents actuator-to-actuator shortcuts such as one lamp, switch, setpoint, cover, fan or media-player state becoming a predictor for another controller. A stale policy schema is also protected by a runtime zeroing guard, so excluded actuator features cannot silently return after an upgrade.
+This means phone data, people/device trackers, weather, cars, calendar/template/virtual entities, camera/AI scores, ESPHome radar channels and custom sensors are all valid candidates. Names such as `energy`/`power`, `device_class`, diagnostic/hidden status and unusual domains no longer disqualify an entity by themselves.
 
-The local-first fast-lighting behavior from 0.7.3 remains: dedicated same-area / same-device occupancy sensors have priority, neighbouring-room sensors can remain weaker early ON cues, and local occupancy dominates OFF timing.
+The runtime still stays compact: full historical indexing screens the broad candidate universe, while each agent keeps only the most predictive context features for live inference. Fast light/switch agents continue to use short 1/3/10 s series, so CPU remains focused on a small selected model rather than every entity at runtime.
 
-Upgrading from 0.7.3 changes the feature/policy/training revision, so policies rebuild automatically from the existing Adaptive AI local archive. A full Recorder re-import is not required. Keep `/data` when updating.
-
-Diagnostics expose how many controllable-device inputs were excluded, together with the primary local sensor, last context trigger, upstream early cues, HA service latency and device acknowledgement time.
-
-See [changelog](adaptive_ai/CHANGELOG.md) and [app documentation](adaptive_ai/README.md).
-
-This is a Home Assistant Supervisor App. New agents start in Shadow; validate rebuilt policies before enabling Control on higher-impact targets.
+On upgrade, the new training revision performs a one-time historical refresh of all eligible context candidates, then rebuilds policies and applies the existing >78% qualification / PAUSED lifecycle.

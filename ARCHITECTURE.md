@@ -1,38 +1,9 @@
-# Adaptive AI v0.6 architecture
+# Adaptive AI 0.7.12 architecture notes
 
-```text
-Home Assistant state_changed event
-            │
-            ├── presence / motion / lux / door / media / weather / ...
-            ▼
-      ~75 ms debounce
-            ▼
-agent-specific explicit context (up to 28 entities / 128 dims)
-            ▼
-reactive desired-state contextual RL
-            ▼
-raw policy certainty
-      ∩ chronological action-specific validation
-            ▼
-calibrated confidence + support + novelty
-            ▼
-Shadow / guarded Control
-            ▼
-Home Assistant service call
-```
+Context admission is deliberately broad. The candidate universe is every parseable Home Assistant state, regardless of domain, name, device class, hidden/diagnostic category or vendor. Two hard exclusions remain: (1) detected controllable entities and all Entity Registry siblings on those actuator devices, and (2) individual entities whose `unit_of_measurement` is explicitly electrical.
 
-## One-second manual lead target
+Electrical filtering is entity-level and unit-only. A `Still Energy` sensor in `%`, a camera score without a unit, a virtual `power` score without W/VA/etc., or a non-electrical sibling on a Shelly device remains eligible. Only the electrical-unit entity itself is blocked.
 
-The `1 s` target is relative to a human manual action, not a request to extrapolate the environment one second into the future. When a precursor sensor changes, inference runs immediately. Historical replay therefore trains from the newest environmental context at the action boundary, with the target actuator excluded from inputs.
+Historical indexing evaluates the broad pool, but live policies remain compact. Fast binary targets select a small set of historically predictive inputs and encode each as current value plus ~1 s, 3 s and 10 s deltas. Generic historical precursor scoring can promote arbitrary phone/car/weather/template context; dedicated occupancy/activity edge scoring remains an extra fast-path for presence/radar/AI drivers.
 
-## Confidence calibration
-
-For accepted historical dwells, each agent performs a chronological pre-update prediction before learning from that dwell. The result is recorded separately for the action the model chose. Displayed/control confidence is capped by a conservative Wilson lower bound of this empirical action-specific hit rate. This prevents frequent OFF states or an overconfident linear model from producing misleading 80–90% confidence.
-
-## Desired-state replay
-
-Stable dwells still provide bounded persistence samples, so the policy learns that `presence=ON + low lux` can mean `desired light=ON`, not merely that ON eventually precedes an OFF transition.
-
-## Upgrade
-
-v0.6 changes the training revision and rebuilds policies from the existing local SQLite archive. It does not require a full Recorder re-import.
+A training-revision upgrade performs one broad Recorder candidate refresh, then steady-state maintenance returns to the selected context of QUALIFIED agents. PAUSED agents consume no normal inference/training CPU until Resume/Rebuild.
