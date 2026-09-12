@@ -1,4 +1,26 @@
+
+## 0.8.0 — feature-complete baseline (2026-09-12)
+
+This release promotes the tested 0.7.14 implementation to the first relatively feature-complete 0.8.x baseline. The focus is predictable per-agent training, low Raspberry Pi resource use, broad Home Assistant context and safe Shadow→Control operation.
+
+- Agent discovery no longer starts offline RL training automatically. Each agent waits for an explicit **Train** action.
+- Only one training job can run at a time by default.
+- Broad historical context screening is streamed from SQLite in bounded batches instead of materializing millions of rows in Python RAM.
+- The replay phase materializes only the target plus the context entities selected for the active agent.
+- Home Assistant Recorder reads use one worker by default and a longer background yield.
+- Temporal state history stores compact state objects and a shorter per-entity deque.
+- Rescan discovers targets only; it never starts training.
+- Interrupted automatic jobs from 0.7.13 are paused on startup and can be resumed manually.
+
 # Changelog
+
+## 0.7.13
+- Fix ESPHome/LD2411 context exclusion: configuration `number`/`select`/`switch` siblings no longer remove `sensor`/`binary_sensor` channels such as `kitchen_presence_presence` from training.
+- Keep direct actuators and explicit electrical-unit telemetry excluded while preserving ESPHome sensory siblings.
+- Force a new broad historical context rebuild so newly admitted ESPHome sensors are imported from Recorder and can compete during feature screening.
+- Add measured replay progress, work counters and phase-specific ETA during long policy rebuilds instead of freezing the UI at 13%.
+- Add a preparation pipeline explaining target discovery, context import, sensor screening, historical replay, benchmark and readiness.
+- Surface eligible/selected ESPHome context counts and preserved sibling diagnostics.
 
 ## 0.7.12
 - Make the context candidate universe broad by default: every parseable Home Assistant entity may compete during historical feature screening.
