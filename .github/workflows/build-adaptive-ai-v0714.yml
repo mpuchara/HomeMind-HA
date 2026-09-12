@@ -1,0 +1,64 @@
+name: Build Adaptive AI 0.7.14 low-memory package
+
+on:
+  push:
+    branches:
+      - adaptive-ai-v0.7.14-work
+    paths:
+      - 'tools/build_v0714.py'
+      - '.github/workflows/build-adaptive-ai-v0714.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: adaptive-ai-v0.7.14-work
+      - name: Create optimized 0.7.14 source tree
+        shell: bash
+        run: |
+          set -euxo pipefail
+          rm -rf _release_v0714
+          mkdir -p _release_v0714
+          cp -a _release_v0713/adaptive_ai _release_v0714/adaptive_ai
+          python tools/build_v0714.py
+      - name: Static validation
+        shell: bash
+        run: |
+          set -euxo pipefail
+          python -m py_compile _release_v0714/adaptive_ai/src/main.py _release_v0714/adaptive_ai/src/control.py
+          node --check _release_v0714/adaptive_ai/src/static/app.js
+          grep -q 'APP_VERSION = "0.7.14"' _release_v0714/adaptive_ai/src/main.py
+          grep -q '"manual_agent_training": True' _release_v0714/adaptive_ai/src/main.py
+          grep -q 'def archive_iter' _release_v0714/adaptive_ai/src/main.py
+          grep -q 'archive_rows_for_entities' _release_v0714/adaptive_ai/src/main.py
+          grep -q '/train' _release_v0714/adaptive_ai/src/main.py
+          grep -q 'manual_agent_training: true' _release_v0714/adaptive_ai/config.yaml
+      - name: Build installable ZIP
+        shell: bash
+        run: |
+          set -euxo pipefail
+          cd _release_v0714
+          rm -f HomeMind-Adaptive-AI-0.7.14.zip
+          zip -qr HomeMind-Adaptive-AI-0.7.14.zip adaptive_ai
+          unzip -t HomeMind-Adaptive-AI-0.7.14.zip
+          unzip -l HomeMind-Adaptive-AI-0.7.14.zip | grep 'adaptive_ai/src/main.py'
+          unzip -l HomeMind-Adaptive-AI-0.7.14.zip | grep 'adaptive_ai/config.yaml'
+          bytes=$(stat -c%s HomeMind-Adaptive-AI-0.7.14.zip)
+          printf 'Adaptive AI 0.7.14 built successfully. ZIP bytes=%s\n' "$bytes" > BUILD_OK.txt
+      - name: Commit generated package
+        shell: bash
+        run: |
+          set -euxo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add _release_v0714
+          if git diff --cached --quiet; then
+            exit 0
+          fi
+          git commit -m 'Build Adaptive AI 0.7.14 low-memory install package'
+          git push origin HEAD:adaptive-ai-v0.7.14-work
