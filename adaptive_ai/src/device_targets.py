@@ -167,5 +167,20 @@ def install():
     context.historical_acceptance_seconds = historical_acceptance_seconds
     control.timing_for = timing_for
 
+    # Context experiments deliberately perturb the selected action.  That is acceptable
+    # for fixed actuators such as lights, but not for a mobile robot: an experiment must
+    # never start a vacuum merely to collect information.  Historical/offline learning
+    # and normal Shadow/Control remain available.
+    import experiments
+    base_experiment_configure = experiments.Experiments.configure
+
+    def experiment_configure(self, agent, payload):
+        domain = str(agent.get("target_entity") or "").split(".", 1)[0]
+        if domain == "vacuum" and isinstance(payload, dict) and payload.get("enabled"):
+            raise ValueError("Context experiments are disabled for mobile vacuum targets")
+        return base_experiment_configure(self, agent, payload)
+
+    experiments.Experiments.configure = experiment_configure
+
     _INSTALLED = True
     return {"installed": True, "vacuum": True, "version": RELEASE_VERSION}
