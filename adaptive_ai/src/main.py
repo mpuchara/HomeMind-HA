@@ -4,26 +4,138 @@ import json
 import math
 import os
 import re
+import threading
+import time
 import traceback
-from settings import (APP_VERSION, OPTIONS, STATIC_DIR, SUPPORTED_TARGETS, clamp, now_ts)
-from storage import STORE
-from ha import AUTOMATION_KNOWLEDGE
-from context import (target_options_for_state)
-from engine import Engine, HAEventStream
-from history import HistoryManager
-from home_bootstrap import HomeBootstrap
 
-ENGINE = Engine()
+from settings import (APP_VERSION, OPTIONS, STATIC_DIR, SUPPORTED_TARGETS, clamp, now_ts)
+
+# Runtime-heavy modules are imported only after the Ingress HTTP server is listening.
+# This removes the startup window where Home Assistant showed 502 Bad Gateway while
+# SQLite migrations, runtime construction and Home Assistant discovery were still loading.
+ENGINE = None
 HISTORY = None
+EVENT_STREAM = None
+STORE = None
+AUTOMATION_KNOWLEDGE = None
+target_options_for_state = None
+default_action_interval = None
+
+STARTUP_LOCK = threading.RLock()
+STARTUP = {
+    "state": "http_starting",
+    "step": 0,
+    "steps": 6,
+    "message": "Starting Adaptive AI web interface",
+    "ready": False,
+    "error": None,
+    "started_at": time.time(),
+}
+
+
+def set_startup(state, step, message, *, ready=False, error=None):
+    with STARTUP_LOCK:
+        STARTUP.update(
+            state=str(state), step=int(step), message=str(message),
+            ready=bool(ready), error=None if error is None else str(error),
+        )
+
+
+def startup_snapshot():
+    with STARTUP_LOCK:
+        data = dict(STARTUP)
+    data["elapsed_seconds"] = max(0.0, time.time() - float(data.get("started_at") or time.time()))
+    return data
+
+
+def runtime_available():
+    return ENGINE is not None and STORE is not None and AUTOMATION_KNOWLEDGE is not None
+
+
+def migrate_legacy_fast_intervals():
+    """Migrate the old manual-agent UI default of 60 s for genuinely fast targets.
+
+    Auto-created agents already used domain defaults. Only manual agents with the exact
+    old shipped 60 s value are migrated, so custom user intervals are left untouched.
+    """
+    if STORE is None or default_action_interval is None:
+        return 0
+    migrated = []
+    for agent in STORE.list_agent_configs():
+        if agent.get("auto_created"):
+            continue
+        try:
+            configured = float(agent.get("action_interval") or 0.0)
+        except (TypeError, ValueError):
+            continue
+        if abs(configured - 60.0) > 1e-9:
+            continue
+        desired = float(default_action_interval(agent.get("target_entity"), agent.get("target_property")))
+        if desired > 2.0:
+            continue
+        STORE.update_agent(agent["id"], {"action_interval": desired})
+        migrated.append({"agent_id": agent["id"], "from": configured, "to": desired})
+    if migrated:
+        STORE.event(None, "info", "fast_action_interval_migration",
+                    f"Migrated {len(migrated)} manual fast agent(s) from the old 60 s action interval",
+                    {"agents": migrated})
+    return len(migrated)
+
+
+def initialize_runtime():
+    """Load the control runtime in the background after HTTP is already available."""
+    global ENGINE, HISTORY, EVENT_STREAM, STORE, AUTOMATION_KNOWLEDGE
+    global target_options_for_state, default_action_interval
+    try:
+        set_startup("loading_runtime", 1, "Loading local database and runtime modules")
+        from storage import STORE as runtime_store
+        from ha import AUTOMATION_KNOWLEDGE as automation_knowledge
+        from context import target_options_for_state as target_options
+        from context import default_action_interval as default_interval
+        from engine import Engine, HAEventStream
+        from history import HistoryManager
+        from home_bootstrap import HomeBootstrap
+
+        STORE = runtime_store
+        AUTOMATION_KNOWLEDGE = automation_knowledge
+        target_options_for_state = target_options
+        default_action_interval = default_interval
+
+        set_startup("building_runtime", 2, "Preparing device policies and local state")
+        ENGINE = Engine()
+        migrated = migrate_legacy_fast_intervals()
+        if migrated:
+            print(f"[startup] Fast-agent interval migration: {migrated}", flush=True)
+
+        set_startup("starting_engine", 3, "Connecting to Home Assistant and reading current states")
+        ENGINE.start()
+
+        set_startup("starting_realtime", 4, "Starting realtime Home Assistant event stream")
+        EVENT_STREAM = HAEventStream(ENGINE)
+        EVENT_STREAM.start()
+
+        set_startup("starting_history", 5, "Preparing history and training manager")
+        HISTORY = HistoryManager(ENGINE)
+        ENGINE.history_manager = HISTORY
+        ENGINE.home_bootstrap = HomeBootstrap(ENGINE.context, HISTORY, STORE)
+        HISTORY.start()
+
+        set_startup("ready", 6, "Adaptive AI runtime is ready", ready=True)
+        print("Adaptive AI runtime initialized", flush=True)
+    except Exception as exc:
+        traceback.print_exc()
+        set_startup("error", STARTUP.get("step", 0), f"Startup failed: {type(exc).__name__}: {exc}", error=exc)
+
 
 def entity_summary(state):
     entity_id = state["entity_id"]
     domain = entity_id.split(".", 1)[0]
     attrs = state.get("attributes") or {}
+    options = target_options_for_state(state) if target_options_for_state is not None else []
     return {
         "entity_id": entity_id, "domain": domain, "name": attrs.get("friendly_name") or entity_id,
         "state": state.get("state"), "unit": attrs.get("unit_of_measurement"),
-        "target_options": target_options_for_state(state),
+        "target_options": options,
     }
 
 
@@ -66,7 +178,7 @@ def validate_agent(p):
 
 
 class Handler(BaseHTTPRequestHandler):
-    server_version = "AdaptiveAI/0.4"
+    server_version = "AdaptiveAI/0.10"
 
     def log_message(self, fmt, *args):
         print(f"[http] {self.address_string()} {fmt % args}", flush=True)
@@ -94,6 +206,33 @@ class Handler(BaseHTTPRequestHandler):
             return self.send_json(404, {"error": "not_found"})
         return self.send_bytes(200, path.read_bytes(), content_type)
 
+    def require_runtime(self):
+        if runtime_available():
+            return True
+        self.send_json(503, {"error": "runtime_starting", "startup": startup_snapshot()})
+        return False
+
+    def status_payload(self):
+        startup = startup_snapshot()
+        if ENGINE is None:
+            return {
+                "version": APP_VERSION,
+                "ha_connected": False,
+                "ha_error": None,
+                "engine_error": startup.get("error"),
+                "state_count": 0,
+                "agent_count": 0,
+                "average_confidence": 0.0,
+                "historical_experience_count": 0,
+                "realtime": {"connected": False, "error": None, "registry_entries": 0, "last_event": None},
+                "history": {"phase": "starting", "progress": 0.0, "message": startup.get("message"), "archive": {"n": 0, "days": 0, "entities": 0}},
+                "home_intelligence": {}, "home_bootstrap": {}, "telemetry": {}, "heavy_job": None,
+                "options": OPTIONS, "startup": startup,
+            }
+        status = ENGINE.status()
+        status["startup"] = startup
+        return status
+
     def do_GET(self):
         path, _, query = self.path.partition("?")
         try:
@@ -107,13 +246,18 @@ class Handler(BaseHTTPRequestHandler):
                 return self.static("settings.js", "application/javascript; charset=utf-8")
             if path == "/home.js":
                 return self.static("home.js", "application/javascript; charset=utf-8")
+            if path == "/api/status":
+                return self.send_json(200, self.status_payload())
+            if path == "/health":
+                startup = startup_snapshot()
+                return self.send_json(200, {"ok": startup.get("error") is None, "ready": bool(startup.get("ready")), "version": APP_VERSION, "startup": startup})
+            if not self.require_runtime():
+                return
             if path.startswith('/api/agents/') and path.endswith('/export'):
                 agent = STORE.get_agent(path.split('/')[3])
                 if not agent or agent.get('training_state') != 'qualified':
                     return self.send_json(409, {'error': 'Train a compatible model first'})
                 return self.send_json(200, ENGINE.policy(agent).inference_export())
-            if path == "/api/status":
-                return self.send_json(200, ENGINE.status())
             if path == "/api/entities":
                 with ENGINE.lock:
                     states = list(ENGINE.state_map.values())
@@ -121,7 +265,17 @@ class Handler(BaseHTTPRequestHandler):
             if path == "/api/agents":
                 agents = STORE.list_agents()
                 for a in agents:
-                    a["runtime"] = ENGINE.runtime_for(a)
+                    runtime = ENGINE.runtime_for(a)
+                    internal = ENGINE.runtime.get(a["id"]) or {}
+                    runtime["event_to_service_ms"] = internal.get("event_to_service_ms")
+                    runtime["intent_to_service_ms"] = internal.get("intent_to_service_ms")
+                    ack = runtime.get("ack_latency_seconds")
+                    runtime["service_to_ack_ms"] = None if ack is None else float(ack) * 1000.0
+                    if runtime.get("event_to_service_ms") is not None and runtime.get("service_to_ack_ms") is not None:
+                        runtime["event_to_ack_ms"] = float(runtime["event_to_service_ms"]) + float(runtime["service_to_ack_ms"])
+                    else:
+                        runtime["event_to_ack_ms"] = None
+                    a["runtime"] = runtime
                 return self.send_json(200, agents)
             if path.startswith("/api/agents/") and path.endswith("/feedback"):
                 agent_id = path.split("/")[3]
@@ -134,8 +288,6 @@ class Handler(BaseHTTPRequestHandler):
                     except Exception:
                         pass
                 return self.send_json(200, STORE.list_events(limit))
-            if path == "/health":
-                return self.send_json(200, {"ok": True, "version": APP_VERSION})
             return self.send_json(404, {"error": "not_found"})
         except Exception as exc:
             traceback.print_exc()
@@ -144,6 +296,8 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         path, _, _ = self.path.partition("?")
         try:
+            if not self.require_runtime():
+                return
             if path in ('/api/home/bootstrap', '/api/home/cancel'):
                 if not ENGINE.home_bootstrap:
                     return self.send_json(409, {'error': 'History engine is not ready'})
@@ -215,6 +369,8 @@ class Handler(BaseHTTPRequestHandler):
     def do_PATCH(self):
         path, _, _ = self.path.partition("?")
         try:
+            if not self.require_runtime():
+                return
             if path.startswith("/api/agents/"):
                 agent_id = path.split("/")[3]
                 payload = self.read_json()
@@ -251,7 +407,6 @@ class Handler(BaseHTTPRequestHandler):
                         ENGINE.models.pop(agent_id, None)
                         ENGINE.runtime.pop(agent_id, None)
                     return self.send_json(200, agent)
-
             return self.send_json(404, {"error": "not_found"})
         except Exception as exc:
             traceback.print_exc()
@@ -260,6 +415,8 @@ class Handler(BaseHTTPRequestHandler):
     def do_DELETE(self):
         path, _, _ = self.path.partition("?")
         try:
+            if not self.require_runtime():
+                return
             if path.startswith("/api/agents/") and path.endswith("/learning"):
                 agent_id = path.split("/")[3]
                 if HISTORY is None or not STORE.get_agent(agent_id):
@@ -279,8 +436,24 @@ class Handler(BaseHTTPRequestHandler):
             return self.send_json(500, {"error": str(exc)})
 
 
+def shutdown_runtime():
+    try:
+        if ENGINE is not None:
+            ENGINE.context.save(force=True)
+            if ENGINE.home_bootstrap:
+                ENGINE.home_bootstrap.cancel()
+            ENGINE.stop_event.set()
+            ENGINE.control_workers.shutdown(wait=False, cancel_futures=True)
+            ENGINE.poll_worker.shutdown(wait=False, cancel_futures=True)
+        if HISTORY is not None:
+            HISTORY.stop_event.set()
+        if EVENT_STREAM is not None:
+            EVENT_STREAM.stop_event.set()
+    except Exception:
+        traceback.print_exc()
+
+
 def main():
-    global HISTORY
     try:
         nice_by = int(OPTIONS.get("process_nice", 10))
         if nice_by > 0 and hasattr(os, "nice"):
@@ -288,29 +461,20 @@ def main():
             print(f"Adaptive AI process niceness increased by {nice_by}; Home Assistant keeps CPU priority", flush=True)
     except Exception as exc:
         print(f"[startup] Could not adjust process niceness: {exc}", flush=True)
-    ENGINE.start()
-    event_stream = HAEventStream(ENGINE)
-    event_stream.start()
-    HISTORY = HistoryManager(ENGINE)
-    ENGINE.history_manager = HISTORY
-    ENGINE.home_bootstrap = HomeBootstrap(ENGINE.context, HISTORY, STORE)
-    HISTORY.start()
+
+    # Bind first. From this point Ingress has a real page and /api/status, even while
+    # the database, Home Assistant connection and learning runtime are still starting.
     server = ThreadingHTTPServer(("0.0.0.0", 8099), Handler)
+    set_startup("http_ready", 0, "Web interface ready; starting Adaptive AI runtime")
     print("Adaptive AI UI listening on :8099", flush=True)
+    runtime_thread = threading.Thread(target=initialize_runtime, name="adaptive-ai-runtime-init", daemon=True)
+    runtime_thread.start()
     try:
         server.serve_forever()
     except KeyboardInterrupt:
         pass
     finally:
-        ENGINE.context.save(force=True)
-        if ENGINE.home_bootstrap:
-            ENGINE.home_bootstrap.cancel()
-        ENGINE.stop_event.set()
-        ENGINE.control_workers.shutdown(wait=False, cancel_futures=True)
-        ENGINE.poll_worker.shutdown(wait=False, cancel_futures=True)
-        if HISTORY is not None:
-            HISTORY.stop_event.set()
-        event_stream.stop_event.set()
+        shutdown_runtime()
         server.server_close()
 
 
