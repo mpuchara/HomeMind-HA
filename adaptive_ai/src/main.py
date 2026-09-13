@@ -11,8 +11,6 @@ import traceback
 from settings import (APP_VERSION, OPTIONS, STATIC_DIR, SUPPORTED_TARGETS, clamp, now_ts)
 
 # Runtime-heavy modules are imported only after the Ingress HTTP server is listening.
-# This removes the startup window where Home Assistant showed 502 Bad Gateway while
-# SQLite migrations, runtime construction and Home Assistant discovery were still loading.
 ENGINE = None
 HISTORY = None
 EVENT_STREAM = None
@@ -20,12 +18,15 @@ STORE = None
 AUTOMATION_KNOWLEDGE = None
 target_options_for_state = None
 default_action_interval = None
+assess_control_qualification = None
+review_status = None
+set_review_approval = None
 
 STARTUP_LOCK = threading.RLock()
 STARTUP = {
     "state": "http_starting",
     "step": 0,
-    "steps": 6,
+    "steps": 7,
     "message": "Starting Adaptive AI web interface",
     "ready": False,
     "error": None,
@@ -53,11 +54,7 @@ def runtime_available():
 
 
 def migrate_legacy_fast_intervals():
-    """Migrate the old manual-agent UI default of 60 s for genuinely fast targets.
-
-    Auto-created agents already used domain defaults. Only manual agents with the exact
-    old shipped 60 s value are migrated, so custom user intervals are left untouched.
-    """
+    """Migrate the old manual-agent UI default of 60 s for genuinely fast targets."""
     if STORE is None or default_action_interval is None:
         return 0
     migrated = []
@@ -86,6 +83,7 @@ def initialize_runtime():
     """Load the control runtime in the background after HTTP is already available."""
     global ENGINE, HISTORY, EVENT_STREAM, STORE, AUTOMATION_KNOWLEDGE
     global target_options_for_state, default_action_interval
+    global assess_control_qualification, review_status, set_review_approval
     try:
         set_startup("loading_runtime", 1, "Loading local database and runtime modules")
         from storage import STORE as runtime_store
@@ -95,11 +93,16 @@ def initialize_runtime():
         from engine import Engine, HAEventStream
         from history import HistoryManager
         from home_bootstrap import HomeBootstrap
+        from qualification import assess_control_qualification as assess_qualification
+        from control import review_status as get_review_status, set_review_approval as set_approval
 
         STORE = runtime_store
         AUTOMATION_KNOWLEDGE = automation_knowledge
         target_options_for_state = target_options
         default_action_interval = default_interval
+        assess_control_qualification = assess_qualification
+        review_status = get_review_status
+        set_review_approval = set_approval
 
         set_startup("building_runtime", 2, "Preparing device policies and local state")
         ENGINE = Engine()
@@ -120,7 +123,21 @@ def initialize_runtime():
         ENGINE.home_bootstrap = HomeBootstrap(ENGINE.context, HISTORY, STORE)
         HISTORY.start()
 
-        set_startup("ready", 6, "Adaptive AI runtime is ready", ready=True)
+        set_startup("reconciling_control", 6, "Checking persistent Control ownership")
+        try:
+            leases = ENGINE.executor.handoff.journal.all()
+            if leases:
+                try:
+                    ENGINE.refresh_states()
+                except Exception:
+                    pass
+                result = ENGINE.executor.reconcile_control()
+                STORE.event(None, "info" if not result.get("failed") else "warning",
+                            "control_startup_reconcile", "Persistent Control ownership reconciled", result)
+        except Exception as exc:
+            STORE.event(None, "error", "control_startup_reconcile_failed", str(exc), None)
+
+        set_startup("ready", 7, "Adaptive AI runtime is ready", ready=True)
         print("Adaptive AI runtime initialized", flush=True)
     except Exception as exc:
         traceback.print_exc()
@@ -206,6 +223,24 @@ class Handler(BaseHTTPRequestHandler):
             return self.send_json(404, {"error": "not_found"})
         return self.send_bytes(200, path.read_bytes(), content_type)
 
+    def trusted_client(self):
+        # Unit/dev runs without Supervisor are intentionally local-friendly. Under
+        # Supervisor, Ingress must arrive from the Supervisor proxy (plus loopback).
+        if not os.environ.get("SUPERVISOR_TOKEN"):
+            return True
+        if not hasattr(self, "client_address") or not self.client_address:
+            return True
+        peer = str(self.client_address[0])
+        configured = os.environ.get("ADAPTIVE_AI_TRUSTED_PROXY_IPS", "172.30.32.2,127.0.0.1,::1")
+        allowed = {x.strip() for x in configured.split(",") if x.strip()}
+        return peer in allowed
+
+    def require_trusted_client(self):
+        if self.trusted_client():
+            return True
+        self.send_json(403, {"error": "forbidden", "message": "Direct add-on HTTP access is not allowed"})
+        return False
+
     def require_runtime(self):
         if runtime_available():
             return True
@@ -234,6 +269,8 @@ class Handler(BaseHTTPRequestHandler):
         return status
 
     def do_GET(self):
+        if not self.require_trusted_client():
+            return
         path, _, query = self.path.partition("?")
         try:
             if path in ("/", ""):
@@ -242,6 +279,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self.static("style.css", "text/css; charset=utf-8")
             if path == "/app.js":
                 return self.static("app.js", "application/javascript; charset=utf-8")
+            if path == "/p0.js":
+                return self.static("p0.js", "application/javascript; charset=utf-8")
             if path == "/settings.js":
                 return self.static("settings.js", "application/javascript; charset=utf-8")
             if path == "/home.js":
@@ -275,6 +314,11 @@ class Handler(BaseHTTPRequestHandler):
                         runtime["event_to_ack_ms"] = float(runtime["event_to_service_ms"]) + float(runtime["service_to_ack_ms"])
                     else:
                         runtime["event_to_ack_ms"] = None
+                    with ENGINE.lock:
+                        target_state = ENGINE.state_map.get(a["target_entity"])
+                    a["control_qualification"] = assess_control_qualification(a)
+                    a["control_review"] = review_status(STORE, a, target_state)
+                    a["control_lease"] = ENGINE.executor.handoff.journal.get(a["target_entity"])
                     a["runtime"] = runtime
                 return self.send_json(200, agents)
             if path.startswith("/api/agents/") and path.endswith("/feedback"):
@@ -293,7 +337,13 @@ class Handler(BaseHTTPRequestHandler):
             traceback.print_exc()
             return self.send_json(500, {"error": str(exc)})
 
+    def _release_before_heavy_job(self, agent, reason):
+        if agent and agent.get("mode") == "control":
+            ENGINE.executor.release_control(agent, reason=reason)
+
     def do_POST(self):
+        if not self.require_trusted_client():
+            return
         path, _, _ = self.path.partition("?")
         try:
             if not self.require_runtime():
@@ -325,6 +375,10 @@ class Handler(BaseHTTPRequestHandler):
                     return self.send_json(404, {"error": "agent/history engine not found"})
                 if agent.get("training_state") == "training":
                     return self.send_json(409, {"error": "this agent is already training"})
+                try:
+                    self._release_before_heavy_job(agent, "training")
+                except Exception as exc:
+                    return self.send_json(502, {"error": f"Could not release Control before training: {exc}"})
                 partial = agent.get("training_state") != "needs_retrain" and agent.get("training_cursor_ts") is not None and float(agent.get("training_progress") or 0.0) < 0.999
                 started = HISTORY.request_agent_resume(agent_id) if partial else HISTORY.request_agent_rebuild(agent_id)
                 if not started:
@@ -337,6 +391,10 @@ class Handler(BaseHTTPRequestHandler):
                     return self.send_json(404, {"error": "agent/history engine not found"})
                 if agent.get("training_state") != "paused":
                     return self.send_json(409, {"error": "Resume is available only for PAUSED agents"})
+                try:
+                    self._release_before_heavy_job(agent, "resume_training")
+                except Exception as exc:
+                    return self.send_json(502, {"error": f"Could not release Control before training: {exc}"})
                 started = HISTORY.request_agent_resume(agent_id)
                 if not started:
                     return self.send_json(409, {"error": "training job is already active"})
@@ -367,6 +425,8 @@ class Handler(BaseHTTPRequestHandler):
             return self.send_json(500, {"error": str(exc)})
 
     def do_PATCH(self):
+        if not self.require_trusted_client():
+            return
         path, _, _ = self.path.partition("?")
         try:
             if not self.require_runtime():
@@ -374,6 +434,7 @@ class Handler(BaseHTTPRequestHandler):
             if path.startswith("/api/agents/"):
                 agent_id = path.split("/")[3]
                 payload = self.read_json()
+                review_request = payload.pop("control_reviewed", None)
                 if "mode" in payload and payload["mode"] not in ("shadow", "control", "paused"):
                     return self.send_json(400, {"error": "invalid mode"})
                 existing = STORE.get_agent(agent_id)
@@ -386,24 +447,54 @@ class Handler(BaseHTTPRequestHandler):
                     return self.send_json(409, {'error': 'Wait for this training job before editing the agent'})
                 with ENGINE.executor.target_lock(existing['target_entity']):
                     existing = STORE.get_agent(agent_id)
+                    if review_request is not None:
+                        with ENGINE.lock:
+                            target_state = ENGINE.state_map.get(existing["target_entity"])
+                        if not target_state:
+                            return self.send_json(409, {"error": "Target state unavailable; cannot review Control guard"})
+                        set_review_approval(STORE, existing, target_state, bool(review_request))
+                        if not bool(review_request) and existing.get("mode") == "control":
+                            payload["mode"] = "shadow"
+
+                    model_change = any(k in payload for k in ("min_value", "max_value", "input_entities"))
+                    disabling = "enabled" in payload and not bool(payload.get("enabled"))
+                    leaving_control = existing.get("mode") == "control" and (
+                        ("mode" in payload and payload.get("mode") != "control") or model_change or disabling
+                    )
+                    if leaving_control:
+                        try:
+                            ENGINE.executor.release_control(existing, reason="mode_or_settings_change")
+                        except Exception as exc:
+                            return self.send_json(502, {"error": f"Could not release Control safely: {exc}"})
+
                     if payload.get("mode") == "control":
-                        if any(k in payload for k in ("min_value", "max_value", "input_entities")):
+                        if model_change:
                             return self.send_json(409, {"error": "Save model changes and Train before enabling Control"})
                         if existing.get("training_state") != "qualified":
-                            score = existing.get("benchmark_score")
-                            score_text = f"{score:.1%}" if score is not None else "not benchmarked"
-                            return self.send_json(409, {"error": f"Control requires behaviour benchmark > {float(OPTIONS.get('candidate_benchmark_threshold', .78)):.0%}; candidate is {score_text}. Use Resume to continue from the saved cursor, or Rebuild after changing sensors/context."})
+                            return self.send_json(409, {"error": "Control requires a completed historical benchmark. Use Train/Resume first."})
+                        qualification = assess_control_qualification(existing)
+                        if not qualification.get("passed"):
+                            return self.send_json(409, {"error": qualification.get("reason"), "control_qualification": qualification})
                         try:
                             ENGINE.take_control(existing, refresh=True)
                         except Exception as exc:
                             STORE.event(agent_id, "error", "automation_takeover_failed", str(exc))
-                            return self.send_json(502, {"error": f"Control transition failed: {exc}. Successfully disabled automations remain off."})
-                    agent = STORE.update_agent(agent_id, payload)
+                            return self.send_json(502, {"error": f"Control transition failed: {exc}. Any partial handoff was rolled back when possible."})
+
+                    try:
+                        agent = STORE.update_agent(agent_id, payload) if payload else STORE.get_agent(agent_id)
+                    except Exception:
+                        if payload.get("mode") == "control":
+                            try:
+                                ENGINE.executor.release_control(existing, reason="mode_commit_failed")
+                            except Exception:
+                                pass
+                        raise
                     if payload.get("mode") == "control":
                         ENGINE.release_manual_hold(agent_id)
                     if not agent:
                         return self.send_json(404, {"error": "agent not found"})
-                    if any(k in payload for k in ("min_value", "max_value", "input_entities")):
+                    if model_change:
                         ENGINE.models.pop(agent_id, None)
                         ENGINE.runtime.pop(agent_id, None)
                     return self.send_json(200, agent)
@@ -413,19 +504,32 @@ class Handler(BaseHTTPRequestHandler):
             return self.send_json(500, {"error": str(exc)})
 
     def do_DELETE(self):
+        if not self.require_trusted_client():
+            return
         path, _, _ = self.path.partition("?")
         try:
             if not self.require_runtime():
                 return
             if path.startswith("/api/agents/") and path.endswith("/learning"):
                 agent_id = path.split("/")[3]
-                if HISTORY is None or not STORE.get_agent(agent_id):
+                agent = STORE.get_agent(agent_id)
+                if HISTORY is None or not agent:
                     return self.send_json(404, {"error": "agent/history engine not found"})
+                try:
+                    self._release_before_heavy_job(agent, "full_rebuild")
+                except Exception as exc:
+                    return self.send_json(502, {"error": f"Could not release Control before rebuild: {exc}"})
                 if not HISTORY.request_agent_rebuild(agent_id):
                     return self.send_json(409, {"error": "Another heavy job is active"})
                 return self.send_json(202, {"ok": True, "state": "training", "message": "Full rebuild scheduled from the beginning of local history"})
             if path.startswith("/api/agents/"):
                 agent_id = path.split("/")[3]
+                agent = STORE.get_agent(agent_id)
+                if agent and agent.get("mode") == "control":
+                    try:
+                        ENGINE.executor.release_control(agent, reason="agent_deleted")
+                    except Exception as exc:
+                        return self.send_json(502, {"error": f"Could not restore previous controllers before deletion: {exc}"})
                 STORE.delete_agent(agent_id)
                 ENGINE.models.pop(agent_id, None)
                 ENGINE.runtime.pop(agent_id, None)
@@ -439,6 +543,13 @@ class Handler(BaseHTTPRequestHandler):
 def shutdown_runtime():
     try:
         if ENGINE is not None:
+            try:
+                errors = ENGINE.executor.release_all_control(reason="shutdown")
+                if errors and STORE is not None:
+                    STORE.event(None, "error", "control_shutdown_restore_failed",
+                                "Some Control leases could not be restored during shutdown", {"errors": errors})
+            except Exception:
+                traceback.print_exc()
             ENGINE.context.save(force=True)
             if ENGINE.home_bootstrap:
                 ENGINE.home_bootstrap.cancel()
@@ -462,8 +573,6 @@ def main():
     except Exception as exc:
         print(f"[startup] Could not adjust process niceness: {exc}", flush=True)
 
-    # Bind first. From this point Ingress has a real page and /api/status, even while
-    # the database, Home Assistant connection and learning runtime are still starting.
     server = ThreadingHTTPServer(("0.0.0.0", 8099), Handler)
     set_startup("http_ready", 0, "Web interface ready; starting Adaptive AI runtime")
     print("Adaptive AI UI listening on :8099", flush=True)

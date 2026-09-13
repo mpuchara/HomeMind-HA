@@ -1,5 +1,4 @@
-// P0 runtime/UX hardening. Loaded after app.js so existing API/actions remain intact.
-// It replaces only presentation functions; control/training behaviour stays in Python.
+// P0/P1 runtime UX. Loaded after app.js so API/actions stay in one place.
 (() => {
   const nodes = new Map();
   const oldHome = renderHome;
@@ -24,7 +23,7 @@
     if (!panel) return;
     panel.hidden=Boolean(s.ready);
     if (s.ready) return;
-    const steps=Math.max(1,Number(s.steps||6)), step=Math.max(0,Number(s.step||0)), progress=Math.round(step*100/steps);
+    const steps=Math.max(1,Number(s.steps||7)), step=Math.max(0,Number(s.step||0)), progress=Math.round(step*100/steps);
     panel.innerHTML=`<div class="history-head"><div><b>${s.error?'Startup problem':'Starting Adaptive AI'}</b><span>${esc(s.message||'Preparing runtime…')}</span></div><div class="history-percent"><strong>${step}/${steps}</strong><small>${esc(duration(s.elapsed_seconds)||'')}</small></div></div><div class="bar history-bar"><i style="width:${progress}%"></i></div>${s.error?`<div class="conflict-warning"><b>Runtime did not start</b><span>${esc(s.error)}</span></div>`:''}`;
   };
 
@@ -34,14 +33,14 @@
     const p95=status.telemetry?.metrics?.event_to_intent?.p95_ms;
     $('#overview').innerHTML=`<div class="metric"><b>${lastAgents.length||status.agent_count||0}</b><span>agents</span></div><div class="metric"><b>${control}</b><span>Control · ${shadow} Shadow</span></div><div class="metric"><b>${status.state_count||0}</b><span>HA entities</span></div><div class="metric"><b>${p95==null?'—':ms(p95)}</b><span>event → intent p95</span></div>`;
     const c=$('#connection'), s=status.startup||{}, rt=status.realtime||{};
-    if (!s.ready) { c.textContent=s.error?'Startup error':`Starting · ${s.step||0}/${s.steps||6}`; c.className='pill'; return; }
+    if (!s.ready) { c.textContent=s.error?'Startup error':`Starting · ${s.step||0}/${s.steps||7}`; c.className='pill'; return; }
     c.textContent=status.ha_connected?`HA connected${rt.connected?' · realtime':' · REST fallback'}`:`Connecting to HA${status.ha_error?' · '+status.ha_error:''}`;
     c.className='pill'+(status.ha_connected?' good':'');
   };
 
   const taskFor = (h,status) => {
     const s=status.startup||{};
-    if (!s.ready) return {title:'Starting Adaptive AI', detail:s.message||'Preparing runtime', p:(s.step||0)/Math.max(1,s.steps||6), eta:null, work:null};
+    if (!s.ready) return {title:'Starting Adaptive AI', detail:s.message||'Preparing runtime', p:(s.step||0)/Math.max(1,s.steps||7), eta:null, work:null};
     const training=lastAgents.find(a=>(a.runtime?.training_state||a.training_state)==='training');
     if (training) return {title:`Training ${training.name}`,detail:h.phase_detail||h.message||'Replaying recorded behaviour',p:Number(training.training_progress||0),eta:h.stage_eta_seconds??h.eta_seconds,work:h.work_total?`${num(h.work_done)} / ${num(h.work_total)} ${h.work_unit||'history rows'}`:null};
     const b=status.home_bootstrap||{};
@@ -63,6 +62,13 @@
 
   const driver = a => { const c=a.runtime?.context_meta||{}, xs=c.primary_behavioural_drivers||[]; return c.primary_occupancy_sensor||xs[0]||c.primary_local_sensor||null; };
   const latency = a => { const r=a.runtime||{}; if(r.event_to_ack_ms!=null)return `event → device ${ms(r.event_to_ack_ms)}`; if(r.event_to_service_ms!=null)return `event → command ${ms(r.event_to_service_ms)}`; if(r.last_service_latency_ms!=null)return `HA call ${ms(r.last_service_latency_ms)}`; return r.realtime_connected?'⚡ realtime':'REST fallback'; };
+  const controlReady = a => Boolean((a.runtime?.training_state||a.training_state)==='qualified' && (a.control_qualification?.passed ?? true) && (a.control_review?.ready ?? true));
+  const controlBlockReason = a => {
+    if ((a.runtime?.training_state||a.training_state)!=='qualified') return 'Complete training and the historical benchmark first.';
+    if (a.control_review && !a.control_review.ready) return a.control_review.approval_required && !a.control_review.approved ? 'Review this generic target in Settings before Control.' : 'Device capabilities changed; review the target again.';
+    if (a.control_qualification && !a.control_qualification.passed) return a.control_qualification.reason||'More held-out evidence is required for Control.';
+    return '';
+  };
   const human = a => {
     const r=a.runtime||{}, training=r.training_state||a.training_state||'paused', reason=String(r.decision_reason||''), state=String(r.decision_state||'idle');
     if(training==='training') return ['training',`Learning ${Math.round(Number(a.training_progress||0)*100)}%`,'Historical replay and validation are running.'];
@@ -70,6 +76,8 @@
     if(training==='waiting') return ['waiting','Ready to train','Training has not started yet.'];
     if(training==='paused'&&a.mode==='paused') return ['paused','Paused','This agent is not making decisions.'];
     if(a.mode==='shadow') return ['shadow','Observing','Shadow calculates decisions but sends no Home Assistant services.'];
+    if(a.control_review && !a.control_review.ready) return ['waiting','Control review required',controlBlockReason(a)];
+    if(a.control_qualification && !a.control_qualification.passed) return ['waiting','More validation required',controlBlockReason(a)];
     if(state==='error'||/^(service|takeover|unavailable|limits):/.test(reason)) return ['error','Problem',reason.replace(/^[^:]+:\s*/, '')||'Control path failed.'];
     if(reason.startsWith('manual:')) return ['hold','Manual control','Your manual setting has priority.'];
     if(reason.startsWith('duplicate:')) return ['hold','State correct','The device is already in the desired state.'];
@@ -85,8 +93,13 @@
   };
 
   const detailsHtml = a => {
-    const r=a.runtime||{}, c=r.context_meta||{}, selected=(r.selected_context_entities||[]).slice(0,12).join(' · ')||'—';
-    return `<div class="detail"><b>Target:</b> ${esc(a.target_entity)} · ${esc(a.target_property)}<br><b>Internal reason:</b> ${esc(r.decision_reason||'—')}<br><b>Behaviour benchmark:</b> ${a.benchmark_score==null?'—':pct(a.benchmark_score)} · ${num(a.benchmark_samples||0)} held-out<br><b>Support / novelty:</b> ${pct(r.historical_support||0)} / ${pct(r.context_novelty??1)}<br><b>Latency:</b> HA call ${ms(r.last_service_latency_ms)} · ACK ${r.ack_latency_seconds==null?'—':ms(Number(r.ack_latency_seconds)*1000)}<br><b>Timing:</b> ACK ${num(r.timing?.acknowledgement||0)} s · settling ${num(r.timing?.settling||0)} s · action interval ${num(a.action_interval||0,1)} s<br><b>Primary sensor:</b> ${esc(driver(a)||'—')}<br><b>Selected context:</b> ${esc(selected)}<br><b>Model:</b> ${esc(r.model||'—')}<br><b>Last HA service:</b> ${esc(r.last_service||'—')}${r.last_service_error?' · '+esc(r.last_service_error):''}</div>`;
+    const r=a.runtime||{}, selected=(r.selected_context_entities||[]).slice(0,12).join(' · ')||'—';
+    const q=a.control_qualification||{}, review=a.control_review||{}, lease=a.control_lease;
+    const qText=q.reason?`${esc(q.reason)} · observed ${pct(q.observed_score||0)} · 95% lower bound ${pct(q.lower_bound||0)}`:'—';
+    const perAction=Object.entries(q.per_action||{}).map(([k,v])=>`${esc(k)}: ${pct(v.accuracy||0)} (${v.correct||0}/${v.samples||0}), lower ${pct(v.lower_bound||0)}`).join(' · ')||'—';
+    const reviewText=review.approval_required?(review.ready?'approved':'review required / invalidated'):'standard device profile';
+    const leaseText=lease?`active · ${Number((lease.disabled_automations||[]).length)} previous controller(s) held`:'none';
+    return `<div class="detail"><b>Target:</b> ${esc(a.target_entity)} · ${esc(a.target_property)}<br><b>Internal reason:</b> ${esc(r.decision_reason||'—')}<br><b>Behaviour benchmark:</b> ${a.benchmark_score==null?'—':pct(a.benchmark_score)} · ${num(a.benchmark_samples||0)} held-out<br><b>Control qualification:</b> ${qText}<br><b>Per-action validation:</b> ${perAction}<br><b>Control review:</b> ${esc(reviewText)}<br><b>Control lease:</b> ${esc(leaseText)}<br><b>Support / novelty:</b> ${pct(r.historical_support||0)} / ${pct(r.context_novelty??1)}<br><b>Latency:</b> HA call ${ms(r.last_service_latency_ms)} · ACK ${r.ack_latency_seconds==null?'—':ms(Number(r.ack_latency_seconds)*1000)}<br><b>Timing:</b> ACK ${num(r.timing?.acknowledgement||0)} s · settling ${num(r.timing?.settling||0)} s · action interval ${num(a.action_interval||0,1)} s<br><b>Primary sensor:</b> ${esc(driver(a)||'—')}<br><b>Selected context:</b> ${esc(selected)}<br><b>Model:</b> ${esc(r.model||'—')}<br><b>Last HA service:</b> ${esc(r.last_service||'—')}${r.last_service_error?' · '+esc(r.last_service_error):''}</div>`;
   };
 
   const create = a => {
@@ -104,8 +117,11 @@
     el.querySelector('[data-p0=mode]').className=`mode ${a.mode}`;
     const [tone,title,detail]=human(a), box=el.querySelector('[data-p0=decision]'); box.className=`decision ${tone}`; text(el,'state',title); text(el,'detail',detail);
     el.classList.toggle('paused-agent',['paused','waiting','needs_retrain'].includes(training)); el.classList.toggle('training-agent',training==='training');
-    el.querySelectorAll('[data-mode]').forEach(b=>{b.classList.toggle('active',b.dataset.mode===a.mode);b.disabled=b.dataset.mode==='control'&&!qualified;});
-    el.querySelector('[data-a=train]').hidden=!['waiting','needs_retrain'].includes(training); el.querySelector('[data-a=resume]').hidden=training!=='paused'; el.querySelector('[data-a=verify]').disabled=a.mode!=='control'||!qualified; el.querySelector('[data-a=rebuild]').disabled=training==='training'||['waiting','needs_retrain'].includes(training);
+    el.querySelectorAll('[data-mode]').forEach(b=>{
+      b.classList.toggle('active',b.dataset.mode===a.mode);
+      if(b.dataset.mode==='control') { const why=controlBlockReason(a); b.disabled=!controlReady(a); b.title=why; }
+    });
+    el.querySelector('[data-a=train]').hidden=!['waiting','needs_retrain'].includes(training); el.querySelector('[data-a=resume]').hidden=training!=='paused'; el.querySelector('[data-a=verify]').disabled=a.mode!=='control'||!controlReady(a); el.querySelector('[data-a=rebuild]').disabled=training==='training'||['waiting','needs_retrain'].includes(training);
     if(el.querySelector('details').open){const body=el.querySelector('[data-p0=details]'),html=detailsHtml(a);if(body.dataset.snap!==html){body.innerHTML=html;body.dataset.snap=html;}}
   };
 

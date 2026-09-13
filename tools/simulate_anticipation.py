@@ -35,7 +35,6 @@ def fixture():
     registry={eid:{'area_id':eid.split('.')[1]} for eid in states}
     context=ContextEngine(DEFAULT_OPTIONS);context.configure(states,entities=registry)
     model=context.home
-    # First disjoint dataset teaches one shared home graph, including alternate paths.
     for i in range(200):
         ts=now-50000+i*100
         for a in ('terrace','living','kitchen','bedroom'):model.observe(a,a,0,ts)
@@ -45,10 +44,13 @@ def fixture():
         model.expire(ts+50)
     raw=model.export()
     context.home=SharedHomeStateModel(raw=raw)
+    benchmark_detail={'balanced':True,'counts':{'samples':80,'correct':80,'per_action':{
+        '0':{'samples':40,'correct':40},'1':{'samples':40,'correct':40}}}}
     a=dict(id='sim',name='Kitchen',target_entity='light.kitchen',target_property='power',
            input_entities=['sensor.lux'],enabled=True,mode='shadow',training_state='qualified',
            min_value=0,max_value=1,deadband=.5,confidence_threshold=.78,action_interval=1,
-           exploration_step=1,micro_exploration=False)
+           exploration_step=1,micro_exploration=False,benchmark_score=1.0,benchmark_samples=80,
+           benchmark_detail=benchmark_detail)
     policy=MultiHorizonPolicy(a,states,registry,set(),context_engine=context)
     temporal=TemporalHistory()
 
@@ -64,12 +66,10 @@ def fixture():
             at=ts+5
         return policy.features(states,temporal,at_ts=at)[0]
 
-    # Disjoint policy training: upcoming accepted ON, empty OFF, wrong-branch OFF.
     for i in range(400):
         for kind,action in (('arriving',1),('empty',0),('bedroom',0)):
             x=example(kind,now-20000+i*30)
             policy.update(1,action,x,1)
-    # Held-out calibration is never folded back before checking confidence.
     for i in range(40):
         for kind,action in (('arriving',1),('empty',0),('bedroom',0)):
             policy.heads[1].validate(action,example(kind,now-6000+i*30),1)
@@ -84,9 +84,11 @@ def run():
     fake_store=Mock();fake_store.get_agent.return_value=a;fake_store.list_agents.return_value=[a]
     fake_store.get_agent_config.return_value=a;fake_store.list_agent_configs.return_value=[a]
     fake_store.meta_get.side_effect=lambda key,default=None:default
+    fake_store.meta_set.return_value=None
     results={}
     try:
         with patch.object(engine_module,'STORE',fake_store),patch.object(executor_module,'STORE',fake_store), \
+             patch.object(e.executor.handoff,'store',fake_store),patch.object(e.executor.handoff.journal,'store',fake_store), \
              patch.object(executor_module.HA,'service',return_value=[]) as service, \
              patch.object(executor_module.AUTOMATION_KNOWLEDGE,'hints_for_target',return_value=(set(),[])):
             for mode in ('shadow','control'):
@@ -104,7 +106,6 @@ def run():
             assert results['control']['forecast']['occupancy_now']==0
             assert service.call_count==1
             dispatched=e.runtime[a['id']]['last_intent']['created_at']
-            # Replay actual acknowledgement and future sensor event on a virtual clock.
             ack_at=dispatched+.05
             arrival_at=dispatched+2
             ack=dict(states['light.kitchen'],state='on',context={'user_id':'supervisor'})
