@@ -19,20 +19,20 @@ function renderHome(status){
   const inf=t.metrics?.inference||{}, latency=t.metrics?.event_to_intent||{};
   const running=['IMPORTING','TRAINING'].includes(b.state), names=h.area_names||{};
   const paths=(h.top_transitions||[]).slice(0,5);
-  $('#homePanel').innerHTML='<div class="history-head"><div><b>Home Intelligence</b><span>Shared occupancy and trajectory model</span></div><strong>'+esc(b.state||'IDLE')+'</strong></div>'+
+  $('#homePanel').innerHTML='<div class="history-head"><div><b>Home Intelligence</b><span>Shared occupancy and trajectory model · live learning is automatic</span></div><strong>'+esc(b.state||'IDLE')+'</strong></div>'+
     '<div class="home-metrics">'+[
       [num(h.areas),'observed areas'],[num(h.edges),'transitions'],[num(h.updates),'online / bootstrap updates'],
       [num(h.unmapped_sources),'sources without area'],[t.rss_mb==null?'—':num(t.rss_mb,1)+' MB','RSS'],
       [inf.p95_ms==null?'—':num(inf.p95_ms,2)+' ms','inference p95'],
       [latency.p95_ms==null?'—':num(latency.p95_ms,2)+' ms','event → intent p95']
     ].map(([v,label])=>'<div><b>'+v+'</b><span>'+label+'</span></div>').join('')+'</div>'+
-    '<div class="home-transitions">'+(paths.length?paths.map(p=>'<span>'+p.path.map(id=>esc(names[id]||id)).join(' → ')+' <b>'+pct(p.probability)+'</b></span>').join(''):'No observed area-to-area transitions yet. Check the source list below; existing mapped sensors continue learning live.')+'</div>'+
+    '<div class="home-transitions">'+(paths.length?paths.map(p=>'<span>'+p.path.map(id=>esc(names[id]||id)).join(' → ')+' <b>'+pct(p.probability)+'</b></span>').join(''):'No observed area-to-area transitions yet. Existing mapped presence/activity sensors learn the live map automatically as state changes arrive.')+'</div>'+
     '<div class="history-meta"><span>Graph half-life '+num(h.half_life_days)+' days</span><span>Policy half-life '+num(status.options?.policy_half_life_days||30)+' days</span><span>Heavy job: '+esc(status.heavy_job||'idle')+'</span><span>Inference count '+num(inf.count)+'</span></div>'+
     (running?'<div class="bar history-bar"><i style="width:'+Math.round((b.progress||0)*100)+'%"></i></div><p>'+num(b.rows)+' rows · '+num(b.rows_per_second)+' rows/s · '+esc(duration(b.eta_seconds)||'ETA pending')+'</p>':'')+
     (b.error?'<p role="alert">'+esc(b.error)+'</p><p class="muted">Bootstrap failed; the current live model continues running.</p>':'')+
     homeSources(h,names)+
-    '<div class="actions"><button class="ghost" onclick="bootstrapHome()" '+(status.heavy_job?'disabled':'')+'>Bootstrap Home Model</button><button class="ghost" onclick="cancelHomeBootstrap()" '+(!running?'disabled':'')+'>Cancel bootstrap</button></div>'+
-    '<p class="muted">Bootstrap reads mapped occupancy/activity history once. Restart does not replay it. Area fallback mapping is available in add-on settings.</p>';
+    '<div class="actions"><button class="ghost" onclick="bootstrapHome()" '+(status.heavy_job?'disabled':'')+'>Backfill Home Model from history</button><button class="ghost" onclick="cancelHomeBootstrap()" '+(!running?'disabled':'')+'>Cancel backfill</button></div>'+
+    '<p class="muted"><b>Automatic:</b> live occupancy, dwell and room-to-room trajectory learning from mapped sensors. <b>Optional:</b> historical backfill imports Recorder history once to give the model useful past trajectories immediately. Restart does not replay history automatically.</p>';
   const updatedSources=$('#homePanel').querySelector('.home-source-details');
   if(updatedSources){updatedSources.open=sourcesOpen;updatedSources.querySelector('.home-source-table').scrollTop=sourceScroll;}
 }
