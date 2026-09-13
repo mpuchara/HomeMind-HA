@@ -10,21 +10,13 @@
 <body>
 <div class="shell">
   <header>
-    <div><div class="eyebrow">LOCAL HOME INTELLIGENCE · 0.9.2</div><h1>Adaptive AI</h1><p>Shared room forecasts, learned device preferences, verified control.</p></div>
-    <div id="connection" class="pill">Connecting…</div>
+    <div><div class="eyebrow">LOCAL HOME INTELLIGENCE · 0.9.2</div><h1>Adaptive AI</h1><p>Learned device behaviour with verified local control.</p></div>
+    <div id="connection" class="pill">Starting…</div>
   </header>
 
+  <section id="startupPanel" class="history-panel card"></section>
   <section class="overview" id="overview"></section>
-
-  <section class="hero card">
-    <div><strong>Context → Home model → Policy → Intent → Executor</strong><span>New agents wait for Train. One training or home bootstrap job runs at a time. Qualified policies start in Shadow.</span></div>
-    <button id="newAgentBtn" class="primary">+ Manual agent</button>
-  </section>
-
-  <section id="historyPanel" class="history-panel card"></section>
-  <section id="homePanel" class="history-panel card" aria-label="Home Intelligence"></section>
-
-  <div class="notice good-note"><b>Learning is local and manual to start.</b> Policies learn from history and user corrections. Version 0.9 uses deterministic actions with confidence, timing and ownership checks.</div>
+  <section id="taskPanel" class="history-panel card"></section>
 
   <main>
     <section>
@@ -40,15 +32,21 @@
             <option value="history_desc">Most history</option>
           </select>
           <button class="ghost" id="rescanBtn">Rescan devices</button>
+          <button class="primary" id="newAgentBtn">+ Manual agent</button>
         </div>
       </div>
       <div id="agents" class="agents"></div>
     </section>
 
-    <section>
-      <div class="section-title"><h2>Recent activity</h2><button class="ghost" id="refreshBtn">Refresh</button></div>
-      <div id="events" class="events card"></div>
-    </section>
+    <details id="diagnosticsPanel" class="card agent-details">
+      <summary><span>Diagnostics & technical details</span><span class="details-chevron" aria-hidden="true">⌄</span></summary>
+      <section id="historyPanel" class="history-panel"></section>
+      <section id="homePanel" class="history-panel" aria-label="Home Intelligence"></section>
+      <section>
+        <div class="section-title"><h2>Recent activity</h2><button class="ghost" id="refreshBtn">Refresh</button></div>
+        <div id="events" class="events"></div>
+      </section>
+    </details>
   </main>
 </div>
 
@@ -58,12 +56,12 @@
   <label>Name<input name="name" required placeholder="Salon brightness"></label>
   <label>Target entity<select name="target_entity" id="targetEntity" required></select></label>
   <label>Controlled property<select name="target_property" id="targetProperty" required></select></label>
-  <div class="context-all"><b>Context: whole-home candidate pool → agent-specific context</b><span>All usable HA entities are considered. Each agent keeps an explicit, collision-free subset of the most relevant context and adds temporal deltas/trends automatically.</span></div>
+  <div class="context-all"><b>Context: automatic whole-home selection</b><span>Usable HA entities compete during historical feature selection; the agent keeps only the most useful explicit context.</span></div>
   <div class="two"><label>Minimum<input name="min_value" type="number" step="any" required></label><label>Maximum<input name="max_value" type="number" step="any" required></label></div>
   <label>Maximum optional micro-exploration step <span class="hint">Exploration is disabled by default.</span><input name="exploration_step" type="number" min="0.01" step="any" required></label>
-  <details open><summary>Safety & policy</summary>
+  <details><summary>Safety & policy</summary>
     <div class="two"><label>Control confidence threshold<input name="confidence_threshold" type="number" min="0" max="0.99" step="0.05" value="0.78"></label><label>Deadband<input name="deadband" type="number" min="0" step="any" value="3"></label></div>
-    <label>Minimum seconds between control actions<input name="action_interval" type="number" min="1" value="60"></label>
+    <label>Minimum seconds between control actions<input name="action_interval" type="number" min="0.1" step="0.1" value="1"></label>
   </details>
   <div class="dialog-actions"><button type="button" class="ghost" id="cancelDialog">Cancel</button><button type="submit" class="primary">Create waiting for Train</button></div>
 </form>
@@ -72,4 +70,5 @@
 <script src="home.js"></script>
 <script src="app.js"></script>
 <script src="settings.js"></script>
-</body></html>
+</body>
+</html>
