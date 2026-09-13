@@ -61,7 +61,7 @@
   <label>Maximum optional micro-exploration step <span class="hint">Exploration is disabled by default.</span><input name="exploration_step" type="number" min="0.01" step="any" required></label>
   <details><summary>Safety & policy</summary>
     <div class="two"><label>Control confidence threshold<input name="confidence_threshold" type="number" min="0" max="0.99" step="0.05" value="0.78"></label><label>Deadband<input name="deadband" type="number" min="0" step="any" value="3"></label></div>
-    <label>Minimum seconds between control actions<input name="action_interval" type="number" min="0.1" step="0.1" value="1"></label>
+    <label>Minimum seconds between control actions<input name="action_interval" type="number" min="0.1" step="0.05" value="0.25"></label>
   </details>
   <div class="dialog-actions"><button type="button" class="ghost" id="cancelDialog">Cancel</button><button type="submit" class="primary">Create waiting for Train</button></div>
 </form>
