@@ -6,10 +6,11 @@ from control import review_status
 
 
 class ControlHandoff:
-    def __init__(self, store, state_map, refresh, knowledge, disable_one, restore_one):
+    def __init__(self, store, state_map, refresh, scan, knowledge, disable_one, restore_one):
         self.store = store
         self.state_map = state_map
         self.refresh = refresh
+        self.scan = scan
         self.knowledge = knowledge
         self.disable_one = disable_one
         self.restore_one = restore_one
@@ -63,7 +64,7 @@ class ControlHandoff:
 
         if refresh_scan:
             self.refresh()
-            self.knowledge.scan(self.state_map(), force=True)
+            self.scan()
 
         current = self.state_map()
         review = review_status(self.store, agent, current.get(agent['target_entity']))
