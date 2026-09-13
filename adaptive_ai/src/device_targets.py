@@ -14,6 +14,7 @@ The adapter is capability-aware and does not expose a controllable target when t
 entity cannot both start and end a cleaning run.
 """
 
+RELEASE_VERSION = "0.10.2"
 _INSTALLED = False
 
 # Home Assistant VacuumEntityFeature values.  Kept local so the add-on does not import
@@ -85,6 +86,10 @@ def install():
     import settings
     import context
     import control
+
+    # Keep the runtime/API version aligned with the add-on package without forcing a
+    # feature-schema rebuild: this adapter changes target-domain semantics, not models.
+    settings.APP_VERSION = RELEASE_VERSION
 
     settings.SUPPORTED_TARGETS.setdefault("vacuum", [])
     if not any(x.get("property") == "power" for x in settings.SUPPORTED_TARGETS["vacuum"]):
@@ -163,4 +168,4 @@ def install():
     control.timing_for = timing_for
 
     _INSTALLED = True
-    return {"installed": True, "vacuum": True}
+    return {"installed": True, "vacuum": True, "version": RELEASE_VERSION}
