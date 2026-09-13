@@ -5,10 +5,10 @@ from device_targets import install as install_device_targets
 # engine/history/executor symbols with ``from context import ...``.
 install_device_targets()
 
-# 0.10.4 changes the manual-feedback/context-selection path only, so keep policy/schema
-# revisions intact while reporting the package version consistently through the runtime API.
+# 0.10.5 finalizes manual-correction semantics while keeping policy/schema revisions
+# intact and reporting the package version consistently through the runtime API.
 import settings
-settings.APP_VERSION = "0.10.4"
+settings.APP_VERSION = "0.10.5"
 
 import queue_main as queued_runtime
 from fast_runtime import install as install_fast_runtime
