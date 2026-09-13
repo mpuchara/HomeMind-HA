@@ -9,7 +9,8 @@ class ControlHandoff:
     def __init__(self, store, state_map, refresh, scan, knowledge, disable_one, restore_one):
         self.store = store
         self.state_map = state_map
-        self.refresh = refresh
+        owner = getattr(refresh, '__self__', None)
+        self.refresh = (lambda: owner.refresh_states()) if owner is not None else refresh
         self.scan = scan
         self.knowledge = knowledge
         self.disable_one = disable_one
