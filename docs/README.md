@@ -1,43 +1,12 @@
-# Dokumentacja Adaptive AI 0.7.12
+# Dokumentacja 0.9.2
 
-Dokumentacja użytkownika dla HomeMind Adaptive AI w wersji **0.7.12**.
+- [Instalacja ZIP](INSTALLATION_PL.md)
+- [Obsługa](QUICK_START_PL.md)
+- [Architektura](ARCHITECTURE_0_9.md)
+- [Poprawka 0.9.2](RELEASE_0_9_2.md)
+- [Poprawka 0.9.1](RELEASE_0_9_1.md)
+- [Architektura wydania 0.9.0](RELEASE_0_9.md)
+- [Audyt bazowej wersji 0.8](AUDIT_0_8.md)
+- [Pomiar na Pi 4](BENCHMARK_PI4.md)
 
-## Zacznij tutaj
-
-1. [Instalacja i aktualizacja](INSTALLATION_PL.md)
-2. [Szybki start](QUICK_START_PL.md)
-3. [Obsługa aplikacji i agentów](USER_GUIDE_PL.md)
-4. [Jak działa Adaptive AI krok po kroku](HOW_IT_WORKS_PL.md)
-5. [Lifecycle agentów: TRAINING → SHADOW / PAUSED](AGENT_LIFECYCLE_PL.md)
-6. [Ustawienia i parametry](SETTINGS_REFERENCE_PL.md)
-7. [Diagnostyka i rozwiązywanie problemów](TROUBLESHOOTING_PL.md)
-8. [Bezpieczeństwo i ograniczenia](SAFETY_AND_LIMITATIONS_PL.md)
-
-## Dokumentacja techniczna
-
-- [Architektura](../ARCHITECTURE.md)
-- [Changelog](../adaptive_ai/CHANGELOG.md)
-- [Release notes 0.7](../RELEASE_0_7.md)
-- [Raport testów](../TEST_REPORT.md)
-
-## Najważniejszy workflow
-
-```text
-Home Assistant Recorder + bieżące stany
-                ↓
-             TRAINING
-                ↓
-      pełny benchmark historii
-                ↓
-        >78%          ≤78%
-          ↓              ↓
-      QUALIFIED        PAUSED
-          ↓              ↓
-        Shadow        brak bieżącego
-          ↓           treningu/inference
-   Verify control         ↓
-          ↓             Resume
-       Control
-```
-
-`Resume` kontynuuje od zapisanego kursora. `Rebuild` zeruje model danego agenta i wykonuje pełną indeksację od początku; używaj go m.in. po dodaniu ważnego nowego sensora.
+Pozostałe dokumenty opisujące 0.7.x mają charakter archiwalny; nie określają aktualnego zachowania Control ani treningu.

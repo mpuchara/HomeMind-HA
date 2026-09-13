@@ -16,7 +16,7 @@ configuration:
     description: Maximum number of relevant HA entities represented explicitly by one agent.
   prediction_horizons_seconds:
     name: Prediction horizons
-    description: Comma-separated prediction horizons in seconds; slow domains add longer horizons automatically.
+    description: Comma-separated policy horizons. Device acknowledgement and settling use separate timing profiles.
   min_historical_support:
     name: Minimum historical support
     description: Control is blocked when comparable historical evidence is below this value.
@@ -25,10 +25,22 @@ configuration:
     description: Control is blocked when the current context is too unlike the training history.
   block_control_on_automation_conflict:
     name: Automation conflict safety
-    description: Block Control while enabled Home Assistant automations also target the same entity. Shadow is unaffected.
+    description: Legacy compatibility option. Control disables detected target automations and verifies takeover. Shadow sends no services.
   action_bins:
     name: Numeric action bins
     description: Number of discrete action levels used by numeric contextual policies.
   rl_alpha:
     name: Exploration strength
-    description: LinUCB uncertainty coefficient used only by optional targeted micro-exploration.
+    description: Retained LinUCB parameter. Micro-exploration is inactive in version 0.9.
+  policy_half_life_days:
+    name: Policy half-life
+    description: Days until historical policy statistics retain half their weight.
+  home_model_half_life_days:
+    name: Home model half-life
+    description: Days until historical home transitions retain half their weight.
+  entity_area_mapping:
+    name: Explicit area mapping
+    description: JSON entity-to-area mapping used after HA entity and device registries.
+  intent_ttl_seconds:
+    name: Intent time to live
+    description: Maximum intent age before service execution, in seconds.

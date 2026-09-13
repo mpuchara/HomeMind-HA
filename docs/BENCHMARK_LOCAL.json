@@ -1,0 +1,31 @@
+{
+  "platform": "Windows-10-10.0.26200-SP0",
+  "python": "3.11.0",
+  "rss_mb": null,
+  "binary_policy": {
+    "count": 1000,
+    "avg_ms": 0.028586800006451085,
+    "p95_ms": 0.050799979362636805
+  },
+  "analog_31_arms_dense": {
+    "count": 1000,
+    "avg_ms": 1.0672380999021698,
+    "p95_ms": 1.7239000007975847
+  },
+  "event_to_shadow_intent_mock_store": {
+    "count": 1000,
+    "avg_ms": 0.2115861998172477,
+    "p95_ms": 0.34339999547228217
+  },
+  "limits": "Microbenchmarks exclude WebSocket delivery, debounce, real SQLite and physical device/HA response time.",
+  "pi4_thresholds_measured": false,
+  "targets": {
+    "idle_rss_mb": 150,
+    "preferred_training_rss_mb": 400,
+    "hard_training_rss_mb": 500,
+    "idle_cpu_percent": 5,
+    "inference_p95_ms": 10,
+    "preferred_event_intent_ms": 25,
+    "hard_event_intent_ms": 50
+  }
+}

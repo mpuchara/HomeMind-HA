@@ -1,3 +1,5 @@
+> Dokument archiwalny sprzed 0.9. Aktualna wersja: [obsługa](QUICK_START_PL.md), [architektura](ARCHITECTURE_0_9.md).
+
 # Obsługa Adaptive AI
 
 ## Główny ekran

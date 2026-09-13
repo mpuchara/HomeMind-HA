@@ -1,3 +1,37 @@
+# 0.9.2 — 2026-09-13
+
+- Fix Control transition blocked globally by unrelated unreadable automation configurations.
+- Treat partial automation scans as visible diagnostics; disable and verify known target automations.
+- Preserve successfully parsed target mappings across failed reads and restarts.
+- Refresh cached mappings on successful edits and remove deleted or identity-replaced automations.
+- Report missing configuration IDs and invalid responses per automation.
+- 107 tests passed, including the HTTP mode-change regression and failed OFF confirmation.
+- Retains trained 0.9 models and the bootstrap/presence fixes from 0.9.1.
+
+# 0.9.1 — 2026-09-13
+
+- Fix bootstrap failure after 8192 live events: aggregate bounded live statistics instead of buffering raw events.
+- Commit shared model and history checkpoints together; failed installation preserves both.
+- Distinguish PIR/presence from radar distance, thresholds, firmware and connectivity.
+- Prefer binary presence over raw energy on the same device and area, while preserving agent policy context.
+- Recognize custom PIR/motion binary sensors independently of integration brand.
+- Add source diagnostics with entity, area and reason; count actual transitions separately from no-arrival trials.
+- 97 tests passed, including bootstrap under 12000 concurrent live events and 30000-update bounded-memory regression.
+- Existing 0.9 policies are retained. Re-run Home Model bootstrap; agent retraining is not forced.
+
+# 0.9.0 — 2026-09-13
+
+- Modular Context → Shared Home State → PolicyBackend → ActionIntent → Executor → Reward pipeline.
+- Shared area transitions and occupancy forecasts at 1/3/5 seconds, manual streaming bootstrap.
+- Single audited Executor for device commands, automation takeover and Verify; zero service calls in Shadow.
+- Own command ACK recognition, event re-evaluation after in-flight commands and bounded retry.
+- Exponential forgetting, age-weighted replay and timing-aware Reward v2.
+- Manual training, one heavy job, disk-backed replay and recoverable checkpoints.
+- Home Intelligence, inference exports, mathematical contributors and resource telemetry.
+- Safe 0.8 migration preserves data, archives incompatible models and requires manual retraining.
+- Deterministic inference; micro-exploration remains disabled.
+- 84 regression tests and a learned anticipation simulator. Physical HA/Pi 4 targets remain unmeasured.
+
 
 ## 0.8.0 — feature-complete baseline (2026-09-12)
 

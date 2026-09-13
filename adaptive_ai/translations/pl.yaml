@@ -16,7 +16,7 @@ configuration:
     description: Maksymalna liczba istotnych encji HA reprezentowanych jawnie przez jednego agenta.
   prediction_horizons_seconds:
     name: Horyzonty predykcji
-    description: Horyzonty predykcji w sekundach rozdzielone przecinkami; wolniejsze domeny automatycznie dostają dłuższe horyzonty.
+    description: Horyzonty polityki w sekundach rozdzielone przecinkami. ACK i stabilizacja urządzenia mają osobne profile czasu.
   min_historical_support:
     name: Minimalne wsparcie historyczne
     description: Sterowanie jest blokowane, gdy podobnych danych historycznych jest zbyt mało.
@@ -25,10 +25,22 @@ configuration:
     description: Sterowanie jest blokowane, gdy bieżący kontekst zbyt mocno różni się od historii treningowej.
   block_control_on_automation_conflict:
     name: Bezpieczeństwo konfliktu automatyzacji
-    description: Blokuj Control, gdy włączone automatyzacje Home Assistanta również sterują tą samą encją. Shadow działa bez zmian.
+    description: Opcja zgodności starszych wersji. Control wyłącza wykryte automatyzacje celu i weryfikuje przejęcie. Shadow nie steruje.
   action_bins:
     name: Poziomy akcji numerycznych
     description: Liczba dyskretnych poziomów akcji dla numerycznych polityk kontekstowych.
   rl_alpha:
     name: Siła eksploracji
-    description: Współczynnik niepewności LinUCB używany wyłącznie przez opcjonalną mikroeeksplorację celowaną.
+    description: Zachowany parametr LinUCB. Mikroeksploracja jest nieaktywna w wersji 0.9.
+  policy_half_life_days:
+    name: Połowiczny zanik wiedzy agenta
+    description: Liczba dni, po których starsze statystyki polityki zachowują połowę wagi.
+  home_model_half_life_days:
+    name: Połowiczny zanik modelu domu
+    description: Liczba dni, po których starsze przejścia zachowują połowę wagi.
+  entity_area_mapping:
+    name: Jawne mapowanie obszarów
+    description: JSON encja do identyfikatora obszaru; fallback po rejestrach encji i urządzeń HA.
+  intent_ttl_seconds:
+    name: Ważność intencji
+    description: Maksymalny wiek intencji przed wykonaniem usługi, w sekundach.

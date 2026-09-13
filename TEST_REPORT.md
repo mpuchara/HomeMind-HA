@@ -1,3 +1,7 @@
-# Test report — 0.7.12
+# Testy wydania 0.9.2
 
-73 unit/contract tests pass. New regressions cover: entity-level electrical filtering by unit only; non-electrical siblings on meter devices remaining eligible; `device_class=power` without an electrical unit remaining eligible; arbitrary camera/phone/car/person/calendar/hidden-diagnostic entities entering the candidate pool when historically relevant; LD2411 percentage radar energy remaining eligible; and the existing lifecycle/control/short-series paths.
+107 testów unittest przeszło. [Pełny wynik](docs/TEST_RESULTS_0_9_2.txt).
+
+[Opis regresji i ograniczeń](docs/RELEASE_0_9_2.md), [symulator](docs/SIMULATOR_0_9_2.json), [mikrobenchmark](docs/BENCHMARK_LOCAL_0_9_2.json).
+
+Odtworzono błąd HTTP zmiany trybu przy siedmiu niedostępnych konfiguracjach automatyzacji. Wersja poprawiona włącza Control, zachowując weryfikację wyłączenia znanych automatyzacji celu. Sprawdzono składnię Python/JavaScript i integralność paczki. Nie deklarujemy pomiarów fizycznego HA ani Raspberry Pi 4.

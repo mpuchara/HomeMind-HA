@@ -1,42 +1,19 @@
-# Adaptive AI — instrukcja użytkownika 0.7.12
+# Adaptive AI 0.9.2 — obsługa
 
-Adaptive AI uczy się na historii Home Assistant Recorder i bieżącym kontekście domu. Po pełnym treningu agent jest kwalifikowany na podstawie historycznego benchmarku zachowania.
+Po aktualizacji zachowaj dane aplikacji. Migracja archiwizuje niezgodne modele i ustawia NEEDS_RETRAIN/paused. Archiwum sensorów, feedback, agenci i ustawienia pozostają zachowane. Restart nie uruchamia automatycznego odtwarzania historii.
 
-## Pierwsze uruchomienie
+Przypisz obszary encjom i urządzeniom w HA. Jeśli rejestr nie zawiera obszaru, entity_area_mapping może podać jawny fallback jako JSON, np. {"binary_sensor.motion":"stairs","light.stairs":"stairs"}. Model nie zgaduje pokoi po nazwach encji.
 
-1. **Nie wyłączaj istniejących automatyzacji.** Są punktem odniesienia dla uczenia.
-2. Poczekaj na zakończenie `TRAINING` i dojście kursora do danych bieżących.
-3. Otwórz kartę agenta i sprawdź:
-   - `Behaviour benchmark`,
-   - `Candidate confidence`,
-   - `Per-action benchmark`,
-   - `Selected context`,
-   - `Primary behavioural driver`,
-   - `Context candidates screened`.
-4. Agent z benchmarkiem **>78%** i wystarczającą liczbą próbek przechodzi do `QUALIFIED + Shadow`.
-5. Słabszy agent przechodzi do `PAUSED` i nie zużywa normalnie CPU na bieżący trening/inference.
-6. Obserwuj `Desired` w Shadow i porównaj z zachowaniem istniejącej automatyki.
-7. Uruchom `Verify control`.
-8. Dopiero po weryfikacji przełącz wybrany agent do `Control`.
+Home Intelligence pokazuje wspólne prognozy obecności i przejścia. Bootstrap historii uruchom ręcznie; można go anulować. Train/Resume/Rebuild agentów i bootstrap współdzielą jedno ciężkie zadanie, aby ograniczać pamięć.
 
-## Resume i Rebuild
+Wybierz agenta, wykonaj Train i sprawdź wynik kwalifikacji. Shadow pokazuje stan docelowy, confidence, support, novelty i intencję bez wywoływania usług HA. Po ocenie uruchom Control.
 
-- **Resume** — kontynuuje uczenie od zapisanego kursora; nie czyści modelu ani dotychczasowych doświadczeń.
-- **Rebuild** — zeruje model i benchmark danego agenta, odświeża potrzebną historię i przechodzi ją od początku. Użyj np. po dodaniu nowego sensora, który powinien mieć wpływ na politykę.
+Control wyłącza wykryte automatyzacje sterujące tym samym celem i sprawdza ich stan. Dynamiczne skrypty i zewnętrzne kontrolery mogą wymagać osobnego wyłączenia. Po opuszczeniu Control automatyzacje nie są przywracane automatycznie.
 
-## Jakie encje mogą być wejściem
+ACCEPTED oznacza przyjęcie usługi, ACK potwierdzenie zgodnego stanu. Executor sprawdza aktualność intencji, dostępność, właściciela celu, kwalifikację, confidence/support/novelty, ręczny hold oraz ograniczenia czasu urządzenia. Własne ACK nie jest ręczną zmianą użytkownika.
 
-Domyślnie kandydatem może być praktycznie każda parsowalna encja HA, m.in. presence/motion, ESPHome radar, camera/AI score, dane telefonu, `person`, `device_tracker`, samochód, pogoda, helpery, template sensors i encje wirtualne.
+Ręczna korekta ma silną ujemną nagrodę i czasowo przejmuje sterowanie. Samo ACK nie daje nagrody. Antycypacja zyskuje premię po obserwowanym przyjściu; brak przyjścia może ją ukarać po pełnym oknie przy działających sensorach.
 
-Wykluczane są aktuatory oraz encje z jednoznacznie elektryczną jednostką (`W`, `V`, `A`, `VA`, `var`, `Wh`, `kWh`, `Ah`, `Ω` itd.). Filtr działa po jednostce, nie po nazwie: `Still Energy` w `%` pozostaje dozwolony.
+Wiedza wygasa domyślnie o połowę w 30 dni (polityka) lub 45 dni (dom). Te wartości zmienisz w konfiguracji. Eksport inferencji zawiera mały stan potrzebny do predykcji; pełny stan uczenia pozostaje w bazie. Mikroeksploracja jest wyłączona w 0.9.
 
-## Pełna dokumentacja
-
-- [Instalacja i aktualizacja](../docs/INSTALLATION_PL.md)
-- [Szybki start](../docs/QUICK_START_PL.md)
-- [Obsługa aplikacji](../docs/USER_GUIDE_PL.md)
-- [Jak działa Adaptive AI](../docs/HOW_IT_WORKS_PL.md)
-- [Lifecycle agentów](../docs/AGENT_LIFECYCLE_PL.md)
-- [Ustawienia](../docs/SETTINGS_REFERENCE_PL.md)
-- [Troubleshooting](../docs/TROUBLESHOOTING_PL.md)
-- [Bezpieczeństwo i ograniczenia](../docs/SAFETY_AND_LIMITATIONS_PL.md)
+Aktualizacja z ZIP wymaga podmiany całego katalogu źródeł istniejącej lokalnej aplikacji i Rebuild, nie samego restartu. Nowa lokalna aplikacja nie przejmuje automatycznie danych wersji z repozytorium. Wykonaj kopię przed podmianą.

@@ -1,7 +1,5 @@
-# Instalacja Adaptive AI
+# Instalacja Adaptive AI 0.9.2
 
-Pełna, aktualna instrukcja instalacji i aktualizacji znajduje się tutaj:
+Podmień kompletny katalog adaptive_ai w źródłach istniejącej lokalnej aplikacji i wykonaj Rebuild. Zachowaj kopię zapasową oraz prywatne dane. Wersja zainstalowana z repozytorium GitHub i nowa lokalna aplikacja mają różne identyfikatory i osobne dane.
 
-**[docs/INSTALLATION_PL.md](docs/INSTALLATION_PL.md)**
-
-Dokumentacja dotyczy bieżącej wersji **Adaptive AI 0.7.12**.
+Przed podmianą przeczytaj [pełną instrukcję](docs/INSTALLATION_PL.md). Po migracji modele 0.8 wymagają ręcznego Train, potem oceny Shadow i włączenia Control.

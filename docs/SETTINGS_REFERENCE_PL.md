@@ -1,3 +1,5 @@
+> Dokument archiwalny 0.7.x. Aktualna wersja: [0.9.0](README.md), [architektura](ARCHITECTURE_0_9.md), [obsługa](QUICK_START_PL.md).
+
 # Ustawienia i parametry
 
 ## Ustawienia pojedynczego agenta
