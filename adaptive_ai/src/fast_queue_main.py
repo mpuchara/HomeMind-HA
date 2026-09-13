@@ -1,4 +1,10 @@
-"""Adaptive AI entrypoint with FIFO training and realtime light timing."""
+"""Adaptive AI entrypoint with FIFO training, device adapters and realtime timing."""
+from device_targets import install as install_device_targets
+
+# Domain-specific Home Assistant semantics must be registered before queue_main imports
+# engine/history/executor symbols with ``from context import ...``.
+install_device_targets()
+
 import queue_main as queued_runtime
 from fast_runtime import install as install_fast_runtime
 
