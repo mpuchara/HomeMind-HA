@@ -1,4 +1,5 @@
 """Exercise the container entry point without starting HA or background workers."""
+import os
 import runpy
 import unittest
 from unittest.mock import Mock, patch
@@ -39,6 +40,27 @@ class StartupTests(unittest.TestCase):
         self.assertIn('startup', payload)
         self.assertFalse(payload['startup']['ready'])
         self.assertEqual(payload['state_count'], 0)
+
+    def test_supervisor_ingress_accepts_only_trusted_proxy_by_default(self):
+        runtime = runpy.run_path(str(ROOT/'adaptive_ai/src/main.py'), run_name='ingress_test_module')
+        handler = runtime['Handler'].__new__(runtime['Handler'])
+        with patch.dict(os.environ, {'SUPERVISOR_TOKEN':'test-token'}, clear=False):
+            handler.client_address=('172.30.32.2', 41000)
+            self.assertTrue(handler.trusted_client())
+            handler.client_address=('127.0.0.1', 41000)
+            self.assertTrue(handler.trusted_client())
+            handler.client_address=('172.30.33.9', 41000)
+            self.assertFalse(handler.trusted_client())
+
+    def test_ingress_proxy_allowlist_can_be_overridden(self):
+        runtime = runpy.run_path(str(ROOT/'adaptive_ai/src/main.py'), run_name='ingress_override_test_module')
+        handler = runtime['Handler'].__new__(runtime['Handler'])
+        env={'SUPERVISOR_TOKEN':'test-token','ADAPTIVE_AI_TRUSTED_PROXY_IPS':'10.1.2.3'}
+        with patch.dict(os.environ, env, clear=False):
+            handler.client_address=('10.1.2.3', 41000)
+            self.assertTrue(handler.trusted_client())
+            handler.client_address=('172.30.32.2', 41000)
+            self.assertFalse(handler.trusted_client())
 
 
 if __name__ == '__main__':
