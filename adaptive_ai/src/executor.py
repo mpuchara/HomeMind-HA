@@ -13,6 +13,8 @@ from storage import STORE
 from ha import HA, AUTOMATION_KNOWLEDGE
 from telemetry import TELEMETRY
 from rewards import RewardEngine
+from control_handoff import ControlHandoff
+from qualification import assess_control_qualification
 
 
 class Executor:
@@ -22,6 +24,17 @@ class Executor:
         self.locks = {}
         self.locks_guard = threading.Lock()
         self.dispatched = OrderedDict()
+        self.handoff = ControlHandoff(
+            STORE,
+            lambda: dict(self.engine.state_map),
+            self.engine.refresh_states,
+            lambda: AUTOMATION_KNOWLEDGE.scan(
+                dict(self.engine.state_map), self.engine.context.resolved_registry(), force=True
+            ),
+            AUTOMATION_KNOWLEDGE,
+            lambda eid: self._service('automation', 'turn_off', {'entity_id': eid, 'stop_actions': True}),
+            lambda eid: self._service('automation', 'turn_on', {'entity_id': eid}),
+        )
 
     def target_lock(self, entity):
         with self.locks_guard:
@@ -36,43 +49,31 @@ class Executor:
             current = STORE.get_agent_config(agent['id'])
             if not current or not current['enabled'] or current.get('training_state') != 'qualified':
                 raise ValueError('Control requires an enabled, qualified agent')
-            if refresh:
-                self.engine.refresh_states()
-                AUTOMATION_KNOWLEDGE.scan(dict(self.engine.state_map), self.engine.context.resolved_registry(), force=True)
-                warning = AUTOMATION_KNOWLEDGE.error
-                self.engine.runtime.setdefault(agent['id'], {})['automation_scan_warning'] = warning
-                if warning:
-                    STORE.event(agent['id'], 'warning', 'automation_scan_partial',
-                                'Control continues with known target automations; scan is incomplete',
-                                {'warning': warning})
-            conflicts = [a for a in STORE.list_agent_configs() if a['id'] != agent['id'] and a['enabled']
-                         and a['mode'] == 'control' and a['target_entity'] == agent['target_entity']]
+            qualification = assess_control_qualification(current)
+            if not qualification['passed']:
+                raise ValueError('Control qualification: ' + qualification['reason'])
+            conflicts = [a for a in STORE.list_agent_configs() if a['id'] != current['id'] and a['enabled']
+                         and a['mode'] == 'control' and a['target_entity'] == current['target_entity']]
             if conflicts:
                 raise ValueError('Another Control agent owns this entity')
-            _, infos = AUTOMATION_KNOWLEDGE.hints_for_target(agent['target_entity'])
-            disabled = []
-            for info in infos:
-                eid = info.get('entity_id')
-                if not eid or not eid.startswith('automation.'):
-                    continue
-                state = self.engine.state_map.get(eid)
-                if (state or {}).get('state') == 'off':
-                    continue
-                # Unknown automation state cannot certify ownership.
-                if state is None:
-                    raise RuntimeError('Automation state unavailable: ' + eid)
-                self._service('automation', 'turn_off', {'entity_id': eid, 'stop_actions': True})
-                disabled.append(eid)
-            if disabled:
-                self.engine.refresh_states()
-                if any(self.engine.state_map.get(eid, {}).get('state') != 'off' for eid in disabled):
-                    raise RuntimeError('Automation OFF not confirmed')
-                with AUTOMATION_KNOWLEDGE.lock:
-                    for info in AUTOMATION_KNOWLEDGE.automations:
-                        if info.get('entity_id') in disabled:
-                            info['enabled'] = False
-                STORE.event(agent['id'], 'info', 'automation_takeover', 'Control disabled matching automations', {'disabled': disabled})
+            disabled = self.handoff.acquire(current, refresh_scan=refresh)
+            warning = AUTOMATION_KNOWLEDGE.error
+            self.engine.runtime.setdefault(agent['id'], {})['automation_scan_warning'] = warning
+            if refresh and warning:
+                STORE.event(agent['id'], 'warning', 'automation_scan_partial',
+                            'Control continues with known target automations; scan is incomplete',
+                            {'warning': warning})
             return disabled
+
+    def release_control(self, agent, reason='mode_change'):
+        with self.target_lock(agent['target_entity']):
+            return self.handoff.release(agent, reason)
+
+    def reconcile_control(self):
+        return self.handoff.reconcile()
+
+    def release_all_control(self, reason='shutdown'):
+        return self.handoff.release_all(reason)
 
     def _result(self, intent, rt, status, reason, decision='blocked'):
         result = {'intent_id': intent.intent_id, 'status': status, 'reason': reason,
@@ -121,6 +122,9 @@ class Executor:
             return reject('unavailable: target state/value unavailable')
         if agent['mode'] == 'shadow':
             return self._result(intent, rt, 'SHADOW', intent.reason, 'shadow')
+        qualification = assess_control_qualification(agent)
+        if not qualification['passed']:
+            return reject('qualification: ' + qualification['reason'])
         if intent.confidence < float(agent['confidence_threshold']):
             return reject('confidence: below configured threshold')
         if intent.support < float(OPTIONS.get('min_historical_support', .2)):
@@ -142,7 +146,6 @@ class Executor:
         supersede = bool(pending and pending.get('acknowledged_ts') is None
                          and intent.target_entity.split('.')[0] in ('light', 'input_boolean')
                          and not same_value(value, pending['action_value'], agent['deadband']))
-        # Ownership is enforced even when the desired value already matches reality.
         try:
             if self.take_control(agent):
                 engine.wake_event.set()
@@ -162,7 +165,6 @@ class Executor:
             return reject('retry: device backoff', decision='waiting')
         if timestamp - rt.get('last_ai_ts', 0) < max(float(agent['action_interval']), timing.settling):
             return reject('cooldown: minimum action interval', decision='waiting')
-        # Slow takeover and HTTP work can outlive the intent. Recheck all revisions.
         if intent.expired(now_ts()):
             return reject('expired: TTL exceeded before dispatch', 'EXPIRED')
         fresh = STORE.get_agent_config(agent['id'])
@@ -190,11 +192,10 @@ class Executor:
                   last_service_error=None, last_service_latency_ms=(now_ts()-started)*1000)
         forecast = rt.get('context_meta', {}).get('home_forecast', {})
         if pending and pending.get('anticipated') and pending.get('acknowledged_ts') is not None:
-            # Replacing a command must not erase its unresolved anticipation reward.
             outcomes = rt.setdefault('outcomes', [])
             outcomes.append({**pending, 'ended_ts': started})
             if len(outcomes) > 16:
-                outcomes.pop(0)  # bounded audit window, never invent a reward
+                outcomes.pop(0)
         rt['pending'] = {'action_index': action_index, 'action_value': value,
                          'horizon': intent.prediction_horizon, 'policy_head': intent.policy_head, 'features': features,
                          'started_ts': started, 'acknowledged_ts': None, 'no_service': False,
@@ -213,6 +214,9 @@ class Executor:
             agent = STORE.get_agent_config(agent['id'])
             if not agent or agent['mode'] != 'control' or not agent['enabled'] or agent.get('training_state') != 'qualified':
                 raise ValueError('Verify sends a service and is available only in qualified Control')
+            qualification = assess_control_qualification(agent)
+            if not qualification['passed']:
+                raise ValueError('Control qualification: ' + qualification['reason'])
             rt = self.engine.runtime.setdefault(agent['id'], {})
             if now_ts() < rt.get('manual_override_until', 0) or rt.get('pending'):
                 raise ValueError('Manual override or pending command')
