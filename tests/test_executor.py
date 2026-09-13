@@ -63,6 +63,7 @@ class ExecutorTests(unittest.TestCase):
         handler.read_json=lambda:{'mode':'control'}
         handler.send_json=Mock()
         with patch.object(main,'STORE',self.store), patch.object(main,'ENGINE',self.e), \
+             patch.object(main,'runtime_available',return_value=True), \
              patch.object(main,'assess_control_qualification',qualification_module.assess_control_qualification), \
              patch.object(self.e,'refresh_states'), \
              patch.object(executor_module.AUTOMATION_KNOWLEDGE,'scan'), \
@@ -79,7 +80,7 @@ class ExecutorTests(unittest.TestCase):
             if self.service.called:self.e.state_map['automation.stairs']['state']='off'
         with patch.object(self.e,'refresh_states',side_effect=refresh), \
              patch.object(executor_module.AUTOMATION_KNOWLEDGE,'scan'), \
-             patch.object(executor_module.AUTOMATION_KNOWLEDGE,'error','7 configs unavailable'):
+             patch.object(executor_module.AUTOMATION_KNOWLEDGE,'error','7 automation configs unavailable'):
             self.assertEqual(self.e.executor.take_control(self.a,refresh=True),['automation.stairs'])
         self.service.assert_called_once_with('automation','turn_off',{'entity_id':'automation.stairs','stop_actions':True})
 
