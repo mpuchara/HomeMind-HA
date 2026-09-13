@@ -1,3 +1,11 @@
+# 0.10.1 — 2026-09-13
+
+- Fix frontend startup ReferenceError from the removed toggleExplore function.
+- Version every browser script URL to prevent stale/mixed JavaScript after upgrades.
+- Execute app.js in a Node VM regression test and verify first API request, refresh timer and UI handlers.
+- 153 tests passed; clean browser startup and experiment menu verified on a local fixture.
+- Existing models, experiment results and Control configuration are preserved.
+
 # 0.10.0 — 2026-09-13
 
 - Add per-agent context experiment menu: presence, environment and other-device activity.

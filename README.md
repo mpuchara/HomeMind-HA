@@ -1,4 +1,6 @@
-# HomeMind-HA / Adaptive AI 0.10.0
+# HomeMind-HA / Adaptive AI 0.10.1
+
+**0.10.1 naprawia zatrzymanie panelu na Starting:** usunięto błędne odwołanie do starej funkcji i dodano test wykonania JavaScript podczas startu. Modele i ustawienia zostają zachowane.
 
 Lokalne sterowanie Home Assistantem: wspólny model aktywności domu, małe polityki urządzeń i deterministyczny Executor. Dla szybkich urządzeń polityka wybiera stan docelowy; profil urządzenia określa ACK, stabilizację, odstępy i czas ręcznego przejęcia.
 
@@ -14,7 +16,7 @@ Zachowane są zmiany aktualnego `main`: kolejka treningów FIFO, szybki profil �
 - [Obsługa](docs/QUICK_START_PL.md)
 - [Architektura](docs/ARCHITECTURE_0_9.md)
 - [Eksperymenty i uczenie online](docs/EXPERIMENTS_PL.md)
-- [Raport wydania i ograniczenia](docs/RELEASE_0_10_0.md)
+- [Raport wydania i ograniczenia](docs/RELEASE_0_10_1.md)
 - [Testy](TEST_REPORT.md)
 - [Benchmark na Raspberry Pi 4](docs/BENCHMARK_PI4.md)
 
