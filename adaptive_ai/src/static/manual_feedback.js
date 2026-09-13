@@ -1,6 +1,7 @@
 (()=>{
   const STYLE_ID='manual-feedback-style';
   const BUTTON_CLASS='manual-correction-btn';
+  const LEGACY_VERIFY_CLASS='manual-legacy-verify';
   let busy=new Set();
 
   function ensureStyle(){
@@ -11,6 +12,7 @@
       .${BUTTON_CLASS}{display:inline-flex!important;visibility:visible!important;border:1px solid rgba(255,110,100,.55)!important;background:rgba(170,45,35,.16)!important;color:#ffb1a8!important;font-weight:700!important}
       .${BUTTON_CLASS}:hover{background:rgba(190,55,42,.26)!important}
       .${BUTTON_CLASS}[disabled]{opacity:.55;cursor:wait}
+      .${LEGACY_VERIFY_CLASS}{display:none!important;visibility:hidden!important}
       .manual-correction-hint{width:100%;font-size:12px;line-height:1.35;color:var(--muted,#9aa0aa);margin-top:2px}
     `;
     document.head.appendChild(s);
@@ -25,10 +27,7 @@
     return body;
   }
 
-  function correctionLabel(agent){
-    if(agent?.target_property==='power')return '👎 Agent zrobił źle — popraw';
-    return '👎 Agent zrobił źle — ustaw poprawnie';
-  }
+  function correctionLabel(){return '👎 Naucz / popraw';}
 
   function askDesired(agent){
     const rt=agent.runtime||{};
@@ -54,58 +53,83 @@
   }
 
   async function correct(agentId,button){
-    if(busy.has(agentId))return;
-    busy.add(agentId);
+    const key=String(agentId);
+    if(busy.has(key))return;
+    busy.add(key);
     const old=button.textContent;
     button.disabled=true;
     button.textContent='Poprawiam i uczę…';
     try{
       const agents=await api('api/agents');
-      const agent=agents.find(a=>String(a.id)===String(agentId));
+      const agent=agents.find(a=>String(a.id)===key);
       if(!agent)throw new Error('Nie znaleziono agenta.');
       const desired=askDesired(agent);
       if(desired===undefined){button.textContent=old;button.disabled=false;return;}
       const body=agent.target_property==='power'?{}:{desired_value:desired};
-      const result=await api(`api/agents/${encodeURIComponent(agentId)}/manual-correction`,{method:'POST',body:JSON.stringify(body)});
-      button.textContent='✓ Stan poprawiony'+learningSuffix(result);
-      setTimeout(()=>{button.textContent=correctionLabel(agent);button.disabled=false;},2200);
+      const result=await api(`api/agents/${encodeURIComponent(key)}/manual-correction`,{method:'POST',body:JSON.stringify(body)});
+      button.textContent='✓ Nauczono'+learningSuffix(result);
+      setTimeout(()=>{button.textContent=correctionLabel();button.disabled=false;},2200);
       if(typeof window.load==='function')setTimeout(()=>window.load(),150);
     }catch(e){
       alert('Nie udało się wykonać korekty: '+e.message);
       button.textContent=old;
       button.disabled=false;
-    }finally{busy.delete(agentId);}
+    }finally{busy.delete(key);}
+  }
+
+  function agentIdForCard(card){
+    if(card?.dataset?.agentId)return String(card.dataset.agentId);
+    const details=card?.querySelector('.agent-details[data-agent-id]');
+    return details?.dataset?.agentId?String(details.dataset.agentId):null;
+  }
+
+  function legacyVerifyButton(actions){
+    return [...actions.querySelectorAll('button')].find(x=>{
+      const onclick=x.getAttribute('onclick')||'';
+      return x.dataset.a==='verify'||onclick.includes('verifyControl(')||(x.textContent||'').trim()==='Verify control';
+    })||null;
+  }
+
+  function bindManualButton(button,id){
+    if(button.dataset.manualCorrectionBound==='1')return;
+    button.dataset.manualCorrectionBound='1';
+    button.addEventListener('click',()=>correct(id,button));
   }
 
   function installButtons(){
     ensureStyle();
     document.querySelectorAll('.agent.card').forEach(card=>{
-      const details=card.querySelector('.agent-details[data-agent-id]');
       const actions=card.querySelector('.actions');
-      if(!details||!actions)return;
-      const id=details.dataset.agentId;
-      let b=actions.querySelector('.'+BUTTON_CLASS);
-      if(!b){
-        b=[...actions.querySelectorAll('button')].find(x=>{
-          const onclick=x.getAttribute('onclick')||'';
-          return onclick.includes('verifyControl(')||(x.textContent||'').trim()==='Verify control';
-        });
-        if(b){
-          b.removeAttribute('onclick');
-          b.classList.add(BUTTON_CLASS);
-        }else{
-          b=document.createElement('button');
-          b.type='button';
-          b.className='ghost '+BUTTON_CLASS;
-          actions.prepend(b);
-        }
-        b.addEventListener('click',()=>correct(id,b));
+      const id=agentIdForCard(card);
+      if(!id||!actions)return;
+
+      // P0 cards keep an internal Verify-control button that their updater expects.
+      // Hide it instead of repurposing it, then place the user-facing teaching action
+      // in the same visual slot. This prevents the 4 s P0 refresh from restoring or
+      // disabling Verify control.
+      const verify=legacyVerifyButton(actions);
+      if(verify){
+        verify.classList.add(LEGACY_VERIFY_CLASS);
+        verify.hidden=true;
+        verify.setAttribute('aria-hidden','true');
+        verify.tabIndex=-1;
       }
+
+      let b=[...actions.querySelectorAll('.'+BUTTON_CLASS)].find(x=>x!==verify);
+      if(!b){
+        b=document.createElement('button');
+        b.type='button';
+        b.className='ghost '+BUTTON_CLASS;
+        if(verify)actions.insertBefore(b,verify);else actions.prepend(b);
+      }
+      bindManualButton(b,id);
       b.disabled=false;
       b.hidden=false;
-      b.style.display='';
-      b.textContent='👎 Naucz / popraw';
+      b.removeAttribute('aria-hidden');
+      b.tabIndex=0;
+      b.textContent=correctionLabel();
       b.title='Zgłoś błędną decyzję agenta. HomeMind poprawi urządzenie i zapisze tę korektę jako silny sygnał uczący razem z bieżącym kontekstem domu.';
+
       if(!actions.querySelector('.manual-correction-hint')){
         const hint=document.createElement('div');
         hint.className='manual-correction-hint';
@@ -115,11 +139,13 @@
     });
   }
 
+  window.manualCorrection=(agentId,button)=>correct(agentId,button);
+
   function start(){
     installButtons();
     const root=document.getElementById('agents');
     if(root)new MutationObserver(()=>installButtons()).observe(root,{childList:true,subtree:true});
-    setInterval(installButtons,2000);
+    setInterval(installButtons,1000);
   }
 
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',start);
