@@ -24,8 +24,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: docker build -t homemind:0.10.6 adaptive_ai
-      - run: python tools/smoke_image.py homemind:0.10.6
+      - run: docker build -t homemind:0.10.7 adaptive_ai
+      - run: python tools/smoke_image.py homemind:0.10.7
   package:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest

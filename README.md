@@ -1,6 +1,6 @@
-# HomeMind-HA / Adaptive AI 0.10.6
+# HomeMind-HA / Adaptive AI 0.10.7
 
-**0.10.6 naprawia awarię startu 0.10.5.** Rozszerzenia uczenia są inicjalizowane po bazie danych, a obserwatory przed uruchomieniem pracowników. Panel HTTP jest dostępny w trakcie startu i pokazuje błędy inicjalizacji. Zachowano ręczne korekty, uczenie szerszego kontekstu, odkurzacze i eksperymenty.
+**0.10.7 poprawia ręczne uczenie agenta:** w każdym agencie przycisk `👎 Naucz / popraw` jest stale widoczny i zajmuje miejsce dawnego `Verify control`. Działa w WAITING, PAUSED, SHADOW i CONTROL oraz przed kwalifikacją agenta. Dla urządzeń binarnych korekta jest jednoklikowa; dla wartości ciągłych lub wyborów użytkownik podaje prawidłową wartość. Zachowane są modele, ustawienia, archiwum i dotychczasowy feedback.
 
 Lokalne sterowanie Home Assistantem: wspólny model aktywności domu, małe polityki urządzeń i deterministyczny Executor. Dla szybkich urządzeń polityka wybiera stan docelowy; profil urządzenia określa ACK, stabilizację, odstępy i czas ręcznego przejęcia.
 
@@ -16,7 +16,7 @@ Zachowane są zmiany aktualnego `main`: kolejka treningów FIFO, szybki profil �
 - [Obsługa](docs/QUICK_START_PL.md)
 - [Architektura](docs/ARCHITECTURE_0_9.md)
 - [Eksperymenty i uczenie online](docs/EXPERIMENTS_PL.md)
-- [Raport wydania i ograniczenia](docs/RELEASE_0_10_6.md)
+- [Raport bazowego wydania 0.10.6](docs/RELEASE_0_10_6.md)
 - [Testy](TEST_REPORT.md)
 - [Benchmark na Raspberry Pi 4](docs/BENCHMARK_PI4.md)
 
