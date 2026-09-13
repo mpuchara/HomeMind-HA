@@ -60,6 +60,7 @@ class ExecutorTests(unittest.TestCase):
         handler.read_json=lambda:{'mode':'control'}
         handler.send_json=Mock()
         with patch.object(main,'STORE',self.store), patch.object(main,'ENGINE',self.e), \
+             patch.object(main,'AUTOMATION_KNOWLEDGE',executor_module.AUTOMATION_KNOWLEDGE), \
              patch.object(self.e,'refresh_states'), \
              patch.object(executor_module.AUTOMATION_KNOWLEDGE,'scan'), \
              patch.object(executor_module.AUTOMATION_KNOWLEDGE,'error','7 automation configs unavailable'):
