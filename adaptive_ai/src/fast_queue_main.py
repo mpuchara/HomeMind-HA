@@ -5,6 +5,11 @@ from device_targets import install as install_device_targets
 # engine/history/executor symbols with ``from context import ...``.
 install_device_targets()
 
+# 0.10.3 changes the feedback/UI path only, so keep policy/schema revisions intact while
+# reporting the package version consistently through the runtime API.
+import settings
+settings.APP_VERSION = "0.10.3"
+
 import queue_main as queued_runtime
 from fast_runtime import install as install_fast_runtime
 from manual_feedback import install as install_manual_feedback
