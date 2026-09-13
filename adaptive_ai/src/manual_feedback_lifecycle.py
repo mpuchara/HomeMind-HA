@@ -1,15 +1,11 @@
-"""Make explicit/manual teaching a first-class signal throughout the agent lifecycle.
+"""Make direct/manual device teaching available throughout the agent lifecycle.
 
-Qualified agents are already handled by the core/manual_feedback path. Waiting,
-paused and needs-retrain agents do not normally run inference, so without this bridge a
-wall switch would be invisible to online learning until after Train. This module lets
-those agents accumulate direct user demonstrations immediately while still keeping
-Control disabled until the normal qualification benchmark passes.
-
-Home Assistant integrations commonly report a physical device change with no user_id.
-A target change with no parent context and no matching HomeMind command echo is therefore
-treated as a direct-device/manual demonstration. Changes carrying a parent context are
-left to automations/integrations and are not labelled as user preference here.
+Qualified explicit HA-user changes are handled by Engine.process_agent plus the
+manual_feedback wrapper because that path understands pending Control actions.  This
+bridge covers waiting/paused/needs-retrain agents and direct physical/device changes
+without a Home Assistant user_id.  0.10.4 observes the *whole eligible context* before
+applying the +/- policy update so a correction can discover previously unselected
+ESPHome/phone/template/etc. entities.
 """
 import math
 import time
@@ -37,46 +33,7 @@ def install(core):
 
     import manual_feedback as feedback
     from context import target_value
-
-    # Extend the UI correction path. The base implementation always performs the user
-    # command; for pre-qualified agents it intentionally does not touch the model. Add
-    # the same +/- preference update here so manual teaching can seed the policy.
-    base_apply = feedback.apply_ui_correction
-
-    def apply_ui_correction(core_arg, agent, desired_value=None):
-        prelearned_positive = False
-        prelearned_negative = False
-        if agent.get("training_state") != "qualified" and _trainable_now(agent):
-            engine = core_arg.ENGINE
-            with engine.lock:
-                state_map = dict(engine.state_map)
-            state = state_map.get(agent["target_entity"])
-            current = target_value(state, agent["target_property"])
-            if current is not None and math.isfinite(float(current)):
-                desired = desired_value
-                if desired is None and agent["target_property"] == "power":
-                    desired = 0.0 if float(current) >= 0.5 else 1.0
-                if desired is not None:
-                    desired = feedback._manual_value(agent, state, desired)
-                    if not feedback._same(agent, current, desired):
-                        rt = engine.runtime.setdefault(agent["id"], {})
-                        prelearned_negative = feedback._negative_prediction(
-                            engine, agent, state_map, rt.get("last_prediction"), desired,
-                            feedback.UI_USER_ID, "manual correction: rejected prediction (UI)"
-                        )
-                        feedback._positive_demonstration(
-                            engine, agent, state_map, desired, feedback.UI_USER_ID,
-                            "manual demonstration (UI, pre-qualification)"
-                        )
-                        prelearned_positive = True
-        result = base_apply(core_arg, agent, desired_value)
-        if prelearned_positive:
-            result["positive_applied"] = True
-            result["negative_applied"] = bool(result.get("negative_applied") or prelearned_negative)
-            result["learning_phase"] = "pre_qualification"
-        return result
-
-    feedback.apply_ui_correction = apply_ui_correction
+    from manual_context_learning import observe as observe_manual_context
 
     # Install a state_changed bridge for two cases not fully covered by process_agent:
     # 1) any manual change while the agent is not qualified;
@@ -130,8 +87,17 @@ def install(core):
                     state_map = dict(engine.state_map)
                 rt = engine.runtime.setdefault(agent["id"], {})
                 actor = user_id or "direct_device"
-                feedback._negative_prediction(
-                    engine, agent, state_map, rt.get("last_prediction"), after, actor,
+                predicted = rt.get("last_prediction")
+
+                # Persist the broad context and possibly rotate the compact schema before
+                # the positive/negative update.  The current correction can therefore
+                # train a newly promoted sensor immediately.
+                context_learning = observe_manual_context(
+                    core, agent, state_map, after, rejected=predicted,
+                    source=origin, user_id=actor,
+                )
+                negative = feedback._negative_prediction(
+                    engine, agent, state_map, predicted, after, actor,
                     f"manual correction: rejected prediction ({origin})"
                 )
                 feedback._positive_demonstration(
@@ -145,6 +111,7 @@ def install(core):
                     agent["id"], "info", "manual_lifecycle_demo",
                     f"Manual teaching {before} → {after} recorded ({origin})",
                     {"before": before, "after": after, "user_id": user_id, "origin": origin,
+                     "negative_applied": bool(negative), "context_learning": context_learning,
                      "training_state": agent.get("training_state")},
                 )
 

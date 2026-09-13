@@ -5,13 +5,14 @@ from device_targets import install as install_device_targets
 # engine/history/executor symbols with ``from context import ...``.
 install_device_targets()
 
-# 0.10.3 changes the feedback/UI path only, so keep policy/schema revisions intact while
-# reporting the package version consistently through the runtime API.
+# 0.10.4 changes the manual-feedback/context-selection path only, so keep policy/schema
+# revisions intact while reporting the package version consistently through the runtime API.
 import settings
-settings.APP_VERSION = "0.10.3"
+settings.APP_VERSION = "0.10.4"
 
 import queue_main as queued_runtime
 from fast_runtime import install as install_fast_runtime
+from manual_context_learning import install as install_manual_context_learning
 from manual_feedback import install as install_manual_feedback
 from manual_feedback_lifecycle import install as install_manual_feedback_lifecycle
 from manual_feedback_static import install as install_manual_feedback_static
@@ -31,6 +32,9 @@ def initialize_runtime():
 
 
 core.initialize_runtime = initialize_runtime
+# Install the broad manual observer before feedback handlers so every correction can
+# promote context before the +/- policy update is applied.
+install_manual_context_learning(core)
 install_manual_feedback(core)
 install_manual_feedback_lifecycle(core)
 install_manual_feedback_static(core)
