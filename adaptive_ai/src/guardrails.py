@@ -1,0 +1,2 @@
+class GuardrailViolation(ValueError):
+    pass
