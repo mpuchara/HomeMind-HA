@@ -2,13 +2,14 @@
 
 A correction from the UI is intentionally equivalent to a physical/manual device
 change: reject the wrong policy choice, reinforce the demonstrated value, apply a
-manual-priority hold, and (for the UI path) perform the requested HA service call.
+manual-priority hold, and (for the UI path) optionally perform the requested HA service
+call.
 
-The UI endpoint is installed as a thin wrapper around the existing HTTP handler so the
-core runtime and training queue remain unchanged.  Physical changes already produce a
-positive manual demonstration in ``Engine.process_agent``; this module supplements that
-path with an explicit negative update when a Shadow prediction was wrong but no Control
-command was pending.
+0.10.4 adds a second teaching operation: "current state is correct".  That operation
+changes no device state; it simply rejects a conflicting Desired value and reinforces the
+state the user is already observing.  Every correction is also passed to the full-context
+observer before the policy update so previously unselected sensors can be discovered and
+promoted into the live schema.
 """
 import math
 import time
@@ -121,13 +122,16 @@ def _positive_demonstration(engine, agent, state_map, desired, user_id, reason):
     return idx
 
 
-def apply_ui_correction(core, agent, desired_value=None):
+def apply_ui_correction(core, agent, desired_value=None, keep_current=False):
     """Perform and learn one explicit user correction.
 
-    Binary targets are one-tap: omitting desired_value toggles the current state.
-    Continuous/categorical targets require the value chosen by the user in the UI.
+    ``keep_current=True`` means "Desired is wrong; the state I see now is correct".  It
+    performs no HA service call.  Otherwise binary targets are one-tap toggles and
+    continuous/categorical targets use the explicit value supplied by the UI.
     """
     from context import target_call, target_value
+    from manual_context_learning import observe as observe_manual_context
+
     engine = core.ENGINE
     store = core.STORE
     if engine is None or store is None:
@@ -140,20 +144,39 @@ def apply_ui_correction(core, agent, desired_value=None):
         current = target_value(state, agent["target_property"])
         if current is None or not math.isfinite(float(current)):
             raise ValueError("Target state/value unavailable")
-        if desired_value is None:
-            if agent["target_property"] != "power":
-                raise ValueError("desired_value is required for non-binary targets")
-            desired_value = 0.0 if float(current) >= 0.5 else 1.0
-        desired = _manual_value(agent, state, desired_value)
-        if _same(agent, current, desired):
-            raise ValueError("The requested correction is already the current state")
+
+        keep_current = bool(keep_current)
+        if keep_current:
+            desired = _manual_value(agent, state, current)
+        else:
+            if desired_value is None:
+                if agent["target_property"] != "power":
+                    raise ValueError("desired_value is required for non-binary targets")
+                desired_value = 0.0 if float(current) >= 0.5 else 1.0
+            desired = _manual_value(agent, state, desired_value)
+            if _same(agent, current, desired):
+                raise ValueError("The requested correction is already the current state")
 
         timestamp = time.time()
         rt = engine.runtime.setdefault(agent["id"], {})
         engine.experiments.cancel(agent["id"], "explicit user correction")
         pending = rt.get("pending")
+        predicted = rt.get("last_prediction")
+        rejected = pending.get("action_value") if pending and not _same(agent, pending.get("action_value"), desired) else predicted
+
+        # Observe the broad context *before* updating the policy.  If repeated manual
+        # evidence promotes a previously unselected ESPHome/phone/etc. entity, the +/-
+        # update below immediately trains the newly inserted feature slot.
+        context_learning = observe_manual_context(
+            core, agent, state_map, desired, rejected=rejected,
+            source="ui_keep_current" if keep_current else "ui_correction",
+            user_id=UI_USER_ID,
+        )
+
+        training_state = str(agent.get("training_state") or "waiting")
+        can_learn = training_state != "training"
+        qualified = training_state == "qualified"
         negative_applied = False
-        qualified = agent.get("training_state") == "qualified"
 
         if qualified and pending and not _same(agent, pending.get("action_value"), desired):
             result = engine.executor.reward_engine.evaluate(
@@ -162,69 +185,79 @@ def apply_ui_correction(core, agent, desired_value=None):
             rt["reward_components_pending"] = result.components
             engine._reward_pending(agent, rt, result.value, "manual correction (UI)", UI_USER_ID)
             negative_applied = True
-        elif qualified:
+        elif can_learn:
             negative_applied = _negative_prediction(
-                engine, agent, state_map, rt.get("last_prediction"), desired,
+                engine, agent, state_map, predicted, desired,
                 UI_USER_ID, "manual correction: rejected prediction (UI)"
             )
 
         positive_applied = False
-        if qualified:
+        if can_learn:
             _positive_demonstration(
                 engine, agent, state_map, desired, UI_USER_ID,
-                "manual demonstration (UI)"
+                "manual demonstration (UI: current correct)" if keep_current else "manual demonstration (UI)"
             )
             positive_applied = True
 
-        # A UI correction is a direct user action, not an autonomous policy action.  It
-        # bypasses Control qualification/confidence while retaining device limits.
-        domain, service, data = target_call(agent["target_entity"], agent["target_property"], desired, state)
-        engine.record_command(agent, desired)
-        started = time.time()
-        try:
-            response = engine.executor._service(domain, service, data)
-            engine.record_command(agent, desired, response)
-        except Exception as exc:
-            rt.update(last_service_ts=started, last_service=f"{domain}.{service}",
-                      last_service_ok=False, last_service_error=f"{type(exc).__name__}: {exc}")
-            store.event(agent["id"], "error", "manual_correction_service_failed", str(exc),
-                        {"current": current, "desired": desired, "service": f"{domain}.{service}"})
-            raise
+        service_name = None
+        data = None
+        if not keep_current:
+            # A UI correction is a direct user action, not an autonomous policy action.
+            # It bypasses Control qualification/confidence while retaining device limits.
+            domain, service, data = target_call(agent["target_entity"], agent["target_property"], desired, state)
+            service_name = f"{domain}.{service}"
+            engine.record_command(agent, desired)
+            started = time.time()
+            try:
+                response = engine.executor._service(domain, service, data)
+                engine.record_command(agent, desired, response)
+            except Exception as exc:
+                rt.update(last_service_ts=started, last_service=service_name,
+                          last_service_ok=False, last_service_error=f"{type(exc).__name__}: {exc}")
+                store.event(agent["id"], "error", "manual_correction_service_failed", str(exc),
+                            {"current": current, "desired": desired, "service": service_name})
+                raise
+            rt.update(
+                last_service_ts=started,
+                last_service=service_name,
+                last_service_data=data,
+                last_service_ok=True,
+                last_service_error=None,
+                last_service_latency_ms=(time.time() - started) * 1000.0,
+            )
 
         rt.update(
-            last_service_ts=started,
-            last_service=f"{domain}.{service}",
-            last_service_data=data,
-            last_service_ok=True,
-            last_service_error=None,
-            last_service_latency_ms=(time.time() - started) * 1000.0,
             last_manual_correction_ts=timestamp,
             last_manual_correction_value=desired,
-            last_manual_correction_source="ui",
+            last_manual_correction_source="ui_keep_current" if keep_current else "ui",
             last_change_origin="manual_ui",
             decision_state="manual",
-            decision_reason="User corrected the device state; manual priority is active",
+            decision_reason=("User confirmed the current state and rejected a conflicting Desired value"
+                             if keep_current else "User corrected the device state; manual priority is active"),
         )
         engine.set_manual_hold(agent, rt, timestamp)
         engine.wake_event.set()
         store.event(agent["id"], "info", "manual_correction_ui",
-                    f"User correction {current} → {desired}",
-                    {"current": current, "desired": desired, "service": f"{domain}.{service}",
-                     "negative_applied": negative_applied, "positive_applied": positive_applied})
+                    (f"User confirmed current value {current}" if keep_current else f"User correction {current} → {desired}"),
+                    {"current": current, "desired": desired, "service": service_name,
+                     "keep_current": keep_current, "negative_applied": negative_applied,
+                     "positive_applied": positive_applied, "context_learning": context_learning})
         return {
             "ok": True,
             "current_value": current,
             "desired_value": desired,
-            "service": f"{domain}.{service}",
+            "service": service_name,
+            "keep_current": keep_current,
             "negative_applied": negative_applied,
             "positive_applied": positive_applied,
-            "training_state": agent.get("training_state"),
+            "training_state": training_state,
             "manual_hold_until": rt.get("manual_override_until"),
+            "context_learning": context_learning,
         }
 
 
 def _physical_manual_snapshot(engine, agent, state_map):
-    """Detect the same physical-manual edge the core runtime is about to learn."""
+    """Detect the same physical manual edge the core runtime is about to learn."""
     from context import target_value
     from control import same_value
     aid = agent["id"]
@@ -253,21 +286,25 @@ def _physical_manual_snapshot(engine, agent, state_map):
         "predicted": rt.get("last_prediction"),
         "user_id": user_id,
         "had_pending": bool(pending),
+        "pending_value": pending.get("action_value") if pending else None,
     }
 
 
-def install_runtime_physical_equivalence(engine):
-    """Make a physical manual change reject a wrong Shadow prediction too.
-
-    Core already punishes a mismatching pending Control action and reinforces the new
-    manual state.  The missing case was Shadow: there is no pending command to punish.
-    """
+def install_runtime_physical_equivalence(core, engine):
+    """Make physical user changes observe full context and reject wrong Shadow output."""
     if getattr(engine, "_manual_feedback_equivalence_installed", False):
         return
     original = engine.process_agent
 
     def process_agent(agent, state_map, changed_entities=None):
         snapshot = _physical_manual_snapshot(engine, agent, state_map)
+        if snapshot and str(agent.get("training_state") or "") != "training":
+            from manual_context_learning import observe as observe_manual_context
+            rejected = snapshot.get("pending_value") if snapshot.get("had_pending") else snapshot.get("predicted")
+            observe_manual_context(
+                core, agent, state_map, snapshot["desired"], rejected=rejected,
+                source="physical_explicit_user", user_id=snapshot["user_id"],
+            )
         result = original(agent, state_map, changed_entities)
         if snapshot and not snapshot["had_pending"] and agent.get("training_state") == "qualified":
             _negative_prediction(
@@ -290,7 +327,7 @@ def install(core):
     def initialize_runtime():
         original_initialize()
         if core.runtime_available():
-            install_runtime_physical_equivalence(core.ENGINE)
+            install_runtime_physical_equivalence(core, core.ENGINE)
             core.STORE.event(None, "info", "manual_feedback_ready",
                              "Manual correction feedback path ready", None)
 
@@ -308,8 +345,10 @@ def install(core):
                 return self.send_json(404, {"error": "agent not found"})
             try:
                 payload = self.read_json()
-                desired = payload.get("desired_value") if isinstance(payload, dict) else None
-                return self.send_json(200, apply_ui_correction(core, agent, desired))
+                payload = payload if isinstance(payload, dict) else {}
+                desired = payload.get("desired_value")
+                keep_current = bool(payload.get("keep_current", False))
+                return self.send_json(200, apply_ui_correction(core, agent, desired, keep_current=keep_current))
             except ValueError as exc:
                 return self.send_json(400, {"error": str(exc)})
             except Exception as exc:
