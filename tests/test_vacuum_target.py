@@ -3,13 +3,7 @@ from support import agent, state
 import context
 import control
 import settings
-from device_targets import (
-    VACUUM_RETURN_HOME,
-    VACUUM_START,
-    VACUUM_STATE if False else VACUUM_START,  # compatibility sentinel; not used
-    VACUUM_STOP,
-    install,
-)
+from device_targets import VACUUM_RETURN_HOME, VACUUM_START, VACUUM_STOP, install
 
 
 # The production entrypoint installs extensions before engine/history/executor imports.
