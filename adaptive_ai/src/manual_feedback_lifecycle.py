@@ -1,17 +1,34 @@
 """Make explicit/manual teaching a first-class signal throughout the agent lifecycle.
 
-Qualified agents are already handled by the core/manual_feedback path.  Waiting,
+Qualified agents are already handled by the core/manual_feedback path. Waiting,
 paused and needs-retrain agents do not normally run inference, so without this bridge a
-wall switch would be invisible to online learning until after Train.  This module lets
+wall switch would be invisible to online learning until after Train. This module lets
 those agents accumulate direct user demonstrations immediately while still keeping
 Control disabled until the normal qualification benchmark passes.
+
+Home Assistant integrations commonly report a physical device change with no user_id.
+A target change with no parent context and no matching HomeMind command echo is therefore
+treated as a direct-device/manual demonstration. Changes carrying a parent context are
+left to automations/integrations and are not labelled as user preference here.
 """
 import math
+import time
 
 
 def _trainable_now(agent):
     # Avoid mutating the policy while the historical training worker owns it.
     return str(agent.get("training_state") or "waiting") != "training"
+
+
+def _manual_origin(state):
+    ctx = (state or {}).get("context") or {}
+    if ctx.get("parent_id"):
+        return None, None
+    if ctx.get("user_id"):
+        return "explicit_user", str(ctx.get("user_id"))
+    # Direct device/integration state changes usually have a context id but no user or
+    # parent. They are accepted only after own-command filtering in the event hook.
+    return "direct_device", None
 
 
 def install(core):
@@ -21,9 +38,9 @@ def install(core):
     import manual_feedback as feedback
     from context import target_value
 
-    # Extend the UI correction path.  The base implementation always performs the user
-    # command; for pre-qualified agents it intentionally does not touch the model.  Add
-    # the same +/- preference update here so manual teaching can be the seed dataset.
+    # Extend the UI correction path. The base implementation always performs the user
+    # command; for pre-qualified agents it intentionally does not touch the model. Add
+    # the same +/- preference update here so manual teaching can seed the policy.
     base_apply = feedback.apply_ui_correction
 
     def apply_ui_correction(core_arg, agent, desired_value=None):
@@ -61,9 +78,11 @@ def install(core):
 
     feedback.apply_ui_correction = apply_ui_correction
 
-    # Install a lightweight state_changed bridge for agents that are not yet qualified.
-    # Qualified agents keep using Engine.process_agent, which has richer pending-action
-    # semantics and is already wrapped by manual_feedback for Shadow prediction penalty.
+    # Install a state_changed bridge for two cases not fully covered by process_agent:
+    # 1) any manual change while the agent is not qualified;
+    # 2) a direct physical/device change without user_id, including qualified agents.
+    # Qualified changes with an explicit HA user_id stay on the richer core path so
+    # pending Control actions are evaluated exactly once.
     base_initialize = core.initialize_runtime
 
     def initialize_runtime():
@@ -71,7 +90,7 @@ def install(core):
         if not core.runtime_available():
             return
         engine = core.ENGINE
-        if getattr(engine, "_manual_prequalification_events_installed", False):
+        if getattr(engine, "_manual_lifecycle_events_installed", False):
             return
         original_state_changed = engine.on_state_changed
 
@@ -83,13 +102,15 @@ def install(core):
             original_state_changed(data)
             if not entity_id or not new_state:
                 return
-            ctx = (new_state.get("context") or {}) if isinstance(new_state, dict) else {}
-            user_id = ctx.get("user_id") if not ctx.get("parent_id") else None
-            if not user_id:
+            origin, user_id = _manual_origin(new_state)
+            if not origin:
                 return
             for agent in core.STORE.list_agent_configs():
-                if (not agent.get("enabled") or agent.get("target_entity") != entity_id
-                        or agent.get("training_state") == "qualified" or not _trainable_now(agent)):
+                if not agent.get("enabled") or agent.get("target_entity") != entity_id or not _trainable_now(agent):
+                    continue
+                # Explicit HA-user changes on qualified agents are already processed by
+                # Engine.process_agent; direct-device changes are not, so they use this bridge.
+                if origin == "explicit_user" and agent.get("training_state") == "qualified":
                     continue
                 before = target_value(old_state, agent["target_property"]) if old_state else None
                 after = target_value(new_state, agent["target_property"])
@@ -102,33 +123,35 @@ def install(core):
                 if not (math.isfinite(before) and math.isfinite(after)) or feedback._same(agent, before, after):
                     continue
                 if engine.own_command_echo(agent, new_state, after):
-                    # Includes corrections initiated from the app; those were already
-                    # learned in apply_ui_correction and must not be counted twice.
+                    # Includes corrections initiated from the app and ordinary HomeMind
+                    # Control commands. Both were already attributed elsewhere.
                     continue
                 with engine.lock:
                     state_map = dict(engine.state_map)
                 rt = engine.runtime.setdefault(agent["id"], {})
+                actor = user_id or "direct_device"
                 feedback._negative_prediction(
-                    engine, agent, state_map, rt.get("last_prediction"), after, user_id,
-                    "manual correction: rejected prediction (physical, pre-qualification)"
+                    engine, agent, state_map, rt.get("last_prediction"), after, actor,
+                    f"manual correction: rejected prediction ({origin})"
                 )
                 feedback._positive_demonstration(
-                    engine, agent, state_map, after, user_id,
-                    "manual demonstration (physical, pre-qualification)"
+                    engine, agent, state_map, after, actor,
+                    f"manual demonstration ({origin})"
                 )
-                engine.set_manual_hold(agent, rt, __import__("time").time())
-                rt["last_change_origin"] = "manual_user"
-                rt["last_manual_correction_source"] = "physical"
+                engine.set_manual_hold(agent, rt, time.time())
+                rt["last_change_origin"] = "manual_user" if origin == "explicit_user" else "manual_device"
+                rt["last_manual_correction_source"] = origin
                 core.STORE.event(
-                    agent["id"], "info", "manual_prequalification_demo",
-                    f"Manual teaching {before} → {after} recorded before qualification",
-                    {"before": before, "after": after, "user_id": user_id},
+                    agent["id"], "info", "manual_lifecycle_demo",
+                    f"Manual teaching {before} → {after} recorded ({origin})",
+                    {"before": before, "after": after, "user_id": user_id, "origin": origin,
+                     "training_state": agent.get("training_state")},
                 )
 
         engine.on_state_changed = on_state_changed
-        engine._manual_prequalification_events_installed = True
-        core.STORE.event(None, "info", "manual_prequalification_ready",
-                         "Manual teaching is active for waiting/paused agents", None)
+        engine._manual_lifecycle_events_installed = True
+        core.STORE.event(None, "info", "manual_lifecycle_ready",
+                         "Manual teaching is active for UI and direct-device changes across the agent lifecycle", None)
 
     core.initialize_runtime = initialize_runtime
     core._manual_feedback_lifecycle_installed = True
