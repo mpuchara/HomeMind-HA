@@ -14,6 +14,7 @@ from policy import MultiHorizonPolicy
 from context_engine import ContextEngine
 from executor import Executor
 from intent import ActionIntent
+from experiments import Experiments
 from telemetry import TELEMETRY, HEAVY_JOBS
 
 class HAEventStream(threading.Thread):
@@ -107,6 +108,7 @@ class Engine(threading.Thread):
         self.entity_registry = {}
         self.context = ContextEngine(OPTIONS, STORE)
         self.executor = Executor(self)
+        self.experiments = Experiments(STORE)
         self.history_manager = None
         self.home_bootstrap = None
         self.archive_seen = {}
@@ -387,10 +389,11 @@ class Engine(threading.Thread):
         groups = {}
         for agent in STORE.list_agent_configs():
             if not agent["enabled"] or agent["mode"] == "paused" or agent.get("training_state") != "qualified":
+                self.experiments.cancel(agent['id'], 'mode, training or availability changed')
                 continue
             if changed:
                 cached = self.models.get(agent["id"])
-                if cached is not None and agent["target_entity"] not in changed and not (changed & (set(cached.schema.entities) | self.context.admitted)):
+                if cached is not None and agent["target_entity"] not in changed and not (changed & (set(cached.schema.entities) | self.context.admitted | self.experiments.watches(agent['id']))):
                     continue
             groups.setdefault(agent["target_entity"], []).append(agent)
         for target, agents in groups.items():
@@ -440,6 +443,12 @@ class Engine(threading.Thread):
     def _reward_pending(self, agent, rt, reward, reason, user_id=None, experience=None):
         pending = experience if experience is not None else rt.get("pending")
         if not pending:
+            return
+        if pending.get('experiment'):
+            # Trial feedback belongs to the separate online model. Do not inject a
+            # counterfactual action as a demonstrated historical preference.
+            if rt.get('pending') is pending:
+                rt['pending'] = None
             return
         policy = self.policy(agent)
         policy.update(int(pending.get("policy_head") or min(policy.horizons)), pending["action_index"], pending["features"], reward)
@@ -530,6 +539,7 @@ class Engine(threading.Thread):
         target_state = state_map.get(agent["target_entity"])
         current = target_value(target_state, agent["target_property"])
         if current is None or not math.isfinite(current):
+            self.experiments.cancel(aid, 'target unavailable')
             rt["pending"] = None  # missing outcome is not acceptance
             rt["previous_target"] = None
             rt["decision_state"] = "blocked"
@@ -549,6 +559,8 @@ class Engine(threading.Thread):
         user_id = context.get("user_id") if not context.get("parent_id") else None
         own_echo = self.own_command_echo(agent, target_state, current)
         expected_ack = pending and same_value(current, pending["action_value"], agent["deadband"])
+        manual = bool(changed and user_id and not own_echo and not expected_ack)
+        self.experiments.observe(agent, state_map, current, manual=manual)
         if changed:
             rt["last_change_origin"] = "own_command" if own_echo or expected_ack else "manual_user" if user_id else "external"
         if changed and user_id and not own_echo and not expected_ack:
@@ -641,7 +653,14 @@ class Engine(threading.Thread):
         ]
 
         chosen, confidence, arms, horizon, support, novelty = policy.predict(features)
-        micro_explore = False
+        trial = self.experiments.propose(agent, policy, state_map, self.context.resolved_registry,
+            features, labels, chosen, confidence, arms, horizon, rt)
+        baseline_value = chosen['value']
+        if trial:
+            chosen = dict(chosen, value=trial['value'], index=trial['index'])
+            support, novelty = trial['support'], trial['novelty']
+        micro_explore = bool(trial)
+        rt['baseline_prediction'] = baseline_value
         rt["last_prediction"] = chosen["value"]
         rt["last_confidence"] = confidence
         rt["structural_confidence"] = chosen.get("structural_confidence", confidence)
@@ -666,9 +685,11 @@ class Engine(threading.Thread):
             prediction_horizon=intent_horizon, policy_head=horizon, created_at=now_ts(), ttl=float(OPTIONS.get('intent_ttl_seconds', 2)),
             policy_version=policy.VERSION, model_revision=policy.model_revision,
             context_revision=context_revision, target_revision=target_revision,
-            reason=f"Policy desires {chosen['value']}; confidence {confidence:.0%}, support {support:.0%}, novelty {novelty:.0%}",
+            reason=(f"Context experiment ({trial['focus']}): {baseline_value} → {chosen['value']}; baseline confidence {confidence:.0%}" if trial else
+                f"Policy desires {chosen['value']}; confidence {confidence:.0%}, support {support:.0%}, novelty {novelty:.0%}"),
+            experiment_token=trial['token'] if trial else '',
             contributors=tuple((x['feature'], x['contribution']) for x in rt['top_context']),
-            context_dependencies=tuple((eid, input_revisions.get(eid, 0)) for eid in policy.schema.entities))
+            context_dependencies=tuple((eid, input_revisions.get(eid, 0)) for eid in sorted(set(policy.schema.entities) | set(trial['snapshot'] if trial else ()))))
         rt['last_intent'] = intent.export()
         rt['behavior_summary'] = self.behavior_summary(agent, rt)
         TELEMETRY.observe('inference', (time.perf_counter()-inference_started)*1000)
@@ -702,6 +723,7 @@ class Engine(threading.Thread):
 
     def runtime_for(self, agent):
         rt = self.runtime.get(agent["id"]) or {}
+        experiment_status = self.experiments.status(agent['id'])
         confidence = float(rt.get("last_confidence") or 0.0)
         policy = self.models.get(agent["id"])
         selected_entities = list(policy.schema.entities) if policy else None
@@ -714,6 +736,8 @@ class Engine(threading.Thread):
             idx = int(clamp(round(float(rt["last_prediction"])), 0, max(0, len(options) - 1))) if options else 0
             prediction_label = options[idx] if options else None
         return {
+            "experiments": experiment_status,
+            "baseline_prediction": rt.get('baseline_prediction'),
             "last_prediction": rt.get("last_prediction"),
             "current_value": target_value(target_state, agent["target_property"]) if target_state else None,
             "last_prediction_label": prediction_label,
@@ -754,7 +778,7 @@ class Engine(threading.Thread):
             "realtime_connected": bool(self.ws_connected),
             "policy_updates": int(policy.total_updates) if policy else int(agent.get("feedback_count") or 0) + int(agent.get("historical_count") or 0),
             "historical_experiences": int(agent.get("historical_count") or 0),
-            "micro_exploration": bool(agent.get("micro_exploration")),
+            "micro_exploration": experiment_status['config']['enabled'],
             "selected_context_entities": list(policy.schema.entities) if policy else [],
             "prediction_horizons": list(policy.horizons) if policy else parse_horizons(agent),
             "training_state": agent.get("training_state") or "training",

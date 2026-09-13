@@ -67,6 +67,7 @@ class Executor:
 
     def release_control(self, agent, reason='mode_change'):
         with self.target_lock(agent['target_entity']):
+            self.engine.experiments.cancel(agent['id'], reason)
             return self.handoff.release(agent, reason)
 
     def reconcile_control(self):
@@ -122,6 +123,8 @@ class Executor:
             return reject('unavailable: target state/value unavailable')
         if agent['mode'] == 'shadow':
             return self._result(intent, rt, 'SHADOW', intent.reason, 'shadow')
+        if intent.experiment_token and not engine.experiments.valid(agent, intent):
+            return reject('experiment: expired or revoked trial')
 
         qualification = assess_control_qualification(agent)
         if not qualification['passed']:
@@ -189,6 +192,10 @@ class Executor:
                     engine.entity_revisions.get(eid, 0) != rev for eid, rev in intent.context_dependencies):
                 return reject('context: state changed before dispatch', decision='waiting')
         domain, service, data = target_call(intent.target_entity, intent.target_property, value, state)
+        if intent.experiment_token and not engine.experiments.valid(agent, intent):
+            return reject('experiment: settings changed before dispatch')
+        if intent.experiment_token and not engine.experiments.begin(agent, intent):
+            return reject('experiment: another probe is active or this trial was revoked', decision='waiting')
         rt.update(last_service_ts=now_ts(), last_service=f'{domain}.{service}', last_service_data=data)
         engine.record_command(agent, value)
         started = now_ts()
@@ -196,10 +203,14 @@ class Executor:
             response = self._service(domain, service, data)
             engine.record_command(agent, value, response)
         except Exception as exc:
+            if intent.experiment_token:
+                engine.experiments.cancel(agent['id'], 'service failure: outcome unknown')
             rt.update(retry_after=now_ts()+max(2, timing.settling), last_service_ok=False,
                       last_service_error=f'{type(exc).__name__}: {exc}')
             return reject('service: ' + str(exc), decision='error')
         self.dispatched[intent.intent_id] = started
+        if intent.experiment_token:
+            engine.experiments.dispatched(agent, intent)
         if len(self.dispatched) > 1024:
             self.dispatched.popitem(last=False)
         rt.update(last_ai_ts=started, last_ai_value=value, last_service_ok=True,
@@ -211,10 +222,11 @@ class Executor:
             if len(outcomes) > 16:
                 outcomes.pop(0)
         rt['pending'] = {'action_index': action_index, 'action_value': value,
+                         'experiment': bool(intent.experiment_token),
                          'horizon': intent.prediction_horizon, 'policy_head': intent.policy_head, 'features': features,
                          'started_ts': started, 'acknowledged_ts': None, 'no_service': False,
                          'area_id': forecast.get('area_id'), 'anticipated': bool(value >= .5
-                            and agent['target_property'] == 'power' and forecast.get('known')
+                            and not intent.experiment_token and agent['target_property'] == 'power' and forecast.get('known')
                             and forecast.get('occupancy_now', 0) < .5),
                          'observation_known': bool(forecast.get('known')),
                          'chatter': started-rt.get('previous_action_ts', 0) < max(2, timing.settling)}

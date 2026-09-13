@@ -281,6 +281,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self.static("app.js", "application/javascript; charset=utf-8")
             if path == "/p0.js":
                 return self.static("p0.js", "application/javascript; charset=utf-8")
+            if path == "/experiments.js":
+                return self.static("experiments.js", "application/javascript; charset=utf-8")
             if path == "/settings.js":
                 return self.static("settings.js", "application/javascript; charset=utf-8")
             if path == "/home.js":
@@ -297,6 +299,11 @@ class Handler(BaseHTTPRequestHandler):
                 if not agent or agent.get('training_state') != 'qualified':
                     return self.send_json(409, {'error': 'Train a compatible model first'})
                 return self.send_json(200, ENGINE.policy(agent).inference_export())
+            if path.startswith('/api/agents/') and path.endswith('/experiments'):
+                agent = STORE.get_agent_config(path.split('/')[3])
+                if not agent:
+                    return self.send_json(404, {'error': 'agent not found'})
+                return self.send_json(200, ENGINE.experiments.status(agent['id']))
             if path == "/api/entities":
                 with ENGINE.lock:
                     states = list(ENGINE.state_map.values())
@@ -348,6 +355,21 @@ class Handler(BaseHTTPRequestHandler):
         try:
             if not self.require_runtime():
                 return
+            if path.startswith('/api/agents/') and path.endswith('/experiments'):
+                agent = STORE.get_agent_config(path.split('/')[3])
+                if not agent:
+                    return self.send_json(404, {'error': 'agent not found'})
+                payload = self.read_json()
+                with ENGINE.executor.target_lock(agent['target_entity']):
+                    agent = STORE.get_agent_config(agent['id'])
+                    if not agent:
+                        return self.send_json(404, {'error': 'agent not found'})
+                    try:
+                        result = ENGINE.experiments.configure(agent, payload)
+                    except ValueError as exc:
+                        return self.send_json(400, {'error': str(exc)})
+                ENGINE.wake_event.set()
+                return self.send_json(200, result)
             if path in ('/api/home/bootstrap', '/api/home/cancel'):
                 if not ENGINE.home_bootstrap:
                     return self.send_json(409, {'error': 'History engine is not ready'})

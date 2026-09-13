@@ -10,7 +10,7 @@ import sys
 import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
-VERSION = "0.9.2"
+VERSION = "0.10.0"
 ENV = dict(os.environ, PYTHONUTF8="1", PYTHONIOENCODING="utf-8")
 
 
@@ -29,12 +29,12 @@ def main():
     if not match or not log.rstrip().endswith("OK"):
         raise RuntimeError("Missing successful unittest report")
     count = int(match[1])
-    (docs/"TEST_RESULTS_0_9_2.txt").write_text(log, encoding="utf-8")
+    (docs/"TEST_RESULTS_0_10_0.txt").write_text(log, encoding="utf-8")
     run(sys.executable, "-m", "compileall", "-q", "adaptive_ai/src")
-    for name in ("app.js", "home.js", "settings.js"):
+    for name in ("app.js", "home.js", "settings.js", "p0.js", "queue.js", "experiments.js"):
         run("node", "--check", str(ROOT/"adaptive_ai/src/static"/name))
-    for tool, artifact in (("simulate_anticipation.py", "SIMULATOR_0_9_2.json"),
-                           ("benchmark.py", "BENCHMARK_LOCAL_0_9_2.json")):
+    for tool, artifact in (("simulate_anticipation.py", "SIMULATOR_0_10_0.json"),
+                           ("benchmark.py", "BENCHMARK_LOCAL_0_10_0.json")):
         data = json.loads(run(sys.executable, str(ROOT/"tools"/tool)).stdout)
         (docs/artifact).write_text(json.dumps(data, indent=2, ensure_ascii=False)+"\n", encoding="utf-8")
 

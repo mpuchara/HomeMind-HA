@@ -1,7 +1,9 @@
-# Testy wydania 0.9.2
+# Testy wydania 0.10.0
 
-107 testów unittest przeszło. [Pełny wynik](docs/TEST_RESULTS_0_9_2.txt).
+152 testy unittest przeszły, w tym 25 testów eksperymentów. [Pełny wynik](docs/TEST_RESULTS_0_10_0.txt).
 
-[Opis regresji i ograniczeń](docs/RELEASE_0_9_2.md), [symulator](docs/SIMULATOR_0_9_2.json), [mikrobenchmark](docs/BENCHMARK_LOCAL_0_9_2.json).
+[Scenariusze i ograniczenia](docs/RELEASE_0_10_0.md), [symulator](docs/SIMULATOR_0_10_0.json), [mikrobenchmark](docs/BENCHMARK_LOCAL_0_10_0.json).
 
-Odtworzono błąd HTTP zmiany trybu przy siedmiu niedostępnych konfiguracjach automatyzacji. Wersja poprawiona włącza Control, zachowując weryfikację wyłączenia znanych automatyzacji celu. Sprawdzono składnię Python/JavaScript i integralność paczki. Nie deklarujemy pomiarów fizycznego HA ani Raspberry Pi 4.
+Sprawdzono odrębność trzech kontekstów, realne aktualizacje wag po wyniku, zmianę kolejnych wyborów, kontrolę porównawczą, budżet po restarcie, brak nagrody za ACK i za utratę obserwacji, powolne urządzenia, granice fizycznych nastaw i pełną ścieżkę wykonania z ręczną korektą. Zachowano wszystkie 127 testów pobranego main.
+
+Menu sprawdzono w przeglądarce na lokalnym fixture: wybór kierunku, zapis, ponowne otwarcie i układ. Pakiet sprawdza także wszystkie pliki JS, kompilację Python, jeden punkt wywołania HA i sumy plików ZIP. Nie wykonano sterowania na fizycznym HA ani pomiarów Raspberry Pi 4.

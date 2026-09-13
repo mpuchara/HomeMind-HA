@@ -1,8 +1,8 @@
 {
-  "version": "0.9.2",
+  "version": "0.10.0",
   "release_date": "2026-09-13",
-  "base_version": "0.9.1",
-  "base_commit": "d17eaa4",
+  "base_version": "0.9.2",
+  "base_commit": "2b544ab",
   "profile": "rpi4-low-memory-manual-training",
   "manual_agent_training": true,
   "max_concurrent_training_jobs": 1,
@@ -13,10 +13,18 @@
   "home_model_version": 1,
   "reward_version": 2,
   "release_status": "locally-tested-source-release",
-  "tests_passed": 107,
+  "tests_passed": 152,
   "docker_build": "not_run_daemon_unavailable",
   "pi4": "not_measured",
   "bootstrap_catchup": "bounded-live-statistics",
   "presence_admission": "binary-first-per-device-and-area",
-  "automation_takeover": "target-scoped-with-persistent-last-known-mappings"
+  "automation_takeover": "transactional-persistent-control-handoff",
+  "experiments": "directed-residual-contextual-bandit-v1",
+  "experiment_focuses": [
+    "presence",
+    "environment",
+    "devices"
+  ],
+  "experiment_storage": "persistent-per-agent-opt-in",
+  "fast_device_runtime": "fast_queue_main"
 }

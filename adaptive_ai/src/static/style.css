@@ -67,3 +67,8 @@
 .home-intent{display:flex;justify-content:space-between;gap:8px;font-size:11px;color:var(--accent);margin:5px 0}.home-intent span{color:var(--muted)}
 .train-state.needs_retrain{color:var(--warn)}.detail a{color:var(--accent)}#homePanel p{line-height:1.5}
 .home-source-details {margin:12px 0}.home-source-table {max-height:320px;overflow:auto}.home-source-table table{width:100%;border-collapse:collapse;text-align:left}.home-source-table td,.home-source-table th{padding:8px;border-bottom:1px solid var(--border,#293440)}.home-source-table small{overflow-wrap:anywhere}
+/* Context experiment dialog: retain compact controls on desktop and mobile. */
+.experiment-form .experiment-enable{display:flex;align-items:center;gap:10px;margin:18px 0 8px}
+.experiment-form input[type=checkbox]{width:auto;margin:0;flex:none}
+.experiment-form pre{white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px}
+.experiment-form [role=alert]{color:var(--warn)}

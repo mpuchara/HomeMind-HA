@@ -1,3 +1,13 @@
+# 0.10.0 — 2026-09-13
+
+- Add per-agent context experiment menu: presence, environment and other-device activity.
+- Learn online with a separate sparse contextual bandit and interleaved baseline observations.
+- Persist budgets, outcomes, model weights and manual-correction backoff across restarts.
+- Bound physical probes, preserve Executor guards, and never reward ACK or interrupted observations.
+- Retain qualified version-10/schema-11 models without retraining; experiments default off.
+- Preserve latest main's FIFO training queue, realtime light timing and transactional Control handoff.
+- 152 tests passed, including 25 experiment tests; local browser settings flow verified.
+
 # 0.9.2 — 2026-09-13
 
 - Fix Control transition blocked globally by unrelated unreadable automation configurations.
