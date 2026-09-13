@@ -4,6 +4,7 @@ from support import agent, state
 
 import context
 import control
+import experiments
 import settings
 from device_targets import VACUUM_RETURN_HOME, VACUUM_START, VACUUM_STOP, install
 
@@ -61,6 +62,11 @@ class VacuumTargetTests(unittest.TestCase):
         self.assertEqual(timing.acknowledgement, 30)
         self.assertEqual(timing.settling, 60)
         self.assertEqual(timing.manual_hold, 1800)
+
+    def test_physical_context_experiments_cannot_start_a_mobile_vacuum(self):
+        runner = experiments.Experiments(object())
+        with self.assertRaisesRegex(ValueError, "disabled for mobile vacuum"):
+            runner.configure(agent(target_entity="vacuum.ryszard", target_property="power"), {"enabled": True})
 
 
 if __name__ == "__main__":
