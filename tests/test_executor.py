@@ -8,6 +8,7 @@ from support import *
 import engine as engine_module
 import executor as executor_module
 import history as history_module
+import qualification as qualification_module
 from storage import Store
 from engine import Engine
 from intent import ActionIntent
@@ -23,7 +24,9 @@ class ExecutorTests(unittest.TestCase):
         for p in self.patches:p.start()
         self.e=Engine()
         self.a=self.store.create_agent(agent())
-        self.store.set_training_state(self.a['id'],'qualified',score=.95,samples=100)
+        detail={'balanced':True,'counts':{'samples':80,'correct':80,'per_action':{
+            '0':{'samples':40,'correct':40},'1':{'samples':40,'correct':40}}}}
+        self.store.set_training_state(self.a['id'],'qualified',score=1.0,samples=80,detail=detail)
         self.store.update_agent(self.a['id'],{'mode':'control'})
         self.a=self.store.get_agent(self.a['id'])
         self.e.state_map={self.a['target_entity']:state(self.a['target_entity'])}
@@ -60,7 +63,7 @@ class ExecutorTests(unittest.TestCase):
         handler.read_json=lambda:{'mode':'control'}
         handler.send_json=Mock()
         with patch.object(main,'STORE',self.store), patch.object(main,'ENGINE',self.e), \
-             patch.object(main,'AUTOMATION_KNOWLEDGE',executor_module.AUTOMATION_KNOWLEDGE), \
+             patch.object(main,'assess_control_qualification',qualification_module.assess_control_qualification), \
              patch.object(self.e,'refresh_states'), \
              patch.object(executor_module.AUTOMATION_KNOWLEDGE,'scan'), \
              patch.object(executor_module.AUTOMATION_KNOWLEDGE,'error','7 automation configs unavailable'):
@@ -88,6 +91,7 @@ class ExecutorTests(unittest.TestCase):
              patch.object(executor_module.AUTOMATION_KNOWLEDGE,'error','7 configs unavailable'):
             with self.assertRaisesRegex(RuntimeError,'OFF not confirmed'):
                 self.e.executor.take_control(self.a,refresh=True)
+        self.assertEqual(self.service.call_args_list[-1].args,('automation','turn_on',{'entity_id':'automation.stairs'}))
 
     def test_shadow_has_no_service(self):
         self.store.update_agent(self.a['id'],{'mode':'shadow'})
@@ -123,7 +127,7 @@ class ExecutorTests(unittest.TestCase):
 
     def test_disabled(self):
         self.store.update_agent(self.a['id'],{'enabled':False})
-        self.assertTrue(self.submit()['reason'].startswith('disabled:'))
+        self.assertTrue(self.submit()['reason'].startswith('disabled:'));self.service.assert_not_called()
 
     def test_confidence(self):
         self.assertTrue(self.submit(confidence=.5)['reason'].startswith('confidence:'))
@@ -177,12 +181,14 @@ class ExecutorTests(unittest.TestCase):
         self.assertTrue(result['reason'].startswith('takeover:'))
         self.service.assert_called_once_with('automation','turn_off',{'entity_id':'automation.stairs','stop_actions':True})
 
-    def test_automation_failure_blocks_device(self):
+    def test_automation_failure_blocks_device_and_rolls_back(self):
         self.hints.return_value=(set(),[{'entity_id':'automation.stairs','enabled':True}])
         self.e.state_map['automation.stairs']=state('automation.stairs','on')
         with patch.object(self.e,'refresh_states'):
             self.assertEqual(self.submit()['status'],'REJECTED')
-        self.assertEqual(self.service.call_count,1)
+        self.assertEqual(self.service.call_count,2)
+        self.assertEqual(self.service.call_args_list[0].args,('automation','turn_off',{'entity_id':'automation.stairs','stop_actions':True}))
+        self.assertEqual(self.service.call_args_list[1].args,('automation','turn_on',{'entity_id':'automation.stairs'}))
 
     def test_own_rest_echo_with_user_id_is_not_manual(self):
         self.e.record_command(self.a,1)
@@ -245,3 +251,6 @@ class ContractTests(unittest.TestCase):
         i=ActionIntent.create(**fields)
         with self.assertRaises(FrozenInstanceError):i.desired_value=0
         with self.assertRaises(ValueError):ActionIntent.create(**(fields|{'desired_value':float('nan')}))
+
+
+if __name__=='__main__':unittest.main()
