@@ -8,7 +8,7 @@
     const s=document.createElement('style');
     s.id=STYLE_ID;
     s.textContent=`
-      .${BUTTON_CLASS}{border:1px solid rgba(255,110,100,.55)!important;background:rgba(170,45,35,.16)!important;color:#ffb1a8!important;font-weight:700!important}
+      .${BUTTON_CLASS}{display:inline-flex!important;visibility:visible!important;border:1px solid rgba(255,110,100,.55)!important;background:rgba(170,45,35,.16)!important;color:#ffb1a8!important;font-weight:700!important}
       .${BUTTON_CLASS}:hover{background:rgba(190,55,42,.26)!important}
       .${BUTTON_CLASS}[disabled]{opacity:.55;cursor:wait}
       .manual-correction-hint{width:100%;font-size:12px;line-height:1.35;color:var(--muted,#9aa0aa);margin-top:2px}
@@ -33,8 +33,6 @@
   function askDesired(agent){
     const rt=agent.runtime||{};
     const current=rt.current_value;
-    // Binary correction is deliberately one tap. The backend reads the live target state
-    // under the per-target lock and switches it to the opposite value atomically.
     if(agent.target_property==='power')return null;
     const lo=Number(agent.min_value),hi=Number(agent.max_value);
     let message=`Podaj właściwą wartość dla ${agent.name}.\nAktualnie: ${current??'—'}`;
@@ -66,28 +64,17 @@
       const agent=agents.find(a=>String(a.id)===String(agentId));
       if(!agent)throw new Error('Nie znaleziono agenta.');
       const desired=askDesired(agent);
-      if(desired===undefined){
-        button.textContent=old;
-        button.disabled=false;
-        return;
-      }
+      if(desired===undefined){button.textContent=old;button.disabled=false;return;}
       const body=agent.target_property==='power'?{}:{desired_value:desired};
-      const result=await api(`api/agents/${encodeURIComponent(agentId)}/manual-correction`,{
-        method:'POST',body:JSON.stringify(body)
-      });
+      const result=await api(`api/agents/${encodeURIComponent(agentId)}/manual-correction`,{method:'POST',body:JSON.stringify(body)});
       button.textContent='✓ Stan poprawiony'+learningSuffix(result);
-      setTimeout(()=>{
-        button.textContent=correctionLabel(agent);
-        button.disabled=false;
-      },2200);
+      setTimeout(()=>{button.textContent=correctionLabel(agent);button.disabled=false;},2200);
       if(typeof window.load==='function')setTimeout(()=>window.load(),150);
     }catch(e){
       alert('Nie udało się wykonać korekty: '+e.message);
       button.textContent=old;
       button.disabled=false;
-    }finally{
-      busy.delete(agentId);
-    }
+    }finally{busy.delete(agentId);}
   }
 
   function installButtons(){
@@ -95,19 +82,36 @@
     document.querySelectorAll('.agent.card').forEach(card=>{
       const details=card.querySelector('.agent-details[data-agent-id]');
       const actions=card.querySelector('.actions');
-      if(!details||!actions||actions.querySelector('.'+BUTTON_CLASS))return;
+      if(!details||!actions)return;
       const id=details.dataset.agentId;
-      const b=document.createElement('button');
-      b.type='button';
-      b.className='ghost '+BUTTON_CLASS;
-      b.textContent='👎 Agent zrobił źle — popraw';
-      b.title='Zgłoś błędną decyzję agenta. Dla urządzeń binarnych stan zostanie natychmiast przełączony; błędna decyzja dostanie karę, właściwy stan nagrodę, a pełny kontekst domu zostanie zapisany do nauki.';
-      b.addEventListener('click',()=>correct(id,b));
-      actions.prepend(b);
-      const hint=document.createElement('div');
-      hint.className='manual-correction-hint';
-      hint.textContent='Użyj, gdy agent ustawił urządzenie źle. HomeMind poprawi stan urządzenia i potraktuje tę korektę jako silny sygnał uczący, razem z pełnym bieżącym kontekstem.';
-      actions.appendChild(hint);
+      let b=actions.querySelector('.'+BUTTON_CLASS);
+      if(!b){
+        b=[...actions.querySelectorAll('button')].find(x=>{
+          const onclick=x.getAttribute('onclick')||'';
+          return onclick.includes('verifyControl(')||(x.textContent||'').trim()==='Verify control';
+        });
+        if(b){
+          b.removeAttribute('onclick');
+          b.classList.add(BUTTON_CLASS);
+        }else{
+          b=document.createElement('button');
+          b.type='button';
+          b.className='ghost '+BUTTON_CLASS;
+          actions.prepend(b);
+        }
+        b.addEventListener('click',()=>correct(id,b));
+      }
+      b.disabled=false;
+      b.hidden=false;
+      b.style.display='';
+      b.textContent='👎 Naucz / popraw';
+      b.title='Zgłoś błędną decyzję agenta. HomeMind poprawi urządzenie i zapisze tę korektę jako silny sygnał uczący razem z bieżącym kontekstem domu.';
+      if(!actions.querySelector('.manual-correction-hint')){
+        const hint=document.createElement('div');
+        hint.className='manual-correction-hint';
+        hint.textContent='Zawsze dostępne: użyj, gdy agent powinien zrobić coś innego. Dla urządzenia binarnego kliknięcie przełączy stan; dla pozostałych podasz właściwą wartość.';
+        actions.appendChild(hint);
+      }
     });
   }
 
