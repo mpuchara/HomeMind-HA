@@ -1,8 +1,8 @@
 {
-  "version": "0.10.2",
+  "version": "0.10.3",
   "release_date": "2026-09-13",
-  "base_version": "0.10.1",
-  "base_commit": "a2dcfe4",
+  "base_version": "0.10.2",
+  "base_commit": "3a28980",
   "profile": "rpi4-low-memory-manual-training",
   "manual_agent_training": true,
   "max_concurrent_training_jobs": 1,
@@ -13,7 +13,7 @@
   "home_model_version": 1,
   "reward_version": 2,
   "release_status": "github-actions-validated-source-release",
-  "tests_passed": 160,
+  "tests_passed": 165,
   "docker_build": "github-actions-success",
   "pi4": "not_measured",
   "bootstrap_catchup": "bounded-live-statistics",
@@ -30,5 +30,8 @@
   "device_target_adapters": [
     "vacuum"
   ],
-  "vacuum_policy": "cleaning=start; idle=return_to_base/stop fallback; capability-gated; physical experiments blocked"
+  "vacuum_policy": "cleaning=start; idle=return_to_base/stop fallback; capability-gated; physical experiments blocked",
+  "manual_feedback": "per-agent explicit correction; -1 rejected prediction/action +1 demonstrated value; physical/UI equivalent",
+  "manual_feedback_ui": "binary one-tap toggle; numeric/categorical explicit desired value",
+  "manual_feedback_safety": "explicit user command bypasses autonomous confidence/qualification but keeps user/device bounds and manual hold"
 }
