@@ -6,7 +6,7 @@ Each target has a serial dispatch lock; validation uses fresh store/state values
 import math
 import threading
 from collections import OrderedDict
-from control import timing_for, legal_value, same_value
+from control import timing_for, legal_value, review_status, same_value
 from context import target_call, target_value
 from settings import (OPTIONS, now_ts)
 from storage import STORE
@@ -122,9 +122,23 @@ class Executor:
             return reject('unavailable: target state/value unavailable')
         if agent['mode'] == 'shadow':
             return self._result(intent, rt, 'SHADOW', intent.reason, 'shadow')
+
         qualification = assess_control_qualification(agent)
         if not qualification['passed']:
+            try:
+                self.release_control(agent, reason='control_qualification_invalidated')
+            except Exception as exc:
+                return reject('qualification: ' + qualification['reason'] + '; previous controllers could not be restored: ' + str(exc), decision='error')
             return reject('qualification: ' + qualification['reason'])
+        review = review_status(STORE, agent, state)
+        if not review['ready']:
+            try:
+                self.release_control(agent, reason='control_review_invalidated')
+            except Exception as exc:
+                return reject('guardrail: Control review invalidated; previous controllers could not be restored: ' + str(exc), decision='error')
+            reason = 'Explicit Control review is required' if not review.get('approved') else 'Device capabilities changed since Control review'
+            return reject('guardrail: ' + reason, decision='error')
+
         if intent.confidence < float(agent['confidence_threshold']):
             return reject('confidence: below configured threshold')
         if intent.support < float(OPTIONS.get('min_historical_support', .2)):
