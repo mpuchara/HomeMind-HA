@@ -1,5 +1,5 @@
 name: "Adaptive AI"
-version: "0.10.3"
+version: "0.10.4"
 slug: "adaptive_ai"
 description: >-
   History-first local reinforcement-learning policies for Home Assistant. Imports
@@ -76,6 +76,11 @@ options:
   manual_agent_training: true
   max_concurrent_training_jobs: 1
   manual_discovery_hours: 24
+  manual_context_max_snapshots: 256
+  manual_context_min_samples: 4
+  manual_context_promote_score: 0.55
+  manual_context_reserve: 2
+  manual_context_observer_max_entities: 512
 schema:
   policy_half_life_days: "int(1,365)"
   home_model_half_life_days: "int(1,365)"
@@ -135,3 +140,8 @@ schema:
   manual_agent_training: "bool"
   max_concurrent_training_jobs: "int(1,1)"
   manual_discovery_hours: "int(6,72)"
+  manual_context_max_snapshots: "int(16,2048)"
+  manual_context_min_samples: "int(3,50)"
+  manual_context_promote_score: "float(0.05,0.99)"
+  manual_context_reserve: "int(0,8)"
+  manual_context_observer_max_entities: "int(32,2000)"
