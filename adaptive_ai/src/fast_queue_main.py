@@ -7,6 +7,7 @@ install_device_targets()
 
 import queue_main as queued_runtime
 from fast_runtime import install as install_fast_runtime
+from manual_feedback import install as install_manual_feedback
 
 core = queued_runtime.core
 _original_initialize_runtime = core.initialize_runtime
@@ -23,6 +24,7 @@ def initialize_runtime():
 
 
 core.initialize_runtime = initialize_runtime
+install_manual_feedback(core)
 
 
 if __name__ == "__main__":
