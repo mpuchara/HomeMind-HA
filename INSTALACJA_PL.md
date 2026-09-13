@@ -1,4 +1,4 @@
-# Instalacja Adaptive AI 0.10.1
+# Instalacja Adaptive AI 0.10.6
 
 Podmień kompletny katalog adaptive_ai w źródłach istniejącej lokalnej aplikacji i wykonaj Rebuild. Zachowaj kopię zapasową oraz prywatne dane. Wersja zainstalowana z repozytorium GitHub i nowa lokalna aplikacja mają różne identyfikatory i osobne dane.
 

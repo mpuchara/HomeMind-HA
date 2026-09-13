@@ -1,8 +1,8 @@
 {
-  "version": "0.10.5",
+  "version": "0.10.6",
   "release_date": "2026-09-13",
-  "base_version": "0.10.4",
-  "base_commit": "0051544",
+  "base_version": "0.10.5",
+  "base_commit": "3050ec8",
   "profile": "rpi4-low-memory-manual-training",
   "manual_agent_training": true,
   "max_concurrent_training_jobs": 1,
@@ -12,9 +12,9 @@
   "feature_schema": 11,
   "home_model_version": 1,
   "reward_version": 2,
-  "release_status": "github-actions-validated-source-release",
-  "tests_passed": 170,
-  "docker_build": "github-actions-success",
+  "release_status": "locally-tested-source-release",
+  "tests_passed": 174,
+  "docker_build": "not_run_daemon_unavailable",
   "pi4": "not_measured",
   "bootstrap_catchup": "bounded-live-statistics",
   "presence_admission": "binary-first-per-device-and-area",
@@ -35,5 +35,6 @@
   "manual_feedback_ui": "binary one-tap live-state toggle; numeric/categorical explicit corrected value",
   "manual_feedback_context": "bounded full eligible HA context snapshot on every manual correction; supervised relevance can promote previously unselected entities",
   "manual_feedback_schema": "online schema rotation preserves matching feature weights and fixed home-intelligence slots",
-  "manual_feedback_safety": "manual correction is blocked from mutating policy during historical training; autonomous Control gates remain unchanged"
+  "manual_feedback_safety": "manual correction is blocked from mutating policy during historical training; autonomous Control gates remain unchanged",
+  "startup": "http-first-database-then-adapters-then-observers-then-workers"
 }

@@ -87,9 +87,7 @@ def install():
     import context
     import control
 
-    # Keep the runtime/API version aligned with the add-on package without forcing a
-    # feature-schema rebuild: this adapter changes target-domain semantics, not models.
-    settings.APP_VERSION = RELEASE_VERSION
+    # Package version belongs to settings, not to the adapter's own revision.
 
     settings.SUPPORTED_TARGETS.setdefault("vacuum", [])
     if not any(x.get("property") == "power" for x in settings.SUPPORTED_TARGETS["vacuum"]):

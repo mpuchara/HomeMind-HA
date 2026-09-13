@@ -1,3 +1,14 @@
+# 0.10.6 — 2026-09-13
+
+- Fix crash before HTTP startup: manual context learning accessed core.STORE while it was None.
+- Keep entrypoint imports free of database/runtime initialization; prepare adapters and manual learning after Store exists.
+- Attach realtime timing and manual event observers before engine, event stream and history workers start.
+- Report initialization-wrapper failures through startup status; keep HTTP diagnostics available.
+- Make settings.APP_VERSION the canonical runtime version; adapters no longer overwrite it.
+- Add four isolated packaged-entrypoint tests, including real HTTP requests during blocked initialization.
+- Add network-isolated container readiness smoke check to CI; package checks cover every JS file and current version.
+- 174 tests passed. Existing 0.10.5 models, manual correction features and data remain compatible.
+
 # 0.10.1 — 2026-09-13
 
 - Fix frontend startup ReferenceError from the removed toggleExplore function.

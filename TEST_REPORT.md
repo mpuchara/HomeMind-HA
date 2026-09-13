@@ -1,11 +1,9 @@
-# Testy wydania 0.10.1
+# Testy wydania 0.10.6
 
-153 testy unittest przeszły, w tym 25 testów eksperymentów. [Pełny wynik](docs/TEST_RESULTS_0_10_1.txt).
+174 testy unittest przeszły. [Pełny wynik](docs/TEST_RESULTS_0_10_6.txt), [opis wydania](docs/RELEASE_0_10_6.md).
 
-[Scenariusze i ograniczenia](docs/RELEASE_0_10_1.md), [symulator](docs/SIMULATOR_0_10_1.json), [mikrobenchmark](docs/BENCHMARK_LOCAL_0_10_1.json).
+Na czystej bazie odtworzono awarię opublikowanego 0.10.5 przy wykonaniu fast_queue_main.py: AttributeError: NoneType object has no attribute lock, przed uruchomieniem HTTP. Dotychczasowe 170 testów przechodziło mimo tej awarii.
 
-Sprawdzono odrębność trzech kontekstów, realne aktualizacje wag po wyniku, zmianę kolejnych wyborów, kontrolę porównawczą, budżet po restarcie, brak nagrody za ACK i za utratę obserwacji, powolne urządzenia, granice fizycznych nastaw i pełną ścieżkę wykonania z ręczną korektą. Zachowano wszystkie 127 testów pobranego main.
+Cztery nowe testy używają osobnych procesów Pythona i rzeczywistego punktu wejścia: import bez bazy, kolejność HTTP/baza/rozszerzenia/pracownicy, widoczność błędów inicjalizacji oraz prawdziwe zapytania HTTP podczas celowo wstrzymanego startu. Weryfikują też kolejkę FIFO, obserwatory korekt i działanie adaptera odkurzacza po imporcie Executor.
 
-Menu sprawdzono w przeglądarce na lokalnym fixture: wybór kierunku, zapis, ponowne otwarcie i układ. Pakiet sprawdza także wszystkie pliki JS, kompilację Python, jeden punkt wywołania HA i sumy plików ZIP. Nie wykonano sterowania na fizycznym HA ani pomiarów Raspberry Pi 4.
-
-Nowy test wykonuje rzeczywisty app.js, sprawdza pierwsze zapytanie API, timer i podpięcie przycisków. Na oryginalnym kodzie 0.10.0 odtworzono ReferenceError: toggleExplore is not defined. Na poprawce test przechodzi.
+Pakiet sprawdza wszystkie siedem skryptów JS, kompilację Pythona, zgodność wersji, [symulator](docs/SIMULATOR_0_10_6.json), [mikrobenchmark](docs/BENCHMARK_LOCAL_0_10_6.json) i integralność ZIP. Lokalny daemon Docker jest niedostępny; test uruchomienia kontenera dodano do CI, bez deklarowania jego wyniku przed wykonaniem. Nie wdrażano na fizycznym HA użytkownika ani nie mierzono Raspberry Pi 4.

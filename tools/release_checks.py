@@ -10,7 +10,8 @@ import sys
 import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
-VERSION = "0.10.1"
+VERSION = json.loads((ROOT/"adaptive_ai/BUILD_INFO.json").read_text(encoding="utf-8"))["version"]
+ARTIFACT_VERSION = VERSION.replace(".", "_")
 ENV = dict(os.environ, PYTHONUTF8="1", PYTHONIOENCODING="utf-8")
 
 
@@ -29,12 +30,12 @@ def main():
     if not match or not log.rstrip().endswith("OK"):
         raise RuntimeError("Missing successful unittest report")
     count = int(match[1])
-    (docs/"TEST_RESULTS_0_10_1.txt").write_text(log, encoding="utf-8")
+    (docs/f"TEST_RESULTS_{ARTIFACT_VERSION}.txt").write_text(log, encoding="utf-8")
     run(sys.executable, "-m", "compileall", "-q", "adaptive_ai/src")
-    for name in ("app.js", "home.js", "settings.js", "p0.js", "queue.js", "experiments.js"):
-        run("node", "--check", str(ROOT/"adaptive_ai/src/static"/name))
-    for tool, artifact in (("simulate_anticipation.py", "SIMULATOR_0_10_1.json"),
-                           ("benchmark.py", "BENCHMARK_LOCAL_0_10_1.json")):
+    for path in sorted((ROOT/"adaptive_ai/src/static").glob("*.js")):
+        run("node", "--check", str(path))
+    for tool, artifact in (("simulate_anticipation.py", f"SIMULATOR_{ARTIFACT_VERSION}.json"),
+                           ("benchmark.py", f"BENCHMARK_LOCAL_{ARTIFACT_VERSION}.json")):
         data = json.loads(run(sys.executable, str(ROOT/"tools"/tool)).stdout)
         (docs/artifact).write_text(json.dumps(data, indent=2, ensure_ascii=False)+"\n", encoding="utf-8")
 

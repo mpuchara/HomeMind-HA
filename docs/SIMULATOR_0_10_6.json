@@ -1,0 +1,82 @@
+{
+  "shadow": {
+    "intent": {
+      "intent_id": "29e7e2b8-4df7-4f21-859c-b7c803a84527",
+      "status": "SHADOW",
+      "reason": "Policy desires 1.0; confidence 92%, support 72%, novelty 28%",
+      "created_at": 1789331357.738212,
+      "desired_value": 1.0
+    },
+    "prediction": 1.0,
+    "confidence": 0.9239395166945217,
+    "support": 0.7201319607581822,
+    "novelty": 0.2798680392418178,
+    "forecast": {
+      "occupancy_now": 0.0,
+      "occupancy_in_1s": 0.0,
+      "occupancy_in_3s": 0.8910338484152411,
+      "occupancy_in_5s": 0.8910338484152411,
+      "arrival_probability": 0.8910338484152411,
+      "departure_probability": 0.0,
+      "trajectory_confidence": 0.9612735863000041,
+      "area_id": "kitchen",
+      "known": true,
+      "support": 198.57735213939696
+    }
+  },
+  "control": {
+    "intent": {
+      "intent_id": "c0d4c1db-7994-4148-a7a0-043be0ace90d",
+      "status": "ACCEPTED",
+      "reason": "Sent light.turn_on; waiting for acknowledgement",
+      "created_at": 1789331357.738212,
+      "desired_value": 1.0
+    },
+    "prediction": 1.0,
+    "confidence": 0.9239395166945217,
+    "support": 0.7201319607581822,
+    "novelty": 0.2798680392418178,
+    "forecast": {
+      "occupancy_now": 0.0,
+      "occupancy_in_1s": 0.0,
+      "occupancy_in_3s": 0.8910338484152411,
+      "occupancy_in_5s": 0.8910338484152411,
+      "arrival_probability": 0.8910338484152411,
+      "departure_probability": 0.0,
+      "trajectory_confidence": 0.9612735863000041,
+      "area_id": "kitchen",
+      "known": true,
+      "support": 198.57735213939696
+    }
+  },
+  "observed_anticipation_reward": 0.5832664966583252,
+  "reward_components": {
+    "manual_correction": 0.0,
+    "acceptance": 0.0,
+    "confirmed_anticipation": 0.45,
+    "false_positive": 0.0,
+    "early_action": 0.0,
+    "useful_anticipation": 0.1332664966583252,
+    "chatter": 0.0,
+    "clipping": 0.0
+  },
+  "negative_branch": {
+    "desired_value": 0.0,
+    "confidence": 0.9125585512290895,
+    "forecast": {
+      "occupancy_now": 0.0,
+      "occupancy_in_1s": 0.0,
+      "occupancy_in_3s": 0.0,
+      "occupancy_in_5s": 0.0,
+      "arrival_probability": 0.0,
+      "departure_probability": 0.0,
+      "trajectory_confidence": 0.7128118384272172,
+      "area_id": "kitchen",
+      "known": true,
+      "support": 19.8563014442799
+    },
+    "non_arrival_reward": -0.6
+  },
+  "anticipated_lead_seconds": 2.0,
+  "ha_service_calls": 1
+}

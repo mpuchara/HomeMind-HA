@@ -317,7 +317,7 @@ def install_runtime_physical_equivalence(core, engine):
     engine._manual_feedback_equivalence_installed = True
 
 
-def install(core):
+def install(core, attach_runtime=True):
     """Install HTTP endpoint and physical/manual learning equivalence."""
     if getattr(core.Handler, "_manual_feedback_installed", False):
         return
@@ -355,6 +355,7 @@ def install(core):
                 return self.send_json(502, {"error": f"Manual correction failed: {type(exc).__name__}: {exc}"})
         return original_post(self)
 
-    core.initialize_runtime = initialize_runtime
+    if attach_runtime:
+        core.initialize_runtime = initialize_runtime
     core.Handler.do_POST = do_post
     core.Handler._manual_feedback_installed = True

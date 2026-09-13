@@ -79,6 +79,14 @@ def migrate_legacy_fast_intervals():
     return len(migrated)
 
 
+def prepare_runtime_extensions():
+    """Entrypoint hook: STORE exists, but policy/engine imports have not run yet."""
+
+
+def prepare_engine_extensions():
+    """Entrypoint hook: install observers before any worker consumes HA events."""
+
+
 def initialize_runtime():
     """Load the control runtime in the background after HTTP is already available."""
     global ENGINE, HISTORY, EVENT_STREAM, STORE, AUTOMATION_KNOWLEDGE
@@ -87,6 +95,8 @@ def initialize_runtime():
     try:
         set_startup("loading_runtime", 1, "Loading local database and runtime modules")
         from storage import STORE as runtime_store
+        STORE = runtime_store
+        prepare_runtime_extensions()
         from ha import AUTOMATION_KNOWLEDGE as automation_knowledge
         from context import target_options_for_state as target_options
         from context import default_action_interval as default_interval
@@ -109,6 +119,8 @@ def initialize_runtime():
         migrated = migrate_legacy_fast_intervals()
         if migrated:
             print(f"[startup] Fast-agent interval migration: {migrated}", flush=True)
+
+        prepare_engine_extensions()
 
         set_startup("starting_engine", 3, "Connecting to Home Assistant and reading current states")
         ENGINE.start()
@@ -586,6 +598,16 @@ def shutdown_runtime():
         traceback.print_exc()
 
 
+def run_initialize_runtime():
+    """Also surface failures in outer runtime wrappers (for example the FIFO queue)."""
+    try:
+        initialize_runtime()
+    except Exception as exc:
+        traceback.print_exc()
+        set_startup('error', STARTUP.get('step', 0),
+                    f'Startup failed: {type(exc).__name__}: {exc}', error=exc)
+
+
 def main():
     try:
         nice_by = int(OPTIONS.get("process_nice", 10))
@@ -598,7 +620,7 @@ def main():
     server = ThreadingHTTPServer(("0.0.0.0", 8099), Handler)
     set_startup("http_ready", 0, "Web interface ready; starting Adaptive AI runtime")
     print("Adaptive AI UI listening on :8099", flush=True)
-    runtime_thread = threading.Thread(target=initialize_runtime, name="adaptive-ai-runtime-init", daemon=True)
+    runtime_thread = threading.Thread(target=run_initialize_runtime, name="adaptive-ai-runtime-init", daemon=True)
     runtime_thread.start()
     try:
         server.serve_forever()

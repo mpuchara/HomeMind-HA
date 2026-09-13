@@ -1,42 +1,38 @@
-"""Adaptive AI entrypoint with FIFO training, device adapters and realtime timing."""
-from device_targets import install as install_device_targets
-
-# Domain-specific Home Assistant semantics must be registered before queue_main imports
-# engine/history/executor symbols with ``from context import ...``.
-install_device_targets()
-
-# 0.10.5 finalizes manual-correction semantics while keeping policy/schema revisions
-# intact and reporting the package version consistently through the runtime API.
-import settings
-settings.APP_VERSION = "0.10.5"
-
+"""HTTP-first entrypoint; runtime extensions load in the background in dependency order."""
 import queue_main as queued_runtime
-from fast_runtime import install as install_fast_runtime
-from manual_context_learning import install as install_manual_context_learning
 from manual_feedback import install as install_manual_feedback
-from manual_feedback_lifecycle import install as install_manual_feedback_lifecycle
 from manual_feedback_static import install as install_manual_feedback_static
 
 core = queued_runtime.core
-_original_initialize_runtime = core.initialize_runtime
 
 
-def initialize_runtime():
-    _original_initialize_runtime()
-    if core.runtime_available():
-        changed = install_fast_runtime(core)
-        if changed:
-            core.STORE.event(None, "info", "fast_runtime_migration",
-                             f"Realtime timing applied to {len(changed)} fast agent(s)",
-                             {"agents": changed})
+def prepare_runtime_extensions():
+    # The database is assigned by main before this hook. Domain adapters must still
+    # precede imports of engine/history/executor, which capture context functions.
+    from device_targets import install as install_device_targets
+    install_device_targets()
+    from manual_context_learning import install as install_manual_context_learning
+    install_manual_context_learning(core)
 
 
-core.initialize_runtime = initialize_runtime
-# Install the broad manual observer before feedback handlers so every correction can
-# promote context before the +/- policy update is applied.
-install_manual_context_learning(core)
-install_manual_feedback(core)
-install_manual_feedback_lifecycle(core)
+def prepare_engine_extensions():
+    from fast_runtime import install as install_fast_runtime
+    from manual_feedback import install_runtime_physical_equivalence
+    from manual_feedback_lifecycle import install_runtime as install_lifecycle
+    changed = install_fast_runtime(core)
+    if changed:
+        core.STORE.event(None, "info", "fast_runtime_migration",
+                         f"Realtime timing applied to {len(changed)} fast agent(s)",
+                         {"agents": changed})
+    install_runtime_physical_equivalence(core, core.ENGINE)
+    install_lifecycle(core)
+    core.STORE.event(None, "info", "manual_feedback_ready", "Manual correction feedback path ready", None)
+
+
+core.prepare_runtime_extensions = prepare_runtime_extensions
+core.prepare_engine_extensions = prepare_engine_extensions
+# HTTP routes are cheap and need no database; observers are attached by the hook above.
+install_manual_feedback(core, attach_runtime=False)
 install_manual_feedback_static(core)
 
 
