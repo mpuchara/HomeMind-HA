@@ -25,3 +25,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: docker build -t homemind:0.9.2 adaptive_ai
+  package:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build install package
+        run: zip -r HomeMind-Adaptive-AI.zip adaptive_ai
+      - name: Upload install package
+        uses: actions/upload-artifact@v4
+        with:
+          name: HomeMind-Adaptive-AI-main
+          path: HomeMind-Adaptive-AI.zip
+          if-no-files-found: error
+          retention-days: 30
