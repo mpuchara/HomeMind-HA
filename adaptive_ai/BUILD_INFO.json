@@ -1,8 +1,8 @@
 {
-  "version": "0.10.1",
+  "version": "0.10.2",
   "release_date": "2026-09-13",
-  "base_version": "0.10.0",
-  "base_commit": "7dc764f",
+  "base_version": "0.10.1",
+  "base_commit": "a2dcfe4",
   "profile": "rpi4-low-memory-manual-training",
   "manual_agent_training": true,
   "max_concurrent_training_jobs": 1,
@@ -12,9 +12,9 @@
   "feature_schema": 11,
   "home_model_version": 1,
   "reward_version": 2,
-  "release_status": "locally-tested-source-release",
-  "tests_passed": 153,
-  "docker_build": "not_run_daemon_unavailable",
+  "release_status": "github-actions-validated-source-release",
+  "tests_passed": 160,
+  "docker_build": "github-actions-success",
   "pi4": "not_measured",
   "bootstrap_catchup": "bounded-live-statistics",
   "presence_admission": "binary-first-per-device-and-area",
@@ -26,5 +26,9 @@
     "devices"
   ],
   "experiment_storage": "persistent-per-agent-opt-in",
-  "fast_device_runtime": "fast_queue_main"
+  "fast_device_runtime": "fast_queue_main",
+  "device_target_adapters": [
+    "vacuum"
+  ],
+  "vacuum_policy": "cleaning=start; idle=return_to_base/stop fallback; capability-gated; physical experiments blocked"
 }
