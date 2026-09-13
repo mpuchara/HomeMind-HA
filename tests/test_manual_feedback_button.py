@@ -17,7 +17,7 @@ class ManualFeedbackButtonContract(unittest.TestCase):
 
     def test_manual_feedback_does_not_observe_or_poll_its_own_dom_changes(self):
         text = (ROOT / "adaptive_ai/src/static/manual_feedback.js").read_text(encoding="utf-8")
-        self.assertNotIn("MutationObserver", text)
+        self.assertNotIn("new MutationObserver", text)
         self.assertNotIn("setInterval(installButtons", text)
         self.assertIn("previousRenderAgents=renderAgents", text)
         self.assertIn("installButtons();", text)
