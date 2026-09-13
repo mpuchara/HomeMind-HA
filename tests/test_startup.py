@@ -1,29 +1,44 @@
 """Exercise the container entry point without starting HA or background workers."""
 import runpy
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 from support import ROOT
 
 
 class StartupTests(unittest.TestCase):
-    def test_script_starts_http_server_and_closes_workers(self):
-        with patch('engine.Engine.start') as engine_start, \
-             patch('engine.HAEventStream.start') as websocket_start, \
-             patch('history.HistoryManager.start') as history_start, \
-             patch('http.server.ThreadingHTTPServer') as server_class, \
+    def test_http_server_binds_before_background_runtime(self):
+        order = []
+        server = Mock()
+        server.serve_forever.side_effect = KeyboardInterrupt
+
+        def server_factory(*args, **kwargs):
+            order.append('http_bound')
+            return server
+
+        thread = Mock()
+        thread.start.side_effect = lambda: order.append('runtime_thread_started')
+
+        with patch('http.server.ThreadingHTTPServer', side_effect=server_factory) as server_class, \
+             patch('threading.Thread', return_value=thread) as thread_class, \
              patch('os.nice', create=True), patch('builtins.print'):
-            server = server_class.return_value
-            server.serve_forever.side_effect = KeyboardInterrupt
             runtime = runpy.run_path(str(ROOT/'adaptive_ai/src/main.py'), run_name='__main__')
-            engine_start.assert_called_once()
-            websocket_start.assert_called_once()
-            history_start.assert_called_once()
-            server_class.assert_called_once_with(('0.0.0.0', 8099), runtime['Handler'])
-            server.serve_forever.assert_called_once()
-            server.server_close.assert_called_once()
-            self.assertTrue(runtime['ENGINE'].stop_event.is_set())
-            self.assertIs(runtime['ENGINE'].history_manager, runtime['HISTORY'])
-            self.assertIsNotNone(runtime['ENGINE'].home_bootstrap)
+
+        server_class.assert_called_once_with(('0.0.0.0', 8099), runtime['Handler'])
+        thread_class.assert_called_once()
+        thread.start.assert_called_once()
+        server.serve_forever.assert_called_once()
+        server.server_close.assert_called_once()
+        self.assertEqual(order[:2], ['http_bound', 'runtime_thread_started'])
+        self.assertFalse(runtime['STARTUP']['ready'])
+        self.assertEqual(runtime['STARTUP']['state'], 'http_ready')
+
+    def test_status_is_available_before_runtime(self):
+        runtime = runpy.run_path(str(ROOT/'adaptive_ai/src/main.py'), run_name='startup_test_module')
+        handler = runtime['Handler'].__new__(runtime['Handler'])
+        payload = handler.status_payload()
+        self.assertIn('startup', payload)
+        self.assertFalse(payload['startup']['ready'])
+        self.assertEqual(payload['state_count'], 0)
 
 
 if __name__ == '__main__':
