@@ -13,6 +13,7 @@ settings.APP_VERSION = "0.10.3"
 import queue_main as queued_runtime
 from fast_runtime import install as install_fast_runtime
 from manual_feedback import install as install_manual_feedback
+from manual_feedback_lifecycle import install as install_manual_feedback_lifecycle
 from manual_feedback_static import install as install_manual_feedback_static
 
 core = queued_runtime.core
@@ -31,6 +32,7 @@ def initialize_runtime():
 
 core.initialize_runtime = initialize_runtime
 install_manual_feedback(core)
+install_manual_feedback_lifecycle(core)
 install_manual_feedback_static(core)
 
 
