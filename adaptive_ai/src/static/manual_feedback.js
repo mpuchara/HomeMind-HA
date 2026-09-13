@@ -2,7 +2,8 @@
   const STYLE_ID='manual-feedback-style';
   const BUTTON_CLASS='manual-correction-btn';
   const LEGACY_VERIFY_CLASS='manual-legacy-verify';
-  let busy=new Set();
+  const busy=new Set();
+  const feedbackUntil=new Map();
 
   function ensureStyle(){
     if(document.getElementById(STYLE_ID))return;
@@ -67,8 +68,13 @@
       if(desired===undefined){button.textContent=old;button.disabled=false;return;}
       const body=agent.target_property==='power'?{}:{desired_value:desired};
       const result=await api(`api/agents/${encodeURIComponent(key)}/manual-correction`,{method:'POST',body:JSON.stringify(body)});
+      feedbackUntil.set(key,Date.now()+2200);
       button.textContent='✓ Nauczono'+learningSuffix(result);
-      setTimeout(()=>{button.textContent=correctionLabel();button.disabled=false;},2200);
+      setTimeout(()=>{
+        feedbackUntil.delete(key);
+        button.textContent=correctionLabel();
+        button.disabled=false;
+      },2200);
       if(typeof window.load==='function')setTimeout(()=>window.load(),150);
     }catch(e){
       alert('Nie udało się wykonać korekty: '+e.message);
@@ -103,16 +109,12 @@
       const id=agentIdForCard(card);
       if(!id||!actions)return;
 
-      // P0 cards keep an internal Verify-control button that their updater expects.
-      // Hide it instead of repurposing it, then place the user-facing teaching action
-      // in the same visual slot. This prevents the 4 s P0 refresh from restoring or
-      // disabling Verify control.
       const verify=legacyVerifyButton(actions);
       if(verify){
-        verify.classList.add(LEGACY_VERIFY_CLASS);
-        verify.hidden=true;
-        verify.setAttribute('aria-hidden','true');
-        verify.tabIndex=-1;
+        if(!verify.classList.contains(LEGACY_VERIFY_CLASS))verify.classList.add(LEGACY_VERIFY_CLASS);
+        if(!verify.hidden)verify.hidden=true;
+        if(verify.getAttribute('aria-hidden')!=='true')verify.setAttribute('aria-hidden','true');
+        if(verify.tabIndex!==-1)verify.tabIndex=-1;
       }
 
       let b=[...actions.querySelectorAll('.'+BUTTON_CLASS)].find(x=>x!==verify);
@@ -123,12 +125,17 @@
         if(verify)actions.insertBefore(b,verify);else actions.prepend(b);
       }
       bindManualButton(b,id);
-      b.disabled=false;
-      b.hidden=false;
-      b.removeAttribute('aria-hidden');
-      b.tabIndex=0;
-      b.textContent=correctionLabel();
+      if(b.hidden)b.hidden=false;
+      if(b.getAttribute('aria-hidden')!=null)b.removeAttribute('aria-hidden');
+      if(b.tabIndex!==0)b.tabIndex=0;
       b.title='Zgłoś błędną decyzję agenta. HomeMind poprawi urządzenie i zapisze tę korektę jako silny sygnał uczący razem z bieżącym kontekstem domu.';
+
+      const showingFeedback=(feedbackUntil.get(id)||0)>Date.now();
+      if(!busy.has(id)&&!showingFeedback){
+        if(b.disabled)b.disabled=false;
+        const label=correctionLabel();
+        if(b.textContent!==label)b.textContent=label;
+      }
 
       if(!actions.querySelector('.manual-correction-hint')){
         const hint=document.createElement('div');
@@ -143,11 +150,19 @@
 
   function start(){
     installButtons();
-    const root=document.getElementById('agents');
-    if(root)new MutationObserver(()=>installButtons()).observe(root,{childList:true,subtree:true});
-    setInterval(installButtons,1000);
+    // Do not observe the whole agent subtree. Updating button text/children from inside
+    // a subtree MutationObserver can schedule the observer again indefinitely and lock
+    // the Home Assistant ingress tab. Instead hook the existing render pass once.
+    if(typeof renderAgents==='function'){
+      const previousRenderAgents=renderAgents;
+      renderAgents=(...args)=>{
+        const result=previousRenderAgents(...args);
+        installButtons();
+        return result;
+      };
+    }
   }
 
-  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',start);
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',start,{once:true});
   else start();
 })();
