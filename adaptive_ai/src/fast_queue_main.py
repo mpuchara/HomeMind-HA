@@ -19,6 +19,8 @@ def prepare_engine_extensions():
     from fast_runtime import install as install_fast_runtime
     from manual_feedback import install_runtime_physical_equivalence
     from manual_feedback_lifecycle import install_runtime as install_lifecycle
+    from historical_teach_install import install as install_historical_teach
+    from historical_teach_reward import install as install_historical_teach_reward
     changed = install_fast_runtime(core)
     if changed:
         core.STORE.event(None, "info", "fast_runtime_migration",
@@ -26,6 +28,8 @@ def prepare_engine_extensions():
                          {"agents": changed})
     install_runtime_physical_equivalence(core, core.ENGINE)
     install_lifecycle(core)
+    install_historical_teach(core)
+    install_historical_teach_reward(core)
     core.STORE.event(None, "info", "manual_feedback_ready", "Manual correction feedback path ready", None)
 
 
