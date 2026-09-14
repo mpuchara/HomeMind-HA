@@ -1,12 +1,13 @@
 import time
 import unittest
 from types import SimpleNamespace
+from unittest.mock import patch
 
 from support import agent, state
 from storage import STORE
 from manual_context_learning import (
     _candidate_snapshot, _ensure_table, _insert_snapshot, _migrate_schema,
-    _SCORE_CACHE, _OBSERVATION_CACHE, manual_scores,
+    _SCORE_CACHE, _OBSERVATION_CACHE, manual_scores, observe,
 )
 from context import ExplicitFeatureSchema
 from policy import DiagonalLinUCB
@@ -60,6 +61,32 @@ class ManualContextLearningTests(unittest.TestCase):
                 created_ts=now-i,
             )
         self.assertNotIn("sensor.always_high", manual_scores(STORE, "agent-y", now=now))
+
+    def test_manual_observation_never_refreshes_live_schema(self):
+        a = agent(target_entity="light.kitchen")
+        core = SimpleNamespace(STORE=STORE, ENGINE=SimpleNamespace(entity_registry={}))
+        state_map = {
+            "light.kitchen": state("light.kitchen", "off"),
+            "binary_sensor.motion": state("binary_sensor.motion", "on", device_class="motion"),
+        }
+        # Even an old caller explicitly requesting refresh_policy=True must only record
+        # evidence. Schema mutation is now a separate, explicit lifecycle.
+        with patch("manual_context_learning._refresh_policy") as refresh:
+            result = observe(
+                core, a, state_map, 1.0, rejected=0.0,
+                source="ui_correction", user_id="user", refresh_policy=True,
+            )
+        refresh.assert_not_called()
+        self.assertTrue(result["recorded"])
+        self.assertFalse(result["schema_changed"])
+        self.assertEqual(result["added"], [])
+        self.assertEqual(result["removed"], [])
+        self.assertTrue(result["schema_refresh_deferred"])
+        with STORE.conn() as c:
+            count = c.execute(
+                "SELECT COUNT(*) FROM manual_context_feedback WHERE agent_id=?", (a["id"],)
+            ).fetchone()[0]
+        self.assertEqual(count, 1)
 
     def test_schema_migration_preserves_matching_feature_weights(self):
         dims = 128
