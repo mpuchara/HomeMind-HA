@@ -1,7 +1,15 @@
-"""Retractable, contextual user labels alongside (not inside) the RL matrices.
+"""Retractable, contextual user teaching for the agent policy.
 
 Historical inference uses only archived, as-of context. It is explicitly a replay
 of the current policy, never a claim about an unrecorded past decision.
+
+A teaching label is authoritative in the context in which the user supplied it and
+also generalizes to nearby contexts.  The matcher deliberately treats categorical
+presence/motion direction as a hard boundary while allowing ordinary analogue
+context (temperature, illuminance, radar strength, etc.) to drift.  This is the
+behaviour a user expects from correcting a point on the Teach chart: the next
+sufficiently similar situation should produce the corrected Desired value rather
+than requiring an identical sensor vector.
 """
 from collections import deque
 import hashlib
@@ -36,12 +44,82 @@ def signature(policy, states, temporal, timestamp):
     return result
 
 
+def _critical_feature(name):
+    """Return True for features whose *direction* describes human presence/activity.
+
+    A motion ON demonstration must never be reused for motion OFF.  At the same time,
+    analogue occupancy/radar values naturally move while describing the same situation,
+    so those values are weighted strongly rather than requiring byte-for-byte equality.
+    """
+    text = str(name).lower().replace('_', ' ')
+    return any(token in text for token in (
+        'occupancy', 'presence', 'motion', 'obecno', 'door', 'window', 'contact',
+        'moving target', 'still target', 'move target', 'radar', 'activity',
+    ))
+
+
 def distance(left, right):
+    """Semantic distance between two teaching contexts.
+
+    The old matcher required every selected feature to stay within 0.20 and the whole
+    vector within RMS 0.07.  In a real room that made a teaching correction look as if it
+    had been forgotten as soon as lux, temperature or radar strength moved slightly.
+
+    We keep the exact feature schema requirement (so a stale label cannot silently bind
+    to a different model), but generalise inside that schema:
+      * categorical option ordering must still match exactly;
+      * a strong sign flip of presence/motion/activity is a hard mismatch;
+      * activity/presence features have extra weight;
+      * ordinary analogue features may drift substantially;
+      * the weighted RMS still bounds how far a label can generalise.
+    """
     if left.keys() != right.keys():
         return None
-    diffs = [abs(left[k]-v) for k,v in right.items()]
-    rms = math.sqrt(sum(d*d for d in diffs)/max(1,len(diffs)))
-    return rms if max(diffs, default=1) <= .20 and rms <= .07 else None
+
+    weighted_sq = 0.0
+    total_weight = 0.0
+    max_generic = 0.0
+    for key, old_value in right.items():
+        new_value = left[key]
+        if str(key).startswith('target_options:'):
+            if old_value != new_value:
+                return None
+            continue
+
+        old_value = float(old_value)
+        new_value = float(new_value)
+        diff = abs(new_value - old_value)
+        critical = _critical_feature(key)
+
+        if critical:
+            # Binary/discrete occupancy is normally represented around -1/+1.  A clear
+            # sign flip therefore means a different behavioural situation and cannot be
+            # diluted by dozens of unchanged features.
+            if old_value * new_value < -0.05 and diff > 0.60:
+                return None
+            weight = 3.0
+            # Large activity/radar changes may still mean the same occupied room, but
+            # beyond this point the example is too far away to be authoritative.
+            if diff > 0.90:
+                return None
+        else:
+            weight = 1.0
+            max_generic = max(max_generic, diff)
+            if diff > 1.20:
+                return None
+
+        weighted_sq += weight * diff * diff
+        total_weight += weight
+
+    if total_weight <= 0:
+        return 0.0
+
+    rms = math.sqrt(weighted_sq / total_weight)
+    # Tunable without a migration.  0.20 is deliberately much wider than the former
+    # 0.07, while the hard occupancy/sign guards above prevent unsafe cross-context use.
+    max_rms = float(OPTIONS.get('teaching_context_rms', 0.20))
+    max_analogue = float(OPTIONS.get('teaching_context_max_analogue_delta', 0.75))
+    return rms if rms <= max_rms and max_generic <= max_analogue else None
 
 
 class Teaching:
@@ -98,14 +176,15 @@ class Teaching:
         matches = []
         for row in candidates:
             rms = distance(sig, row['signature'])
-            # A changed motion edge cannot be diluted by dozens of constant inputs.
+            # Presence/motion sign changes are rejected by distance().  Among contexts
+            # that are behaviourally compatible, prefer the nearest and newest explicit
+            # user correction.
             if rms is not None:
                 matches.append((rms, -row["id"], row))
         if not matches:
             return None
-        # Newest explicit correction wins within effectively identical contexts.
         best = min(x[0] for x in matches)
-        return min((x for x in matches if x[0] <= best + .005), key=lambda x: x[1])[2]
+        return min((x for x in matches if x[0] <= best + .015), key=lambda x: x[1])[2]
 
     def physical_correction(self, engine, agent, states, desired, timestamp):
         """A newer real user action retires conflicting button instructions."""
