@@ -20,6 +20,7 @@ jobs:
       - run: python -m compileall -q adaptive_ai/src
       - run: node --check adaptive_ai/src/static/app.js && node --check adaptive_ai/src/static/home.js && node --check adaptive_ai/src/static/settings.js && node --check adaptive_ai/src/static/p0.js && node --check adaptive_ai/src/static/queue.js && node --check adaptive_ai/src/static/experiments.js && node --check adaptive_ai/src/static/manual_feedback.js
       - run: python tools/simulate_anticipation.py
+      - run: python tools/simulate_context_tournament.py
   image:
     runs-on: ubuntu-latest
     steps:
