@@ -29,6 +29,7 @@ def prepare_engine_extensions():
     from context_tournament_quality import install_sensor_quality
     from context_schema_history import install_schema_history
     from context_tournament_requalification import install_promotion_shadow_requalification
+    from context_schema_probation import install_schema_probation
     changed = install_fast_runtime(core)
     if changed:
         core.STORE.event(None, "info", "fast_runtime_migration",
@@ -58,6 +59,9 @@ def prepare_engine_extensions():
     # Requalification is outermost: only after a real promotion row exists can the affected
     # Control agent be persisted back to Shadow and its previous Control handoff released.
     install_promotion_shadow_requalification(tournament)
+    # Probation sits outside promotion/history/requalification. It snapshots the old policy,
+    # compares both schemas on future outcomes and can restore only that agent's old model.
+    install_schema_probation(tournament)
     core.STORE.event(None, "info", "manual_feedback_ready", "Manual correction feedback path ready", None)
     core.STORE.event(None, "info", "teach_rl_ready", "Historical Teach RL pipeline ready", None)
     core.STORE.event(None, "info", "context_tournament_ready",
@@ -72,6 +76,9 @@ def prepare_engine_extensions():
                       "sensor_quality": "availability",
                       "ranking": "predictive_gain * sensor_quality",
                       "promotion_requalification": "control_to_shadow",
+                      "schema_probation_samples": int(core.OPTIONS.get("context_schema_probation_samples", 50)) if hasattr(core, "OPTIONS") else 50,
+                      "schema_rollback_margin": 0.03,
+                      "schema_rollback_min_samples": 30,
                       "consecutive_wins": int(core.OPTIONS.get("context_tournament_consecutive_wins", 3)) if hasattr(core, "OPTIONS") else 3,
                       "evaluation_hours": float(core.OPTIONS.get("context_tournament_evaluation_hours", 24)) if hasattr(core, "OPTIONS") else 24,
                       "cooldown_hours": float(core.OPTIONS.get("context_tournament_cooldown_hours", 24)) if hasattr(core, "OPTIONS") else 24,
@@ -79,6 +86,7 @@ def prepare_engine_extensions():
                       "promotion_table": "context_tournament_promotions",
                       "quality_table": "context_tournament_sensor_quality",
                       "schema_history_table": "context_schema_history",
+                      "schema_probation_table": "context_schema_probation",
                       "binary_metric": "balanced_accuracy",
                       "continuous_metric": "normalized_mae",
                       "installed": tournament is not None})
