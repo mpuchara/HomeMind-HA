@@ -115,14 +115,19 @@ class ArchiveTests(unittest.TestCase):
         _,peak=tracemalloc.get_traced_memory();tracemalloc.stop()
         self.assertEqual(count,20000);self.assertLess(peak,3*1024*1024)
 
-    def test_deferred_validation_vectors_stay_on_disk(self):
+    def test_prequential_validation_updates_stay_bounded_and_are_not_folded_twice(self):
         p=MultiHorizonPolicy(agent(),{}, {},set())
         spool=DeferredUpdates({'test':p})
+        before=p.heads[1].total_updates
         tracemalloc.start()
         for i in range(5000):spool.append((p,1,1,{j:.5 for j in range(128)},1,self.base+i))
         _,peak=tracemalloc.get_traced_memory();tracemalloc.stop()
         self.assertLess(peak,2*1024*1024)
-        self.assertEqual(sum(1 for _ in spool),5000);spool.close()
+        self.assertEqual(len(spool),5000)
+        self.assertGreater(p.heads[1].total_updates,before)
+        # The legacy final fold loop sees no pending vectors: every sample was already
+        # learned immediately after its validation event.
+        self.assertEqual(sum(1 for _ in spool),0);spool.close()
 
     def test_shared_heavy_job_gate(self):
         gate=HeavyJobGate();self.assertTrue(gate.acquire('agent:a'))
