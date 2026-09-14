@@ -20,6 +20,7 @@ from context_tournament_metrics import metric_row
 _INSTALLED = False
 _ORIGINAL_ELIGIBILITY = None
 _ORIGINAL_FINALIZE_WINDOW = None
+_MARGIN_EPSILON = 1e-12
 
 
 def beats_with_hysteresis(old_score, new_score, min_gain):
@@ -34,7 +35,9 @@ def beats_with_hysteresis(old_score, new_score, min_gain):
         return False
     if not (math.isfinite(old) and math.isfinite(new) and math.isfinite(margin)):
         return False
-    return new > old + margin
+    # Compare the score delta with a tiny numerical guard so decimal boundaries such as
+    # 0.87 - 0.84 == 0.03 remain strict even under binary floating-point representation.
+    return (new - old) > margin + _MARGIN_EPSILON
 
 
 def hysteresis_diagnostics(old_score, new_score, min_gain):
