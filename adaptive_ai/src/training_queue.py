@@ -1,13 +1,15 @@
 """FIFO admission queue for expensive per-agent historical training jobs.
 
 The HistoryManager intentionally permits only one heavy replay at a time so Home
-Assistant keeps CPU/RAM priority.  This queue turns that resource limit into normal
+Assistant keeps CPU/RAM priority. This queue turns that resource limit into normal
 product behaviour: Train/Resume/Rebuild requests are accepted, deduplicated and run
 in order as soon as the shared heavy-job gate becomes available.
 """
 from collections import deque
 import threading
 import time
+
+from telemetry import HEAVY_JOBS
 
 
 class TrainingQueue(threading.Thread):
@@ -50,6 +52,11 @@ class TrainingQueue(threading.Thread):
     def _release_control_before_queue(self, agent, reason):
         if agent.get("mode") == "control":
             self.engine.executor.release_control(agent, reason=reason)
+
+    def _teach_service(self, job):
+        if not job or job.get("reason") != "teach_rl":
+            return None
+        return getattr(self.engine, "rl_teaching", None)
 
     def enqueue(self, agent_id, rebuild=False, reason="training"):
         agent = self.store.get_agent(agent_id)
@@ -109,7 +116,14 @@ class TrainingQueue(threading.Thread):
             self.store.event(agent_id, "info", "training_queue_cancelled",
                              "Queued training request cancelled", None)
             self.cv.notify_all()
-            return True
+        service = self._teach_service(job)
+        if service is not None:
+            try:
+                service.abort_retrain(agent_id, "Teach RL queue request cancelled", state="cancelled")
+            except Exception as exc:
+                self.store.event(agent_id, "warning", "teach_rl_cancel_cleanup_failed",
+                                 str(exc), {"error": f"{type(exc).__name__}: {exc}"})
+        return True
 
     def status_for(self, agent_id):
         with self.cv:
@@ -175,11 +189,28 @@ class TrainingQueue(threading.Thread):
             self._drop_head("training_queue_dropped", "Queued training dropped because the agent no longer exists")
             return True
 
+        # Teach RL has a queue-owned preflight before the destructive Rebuild.  Do not
+        # query Recorder while another agent/bootstrap owns the shared heavy slot.  Once
+        # selection succeeds, its state becomes `selected`, so a rare acquire race does
+        # not repeat the Recorder scan on the next queue poll.
+        service = self._teach_service(job)
+        if self._history_active_ids() or HEAVY_JOBS.owner is not None:
+            return False
         try:
+            if service is not None:
+                if service.needs_context_selection(job["agent_id"]):
+                    service.prepare_context_selection(agent)
+                    agent = self.store.get_agent(job["agent_id"]) or agent
             started = (self.history.request_agent_rebuild(job["agent_id"])
                        if job.get("rebuild") else
                        self.history.request_agent_resume(job["agent_id"]))
         except Exception as exc:
+            if service is not None:
+                try:
+                    service.abort_retrain(job["agent_id"], exc, state="failed")
+                except Exception as cleanup_exc:
+                    self.store.event(job["agent_id"], "warning", "teach_rl_prepare_cleanup_failed",
+                                     str(cleanup_exc), {"error": f"{type(cleanup_exc).__name__}: {cleanup_exc}"})
             dropped = self._drop_head("training_queue_failed", str(exc), {"error": str(exc)})
             if dropped:
                 current = self.store.get_agent(dropped["agent_id"])
@@ -194,8 +225,8 @@ class TrainingQueue(threading.Thread):
             return True
 
         if not started:
-            # Another agent or Home Bootstrap owns the shared heavy-job gate. Keep
-            # this request at the head and retry; HTTP callers never see a 409.
+            # Another job won the small race after the preflight. Keep this request at
+            # the head; Teach context is already selected and will not be rescanned.
             return False
 
         with self.cv:
@@ -203,10 +234,8 @@ class TrainingQueue(threading.Thread):
             self.pending.pop(job["agent_id"], None)
             job = {**job, "started_at": time.time()}
             self.active = job
-            if job.get("reason") == "teach_rl":
-                service = getattr(self.engine, "rl_teaching", None)
-                if service is not None:
-                    service.mark_training(job["agent_id"])
+            if service is not None:
+                service.mark_training(job["agent_id"])
             self.store.event(job["agent_id"], "info", "training_queue_started",
                              "Queued training started automatically",
                              {"wait_seconds": max(0.0, job["started_at"] - job["queued_at"]),
@@ -222,17 +251,15 @@ class TrainingQueue(threading.Thread):
         if job["agent_id"] in self._history_active_ids():
             return False
 
-        # A Teach RL job is two-stage: normal deterministic historical rebuild first,
-        # then supervised fine-tuning on the active Teach labels.  Finalization happens
-        # before the queue slot is released so the UI never observes a half-finished model.
-        if job.get("reason") == "teach_rl":
-            service = getattr(self.engine, "rl_teaching", None)
-            if service is not None:
-                try:
-                    service.finalize_retrain(job["agent_id"])
-                except Exception as exc:
-                    self.store.event(job["agent_id"], "error", "teach_rl_finalize_failed",
-                                     str(exc), {"error": f"{type(exc).__name__}: {exc}"})
+        # A Teach RL job is two-stage after preflight: normal deterministic historical
+        # rebuild first, then supervised fine-tuning on the active Teach labels.
+        service = self._teach_service(job)
+        if service is not None:
+            try:
+                service.finalize_retrain(job["agent_id"])
+            except Exception as exc:
+                self.store.event(job["agent_id"], "error", "teach_rl_finalize_failed",
+                                 str(exc), {"error": f"{type(exc).__name__}: {exc}"})
 
         agent = self.store.get_agent(job["agent_id"])
         with self.cv:
