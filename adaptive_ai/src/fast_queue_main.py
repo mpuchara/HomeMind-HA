@@ -17,6 +17,7 @@ def prepare_runtime_extensions():
 
 def prepare_engine_extensions():
     from fast_runtime import install as install_fast_runtime
+    from paused_shadow_inference import install as install_paused_shadow_inference
     from manual_feedback import install_runtime_physical_equivalence
     from manual_feedback_lifecycle import install_runtime as install_lifecycle
     from teaching_learning_bridge import install as install_teaching_learning_bridge
@@ -39,6 +40,9 @@ def prepare_engine_extensions():
         core.STORE.event(None, "info", "fast_runtime_migration",
                          f"Realtime timing applied to {len(changed)} fast agent(s)",
                          {"agents": changed})
+    # Runtime mode and offline-training state are separate concerns. A paused trained
+    # model may infer in Shadow, but this never changes Control qualification.
+    install_paused_shadow_inference(core)
     install_runtime_physical_equivalence(core, core.ENGINE)
     install_lifecycle(core)
     install_teaching_learning_bridge(core)
@@ -97,6 +101,7 @@ def prepare_engine_extensions():
                       "schema_rollback_margin": 0.03,
                       "schema_rollback_min_samples": 30,
                       "teach_rl_control_rebenchmark": "prequential_shadow",
+                      "paused_shadow_inference": "existing_model_only",
                       "control_diagnostics": "schema_revision+schema_age+prequential_samples+feature_tournament_state",
                       "context_ui_diagnostics": "active+primary+challengers+evaluation+schema+last_update",
                       "context_events": "structured_numeric_no_generated_text",
