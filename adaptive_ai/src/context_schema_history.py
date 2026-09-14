@@ -14,6 +14,9 @@ import json
 import math
 import time
 
+from context import action_values
+from context_tournament_metrics import metric_row
+
 
 VALID_SCHEMA_HISTORY_STATUSES = {"promoted", "accepted", "rolled_back"}
 
@@ -60,7 +63,7 @@ def _row_dict(row):
 
 
 def install_schema_history(service):
-    """Create the audit table and attach a small persistence API to Tournament service."""
+    """Create the audit table, persistence API, and automatic promotion audit hook."""
     if getattr(service, "_schema_history_installed", False):
         return service
 
@@ -141,9 +144,82 @@ def install_schema_history(service):
             ).fetchone()
         return _row_dict(row)
 
+    # Install the data API before wrapping runtime so future rollback/probation code can
+    # update the same row without depending on this observer implementation.
     service.record_schema_history = record_schema_history
     service.set_schema_history_status = set_schema_history_status
     service.schema_history = schema_history
     service.schema_history_by_id = schema_history_by_id
+
+    original_observe = service.observe_shadow
+
+    def observe_with_schema_history(agent, state_map=None, changed_entities=None):
+        aid = str(agent["id"])
+        before = service.state(aid)
+        old_schema = list(before.get("active_features") or [])
+        before_promotion = (
+            service.promotion_status(agent)
+            if hasattr(service, "promotion_status") else {}
+        )
+        before_promotion_ts = before_promotion.get("last_promotion_ts")
+
+        result = original_observe(agent, state_map, changed_entities)
+
+        after = service.state(aid)
+        new_schema = list(after.get("active_features") or [])
+        if new_schema == old_schema or not hasattr(service, "promotion_status"):
+            return result
+
+        promotion_state = service.promotion_status(agent) or {}
+        promoted = promotion_state.get("promoted_entity")
+        removed = promotion_state.get("replaced_entity")
+        promoted_ts = promotion_state.get("last_promotion_ts")
+        # Do not attribute an unrelated/manual schema edit to an old Tournament win.
+        if promoted_ts is None or promoted_ts == before_promotion_ts or promoted not in set(new_schema):
+            return result
+
+        details = dict(promotion_state.get("details") or {})
+        actions = [float(x) for x in action_values(agent)]
+        metrics = {}
+        if actions and promoted:
+            try:
+                model = service._load_shadow_model(aid, promoted, len(actions))
+                metrics = metric_row(model, actions)
+            except Exception:
+                metrics = {}
+        baseline = metrics.get("baseline_score")
+        challenger = metrics.get("challenger_score")
+        samples = metrics.get("samples")
+        if baseline is None:
+            baseline = details.get("baseline_score")
+        if challenger is None:
+            challenger = details.get("challenger_score")
+        if samples is None:
+            samples = details.get("samples")
+
+        history_id = record_schema_history(
+            agent_id=aid,
+            created_ts=promoted_ts,
+            old_schema=old_schema,
+            new_schema=new_schema,
+            reason="sensor_tournament_promotion",
+            baseline_score=baseline,
+            challenger_score=challenger,
+            evaluation_samples=samples,
+            promoted_entity=promoted,
+            removed_entity=removed,
+            status="promoted",
+        )
+        try:
+            service.store.event(
+                aid, "info", "context_schema_history_recorded",
+                f"Recorded schema promotion history row {history_id}",
+                {"history_id": history_id, "promoted": promoted, "removed": removed},
+            )
+        except Exception:
+            pass
+        return result
+
+    service.observe_shadow = observe_with_schema_history
     service._schema_history_installed = True
     return service
