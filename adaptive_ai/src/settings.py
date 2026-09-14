@@ -52,6 +52,7 @@ DEFAULT_OPTIONS = {
     "context_tournament_min_samples": 40,
     "context_tournament_min_days": 3,
     "context_tournament_min_gain": 0.03,
+    "context_primary_replacement_gain": 0.07,
     "context_tournament_consecutive_wins": 3,
     "context_tournament_evaluation_hours": 24,
     "context_tournament_cooldown_hours": 24,
