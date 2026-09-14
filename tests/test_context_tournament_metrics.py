@@ -20,7 +20,7 @@ class FakeEngine:
         self.state_map = dict(states)
         self.entity_registry = {}
         self.context_relevance = {'agent-1': dict(scores)}
-        self.models = {}
+        self.models = {'agent-1': policy}
         self.runtime = {'agent-1': {'last_prediction': 0.0}}
         self.lock = threading.RLock()
         self._policy = policy
@@ -117,7 +117,10 @@ class ContextTournamentMetricIntegrationTests(unittest.TestCase):
             self.active: st(self.active, 'off', device_class='occupancy'),
             self.challenger: st(self.challenger, 'on', device_class='occupancy'),
         }
-        self.policy = SimpleNamespace(schema=SimpleNamespace(entities=[self.active]))
+        self.policy = SimpleNamespace(
+            schema=SimpleNamespace(entities=[self.active]),
+            model_revision='champion-1',
+        )
         self.engine = FakeEngine(self.states, {self.challenger: .95}, self.policy)
         self.service = ContextTournament(self.store, self.engine)
         self.service.sync_agent(self.agent, policy=self.policy)
@@ -128,7 +131,8 @@ class ContextTournamentMetricIntegrationTests(unittest.TestCase):
 
     def test_runtime_row_contains_incremental_value_contract(self):
         self.service.observe_shadow(self.agent, dict(self.states), {self.challenger})
-        row = self.service.shadow_status(self.agent)['challengers'][0]
+        status = self.service.shadow_status(self.agent)
+        row = status['challengers'][0]
         self.assertEqual(row['entity_id'], self.challenger)
         self.assertEqual(row['metric'], 'balanced_accuracy')
         self.assertIn('baseline_score', row)
@@ -138,6 +142,9 @@ class ContextTournamentMetricIntegrationTests(unittest.TestCase):
         self.assertIn('availability', row)
         self.assertIn('days_observed', row)
         self.assertAlmostEqual(row['availability'], 1.0, places=7)
+        self.assertEqual(row['evaluation_mode'], 'prequential_future_only')
+        self.assertEqual(status['evaluation_order'], 'predict -> score -> learn')
+        self.assertEqual(status['evaluation_scope'], 'future events after challenger selection')
 
     def test_unavailable_state_reduces_availability_not_feature_score(self):
         self.service.observe_shadow(self.agent, dict(self.states), {self.challenger})
@@ -148,6 +155,81 @@ class ContextTournamentMetricIntegrationTests(unittest.TestCase):
         row = self.service.shadow_status(self.agent)['challengers'][0]
         self.assertAlmostEqual(row['availability'], 0.5, places=7)
         self.assertAlmostEqual(row['feature_score'], 0.95, places=7)
+
+    def test_old_shadow_evidence_is_reset_before_future_proof(self):
+        # Simulate evidence accumulated before the strict future-only evaluator existed.
+        legacy = self.service._blank_shadow_model(2)
+        legacy.update({
+            'samples': 40,
+            'active_correct': 20,
+            'shadow_correct': 38,
+            'counts': {'0:8': [0, 40]},
+        })
+        self.service._save_shadow_model(self.agent['id'], self.challenger, legacy)
+
+        row = self.service.shadow_status(self.agent)['challengers'][0]
+        self.assertEqual(row['samples'], 0)
+        self.assertIsNone(row['gain'])
+        self.assertEqual(row['evaluation_reason'], 'future_only_upgrade')
+        self.assertEqual(row['evaluation_schema_revision'], 1)
+        self.assertEqual(row['evaluation_champion_revision'], 'champion-1')
+
+    def test_reselected_challenger_starts_a_new_future_epoch(self):
+        self.service.observe_shadow(self.agent, dict(self.states), {self.challenger})
+        model = self.service._load_shadow_model(self.agent['id'], self.challenger, 2)
+        model['samples'] = 25
+        model['class_totals'] = [12, 13]
+        model['active_correct_by_class'] = [8, 7]
+        model['shadow_correct_by_class'] = [10, 10]
+        self.service._save_shadow_model(self.agent['id'], self.challenger, model)
+
+        removed = self.service.sync_agent(
+            self.agent, policy=self.policy, feature_scores={self.challenger: 0.0}
+        )
+        self.assertEqual(removed['challenger_features'], [])
+        restored = self.service.sync_agent(
+            self.agent, policy=self.policy, feature_scores={self.challenger: .95}
+        )
+        self.assertEqual(restored['challenger_features'], [self.challenger])
+        row = self.service.shadow_status(self.agent)['challengers'][0]
+        self.assertEqual(row['samples'], 0)
+        self.assertIsNone(row['gain'])
+        self.assertEqual(row['evaluation_reason'], 'challenger_selected')
+
+    def test_active_schema_change_invalidates_old_challenger_proof(self):
+        self.service.observe_shadow(self.agent, dict(self.states), {self.challenger})
+        model = self.service._load_shadow_model(self.agent['id'], self.challenger, 2)
+        model['samples'] = 18
+        self.service._save_shadow_model(self.agent['id'], self.challenger, model)
+
+        revised = self.service.sync_agent(
+            self.agent,
+            policy=None,
+            active_features=[self.active, 'sensor.extra_active_context'],
+            feature_scores={self.challenger: .95},
+        )
+        self.assertEqual(revised['schema_revision'], 2)
+        row = self.service.shadow_status(self.agent)['challengers'][0]
+        self.assertEqual(row['samples'], 0)
+        self.assertEqual(row['evaluation_schema_revision'], 2)
+        self.assertEqual(row['evaluation_reason'], 'active_schema_changed')
+
+    def test_champion_model_change_invalidates_old_challenger_proof(self):
+        self.service.observe_shadow(self.agent, dict(self.states), {self.challenger})
+        model = self.service._load_shadow_model(self.agent['id'], self.challenger, 2)
+        model['samples'] = 18
+        self.service._save_shadow_model(self.agent['id'], self.challenger, model)
+
+        new_policy = SimpleNamespace(
+            schema=SimpleNamespace(entities=[self.active]),
+            model_revision='champion-2',
+        )
+        self.engine.models[self.agent['id']] = new_policy
+        self.service.sync_agent(self.agent, policy=new_policy, feature_scores={self.challenger: .95})
+        row = self.service.shadow_status(self.agent)['challengers'][0]
+        self.assertEqual(row['samples'], 0)
+        self.assertEqual(row['evaluation_champion_revision'], 'champion-2')
+        self.assertEqual(row['evaluation_reason'], 'champion_model_changed')
 
     def test_metrics_extension_stays_non_controlling(self):
         self.service.observe_shadow(self.agent, dict(self.states), {self.challenger})
