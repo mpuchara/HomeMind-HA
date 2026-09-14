@@ -56,6 +56,7 @@ DEFAULT_OPTIONS = {
     "context_tournament_consecutive_wins": 3,
     "context_tournament_evaluation_hours": 24,
     "context_tournament_cooldown_hours": 24,
+    "context_schema_probation_samples": 50,
     "fast_clock_context_weight": 0.15,
     "fast_causal_driver_min_score": 0.50,
     "fast_causal_driver_reserve": 2,
