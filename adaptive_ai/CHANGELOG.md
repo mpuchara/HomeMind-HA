@@ -1,3 +1,15 @@
+# 0.11.2 — 2026-09-14
+
+- Separate historical Teach from Wrong decision; Wrong decision keeps its existing immediate correction path unchanged.
+- Make Teach points persistent supervised RL examples instead of runtime overrides.
+- Default the Teach chart to the last 10 minutes and add a visible gray translucent drag selection on the dark chart.
+- Re-screen the broad eligible HA context from historical as-of states; allow strongly supported hidden sensors to replace occupied feature slots.
+- Queue the normal full offline rebuild on the selected schema, then fine-tune rebuilt LinUCB heads with active Teach examples.
+- Replay the same historical window using the new base RL policy after training; Teach labels remain visible as reference points.
+- Keep Undo deterministic: remove the supervised label and retrain from history plus the remaining active Teach labels.
+- Preserve the single heavy-job FIFO and bounded historical replay for Raspberry Pi operation.
+- 218 automated tests pass on Python 3.11 and 3.13; anticipation simulator and Docker smoke test pass.
+
 # 0.11.0 — 2026-09-14
 
 - Reduce agent cards to Shadow/Control, Wrong decision, Settings and Teach; move other operations and diagnostics into Settings.
