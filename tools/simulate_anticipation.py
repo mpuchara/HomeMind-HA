@@ -4,6 +4,11 @@ No prerecorded desired prediction and no target-state-copy rule. A trained linea
 policy must emit ON while kitchen occupancy and target light are still OFF.
 The identical Terrace→Living prefix has irreducible branch uncertainty: a later
 Bedroom event should remove the Kitchen anticipation, and non-arrival gets a penalty.
+
+This simulator exercises anticipation, dispatch and reward semantics rather than the
+qualification threshold itself. Confidence gating has dedicated Executor tests, so the
+fixture uses a deliberately permissive per-agent threshold that stays below the learned
+structural confidence instead of pretending a ~0.47 live confidence satisfies 0.78.
 """
 import json
 import os
@@ -48,7 +53,7 @@ def fixture():
         '0':{'samples':40,'correct':40},'1':{'samples':40,'correct':40}}}}
     a=dict(id='sim',name='Kitchen',target_entity='light.kitchen',target_property='power',
            input_entities=['sensor.lux'],enabled=True,mode='shadow',training_state='qualified',
-           min_value=0,max_value=1,deadband=.5,confidence_threshold=.78,action_interval=1,
+           min_value=0,max_value=1,deadband=.5,confidence_threshold=.40,action_interval=1,
            exploration_step=1,micro_exploration=False,benchmark_score=1.0,benchmark_samples=80,
            benchmark_detail=benchmark_detail)
     policy=MultiHorizonPolicy(a,states,registry,set(),context_engine=context)
@@ -101,6 +106,7 @@ def run():
                                'novelty':rt.get('context_novelty'),'forecast':rt.get('context_meta',{}).get('home_forecast')}
                 if mode=='shadow':assert service.call_count==0
             assert results['shadow']['prediction']==1, results
+            assert results['control']['confidence'] >= a['confidence_threshold'], results
             assert results['control']['intent']['status']=='ACCEPTED', results
             assert states['binary_sensor.kitchen']['state']=='off'
             assert results['control']['forecast']['occupancy_now']==0
