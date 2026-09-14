@@ -8,6 +8,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
+import context_schema_probation as probation_module
 from context_schema_probation import (
     MIN_ROLLBACK_SAMPLES,
     ROLLBACK_MARGIN,
@@ -196,6 +197,10 @@ class FakeService:
 
 class ProbationIntegrationTests(unittest.TestCase):
     def test_underperforming_promoted_policy_restores_exact_previous_model(self):
+        original_chooser = probation_module.promotion._choose_schema_after_promotion
+        self.addCleanup(
+            setattr, probation_module.promotion, '_choose_schema_after_promotion', original_chooser
+        )
         with tempfile.TemporaryDirectory() as root, patch(
             'context_schema_probation.MultiHorizonPolicy', FakeClonePolicy
         ):
