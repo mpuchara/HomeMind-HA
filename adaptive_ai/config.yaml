@@ -1,5 +1,5 @@
 name: "Adaptive AI"
-version: "0.11.1"
+version: "0.11.2"
 slug: "adaptive_ai"
 description: >-
   History-first local reinforcement-learning policies for Home Assistant. Imports
@@ -81,6 +81,9 @@ options:
   manual_context_promote_score: 0.55
   manual_context_reserve: 2
   manual_context_observer_max_entities: 512
+  teach_rl_feature_score: 0.55
+  teach_rl_positive_weight: 6
+  teach_rl_negative_weight: 3
 schema:
   policy_half_life_days: "int(1,365)"
   home_model_half_life_days: "int(1,365)"
@@ -145,3 +148,6 @@ schema:
   manual_context_promote_score: "float(0.05,0.99)"
   manual_context_reserve: "int(0,8)"
   manual_context_observer_max_entities: "int(32,2000)"
+  teach_rl_feature_score: "float(0.05,0.99)"
+  teach_rl_positive_weight: "int(1,30)"
+  teach_rl_negative_weight: "int(0,30)"
