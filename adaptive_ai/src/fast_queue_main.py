@@ -14,7 +14,9 @@ def prepare_runtime_extensions():
     from manual_context_learning import install as install_manual_context_learning
     install_manual_context_learning(core)
     from manual_context_one_sided import install as install_one_sided_manual_context
+    from manual_context_primary import install as install_manual_primary
     install_one_sided_manual_context(core)
+    install_manual_primary(core)
 
 
 def prepare_engine_extensions():
