@@ -31,6 +31,10 @@ def assess_control_qualification(agent):
     evidence and each action's 95% Wilson lower bound must clear the configured threshold.
     Non-binary targets use an aggregate Wilson bound until a richer continuous metric is
     introduced.
+
+    A post-Teach policy can explicitly mark its Control proof ``stale``.  This is a hard
+    blocker even if an older benchmark would otherwise pass; only a fresh Shadow benchmark
+    for the changed policy may clear the marker.
     """
     detail = dict(agent.get("benchmark_detail") or {})
     counts = dict(detail.get("counts") or {})
@@ -52,6 +56,36 @@ def assess_control_qualification(agent):
             "correct": c,
             "accuracy": (c / n) if n else 0.0,
             "lower_bound": wilson_lower_bound(c, n, z),
+        }
+
+    stale = bool(
+        detail.get("qualification_stale")
+        or str(detail.get("control_qualification") or "").lower() == "stale"
+    )
+    if stale:
+        populated = [x for x in action_stats.values() if x["samples"] > 0]
+        observed = (
+            sum(x["accuracy"] for x in populated) / len(populated)
+            if binary and populated else
+            (correct / samples) if samples else 0.0
+        )
+        lower = (
+            min((x["lower_bound"] for x in populated), default=0.0)
+            if binary else wilson_lower_bound(correct, samples, z)
+        )
+        return {
+            "passed": False,
+            "state": "stale",
+            "binary": binary,
+            "threshold": threshold,
+            "observed_score": observed,
+            "lower_bound": lower,
+            "samples": samples,
+            "minimum_samples": min_total,
+            "minimum_samples_per_action": min_per_action if binary else None,
+            "confidence_z": z,
+            "per_action": action_stats,
+            "reason": "Control qualification is stale; collect a fresh Shadow benchmark for the current policy",
         }
 
     if binary:
@@ -83,6 +117,7 @@ def assess_control_qualification(agent):
 
     return {
         "passed": passed,
+        "state": "qualified" if passed else "insufficient",
         "binary": binary,
         "threshold": threshold,
         "observed_score": observed,

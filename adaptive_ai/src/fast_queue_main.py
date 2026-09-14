@@ -30,6 +30,7 @@ def prepare_engine_extensions():
     from context_schema_history import install_schema_history
     from context_tournament_requalification import install_promotion_shadow_requalification
     from context_schema_probation import install_schema_probation
+    from teach_rl_rebenchmark import install_teach_rl_rebenchmark
     changed = install_fast_runtime(core)
     if changed:
         core.STORE.event(None, "info", "fast_runtime_migration",
@@ -62,6 +63,10 @@ def prepare_engine_extensions():
     # Probation sits outside promotion/history/requalification. It snapshots the old policy,
     # compares both schemas on future outcomes and can restore only that agent's old model.
     install_schema_probation(tournament)
+    # Teach rebenchmark is the outermost process-agent observer. It invalidates the rebuild
+    # benchmark only after supervised Teach fine tuning, then scores future Shadow outcomes
+    # before any inner online learning sees them. It never enables Control automatically.
+    install_teach_rl_rebenchmark(core.STORE, core.ENGINE, core.ENGINE.rl_teaching)
     core.STORE.event(None, "info", "manual_feedback_ready", "Manual correction feedback path ready", None)
     core.STORE.event(None, "info", "teach_rl_ready", "Historical Teach RL pipeline ready", None)
     core.STORE.event(None, "info", "context_tournament_ready",
@@ -79,6 +84,7 @@ def prepare_engine_extensions():
                       "schema_probation_samples": int(core.OPTIONS.get("context_schema_probation_samples", 50)) if hasattr(core, "OPTIONS") else 50,
                       "schema_rollback_margin": 0.03,
                       "schema_rollback_min_samples": 30,
+                      "teach_rl_control_rebenchmark": "prequential_shadow",
                       "consecutive_wins": int(core.OPTIONS.get("context_tournament_consecutive_wins", 3)) if hasattr(core, "OPTIONS") else 3,
                       "evaluation_hours": float(core.OPTIONS.get("context_tournament_evaluation_hours", 24)) if hasattr(core, "OPTIONS") else 24,
                       "cooldown_hours": float(core.OPTIONS.get("context_tournament_cooldown_hours", 24)) if hasattr(core, "OPTIONS") else 24,
