@@ -26,7 +26,7 @@ from test_context_tournament_quality import SensorQualityMathTests
 from test_context_tournament_requalification import PromotionShadowRequalificationTests
 from test_context_tournament_shadow import ContextTournamentShadowTests
 from test_desired_teaching import DesiredTeachingTests
-from test_policy_rewards import PolicyRewardTests
+from test_policy_rewards import PolicyTests
 from test_prequential_replay import PrequentialReplayTests
 from test_teach_rl_rebenchmark import TeachRLRebenchmarkTests
 from test_teaching_rl import TeachRLTests
@@ -49,7 +49,7 @@ def _run_existing(owner, case_class, method_name):
 class Release012RequiredScenarios(unittest.TestCase):
     def test_negative_reward_reduces_predicted_action_calibration(self):
         _run_existing(
-            self, PolicyRewardTests,
+            self, PolicyTests,
             "test_negative_validation_reduces_action_confidence",
         )
 
