@@ -3,6 +3,7 @@ import time
 import unittest
 
 from support import *
+from telemetry import HEAVY_JOBS
 from training_queue import TrainingQueue
 
 
@@ -37,14 +38,42 @@ class FakeExecutor:
         self.released.append((agent['id'], reason))
 
 
+class FakeRLTeaching:
+    def __init__(self, trace):
+        self.trace = trace
+        self.selection_needed = True
+        self.aborted = []
+
+    def needs_context_selection(self, agent_id):
+        return self.selection_needed
+
+    def prepare_context_selection(self, agent):
+        self.trace.append(('prepare_context', agent['id']))
+        self.selection_needed = False
+        return {'selected': ['binary_sensor.test']}
+
+    def mark_training(self, agent_id):
+        self.trace.append(('mark_training', agent_id))
+
+    def finalize_retrain(self, agent_id):
+        self.trace.append(('finalize', agent_id))
+        return {'labels_applied': 1}
+
+    def abort_retrain(self, agent_id, reason, state='failed'):
+        self.aborted.append((agent_id, state, str(reason)))
+        self.trace.append(('abort', agent_id, state))
+
+
 class FakeEngine:
-    def __init__(self):
+    def __init__(self, trace):
         self.executor = FakeExecutor()
+        self.rl_teaching = FakeRLTeaching(trace)
 
 
 class FakeHistory:
-    def __init__(self, store):
+    def __init__(self, store, trace):
         self.store = store
+        self.trace = trace
         self.agent_jobs = set()
         self.agent_jobs_lock = threading.RLock()
         self.blocked = False
@@ -57,6 +86,7 @@ class FakeHistory:
             self.agent_jobs.add(agent_id)
         self.store.agents[agent_id]['training_state'] = 'training'
         self.started.append((agent_id, rebuild))
+        self.trace.append(('history_start', agent_id, rebuild))
         return True
 
     def request_agent_resume(self, agent_id):
@@ -73,13 +103,17 @@ class FakeHistory:
 
 class TrainingQueueTests(unittest.TestCase):
     def setUp(self):
+        # A failed prior test must never leave the process-wide heavy slot occupied.
+        HEAVY_JOBS.release('bootstrap-test')
+        self.trace = []
         self.store = FakeStore()
-        self.history = FakeHistory(self.store)
-        self.engine = FakeEngine()
+        self.history = FakeHistory(self.store, self.trace)
+        self.engine = FakeEngine(self.trace)
         self.queue = TrainingQueue(self.history, self.store, self.engine, poll_seconds=.02)
         self.queue.start()
 
     def tearDown(self):
+        HEAVY_JOBS.release('bootstrap-test')
         self.queue.stop()
         self.queue.join(timeout=1)
 
@@ -136,6 +170,34 @@ class TrainingQueueTests(unittest.TestCase):
         self.assertTrue(self.queue.cancel('a'))
         self.assertIsNone(self.queue.status_for('a'))
         self.assertEqual(self.queue.snapshot()['queued_count'], 0)
+
+    def test_teach_rl_prepares_context_before_rebuild_and_finalizes_after(self):
+        self.queue.enqueue('a', rebuild=True, reason='teach_rl')
+        self.assertTrue(self.wait_for(lambda: self.history.started == [('a', True)]))
+        self.assertIn(('prepare_context', 'a'), self.trace)
+        self.assertIn(('mark_training', 'a'), self.trace)
+        self.assertLess(self.trace.index(('prepare_context', 'a')),
+                        self.trace.index(('history_start', 'a', True)))
+        self.assertLess(self.trace.index(('history_start', 'a', True)),
+                        self.trace.index(('mark_training', 'a')))
+        self.history.complete('a')
+        self.assertTrue(self.wait_for(lambda: ('finalize', 'a') in self.trace))
+
+    def test_teach_rl_context_preflight_waits_for_shared_heavy_gate(self):
+        self.assertTrue(HEAVY_JOBS.acquire('bootstrap-test'))
+        self.queue.enqueue('a', rebuild=True, reason='teach_rl')
+        time.sleep(.08)
+        self.assertNotIn(('prepare_context', 'a'), self.trace)
+        self.assertEqual(self.history.started, [])
+        HEAVY_JOBS.release('bootstrap-test')
+        self.assertTrue(self.wait_for(lambda: self.history.started == [('a', True)]))
+        self.assertIn(('prepare_context', 'a'), self.trace)
+
+    def test_cancelled_teach_rl_job_aborts_teach_preparation(self):
+        self.history.blocked = True
+        self.queue.enqueue('a', rebuild=True, reason='teach_rl')
+        self.assertTrue(self.queue.cancel('a'))
+        self.assertEqual(self.engine.rl_teaching.aborted[0][:2], ('a', 'cancelled'))
 
 
 if __name__ == '__main__':
