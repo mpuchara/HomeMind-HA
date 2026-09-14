@@ -177,18 +177,20 @@ def install_metrics(service):
             current_actual[aid] = current
 
         # Availability is measured against valid evaluation opportunities. Target and
-        # action space must be known; the challenger itself may be unavailable.
+        # action space must be known; the challenger itself may be unavailable/unknown.
         if actions and current is not None:
             tournament = service.state(aid)
             for challenger in tournament.get("challenger_features") or []:
                 model = service._load_shadow_model(aid, challenger, len(actions))
                 ensure_fields(model, len(actions))
                 model["observation_opportunities"] = int(model.get("observation_opportunities") or 0) + 1
-                scalar = context_scalar(challenger, states.get(challenger), agent)
-                available = False
-                if scalar is not None:
+                raw_state = states.get(challenger)
+                raw_text = str((raw_state or {}).get("state") or "").strip().lower()
+                available = bool(raw_state) and raw_text not in ("", "unknown", "unavailable", "none")
+                if available:
+                    scalar = context_scalar(challenger, raw_state, agent)
                     try:
-                        available = math.isfinite(float(scalar))
+                        available = scalar is not None and math.isfinite(float(scalar))
                     except (TypeError, ValueError):
                         available = False
                 if available:
