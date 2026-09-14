@@ -24,8 +24,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: docker build -t homemind:0.11.0 adaptive_ai
-      - run: python tools/smoke_image.py homemind:0.11.0
+      - name: Read addon version
+        id: version
+        shell: bash
+        run: |
+          VERSION=$(sed -n 's/^version: "\(.*\)"/\1/p' adaptive_ai/config.yaml | head -n1)
+          test -n "$VERSION"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+      - run: docker build --build-arg BUILD_VERSION=${{ steps.version.outputs.version }} -t homemind:${{ steps.version.outputs.version }} adaptive_ai
+      - run: python tools/smoke_image.py homemind:${{ steps.version.outputs.version }}
   package:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
