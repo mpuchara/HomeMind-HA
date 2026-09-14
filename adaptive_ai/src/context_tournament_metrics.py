@@ -1,7 +1,12 @@
 """Incremental value metrics for Sensor Tournament challengers.
 
 Step 7 evaluates whether a challenger adds predictive value beyond the active policy.
-It does not participate in control. Metrics are paired on the same prequential samples:
+Step 8 makes that proof strictly future/prequential: candidate discovery may use older
+history, but a challenger evaluation epoch starts only after the sensor is selected.
+Every evaluation event is scored before either the challenger residual model or the
+active replay policy can learn from that event.
+
+Metrics are paired on the same prequential samples:
 - binary targets: balanced accuracy (primary), exposed as a higher-is-better score;
 - continuous targets: normalized MAE, exposed as score = 1 - nMAE.
 
@@ -16,6 +21,7 @@ from context import action_values, context_scalar, target_value
 
 
 PERSIST_INTERVAL_SECONDS = 60.0
+PREQUENTIAL_EPOCH_VERSION = 1
 
 
 def balanced_accuracy(class_totals, correct_by_class):
@@ -96,10 +102,12 @@ def availability_stats(model):
 
 
 def install_metrics(service):
-    """Attach additive-value metrics to an installed ContextTournament service.
+    """Attach additive-value metrics and future-only evaluation epochs.
 
-    The extension wraps only shadow bookkeeping. It never calls policy(), never creates an
-    ActionIntent, never invokes Executor/HA services and never changes feature schema.
+    The extension wraps only shadow bookkeeping. It never creates an ActionIntent, never
+    invokes Executor/HA services and never changes feature schema. Challenger proof is
+    reset when a sensor enters the tournament, when the active schema changes, or when a
+    different champion model revision becomes authoritative.
     """
     if getattr(service, "_incremental_metrics_installed", False):
         return service
@@ -108,10 +116,12 @@ def install_metrics(service):
     last_persist = {}
     current_actual = {}
     current_agent = {}
+    champion_revisions = {}
 
     original_score = service._score_shadow_sample
     original_observe = service.observe_shadow
     original_status = service.shadow_status
+    original_sync = service.sync_agent
 
     def ensure_fields(model, action_count):
         n = int(action_count)
@@ -129,6 +139,72 @@ def install_metrics(service):
         model.setdefault("last_observed_ts", None)
         return model
 
+    def champion_revision(agent_id, policy=None):
+        aid = str(agent_id)
+        candidate = policy
+        if candidate is None:
+            candidate = (getattr(service.engine, "models", {}) or {}).get(aid)
+        revision = getattr(candidate, "model_revision", None) if candidate is not None else None
+        if revision is not None:
+            revision = str(revision)
+            with lock:
+                champion_revisions[aid] = revision
+            return revision
+        with lock:
+            return champion_revisions.get(aid)
+
+    def clear_transient_prediction(agent_id, challenger):
+        aid = str(agent_id)
+        with service.lock:
+            runtime = service._shadow_runtime.get(aid)
+            if not runtime:
+                return
+            for key in ("pending", "predictions"):
+                values = dict(runtime.get(key) or {})
+                values.pop(str(challenger), None)
+                runtime[key] = values
+
+    def reset_evaluation_epoch(agent, challenger, action_count, tournament, now, reason,
+                               policy=None):
+        aid = str(agent["id"])
+        model = service._blank_shadow_model(action_count)
+        ensure_fields(model, action_count)
+        model["prequential_epoch_version"] = PREQUENTIAL_EPOCH_VERSION
+        model["evaluation_schema_revision"] = int(tournament.get("schema_revision") or 0)
+        model["evaluation_champion_revision"] = champion_revision(aid, policy)
+        model["evaluation_started_ts"] = float(now)
+        model["evaluation_reason"] = str(reason)
+        service._save_shadow_model(aid, challenger, model)
+        clear_transient_prediction(aid, challenger)
+        with lock:
+            last_persist[(aid, str(challenger))] = float(now)
+        return model
+
+    def ensure_future_epoch(agent, challenger, action_count, tournament, now):
+        aid = str(agent["id"])
+        model = service._load_shadow_model(aid, challenger, action_count)
+        ensure_fields(model, action_count)
+        expected_schema = int(tournament.get("schema_revision") or 0)
+        expected_champion = champion_revision(aid)
+        model_champion = model.get("evaluation_champion_revision")
+        stale = (
+            int(model.get("prequential_epoch_version") or 0) != PREQUENTIAL_EPOCH_VERSION
+            or model.get("evaluation_started_ts") is None
+            or int(model.get("evaluation_schema_revision") or -1) != expected_schema
+            or (expected_champion is not None and str(model_champion or "") != str(expected_champion))
+        )
+        if stale:
+            reason = "future_only_upgrade"
+            if model.get("evaluation_started_ts") is not None:
+                if int(model.get("evaluation_schema_revision") or -1) != expected_schema:
+                    reason = "active_schema_changed"
+                elif expected_champion is not None and str(model_champion or "") != str(expected_champion):
+                    reason = "champion_model_changed"
+            model = reset_evaluation_epoch(
+                agent, challenger, action_count, tournament, now, reason
+            )
+        return model
+
     def maybe_persist(agent_id, challenger, model, now, force=False):
         key = (str(agent_id), str(challenger))
         with lock:
@@ -138,12 +214,43 @@ def install_metrics(service):
             last_persist[key] = now
         service._save_shadow_model(agent_id, challenger, model)
 
+    def sync_with_future_epochs(agent, **kwargs):
+        aid = str(agent["id"])
+        before = service.state(aid)
+        policy = kwargs.get("policy")
+        old_challengers = set(before.get("challenger_features") or [])
+        old_schema_revision = int(before.get("schema_revision") or 0)
+        old_champion = champion_revision(aid)
+        new_champion = champion_revision(aid, policy)
+        after = original_sync(agent, **kwargs)
+        new_challengers = set(after.get("challenger_features") or [])
+        schema_changed = int(after.get("schema_revision") or 0) != old_schema_revision
+        champion_changed = (
+            old_champion is not None and new_champion is not None
+            and str(old_champion) != str(new_champion)
+        )
+        reset_all = schema_changed or champion_changed
+        targets = new_challengers if reset_all else (new_challengers - old_challengers)
+        if targets:
+            actions = [float(x) for x in action_values(agent)]
+            now = time.time()
+            reason = (
+                "active_schema_changed" if schema_changed else
+                "champion_model_changed" if champion_changed else
+                "challenger_selected"
+            )
+            for challenger in sorted(targets):
+                reset_evaluation_epoch(
+                    agent, challenger, len(actions), after, now, reason, policy=policy
+                )
+        return after
+
     def score_with_incremental_metrics(agent_id, challenger, pending, actual_idx, action_count, now):
         aid = str(agent_id)
         agent = current_agent.get(aid)
         actions = [float(x) for x in action_values(agent)] if agent is not None else []
-        model = service._load_shadow_model(aid, challenger, action_count)
-        ensure_fields(model, action_count)
+        tournament = service.state(aid)
+        model = ensure_future_epoch(agent, challenger, action_count, tournament, now)
 
         active_idx = int(pending["active_index"])
         shadow_idx = int(pending["shadow_index"])
@@ -162,8 +269,8 @@ def install_metrics(service):
                 float(pending.get("shadow_value", actions[shadow_idx])) - actual_value
             )
 
-        # The base scorer remains authoritative for residual-table learning and persists
-        # the same model object after scoring, so these paired metrics are stored atomically.
+        # Prequential order: paired baseline/challenger scores are recorded first.  The
+        # base scorer then learns the observed class/value into its residual table.
         return original_score(agent_id, challenger, pending, actual_idx, action_count, now)
 
     def observe_with_incremental_metrics(agent, state_map=None, changed_entities=None):
@@ -176,13 +283,12 @@ def install_metrics(service):
             current_agent[aid] = agent
             current_actual[aid] = current
 
-        # Availability is measured against valid evaluation opportunities. Target and
-        # action space must be known; the challenger itself may be unavailable/unknown.
+        # Candidate discovery can be based on historical relevance, but availability and
+        # metric evidence begin only after selection into a fresh future-only epoch.
         if actions and current is not None:
             tournament = service.state(aid)
             for challenger in tournament.get("challenger_features") or []:
-                model = service._load_shadow_model(aid, challenger, len(actions))
-                ensure_fields(model, len(actions))
+                model = ensure_future_epoch(agent, challenger, len(actions), tournament, now)
                 model["observation_opportunities"] = int(model.get("observation_opportunities") or 0) + 1
                 raw_state = states.get(challenger)
                 raw_text = str((raw_state or {}).get("state") or "").strip().lower()
@@ -205,22 +311,35 @@ def install_metrics(service):
     def status_with_incremental_metrics(agent):
         payload = original_status(agent)
         actions = [float(x) for x in action_values(agent)]
+        tournament = service.state(agent["id"])
+        now = time.time()
         for row in payload.get("challengers") or []:
             entity_id = row.get("entity_id")
-            model = service._load_shadow_model(agent["id"], entity_id, len(actions)) if actions else {}
+            model = (
+                ensure_future_epoch(agent, entity_id, len(actions), tournament, now)
+                if actions else {}
+            )
             ensure_fields(model, len(actions))
             metrics = metric_row(model, actions)
             availability, days_observed = availability_stats(model)
             row.update(metrics)
             row["availability"] = availability
             row["days_observed"] = days_observed
+            row["evaluation_mode"] = "prequential_future_only"
+            row["evaluation_started_ts"] = model.get("evaluation_started_ts")
+            row["evaluation_schema_revision"] = model.get("evaluation_schema_revision")
+            row["evaluation_champion_revision"] = model.get("evaluation_champion_revision")
+            row["evaluation_reason"] = model.get("evaluation_reason")
             # Compatibility alias only. New promotion logic should consume `gain`.
             row["accuracy_gain"] = metrics["gain"] if metrics["metric"] == "balanced_accuracy" else None
         payload["score_definition"] = "gain = Loss(active) - Loss(active + sensor)"
+        payload["evaluation_order"] = "predict -> score -> learn"
+        payload["evaluation_scope"] = "future events after challenger selection"
         payload["binary_metric"] = "balanced_accuracy"
         payload["continuous_metric"] = "normalized_mae"
         return payload
 
+    service.sync_agent = sync_with_future_epochs
     service._score_shadow_sample = score_with_incremental_metrics
     service.observe_shadow = observe_with_incremental_metrics
     service.shadow_status = status_with_incremental_metrics
