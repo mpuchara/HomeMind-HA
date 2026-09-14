@@ -47,6 +47,7 @@ DEFAULT_OPTIONS = {
     "fast_recent_change_seconds": 3,
     "fast_series_lags_seconds": "1,3,10",
     "fast_max_context_entities": 8,
+    "context_challenger_count": 4,
     "fast_clock_context_weight": 0.15,
     "fast_causal_driver_min_score": 0.50,
     "fast_causal_driver_reserve": 2,
