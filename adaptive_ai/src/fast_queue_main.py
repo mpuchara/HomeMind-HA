@@ -20,6 +20,7 @@ def prepare_engine_extensions():
     from manual_feedback import install_runtime_physical_equivalence
     from manual_feedback_lifecycle import install_runtime as install_lifecycle
     from teaching_learning_bridge import install as install_teaching_learning_bridge
+    from teaching_rl import RLTeaching
     changed = install_fast_runtime(core)
     if changed:
         core.STORE.event(None, "info", "fast_runtime_migration",
@@ -28,7 +29,11 @@ def prepare_engine_extensions():
     install_runtime_physical_equivalence(core, core.ENGINE)
     install_lifecycle(core)
     install_teaching_learning_bridge(core)
+    # Historical Teach is a separate offline-RL path.  The existing Teaching bridge is
+    # intentionally kept intact because Wrong decision already depends on that behaviour.
+    core.ENGINE.rl_teaching = RLTeaching(core.STORE, core.ENGINE)
     core.STORE.event(None, "info", "manual_feedback_ready", "Manual correction feedback path ready", None)
+    core.STORE.event(None, "info", "teach_rl_ready", "Historical Teach RL pipeline ready", None)
 
 
 core.prepare_runtime_extensions = prepare_runtime_extensions
