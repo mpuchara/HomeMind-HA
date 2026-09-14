@@ -64,12 +64,50 @@ def _agent_payloads(self):
     return agents
 
 
+def _rl_teaching():
+    service = getattr(core.ENGINE, "rl_teaching", None) if core.ENGINE is not None else None
+    if service is None:
+        raise RuntimeError("Teach RL service is not ready")
+    return service
+
+
 def do_get(self):
-    path, _, _ = self.path.partition("?")
+    path, _, query = self.path.partition("?")
     if path == "/queue.js":
         if not self.require_trusted_client():
             return
         return self.static("queue.js", "application/javascript; charset=utf-8")
+
+    # Historical Teach has its own base-RL replay endpoints.  The old /teaching routes
+    # remain untouched because Wrong decision already depends on their immediate logic.
+    if path.startswith("/api/agents/") and path.endswith(("/teach-rl-history", "/teach-rl-point", "/teach-rl-status")):
+        if not self.require_trusted_client() or not self.require_runtime():
+            return
+        agent_id = path.split("/")[3]
+        agent = core.STORE.get_agent_config(agent_id)
+        if not agent:
+            return self.send_json(404, {"error": "agent not found"})
+        try:
+            service = _rl_teaching()
+            if path.endswith("/teach-rl-status"):
+                result = service.status(agent_id)
+                result["training_queue"] = TRAINING_QUEUE.status_for(agent_id) if TRAINING_QUEUE else None
+                if core.HISTORY is not None:
+                    result["history"] = core.HISTORY.status()
+                return self.send_json(200, result)
+            from urllib.parse import parse_qs
+            params = parse_qs(query)
+            if path.endswith("/teach-rl-point"):
+                return self.send_json(200, service.point(agent, params.get("ts", [None])[0]))
+            return self.send_json(200, service.history(
+                agent, params.get("start", [None])[0], params.get("end", [None])[0]
+            ))
+        except (ValueError, TypeError) as exc:
+            return self.send_json(400, {"error": str(exc)})
+        except Exception as exc:
+            traceback.print_exc()
+            return self.send_json(500, {"error": str(exc)})
+
     if path == "/api/agents" and TRAINING_QUEUE is not None:
         if not self.require_trusted_client():
             return
@@ -110,8 +148,49 @@ def _queue_agent(self, agent_id, *, rebuild, reason, resumed=False):
     })
 
 
+def _teach_queue_busy(agent_id):
+    queued = TRAINING_QUEUE.status_for(agent_id) if TRAINING_QUEUE else None
+    return queued if queued and queued.get("state") in ("queued", "active") else None
+
+
 def do_post(self):
     path, _, _ = self.path.partition("?")
+
+    if path.startswith("/api/agents/") and path.endswith(("/teach-rl", "/undo-teach-rl", "/teach-rl-train")):
+        if not self.require_trusted_client() or not self.require_runtime():
+            return
+        agent_id = path.split("/")[3]
+        agent = core.STORE.get_agent_config(agent_id)
+        if not agent:
+            return self.send_json(404, {"error": "agent not found"})
+        try:
+            service = _rl_teaching()
+            busy = _teach_queue_busy(agent_id)
+            if path.endswith("/teach-rl-train"):
+                if busy:
+                    status = service.status(agent_id)
+                    status["training_queue"] = busy
+                    return self.send_json(202, status)
+                report = service.prepare_retrain(agent)
+                if TRAINING_QUEUE is None:
+                    raise RuntimeError("Training queue is not ready")
+                queued = TRAINING_QUEUE.enqueue(agent_id, rebuild=True, reason="teach_rl")
+                return self.send_json(202, {"ok": True, "report": report, "training_queue": queued})
+            if busy:
+                return self.send_json(409, {"error": "Poczekaj na zakończenie Teach RL przed zmianą punktów", "training_queue": busy})
+            if path.endswith("/undo-teach-rl"):
+                return self.send_json(200, service.undo(agent))
+            payload = self.read_json()
+            payload = payload if isinstance(payload, dict) else {}
+            if payload.get("sample_ts") is None or payload.get("desired_value") is None:
+                return self.send_json(400, {"error": "sample_ts and desired_value are required"})
+            return self.send_json(200, service.add_label(agent, payload["desired_value"], payload["sample_ts"]))
+        except ValueError as exc:
+            return self.send_json(400, {"error": str(exc)})
+        except Exception as exc:
+            traceback.print_exc()
+            return self.send_json(502, {"error": f"Teach RL failed: {type(exc).__name__}: {exc}"})
+
     if TRAINING_QUEUE is not None and path.startswith("/api/agents/") and path.endswith("/train"):
         if not self.require_trusted_client() or not self.require_runtime():
             return
