@@ -22,6 +22,7 @@ def prepare_engine_extensions():
     from teaching_learning_bridge import install as install_teaching_learning_bridge
     from teaching_rl import RLTeaching
     from context_tournament import install as install_context_tournament
+    from context_tournament_metrics import install_metrics as install_context_tournament_metrics
     changed = install_fast_runtime(core)
     if changed:
         core.STORE.event(None, "info", "fast_runtime_migration",
@@ -34,12 +35,15 @@ def prepare_engine_extensions():
     # intentionally kept intact because Wrong decision already depends on that behaviour.
     core.ENGINE.rl_teaching = RLTeaching(core.STORE, core.ENGINE)
     tournament = install_context_tournament(core.STORE, core.ENGINE)
+    install_context_tournament_metrics(tournament)
     core.STORE.event(None, "info", "manual_feedback_ready", "Manual correction feedback path ready", None)
     core.STORE.event(None, "info", "teach_rl_ready", "Historical Teach RL pipeline ready", None)
     core.STORE.event(None, "info", "context_tournament_ready",
-                     "Sensor Tournament state layer ready; challengers remain non-controlling",
+                     "Sensor Tournament shadow evaluates incremental predictive value",
                      {"challenger_count": int(core.OPTIONS.get("context_challenger_count", 4)) if hasattr(core, "OPTIONS") else 4,
                       "state_table": "context_tournament_state",
+                      "binary_metric": "balanced_accuracy",
+                      "continuous_metric": "normalized_mae",
                       "installed": tournament is not None})
 
 
