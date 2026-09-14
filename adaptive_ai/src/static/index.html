@@ -6,7 +6,11 @@
   <base href="./">
   <title>Adaptive AI</title>
   <link rel="stylesheet" href="style.css?v=0.11.2">
-  <link rel="stylesheet" href="paused_shadow.css?v=0.11.2">
+  <style>
+    /* PAUSED training may still run an existing policy in runtime SHADOW mode. */
+    .agent.paused-agent:has(.mode.shadow){opacity:1;filter:none}
+    .agent.paused-agent:has(.mode.shadow):hover{opacity:1;filter:none}
+  </style>
 </head>
 <body>
 <div class="shell">
