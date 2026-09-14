@@ -4,9 +4,6 @@ import types
 def install(core):
     engine = core.ENGINE; manager = engine.teaching
     if getattr(manager, "_supervised_graph_teach", False): return
-    import teaching
-    from historical_teach_distance import distance
-    teaching.distance = distance
     original = manager.teach
 
     def teach(self, eng, agent, desired=None, sample_ts=None):
