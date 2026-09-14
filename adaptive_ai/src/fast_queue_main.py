@@ -27,6 +27,7 @@ def prepare_engine_extensions():
     from context_tournament_promotion import install_promotion as install_context_tournament_promotion
     from context_tournament_primary_protection import install_primary_protection
     from context_tournament_quality import install_sensor_quality
+    from context_schema_history import install_schema_history
     changed = install_fast_runtime(core)
     if changed:
         core.STORE.event(None, "info", "fast_runtime_migration",
@@ -50,6 +51,9 @@ def prepare_engine_extensions():
     # Quality wraps the final replacement chooser and records active/challenger reliability
     # before promotion is evaluated on each event.
     install_sensor_quality(tournament)
+    # Schema history is outermost so it sees the exact before/after state of a successful
+    # promotion after all hysteresis, primary-protection and quality gates have passed.
+    install_schema_history(tournament)
     core.STORE.event(None, "info", "manual_feedback_ready", "Manual correction feedback path ready", None)
     core.STORE.event(None, "info", "teach_rl_ready", "Historical Teach RL pipeline ready", None)
     core.STORE.event(None, "info", "context_tournament_ready",
@@ -69,6 +73,7 @@ def prepare_engine_extensions():
                       "state_table": "context_tournament_state",
                       "promotion_table": "context_tournament_promotions",
                       "quality_table": "context_tournament_sensor_quality",
+                      "schema_history_table": "context_schema_history",
                       "binary_metric": "balanced_accuracy",
                       "continuous_metric": "normalized_mae",
                       "installed": tournament is not None})
