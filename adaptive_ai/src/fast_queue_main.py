@@ -26,6 +26,7 @@ def prepare_engine_extensions():
     from context_tournament_hysteresis import install as install_context_tournament_hysteresis
     from context_tournament_promotion import install_promotion as install_context_tournament_promotion
     from context_tournament_primary_protection import install_primary_protection
+    from context_tournament_quality import install_sensor_quality
     changed = install_fast_runtime(core)
     if changed:
         core.STORE.event(None, "info", "fast_runtime_migration",
@@ -46,6 +47,9 @@ def prepare_engine_extensions():
     # Primary feature protection runs after promotion wiring but patches the schema-slot
     # chooser used by that state machine. It cannot create control actions of its own.
     install_primary_protection(tournament)
+    # Quality wraps the final replacement chooser and records active/challenger reliability
+    # before promotion is evaluated on each event.
+    install_sensor_quality(tournament)
     core.STORE.event(None, "info", "manual_feedback_ready", "Manual correction feedback path ready", None)
     core.STORE.event(None, "info", "teach_rl_ready", "Historical Teach RL pipeline ready", None)
     core.STORE.event(None, "info", "context_tournament_ready",
@@ -57,11 +61,14 @@ def prepare_engine_extensions():
                       "min_gain": float(core.OPTIONS.get("context_tournament_min_gain", 0.03)) if hasattr(core, "OPTIONS") else 0.03,
                       "primary_replacement_gain": float(core.OPTIONS.get("context_primary_replacement_gain", 0.07)) if hasattr(core, "OPTIONS") else 0.07,
                       "hysteresis": "challenger_score > baseline_score + required_gain",
+                      "sensor_quality": "availability",
+                      "ranking": "predictive_gain * sensor_quality",
                       "consecutive_wins": int(core.OPTIONS.get("context_tournament_consecutive_wins", 3)) if hasattr(core, "OPTIONS") else 3,
                       "evaluation_hours": float(core.OPTIONS.get("context_tournament_evaluation_hours", 24)) if hasattr(core, "OPTIONS") else 24,
                       "cooldown_hours": float(core.OPTIONS.get("context_tournament_cooldown_hours", 24)) if hasattr(core, "OPTIONS") else 24,
                       "state_table": "context_tournament_state",
                       "promotion_table": "context_tournament_promotions",
+                      "quality_table": "context_tournament_sensor_quality",
                       "binary_metric": "balanced_accuracy",
                       "continuous_metric": "normalized_mae",
                       "installed": tournament is not None})
