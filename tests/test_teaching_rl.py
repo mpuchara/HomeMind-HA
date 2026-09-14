@@ -94,13 +94,19 @@ class TeachRLTests(unittest.TestCase):
         ]
         fp = fingerprint(self.agent)
         with self.store.lock, self.store.conn() as c:
-            for ts, desired, good_state, bad_state in samples:
-                c.execute("INSERT INTO teaching_rl_labels(agent_id,created_ts,sample_ts,desired,previous_desired,fingerprint) VALUES(?,?,?,?,?,?)",
-                          (self.agent['id'], self.now, ts, desired, 0, fp))
-                self.store.archive_upsert(self.good, ts, good_state, {'device_class': 'occupancy'}, source='test')
-                self.store.archive_upsert(self.bad, ts, bad_state, {'device_class': 'motion'}, source='test')
-                self.store.archive_upsert(self.battery, ts, 90 if desired else 10,
-                                          {'device_class': 'battery', 'unit_of_measurement': '%'}, source='test')
+            c.executemany(
+                "INSERT INTO teaching_rl_labels(agent_id,created_ts,sample_ts,desired,previous_desired,fingerprint) VALUES(?,?,?,?,?,?)",
+                [(self.agent['id'], self.now, ts, desired, 0, fp) for ts, desired, _, _ in samples],
+            )
+        rows = []
+        for ts, desired, good_state, bad_state in samples:
+            rows.extend([
+                (self.good, ts, good_state, {'device_class': 'occupancy'}, None, 'test'),
+                (self.bad, ts, bad_state, {'device_class': 'motion'}, None, 'test'),
+                (self.battery, ts, 90 if desired else 10,
+                 {'device_class': 'battery', 'unit_of_measurement': '%'}, None, 'test'),
+            ])
+        self.store.archive_batch(rows)
         return samples
 
     def test_full_context_scores_hidden_sensor_and_excludes_diagnostics(self):
@@ -157,7 +163,8 @@ class TeachRLTests(unittest.TestCase):
         learned = MultiHorizonPolicy(self.store.get_agent_config(self.agent['id']), on_states, self.registry, set(), model=raw)
         for ts, desired_states, desired in ((t0, on_states, 1), (t1, off_states, 0)):
             temporal = TemporalHistory()
-            for eid, st in desired_states.items(): temporal.add(eid, ts, st)
+            for eid, st in desired_states.items():
+                temporal.add(eid, ts, st)
             features = learned.features(desired_states, temporal, at_ts=ts)[0]
             self.assertEqual(learned.predict(features)[0]['value'], desired)
 
