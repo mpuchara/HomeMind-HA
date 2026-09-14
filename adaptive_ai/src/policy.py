@@ -179,16 +179,27 @@ class DiagonalLinUCB:
     def validate(self, action_idx, x, reward, sample_ts=None):
         self.decay()
         reward = clamp(float(reward), -1.0, 1.0)
-        if reward < 0.15:
+        # Preserve the existing positive-validation threshold: weak/neutral evidence is
+        # ignored, while accepted positive examples (>= 0.15) keep the old behavior.
+        if 0.0 <= reward < 0.15:
             return
         arms = self.evaluate(x)
         predicted = max(arms, key=lambda a: a["mean"])["index"]
-        # Positive reward means the logged desired state was accepted; negative reward
-        # means that action was quickly rejected, so predicting a different action counts
-        # as the correct held-out decision.
-        # Rejecting one setting does not establish that every other setting is right.
-        correct = predicted == action_idx
         weight = max(0.25, abs(reward)) * self.sample_weight(sample_ts)
+
+        if reward < 0.0:
+            # A negative example identifies only the rejected action. If the held-out
+            # policy predicted that exact action, record a validation failure for that
+            # predicted arm. Predicting another action is not evidence that it was right.
+            if predicted != action_idx:
+                return
+            self.validation_weight += weight
+            self.validation_samples += 1
+            self.validation_pred_weight[predicted] += weight
+            return
+
+        # Positive reward means the logged desired state was accepted.
+        correct = predicted == action_idx
         self.validation_weight += weight
         self.validation_correct_weight += weight if correct else 0.0
         self.validation_samples += 1
