@@ -27,6 +27,41 @@ class PolicyTests(unittest.TestCase):
         h.decay(h.last_decay_ts+30*86400)
         self.assertAlmostEqual(h.validation_weight,.5)
 
+    def test_negative_validation_reduces_action_confidence(self):
+        h=DiagonalLinUCB(4,[0,1])
+        features={0:1}
+        # Make ON (arm 1) the deterministic prediction and establish strong held-out
+        # reliability for that action before presenting explicit rejections.
+        for _ in range(20):
+            h.update(1,features,1)
+        for _ in range(12):
+            h.validate(1,features,1)
+
+        on_before=h.calibration(1)
+        off_before=h.calibration(0)
+        validation_weight_before=h.validation_weight
+        validation_samples_before=h.validation_samples
+
+        # Rejecting OFF while the policy predicted ON must not turn ON into an implied
+        # success and must not change either action's calibration.
+        h.validate(0,features,-1)
+        self.assertEqual(h.calibration(1),on_before)
+        self.assertEqual(h.calibration(0),off_before)
+        self.assertEqual(h.validation_weight,validation_weight_before)
+        self.assertEqual(h.validation_samples,validation_samples_before)
+
+        # Explicitly rejecting the action the policy predicted records failures only for
+        # that predicted arm, lowering ON reliability without certifying OFF.
+        for _ in range(6):
+            h.validate(1,features,-1)
+
+        on_after=h.calibration(1)
+        off_after=h.calibration(0)
+        self.assertLess(on_after['accuracy'],on_before['accuracy'])
+        self.assertLess(on_after['ceiling'],on_before['ceiling'])
+        self.assertGreater(on_after['samples'],on_before['samples'])
+        self.assertEqual(off_after,off_before)
+
     def test_decay_roundtrip(self):
         h=DiagonalLinUCB(4,[0,1]);h.update(1,{1:1},1);h.decay(h.last_decay_ts+86400)
         loaded=DiagonalLinUCB(4,[0,1],model=h.export())
