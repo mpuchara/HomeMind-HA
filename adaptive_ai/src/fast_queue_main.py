@@ -23,6 +23,7 @@ def prepare_engine_extensions():
     from teaching_rl import RLTeaching
     from context_tournament import install as install_context_tournament
     from context_tournament_metrics import install_metrics as install_context_tournament_metrics
+    from context_tournament_promotion import install_promotion as install_context_tournament_promotion
     changed = install_fast_runtime(core)
     if changed:
         core.STORE.event(None, "info", "fast_runtime_migration",
@@ -36,12 +37,21 @@ def prepare_engine_extensions():
     core.ENGINE.rl_teaching = RLTeaching(core.STORE, core.ENGINE)
     tournament = install_context_tournament(core.STORE, core.ENGINE)
     install_context_tournament_metrics(tournament)
+    install_context_tournament_promotion(tournament)
     core.STORE.event(None, "info", "manual_feedback_ready", "Manual correction feedback path ready", None)
     core.STORE.event(None, "info", "teach_rl_ready", "Historical Teach RL pipeline ready", None)
     core.STORE.event(None, "info", "context_tournament_ready",
-                     "Sensor Tournament shadow evaluates incremental predictive value",
+                     "Sensor Tournament shadow evaluates incremental predictive value and auto-promotes proven sensors",
                      {"challenger_count": int(core.OPTIONS.get("context_challenger_count", 4)) if hasattr(core, "OPTIONS") else 4,
+                      "enabled": bool(core.OPTIONS.get("context_tournament_enabled", True)) if hasattr(core, "OPTIONS") else True,
+                      "min_samples": int(core.OPTIONS.get("context_tournament_min_samples", 40)) if hasattr(core, "OPTIONS") else 40,
+                      "min_days": float(core.OPTIONS.get("context_tournament_min_days", 3)) if hasattr(core, "OPTIONS") else 3,
+                      "min_gain": float(core.OPTIONS.get("context_tournament_min_gain", 0.03)) if hasattr(core, "OPTIONS") else 0.03,
+                      "consecutive_wins": int(core.OPTIONS.get("context_tournament_consecutive_wins", 3)) if hasattr(core, "OPTIONS") else 3,
+                      "evaluation_hours": float(core.OPTIONS.get("context_tournament_evaluation_hours", 24)) if hasattr(core, "OPTIONS") else 24,
+                      "cooldown_hours": float(core.OPTIONS.get("context_tournament_cooldown_hours", 24)) if hasattr(core, "OPTIONS") else 24,
                       "state_table": "context_tournament_state",
+                      "promotion_table": "context_tournament_promotions",
                       "binary_metric": "balanced_accuracy",
                       "continuous_metric": "normalized_mae",
                       "installed": tournament is not None})
