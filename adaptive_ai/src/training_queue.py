@@ -95,7 +95,7 @@ class TrainingQueue(threading.Thread):
             position = len(self.jobs)
             self.store.event(agent_id, "info", "training_queued",
                              f"Training queued at position {position}",
-                             {"position": position, "rebuild": bool(rebuild)})
+                             {"position": position, "rebuild": bool(rebuild), "reason": str(reason)})
             self.cv.notify_all()
             return self.status_for(agent_id)
 
@@ -117,6 +117,7 @@ class TrainingQueue(threading.Thread):
                 return {
                     "state": "active", "position": 0, "ahead": 0,
                     "rebuild": bool(self.active.get("rebuild")),
+                    "reason": self.active.get("reason"),
                     "queued_at": self.active.get("queued_at"),
                     "started_at": self.active.get("started_at"),
                     "agent_id": agent_id,
@@ -132,6 +133,7 @@ class TrainingQueue(threading.Thread):
                         "position": index + 1,
                         "ahead": index + (1 if self.active or active_ids else 0),
                         "rebuild": bool(job.get("rebuild")),
+                        "reason": job.get("reason"),
                         "queued_at": job.get("queued_at"),
                         "agent_id": agent_id,
                     }
@@ -201,10 +203,14 @@ class TrainingQueue(threading.Thread):
             self.pending.pop(job["agent_id"], None)
             job = {**job, "started_at": time.time()}
             self.active = job
+            if job.get("reason") == "teach_rl":
+                service = getattr(self.engine, "rl_teaching", None)
+                if service is not None:
+                    service.mark_training(job["agent_id"])
             self.store.event(job["agent_id"], "info", "training_queue_started",
                              "Queued training started automatically",
                              {"wait_seconds": max(0.0, job["started_at"] - job["queued_at"]),
-                              "rebuild": bool(job.get("rebuild"))})
+                              "rebuild": bool(job.get("rebuild")), "reason": job.get("reason")})
             self.cv.notify_all()
         return True
 
@@ -215,6 +221,19 @@ class TrainingQueue(threading.Thread):
             return False
         if job["agent_id"] in self._history_active_ids():
             return False
+
+        # A Teach RL job is two-stage: normal deterministic historical rebuild first,
+        # then supervised fine-tuning on the active Teach labels.  Finalization happens
+        # before the queue slot is released so the UI never observes a half-finished model.
+        if job.get("reason") == "teach_rl":
+            service = getattr(self.engine, "rl_teaching", None)
+            if service is not None:
+                try:
+                    service.finalize_retrain(job["agent_id"])
+                except Exception as exc:
+                    self.store.event(job["agent_id"], "error", "teach_rl_finalize_failed",
+                                     str(exc), {"error": f"{type(exc).__name__}: {exc}"})
+
         agent = self.store.get_agent(job["agent_id"])
         with self.cv:
             if self.active and self.active["agent_id"] == job["agent_id"]:
@@ -222,7 +241,7 @@ class TrainingQueue(threading.Thread):
                 self.cv.notify_all()
         self.store.event(job["agent_id"], "info", "training_queue_finished",
                          "Training slot released; next queued job may start",
-                         {"training_state": (agent or {}).get("training_state")})
+                         {"training_state": (agent or {}).get("training_state"), "reason": job.get("reason")})
         return True
 
     def run(self):
