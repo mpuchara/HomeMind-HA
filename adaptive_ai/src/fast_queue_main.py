@@ -23,6 +23,7 @@ def prepare_engine_extensions():
     from teaching_rl import RLTeaching
     from context_tournament import install as install_context_tournament
     from context_tournament_metrics import install_metrics as install_context_tournament_metrics
+    from context_tournament_hysteresis import install as install_context_tournament_hysteresis
     from context_tournament_promotion import install_promotion as install_context_tournament_promotion
     changed = install_fast_runtime(core)
     if changed:
@@ -37,6 +38,9 @@ def prepare_engine_extensions():
     core.ENGINE.rl_teaching = RLTeaching(core.STORE, core.ENGINE)
     tournament = install_context_tournament(core.STORE, core.ENGINE)
     install_context_tournament_metrics(tournament)
+    # Hysteresis patches only the promotion score boundary; install it before wiring the
+    # promotion state machine so every cumulative/window comparison uses strict margin.
+    install_context_tournament_hysteresis()
     install_context_tournament_promotion(tournament)
     core.STORE.event(None, "info", "manual_feedback_ready", "Manual correction feedback path ready", None)
     core.STORE.event(None, "info", "teach_rl_ready", "Historical Teach RL pipeline ready", None)
@@ -47,6 +51,7 @@ def prepare_engine_extensions():
                       "min_samples": int(core.OPTIONS.get("context_tournament_min_samples", 40)) if hasattr(core, "OPTIONS") else 40,
                       "min_days": float(core.OPTIONS.get("context_tournament_min_days", 3)) if hasattr(core, "OPTIONS") else 3,
                       "min_gain": float(core.OPTIONS.get("context_tournament_min_gain", 0.03)) if hasattr(core, "OPTIONS") else 0.03,
+                      "hysteresis": "challenger_score > baseline_score + min_gain",
                       "consecutive_wins": int(core.OPTIONS.get("context_tournament_consecutive_wins", 3)) if hasattr(core, "OPTIONS") else 3,
                       "evaluation_hours": float(core.OPTIONS.get("context_tournament_evaluation_hours", 24)) if hasattr(core, "OPTIONS") else 24,
                       "cooldown_hours": float(core.OPTIONS.get("context_tournament_cooldown_hours", 24)) if hasattr(core, "OPTIONS") else 24,
