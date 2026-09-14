@@ -1,16 +1,15 @@
 """Historical Teach as supervised data for deterministic RL rebuilds.
 
-This module is intentionally separate from ``Teaching`` / Wrong decision.  Wrong decision
-keeps its existing immediate contextual/manual behaviour.  Teach-RL instead stores
-historical supervised examples, re-screens the broad HA context, lets strong demonstrated
-features replace weak schema inputs, requests the normal offline rebuild, and finally
-folds the active supervised examples into the rebuilt LinUCB policy.
+This module is intentionally separate from ``Teaching`` / Wrong decision. Wrong decision
+keeps its existing immediate contextual/manual behaviour. Teach-RL stores historical
+supervised examples and joins the normal offline rebuild only after Recorder has refreshed
+the broad eligible context. That lets an entity absent from the current policy schema enter
+(or replace another feature in) the rebuilt RL policy.
 
 The label log is the source of truth. Undo removes one label; the next rebuild starts from
 raw entity_history again, so no inverse-matrix bookkeeping is required.
 """
 from bisect import bisect_right
-from collections import defaultdict
 import hashlib
 import json
 import math
@@ -84,6 +83,7 @@ def _selection_limit(agent):
 class RLTeaching:
     MAX_LABELS = 256
     MAX_HISTORY_ROWS = 40000
+    ACTIVE_STATES = {"prepared", "training", "finalizing"}
 
     def __init__(self, store, engine):
         self.store = store
@@ -117,27 +117,17 @@ class RLTeaching:
         self._recover_interrupted_jobs()
 
     def _recover_interrupted_jobs(self):
-        """A queue is intentionally in-memory; never leave temporary inputs after restart."""
+        """The queue is in-memory, so mark unfinished Teach jobs interrupted on restart."""
         with self.store.conn() as c:
             rows = c.execute(
-                "SELECT agent_id,original_inputs_json,state FROM teaching_rl_jobs "
+                "SELECT agent_id,state FROM teaching_rl_jobs "
                 "WHERE state IN ('prepared','training','finalizing')"
             ).fetchall()
         for row in rows:
-            try:
-                original = json.loads(row["original_inputs_json"] or '["*"]')
-                self._set_inputs_direct(row["agent_id"], original)
-                with self.store.lock, self.store.conn() as c:
-                    c.execute("UPDATE teaching_rl_jobs SET state='interrupted' WHERE agent_id=?", (row["agent_id"],))
-                self.store.event(row["agent_id"], "warning", "teach_rl_interrupted",
-                                 "Interrupted Teach RL job restored the normal input selector", None)
-            except Exception:
-                pass
-
-    def _set_inputs_direct(self, agent_id, inputs):
-        raw = json.dumps(list(inputs or ["*"]), separators=(",", ":"))
-        with self.store.lock, self.store.conn() as c:
-            c.execute("UPDATE agents SET input_entities=? WHERE id=?", (raw, str(agent_id)))
+            with self.store.lock, self.store.conn() as c:
+                c.execute("UPDATE teaching_rl_jobs SET state='interrupted' WHERE agent_id=?", (row["agent_id"],))
+            self.store.event(row["agent_id"], "warning", "teach_rl_interrupted",
+                             "Interrupted Teach RL job can be started again safely", None)
 
     def labels(self, agent_id, include_undone=False):
         where = "agent_id=?" + ("" if include_undone else " AND undone_ts IS NULL")
@@ -192,7 +182,13 @@ class RLTeaching:
                          "Teach RL label removed; retrain to rebuild without it", {"label_id": label_id})
         return {"ok": True, "undone_id": label_id}
 
-    def _eligible_entities(self, agent):
+    def is_retrain_active(self, agent_id):
+        with self.store.conn() as c:
+            row = c.execute("SELECT state FROM teaching_rl_jobs WHERE agent_id=?", (str(agent_id),)).fetchone()
+        return bool(row and row["state"] in self.ACTIVE_STATES)
+
+    def eligible_entities(self, agent):
+        """Full Teach candidate universe, minus actuators/electrical/diagnostic telemetry."""
         with self.engine.lock:
             states = dict(self.engine.state_map)
             registry = dict(self.engine.entity_registry)
@@ -207,19 +203,20 @@ class RLTeaching:
         ]
 
     def supervised_scores(self, agent):
-        """Score the whole eligible HA universe against active Teach labels.
+        """Score the full eligible HA universe against active Teach labels.
 
-        Contrasting Desired values are required.  Correlation supplies the main signal;
-        proximity of the last sensor transition to each labelled point is only a bounded
-        bonus, so chatty telemetry cannot win by update frequency alone.
+        The normal Rebuild refreshes Recorder before this method is called from the
+        HistoryManager. Thus a useful entity does not need to have been in the old policy
+        schema or in the low-memory maintenance set.
         """
         labels = [r for r in self.labels(agent["id"]) if r["fingerprint"] == fingerprint(agent)]
         if len(labels) < 2 or max(r["desired"] for r in labels) - min(r["desired"] for r in labels) <= 1e-9:
-            return {}, {"labels": len(labels), "candidates": 0, "reason": "need contrasting Teach labels"}
+            return {}, {"labels": len(labels), "candidates": len(self.eligible_entities(agent)),
+                        "reason": "need contrasting Teach labels"}
         times = [float(r["sample_ts"]) for r in labels]
         desired = [float(r["desired"]) for r in labels]
         start, end = min(times), max(times)
-        candidates = self._eligible_entities(agent)
+        candidates = self.eligible_entities(agent)
         half_life_days = max(1.0, float(OPTIONS.get("policy_half_life_days", 30)))
         now = time.time()
         weights = [math.exp(-math.log(2.0) * max(0.0, now-t) / (half_life_days*86400.0)) for t in times]
@@ -268,17 +265,22 @@ class RLTeaching:
                     scores[eid] = round(score, 6)
         return scores, {"labels": len(labels), "candidates": len(candidates)}
 
-    def select_features(self, agent):
+    def select_features(self, agent, historical=None):
         scores, stats = self.supervised_scores(agent)
         with self.engine.lock:
-            state_map = dict(self.engine.state_map)
+            all_states = dict(self.engine.state_map)
             registry = dict(self.engine.entity_registry)
+        eligible = set(self.eligible_entities(agent))
+        # Feed select_context_entities only the Teach-eligible universe so diagnostics
+        # cannot enter via locality/name priors after being correctly excluded above.
+        state_map = {eid: st for eid, st in all_states.items()
+                     if eid == agent["target_entity"] or eid in eligible}
         try:
             from ha import AUTOMATION_KNOWLEDGE
             hints, _ = AUTOMATION_KNOWLEDGE.hints_for_target(agent["target_entity"])
         except Exception:
             hints = set()
-        historical = dict(self.engine.context_relevance.get(agent["id"]) or {})
+        historical = dict((self.engine.context_relevance.get(agent["id"]) or {}) if historical is None else historical)
         combined = dict(historical)
         for eid, score in scores.items():
             combined[eid] = max(float(combined.get(eid, 0.0)), float(score))
@@ -315,28 +317,26 @@ class RLTeaching:
         return selected[:limit], meta, scores
 
     def prepare_retrain(self, agent):
-        selected, meta, scores = self.select_features(agent)
-        if not selected:
-            raise ValueError("Teach RL nie znalazł dopuszczonych features do treningu")
+        """Persist intent to retrain; feature selection waits for the broad Recorder refresh."""
         existing = None
         with self.store.conn() as c:
             existing = c.execute("SELECT * FROM teaching_rl_jobs WHERE agent_id=?", (agent["id"],)).fetchone()
         original_inputs = list(agent.get("input_entities") or ["*"])
         pre_schema = ((self.store.get_model(agent["id"]) or {}).get("schema") or {}).get("entities") or []
-        if existing and existing["state"] in ("prepared", "training", "finalizing"):
+        if existing and existing["state"] in self.ACTIVE_STATES:
             try:
                 original_inputs = json.loads(existing["original_inputs_json"] or '["*"]')
                 pre_schema = json.loads(existing["pre_schema_json"] or '[]')
             except Exception:
                 pass
-        self._set_inputs_direct(agent["id"], selected)
         report = {
             "labels": len(self.labels(agent["id"])),
-            "selected": selected,
-            "added": [x for x in selected if x not in pre_schema],
-            "removed": [x for x in pre_schema if x not in selected],
-            "scores": meta.get("teach_rl_scores") or {},
-            "candidates": meta.get("teach_rl_candidates", 0),
+            "selected": [],
+            "added": [],
+            "removed": [],
+            "scores": {},
+            "candidates": len(self.eligible_entities(agent)),
+            "stage": "waiting_for_recorder_refresh",
         }
         with self.store.lock, self.store.conn() as c:
             c.execute(
@@ -346,15 +346,48 @@ class RLTeaching:
                      original_inputs_json=excluded.original_inputs_json,pre_schema_json=excluded.pre_schema_json,
                      selected_inputs_json=excluded.selected_inputs_json,report_json=excluded.report_json""",
                 (agent["id"], time.time(), "prepared", json.dumps(original_inputs), json.dumps(pre_schema),
-                 json.dumps(selected), json.dumps(report)),
+                 "[]", json.dumps(report)),
             )
         self.store.event(agent["id"], "info", "teach_rl_prepared",
-                         f"Teach RL selected {len(selected)} context features for rebuild", report)
+                         "Teach RL queued for broad Recorder refresh and feature re-selection", report)
         return report
 
     def mark_training(self, agent_id):
         with self.store.lock, self.store.conn() as c:
             c.execute("UPDATE teaching_rl_jobs SET state='training' WHERE agent_id=?", (agent_id,))
+
+    def training_selection(self, agent, historical):
+        """Called by HistoryManager after broad Recorder refresh, before policy creation."""
+        if not self.is_retrain_active(agent["id"]):
+            return None
+        selected, meta, scores = self.select_features(agent, historical=historical)
+        if not selected:
+            raise ValueError("Teach RL nie znalazł dopuszczonych features do treningu")
+        combined = dict(historical or {})
+        for eid, score in scores.items():
+            combined[eid] = max(float(combined.get(eid, 0.0)), float(score))
+        with self.store.conn() as c:
+            row = c.execute("SELECT pre_schema_json,report_json FROM teaching_rl_jobs WHERE agent_id=?",
+                            (agent["id"],)).fetchone()
+        pre_schema = json.loads((row["pre_schema_json"] if row else None) or '[]')
+        try:
+            report = json.loads((row["report_json"] if row else None) or '{}')
+        except Exception:
+            report = {}
+        report.update({
+            "selected": selected,
+            "added": [x for x in selected if x not in pre_schema],
+            "removed": [x for x in pre_schema if x not in selected],
+            "scores": meta.get("teach_rl_scores") or {},
+            "candidates": meta.get("teach_rl_candidates", 0),
+            "stage": "feature_selection_complete",
+        })
+        with self.store.lock, self.store.conn() as c:
+            c.execute("UPDATE teaching_rl_jobs SET selected_inputs_json=?,report_json=? WHERE agent_id=?",
+                      (json.dumps(selected), json.dumps(report), agent["id"]))
+        self.store.event(agent["id"], "info", "teach_rl_features_selected",
+                         f"Teach RL selected {len(selected)} features after Recorder refresh", report)
+        return selected, combined
 
     def _label_context(self, agent, policy, sample_ts):
         states, temporal, _ = self.engine.teaching.point_context(
@@ -374,9 +407,7 @@ class RLTeaching:
             return None
         with self.store.lock, self.store.conn() as c:
             c.execute("UPDATE teaching_rl_jobs SET state='finalizing' WHERE agent_id=?", (agent_id,))
-        original_inputs = json.loads(row["original_inputs_json"] or '["*"]')
         pre_schema = json.loads(row["pre_schema_json"] or '[]')
-        selected = json.loads(row["selected_inputs_json"] or '[]')
         report = json.loads(row["report_json"] or '{}')
         try:
             agent = self.store.get_agent_config(agent_id)
@@ -417,9 +448,6 @@ class RLTeaching:
                 chosen = policy.predict(features)[0]["value"]
                 after_correct += int(abs(float(chosen)-float(policy.actions[desired_idx])) <= max(.01, float(agent.get("deadband") or .01)))
             self.store.save_model(agent_id, policy.serialize())
-            self._set_inputs_direct(agent_id, original_inputs)
-            restored = self.store.get_agent_config(agent_id)
-            policy.agent = restored or agent
             new_schema = list(policy.schema.entities)
             report.update({
                 "labels_applied": len(usable),
@@ -428,7 +456,8 @@ class RLTeaching:
                 "removed": [x for x in pre_schema if x not in new_schema],
                 "teach_fit_before": (before_correct/len(usable) if usable else None),
                 "teach_fit_after": (after_correct/len(usable) if usable else None),
-                "benchmark_score": (restored or {}).get("benchmark_score"),
+                "benchmark_score": agent.get("benchmark_score"),
+                "stage": "done",
             })
             with self.store.lock, self.store.conn() as c:
                 c.execute("UPDATE teaching_rl_jobs SET state='done',report_json=? WHERE agent_id=?",
@@ -440,7 +469,6 @@ class RLTeaching:
                              f"Teach RL rebuild complete; applied {len(usable)} supervised example(s)", report)
             return report
         except Exception as exc:
-            self._set_inputs_direct(agent_id, original_inputs)
             with self.store.lock, self.store.conn() as c:
                 c.execute("UPDATE teaching_rl_jobs SET state='failed',report_json=? WHERE agent_id=?",
                           (json.dumps({**report, "error": f"{type(exc).__name__}: {exc}"}), agent_id))
