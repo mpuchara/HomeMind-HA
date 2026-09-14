@@ -33,6 +33,7 @@ def prepare_engine_extensions():
     from teach_rl_rebenchmark import install_teach_rl_rebenchmark
     from control_diagnostics import install_control_diagnostics
     from context_ui_diagnostics import install_context_ui_diagnostics
+    from context_tournament_events import install_context_events
     changed = install_fast_runtime(core)
     if changed:
         core.STORE.event(None, "info", "fast_runtime_migration",
@@ -75,6 +76,9 @@ def prepare_engine_extensions():
     # UI diagnostics are an additional read-only wrapper around the already diagnostic
     # runtime payload. They expose the last context update without entering the control path.
     install_context_ui_diagnostics(tournament)
+    # Structured event reporting is the final observer. It only deduplicates/logs numerical
+    # evidence and normalizes legacy Tournament event names; it cannot affect decisions.
+    install_context_events(tournament)
     core.STORE.event(None, "info", "manual_feedback_ready", "Manual correction feedback path ready", None)
     core.STORE.event(None, "info", "teach_rl_ready", "Historical Teach RL pipeline ready", None)
     core.STORE.event(None, "info", "context_tournament_ready",
@@ -95,6 +99,7 @@ def prepare_engine_extensions():
                       "teach_rl_control_rebenchmark": "prequential_shadow",
                       "control_diagnostics": "schema_revision+schema_age+prequential_samples+feature_tournament_state",
                       "context_ui_diagnostics": "active+primary+challengers+evaluation+schema+last_update",
+                      "context_events": "structured_numeric_no_generated_text",
                       "consecutive_wins": int(core.OPTIONS.get("context_tournament_consecutive_wins", 3)) if hasattr(core, "OPTIONS") else 3,
                       "evaluation_hours": float(core.OPTIONS.get("context_tournament_evaluation_hours", 24)) if hasattr(core, "OPTIONS") else 24,
                       "cooldown_hours": float(core.OPTIONS.get("context_tournament_cooldown_hours", 24)) if hasattr(core, "OPTIONS") else 24,
@@ -103,6 +108,7 @@ def prepare_engine_extensions():
                       "quality_table": "context_tournament_sensor_quality",
                       "schema_history_table": "context_schema_history",
                       "schema_probation_table": "context_schema_probation",
+                      "context_event_state_table": "context_tournament_event_state",
                       "binary_metric": "balanced_accuracy",
                       "continuous_metric": "normalized_mae",
                       "installed": tournament is not None})
