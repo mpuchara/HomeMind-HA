@@ -154,6 +154,15 @@ def _feature_evidence(agent, labels):
     return True, stats
 
 
+def _feature_evidence_factor(sample_count):
+    """Shrink feature evidence until a sensor has the configured sample support."""
+    n = max(0, int(sample_count or 0))
+    target = max(1, int(OPTIONS.get("teach_rl_feature_evidence_samples", 24)))
+    if n <= 0:
+        return 0.0
+    return min(1.0, math.sqrt(float(n) / float(target)))
+
+
 class RLTeaching:
     MAX_LABELS = 256
     MAX_HISTORY_ROWS = 40000
@@ -431,7 +440,8 @@ class RLTeaching:
                 corr = abs(_weighted_corr(xs, ys, ws))
                 coverage = min(1.0, len(xs) / max(2.0, float(len(labels))))
                 recency = sum(math.exp(-age/recency_tau) for age in recencies) / max(1, len(recencies))
-                score = min(1.0, corr * coverage * (0.82 + 0.18*recency))
+                evidence_factor = _feature_evidence_factor(len(xs))
+                score = min(1.0, corr * coverage * (0.82 + 0.18*recency) * evidence_factor)
                 if score >= 0.05:
                     scores[eid] = round(score, 6)
         return scores, stats
