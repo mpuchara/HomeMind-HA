@@ -1,16 +1,16 @@
 """Learn which *unselected* Home Assistant entities explain manual corrections.
 
-Manual corrections are the strongest preference signal in HomeMind.  The live policy can
+Manual corrections are the strongest preference signal in HomeMind. The live policy can
 only update features already present in its compact schema, so this module observes a
-broader candidate universe at every explicit/direct-device correction.  It persists a
-bounded scalar snapshot of all eligible non-electrical, non-actuator context, estimates
-which entities correlate with the demonstrated target value, and promotes strong manual
-signals into the compact policy schema.
+broader candidate universe at every explicit/direct-device correction. It persists a
+bounded scalar snapshot of all eligible non-electrical, non-actuator context and estimates
+which entities correlate with the demonstrated target value.
 
-Schema promotion is online and conservative: existing feature weights are copied by
-semantic label, new slots start at the ridge prior, fixed home-intelligence features are
-preserved, and the correction that triggered the promotion is then learned using the new
-schema.  Historical/raw archives are untouched.
+Decision learning and feature-schema changes are intentionally separate. A manual
+correction may immediately update the action policy, but observing that correction never
+changes the live feature schema. Manual context evidence is retained for a later,
+explicit schema-refresh/qualification step. Existing feature weights can still be migrated
+safely when that separate step is invoked; historical/raw archives are untouched.
 """
 from collections import defaultdict
 import json
@@ -59,7 +59,7 @@ def _candidate_snapshot(agent, state_map, registry, now=None):
 
     This intentionally mirrors the broad candidate gate used by normal context selection:
     unusual ESPHome channels, phone/car/template sensors, camera scores and virtual
-    entities are allowed.  Only the target itself, controllable inputs and explicit
+    entities are allowed. Only the target itself, controllable inputs and explicit
     electrical-unit telemetry are excluded.
     """
     from context import (
@@ -160,8 +160,8 @@ def manual_scores(store, agent_id, now=None):
     """Supervised relevance from full-context manual snapshots.
 
     A candidate needs repeated corrections *and* variation in the demonstrated target
-    value before it can become a strong promotion signal.  This prevents one accidental
-    correction from making every coincident sensor look causal.  Recency-to-correction is
+    value before it can become a strong promotion signal. This prevents one accidental
+    correction from making every coincident sensor look causal. Recency-to-correction is
     only a small bonus; the main term is cross-correction correlation.
     """
     aid = str(agent_id)
@@ -195,7 +195,7 @@ def manual_scores(store, agent_id, now=None):
         if n < min_samples:
             continue
         # At least two meaningfully different demonstrated values are required for a
-        # candidate to displace an existing feature.  One-sided corrections are retained
+        # candidate to displace an existing feature. One-sided corrections are retained
         # and will become useful as soon as contrasting evidence arrives.
         if max(ys) - min(ys) <= 1e-6:
             continue
@@ -204,7 +204,7 @@ def manual_scores(store, agent_id, now=None):
         known_ages = [a for a in ages if a is not None]
         recent = 0.0
         if known_ages:
-            # A weak bonus for signals that actually changed near a correction.  It is
+            # A weak bonus for signals that actually changed near a correction. It is
             # deliberately capped so high-rate telemetry cannot win without correlation.
             recent = sum(math.exp(-a / 12.0) for a in known_ages) / len(known_ages)
         score = min(1.0, corr * coverage + 0.15 * recent * coverage)
@@ -349,6 +349,7 @@ def _migrate_schema(policy, new_entities, new_meta):
 
 
 def _refresh_policy(core, agent, state_map, scores):
+    """Explicitly apply already-collected manual context evidence to the live schema."""
     if not scores or str(agent.get("training_state") or "") == "training":
         return {"changed": False, "added": [], "removed": []}
     engine = core.ENGINE
@@ -356,7 +357,10 @@ def _refresh_policy(core, agent, state_map, scores):
     from ha import AUTOMATION_KNOWLEDGE
     hints, _ = AUTOMATION_KNOWLEDGE.hints_for_target(agent["target_entity"])
     base_rel = dict(engine.context_relevance.get(agent["id"]) or {})
-    selected, meta = _BASE_SELECTOR(
+    selector = _BASE_SELECTOR
+    if selector is None:
+        from policy import select_context_entities as selector
+    selected, meta = selector(
         agent, state_map, dict(engine.entity_registry), hints,
         relevance_scores=base_rel,
     )
@@ -368,15 +372,36 @@ def _refresh_policy(core, agent, state_map, scores):
         rt["context_meta"] = dict(policy.selection_meta)
         core.STORE.event(
             agent["id"], "info", "manual_context_schema_refresh",
-            "Manual corrections changed the selected context schema",
+            "Qualified manual context evidence changed the selected context schema",
             {"added": result["added"], "removed": result["removed"],
              "manual_scores": meta.get("manual_context_scores") or {}},
         )
     return result
 
 
-def observe(core, agent, state_map, desired, rejected=None, source="manual", user_id=None, refresh_policy=True):
-    """Persist broad correction context and, when justified, refresh the live schema."""
+def refresh_schema(core, agent, state_map):
+    """Separate schema-management entry point for a qualified/controlled workflow.
+
+    Manual correction handlers must not call this function. They should call ``observe``
+    to retain broad context evidence and then update the action policy immediately. A
+    later schema-qualification workflow can call this function after it has decided that
+    enough independent evidence exists to reconsider the active sensor set.
+    """
+    if core is None or core.STORE is None or core.ENGINE is None:
+        return {"changed": False, "added": [], "removed": [], "reason": "runtime unavailable"}
+    scores = manual_scores(core.STORE, agent["id"])
+    return _refresh_policy(core, agent, state_map, scores)
+
+
+def observe(core, agent, state_map, desired, rejected=None, source="manual", user_id=None, refresh_policy=False):
+    """Persist broad correction context without changing the live feature schema.
+
+    ``refresh_policy`` is retained as a compatibility argument for older callers, but is
+    intentionally ignored. This keeps action learning and context-schema management on
+    separate lifecycles: the correction can be learned immediately by the policy while
+    sensor promotion remains deferred to ``refresh_schema`` (and, later, its evidence
+    qualification gate).
+    """
     if core is None or core.STORE is None or core.ENGINE is None:
         return {"recorded": False, "reason": "runtime unavailable"}
     snapshot = _candidate_snapshot(agent, state_map, dict(core.ENGINE.entity_registry))
@@ -384,22 +409,20 @@ def observe(core, agent, state_map, desired, rejected=None, source="manual", use
         return {"recorded": False, "reason": "no eligible context"}
     _insert_snapshot(core.STORE, agent["id"], desired, rejected, source, user_id, snapshot)
     scores = manual_scores(core.STORE, agent["id"])
-    refresh = (_refresh_policy(core, agent, state_map, scores) if refresh_policy
-               else {"changed": False, "added": [], "removed": []})
     return {
         "recorded": True,
         "candidates": len(snapshot),
         "observations": int(_OBSERVATION_CACHE.get(str(agent["id"]), 0)),
         "scores": {k: round(float(v), 4) for k, v in sorted(scores.items(), key=lambda kv: -kv[1])[:12]},
-        "schema_changed": bool(refresh.get("changed")),
-        "added": list(refresh.get("added") or []),
-        "removed": list(refresh.get("removed") or []),
-        "schema_refresh_deferred": not refresh_policy,
+        "schema_changed": False,
+        "added": [],
+        "removed": [],
+        "schema_refresh_deferred": True,
     }
 
 
 def install(core):
-    """Install persistent observer and make future policy selection manual-feedback aware."""
+    """Install the persistent manual-context observer without patching policy selection."""
     global _PATCHED, _CORE, _BASE_SELECTOR
     _CORE = core
     _ensure_table(core.STORE)
@@ -407,16 +430,9 @@ def install(core):
         return
     import policy as policy_module
     _BASE_SELECTOR = policy_module.select_context_entities
-
-    def select_with_manual(agent, state_map, registry, hint_entities, max_entities=None, relevance_scores=None):
-        selected, meta = _BASE_SELECTOR(
-            agent, state_map, registry, hint_entities,
-            max_entities=max_entities, relevance_scores=relevance_scores,
-        )
-        scores = manual_scores(core.STORE, agent.get("id")) if agent.get("id") else {}
-        return _promote_manual_entities(agent, state_map, selected, meta, scores)
-
-    policy_module.select_context_entities = select_with_manual
     _PATCHED = True
-    core.STORE.event(None, "info", "manual_context_learning_ready",
-                     "Full-context manual correction observer is active", None)
+    core.STORE.event(
+        None, "info", "manual_context_learning_ready",
+        "Full-context manual correction observer is active; schema promotion is deferred",
+        None,
+    )
