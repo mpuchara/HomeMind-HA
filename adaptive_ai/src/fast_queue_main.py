@@ -25,6 +25,7 @@ def prepare_engine_extensions():
     from context_tournament_metrics import install_metrics as install_context_tournament_metrics
     from context_tournament_hysteresis import install as install_context_tournament_hysteresis
     from context_tournament_promotion import install_promotion as install_context_tournament_promotion
+    from context_tournament_primary_protection import install_primary_protection
     changed = install_fast_runtime(core)
     if changed:
         core.STORE.event(None, "info", "fast_runtime_migration",
@@ -42,6 +43,9 @@ def prepare_engine_extensions():
     # promotion state machine so every cumulative/window comparison uses strict margin.
     install_context_tournament_hysteresis()
     install_context_tournament_promotion(tournament)
+    # Primary feature protection runs after promotion wiring but patches the schema-slot
+    # chooser used by that state machine. It cannot create control actions of its own.
+    install_primary_protection(tournament)
     core.STORE.event(None, "info", "manual_feedback_ready", "Manual correction feedback path ready", None)
     core.STORE.event(None, "info", "teach_rl_ready", "Historical Teach RL pipeline ready", None)
     core.STORE.event(None, "info", "context_tournament_ready",
@@ -51,7 +55,8 @@ def prepare_engine_extensions():
                       "min_samples": int(core.OPTIONS.get("context_tournament_min_samples", 40)) if hasattr(core, "OPTIONS") else 40,
                       "min_days": float(core.OPTIONS.get("context_tournament_min_days", 3)) if hasattr(core, "OPTIONS") else 3,
                       "min_gain": float(core.OPTIONS.get("context_tournament_min_gain", 0.03)) if hasattr(core, "OPTIONS") else 0.03,
-                      "hysteresis": "challenger_score > baseline_score + min_gain",
+                      "primary_replacement_gain": float(core.OPTIONS.get("context_primary_replacement_gain", 0.07)) if hasattr(core, "OPTIONS") else 0.07,
+                      "hysteresis": "challenger_score > baseline_score + required_gain",
                       "consecutive_wins": int(core.OPTIONS.get("context_tournament_consecutive_wins", 3)) if hasattr(core, "OPTIONS") else 3,
                       "evaluation_hours": float(core.OPTIONS.get("context_tournament_evaluation_hours", 24)) if hasattr(core, "OPTIONS") else 24,
                       "cooldown_hours": float(core.OPTIONS.get("context_tournament_cooldown_hours", 24)) if hasattr(core, "OPTIONS") else 24,
