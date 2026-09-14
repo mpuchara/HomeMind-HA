@@ -1,4 +1,0 @@
-/* A PAUSED training state can still run an existing policy in runtime Shadow mode.
-   The card should look active when the mode badge says SHADOW; Control remains blocked. */
-.agent.paused-agent:has(.mode.shadow){opacity:1;filter:none}
-.agent.paused-agent:has(.mode.shadow):hover{opacity:1;filter:none}
