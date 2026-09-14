@@ -1,3 +1,13 @@
+# 0.10.9 — 2026-09-14
+
+- Add always-visible Naucz: label Desired without sending an HA service or imposing a manual hold, including Shadow and Paused.
+- Keep Naucz / popraw as explicit physical Current correction plus learning.
+- Persist contextual labels and policy updates; show the resulting model prediction and calibrated confidence.
+- Prevent historical-training races; preserve pending physical outcomes and defer schema promotion while they exist.
+- Route search through the active renderer; reconcile card ownership by agent ID and respect hidden cards in CSS.
+- Preserve the 0.10.8 startup freeze fix; no DOM observer or new polling loop.
+- 186 tests passed; local browser verified teaching, correction and search.
+
 # 0.10.6 — 2026-09-13
 
 - Fix crash before HTTP startup: manual context learning accessed core.STORE while it was None.

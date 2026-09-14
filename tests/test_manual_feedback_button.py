@@ -23,14 +23,15 @@ class ManualFeedbackButtonContract(unittest.TestCase):
         self.assertIn("installButtons();", text)
 
     def test_release_version_is_consistent(self):
-        self.assertIn('version: "0.10.8"', (ROOT / "adaptive_ai/config.yaml").read_text(encoding="utf-8"))
-        self.assertIn('APP_VERSION = "0.10.8"', (ROOT / "adaptive_ai/src/settings.py").read_text(encoding="utf-8"))
-        self.assertIn('ARG BUILD_VERSION=0.10.8', (ROOT / "adaptive_ai/Dockerfile").read_text(encoding="utf-8"))
         info = json.loads((ROOT / "adaptive_ai/BUILD_INFO.json").read_text(encoding="utf-8"))
-        self.assertEqual("0.10.8", info["version"])
+        version = info["version"]
+        self.assertIn(f'version: "{version}"', (ROOT / "adaptive_ai/config.yaml").read_text(encoding="utf-8"))
+        self.assertIn(f'APP_VERSION = "{version}"', (ROOT / "adaptive_ai/src/settings.py").read_text(encoding="utf-8"))
+        self.assertIn(f'ARG BUILD_VERSION={version}', (ROOT / "adaptive_ai/Dockerfile").read_text(encoding="utf-8"))
         html = (ROOT / "adaptive_ai/src/static/index.html").read_text(encoding="utf-8")
-        self.assertIn("0.10.8 HF1", html)
-        self.assertIn("manual_feedback.js?v=0.10.8-hf1", html)
+        self.assertIn(f'LOCAL HOME INTELLIGENCE · {version}', html)
+        for script in (ROOT / 'adaptive_ai/src/static').glob('*.js'):
+            self.assertIn(f'{script.name}?v={version}', html)
 
 
 if __name__ == "__main__":

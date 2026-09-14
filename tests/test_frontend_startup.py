@@ -32,6 +32,13 @@ assert.equal(timers[0][1], 4000);
 assert.equal(typeof nodes.get('#newAgentBtn').onclick, 'function');
 assert.equal(typeof nodes.get('#rescanBtn').onclick, 'function');
 assert.equal(typeof nodes.get('#agentForm').onsubmit, 'function');
+// Search must dispatch through the newest renderer, just like periodic refresh.
+// Capturing the legacy function here used to create two competing sets of cards.
+let renders = 0;
+context.renderAgents = () => { renders++; };
+nodes.get('#agentSearch').oninput();
+nodes.get('#agentSort').onchange();
+assert.equal(renders, 2);
 '''
         result = subprocess.run(['node', '-e', script], cwd=ROOT, capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)

@@ -256,6 +256,68 @@ def apply_ui_correction(core, agent, desired_value=None, keep_current=False):
         }
 
 
+def teach_desired(core, agent, desired_value=None):
+    """Label the desired decision in this context, without a physical correction.
+
+    Unlike manual-correction this must never dispatch a service, reward a pending
+    physical command, set a manual hold, or change the agent's operating mode.
+    A binary request without a value toggles the latest prediction, not Current.
+    """
+    from context import target_value
+    from manual_context_learning import observe as observe_manual_context
+
+    engine, store = core.ENGINE, core.STORE
+    if engine is None or store is None:
+        raise RuntimeError("runtime unavailable")
+    with engine.executor.target_lock(agent["target_entity"]):
+        # Training can start after the HTTP handler reads the configuration.
+        agent = store.get_agent_config(agent["id"])
+        if agent is None:
+            raise ValueError("Agent no longer exists")
+        if agent.get("training_state") == "training":
+            raise ValueError("Trwa trening historyczny. Naucz Desired po jego zakończeniu.")
+        with engine.lock:
+            state_map = dict(engine.state_map)
+        state = state_map.get(agent["target_entity"])
+        if not state or state.get("state") in ("unknown", "unavailable"):
+            raise ValueError("Target state/value unavailable")
+        rt = engine.runtime.setdefault(agent["id"], {})
+        predicted = rt.get("last_prediction")
+        if desired_value is None:
+            if agent["target_property"] != "power" or predicted is None:
+                raise ValueError("desired_value is required when Desired is unavailable or non-binary")
+            desired_value = 0.0 if float(predicted) >= .5 else 1.0
+        desired = _manual_value(agent, state, desired_value)
+        context_learning = observe_manual_context(
+            core, agent, state_map, desired, rejected=predicted,
+            source="ui_teach_desired", user_id=UI_USER_ID,
+            # Pending physical outcomes still refer to their original feature slots.
+            # Keep the label, but defer schema promotion until those outcomes settle.
+            refresh_policy=not bool(rt.get("pending") or rt.get("outcomes")),
+        )
+        policy = engine.policy(agent)
+        with policy.lock:
+            negative = _negative_prediction(
+                engine, agent, state_map, predicted, desired,
+                UI_USER_ID, "desired teaching: rejected prediction (UI)",
+            )
+            _positive_demonstration(engine, agent, state_map, desired, UI_USER_ID,
+                                    "desired teaching: labelled decision (UI)")
+            # Show the resulting model decision, not a fabricated prediction/confidence.
+            features, _, _ = policy.features(state_map, engine.temporal_history, at_ts=time.time())
+            chosen, confidence, _, horizon, support, novelty = policy.predict(features)
+        rt.update(last_prediction=chosen["value"], last_confidence=confidence,
+                  prediction_horizon=horizon, historical_support=support, context_novelty=novelty)
+        store.event(agent["id"], "info", "desired_teaching_ui",
+                    f"User taught Desired {desired}; no device command sent",
+                    {"previous_desired": predicted, "taught_desired": desired,
+                     "prediction_after": chosen["value"], "context_learning": context_learning})
+        return {"ok": True, "current_value": target_value(state, agent["target_property"]),
+                "desired_value": desired, "prediction_after": chosen["value"], "service": None,
+                "negative_applied": negative, "positive_applied": True,
+                "context_learning": context_learning}
+
+
 def _physical_manual_snapshot(engine, agent, state_map):
     """Detect the same physical manual edge the core runtime is about to learn."""
     from context import target_value
@@ -334,7 +396,7 @@ def install(core, attach_runtime=True):
     def do_post(self):
         path, _, _ = self.path.partition("?")
         parts = path.strip("/").split("/")
-        if len(parts) == 4 and parts[:2] == ["api", "agents"] and parts[3] == "manual-correction":
+        if len(parts) == 4 and parts[:2] == ["api", "agents"] and parts[3] in ("manual-correction", "teach-desired"):
             if not self.require_trusted_client():
                 return
             if not self.require_runtime():
@@ -347,6 +409,8 @@ def install(core, attach_runtime=True):
                 payload = self.read_json()
                 payload = payload if isinstance(payload, dict) else {}
                 desired = payload.get("desired_value")
+                if parts[3] == "teach-desired":
+                    return self.send_json(200, teach_desired(core, agent, desired))
                 keep_current = bool(payload.get("keep_current", False))
                 return self.send_json(200, apply_ui_correction(core, agent, desired, keep_current=keep_current))
             except ValueError as exc:

@@ -1,9 +1,9 @@
-# Adaptive AI 0.10.7
+# Adaptive AI 0.10.9
 
-Lokalne polityki urządzeń, wspólny model aktywności domu i deterministyczny Executor dla Home Assistanta.
+Lokalne polityki urządzeń i wspólny model aktywności domu dla Home Assistanta.
 
-**0.10.7:** każdy agent ma stale widoczny przycisk `👎 Naucz / popraw` w miejscu dawnego `Verify control`. Ręczna korekta pozostaje dostępna niezależnie od trybu i stanu kwalifikacji agenta.
+`Naucz` uczy właściwego Desired bez polecenia do urządzenia, także w Shadow. `Naucz / popraw` zmienia Current i uczy. Oba przyciski są stale widoczne poza szczegółami. Wartości ON/OFF są odwracane odpowiednio względem Desired lub Current.
+
+Naprawiono podwójne karty po wyszukiwaniu oraz filtrowanie kart. Modele i dane z 0.10.8 pozostają zgodne.
 
 [Obsługa](DOCS.md) · [Zmiany](CHANGELOG.md)
-
-Uczenie historyczne jest ręczne, pojedyncze i strumieniowe. Control wyłącza rozpoznane automatyzacje celu; Shadow nie wysyła usług. Po aktualizacji z 0.8 modele wymagają ponownego Train.

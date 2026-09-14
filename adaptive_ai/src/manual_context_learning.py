@@ -375,7 +375,7 @@ def _refresh_policy(core, agent, state_map, scores):
     return result
 
 
-def observe(core, agent, state_map, desired, rejected=None, source="manual", user_id=None):
+def observe(core, agent, state_map, desired, rejected=None, source="manual", user_id=None, refresh_policy=True):
     """Persist broad correction context and, when justified, refresh the live schema."""
     if core is None or core.STORE is None or core.ENGINE is None:
         return {"recorded": False, "reason": "runtime unavailable"}
@@ -384,7 +384,8 @@ def observe(core, agent, state_map, desired, rejected=None, source="manual", use
         return {"recorded": False, "reason": "no eligible context"}
     _insert_snapshot(core.STORE, agent["id"], desired, rejected, source, user_id, snapshot)
     scores = manual_scores(core.STORE, agent["id"])
-    refresh = _refresh_policy(core, agent, state_map, scores)
+    refresh = (_refresh_policy(core, agent, state_map, scores) if refresh_policy
+               else {"changed": False, "added": [], "removed": []})
     return {
         "recorded": True,
         "candidates": len(snapshot),
@@ -393,6 +394,7 @@ def observe(core, agent, state_map, desired, rejected=None, source="manual", use
         "schema_changed": bool(refresh.get("changed")),
         "added": list(refresh.get("added") or []),
         "removed": list(refresh.get("removed") or []),
+        "schema_refresh_deferred": not refresh_policy,
     }
 
 

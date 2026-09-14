@@ -1,6 +1,6 @@
-# HomeMind-HA / Adaptive AI 0.10.7
+# HomeMind-HA / Adaptive AI 0.10.9
 
-**0.10.7 poprawia ręczne uczenie agenta:** w każdym agencie przycisk `👎 Naucz / popraw` jest stale widoczny i zajmuje miejsce dawnego `Verify control`. Działa w WAITING, PAUSED, SHADOW i CONTROL oraz przed kwalifikacją agenta. Dla urządzeń binarnych korekta jest jednoklikowa; dla wartości ciągłych lub wyborów użytkownik podaje prawidłową wartość. Zachowane są modele, ustawienia, archiwum i dotychczasowy feedback.
+**Dwa stale widoczne przyciski każdego agenta:** `Naucz` zapisuje poprawne Desired w bieżącym kontekście bez polecenia do urządzenia, także w Shadow. `Naucz / popraw` zmienia fizyczne Current i uczy agenta. Poprawiono podwójne karty po wyszukiwaniu oraz ukrywanie odfiltrowanych kart. [Opis wydania i testów](docs/RELEASE_0_10_9.md).
 
 Lokalne sterowanie Home Assistantem: wspólny model aktywności domu, małe polityki urządzeń i deterministyczny Executor. Dla szybkich urządzeń polityka wybiera stan docelowy; profil urządzenia określa ACK, stabilizację, odstępy i czas ręcznego przejęcia.
 

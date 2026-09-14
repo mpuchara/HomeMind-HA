@@ -1,6 +1,7 @@
 (()=>{
   const STYLE_ID='manual-feedback-style';
   const BUTTON_CLASS='manual-correction-btn';
+  const TEACH_CLASS='teach-desired-btn';
   const LEGACY_VERIFY_CLASS='manual-legacy-verify';
   const busy=new Set();
   const feedbackUntil=new Map();
@@ -13,6 +14,8 @@
       .${BUTTON_CLASS}{display:inline-flex!important;visibility:visible!important;border:1px solid rgba(255,110,100,.55)!important;background:rgba(170,45,35,.16)!important;color:#ffb1a8!important;font-weight:700!important}
       .${BUTTON_CLASS}:hover{background:rgba(190,55,42,.26)!important}
       .${BUTTON_CLASS}[disabled]{opacity:.55;cursor:wait}
+      .${TEACH_CLASS}{display:inline-flex!important;visibility:visible!important;border:1px solid #7cd2f6!important;color:#a7e3ff!important;font-weight:700!important}
+      .${TEACH_CLASS}[disabled]{opacity:.55;cursor:wait}
       .${LEGACY_VERIFY_CLASS}{display:none!important;visibility:hidden!important}
       .manual-correction-hint{width:100%;font-size:12px;line-height:1.35;color:var(--muted,#9aa0aa);margin-top:2px}
     `;
@@ -28,20 +31,23 @@
     return body;
   }
 
-  function correctionLabel(){return '👎 Naucz / popraw';}
+  function correctionLabel(teaching=false){return teaching?'Naucz':'👎 Naucz / popraw';}
 
-  function askDesired(agent){
+  function askDesired(agent,teaching=false){
     const rt=agent.runtime||{};
-    const current=rt.current_value;
-    if(agent.target_property==='power')return null;
+    const current=teaching?rt.last_prediction:rt.current_value;
+    if(agent.target_property==='power'&&(!teaching||current!=null))return null;
     const lo=Number(agent.min_value),hi=Number(agent.max_value);
-    let message=`Podaj właściwą wartość dla ${agent.name}.\nAktualnie: ${current??'—'}`;
+    let message=`Podaj właściwą wartość dla ${agent.name}.\n${teaching?'Desired (nauka bez polecenia do urządzenia)':'Current (zmiana urządzenia)'}: ${current??'—'}`;
+    if(agent.target_property==='power')message+='\nPodaj 0 (OFF) lub 1 (ON).';
     if(Number.isFinite(lo)&&Number.isFinite(hi))message+=`\nZakres: ${lo} … ${hi}`;
     if(agent.target_property==='option_index')message+='\nDla wyboru podaj indeks opcji.';
     const raw=window.prompt(message,current??'');
     if(raw===null)return undefined;
+    if(!String(raw).trim())throw new Error('Podaj wartość.');
     const value=Number(String(raw).replace(',','.'));
     if(!Number.isFinite(value))throw new Error('Podana wartość nie jest liczbą.');
+    if(agent.target_property==='power'&&![0,1].includes(value))throw new Error('Podaj 0 lub 1.');
     return value;
   }
 
@@ -53,26 +59,28 @@
     return `${punished}${learned}${context}`;
   }
 
-  async function correct(agentId,button){
+  async function correct(agentId,button,teaching=false){
     const key=String(agentId);
+    const feedbackKey=key+':'+teaching;
     if(busy.has(key))return;
     busy.add(key);
     const old=button.textContent;
     button.disabled=true;
-    button.textContent='Poprawiam i uczę…';
+    button.textContent=teaching?'Uczę Desired…':'Poprawiam i uczę…';
     try{
       const agents=await api('api/agents');
       const agent=agents.find(a=>String(a.id)===key);
       if(!agent)throw new Error('Nie znaleziono agenta.');
-      const desired=askDesired(agent);
+      const desired=askDesired(agent,teaching);
       if(desired===undefined){button.textContent=old;button.disabled=false;return;}
-      const body=agent.target_property==='power'?{}:{desired_value:desired};
-      const result=await api(`api/agents/${encodeURIComponent(key)}/manual-correction`,{method:'POST',body:JSON.stringify(body)});
-      feedbackUntil.set(key,Date.now()+2200);
-      button.textContent='✓ Nauczono'+learningSuffix(result);
+      const body=teaching?(desired===null?{}:{desired_value:desired}):(agent.target_property==='power'?{}:{desired_value:desired});
+      const path=teaching?`api/agents/${encodeURIComponent(key)}/teach-desired`:`api/agents/${encodeURIComponent(key)}/manual-correction`;
+      const result=await api(path,{method:'POST',body:JSON.stringify(body)});
+      feedbackUntil.set(feedbackKey,Date.now()+2200);
+      button.textContent=(teaching?'✓ Zapisano naukę Desired':'✓ Nauczono')+learningSuffix(result);
       setTimeout(()=>{
-        feedbackUntil.delete(key);
-        button.textContent=correctionLabel();
+        feedbackUntil.delete(feedbackKey);
+        button.textContent=correctionLabel(teaching);
         button.disabled=false;
       },2200);
       if(typeof window.load==='function')setTimeout(()=>window.load(),150);
@@ -117,30 +125,38 @@
         if(verify.tabIndex!==-1)verify.tabIndex=-1;
       }
 
-      let b=[...actions.querySelectorAll('.'+BUTTON_CLASS)].find(x=>x!==verify);
+      for(const teaching of [true,false]){
+      const cls=teaching?TEACH_CLASS:BUTTON_CLASS;
+      let b=[...actions.querySelectorAll('.'+cls)].find(x=>x!==verify);
       if(!b){
         b=document.createElement('button');
         b.type='button';
-        b.className='ghost '+BUTTON_CLASS;
+        b.className='ghost '+cls;
         if(verify)actions.insertBefore(b,verify);else actions.prepend(b);
       }
-      bindManualButton(b,id);
+      if(teaching){
+        if(b.dataset.teachBound!=='1'){
+          b.dataset.teachBound='1';
+          b.addEventListener('click',()=>correct(id,b,true));
+        }
+      }else bindManualButton(b,id);
       if(b.hidden)b.hidden=false;
       if(b.getAttribute('aria-hidden')!=null)b.removeAttribute('aria-hidden');
       if(b.tabIndex!==0)b.tabIndex=0;
-      b.title='Zgłoś błędną decyzję agenta. HomeMind poprawi urządzenie i zapisze tę korektę jako silny sygnał uczący razem z bieżącym kontekstem domu.';
+      b.title=teaching?'Naucz poprawnego Desired w bieżącym kontekście, także w Shadow. Nie wysyła polecenia do urządzenia. Dla ON/OFF odwraca Desired.':'Popraw Current: zmień urządzenie i naucz agenta poprawnego stanu. Dla ON/OFF odwraca Current.';
 
-      const showingFeedback=(feedbackUntil.get(id)||0)>Date.now();
+      const showingFeedback=(feedbackUntil.get(id+':'+teaching)||0)>Date.now();
       if(!busy.has(id)&&!showingFeedback){
         if(b.disabled)b.disabled=false;
-        const label=correctionLabel();
+        const label=correctionLabel(teaching);
         if(b.textContent!==label)b.textContent=label;
+      }
       }
 
       if(!actions.querySelector('.manual-correction-hint')){
         const hint=document.createElement('div');
         hint.className='manual-correction-hint';
-        hint.textContent='Zawsze dostępne: użyj, gdy agent powinien zrobić coś innego. Dla urządzenia binarnego kliknięcie przełączy stan; dla pozostałych podasz właściwą wartość.';
+        hint.textContent='Naucz → popraw Desired bez polecenia do urządzenia (także Shadow). Naucz / popraw → zmień Current i ucz. ON/OFF: odwróć wskazany stan; inne wartości: podaj nastawę. W Control agent nadal steruje automatycznie.';
         actions.appendChild(hint);
       }
     });

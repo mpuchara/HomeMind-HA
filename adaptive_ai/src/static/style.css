@@ -35,6 +35,8 @@
 .train-state.candidate{color:var(--warn);border-color:#665522;background:#211d10}
 .train-state.paused{color:var(--muted);border-color:#3a4149;background:#15191d}
 .train-state.training{color:var(--warn);border-color:#665522;background:#211d10}
+/* The flex card layout must not override the browser's hidden attribute. */
+.agent[hidden]{display:none!important}
 .agent.paused-agent{opacity:.52;filter:saturate(.38);transition:opacity .15s ease,filter .15s ease}
 .agent.paused-agent:hover{opacity:.70;filter:saturate(.58)}
 .agent.paused-agent .resume{border-color:#356c55;color:var(--good);font-weight:850}

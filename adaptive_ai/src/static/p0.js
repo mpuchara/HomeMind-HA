@@ -129,8 +129,12 @@
   renderAgents = () => {
     const root=$('#agents'), existing=new Set(lastAgents.map(a=>String(a.id)));
     for(const [id,node] of nodes)if(!existing.has(String(id))){node.remove();nodes.delete(id);}
-    for(const a of lastAgents){let node=nodes.get(a.id);if(!node){node=create(a);nodes.set(a.id,node);root.appendChild(node);}update(node,a);node.hidden=true;}
-    const shown=sortedFilteredAgents(); shown.forEach(a=>{const n=nodes.get(a.id);n.hidden=false;root.appendChild(n);});
+    // Own the complete list: discard stale legacy cards, retaining live card nodes
+    // (and their open details, focus and learning-button state) across refreshes.
+    const owned=new Set(nodes.values());
+    for(const node of [...root.children])if(!owned.has(node)&&!node.classList.contains('p0-empty'))node.remove();
+    for(const a of lastAgents){const id=String(a.id);let node=nodes.get(id);if(!node){node=create(a);nodes.set(id,node);}if(node.parentNode!==root)root.appendChild(node);update(node,a);node.hidden=true;}
+    const shown=[...new Map(sortedFilteredAgents().map(a=>[String(a.id),a])).values()]; shown.forEach(a=>{const n=nodes.get(String(a.id));n.hidden=false;root.appendChild(n);});
     $('#agentCount').textContent=`${lastAgents.length} configured · ${shown.length} shown`;
     let empty=root.querySelector('.p0-empty');if(!shown.length){if(!empty){empty=document.createElement('div');empty.className='empty card p0-empty';root.appendChild(empty);}empty.innerHTML=`<b>No matching agents</b><span>${esc(lastAgents.length?'Change the search filter.':'Discovery will add active devices; training starts manually.')}</span>`;}else if(empty)empty.remove();
   };
