@@ -1,8 +1,8 @@
 {
-  "version": "0.11.2",
+  "version": "0.12.0",
   "release_date": "2026-09-14",
-  "base_version": "0.11.1",
-  "base_commit": "096cefdd",
+  "base_version": "0.11.2",
+  "base_commit": "9f178eac",
   "profile": "rpi4-low-memory-manual-training",
   "manual_agent_training": true,
   "max_concurrent_training_jobs": 1,
@@ -13,7 +13,7 @@
   "home_model_version": 1,
   "reward_version": 2,
   "release_status": "ci-validated-source-release",
-  "tests_passed": 221,
+  "tests_passed": 412,
   "docker_build": "github-actions-smoke-passed",
   "pi4": "not_measured",
   "bootstrap_catchup": "bounded-live-statistics",
@@ -51,5 +51,13 @@
     "negative_previous": 3
   },
   "wrong_decision": "unchanged existing immediate contextual/manual correction path",
+  "sensor_tournament": "persistent candidate -> challenger -> future-only prequential validation -> promotion -> probation/rollback",
+  "sensor_tournament_promotion": "40+ future samples, 3+ observed days, >=3pp cumulative gain, three consecutive 24h winning windows, 24h cooldown",
+  "sensor_tournament_primary_protection": "primary replacement requires >7pp gain unless global margin is stricter",
+  "sensor_tournament_quality": "predictive gain is reliability-adjusted; unavailable sensors are penalized",
+  "sensor_tournament_requalification": "schema promotion demotes affected Control agent to Shadow and requires fresh qualification",
+  "sensor_tournament_probation": "previous serialized model/schema preserved; >3pp degradation after minimum paired evidence rolls back automatically",
+  "sensor_tournament_simulator": "A: new 90% sensor beats 75% champion and promotes; B: 300 tiny-sample noise sensors cannot promote; C: concept drift automatically replaces A with B",
+  "migration": "additive SQLite only; agents, archive history, Teach labels, feedback, models and benchmarks preserved",
   "anticipation_simulator": "Production anticipation, dispatch and reward simulator passes together with dedicated confidence-gate tests"
 }
