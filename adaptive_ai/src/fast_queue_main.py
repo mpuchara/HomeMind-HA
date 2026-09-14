@@ -21,6 +21,7 @@ def prepare_engine_extensions():
     from manual_feedback_lifecycle import install_runtime as install_lifecycle
     from teaching_learning_bridge import install as install_teaching_learning_bridge
     from teaching_rl import RLTeaching
+    from context_tournament import install as install_context_tournament
     changed = install_fast_runtime(core)
     if changed:
         core.STORE.event(None, "info", "fast_runtime_migration",
@@ -32,8 +33,14 @@ def prepare_engine_extensions():
     # Historical Teach is a separate offline-RL path.  The existing Teaching bridge is
     # intentionally kept intact because Wrong decision already depends on that behaviour.
     core.ENGINE.rl_teaching = RLTeaching(core.STORE, core.ENGINE)
+    tournament = install_context_tournament(core.STORE, core.ENGINE)
     core.STORE.event(None, "info", "manual_feedback_ready", "Manual correction feedback path ready", None)
     core.STORE.event(None, "info", "teach_rl_ready", "Historical Teach RL pipeline ready", None)
+    core.STORE.event(None, "info", "context_tournament_ready",
+                     "Sensor Tournament state layer ready; challengers remain non-controlling",
+                     {"challenger_count": int(core.OPTIONS.get("context_challenger_count", 4)) if hasattr(core, "OPTIONS") else 4,
+                      "state_table": "context_tournament_state",
+                      "installed": tournament is not None})
 
 
 core.prepare_runtime_extensions = prepare_runtime_extensions
