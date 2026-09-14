@@ -47,6 +47,7 @@ options:
   context_tournament_consecutive_wins: 3
   context_tournament_evaluation_hours: 24
   context_tournament_cooldown_hours: 24
+  context_schema_probation_samples: 50
   fast_clock_context_weight: 0.15
   fast_causal_driver_min_score: 0.50
   fast_causal_driver_reserve: 2
@@ -127,6 +128,7 @@ schema:
   context_tournament_consecutive_wins: "int(1,20)"
   context_tournament_evaluation_hours: "float(1.0,168.0)"
   context_tournament_cooldown_hours: "float(0.0,720.0)"
+  context_schema_probation_samples: "int(30,5000)"
   fast_clock_context_weight: "float(0.0,1.0)"
   fast_causal_driver_min_score: "float(0.10,0.95)"
   fast_causal_driver_reserve: "int(1,4)"
