@@ -32,6 +32,7 @@ def prepare_engine_extensions():
     from context_schema_probation import install_schema_probation
     from teach_rl_rebenchmark import install_teach_rl_rebenchmark
     from control_diagnostics import install_control_diagnostics
+    from context_ui_diagnostics import install_context_ui_diagnostics
     changed = install_fast_runtime(core)
     if changed:
         core.STORE.event(None, "info", "fast_runtime_migration",
@@ -71,6 +72,9 @@ def prepare_engine_extensions():
     # Diagnostics are deliberately installed last and only decorate HTTP/runtime payloads.
     # Executor keeps its direct qualification import and never learns how sensors were picked.
     install_control_diagnostics(core, tournament)
+    # UI diagnostics are an additional read-only wrapper around the already diagnostic
+    # runtime payload. They expose the last context update without entering the control path.
+    install_context_ui_diagnostics(tournament)
     core.STORE.event(None, "info", "manual_feedback_ready", "Manual correction feedback path ready", None)
     core.STORE.event(None, "info", "teach_rl_ready", "Historical Teach RL pipeline ready", None)
     core.STORE.event(None, "info", "context_tournament_ready",
@@ -90,6 +94,7 @@ def prepare_engine_extensions():
                       "schema_rollback_min_samples": 30,
                       "teach_rl_control_rebenchmark": "prequential_shadow",
                       "control_diagnostics": "schema_revision+schema_age+prequential_samples+feature_tournament_state",
+                      "context_ui_diagnostics": "active+primary+challengers+evaluation+schema+last_update",
                       "consecutive_wins": int(core.OPTIONS.get("context_tournament_consecutive_wins", 3)) if hasattr(core, "OPTIONS") else 3,
                       "evaluation_hours": float(core.OPTIONS.get("context_tournament_evaluation_hours", 24)) if hasattr(core, "OPTIONS") else 24,
                       "cooldown_hours": float(core.OPTIONS.get("context_tournament_cooldown_hours", 24)) if hasattr(core, "OPTIONS") else 24,
