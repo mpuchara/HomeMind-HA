@@ -125,6 +125,10 @@ class Executor:
             return self._result(intent, rt, 'SHADOW', intent.reason, 'shadow')
         if intent.experiment_token and not engine.experiments.valid(agent, intent):
             return reject('experiment: expired or revoked trial')
+        if intent.teaching_id and not engine.teaching.valid(agent, intent, engine):
+            return reject('teaching: user label was undone or changed')
+        if intent.teaching_revision != engine.teaching.revision(agent['id']):
+            return reject('teaching: instructions changed since this decision was created')
 
         qualification = assess_control_qualification(agent)
         if not qualification['passed']:
@@ -142,11 +146,13 @@ class Executor:
             reason = 'Explicit Control review is required' if not review.get('approved') else 'Device capabilities changed since Control review'
             return reject('guardrail: ' + reason, decision='error')
 
-        if intent.confidence < float(agent['confidence_threshold']):
+        # An explicit contextual user label is an instruction, not statistical
+        # confidence. Keep qualification, review, freshness and device guards intact.
+        if not intent.teaching_id and intent.confidence < float(agent['confidence_threshold']):
             return reject('confidence: below configured threshold')
-        if intent.support < float(OPTIONS.get('min_historical_support', .2)):
+        if not intent.teaching_id and intent.support < float(OPTIONS.get('min_historical_support', .2)):
             return reject('support: insufficient historical support')
-        if intent.novelty > float(OPTIONS.get('max_context_novelty', .85)):
+        if not intent.teaching_id and intent.novelty > float(OPTIONS.get('max_context_novelty', .85)):
             return reject('novelty: context outside supported distribution')
         if timestamp < rt.get('manual_override_until', 0):
             return reject('manual: explicit user override active')
@@ -194,6 +200,8 @@ class Executor:
         domain, service, data = target_call(intent.target_entity, intent.target_property, value, state)
         if intent.experiment_token and not engine.experiments.valid(agent, intent):
             return reject('experiment: settings changed before dispatch')
+        if intent.teaching_id and not engine.teaching.valid(agent, intent, engine):
+            return reject('teaching: user label revoked before dispatch')
         if intent.experiment_token and not engine.experiments.begin(agent, intent):
             return reject('experiment: another probe is active or this trial was revoked', decision='waiting')
         rt.update(last_service_ts=now_ts(), last_service=f'{domain}.{service}', last_service_data=data)
@@ -222,6 +230,7 @@ class Executor:
             if len(outcomes) > 16:
                 outcomes.pop(0)
         rt['pending'] = {'action_index': action_index, 'action_value': value,
+                         'teaching_id': intent.teaching_id,
                          'experiment': bool(intent.experiment_token),
                          'horizon': intent.prediction_horizon, 'policy_head': intent.policy_head, 'features': features,
                          'started_ts': started, 'acknowledged_ts': None, 'no_service': False,

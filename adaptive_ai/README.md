@@ -1,9 +1,9 @@
-# Adaptive AI 0.10.9
+# Adaptive AI 0.11.0
 
-Lokalne polityki urządzeń i wspólny model aktywności domu dla Home Assistanta.
+Cztery akcje każdego agenta: Shadow/Control, Wrong decision, Settings, Teach.
 
-`Naucz` uczy właściwego Desired bez polecenia do urządzenia, także w Shadow. `Naucz / popraw` zmienia Current i uczy. Oba przyciski są stale widoczne poza szczegółami. Wartości ON/OFF są odwracane odpowiednio względem Desired lub Current.
+Wrong decision zmienia nauczone Desired. Teach pozwala uczyć na historii: powiększ wykres, wybierz moment i podaj prawidłowy stan. Cofnij ostatnią naukę w Teach lub Settings. W Shadow nie ma poleceń; w Control poprawione Desired steruje przez Executor.
 
-Naprawiono podwójne karty po wyszukiwaniu oraz filtrowanie kart. Modele i dane z 0.10.8 pozostają zgodne.
+Dawne Desired jest oznaczoną rekonstrukcją obecnym modelem. Zapis rzeczywistych predykcji rozpoczyna się od 0.11.0. Modele, archiwum i ustawienia pozostają zgodne.
 
 [Obsługa](DOCS.md) · [Zmiany](CHANGELOG.md)

@@ -1,7 +1,7 @@
-# Testy wydania 0.10.9
+# Testy wydania 0.11.0
 
-186 testów unittest przeszło. [Pełny wynik](docs/TEST_RESULTS_0_10_9.txt) · [Opis scenariuszy i ograniczeń](docs/RELEASE_0_10_9.md).
+208 testów unittest. [Pełny wynik](docs/TEST_RESULTS_0_11_0.txt) · [Opis wydania](docs/RELEASE_0_11_0.md) · [Audyt ręcznej nauki RL](docs/AUDIT_MANUAL_LEARNING_0_11_0.md).
 
-Sprawdzono backend obu rodzajów uczenia, utrwalenie modelu i kontekstu, brak usług HA przy nauce Desired, odróżnianie Current od Desired, wyścig z treningiem i uzgadnianie kart. Lokalna przeglądarka potwierdziła widoczność przycisków, ich działanie na symulowanym urządzeniu i filtrowanie.
+Nowe scenariusze: efektywna korekta po 2000 przeciwnych próbek, cofanie bez utraty niezależnej nauki, zachowanie po restarcie/treningu, Shadow bez usług, Control przez Executor, unieważnianie intentu po undo, kwalifikacja Control, historyczne as-of bez przyszłego kontekstu, gęste radary, temperatury i zmiana opcji, odczyt live podczas transakcji SQLite, start kart przy zablokowanym ciężkim statusie.
 
-Pełne sprawdzenia pakietu obejmują Python, wszystkie JS, symulator, mikrobenchmark, zgodność wersji i integralność ZIP. Docker oraz fizyczny HA nie były testowane lokalnie.
+Lokalna przeglądarka potwierdziła cztery akcje, Settings, wykres, powiększanie, wybór momentu, naukę i cofanie. Polecenia urządzeń są symulowane. Kontrole pakietu obejmują Python, wszystkie JS, symulator, mikrobenchmark, wersje i integralność ZIP. Nie testowano lokalnie Docker ani fizycznego HA.

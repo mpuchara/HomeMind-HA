@@ -26,6 +26,8 @@ class ActionIntent:
     context_dependencies: tuple = ()
     policy_head: int = 1
     experiment_token: str = ''
+    teaching_id: int = 0
+    teaching_revision: int = 0
 
     def __post_init__(self):
         object.__setattr__(self, 'contributors', tuple((str(k), float(v)) for k,v in self.contributors))

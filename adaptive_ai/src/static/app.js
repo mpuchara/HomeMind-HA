@@ -2,6 +2,7 @@ let entities=[];
 let lastHistory={};
 let lastAgents=[];
 let lastStatus={};
+let loadInFlight=false;
 const openAgentDetails=new Set(JSON.parse(localStorage.getItem('adaptiveAiOpenAgentDetails')||'[]').map(String));
 const $=s=>document.querySelector(s);
 const api=async(path,opts={})=>{const r=await fetch(path,{headers:{'Content-Type':'application/json'},...opts});if(!r.ok)throw new Error(await r.text());return r.status===204?null:r.json()};
@@ -18,6 +19,9 @@ function renderOverview(status){
     <div class="metric"><b>${num(status.historical_experience_count||0)}</b><span>predictive RL experiences</span></div>`;
 }
 async function load(){
+  if(loadInFlight)return;
+  loadInFlight=true;
+  try{
   let status;
   try{
     status=await api('api/status');lastStatus=status;
@@ -31,6 +35,7 @@ async function load(){
     const [agents,events]=await Promise.all([api('api/agents'),api('api/events?limit=60')]);
     lastAgents=agents;renderAgents();renderEvents(events);
   }catch(e){$('#events').innerHTML=`<div class="empty">UI data will retry automatically. ${esc(e.message)}</div>`;}
+  }finally{loadInFlight=false;}
 }
 function renderHistory(h,status={}){
   const ar=h.archive||{}, progress=Math.round((Number(h.progress)||0)*100);

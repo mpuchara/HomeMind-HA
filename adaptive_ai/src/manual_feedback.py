@@ -396,7 +396,7 @@ def install(core, attach_runtime=True):
     def do_post(self):
         path, _, _ = self.path.partition("?")
         parts = path.strip("/").split("/")
-        if len(parts) == 4 and parts[:2] == ["api", "agents"] and parts[3] in ("manual-correction", "teach-desired"):
+        if len(parts) == 4 and parts[:2] == ["api", "agents"] and parts[3] in ("manual-correction", "teach-desired", "teaching", "undo-teaching"):
             if not self.require_trusted_client():
                 return
             if not self.require_runtime():
@@ -409,6 +409,10 @@ def install(core, attach_runtime=True):
                 payload = self.read_json()
                 payload = payload if isinstance(payload, dict) else {}
                 desired = payload.get("desired_value")
+                if parts[3] == "teaching":
+                    return self.send_json(200, core.ENGINE.teaching.teach(core.ENGINE, agent, desired, payload.get("sample_ts")))
+                if parts[3] == "undo-teaching":
+                    return self.send_json(200, core.ENGINE.teaching.undo(core.ENGINE, agent))
                 if parts[3] == "teach-desired":
                     return self.send_json(200, teach_desired(core, agent, desired))
                 keep_current = bool(payload.get("keep_current", False))

@@ -1,6 +1,10 @@
-# HomeMind-HA / Adaptive AI 0.10.9
+# HomeMind-HA / Adaptive AI 0.11.0
 
-**Dwa stale widoczne przyciski każdego agenta:** `Naucz` zapisuje poprawne Desired w bieżącym kontekście bez polecenia do urządzenia, także w Shadow. `Naucz / popraw` zmienia fizyczne Current i uczy agenta. Poprawiono podwójne karty po wyszukiwaniu oraz ukrywanie odfiltrowanych kart. [Opis wydania i testów](docs/RELEASE_0_10_9.md).
+Karta agenta ma cztery akcje: **Shadow/Control**, **Wrong decision**, **Settings** i **Teach**. Wrong decision uczy poprawnego Desired. Teach otwiera powiększalny wykres historii z wyborem dokładnej chwili i zapisem poprawnego Desired. Cofanie ostatniej korekty jest dostępne w Teach oraz Settings; pozostałe operacje i diagnostyka są w Settings.
+
+Ręczne etykiety są odwracalne i nie giną podczas treningu bazowego RL. W Shadow zmieniają predykcję; w Control decyzję wykonuje Executor po sprawdzeniu kontekstu i urządzenia. Current ma niezależne od diagnostyki odświeżanie około 0,5 s.
+
+[Instalacja](INSTALACJA_PL.md) · [Obsługa i opis wydania](docs/RELEASE_0_11_0.md) · [Audyt ręcznej nauki RL](docs/AUDIT_MANUAL_LEARNING_0_11_0.md).
 
 Lokalne sterowanie Home Assistantem: wspólny model aktywności domu, małe polityki urządzeń i deterministyczny Executor. Dla szybkich urządzeń polityka wybiera stan docelowy; profil urządzenia określa ACK, stabilizację, odstępy i czas ręcznego przejęcia.
 

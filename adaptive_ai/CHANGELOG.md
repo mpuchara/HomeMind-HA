@@ -1,3 +1,15 @@
+# 0.11.0 — 2026-09-14
+
+- Reduce agent cards to Shadow/Control, Wrong decision, Settings and Teach; move other operations and diagnostics into Settings.
+- Add zoomable historical teaching with precise as-of inspection, target labels and per-agent undo.
+- Make button labels independent of base RL matrices: one correction changes a matching decision even after thousands of old samples; undo preserves unrelated learning.
+- Route taught decisions through Control Executor with explicit user-label provenance, revalidation and normal device/qualification guards. Shadow dispatches nothing.
+- Retire conflicting button labels after a genuine physical user correction; option reordering invalidates old categorical labels.
+- Distinguish current-policy historical replay from recorded Desired; record future decisions in bounded batches with 31-day retention.
+- Bound dense radar-history replay by indexed sampling; inspect selected points exactly and never borrow future/live home forecasts.
+- Refresh Current through a lightweight 500 ms loop and bootstrap cards without waiting for diagnostics; prevent overlapping refreshes.
+- 207 automated tests plus local browser checks. No model migration required from 0.10.9.
+
 # 0.10.9 — 2026-09-14
 
 - Add always-visible Naucz: label Desired without sending an HA service or imposing a manual hold, including Shadow and Paused.

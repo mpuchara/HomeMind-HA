@@ -1,9 +1,9 @@
-# Instalacja Adaptive AI 0.10.9
+# Instalacja Adaptive AI 0.11.0
 
-1. Rozpakuj ZIP. Podmień cały katalog `adaptive_ai` w źródłach istniejącego dodatku lokalnego (`/addons/adaptive_ai`).
-2. W Home Assistant wykonaj **Rebuild / Przebuduj** dla dodatku Adaptive AI i uruchom go ponownie. Zachowaj jego istniejący katalog danych.
-3. Otwórz ponownie panel. Nagłówek ma pokazywać **0.10.9**. Na każdej karcie, poza szczegółami, są **Naucz** i **Naucz / popraw**.
+1. Rozpakuj ZIP i podmień cały katalog `adaptive_ai` w źródłach istniejącego lokalnego dodatku, zwykle `/addons/adaptive_ai`.
+2. W Home Assistant wykonaj **Rebuild / Przebuduj dodatek**, uruchom go ponownie i otwórz panel. Nagłówek powinien pokazywać **0.11.0**.
+3. Zachowaj istniejący katalog danych dodatku. Modele, ustawienia i historia z 0.10.9 pozostają zgodne; nie trzeba przebudowywać modeli agentów.
 
-Nie wykonuj Rebuild modeli agentów: modele, ustawienia i dane z 0.10.8 pozostają zgodne. Nie twórz drugiej instalacji dodatku, jeśli chcesz zachować dotychczasowe dane.
+Nowe korekty można cofać od tego wydania. Dawne korekty 0.10.9 są już częścią bazowego modelu i nie mają odwracalnego dziennika.
 
-[Zasady uczenia i opis wydania](docs/RELEASE_0_10_9.md) · [Pełna instrukcja instalacji](docs/INSTALLATION_PL.md).
+[Obsługa Teach](docs/RELEASE_0_11_0.md) · [Audyt mechanizmu nauki](docs/AUDIT_MANUAL_LEARNING_0_11_0.md) · [Pełna instrukcja instalacji](docs/INSTALLATION_PL.md).

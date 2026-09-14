@@ -11,6 +11,7 @@ from storage import STORE
 from ha import HA, AUTOMATION_KNOWLEDGE
 from context import (TemporalHistory, action_values, parse_horizons, sensor_recommendations, target_options_for_state, target_value)
 from policy import MultiHorizonPolicy
+from teaching import Teaching
 from context_engine import ContextEngine
 from executor import Executor
 from intent import ActionIntent
@@ -131,6 +132,7 @@ class Engine(threading.Thread):
         self.ws_error = None
         self.temporal_history = TemporalHistory(maxlen=24)
         self.lock = threading.RLock()
+        self.teaching = Teaching(STORE)
 
     def prime_temporal_from_archive(self, start_ts, end_ts):
         # Startup must not scan/replay the archive; live states warm temporal context.
@@ -345,6 +347,7 @@ class Engine(threading.Thread):
                     self.last_full_poll = now_ts()
                     self.poll_future = self.poll_worker.submit(self.refresh_states)
                 self.flush_archive()
+                self.teaching.flush()
                 self.context.home.expire(now_ts())
                 self.context.save()
                 with self.lock:
@@ -444,7 +447,7 @@ class Engine(threading.Thread):
         pending = experience if experience is not None else rt.get("pending")
         if not pending:
             return
-        if pending.get('experiment'):
+        if pending.get('experiment') or pending.get('teaching_id'):
             # Trial feedback belongs to the separate online model. Do not inject a
             # counterfactual action as a demonstrated historical preference.
             if rt.get('pending') is pending:
@@ -564,6 +567,7 @@ class Engine(threading.Thread):
         if changed:
             rt["last_change_origin"] = "own_command" if own_echo or expected_ack else "manual_user" if user_id else "external"
         if changed and user_id and not own_echo and not expected_ack:
+            self.teaching.physical_correction(self, agent, state_map, current, timestamp)
             if pending:
                 if not same_value(current, pending["action_value"], agent["deadband"]):
                     result = self.executor.reward_engine.evaluate(manual_correction=True, chatter=bool(pending.get('chatter')))
@@ -652,16 +656,22 @@ class Engine(threading.Thread):
             for x in automation_infos[:8]
         ]
 
+        teaching_revision = self.teaching.revision(aid)
         chosen, confidence, arms, horizon, support, novelty = policy.predict(features)
-        trial = self.experiments.propose(agent, policy, state_map, self.context.resolved_registry,
-            features, labels, chosen, confidence, arms, horizon, rt)
         baseline_value = chosen['value']
+        teaching = self.teaching.match(agent, policy, state_map, self.temporal_history, now_ts())
+        if teaching:
+            chosen = dict(chosen, value=teaching['desired'], index=min(range(len(policy.actions)), key=lambda i: abs(policy.actions[i]-teaching['desired'])))
+        rt['teaching_id'] = teaching['id'] if teaching else None
+        trial = None if teaching else self.experiments.propose(agent, policy, state_map, self.context.resolved_registry,
+            features, labels, chosen, confidence, arms, horizon, rt)
         if trial:
             chosen = dict(chosen, value=trial['value'], index=trial['index'])
             support, novelty = trial['support'], trial['novelty']
         micro_explore = bool(trial)
         rt['baseline_prediction'] = baseline_value
         rt["last_prediction"] = chosen["value"]
+        self.teaching.record(aid, current, chosen['value'], now_ts())
         rt["last_confidence"] = confidence
         rt["structural_confidence"] = chosen.get("structural_confidence", confidence)
         rt["validation_accuracy"] = chosen.get("validation_accuracy", 0.0)
@@ -685,7 +695,9 @@ class Engine(threading.Thread):
             prediction_horizon=intent_horizon, policy_head=horizon, created_at=now_ts(), ttl=float(OPTIONS.get('intent_ttl_seconds', 2)),
             policy_version=policy.VERSION, model_revision=policy.model_revision,
             context_revision=context_revision, target_revision=target_revision,
-            reason=(f"Context experiment ({trial['focus']}): {baseline_value} → {chosen['value']}; baseline confidence {confidence:.0%}" if trial else
+            teaching_id=teaching['id'] if teaching else 0,
+            teaching_revision=teaching_revision,
+            reason=(f"User teaching #{teaching['id']}: Desired {chosen['value']} in matching context" if teaching else f"Context experiment ({trial['focus']}): {baseline_value} → {chosen['value']}; baseline confidence {confidence:.0%}" if trial else
                 f"Policy desires {chosen['value']}; confidence {confidence:.0%}, support {support:.0%}, novelty {novelty:.0%}"),
             experiment_token=trial['token'] if trial else '',
             contributors=tuple((x['feature'], x['contribution']) for x in rt['top_context']),
@@ -728,8 +740,9 @@ class Engine(threading.Thread):
         policy = self.models.get(agent["id"])
         selected_entities = list(policy.schema.entities) if policy else None
         with self.lock:
-            recs, present = sensor_recommendations(agent, self.state_map, confidence, selected_entities)
+            states = dict(self.state_map)
             target_state = self.state_map.get(agent["target_entity"])
+        recs, present = sensor_recommendations(agent, states, confidence, selected_entities)
         prediction_label = None
         if agent["target_property"] == "option_index" and rt.get("last_prediction") is not None:
             options = list(((target_state or {}).get("attributes") or {}).get("options") or [])
@@ -739,6 +752,7 @@ class Engine(threading.Thread):
             "experiments": experiment_status,
             "baseline_prediction": rt.get('baseline_prediction'),
             "last_prediction": rt.get("last_prediction"),
+            "teaching_id": rt.get("teaching_id"),
             "current_value": target_value(target_state, agent["target_property"]) if target_state else None,
             "last_prediction_label": prediction_label,
             "last_confidence": confidence,

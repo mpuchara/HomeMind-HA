@@ -289,6 +289,9 @@ class Store:
             c.execute("DELETE FROM historical_experiences WHERE agent_id=?", (agent_id,))
             c.execute("DELETE FROM rl_models WHERE agent_id=?", (agent_id,))
             c.execute("DELETE FROM agents WHERE id=?", (agent_id,))
+            for table in ('teaching_labels', 'decision_history'):
+                if c.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (table,)).fetchone():
+                    c.execute(f"DELETE FROM {table} WHERE agent_id=?", (agent_id,))
         self.event(agent_id, "info", "agent_deleted", "Agent deleted", None)
 
     def add_feedback(self, agent_id, action_index, action_value, reward, reason, features, user_id=None, source="live"):

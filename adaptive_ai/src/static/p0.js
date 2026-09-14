@@ -102,35 +102,40 @@
     return `<div class="detail"><b>Target:</b> ${esc(a.target_entity)} · ${esc(a.target_property)}<br><b>Eksperymenty:</b> ${esc(r.experiments?.config?.enabled ? r.experiments.reason : "wyłączone")}<br><b>Internal reason:</b> ${esc(r.decision_reason||'—')}<br><b>Behaviour benchmark:</b> ${a.benchmark_score==null?'—':pct(a.benchmark_score)} · ${num(a.benchmark_samples||0)} held-out<br><b>Control qualification:</b> ${qText}<br><b>Per-action validation:</b> ${perAction}<br><b>Control review:</b> ${esc(reviewText)}<br><b>Control lease:</b> ${esc(leaseText)}<br><b>Support / novelty:</b> ${pct(r.historical_support||0)} / ${pct(r.context_novelty??1)}<br><b>Latency:</b> HA call ${ms(r.last_service_latency_ms)} · ACK ${r.ack_latency_seconds==null?'—':ms(Number(r.ack_latency_seconds)*1000)}<br><b>Timing:</b> ACK ${num(r.timing?.acknowledgement||0)} s · settling ${num(r.timing?.settling||0)} s · action interval ${num(a.action_interval||0,1)} s<br><b>Primary sensor:</b> ${esc(driver(a)||'—')}<br><b>Selected context:</b> ${esc(selected)}<br><b>Model:</b> ${esc(r.model||'—')}<br><b>Last HA service:</b> ${esc(r.last_service||'—')}${r.last_service_error?' · '+esc(r.last_service_error):''}</div>`;
   };
 
+  window.agentDiagnostics = detailsHtml;
+
   const create = a => {
     const el=document.createElement('article'); el.className='agent card'; el.dataset.agentId=a.id;
-    el.innerHTML=`<div class="agent-head"><div class="agent-title"><h3><span data-p0="name"></span> <span data-p0="badge"></span></h3><div class="target" data-p0="target"></div></div><span class="mode" data-p0="mode"></span></div><div class="agent-primary"><div class="state-metric current"><span>Current</span><b data-p0="current"></b></div><div class="state-metric desired"><span>Desired</span><b data-p0="desired"></b></div><div><span>Confidence</span><b data-p0="confidence"></b></div></div><div class="decision" data-p0="decision"><b data-p0="state"></b><span data-p0="detail"></span></div><div class="agent-status"><span data-p0="driver"></span><span data-p0="latency"></span><span data-p0="training"></span></div><details class="agent-details"><summary><span>Details</span><span class="details-chevron">⌄</span></summary><div data-p0="details"></div></details><div class="actions"><button class="ghost" data-mode="shadow">Shadow</button><button class="ghost" data-mode="control">Control</button><button class="ghost" data-mode="paused">Paused</button><button class="ghost resume" data-a="train">Train</button><button class="ghost resume" data-a="resume">Resume</button><button class="ghost" data-a="settings">Settings</button><button class="ghost" data-a="verify">Verify control</button><button class="ghost" data-a="experiments">Eksperymenty</button><button class="ghost rebuild" data-a="rebuild">Rebuild</button><button class="ghost danger" data-a="delete">Delete</button></div>`;
-    el.querySelectorAll('[data-mode]').forEach(b=>b.onclick=()=>setMode(a.id,b.dataset.mode));
-    el.querySelector('[data-a=experiments]').onclick=()=>openExperiments(a.id); el.querySelector('[data-a=train]').onclick=()=>trainAgent(a.id); el.querySelector('[data-a=resume]').onclick=()=>resumeLearning(a.id); el.querySelector('[data-a=settings]').onclick=()=>editAgent(a.id); el.querySelector('[data-a=verify]').onclick=()=>verifyControl(a.id); el.querySelector('[data-a=rebuild]').onclick=()=>resetLearning(a.id); el.querySelector('[data-a=delete]').onclick=()=>removeAgent(a.id);
-    const d=el.querySelector('details'); d.open=openAgentDetails.has(String(a.id)); d.ontoggle=()=>{ if(d.open)openAgentDetails.add(String(a.id));else openAgentDetails.delete(String(a.id));persistOpenAgentDetails(); const cur=lastAgents.find(x=>x.id===a.id); if(d.open&&cur)el.querySelector('[data-p0=details]').innerHTML=detailsHtml(cur); };
+    el.innerHTML=`<div class="agent-head"><div class="agent-title"><h3><span data-p0="name"></span> <span data-p0="badge"></span></h3><div class="target" data-p0="target"></div></div><span class="mode" data-p0="mode"></span></div><div class="agent-primary"><div class="state-metric current"><span>Current</span><b data-p0="current"></b></div><div class="state-metric desired"><span>Desired</span><b data-p0="desired"></b></div><div><span>Confidence</span><b data-p0="confidence"></b></div></div><div class="decision" data-p0="decision"><b data-p0="state"></b><span data-p0="detail"></span></div><div class="agent-status"><span data-p0="driver"></span><span data-p0="latency"></span><span data-p0="training"></span></div><div class="actions"><button class="ghost" data-a="mode" role="switch">Shadow / Control</button><button class="ghost wrong-decision" data-a="wrong">Wrong decision</button><button class="ghost" data-a="settings">Settings</button><button class="primary" data-a="teach">Teach</button></div>`;
+    el.querySelector('[data-a=mode]').onclick=()=>{const cur=lastAgents.find(x=>String(x.id)===String(a.id));if(cur)setMode(a.id,cur.mode==='shadow'?'control':'shadow');};
+    el.querySelector('[data-a=wrong]').onclick=event=>wrongDecision(a.id,event.currentTarget);
+    el.querySelector('[data-a=settings]').onclick=()=>editAgent(a.id);
+    el.querySelector('[data-a=teach]').onclick=()=>openTeach(a.id);
     return el;
   };
 
   const update = (el,a) => {
     const r=a.runtime||{}, training=r.training_state||a.training_state||'paused', qualified=training==='qualified', conf=qualified&&r.last_prediction!=null?Number(r.last_confidence||0):Number(a.benchmark_score??r.last_confidence??0);
     text(el,'name',a.name); text(el,'badge',(a.auto_created?'AUTO · ':'')+training.toUpperCase()); text(el,'target',`${a.target_entity} · ${a.target_property}`); text(el,'mode',a.mode.toUpperCase()); text(el,'current',currentValue(a)); text(el,'desired',prediction(a)); text(el,'confidence',pct(conf)); text(el,'driver',driver(a)?`Sensor: ${driver(a)}`:'Sensor: learning context'); text(el,'latency',latency(a)); text(el,'training',training==='training'?`training ${Math.round(Number(a.training_progress||0)*100)}%`:training);
-    const experimentButton=el.querySelector('[data-a=experiments]'); experimentButton.classList.toggle('active',Boolean(r.experiments?.config?.enabled)); experimentButton.textContent=r.experiments?.active?'Eksperyment: obserwacja':r.experiments?.config?.enabled?'Eksperymenty ON':'Eksperymenty';
     el.querySelector('[data-p0=mode]').className=`mode ${a.mode}`;
     const [tone,title,detail]=r.experiments?.active?.kind==='probe' ? ['acted','Eksperyment w toku','Pewność dotyczy zwykłej predykcji. Trwa obserwacja niewielkiej zmiany nastawy.'] : human(a), box=el.querySelector('[data-p0=decision]'); box.className=`decision ${tone}`; text(el,'state',title); text(el,'detail',detail);
     el.classList.toggle('paused-agent',['paused','waiting','needs_retrain'].includes(training)); el.classList.toggle('training-agent',training==='training');
-    el.querySelectorAll('[data-mode]').forEach(b=>{
-      b.classList.toggle('active',b.dataset.mode===a.mode);
-      if(b.dataset.mode==='control') { const why=controlBlockReason(a); b.disabled=!controlReady(a); b.title=why; }
-    });
-    el.querySelector('[data-a=train]').hidden=!['waiting','needs_retrain'].includes(training); el.querySelector('[data-a=resume]').hidden=training!=='paused'; el.querySelector('[data-a=verify]').disabled=a.mode!=='control'||!controlReady(a); el.querySelector('[data-a=rebuild]').disabled=training==='training'||['waiting','needs_retrain'].includes(training);
-    if(el.querySelector('details').open){const body=el.querySelector('[data-p0=details]'),html=detailsHtml(a);if(body.dataset.snap!==html){body.innerHTML=html;body.dataset.snap=html;}}
+    const toggle=el.querySelector('[data-a=mode]');
+    toggle.textContent=a.mode==='control'?'Control → Shadow':a.mode==='shadow'?'Shadow → Control':'Paused → Shadow';
+    toggle.setAttribute('aria-checked',String(a.mode==='control'));
+    toggle.disabled=a.mode==='shadow'&&!controlReady(a);
+    toggle.title=a.mode!=='shadow'?'Przełącz na Shadow':controlBlockReason(a);
+    if(r.teaching_id){text(el,'state','Decyzja z nauki użytkownika');text(el,'detail',`Korekta #${r.teaching_id} pasuje do kontekstu. Pewność dotyczy modelu bazowego.`);}
+
   };
 
+  window.updateAgentLive = update;
   renderAgents = () => {
+    window.applyLiveValues?.();
     const root=$('#agents'), existing=new Set(lastAgents.map(a=>String(a.id)));
     for(const [id,node] of nodes)if(!existing.has(String(id))){node.remove();nodes.delete(id);}
     // Own the complete list: discard stale legacy cards, retaining live card nodes
-    // (and their open details, focus and learning-button state) across refreshes.
+    // across refreshes, without cloning buttons or their event handlers.
     const owned=new Set(nodes.values());
     for(const node of [...root.children])if(!owned.has(node)&&!node.classList.contains('p0-empty'))node.remove();
     for(const a of lastAgents){const id=String(a.id);let node=nodes.get(id);if(!node){node=create(a);nodes.set(id,node);}if(node.parentNode!==root)root.appendChild(node);update(node,a);node.hidden=true;}

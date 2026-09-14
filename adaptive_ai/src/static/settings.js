@@ -26,9 +26,21 @@ window.editAgent = function(id) {
     <label>Encje kontekstu: * = automatyczny dobór ze wszystkich<input name="input_entities" value="${esc((a.input_entities||['*']).join(', '))}" required></label>
     ${reviewBlock}
     <p>Możesz wpisać identyfikatory czujników oddzielone przecinkami. Zmiana kontekstu lub zakresu przebuduje model. Czas stabilizacji nie jest automatycznie wyliczany z fizycznego efektu.</p>
+    <details><summary>Diagnostyka i szczegóły agenta</summary>${window.agentDiagnostics?.(a)||''}</details>
+    <div class="settings-tools"><b>Pozostałe operacje</b><div class="actions">
+      <button type="button" class="ghost" data-tool="undo">Cofnij ostatnią naukę</button>
+      <button type="button" class="ghost" data-tool="paused">Pause</button>
+      <button type="button" class="ghost" data-tool="train">Train</button>
+      <button type="button" class="ghost" data-tool="resume">Resume</button>
+      <button type="button" class="ghost" data-tool="rebuild">Rebuild model</button>
+      <button type="button" class="ghost" data-tool="experiments">Eksperymenty</button>
+      <button type="button" class="ghost danger" data-tool="delete">Delete</button>
+    </div></div>
     <p class="settings-error" role="alert"></p>
     <div class="dialog-actions"><button type="button" class="ghost">Anuluj</button><button class="primary" type="submit">Zapisz</button></div></form>`;
-  settingsDialog.querySelector('button[type=button]').onclick = () => settingsDialog.close();
+  settingsDialog.querySelector('.dialog-actions button[type=button]').onclick = () => settingsDialog.close();
+  const operations={undo:()=>undoTeaching(id),paused:()=>setMode(id,'paused'),train:()=>trainAgent(id),resume:()=>resumeLearning(id),rebuild:()=>resetLearning(id),experiments:()=>openExperiments(id),delete:()=>removeAgent(id)};
+  settingsDialog.querySelectorAll('[data-tool]').forEach(b=>b.onclick=()=>{settingsDialog.close();operations[b.dataset.tool]();});
   settingsDialog.querySelector('form').onsubmit = async event => {
     event.preventDefault();
     const form = event.target, body = {};

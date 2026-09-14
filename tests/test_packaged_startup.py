@@ -134,7 +134,7 @@ try:
     assert entered.wait(5)
     assert not json.loads(get('/health'))['ready']
     assert json.loads(get('/api/status'))['startup']['state'] == 'loading_runtime'
-    assert b'correctionLabel' in get('/manual_feedback.js?v=test')
+    assert b'window.wrongDecision' in get('/manual_feedback.js?v=test')
     release.set()
     runtime.join(10)
     assert not runtime.is_alive()

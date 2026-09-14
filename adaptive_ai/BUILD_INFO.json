@@ -1,8 +1,8 @@
 {
-  "version": "0.10.9",
+  "version": "0.11.0",
   "release_date": "2026-09-14",
-  "base_version": "0.10.8-hf1",
-  "base_commit": "9d28c07",
+  "base_version": "0.10.9",
+  "base_commit": "00bb66a",
   "profile": "rpi4-low-memory-manual-training",
   "manual_agent_training": true,
   "max_concurrent_training_jobs": 1,
@@ -13,7 +13,7 @@
   "home_model_version": 1,
   "reward_version": 2,
   "release_status": "locally-validated-source-release",
-  "tests_passed": 186,
+  "tests_passed": 208,
   "docker_build": "not_run_locally",
   "pi4": "not_measured",
   "bootstrap_catchup": "bounded-live-statistics",
@@ -31,12 +31,15 @@
     "vacuum"
   ],
   "vacuum_policy": "cleaning=start; idle=return_to_base/stop fallback; capability-gated; physical experiments blocked",
-  "manual_feedback": "one explicit wrong-agent-action correction; -1 rejected prediction/action +1 corrected value; physical/UI equivalent",
-  "manual_feedback_ui": "Always-visible Naucz (Desired only) and Naucz / popraw (physical Current correction)",
+  "manual_feedback": "Physical corrections keep existing RL path. New button corrections are retractable contextual labels with explicit Control provenance.",
+  "manual_feedback_ui": "Four actions: Shadow/Control, Wrong decision, Settings, Teach; undo in Teach and Settings",
   "manual_feedback_context": "bounded full eligible HA context snapshot on every manual correction; supervised relevance can promote previously unselected entities",
   "manual_feedback_schema": "online schema rotation preserves matching feature weights and fixed home-intelligence slots",
-  "manual_feedback_safety": "manual correction is blocked from mutating policy during historical training; autonomous Control gates remain unchanged",
+  "manual_feedback_safety": "Physical corrections cannot mutate policy during historical training. Button labels remain independent; Control requires qualification, review, freshness and device guards; matched user labels bypass statistical confidence gates.",
   "startup": "http-first-database-then-adapters-then-observers-then-workers",
-  "desired_teaching": "persistent contextual labels; reject prediction and reinforce desired; no direct HA call, manual hold, or pending-action reward",
-  "agent_rendering": "event-time renderer dispatch; stable card ownership by normalized agent ID"
+  "desired_teaching": "New buttons store retractable contextual Desired labels; no direct HA call, manual hold, or pending-action reward",
+  "agent_rendering": "event-time renderer dispatch; stable card ownership by normalized agent ID",
+  "button_teaching": "Retractable contextual user labels, independent of base RL matrices; historical as-of snapshots; bounded local matching",
+  "live_ui": "Independent 500 ms lightweight non-overlapping polling",
+  "teaching_history": "Bounded replay plus indexed as-of sampling for dense radar streams; 31 day windows; <=1000 chart points; exact point inspection"
 }

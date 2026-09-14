@@ -19,6 +19,7 @@ class Element {
     if(!this.parts.has(s))this.parts.set(s,new Element());return this.parts.get(s);}
   querySelectorAll(){return [];}
   addEventListener(){}
+  setAttribute(){}
 }
 const roots=new Map(), root=new Element();roots.set('#agents',root);
 let agents=[{id:7,name:'Test',mode:'shadow',target_entity:'switch.test',target_property:'power',runtime:{},training_state:'qualified'}];
@@ -29,6 +30,7 @@ const c={document:{createElement:()=>new Element()},
   openAgentDetails:new Set(),persistOpenAgentDetails(){},lastAgents:agents,
   sortedFilteredAgents:()=>filtered,esc:String,pct:String,num:String,currentValue:()=>0,prediction:()=>1,
 };
+c.window=c;
 vm.runInNewContext(fs.readFileSync('adaptive_ai/src/static/p0.js','utf8'),c);
 c.renderAgents();const card=root.children[0];
 assert.equal(root.children.length,1);assert.equal(card.hidden,false);

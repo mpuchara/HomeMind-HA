@@ -7,6 +7,7 @@ import re
 import threading
 import time
 import traceback
+from urllib.parse import parse_qs
 
 from settings import (APP_VERSION, OPTIONS, STATIC_DIR, SUPPORTED_TARGETS, clamp, now_ts)
 
@@ -306,6 +307,32 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send_json(200, {"ok": startup.get("error") is None, "ready": bool(startup.get("ready")), "version": APP_VERSION, "startup": startup})
             if not self.require_runtime():
                 return
+            if path == '/api/live':
+                # No model serialization, history counts, recommendations or status.
+                agents = STORE.list_agent_configs()
+                with ENGINE.lock:
+                    from context import target_value
+                    values = [{"id": a['id'], "current_value": target_value(ENGINE.state_map.get(a['target_entity']), a['target_property']),
+                        "last_prediction": (ENGINE.runtime.get(a['id']) or {}).get('last_prediction'),
+                        "teaching_id": (ENGINE.runtime.get(a['id']) or {}).get('teaching_id')}
+                        for a in agents]
+                payload = {"ts": time.time(), "agents": values}
+                if parse_qs(query).get('bootstrap') == ['1']:
+                    payload['configs'] = agents
+                return self.send_json(200, payload)
+            if path.startswith('/api/agents/') and path.endswith(('/teaching-history', '/teaching-point')):
+                agent = STORE.get_agent_config(path.split('/')[3])
+                if not agent:
+                    return self.send_json(404, {'error': 'agent not found'})
+                params = parse_qs(query)
+                try:
+                    if path.endswith('/teaching-point'):
+                        result = ENGINE.teaching.point(ENGINE, agent, params.get('ts', [None])[0])
+                    else:
+                        result = ENGINE.teaching.history(ENGINE, agent, params.get('start', [None])[0], params.get('end', [None])[0])
+                    return self.send_json(200, result)
+                except (ValueError, TypeError) as exc:
+                    return self.send_json(400, {'error': str(exc)})
             if path.startswith('/api/agents/') and path.endswith('/export'):
                 agent = STORE.get_agent(path.split('/')[3])
                 if not agent or agent.get('training_state') != 'qualified':
