@@ -92,6 +92,43 @@
     return ['idle','Ready','Waiting for the next relevant Home Assistant event.'];
   };
 
+  const timeSpan = seconds => {
+    const s=Math.max(0,Number(seconds)||0);
+    if(s<60)return `${Math.max(1,Math.round(s))} s`;
+    if(s<3600)return `${Math.round(s/60)} min`;
+    if(s<86400)return `${Math.round(s/3600)} h`;
+    return `${(s/86400).toFixed(s<864000?1:0)} d`;
+  };
+  const ago = ts => ts==null?'—':`${timeSpan(Date.now()/1000-Number(ts))} ago`;
+  const until = ts => ts==null?'—':(Number(ts)<=Date.now()/1000?'due now':`in ${timeSpan(Number(ts)-Date.now()/1000)}`);
+  const gainText = value => value==null||!Number.isFinite(Number(value))?'—':`${Number(value)>=0?'+':''}${(Number(value)*100).toFixed(1)}%`;
+  const primarySet = a => {
+    const c=a.runtime?.context_meta||{}, values=[];
+    if(c.primary_occupancy_sensor)values.push(c.primary_occupancy_sensor);
+    if(c.primary_local_sensor)values.push(c.primary_local_sensor);
+    for(const x of c.primary_local_sensors||[])values.push(x);
+    for(const x of c.primary_behavioural_drivers||[])values.push(x);
+    return new Set(values.filter(Boolean).map(String));
+  };
+  const contextDiagnosticsHtml = a => {
+    const r=a.runtime||{}, t=r.context_tournament||{}, q=a.control_qualification||{};
+    const active=(t.active_features||r.selected_context_entities||[]).map(String);
+    const primaries=primarySet(a), primary=driver(a);
+    const shadow=t.shadow_evaluation||{}, challengers=[...(shadow.challengers||[])].sort((x,y)=>Number(y.gain??-Infinity)-Number(x.gain??-Infinity));
+    const activeRows=active.length?active.map(entity=>`<span>✓ ${esc(entity)}${primaries.has(entity)?' · <b>primary</b>':''}</span>`).join(''):'<span>No active context schema yet.</span>';
+    const challengerRows=challengers.length?challengers.map(row=>`<span>${Number(row.gain||0)>0?'↑':'·'} ${esc(row.entity_id||'—')} · ${gainText(row.gain)}${row.sensor_quality==null?'':` · quality ${pct(row.sensor_quality)}`}${row.samples==null?'':` · ${num(row.samples)} samples`}</span>`).join(''):'<span>No active challengers.</span>';
+    const nextEnds=challengers.map(row=>Number(row.evaluation_window_end_ts)).filter(value=>Number.isFinite(value)&&value>0);
+    const nextEvaluation=nextEnds.length?Math.min(...nextEnds):null;
+    const lastEvaluation=t.last_evaluation??q.feature_tournament_state?.last_evaluation;
+    const schemaAge=t.schema_age??q.schema_age;
+    const revision=t.schema_revision??q.schema_revision??0;
+    const update=t.last_context_update;
+    const updateBlock=update?`<div class="context-all"><b>Context updated</b><span>${esc(update.promoted_entity)}${update.removed_entity?` replaced ${esc(update.removed_entity)}`:' added to context'}</span><span>Expected gain: ${gainText(update.expected_gain)} · Validation samples: ${num(update.validation_samples||0)} · ${esc(update.status||'promoted')}</span></div>`:'';
+    return `<div class="context-all"><b>Active context</b>${activeRows}</div>
+      <div class="detail"><b>Primary sensor:</b> ${esc(primary||'—')}<br><b>Last context evaluation:</b> ${esc(ago(lastEvaluation))}<br><b>Next evaluation:</b> ${esc(until(nextEvaluation))}<br><b>Schema age:</b> ${schemaAge==null?'—':esc(timeSpan(schemaAge))}<br><b>Schema revision:</b> ${esc(revision)}<br><b>Prequential samples:</b> ${num(q.prequential_samples||0)}</div>
+      <div class="context-all"><b>Context challengers</b>${challengerRows}</div>${updateBlock}`;
+  };
+
   const detailsHtml = a => {
     const r=a.runtime||{}, selected=(r.selected_context_entities||[]).slice(0,12).join(' · ')||'—';
     const q=a.control_qualification||{}, review=a.control_review||{}, lease=a.control_lease;
@@ -99,7 +136,7 @@
     const perAction=Object.entries(q.per_action||{}).map(([k,v])=>`${esc(k)}: ${pct(v.accuracy||0)} (${v.correct||0}/${v.samples||0}), lower ${pct(v.lower_bound||0)}`).join(' · ')||'—';
     const reviewText=review.approval_required?(review.ready?'approved':'review required / invalidated'):'standard device profile';
     const leaseText=lease?`active · ${Number((lease.disabled_automations||[]).length)} previous controller(s) held`:'none';
-    return `<div class="detail"><b>Target:</b> ${esc(a.target_entity)} · ${esc(a.target_property)}<br><b>Eksperymenty:</b> ${esc(r.experiments?.config?.enabled ? r.experiments.reason : "wyłączone")}<br><b>Internal reason:</b> ${esc(r.decision_reason||'—')}<br><b>Behaviour benchmark:</b> ${a.benchmark_score==null?'—':pct(a.benchmark_score)} · ${num(a.benchmark_samples||0)} held-out<br><b>Control qualification:</b> ${qText}<br><b>Per-action validation:</b> ${perAction}<br><b>Control review:</b> ${esc(reviewText)}<br><b>Control lease:</b> ${esc(leaseText)}<br><b>Support / novelty:</b> ${pct(r.historical_support||0)} / ${pct(r.context_novelty??1)}<br><b>Latency:</b> HA call ${ms(r.last_service_latency_ms)} · ACK ${r.ack_latency_seconds==null?'—':ms(Number(r.ack_latency_seconds)*1000)}<br><b>Timing:</b> ACK ${num(r.timing?.acknowledgement||0)} s · settling ${num(r.timing?.settling||0)} s · action interval ${num(a.action_interval||0,1)} s<br><b>Primary sensor:</b> ${esc(driver(a)||'—')}<br><b>Selected context:</b> ${esc(selected)}<br><b>Model:</b> ${esc(r.model||'—')}<br><b>Last HA service:</b> ${esc(r.last_service||'—')}${r.last_service_error?' · '+esc(r.last_service_error):''}</div>`;
+    return `${contextDiagnosticsHtml(a)}<div class="detail"><b>Target:</b> ${esc(a.target_entity)} · ${esc(a.target_property)}<br><b>Eksperymenty:</b> ${esc(r.experiments?.config?.enabled ? r.experiments.reason : "wyłączone")}<br><b>Internal reason:</b> ${esc(r.decision_reason||'—')}<br><b>Behaviour benchmark:</b> ${a.benchmark_score==null?'—':pct(a.benchmark_score)} · ${num(a.benchmark_samples||0)} held-out<br><b>Control qualification:</b> ${qText}<br><b>Per-action validation:</b> ${perAction}<br><b>Control review:</b> ${esc(reviewText)}<br><b>Control lease:</b> ${esc(leaseText)}<br><b>Support / novelty:</b> ${pct(r.historical_support||0)} / ${pct(r.context_novelty??1)}<br><b>Latency:</b> HA call ${ms(r.last_service_latency_ms)} · ACK ${r.ack_latency_seconds==null?'—':ms(Number(r.ack_latency_seconds)*1000)}<br><b>Timing:</b> ACK ${num(r.timing?.acknowledgement||0)} s · settling ${num(r.timing?.settling||0)} s · action interval ${num(a.action_interval||0,1)} s<br><b>Selected context:</b> ${esc(selected)}<br><b>Model:</b> ${esc(r.model||'—')}<br><b>Last HA service:</b> ${esc(r.last_service||'—')}${r.last_service_error?' · '+esc(r.last_service_error):''}</div>`;
   };
 
   window.agentDiagnostics = detailsHtml;
