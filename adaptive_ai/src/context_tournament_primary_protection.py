@@ -26,6 +26,7 @@ from settings import OPTIONS
 _ACTIVE_SERVICE = None
 _BASE_CHOOSER = None
 _PATCHED = False
+_MARGIN_EPSILON = 1e-12
 
 
 def _finite(value):
@@ -64,7 +65,9 @@ def beats_margin(baseline_score, challenger_score, margin):
     old = _finite(baseline_score)
     new = _finite(challenger_score)
     required = max(0.0, _finite(margin) or 0.0)
-    return old is not None and new is not None and new > old + required
+    # Compare the delta, with a tiny numerical guard, so an exact decimal boundary such
+    # as 0.91 - 0.84 == 0.07 cannot pass merely because of binary float representation.
+    return old is not None and new is not None and (new - old) > required + _MARGIN_EPSILON
 
 
 def replacement_plan(agent, policy, challenger, tournament, baseline_score,
