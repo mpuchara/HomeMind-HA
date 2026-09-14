@@ -1,7 +1,6 @@
 """Bounded-memory historical views. Large timelines and held-out vectors stay on disk."""
 import json
 import sqlite3
-import tempfile
 from context import archived_state, TemporalHistory, state_scalar
 from home_state import SharedHomeStateModel
 
@@ -25,27 +24,43 @@ class BoundedUsage:
 
 
 class DeferredUpdates:
+    """Compatibility queue with prequential test-then-learn semantics.
+
+    History replay calls ``head.validate(...)`` before appending an item here.  Prior to
+    v0.12, appended validation examples were written to a temporary file and all folded
+    into the policy only after the whole held-out slice had been scored.  That made the
+    validation slice a fixed backtest rather than a true online/prequential sequence.
+
+    Appending now performs the policy update immediately.  Therefore every chronological
+    event is first evaluated by the model that existed before that event, and only then
+    becomes training evidence for the next event.  The iterator intentionally yields no
+    items so the legacy end-of-pass fold in ``history.py`` is a no-op and cannot double
+    learn the same sample.  ``count`` is preserved for diagnostics.
+    """
     def __init__(self, policies):
         self.policies = policies
-        self.file = tempfile.TemporaryFile(mode='w+t', encoding='utf-8')
         self.count = 0
+        self.closed = False
 
     def append(self, update):
+        if self.closed:
+            raise RuntimeError("DeferredUpdates is closed")
         policy, horizon, action, features, reward, ts = update
-        self.file.write(json.dumps([policy.agent['id'], horizon, action, features, reward, ts], separators=(',', ':'))+'\n')
+        # Callers validate/benchmark before append.  Learning here makes the ordering:
+        # predict/score -> learn, exactly once, in chronological replay order.
+        policy.update(int(horizon), int(action), features, float(reward), float(ts))
         self.count += 1
 
     def __len__(self):
         return self.count
 
     def __iter__(self):
-        self.file.seek(0)
-        for line in self.file:
-            aid, horizon, action, features, reward, ts = json.loads(line)
-            yield self.policies[aid], horizon, action, {int(k):v for k,v in features.items()}, reward, ts
+        # history.py retains its old final fold loop for compatibility.  Samples are
+        # already learned at append-time, so yielding them again would double-update.
+        return iter(())
 
     def close(self):
-        self.file.close()
+        self.closed = True
 
     def __del__(self):
         self.close()
