@@ -25,15 +25,13 @@ def install(core):
             else:
                 from historical_teach_context import observe
                 info = observe(core, agent, result["sample_ts"], result["desired_value"], rejected)
-            from historical_teach_policy import train
-            train(core, self, agent, result["desired_value"], rejected, sample_ts=result["sample_ts"] if sample_ts is not None else None)
             from historical_teach_signature import refresh
             refresh(core, self, agent, result["label_id"], sample_ts=result["sample_ts"] if sample_ts is not None else None)
             self.refresh(eng, agent)
-            result.update(base_model_updated=True, context_learning=info)
+            result.update(context_learning=info)
         except Exception as exc:
-            core.STORE.event(agent["id"], "warning", "graph_teach_learning_failed", str(exc), {"label_id": result["label_id"]})
-            result.update(base_model_updated=False, supervision_error=f"{type(exc).__name__}: {exc}")
+            core.STORE.event(agent["id"], "warning", "graph_teach_context_failed", str(exc), {"label_id": result["label_id"]})
+            result.update(context_learning_error=f"{type(exc).__name__}: {exc}")
         return result
 
     manager.teach = types.MethodType(teach, manager)
