@@ -17,6 +17,7 @@ import time
 
 from context import (
     HistoricalTemporalTracker,
+    action_values,
     archived_state,
     context_scalar,
     controllable_context_exclusions,
@@ -78,6 +79,79 @@ def _selection_limit(agent):
     if is_fast_reactive_agent(agent):
         limit = min(limit, max(2, int(OPTIONS.get("fast_max_context_entities", 8))))
     return limit
+
+
+def _feature_evidence(agent, labels):
+    """Return whether Teach labels are strong enough to reconsider the feature schema.
+
+    Action learning is deliberately *not* gated here. These requirements apply only to
+    feature selection. Teach labels remain valid supervised examples even when there is
+    not yet enough evidence to add/remove sensors.
+    """
+    min_labels = max(2, int(OPTIONS.get("teach_rl_feature_min_labels", 12)))
+    min_per_binary = max(1, int(OPTIONS.get("teach_rl_feature_min_per_binary_class", 5)))
+    min_days = max(0.0, float(OPTIONS.get("teach_rl_feature_min_observation_days", 2)))
+    evidence_samples = max(2, int(OPTIONS.get("teach_rl_feature_evidence_samples", 24)))
+
+    clean = []
+    for row in labels or []:
+        try:
+            ts = float(row["sample_ts"])
+            desired = float(row["desired"])
+        except (KeyError, TypeError, ValueError):
+            continue
+        if math.isfinite(ts) and math.isfinite(desired):
+            clean.append({"sample_ts": ts, "desired": desired})
+
+    actions = [float(x) for x in action_values(agent)]
+    times = [r["sample_ts"] for r in clean]
+    span_days = ((max(times) - min(times)) / 86400.0) if len(times) >= 2 else 0.0
+    action_indices = []
+    if actions:
+        for row in clean:
+            action_indices.append(min(range(len(actions)), key=lambda i: abs(actions[i]-row["desired"])))
+
+    stats = {
+        "labels": len(clean),
+        "min_labels": min_labels,
+        "min_per_binary_class": min_per_binary,
+        "min_observation_days": min_days,
+        "observation_days": round(span_days, 6),
+        "feature_evidence_samples": evidence_samples,
+        "target_kind": "binary" if len(actions) == 2 else "continuous",
+        "feature_selection_eligible": False,
+    }
+
+    if len(clean) < min_labels:
+        stats["reason"] = f"need at least {min_labels} Teach labels for feature selection"
+        return False, stats
+    if span_days + 1e-9 < min_days:
+        stats["reason"] = f"need at least {min_days:g} observation days for feature selection"
+        return False, stats
+    if not actions:
+        stats["reason"] = "target has no action bins"
+        return False, stats
+
+    if len(actions) == 2:
+        counts = [action_indices.count(i) for i in range(2)]
+        stats["binary_class_counts"] = {
+            str(actions[i]): int(counts[i]) for i in range(2)
+        }
+        if any(count < min_per_binary for count in counts):
+            stats["reason"] = (
+                f"need at least {min_per_binary} Teach labels in each binary class"
+            )
+            return False, stats
+    else:
+        distinct_bins = len(set(action_indices))
+        stats["desired_action_bins"] = distinct_bins
+        if distinct_bins < 3:
+            stats["reason"] = "need at least 3 distinct Desired action bins for feature selection"
+            return False, stats
+
+    stats["feature_selection_eligible"] = True
+    stats["reason"] = None
+    return True, stats
 
 
 class RLTeaching:
@@ -299,12 +373,14 @@ class RLTeaching:
         return {"chunks": done, "rows": inserted, "windows": len(windows), "candidates": len(candidates)}
 
     def supervised_scores(self, agent):
-        """Score the full eligible HA universe against active Teach labels."""
+        """Score eligible HA sensors only after Teach evidence passes schema gates."""
         labels = [r for r in self.labels(agent["id"]) if r["fingerprint"] == fingerprint(agent)]
         candidates = self.eligible_entities(agent)
-        if len(labels) < 2 or max((r["desired"] for r in labels), default=0) - min((r["desired"] for r in labels), default=0) <= 1e-9:
-            return {}, {"labels": len(labels), "candidates": len(candidates),
-                        "reason": "need contrasting Teach labels"}
+        eligible, evidence = _feature_evidence(agent, labels)
+        stats = {"labels": len(labels), "candidates": len(candidates), **evidence}
+        if not eligible:
+            return {}, stats
+
         times = [float(r["sample_ts"]) for r in labels]
         desired = [float(r["desired"]) for r in labels]
         start, end = min(times), max(times)
@@ -329,7 +405,7 @@ class RLTeaching:
                 if not rows:
                     continue
                 row_times = [float(r["ts"]) for r in rows]
-                xs, ys, ws, recencies = [], [], [], []
+                xs, ys, ws, recencies, paired_labels = [], [], [], [], []
                 for ts, target, w in zip(times, desired, weights):
                     idx = bisect_right(row_times, ts) - 1
                     if idx < 0:
@@ -346,7 +422,11 @@ class RLTeaching:
                         continue
                     xs.append(val); ys.append(target); ws.append(w)
                     recencies.append(max(0.0, ts-row_times[idx]))
-                if len(xs) < 2 or max(xs)-min(xs) <= 1e-8 or max(ys)-min(ys) <= 1e-8:
+                    paired_labels.append({"sample_ts": ts, "desired": target})
+                candidate_eligible, _ = _feature_evidence(agent, paired_labels)
+                if not candidate_eligible:
+                    continue
+                if max(xs)-min(xs) <= 1e-8 or max(ys)-min(ys) <= 1e-8:
                     continue
                 corr = abs(_weighted_corr(xs, ys, ws))
                 coverage = min(1.0, len(xs) / max(2.0, float(len(labels))))
@@ -354,16 +434,41 @@ class RLTeaching:
                 score = min(1.0, corr * coverage * (0.82 + 0.18*recency))
                 if score >= 0.05:
                     scores[eid] = round(score, 6)
-        return scores, {"labels": len(labels), "candidates": len(candidates)}
+        return scores, stats
 
     def select_features(self, agent, historical=None):
         scores, stats = self.supervised_scores(agent)
+        limit = _selection_limit(agent)
+
+        # Teach labels always remain available for supervised action fine-tuning, but
+        # until the evidence gate passes they are not allowed to rotate the live schema.
+        if not stats.get("feature_selection_eligible"):
+            raw = self.store.get_model(agent["id"]) or {}
+            selected = list(((raw.get("schema") or {}).get("entities") or []))
+            if not selected:
+                try:
+                    selected = list(self.engine.policy(agent).schema.entities)
+                except Exception:
+                    selected = []
+            selected = selected[:limit]
+            meta = {
+                "teach_rl_scores": {},
+                "teach_rl_labels": stats.get("labels", 0),
+                "teach_rl_candidates": stats.get("candidates", 0),
+                "teach_rl_feature_selection_eligible": False,
+                "teach_rl_feature_selection_reason": stats.get("reason"),
+                "teach_rl_observation_days": stats.get("observation_days", 0.0),
+                "teach_rl_binary_class_counts": stats.get("binary_class_counts") or {},
+                "teach_rl_desired_action_bins": stats.get("desired_action_bins"),
+            }
+            return selected, meta, scores
+
         with self.engine.lock:
             all_states = dict(self.engine.state_map)
             registry = dict(self.engine.entity_registry)
-        eligible = set(self.eligible_entities(agent))
+        eligible_entities = set(self.eligible_entities(agent))
         state_map = {eid: st for eid, st in all_states.items()
-                     if eid == agent["target_entity"] or eid in eligible}
+                     if eid == agent["target_entity"] or eid in eligible_entities}
         try:
             from ha import AUTOMATION_KNOWLEDGE
             hints, _ = AUTOMATION_KNOWLEDGE.hints_for_target(agent["target_entity"])
@@ -378,10 +483,9 @@ class RLTeaching:
         selected, meta = select_context_entities(
             broad_agent, state_map, registry, hints, relevance_scores=combined,
         )
-        limit = _selection_limit(agent)
         selected = list(selected[:limit])
 
-        threshold = float(OPTIONS.get("teach_rl_feature_score", 0.55))
+        threshold = float(OPTIONS.get("teach_rl_feature_score", 0.60))
         strong = [(eid, float(score)) for eid, score in scores.items() if float(score) >= threshold]
         strong.sort(key=lambda x: (-x[1], x[0]))
         for eid, score in strong:
@@ -401,6 +505,11 @@ class RLTeaching:
         meta["teach_rl_scores"] = {k: round(v, 4) for k, v in sorted(scores.items(), key=lambda kv: -kv[1])[:20]}
         meta["teach_rl_labels"] = stats.get("labels", 0)
         meta["teach_rl_candidates"] = stats.get("candidates", 0)
+        meta["teach_rl_feature_selection_eligible"] = True
+        meta["teach_rl_feature_selection_reason"] = None
+        meta["teach_rl_observation_days"] = stats.get("observation_days", 0.0)
+        meta["teach_rl_binary_class_counts"] = stats.get("binary_class_counts") or {}
+        meta["teach_rl_desired_action_bins"] = stats.get("desired_action_bins")
         return selected[:limit], meta, scores
 
     def prepare_retrain(self, agent):
@@ -435,8 +544,16 @@ class RLTeaching:
         return report
 
     def prepare_context_selection(self, agent):
-        """Queue-thread preflight: Recorder backfill -> full candidate scoring -> selector."""
-        refreshed = self.refresh_label_context(agent)
+        """Queue-thread preflight: gate evidence, then optionally refresh/select context."""
+        labels = [r for r in self.labels(agent["id"]) if r["fingerprint"] == fingerprint(agent)]
+        evidence_ok, evidence = _feature_evidence(agent, labels)
+        if evidence_ok:
+            refreshed = self.refresh_label_context(agent)
+        else:
+            refreshed = {
+                "chunks": 0, "rows": 0, "windows": 0, "candidates": len(self.eligible_entities(agent)),
+                "skipped": True, "reason": evidence.get("reason"),
+            }
         selected, meta, _ = self.select_features(agent)
         if not selected:
             raise ValueError("Teach RL nie znalazł dopuszczonych features do treningu")
@@ -452,16 +569,24 @@ class RLTeaching:
             "scores": meta.get("teach_rl_scores") or {},
             "candidates": meta.get("teach_rl_candidates", 0),
             "context_refresh": refreshed,
+            "feature_selection_eligible": bool(meta.get("teach_rl_feature_selection_eligible")),
+            "feature_selection_reason": meta.get("teach_rl_feature_selection_reason"),
+            "observation_days": meta.get("teach_rl_observation_days", 0.0),
+            "binary_class_counts": meta.get("teach_rl_binary_class_counts") or {},
+            "desired_action_bins": meta.get("teach_rl_desired_action_bins"),
             "stage": "features_selected",
         })
         # The selector is temporary configuration for the normal deterministic Rebuild.
-        # The rebuilt model persists its schema; the user's '*' selector is restored after.
+        # If evidence is insufficient, `selected` is the existing schema, so Teach still
+        # fine-tunes actions without changing which sensors the policy uses.
         self._set_inputs_direct(agent["id"], selected)
         with self.store.lock, self.store.conn() as c:
             c.execute("UPDATE teaching_rl_jobs SET state='selected',selected_inputs_json=?,report_json=? WHERE agent_id=?",
                       (json.dumps(selected), json.dumps(report), agent["id"]))
-        self.store.event(agent["id"], "info", "teach_rl_features_selected",
-                         f"Teach RL selected {len(selected)} features for the offline rebuild", report)
+        message = (f"Teach RL selected {len(selected)} features for the offline rebuild"
+                   if report["feature_selection_eligible"] else
+                   f"Teach RL kept the existing {len(selected)}-feature schema; labels will still fine-tune actions")
+        self.store.event(agent["id"], "info", "teach_rl_features_selected", message, report)
         return report
 
     def needs_context_selection(self, agent_id):

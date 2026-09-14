@@ -10,7 +10,7 @@ from support import *
 from context import TemporalHistory
 from policy import MultiHorizonPolicy
 from storage import Store
-from teaching_rl import RLTeaching, fingerprint
+from teaching_rl import RLTeaching, fingerprint, _feature_evidence
 
 
 class FakeTeaching:
@@ -85,13 +85,7 @@ class TeachRLTests(unittest.TestCase):
     def tearDown(self):
         self.temp.cleanup()
 
-    def _labels_and_history(self):
-        samples = [
-            (self.now-240, 1, 'on', 'on'),
-            (self.now-180, 0, 'off', 'on'),
-            (self.now-120, 1, 'on', 'off'),
-            (self.now-60, 0, 'off', 'off'),
-        ]
+    def _insert_labels_and_history(self, samples):
         fp = fingerprint(self.agent)
         with self.store.lock, self.store.conn() as c:
             c.executemany(
@@ -109,10 +103,103 @@ class TeachRLTests(unittest.TestCase):
         self.store.archive_batch(rows)
         return samples
 
+    def _labels_and_history(self):
+        # Twelve balanced labels over 66 hours satisfy the production feature gate:
+        # >=12 total, >=5 per binary class and >=2 observation days.
+        samples = []
+        for i in range(12):
+            ts = self.now - (11-i) * 6 * 3600
+            desired = 1 if i % 2 == 0 else 0
+            good_state = 'on' if desired else 'off'
+            bad_state = 'on' if i < 6 else 'off'
+            samples.append((ts, desired, good_state, bad_state))
+        return self._insert_labels_and_history(samples)
+
+    def test_feature_evidence_gate_requires_twelve_labels(self):
+        labels = [
+            {'sample_ts': self.now-3*86400, 'desired': 0.0},
+            {'sample_ts': self.now, 'desired': 1.0},
+        ]
+        eligible, stats = _feature_evidence(self.agent, labels)
+        self.assertFalse(eligible)
+        self.assertEqual(stats['min_labels'], 12)
+        self.assertIn('12', stats['reason'])
+
+    def test_binary_feature_evidence_requires_five_per_class(self):
+        labels = []
+        for i in range(12):
+            desired = 1.0 if i < 8 else 0.0  # 8 ON / 4 OFF: total is enough, balance is not.
+            labels.append({'sample_ts': self.now-(11-i)*6*3600, 'desired': desired})
+        eligible, stats = _feature_evidence(self.agent, labels)
+        self.assertFalse(eligible)
+        self.assertEqual(stats['binary_class_counts']['0.0'], 4)
+        self.assertEqual(stats['binary_class_counts']['1.0'], 8)
+        self.assertIn('each binary class', stats['reason'])
+
+    def test_feature_evidence_requires_two_observation_days(self):
+        labels = [
+            {'sample_ts': self.now-(11-i)*3600, 'desired': float(i % 2)}
+            for i in range(12)
+        ]
+        eligible, stats = _feature_evidence(self.agent, labels)
+        self.assertFalse(eligible)
+        self.assertLess(stats['observation_days'], 2)
+        self.assertIn('observation days', stats['reason'])
+
+    def test_continuous_feature_evidence_requires_three_action_bins(self):
+        continuous = dict(self.agent)
+        continuous.update(target_property='brightness_pct', min_value=0, max_value=100)
+        two_ranges = [
+            {'sample_ts': self.now-(11-i)*6*3600, 'desired': 0.0 if i % 2 == 0 else 100.0}
+            for i in range(12)
+        ]
+        eligible, stats = _feature_evidence(continuous, two_ranges)
+        self.assertFalse(eligible)
+        self.assertEqual(stats['desired_action_bins'], 2)
+
+        three_ranges = [
+            {'sample_ts': self.now-(11-i)*6*3600, 'desired': (0.0, 50.0, 100.0)[i % 3]}
+            for i in range(12)
+        ]
+        eligible, stats = _feature_evidence(continuous, three_ranges)
+        self.assertTrue(eligible)
+        self.assertGreaterEqual(stats['desired_action_bins'], 3)
+
+    def test_supervised_scores_do_not_start_from_two_contrasting_labels(self):
+        samples = [
+            (self.now-3*86400, 0, 'off', 'off'),
+            (self.now, 1, 'on', 'on'),
+        ]
+        self._insert_labels_and_history(samples)
+        scores, stats = self.service.supervised_scores(self.agent)
+        self.assertEqual(scores, {})
+        self.assertFalse(stats['feature_selection_eligible'])
+        self.assertIn('12', stats['reason'])
+
+    def test_insufficient_teach_evidence_preserves_existing_schema(self):
+        limited_agent = dict(self.agent)
+        limited_agent['input_entities'] = [self.bad]
+        policy = MultiHorizonPolicy(limited_agent, self.states, self.registry, set())
+        self.store.save_model(self.agent['id'], policy.serialize())
+        self.engine.models[self.agent['id']] = policy
+        before = list(policy.schema.entities)
+
+        samples = [
+            (self.now-3*86400, 0, 'off', 'off'),
+            (self.now, 1, 'on', 'on'),
+        ]
+        self._insert_labels_and_history(samples)
+        selected, meta, scores = self.service.select_features(self.agent)
+        self.assertEqual(selected, before)
+        self.assertEqual(scores, {})
+        self.assertFalse(meta['teach_rl_feature_selection_eligible'])
+        self.assertNotIn(self.good, selected)
+
     def test_full_context_scores_hidden_sensor_and_excludes_diagnostics(self):
         self._labels_and_history()
         scores, stats = self.service.supervised_scores(self.agent)
-        self.assertEqual(stats['labels'], 4)
+        self.assertEqual(stats['labels'], 12)
+        self.assertTrue(stats['feature_selection_eligible'])
         self.assertIn(self.good, scores)
         self.assertGreater(scores[self.good], .7)
         self.assertNotIn(self.battery, scores)
@@ -120,15 +207,16 @@ class TeachRLTests(unittest.TestCase):
     def test_feature_selection_can_promote_sensor_outside_current_schema(self):
         self._labels_and_history()
         self.engine.context_relevance[self.agent['id']] = {self.bad: .35}
-        with patch.dict('settings.OPTIONS', {'fast_max_context_entities': 2, 'teach_rl_feature_score': .55}):
+        with patch.dict('settings.OPTIONS', {'fast_max_context_entities': 2, 'teach_rl_feature_score': .60}):
             selected, meta, scores = self.service.select_features(self.agent)
         self.assertIn(self.good, selected)
         self.assertIn(self.good, meta['teach_rl_scores'])
+        self.assertTrue(meta['teach_rl_feature_selection_eligible'])
         self.assertGreater(scores[self.good], .7)
 
     def test_prepare_retrain_defers_selection_until_recorder_context_is_ready(self):
         self._labels_and_history()
-        with patch.dict('settings.OPTIONS', {'fast_max_context_entities': 2, 'teach_rl_feature_score': .55}):
+        with patch.dict('settings.OPTIONS', {'fast_max_context_entities': 2, 'teach_rl_feature_score': .60}):
             queued = self.service.prepare_retrain(self.agent)
         # HTTP/queue admission must stay cheap: no temporary selector is installed yet.
         self.assertEqual(self.store.get_agent_config(self.agent['id'])['input_entities'], ['*'])
@@ -139,13 +227,14 @@ class TeachRLTests(unittest.TestCase):
         # eligible universe and only then constrains the deterministic Rebuild.
         refreshed = {'chunks': 2, 'rows': 8, 'windows': 2, 'candidates': 3}
         with patch.object(self.service, 'refresh_label_context', return_value=refreshed), \
-             patch.dict('settings.OPTIONS', {'fast_max_context_entities': 2, 'teach_rl_feature_score': .55}):
+             patch.dict('settings.OPTIONS', {'fast_max_context_entities': 2, 'teach_rl_feature_score': .60}):
             report = self.service.prepare_context_selection(self.agent)
         temporary = self.store.get_agent_config(self.agent['id'])['input_entities']
         self.assertNotEqual(temporary, ['*'])
         self.assertIn(self.good, temporary)
         self.assertIn(self.good, report['selected'])
         self.assertEqual(report['context_refresh'], refreshed)
+        self.assertTrue(report['feature_selection_eligible'])
         self.assertEqual(report['stage'], 'features_selected')
         self.assertFalse(self.service.needs_context_selection(self.agent['id']))
         with self.store.conn() as c:
@@ -153,6 +242,28 @@ class TeachRLTests(unittest.TestCase):
                             (self.agent['id'],)).fetchone()
         self.assertEqual(json.loads(row['original_inputs_json']), ['*'])
         self.assertEqual(row['state'], 'selected')
+
+    def test_prepare_context_selection_skips_schema_rescreen_when_evidence_is_insufficient(self):
+        limited_agent = dict(self.agent)
+        limited_agent['input_entities'] = [self.bad]
+        policy = MultiHorizonPolicy(limited_agent, self.states, self.registry, set())
+        self.store.save_model(self.agent['id'], policy.serialize())
+        self.engine.models[self.agent['id']] = policy
+        before = list(policy.schema.entities)
+        samples = [
+            (self.now-3*86400, 0, 'off', 'off'),
+            (self.now, 1, 'on', 'on'),
+        ]
+        self._insert_labels_and_history(samples)
+        self.service.prepare_retrain(self.agent)
+        with patch.object(self.service, 'refresh_label_context') as refresh:
+            report = self.service.prepare_context_selection(self.agent)
+        refresh.assert_not_called()
+        self.assertFalse(report['feature_selection_eligible'])
+        self.assertEqual(report['selected'], before)
+        self.assertEqual(report['added'], [])
+        self.assertEqual(report['removed'], [])
+        self.assertTrue(report['context_refresh']['skipped'])
 
     def test_finalize_changes_base_policy_and_restores_selector(self):
         t0, t1 = self.now-100, self.now-50

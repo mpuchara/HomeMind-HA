@@ -85,7 +85,11 @@ DEFAULT_OPTIONS = {
     "manual_agent_training": True,
     "max_concurrent_training_jobs": 1,
     "manual_discovery_hours": 24,
-    "teach_rl_feature_score": 0.55,
+    "teach_rl_feature_min_labels": 12,
+    "teach_rl_feature_min_per_binary_class": 5,
+    "teach_rl_feature_min_observation_days": 2,
+    "teach_rl_feature_score": 0.60,
+    "teach_rl_feature_evidence_samples": 24,
     "teach_rl_positive_weight": 6,
     "teach_rl_negative_weight": 3,
 }
