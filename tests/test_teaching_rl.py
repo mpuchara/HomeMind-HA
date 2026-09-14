@@ -126,17 +126,33 @@ class TeachRLTests(unittest.TestCase):
         self.assertIn(self.good, meta['teach_rl_scores'])
         self.assertGreater(scores[self.good], .7)
 
-    def test_prepare_retrain_constrains_rebuild_without_overwriting_original_inputs(self):
+    def test_prepare_retrain_defers_selection_until_recorder_context_is_ready(self):
         self._labels_and_history()
         with patch.dict('settings.OPTIONS', {'fast_max_context_entities': 2, 'teach_rl_feature_score': .55}):
-            report = self.service.prepare_retrain(self.agent)
+            queued = self.service.prepare_retrain(self.agent)
+        # HTTP/queue admission must stay cheap: no temporary selector is installed yet.
+        self.assertEqual(self.store.get_agent_config(self.agent['id'])['input_entities'], ['*'])
+        self.assertEqual(queued['stage'], 'queued')
+        self.assertEqual(queued['selected'], [])
+
+        # The queue thread first refreshes Recorder context, then re-scores the full
+        # eligible universe and only then constrains the deterministic Rebuild.
+        refreshed = {'chunks': 2, 'rows': 8, 'windows': 2, 'candidates': 3}
+        with patch.object(self.service, 'refresh_label_context', return_value=refreshed), \
+             patch.dict('settings.OPTIONS', {'fast_max_context_entities': 2, 'teach_rl_feature_score': .55}):
+            report = self.service.prepare_context_selection(self.agent)
         temporary = self.store.get_agent_config(self.agent['id'])['input_entities']
         self.assertNotEqual(temporary, ['*'])
         self.assertIn(self.good, temporary)
-        with self.store.conn() as c:
-            row = c.execute('SELECT original_inputs_json FROM teaching_rl_jobs WHERE agent_id=?', (self.agent['id'],)).fetchone()
-        self.assertEqual(json.loads(row[0]), ['*'])
         self.assertIn(self.good, report['selected'])
+        self.assertEqual(report['context_refresh'], refreshed)
+        self.assertEqual(report['stage'], 'features_selected')
+        self.assertFalse(self.service.needs_context_selection(self.agent['id']))
+        with self.store.conn() as c:
+            row = c.execute('SELECT original_inputs_json,state FROM teaching_rl_jobs WHERE agent_id=?',
+                            (self.agent['id'],)).fetchone()
+        self.assertEqual(json.loads(row['original_inputs_json']), ['*'])
+        self.assertEqual(row['state'], 'selected')
 
     def test_finalize_changes_base_policy_and_restores_selector(self):
         t0, t1 = self.now-100, self.now-50
