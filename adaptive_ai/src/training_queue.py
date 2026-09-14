@@ -6,6 +6,7 @@ product behaviour: Train/Resume/Rebuild requests are accepted, deduplicated and 
 in order as soon as the shared heavy-job gate becomes available.
 """
 from collections import deque
+import json
 import threading
 import time
 
@@ -58,6 +59,40 @@ class TrainingQueue(threading.Thread):
             return None
         return getattr(self.engine, "rl_teaching", None)
 
+    def _abort_teach(self, service, agent_id, reason, state="failed"):
+        """Restore a temporary Teach selector and close its durable job state.
+
+        Keep a compatibility fallback here because queue lifecycle and Teach storage are
+        separate extensions and upgrades can briefly mix their versions after restart.
+        """
+        if service is None:
+            return
+        abort = getattr(service, "abort_retrain", None)
+        if callable(abort):
+            abort(agent_id, reason, state=state)
+            return
+        original = ["*"]
+        try:
+            with service.store.conn() as c:
+                row = c.execute(
+                    "SELECT original_inputs_json FROM teaching_rl_jobs WHERE agent_id=?",
+                    (agent_id,),
+                ).fetchone()
+            if row:
+                original = json.loads(row["original_inputs_json"] or '["*"]')
+            service._set_inputs_direct(agent_id, original)
+            service._set_job_stage(
+                agent_id, state=state, stage=state,
+                error=f"{type(reason).__name__}: {reason}" if isinstance(reason, Exception) else str(reason),
+            )
+            service.store.event(
+                agent_id, "warning" if state == "failed" else "info", "teach_rl_" + state,
+                str(reason), {"state": state},
+            )
+        except Exception:
+            # The caller records a dedicated cleanup failure event.
+            raise
+
     def enqueue(self, agent_id, rebuild=False, reason="training"):
         agent = self.store.get_agent(agent_id)
         if not agent:
@@ -71,9 +106,15 @@ class TrainingQueue(threading.Thread):
                         "rebuild": bool(rebuild), "agent_id": agent_id}
             existing = self.pending.get(agent_id)
             if existing:
-                if rebuild and not existing["rebuild"]:
+                if str(reason) == "teach_rl":
                     existing["rebuild"] = True
-                    existing["reason"] = "full_rebuild"
+                    existing["reason"] = "teach_rl"
+                    self.store.event(agent_id, "info", "training_queue_upgraded",
+                                     "Queued training upgraded to Teach RL rebuild", None)
+                elif rebuild and not existing["rebuild"]:
+                    existing["rebuild"] = True
+                    if existing.get("reason") != "teach_rl":
+                        existing["reason"] = "full_rebuild"
                     self.store.event(agent_id, "info", "training_queue_upgraded",
                                      "Queued training upgraded to a full rebuild", None)
                 return self.status_for(agent_id)
@@ -93,9 +134,13 @@ class TrainingQueue(threading.Thread):
             # being released. Keep exactly one pending entry.
             existing = self.pending.get(agent_id)
             if existing:
-                if rebuild:
+                if str(reason) == "teach_rl":
                     existing["rebuild"] = True
-                    existing["reason"] = "full_rebuild"
+                    existing["reason"] = "teach_rl"
+                elif rebuild:
+                    existing["rebuild"] = True
+                    if existing.get("reason") != "teach_rl":
+                        existing["reason"] = "full_rebuild"
                 return self.status_for(agent_id)
             self.jobs.append(job)
             self.pending[agent_id] = job
@@ -119,7 +164,7 @@ class TrainingQueue(threading.Thread):
         service = self._teach_service(job)
         if service is not None:
             try:
-                service.abort_retrain(agent_id, "Teach RL queue request cancelled", state="cancelled")
+                self._abort_teach(service, agent_id, "Teach RL queue request cancelled", state="cancelled")
             except Exception as exc:
                 self.store.event(agent_id, "warning", "teach_rl_cancel_cleanup_failed",
                                  str(exc), {"error": f"{type(exc).__name__}: {exc}"})
@@ -189,25 +234,26 @@ class TrainingQueue(threading.Thread):
             self._drop_head("training_queue_dropped", "Queued training dropped because the agent no longer exists")
             return True
 
-        # Teach RL has a queue-owned preflight before the destructive Rebuild.  Do not
-        # query Recorder while another agent/bootstrap owns the shared heavy slot.  Once
+        # Teach RL has a queue-owned preflight before the destructive Rebuild. Do not
+        # query Recorder while another agent/bootstrap owns the shared heavy slot. Once
         # selection succeeds, its state becomes `selected`, so a rare acquire race does
         # not repeat the Recorder scan on the next queue poll.
         service = self._teach_service(job)
         if self._history_active_ids() or HEAVY_JOBS.owner is not None:
             return False
         try:
-            if service is not None:
-                if service.needs_context_selection(job["agent_id"]):
-                    service.prepare_context_selection(agent)
-                    agent = self.store.get_agent(job["agent_id"]) or agent
+            if job.get("reason") == "teach_rl" and service is None:
+                raise RuntimeError("Teach RL service unavailable")
+            if service is not None and service.needs_context_selection(job["agent_id"]):
+                service.prepare_context_selection(agent)
+                agent = self.store.get_agent(job["agent_id"]) or agent
             started = (self.history.request_agent_rebuild(job["agent_id"])
                        if job.get("rebuild") else
                        self.history.request_agent_resume(job["agent_id"]))
         except Exception as exc:
             if service is not None:
                 try:
-                    service.abort_retrain(job["agent_id"], exc, state="failed")
+                    self._abort_teach(service, job["agent_id"], exc, state="failed")
                 except Exception as cleanup_exc:
                     self.store.event(job["agent_id"], "warning", "teach_rl_prepare_cleanup_failed",
                                      str(cleanup_exc), {"error": f"{type(cleanup_exc).__name__}: {cleanup_exc}"})
