@@ -2,9 +2,9 @@
 
 This module is intentionally separate from ``Teaching`` / Wrong decision. Wrong decision
 keeps its existing immediate contextual/manual behaviour. Teach-RL stores historical
-supervised examples and joins the normal offline rebuild only after Recorder has refreshed
-the broad eligible context. That lets an entity absent from the current policy schema enter
-(or replace another feature in) the rebuilt RL policy.
+supervised examples, refreshes a bounded Recorder slice around those examples, re-screens
+the full eligible HA context, and then sends the selected schema through the normal offline
+RL rebuild before supervised fine-tuning.
 
 The label log is the source of truth. Undo removes one label; the next rebuild starts from
 raw entity_history again, so no inverse-matrix bookkeeping is required.
@@ -27,7 +27,7 @@ from context import (
     target_value,
 )
 from manual_feedback import _manual_value
-from settings import OPTIONS
+from settings import OPTIONS, iso_from_ts, parse_ts
 
 
 DIAGNOSTIC_DEVICE_CLASSES = {
@@ -83,7 +83,7 @@ def _selection_limit(agent):
 class RLTeaching:
     MAX_LABELS = 256
     MAX_HISTORY_ROWS = 40000
-    ACTIVE_STATES = {"prepared", "training", "finalizing"}
+    ACTIVE_STATES = {"prepared", "selecting", "selected", "training", "finalizing"}
 
     def __init__(self, store, engine):
         self.store = store
@@ -116,18 +116,29 @@ class RLTeaching:
             )
         self._recover_interrupted_jobs()
 
+    def _set_inputs_direct(self, agent_id, inputs):
+        """Temporary internal selector change without triggering user-facing config reset."""
+        raw = json.dumps(list(inputs or ["*"]), separators=(",", ":"))
+        with self.store.lock, self.store.conn() as c:
+            c.execute("UPDATE agents SET input_entities=? WHERE id=?", (raw, str(agent_id)))
+
     def _recover_interrupted_jobs(self):
-        """The queue is in-memory, so mark unfinished Teach jobs interrupted on restart."""
+        """Queue state is in-memory; restore temporary selectors after a restart."""
         with self.store.conn() as c:
             rows = c.execute(
-                "SELECT agent_id,state FROM teaching_rl_jobs "
-                "WHERE state IN ('prepared','training','finalizing')"
+                "SELECT agent_id,original_inputs_json,state FROM teaching_rl_jobs "
+                "WHERE state IN ('selecting','selected','training','finalizing')"
             ).fetchall()
         for row in rows:
-            with self.store.lock, self.store.conn() as c:
-                c.execute("UPDATE teaching_rl_jobs SET state='interrupted' WHERE agent_id=?", (row["agent_id"],))
-            self.store.event(row["agent_id"], "warning", "teach_rl_interrupted",
-                             "Interrupted Teach RL job can be started again safely", None)
+            try:
+                original = json.loads(row["original_inputs_json"] or '["*"]')
+                self._set_inputs_direct(row["agent_id"], original)
+                with self.store.lock, self.store.conn() as c:
+                    c.execute("UPDATE teaching_rl_jobs SET state='interrupted' WHERE agent_id=?", (row["agent_id"],))
+                self.store.event(row["agent_id"], "warning", "teach_rl_interrupted",
+                                 "Interrupted Teach RL job restored the normal input selector", None)
+            except Exception:
+                pass
 
     def labels(self, agent_id, include_undone=False):
         where = "agent_id=?" + ("" if include_undone else " AND undone_ts IS NULL")
@@ -202,21 +213,101 @@ class RLTeaching:
             and not _diagnostic_context(eid, st)
         ]
 
-    def supervised_scores(self, agent):
-        """Score the full eligible HA universe against active Teach labels.
+    def _job_report(self, agent_id):
+        with self.store.conn() as c:
+            row = c.execute("SELECT report_json FROM teaching_rl_jobs WHERE agent_id=?", (agent_id,)).fetchone()
+        try:
+            return json.loads((row["report_json"] if row else None) or '{}')
+        except Exception:
+            return {}
 
-        The normal Rebuild refreshes Recorder before this method is called from the
-        HistoryManager. Thus a useful entity does not need to have been in the old policy
-        schema or in the low-memory maintenance set.
+    def _set_job_stage(self, agent_id, state=None, **updates):
+        report = self._job_report(agent_id)
+        report.update(updates)
+        with self.store.lock, self.store.conn() as c:
+            if state is None:
+                c.execute("UPDATE teaching_rl_jobs SET report_json=? WHERE agent_id=?", (json.dumps(report), agent_id))
+            else:
+                c.execute("UPDATE teaching_rl_jobs SET state=?,report_json=? WHERE agent_id=?",
+                          (state, json.dumps(report), agent_id))
+        return report
+
+    @staticmethod
+    def _merge_windows(times, lookback):
+        windows = []
+        for ts in sorted(set(float(x) for x in times)):
+            start, end = ts-lookback, ts+1.0
+            if windows and start <= windows[-1][1] + 1.0:
+                windows[-1] = (windows[-1][0], max(windows[-1][1], end))
+            else:
+                windows.append((start, end))
+        return windows
+
+    def refresh_label_context(self, agent):
+        """Backfill only small Recorder windows around Teach labels, on the queue thread.
+
+        HA Recorder includes the state at a requested period boundary, so each short
+        window supplies the as-of baseline plus any transitions around the label. This
+        avoids importing days of unrelated whole-home telemetry merely to choose features.
+        The normal Rebuild that follows still performs its usual deterministic backfill.
         """
         labels = [r for r in self.labels(agent["id"]) if r["fingerprint"] == fingerprint(agent)]
-        if len(labels) < 2 or max(r["desired"] for r in labels) - min(r["desired"] for r in labels) <= 1e-9:
-            return {}, {"labels": len(labels), "candidates": len(self.eligible_entities(agent)),
+        if not labels:
+            return {"chunks": 0, "rows": 0, "windows": 0}
+        candidates = self.eligible_entities(agent)
+        if not candidates:
+            return {"chunks": 0, "rows": 0, "windows": 0}
+        from ha import HA
+        lookback = max(30.0, float(OPTIONS.get("fast_temporal_long_seconds", 12)) + 5.0)
+        if not is_fast_reactive_agent(agent):
+            lookback = max(120.0, float(OPTIONS.get("temporal_long_seconds", 300)) + 5.0)
+        windows = self._merge_windows([r["sample_ts"] for r in labels], lookback)
+        batches = [candidates[i:i+30] for i in range(0, len(candidates), 30)]
+        total = max(1, len(windows)*len(batches))
+        done = inserted = 0
+        self._set_job_stage(agent["id"], state="selecting", stage="collecting_teach_context",
+                            context_candidates=len(candidates), context_chunks_total=total,
+                            context_chunks_done=0)
+        with self.engine.lock:
+            live = dict(self.engine.state_map)
+        for start, end in windows:
+            for batch in batches:
+                data = HA.history(batch, iso_from_ts(start), iso_from_ts(end), minimal=True,
+                                  no_attributes=True, significant=True, timeout=20) or []
+                rows = []
+                for group in data:
+                    if not group:
+                        continue
+                    group_entity = group[0].get("entity_id")
+                    for item in group:
+                        eid = item.get("entity_id") or group_entity
+                        ts = parse_ts(item.get("last_changed") or item.get("last_updated"))
+                        if not eid or ts is None:
+                            continue
+                        # no_attributes keeps Recorder I/O small; current attributes retain
+                        # only semantic metadata and never substitute the historical value.
+                        attrs = dict((live.get(eid) or {}).get("attributes") or {})
+                        rows.append((eid, ts, item.get("state"), attrs,
+                                     (item.get("context") or {}).get("user_id"), "teach_rl_context"))
+                if rows:
+                    inserted += self.store.archive_batch(rows)
+                done += 1
+                self._set_job_stage(agent["id"], stage="collecting_teach_context",
+                                    context_candidates=len(candidates), context_chunks_total=total,
+                                    context_chunks_done=done, context_rows_imported=inserted)
+                time.sleep(max(0.0, float(OPTIONS.get("history_background_pause_ms", 250))) / 1000.0)
+        return {"chunks": done, "rows": inserted, "windows": len(windows), "candidates": len(candidates)}
+
+    def supervised_scores(self, agent):
+        """Score the full eligible HA universe against active Teach labels."""
+        labels = [r for r in self.labels(agent["id"]) if r["fingerprint"] == fingerprint(agent)]
+        candidates = self.eligible_entities(agent)
+        if len(labels) < 2 or max((r["desired"] for r in labels), default=0) - min((r["desired"] for r in labels), default=0) <= 1e-9:
+            return {}, {"labels": len(labels), "candidates": len(candidates),
                         "reason": "need contrasting Teach labels"}
         times = [float(r["sample_ts"]) for r in labels]
         desired = [float(r["desired"]) for r in labels]
         start, end = min(times), max(times)
-        candidates = self.eligible_entities(agent)
         half_life_days = max(1.0, float(OPTIONS.get("policy_half_life_days", 30)))
         now = time.time()
         weights = [math.exp(-math.log(2.0) * max(0.0, now-t) / (half_life_days*86400.0)) for t in times]
@@ -271,8 +362,6 @@ class RLTeaching:
             all_states = dict(self.engine.state_map)
             registry = dict(self.engine.entity_registry)
         eligible = set(self.eligible_entities(agent))
-        # Feed select_context_entities only the Teach-eligible universe so diagnostics
-        # cannot enter via locality/name priors after being correctly excluded above.
         state_map = {eid: st for eid, st in all_states.items()
                      if eid == agent["target_entity"] or eid in eligible}
         try:
@@ -292,8 +381,6 @@ class RLTeaching:
         limit = _selection_limit(agent)
         selected = list(selected[:limit])
 
-        # Full supervised re-selection: a strong Teach feature may displace a weaker
-        # selected feature even when every schema slot is occupied.
         threshold = float(OPTIONS.get("teach_rl_feature_score", 0.55))
         strong = [(eid, float(score)) for eid, score in scores.items() if float(score) >= threshold]
         strong.sort(key=lambda x: (-x[1], x[0]))
@@ -317,7 +404,7 @@ class RLTeaching:
         return selected[:limit], meta, scores
 
     def prepare_retrain(self, agent):
-        """Persist intent to retrain; feature selection waits for the broad Recorder refresh."""
+        """Persist a lightweight job. Context backfill/selection runs on the queue thread."""
         existing = None
         with self.store.conn() as c:
             existing = c.execute("SELECT * FROM teaching_rl_jobs WHERE agent_id=?", (agent["id"],)).fetchone()
@@ -330,13 +417,8 @@ class RLTeaching:
             except Exception:
                 pass
         report = {
-            "labels": len(self.labels(agent["id"])),
-            "selected": [],
-            "added": [],
-            "removed": [],
-            "scores": {},
-            "candidates": len(self.eligible_entities(agent)),
-            "stage": "waiting_for_recorder_refresh",
+            "labels": len(self.labels(agent["id"])), "selected": [], "added": [], "removed": [],
+            "scores": {}, "candidates": len(self.eligible_entities(agent)), "stage": "queued",
         }
         with self.store.lock, self.store.conn() as c:
             c.execute(
@@ -349,45 +431,46 @@ class RLTeaching:
                  "[]", json.dumps(report)),
             )
         self.store.event(agent["id"], "info", "teach_rl_prepared",
-                         "Teach RL queued for broad Recorder refresh and feature re-selection", report)
+                         "Teach RL queued for context refresh and feature re-selection", report)
         return report
 
-    def mark_training(self, agent_id):
-        with self.store.lock, self.store.conn() as c:
-            c.execute("UPDATE teaching_rl_jobs SET state='training' WHERE agent_id=?", (agent_id,))
-
-    def training_selection(self, agent, historical):
-        """Called by HistoryManager after broad Recorder refresh, before policy creation."""
-        if not self.is_retrain_active(agent["id"]):
-            return None
-        selected, meta, scores = self.select_features(agent, historical=historical)
+    def prepare_context_selection(self, agent):
+        """Queue-thread preflight: Recorder backfill -> full candidate scoring -> selector."""
+        refreshed = self.refresh_label_context(agent)
+        selected, meta, _ = self.select_features(agent)
         if not selected:
             raise ValueError("Teach RL nie znalazł dopuszczonych features do treningu")
-        combined = dict(historical or {})
-        for eid, score in scores.items():
-            combined[eid] = max(float(combined.get(eid, 0.0)), float(score))
         with self.store.conn() as c:
             row = c.execute("SELECT pre_schema_json,report_json FROM teaching_rl_jobs WHERE agent_id=?",
                             (agent["id"],)).fetchone()
         pre_schema = json.loads((row["pre_schema_json"] if row else None) or '[]')
-        try:
-            report = json.loads((row["report_json"] if row else None) or '{}')
-        except Exception:
-            report = {}
+        report = self._job_report(agent["id"])
         report.update({
             "selected": selected,
             "added": [x for x in selected if x not in pre_schema],
             "removed": [x for x in pre_schema if x not in selected],
             "scores": meta.get("teach_rl_scores") or {},
             "candidates": meta.get("teach_rl_candidates", 0),
-            "stage": "feature_selection_complete",
+            "context_refresh": refreshed,
+            "stage": "features_selected",
         })
+        # The selector is temporary configuration for the normal deterministic Rebuild.
+        # The rebuilt model persists its schema; the user's '*' selector is restored after.
+        self._set_inputs_direct(agent["id"], selected)
         with self.store.lock, self.store.conn() as c:
-            c.execute("UPDATE teaching_rl_jobs SET selected_inputs_json=?,report_json=? WHERE agent_id=?",
+            c.execute("UPDATE teaching_rl_jobs SET state='selected',selected_inputs_json=?,report_json=? WHERE agent_id=?",
                       (json.dumps(selected), json.dumps(report), agent["id"]))
         self.store.event(agent["id"], "info", "teach_rl_features_selected",
-                         f"Teach RL selected {len(selected)} features after Recorder refresh", report)
-        return selected, combined
+                         f"Teach RL selected {len(selected)} features for the offline rebuild", report)
+        return report
+
+    def needs_context_selection(self, agent_id):
+        with self.store.conn() as c:
+            row = c.execute("SELECT state FROM teaching_rl_jobs WHERE agent_id=?", (agent_id,)).fetchone()
+        return bool(row and row["state"] in ("prepared", "selecting"))
+
+    def mark_training(self, agent_id):
+        self._set_job_stage(agent_id, state="training", stage="training_rl")
 
     def _label_context(self, agent, policy, sample_ts):
         states, temporal, _ = self.engine.teaching.point_context(
@@ -407,6 +490,7 @@ class RLTeaching:
             return None
         with self.store.lock, self.store.conn() as c:
             c.execute("UPDATE teaching_rl_jobs SET state='finalizing' WHERE agent_id=?", (agent_id,))
+        original_inputs = json.loads(row["original_inputs_json"] or '["*"]')
         pre_schema = json.loads(row["pre_schema_json"] or '[]')
         report = json.loads(row["report_json"] or '{}')
         try:
@@ -414,7 +498,6 @@ class RLTeaching:
             raw = self.store.get_model(agent_id)
             if not agent or not raw:
                 raise RuntimeError("Offline rebuild did not produce a policy model")
-            # Force the engine to load the just-saved rebuild, not a stale in-memory copy.
             self.engine.models.pop(agent_id, None)
             policy = self.engine.policy(agent)
             labels = [r for r in self.labels(agent_id) if r["fingerprint"] == fingerprint(agent)]
@@ -448,16 +531,17 @@ class RLTeaching:
                 chosen = policy.predict(features)[0]["value"]
                 after_correct += int(abs(float(chosen)-float(policy.actions[desired_idx])) <= max(.01, float(agent.get("deadband") or .01)))
             self.store.save_model(agent_id, policy.serialize())
+            self._set_inputs_direct(agent_id, original_inputs)
+            restored = self.store.get_agent_config(agent_id)
+            policy.agent = restored or agent
             new_schema = list(policy.schema.entities)
             report.update({
-                "labels_applied": len(usable),
-                "selected": new_schema,
+                "labels_applied": len(usable), "selected": new_schema,
                 "added": [x for x in new_schema if x not in pre_schema],
                 "removed": [x for x in pre_schema if x not in new_schema],
                 "teach_fit_before": (before_correct/len(usable) if usable else None),
                 "teach_fit_after": (after_correct/len(usable) if usable else None),
-                "benchmark_score": agent.get("benchmark_score"),
-                "stage": "done",
+                "benchmark_score": (restored or {}).get("benchmark_score"), "stage": "done",
             })
             with self.store.lock, self.store.conn() as c:
                 c.execute("UPDATE teaching_rl_jobs SET state='done',report_json=? WHERE agent_id=?",
@@ -469,11 +553,23 @@ class RLTeaching:
                              f"Teach RL rebuild complete; applied {len(usable)} supervised example(s)", report)
             return report
         except Exception as exc:
+            self._set_inputs_direct(agent_id, original_inputs)
             with self.store.lock, self.store.conn() as c:
                 c.execute("UPDATE teaching_rl_jobs SET state='failed',report_json=? WHERE agent_id=?",
                           (json.dumps({**report, "error": f"{type(exc).__name__}: {exc}"}), agent_id))
             self.store.event(agent_id, "error", "teach_rl_failed", str(exc), report)
             raise
+
+    def fail_preparation(self, agent_id, exc):
+        with self.store.conn() as c:
+            row = c.execute("SELECT original_inputs_json,report_json FROM teaching_rl_jobs WHERE agent_id=?", (agent_id,)).fetchone()
+        original = json.loads((row["original_inputs_json"] if row else None) or '["*"]')
+        self._set_inputs_direct(agent_id, original)
+        report = self._job_report(agent_id)
+        report.update({"stage": "failed", "error": f"{type(exc).__name__}: {exc}"})
+        with self.store.lock, self.store.conn() as c:
+            c.execute("UPDATE teaching_rl_jobs SET state='failed',report_json=? WHERE agent_id=?",
+                      (json.dumps(report), agent_id))
 
     def status(self, agent_id):
         with self.store.conn() as c:
