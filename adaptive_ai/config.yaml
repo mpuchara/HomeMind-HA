@@ -38,6 +38,7 @@ options:
   fast_recent_change_seconds: 3
   fast_series_lags_seconds: "1,3,10"
   fast_max_context_entities: 8
+  context_challenger_count: 4
   fast_clock_context_weight: 0.15
   fast_causal_driver_min_score: 0.50
   fast_causal_driver_reserve: 2
@@ -109,6 +110,7 @@ schema:
   fast_recent_change_seconds: "int(1,30)"
   fast_series_lags_seconds: "str"
   fast_max_context_entities: "int(2,20)"
+  context_challenger_count: "int(0,16)"
   fast_clock_context_weight: "float(0.0,1.0)"
   fast_causal_driver_min_score: "float(0.10,0.95)"
   fast_causal_driver_reserve: "int(1,4)"
