@@ -13,6 +13,8 @@ def prepare_runtime_extensions():
     install_device_targets()
     from manual_context_learning import install as install_manual_context_learning
     install_manual_context_learning(core)
+    from manual_context_one_sided import install as install_one_sided_manual_context
+    install_one_sided_manual_context(core)
 
 
 def prepare_engine_extensions():
