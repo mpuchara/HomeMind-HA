@@ -7,6 +7,7 @@ from types import SimpleNamespace
 import support
 import storage
 from agent_candidates import AgentCandidateManager, ensure_tables, install_store_overlay
+from agent_candidate_manual_rebuild import install as install_candidate_manual_rebuild
 from agent_candidate_teach_status import install as install_candidate_teach_status
 
 
@@ -33,6 +34,29 @@ class FakeHandler:
 
     def do_DELETE(self):
         return None
+
+
+class RecordingQueue:
+    def __init__(self):
+        self.calls = []
+
+    def status_for(self, agent_id):
+        return None
+
+    def enqueue(self, agent_id, rebuild=False, reason="training"):
+        self.calls.append((str(agent_id), bool(rebuild), str(reason)))
+        return {
+            "state": "queued", "position": 1, "ahead": 0,
+            "rebuild": bool(rebuild), "reason": str(reason), "agent_id": str(agent_id),
+        }
+
+    def cancel(self, agent_id):
+        return False
+
+
+class RejectTeachPreflight:
+    def prepare_retrain(self, agent):
+        raise AssertionError("manual Rebuild must not enter Teach RL preflight")
 
 
 class CandidateBuildRequestTests(unittest.TestCase):
@@ -62,6 +86,7 @@ class CandidateBuildRequestTests(unittest.TestCase):
             TRAINING_QUEUE=None, HISTORY=None,
         )
         self.manager = AgentCandidateManager(self.core, start_worker=False)
+        self.manager = install_candidate_manual_rebuild(self.manager)
         install_candidate_teach_status(self.core, self.manager)
 
     def tearDown(self):
@@ -114,6 +139,28 @@ class CandidateBuildRequestTests(unittest.TestCase):
         self.assertEqual(newer["build_revision"], 1)
         self.assertTrue(newer["dirty"])
         self.assertTrue(newer["stale"])
+
+    def test_manual_rebuild_uses_full_history_queue_without_teach_preflight(self):
+        queue = RecordingQueue()
+        self.core.TRAINING_QUEUE = queue
+        self.engine.rl_teaching = RejectTeachPreflight()
+
+        requested = self.manager.request_build(self.parent["id"], "manual_rebuild")
+        self.assertEqual(requested["feedback_revision"], 0)
+        self.assertEqual(requested["build_revision"], 0)
+        row = self.manager._candidate_row(self.parent["id"])
+        self.assertEqual(row["reason"], "manual_rebuild")
+
+        self.assertTrue(self.manager._start_build(row))
+        status = self.manager.status(self.parent["id"])
+        self.assertEqual(status["state"], "building")
+        self.assertFalse(status["dirty"])
+        self.assertEqual(status["feedback_revision"], 0)
+        self.assertEqual(status["build_revision"], 0)
+        self.assertEqual(
+            queue.calls,
+            [(str(status["candidate_id"]), True, "full_rebuild")],
+        )
 
 
 class CandidateUiStabilityTests(unittest.TestCase):
