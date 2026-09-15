@@ -365,11 +365,12 @@ class ExploreUiContractTests(unittest.TestCase):
         binding = (root / "adaptive_ai/src/static/explore_ui.js").read_text(encoding="utf-8")
         html = (root / "adaptive_ai/src/static/index.html").read_text(encoding="utf-8")
         candidate = (root / "adaptive_ai/src/static/candidate_ui.js").read_text(encoding="utf-8")
+        version = json.loads((root / "adaptive_ai/BUILD_INFO.json").read_text(encoding="utf-8"))["version"]
         self.assertIn("button.disabled=false", binding)
         self.assertIn("window.openExplore", binding)
         self.assertIn("data-generation-id", candidate)
         self.assertIn("candidate-explore-result", candidate)
-        self.assertIn("explore_ui.js?v=0.13.2", html)
+        self.assertIn(f"explore_ui.js?v={version}", html)
 
     def test_backend_is_orchestration_not_a_second_learning_subsystem(self):
         root = Path(__file__).resolve().parents[1]
