@@ -8,6 +8,10 @@
   const refresh=async()=>{try{await window.refreshCandidates?.();}catch(_){}try{window.renderAgents?.();}catch(_){}};
   const post=(ref,action,body={})=>api(`api/agent-workflow/${encodeURIComponent(ref)}/${action}`,{method:'POST',body:JSON.stringify(body)});
   const status=ref=>api(`api/agent-workflow/${encodeURIComponent(ref)}/status`);
+  // app.js declares lastAgents with top-level `let`, which is a global lexical binding,
+  // not a window property. Read that binding directly so the workflow layer decorates
+  // the actual current Live cards after every normal render.
+  const liveAgents=()=>{try{return Array.isArray(lastAgents)?lastAgents:[];}catch(_){return [];}};
 
   window.workflowAutonomous=async(ref,button)=>{
     if(button)button.disabled=true;
@@ -158,9 +162,9 @@
 
   const baseRender=window.renderAgents;
   if(typeof baseRender==='function'&&!window.__generationWorkflowRender){
-    window.renderAgents=()=>{const out=baseRender();document.querySelectorAll('#agents > .agent:not(.candidate-agent)').forEach(card=>{const a=(window.lastAgents||[]).find(x=>String(x.id)===String(card.dataset.agentId));if(a)liveActions(card,a);});return out;};
+    window.renderAgents=()=>{const out=baseRender(),agents=liveAgents();document.querySelectorAll('#agents > .agent:not(.candidate-agent)').forEach(card=>{const a=agents.find(x=>String(x.id)===String(card.dataset.agentId));if(a)liveActions(card,a);});return out;};
     window.__generationWorkflowRender=true;
   }
   // Decorate cards already rendered before this final UI layer loaded.
-  document.querySelectorAll('#agents > .agent:not(.candidate-agent)').forEach(card=>{const a=(window.lastAgents||[]).find(x=>String(x.id)===String(card.dataset.agentId));if(a)liveActions(card,a);});
+  {const agents=liveAgents();document.querySelectorAll('#agents > .agent:not(.candidate-agent)').forEach(card=>{const a=agents.find(x=>String(x.id)===String(card.dataset.agentId));if(a)liveActions(card,a);});}
 })();
