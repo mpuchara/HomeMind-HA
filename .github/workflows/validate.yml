@@ -23,6 +23,7 @@ jobs:
       - run: python tools/simulate_context_tournament.py
         env:
           ADAPTIVE_AI_DATA: ${{ runner.temp }}/homemind-context-tournament
+      - run: python tools/simulate_fast_light_timing.py
   image:
     runs-on: ubuntu-latest
     steps:
