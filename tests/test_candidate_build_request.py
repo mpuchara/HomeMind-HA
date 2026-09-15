@@ -123,11 +123,15 @@ class CandidateUiStabilityTests(unittest.TestCase):
         self.assertIn("candidates.forEach(node=>node.remove())", source)
         self.assertIn("finally{candidates.forEach(node=>root.appendChild(node));}", source)
 
-    def test_stale_copy_only_describes_feedback_after_build_snapshot(self):
+    def test_candidate_copy_uses_correct_workflow_names(self):
         source = (support.ROOT / "adaptive_ai/src/static/candidate_ui.js").read_text(encoding="utf-8")
         self.assertNotIn("New feedback arrived — another build is required.", source)
-        self.assertIn("New Teach feedback arrived after this build snapshot", source)
-        self.assertIn("Training the current Teach revision", source)
+        self.assertIn("New Correct / Change decision feedback arrived after this build snapshot", source)
+        self.assertIn(">Autonomous<", source)
+        self.assertIn(">Correct<", source)
+        self.assertIn(">Change decision<", source)
+        self.assertNotIn(">Teach<", source)
+        self.assertNotIn(">Wrong decision<", source)
 
 
 if __name__ == "__main__":

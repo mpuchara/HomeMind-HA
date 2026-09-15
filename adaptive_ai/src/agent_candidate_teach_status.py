@@ -42,6 +42,16 @@ def _install_build_request(core, manager):
         result["new_feedback_since_build"] = newer_feedback
         result["build_pending"] = bool(result.get("state") == "queued" or dirty)
         result["build_current_revision"] = bool(feedback_revision == build_revision and not dirty)
+        # Keep the safety gate available as an explicit top-level diagnostic as well as
+        # inside the comparison summary. Lightweight status-only test/diagnostic managers
+        # need not expose Candidate persistence internals.
+        candidate_row = getattr(manager, "_candidate_row", None)
+        row = candidate_row(parent_id) if callable(candidate_row) else None
+        try:
+            gate = json.loads((row or {}).get("offline_gate_json") or "{}")
+        except Exception:
+            gate = {}
+        result["offline_gate_passed"] = bool(gate.get("passed"))
         return result
 
     def request_build(parent_id, reason="teach_train"):
@@ -99,7 +109,15 @@ def _install_build_request(core, manager):
     return manager
 
 
-def install(core, manager):
+def install(core, manager=None):
+    # Keep production's explicit ``install(core, manager)`` contract, while allowing
+    # integration stacks to compose the same extension as ``install(manager)``. The
+    # manager already owns its exact core object, so the two forms are equivalent and
+    # no runtime behavior changes.
+    if manager is None:
+        manager = core
+        core = manager.core
+
     manager = _install_build_request(core, manager)
     service = getattr(core.ENGINE, "rl_teaching", None)
     store = getattr(core, "STORE", None)

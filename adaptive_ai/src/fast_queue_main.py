@@ -74,12 +74,29 @@ def prepare_engine_extensions():
     from agent_candidate_debounce import install as install_candidate_debounce
     from agent_candidate_teach_status import install as install_candidate_teach_status
     from agent_candidate_lifecycle_hardening import install as install_candidate_lifecycle_hardening
+    from agent_candidate_conservative_correct import install as install_candidate_conservative_correct
+    from agent_candidate_lineage import install as install_candidate_lineage
+    from agent_candidate_lineage_retention import install as install_candidate_lineage_retention
+    from agent_candidate_lineage_guards import install as install_candidate_lineage_guards
+    from agent_candidate_shadow_runtime import install as install_candidate_shadow_runtime
+    from agent_candidate_shadow_context import install as install_candidate_shadow_context
+    from agent_candidate_atomic_promote import install as install_candidate_atomic_promote
     candidates = install_agent_candidates(core, start_worker=False)
     candidates = install_candidate_config_guard(candidates)
     candidates = install_candidate_balance(candidates)
     candidates = install_candidate_debounce(candidates)
     candidates = install_candidate_teach_status(core, candidates)
     candidates = install_candidate_lifecycle_hardening(candidates)
+    candidates = install_candidate_conservative_correct(candidates)
+    candidates = install_candidate_lineage(candidates)
+    candidates = install_candidate_lineage_retention(candidates)
+    candidates = install_candidate_lineage_guards(candidates)
+    candidates = install_candidate_shadow_runtime(candidates)
+    candidates = install_candidate_shadow_context(candidates)
+    # Promotion must wrap the final lineage/Correct/Explore manager.  This is the last
+    # lifecycle layer so no earlier wrapper can reintroduce the legacy "always Shadow"
+    # release-promote-reacquire sequence.
+    candidates = install_candidate_atomic_promote(candidates)
     candidates.start()
     core.STORE.event(None, "info", "manual_feedback_ready", "Manual correction feedback path ready", None)
     core.STORE.event(None, "info", "teach_rl_ready", "Historical Teach RL pipeline ready", None)
@@ -105,10 +122,20 @@ def prepare_engine_extensions():
                       "fast_light_tournament_metric": "timing_utility_with_balanced_accuracy_safety",
                       "agent_candidates": bool(candidates),
                       "candidate_build": "isolated_hidden_surrogate",
+                      "candidate_correct": getattr(candidates, "candidate_correct_contract", "legacy"),
+                      "candidate_offline_gate": getattr(candidates, "candidate_offline_gate_contract", "legacy"),
+                      "candidate_lineage": getattr(candidates, "candidate_lineage_contract", "legacy"),
+                      "candidate_model_retention": getattr(candidates, "candidate_model_retention", None),
+                      "candidate_shadow": getattr(candidates, "candidate_shadow_contract", "legacy"),
+                      "candidate_shadow_context": getattr(candidates, "candidate_shadow_context_contract", "legacy"),
+                      "candidate_decision_history": getattr(candidates, "candidate_decision_history_contract", "legacy"),
+                      "candidate_pair_contract": getattr(candidates, "candidate_pair_contract", "legacy"),
                       "candidate_feedback_debounce_seconds": getattr(candidates, "candidate_feedback_debounce_seconds", 15.0),
                       "candidate_config_contract": getattr(candidates, "candidate_config_contract", "policy_config_must_match_live_at_build_and_promote"),
-                      "candidate_comparison": "paired_future_live_vs_candidate",
-                      "candidate_promotion": "manual_to_shadow",
+                      "candidate_comparison": "paired_future_direct_parent_vs_child",
+                      "candidate_promotion": getattr(candidates, "candidate_promotion_contract", "atomic_generation_swap_preserve_live_mode_or_explicit_target"),
+                      "candidate_control_promotion": getattr(candidates, "candidate_control_promote_contract", "target_lock_preserve_ownership_lease_no_release_reacquire"),
+                      "candidate_physical_mode": getattr(candidates, "candidate_physical_mode_contract", "candidate_always_shadow_until_committed_promote"),
                       "candidate_binary_evidence": "20_future_samples_per_action",
                       "control_diagnostics": "schema_revision+schema_age+prequential_samples+feature_tournament_state",
                       "context_ui_diagnostics": "active+primary+challengers+evaluation+schema+last_update",

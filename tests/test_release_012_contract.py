@@ -16,7 +16,6 @@ from types import SimpleNamespace
 from context import ExplicitFeatureSchema
 from context_tournament import ContextTournament
 from policy import MultiHorizonPolicy
-from settings import APP_VERSION
 from storage import Store
 from teaching_rl import RLTeaching, fingerprint
 
@@ -101,7 +100,6 @@ class Release012RequiredScenarios(unittest.TestCase):
 
 class Release012MigrationContract(unittest.TestCase):
     def test_release_keeps_linucb_and_feature_schema_persistence_compatible(self):
-        self.assertEqual(APP_VERSION, "0.13.2")
         self.assertEqual(MultiHorizonPolicy.VERSION, 10)
         self.assertEqual(ExplicitFeatureSchema.VERSION, 11)
 

@@ -1,18 +1,35 @@
 from pathlib import Path
 import json
+import re
 import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 
 
 class ManualFeedbackButtonContract(unittest.TestCase):
-    def test_card_has_exactly_four_primary_actions(self):
-        import re
-        text = (ROOT / "adaptive_ai/src/static/p0.js").read_text(encoding="utf-8")
-        template = text.split("const create = a => {", 1)[1].split("`;", 1)[0]
-        actions = re.findall(r'<button[^>]+data-a="([^"]+)"', template)
-        self.assertEqual(actions, ["mode", "wrong", "settings", "teach"])
-        self.assertNotIn('<details', template)
+    def test_card_has_exactly_five_generation_workflow_actions(self):
+        text = (ROOT / "adaptive_ai/src/static/agent_workflow_ui.js").read_text(encoding="utf-8")
+        template = text.split("actions.innerHTML=", 1)[1].split("`;", 1)[0]
+        actions = re.findall(r'data-wf="([^"]+)"', template)
+        self.assertEqual(actions, ["auto", "correct", "explore", "change", "settings"])
+        self.assertIn(">Autonomous<", template)
+        self.assertIn(">Correct<", template)
+        self.assertIn(">Explore<", template)
+        self.assertIn(">Change decision<", template)
+        self.assertIn(">Settings<", template)
+        self.assertRegex(template, r'data-wf="explore"[^>]*disabled')
+        self.assertNotIn(">Teach<", template)
+        self.assertNotIn(">Wrong decision<", template)
+
+    def test_runtime_layer_replaces_legacy_primary_actions_after_every_live_render(self):
+        text = (ROOT / "adaptive_ai/src/static/agent_workflow_ui.js").read_text(encoding="utf-8")
+        self.assertIn("const baseRender=window.renderAgents", text)
+        self.assertIn("window.renderAgents=()=>", text)
+        self.assertIn("liveActions(card,a)", text)
+        # app.js uses a top-level lexical `let lastAgents`; the workflow must read that
+        # actual binding rather than a nonexistent window.lastAgents property.
+        self.assertIn("Array.isArray(lastAgents)?lastAgents:[]", text)
+        self.assertNotIn("window.lastAgents", text)
 
     def test_teaching_does_not_observe_its_own_dom_changes(self):
         text = (ROOT / "adaptive_ai/src/static/manual_feedback.js").read_text(encoding="utf-8")
