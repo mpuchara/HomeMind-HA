@@ -1,24 +1,22 @@
 """Generation-aware Explore built on the existing Experiments and Sensor Tournament.
 
-This module is an orchestration layer, not a second learning subsystem:
+This module is orchestration only, never a second learning subsystem:
 
-* ``Free exploration`` configures the existing ``engine.experiments`` residual learner.
-  Any physical micro-probe is still proposed by the normal Live policy path and can be
-  dispatched only by Executor after its ordinary confidence/support/novelty/device guards.
-* ``Targeted sensor`` pins one user-selected HA entity as a challenger inside the existing
-  Sensor Tournament for the child Candidate. The hint changes selection priority only;
-  future/prequential evidence, availability/quality, predictive gain and promotion safety
-  gates remain authoritative.
+* Free exploration configures the already-installed ``engine.experiments`` residual
+  learner. A physical micro-probe can still be created only by the normal Live policy
+  path and dispatched only by Executor after the existing confidence, support, novelty,
+  device, interval, budget and observation guards.
+* Targeted sensor pins a user-selected HA entity into the already-installed Sensor
+  Tournament challenger set for the child Candidate. Manual selection changes priority,
+  never evidence: prequential future samples, availability/quality, predictive gain and
+  promotion safety remain authoritative.
 
-Every Explore request owns a direct child generation. The selected parent policy is never
-trained or schema-mutated in place. Candidate generations never submit an ActionIntent and
-never call Executor/HA services. When active Free probing is impossible, the session waits
-for the Live owner; Targeted exploration remains fully passive in Candidate Shadow.
+Each Explore request owns a direct child generation. The selected parent is immutable.
+Candidate Shadow never creates an ActionIntent and never calls Executor/HA services.
 """
 from __future__ import annotations
 
 import json
-import math
 import time
 import uuid
 from urllib.parse import unquote, urlsplit
@@ -44,16 +42,24 @@ TARGETED_MODE = "targeted_sensor"
 FREE_REASON = "explore_free"
 FREE_TRAIN_REASON = "explore_free_training"
 TARGETED_REASON = "explore_targeted_sensor"
-ACTIVE_SESSION_STATES = {"collecting", "evaluating", "training"}
 TARGETED_ACTIVE_STATES = {"evaluating"}
 
 
 def _json(raw, default=None):
     try:
-        value = json.loads(raw or "{}")
+        return json.loads(raw or "{}")
     except Exception:
-        value = {} if default is None else default
-    return value
+        return {} if default is None else default
+
+
+def _table_exists(store, name):
+    try:
+        with store.conn() as c:
+            return bool(c.execute(
+                "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (str(name),)
+            ).fetchone())
+    except Exception:
+        return False
 
 
 def ensure_explore_tables(store):
@@ -88,6 +94,8 @@ def ensure_explore_tables(store):
 
 
 def _row(store, session_id):
+    if not _table_exists(store, "agent_explore_sessions"):
+        return None
     with store.conn() as c:
         row = c.execute(
             "SELECT * FROM agent_explore_sessions WHERE session_id=?", (str(session_id),)
@@ -96,6 +104,8 @@ def _row(store, session_id):
 
 
 def _latest_for_parent(store, parent_generation_id):
+    if not _table_exists(store, "agent_explore_sessions"):
+        return None
     with store.conn() as c:
         row = c.execute(
             """SELECT * FROM agent_explore_sessions WHERE parent_generation_id=?
@@ -106,6 +116,11 @@ def _latest_for_parent(store, parent_generation_id):
 
 
 def _session_for_child(store, child_generation_id):
+    # Candidate Shadow is a process-global module and can be exercised in tests/runtime
+    # instances where Explore was not installed. Absence of this additive table therefore
+    # means simply "no Explore session", never a Shadow failure.
+    if not _table_exists(store, "agent_explore_sessions"):
+        return None
     with store.conn() as c:
         row = c.execute(
             "SELECT * FROM agent_explore_sessions WHERE child_generation_id=?",
@@ -115,6 +130,8 @@ def _session_for_child(store, child_generation_id):
 
 
 def _session_for_child_agent(store, agent_id, statuses=None, mode=None):
+    if not _table_exists(store, "agent_explore_sessions"):
+        return None
     clauses = ["g.agent_id=?"]
     args = [str(agent_id)]
     if statuses:
@@ -135,6 +152,8 @@ def _session_for_child_agent(store, agent_id, statuses=None, mode=None):
 
 
 def _active_free_for_live(store, root_agent_id):
+    if not _table_exists(store, "agent_explore_sessions"):
+        return None
     with store.conn() as c:
         row = c.execute(
             """SELECT * FROM agent_explore_sessions
@@ -199,8 +218,6 @@ def _mark_edge(manager, child_generation_id, state, *, reason=None, lineage_stat
             args,
         )
         if state == "exploring":
-            # The child is an exact snapshot, so there is no stale build revision while
-            # evidence is being collected. Its lineage state remains Shadow-visible.
             c.execute(
                 """UPDATE agent_candidates SET build_revision=feedback_revision,dirty=0
                    WHERE parent_agent_id=? AND candidate_id=?""",
@@ -263,9 +280,7 @@ def _update_action_detail(manager, action_id, values):
 
 def _active_probe_available(root_live):
     return bool(
-        root_live
-        and root_live.get("enabled")
-        and root_live.get("mode") == "control"
+        root_live and root_live.get("enabled") and root_live.get("mode") == "control"
         and root_live.get("training_state") == "qualified"
     )
 
@@ -277,10 +292,8 @@ def _session_payload(manager, session):
     root = manager.store.get_agent_config(str(session["live_owner_agent_id"]))
     result = _json(session.get("result_json"), {})
     payload = {
-        "session_id": session["session_id"],
-        "mode": session["mode"],
-        "status": session["status"],
-        "root_agent_id": session["root_agent_id"],
+        "session_id": session["session_id"], "mode": session["mode"],
+        "status": session["status"], "root_agent_id": session["root_agent_id"],
         "parent_generation_id": session["parent_generation_id"],
         "child_generation_id": session["child_generation_id"],
         "child_generation_number": int(child["generation_number"]) if child else None,
@@ -288,20 +301,18 @@ def _session_payload(manager, session):
         "outcome_count": int(session.get("outcome_count") or 0),
         "measured_outcomes": int(session.get("measured_outcomes") or 0),
         "requested_config": _json(session.get("requested_config_json"), {}),
-        "result": result,
-        "result_message": result.get("message"),
+        "result": result, "result_message": result.get("message"),
         "candidate_dispatch": False,
         "active_probe_available": _active_probe_available(root),
         "probe_owner": "live_executor_only" if session["mode"] == FREE_MODE else "passive_shadow",
-        "created_ts": float(session["created_ts"]),
-        "updated_ts": float(session["updated_ts"]),
+        "created_ts": float(session["created_ts"]), "updated_ts": float(session["updated_ts"]),
     }
     if session["mode"] == FREE_MODE:
         payload["experiment_status"] = manager.engine.experiments.status(str(session["live_owner_agent_id"]))
     return payload
 
 
-def _validate_target_sensor(manager, parent_generation, parent_agent, sensor):
+def _validate_target_sensor(manager, parent_agent, sensor):
     sensor = str(sensor or "").strip()
     if not sensor or "." not in sensor:
         raise ValueError("Choose a Home Assistant entity for Targeted sensor")
@@ -309,8 +320,7 @@ def _validate_target_sensor(manager, parent_generation, parent_agent, sensor):
         state = dict(manager.engine.state_map).get(sensor)
     if not state:
         raise ValueError("Targeted sensor is not currently available in Home Assistant")
-    raw = str(state.get("state") or "").strip().lower()
-    if raw in ("", "unknown", "unavailable", "none"):
+    if str(state.get("state") or "").strip().lower() in ("", "unknown", "unavailable", "none"):
         raise ValueError("Targeted sensor is currently unavailable")
     service = getattr(manager.engine, "context_tournament", None)
     if service is None:
@@ -329,7 +339,7 @@ def _validate_target_sensor(manager, parent_generation, parent_agent, sensor):
 
 
 def _force_challenger_state(service, agent, sensor, state=None):
-    """Pin a hypothesis into the existing tournament selection, never into its evidence."""
+    """Pin a hypothesis into selection priority, never into evidence."""
     state = dict(state or service.state(agent["id"]))
     active = [str(x) for x in state.get("active_features") or []]
     if sensor in active:
@@ -349,15 +359,13 @@ def _force_challenger_state(service, agent, sensor, state=None):
                VALUES(?,?,?,?,?,?,?,?)
                ON CONFLICT(agent_id) DO UPDATE SET
                  challenger_features_json=excluded.challenger_features_json,
-                 last_evaluation=excluded.last_evaluation,
-                 updated_ts=excluded.updated_ts""",
+                 last_evaluation=excluded.last_evaluation,updated_ts=excluded.updated_ts""",
             (
                 str(agent["id"]), json.dumps(active, separators=(",", ":")),
                 json.dumps(challengers, separators=(",", ":")),
                 json.dumps(state.get("feature_scores") or {}, separators=(",", ":"), sort_keys=True),
                 state.get("last_evaluation"), int(state.get("schema_revision") or 0),
-                json.dumps(state.get("previous_schema") or [], separators=(",", ":")),
-                time.time(),
+                json.dumps(state.get("previous_schema") or [], separators=(",", ":")), time.time(),
             ),
         )
     with service.lock:
@@ -368,10 +376,8 @@ def _force_challenger_state(service, agent, sensor, state=None):
 def _queue_free_training(manager, session):
     edge, parent, child = _edge(manager, session["child_generation_id"])
     if not edge or not parent or not child:
-        return _merge_result(
-            manager.store, session["session_id"], status="failed",
-            patch={"message": "Explore child disappeared before continuation training"},
-        )
+        return _merge_result(manager.store, session["session_id"], status="failed",
+                             patch={"message": "Explore child disappeared before continuation training"})
     now = time.time()
     with manager.store.lock, manager.store.conn() as c:
         c.execute(
@@ -381,16 +387,13 @@ def _queue_free_training(manager, session):
             (FREE_TRAIN_REASON, now, now, str(parent["agent_id"]), str(child["agent_id"])),
         )
         c.execute(
-            """UPDATE agent_candidate_generations SET lifecycle_state='queued',updated_ts=?
-               WHERE generation_id=?""",
+            "UPDATE agent_candidate_generations SET lifecycle_state='queued',updated_ts=? WHERE generation_id=?",
             (now, str(child["generation_id"])),
         )
     updated = _merge_result(
         manager.store, session["session_id"], status="training",
-        patch={
-            "message": "Free exploration evidence collected; child continuation training queued",
-            "training_mode": "resume_from_parent_cursor",
-        },
+        patch={"message": "Free exploration evidence collected; child continuation training queued",
+               "training_mode": "resume_from_parent_cursor"},
     )
     manager.wake_event.set()
     return updated
@@ -398,10 +401,8 @@ def _queue_free_training(manager, session):
 
 def _restore_previous_experiment_config(manager, session):
     root = manager.store.get_agent_config(str(session["live_owner_agent_id"]))
-    if not root:
-        return
     previous = _json(session.get("previous_config_json"), {})
-    if not previous:
+    if not root or not previous:
         return
     try:
         manager.engine.experiments.configure(root, previous)
@@ -414,40 +415,29 @@ def _restore_previous_experiment_config(manager, session):
 
 
 def _finish_free_outcome(manager, session, reward, reason):
-    measured = int(reward is not None)
     updated = _merge_result(
-        manager.store, session["session_id"], outcome_inc=1, measured_inc=measured,
-        patch={
-            "last_outcome_reason": str(reason),
-            "last_reward": reward,
-            "message": "collecting bounded Explore evidence",
-        },
+        manager.store, session["session_id"], outcome_inc=1, measured_inc=int(reward is not None),
+        patch={"last_outcome_reason": str(reason), "last_reward": reward,
+               "message": "collecting bounded Explore evidence"},
     )
     if not updated:
         return
-    requested = _json(updated.get("requested_config_json"), {})
-    budget = max(1, int(requested.get("daily_budget") or 1))
+    budget = max(1, int(_json(updated.get("requested_config_json"), {}).get("daily_budget") or 1))
     if int(updated.get("outcome_count") or 0) < budget:
         return
     _restore_previous_experiment_config(manager, updated)
     if int(updated.get("measured_outcomes") or 0) <= 0:
-        _mark_edge(
-            manager, updated["child_generation_id"], "insufficient_evidence",
-            reason=FREE_REASON, lineage_state="insufficient_evidence", dirty=False,
-        )
-        _merge_result(
-            manager.store, updated["session_id"], status="no_evidence",
-            patch={"message": "Free exploration finished without a measurable labelled outcome"},
-        )
+        _mark_edge(manager, updated["child_generation_id"], "insufficient_evidence",
+                   reason=FREE_REASON, lineage_state="insufficient_evidence", dirty=False)
+        _merge_result(manager.store, updated["session_id"], status="no_evidence",
+                      patch={"message": "Free exploration finished without a measurable labelled outcome"})
         return
     _queue_free_training(manager, updated)
 
 
 def _start_free_training(manager, row):
     queue = manager._queue()
-    if queue is None:
-        return False
-    if queue.status_for(row["candidate_id"]):
+    if queue is None or queue.status_for(row["candidate_id"]):
         return False
     parent = manager.store.get_agent_config(str(row["parent_agent_id"]))
     candidate = manager.store.get_agent_config(str(row["candidate_id"]))
@@ -455,9 +445,6 @@ def _start_free_training(manager, row):
         manager._fail(row, "Explore parent or child disappeared")
         return True
     try:
-        # The child remained an immutable direct-parent snapshot while data were collected.
-        # Re-copying here makes restart/race recovery deterministic, then continuation uses
-        # the parent's saved cursor and never calls clear_learning/rebuild.
         candidate = _copy_parent_snapshot(manager, parent["id"], candidate["id"])
         now = time.time()
         build_revision = int(row.get("feedback_revision") or 0)
@@ -470,8 +457,7 @@ def _start_free_training(manager, row):
                 (build_revision, now, now, str(parent["id"]), str(candidate["id"])),
             )
             c.execute(
-                """UPDATE agent_candidate_generations SET lifecycle_state='building',updated_ts=?
-                   WHERE agent_id=?""",
+                "UPDATE agent_candidate_generations SET lifecycle_state='building',updated_ts=? WHERE agent_id=?",
                 (now, str(candidate["id"])),
             )
         queued = queue.enqueue(candidate["id"], rebuild=False, reason="explore_free_continuation")
@@ -491,9 +477,7 @@ def _finish_free_training(manager, row):
     if str(fresh.get("state") or "") not in ("comparing", "ready"):
         return
     child_generation = lineage_row(manager.store, agent_id=fresh.get("candidate_id"))
-    if not child_generation:
-        return
-    session = _session_for_child(manager.store, child_generation["generation_id"])
+    session = _session_for_child(manager.store, (child_generation or {}).get("generation_id"))
     if not session or session.get("mode") != FREE_MODE:
         return
     parent = manager.store.get_agent_config(str(fresh["parent_agent_id"]))
@@ -501,31 +485,23 @@ def _finish_free_training(manager, row):
     if not parent or not child or manager.store.get_model(child["id"]) is None:
         return
     try:
-        report = {
-            "mode": "free_exploration_continuation",
-            "measured_outcomes": int(session.get("measured_outcomes") or 0),
-            "outcome_count": int(session.get("outcome_count") or 0),
-        }
+        report = {"mode": "free_exploration_continuation",
+                  "measured_outcomes": int(session.get("measured_outcomes") or 0),
+                  "outcome_count": int(session.get("outcome_count") or 0)}
         gate = _offline_gate(parent, _benchmark_stats(parent), _benchmark_stats(child), report)
         state = _persist_gate(manager, fresh, gate)
-        _refresh_generation_metadata(
-            manager.store, child["id"], lifecycle_state=state,
-            comparison_json=fresh.get("comparison_json") or "{}",
-        )
+        _refresh_generation_metadata(manager.store, child["id"], lifecycle_state=state,
+                                     comparison_json=fresh.get("comparison_json") or "{}")
         _merge_result(
             manager.store, session["session_id"],
             status="complete" if gate.get("passed") else "blocked",
-            patch={
-                "message": "Free exploration child is ready for paired comparison" if gate.get("passed")
-                else "Free exploration child did not pass the offline regression gate",
-                "offline_gate": gate,
-            },
+            patch={"message": "Free exploration child is ready for paired comparison" if gate.get("passed")
+                              else "Free exploration child did not pass the offline regression gate",
+                   "offline_gate": gate},
         )
     except Exception as exc:
-        _merge_result(
-            manager.store, session["session_id"], status="failed",
-            patch={"message": f"Free exploration final gate failed: {type(exc).__name__}: {exc}"},
-        )
+        _merge_result(manager.store, session["session_id"], status="failed",
+                      patch={"message": f"Free exploration final gate failed: {type(exc).__name__}: {exc}"})
 
 
 def _target_row(service, agent, sensor):
@@ -536,7 +512,7 @@ def _target_row(service, agent, sensor):
     return None, status
 
 
-def _finalize_targeted_success(manager, session, agent, evidence):
+def _finalize_targeted_success(manager, session, evidence):
     edge, parent_generation, child_generation = _edge(manager, session["child_generation_id"])
     if not edge or not parent_generation or not child_generation:
         return
@@ -545,35 +521,23 @@ def _finalize_targeted_success(manager, session, agent, evidence):
     if not parent or not child:
         return
     try:
-        report = {
-            "mode": "targeted_sensor",
-            "sensor": session.get("targeted_sensor"),
-            "future_prequential": True,
-            "predictive_gain": (evidence or {}).get("gain"),
-            "sensor_quality": (evidence or {}).get("sensor_quality"),
-        }
+        report = {"mode": "targeted_sensor", "sensor": session.get("targeted_sensor"),
+                  "future_prequential": True, "predictive_gain": (evidence or {}).get("gain"),
+                  "sensor_quality": (evidence or {}).get("sensor_quality")}
         gate = _offline_gate(parent, _benchmark_stats(parent), _benchmark_stats(child), report)
         state = _persist_gate(manager, edge, gate)
-        _refresh_generation_metadata(
-            manager.store, child["id"], lifecycle_state=state,
-            comparison_json=edge.get("comparison_json") or "{}",
-        )
+        _refresh_generation_metadata(manager.store, child["id"], lifecycle_state=state,
+                                     comparison_json=edge.get("comparison_json") or "{}")
         _merge_result(
             manager.store, session["session_id"],
             status="complete" if gate.get("passed") else "blocked",
-            patch={
-                "message": "targeted sensor proved incremental value" if gate.get("passed")
-                else "sensor gain was proven but the child Candidate failed its offline regression gate",
-                "sensor": session.get("targeted_sensor"),
-                "evidence": evidence or {},
-                "offline_gate": gate,
-            },
+            patch={"message": "targeted sensor proved incremental value" if gate.get("passed")
+                              else "sensor gain was proven but the child Candidate failed its offline regression gate",
+                   "sensor": session.get("targeted_sensor"), "evidence": evidence or {}, "offline_gate": gate},
         )
     except Exception as exc:
-        _merge_result(
-            manager.store, session["session_id"], status="failed",
-            patch={"message": f"Targeted sensor final gate failed: {type(exc).__name__}: {exc}"},
-        )
+        _merge_result(manager.store, session["session_id"], status="failed",
+                      patch={"message": f"Targeted sensor final gate failed: {type(exc).__name__}: {exc}"})
 
 
 def _evaluate_targeted(manager, session, agent, service):
@@ -582,73 +546,103 @@ def _evaluate_targeted(manager, session, agent, service):
     sensor = str(session.get("targeted_sensor") or "")
     tournament_state = service.state(agent["id"])
     if sensor in set(str(x) for x in tournament_state.get("active_features") or []):
-        row, _ = _target_row(service, agent, sensor)
-        _finalize_targeted_success(manager, session, agent, row or {})
+        evidence, _ = _target_row(service, agent, sensor)
+        _finalize_targeted_success(manager, session, evidence or {})
         return _session_payload(manager, _row(manager.store, session["session_id"]))
 
-    evidence, tournament_status = _target_row(service, agent, sensor)
+    evidence, _ = _target_row(service, agent, sensor)
     if not evidence:
-        _merge_result(
-            manager.store, session["session_id"],
-            patch={"message": "targeted sensor is selected; waiting for future observations"},
-        )
+        _merge_result(manager.store, session["session_id"],
+                      patch={"message": "targeted sensor is selected; waiting for future observations"})
         return _session_payload(manager, _row(manager.store, session["session_id"]))
 
     cfg = tournament_config()
     samples = int(evidence.get("samples") or 0)
     days = float(evidence.get("days_observed") or 0.0)
     gain = evidence.get("gain")
-    quality = evidence.get("sensor_quality")
-    patch = {
-        "message": "evaluating targeted sensor with future paired evidence",
-        "sensor": sensor,
-        "evidence": evidence,
-        "tournament_contract": "predict -> score -> learn",
-        "manual_priority_is_evidence_override": False,
-    }
+    patch = {"message": "evaluating targeted sensor with future paired evidence", "sensor": sensor,
+             "evidence": evidence, "tournament_contract": "predict -> score -> learn",
+             "manual_priority_is_evidence_override": False}
     _merge_result(manager.store, session["session_id"], patch=patch)
-
     enough = samples >= int(cfg["min_samples"]) and days >= float(cfg["min_days"])
     if enough and gain is not None and float(gain) < float(cfg["min_gain"]):
-        _mark_edge(
-            manager, session["child_generation_id"], "insufficient_evidence",
-            reason=TARGETED_REASON, lineage_state="insufficient_evidence", dirty=False,
-        )
+        _mark_edge(manager, session["child_generation_id"], "insufficient_evidence",
+                   reason=TARGETED_REASON, lineage_state="insufficient_evidence", dirty=False)
         _merge_result(
             manager.store, session["session_id"], status="no_gain",
-            patch={
-                "message": "no measurable gain",
-                "reason": "predictive_gain_below_existing_tournament_threshold",
-                "evidence": evidence,
-                "required_gain": float(cfg["min_gain"]),
-            },
+            patch={"message": "no measurable gain",
+                   "reason": "predictive_gain_below_existing_tournament_threshold",
+                   "evidence": evidence, "required_gain": float(cfg["min_gain"])},
         )
     elif enough and evidence.get("promotion_blocked_reason") == "sensor_quality":
-        _mark_edge(
-            manager, session["child_generation_id"], "insufficient_evidence",
-            reason=TARGETED_REASON, lineage_state="insufficient_evidence", dirty=False,
-        )
+        _mark_edge(manager, session["child_generation_id"], "insufficient_evidence",
+                   reason=TARGETED_REASON, lineage_state="insufficient_evidence", dirty=False)
         _merge_result(
             manager.store, session["session_id"], status="quality_blocked",
-            patch={
-                "message": "targeted sensor failed the existing availability/quality safety gate",
-                "sensor_quality": quality,
-                "evidence": evidence,
-            },
+            patch={"message": "targeted sensor failed the existing availability/quality safety gate",
+                   "sensor_quality": evidence.get("sensor_quality"), "evidence": evidence},
         )
     return _session_payload(manager, _row(manager.store, session["session_id"]))
+
+
+def _install_shadow_overlay():
+    """Install one process-global trampoline; all runtime dependencies are resolved per call.
+
+    Unit tests and restart simulations create several managers in one Python process. The
+    previous closure-per-manager implementation stacked wrappers and leaked an old store or
+    tournament into later runtimes. A single trampoline is both cheaper and correct.
+    """
+    try:
+        import agent_candidate_shadow_runtime as shadow_module
+    except Exception:
+        return
+    if getattr(shadow_module, "_explore_targeted_overlay_installed", False):
+        return
+    base_predict = shadow_module._predict_candidate
+
+    def predict_candidate_with_targeted_explore(active_manager, generation, state_map, event_ts):
+        result = base_predict(active_manager, generation, state_map, event_ts)
+        if not result:
+            return result
+        session = _session_for_child(active_manager.store, generation.get("generation_id"))
+        if not session or session.get("mode") != TARGETED_MODE or session.get("status") not in TARGETED_ACTIVE_STATES:
+            return result
+        service = getattr(active_manager.engine, "context_tournament", None)
+        if service is None:
+            return result
+        agent = active_manager.store.get_agent_config(str(generation.get("agent_id") or ""))
+        if not agent:
+            return result
+        try:
+            rt = active_manager.engine.runtime.setdefault(str(agent["id"]), {})
+            rt["last_prediction"] = float(result["desired"])
+            rt["last_confidence"] = result.get("confidence")
+            root_rt = active_manager.engine.runtime.get(str(generation["root_agent_id"])) or {}
+            rt["last_change_origin"] = root_rt.get("last_change_origin")
+            # Passive only: this updates Tournament prediction/evidence state and never
+            # constructs an ActionIntent or invokes Executor.
+            service.observe_shadow(agent, state_map, None)
+            _evaluate_targeted(active_manager, session, agent, service)
+        except Exception as exc:
+            active_manager.store.event(
+                generation["root_agent_id"], "warning", "targeted_explore_shadow_gap",
+                "Targeted sensor Explore skipped one passive Candidate observation",
+                {"generation_id": generation["generation_id"], "sensor": session.get("targeted_sensor"),
+                 "error": f"{type(exc).__name__}: {exc}"},
+            )
+        return result
+
+    shadow_module._predict_candidate = predict_candidate_with_targeted_explore
+    shadow_module._explore_targeted_overlay_installed = True
 
 
 def install(manager):
     if getattr(manager, "_agent_explore_installed", False):
         return manager
-
     ensure_explore_tables(manager.store)
     service = getattr(manager.engine, "context_tournament", None)
     experiments = getattr(manager.engine, "experiments", None)
     if service is None or experiments is None:
-        # Keep startup deterministic: this feature intentionally refuses to create a
-        # fallback subsystem when either established learning engine is absent.
         manager.agent_explore_contract = "unavailable_existing_subsystems_required"
         return manager
 
@@ -670,51 +664,10 @@ def install(manager):
         )
         if not session:
             return state
-        sensor = str(session.get("targeted_sensor") or "")
-        return _force_challenger_state(service, agent, sensor, state)
+        return _force_challenger_state(service, agent, str(session.get("targeted_sensor") or ""), state)
 
     service.sync_agent = forced_sync
-
-    # Candidate Shadow inference remains policy-only. We append the already-existing
-    # Sensor Tournament observer so a targeted child can gather passive prequential
-    # evidence on the same context/outcome stream; no ActionIntent is constructed here.
-    try:
-        import agent_candidate_shadow_runtime as shadow_module
-        original_predict_candidate = shadow_module._predict_candidate
-
-        def predict_candidate_with_targeted_explore(active_manager, generation, state_map, event_ts):
-            result = original_predict_candidate(active_manager, generation, state_map, event_ts)
-            if not result:
-                return result
-            session = _session_for_child(
-                active_manager.store, generation.get("generation_id")
-            )
-            if not session or session.get("mode") != TARGETED_MODE or session.get("status") not in TARGETED_ACTIVE_STATES:
-                return result
-            agent = active_manager.store.get_agent_config(str(generation.get("agent_id") or ""))
-            if not agent:
-                return result
-            try:
-                rt = active_manager.engine.runtime.setdefault(str(agent["id"]), {})
-                rt["last_prediction"] = float(result["desired"])
-                rt["last_confidence"] = result.get("confidence")
-                root_rt = active_manager.engine.runtime.get(str(generation["root_agent_id"])) or {}
-                rt["last_change_origin"] = root_rt.get("last_change_origin")
-                service.observe_shadow(agent, state_map, None)
-                _evaluate_targeted(active_manager, session, agent, service)
-            except Exception as exc:
-                active_manager.store.event(
-                    generation["root_agent_id"], "warning", "targeted_explore_shadow_gap",
-                    "Targeted sensor Explore skipped one passive Candidate observation",
-                    {"generation_id": generation["generation_id"],
-                     "sensor": session.get("targeted_sensor"),
-                     "error": f"{type(exc).__name__}: {exc}"},
-                )
-            return result
-
-        shadow_module._predict_candidate = predict_candidate_with_targeted_explore
-    except Exception:
-        original_predict_candidate = None
+    _install_shadow_overlay()
 
     def experiment_finish(aid, reward, reason):
         session = _active_free_for_live(manager.store, aid)
@@ -728,15 +681,10 @@ def install(manager):
     def start_build(row):
         reason = str(row.get("reason") or "")
         if reason in (FREE_REASON, TARGETED_REASON):
-            # Explore evidence must exist before a build. Move a race-observed queued row
-            # into the passive evidence state rather than letting legacy rebuild semantics
-            # start a costly job from zero.
             generation = lineage_row(manager.store, agent_id=row.get("candidate_id"))
             if generation:
-                _mark_edge(
-                    manager, generation["generation_id"], "exploring",
-                    reason=reason, lineage_state="comparing", dirty=False,
-                )
+                _mark_edge(manager, generation["generation_id"], "exploring",
+                           reason=reason, lineage_state="comparing", dirty=False)
             return True
         if reason == FREE_TRAIN_REASON:
             return _start_free_training(manager, row)
@@ -744,35 +692,25 @@ def install(manager):
 
     def finish_build(row):
         result = original_finish_build(row)
-        reason = str(row.get("reason") or "")
-        if result and reason == FREE_TRAIN_REASON:
+        if result and str(row.get("reason") or "") == FREE_TRAIN_REASON:
             _finish_free_training(manager, row)
         return result
 
     manager._start_build = start_build
     manager._finish_build_if_ready = finish_build
 
-    def create_explore_child(parent_generation, reason, mode, *, sensor=None,
-                             requested=None, previous=None):
+    def create_explore_child(parent_generation, reason, mode, *, sensor=None, requested=None, previous=None):
         created = _create_or_coalesce_child(
             manager, parent_generation, reason, "explore", allow_coalesce=False
         )
         child_gid = created["child_generation_id"]
-        session = _insert_session(
-            manager, parent_generation, child_gid, mode=mode, sensor=sensor,
-            requested=requested, previous=previous,
-        )
-        _mark_edge(
-            manager, child_gid, "exploring", reason=reason,
-            # Candidate Shadow must run while Explore is collecting evidence. Standard
-            # parent-vs-child promotion comparison is still withheld by edge state.
-            lineage_state="comparing", dirty=False,
-        )
-        _update_action_detail(
-            manager, created.get("action_id"),
-            {"explore_mode": mode, "targeted_sensor": sensor,
-             "session_id": session["session_id"], "candidate_dispatch": False},
-        )
+        session = _insert_session(manager, parent_generation, child_gid, mode=mode, sensor=sensor,
+                                  requested=requested, previous=previous)
+        _mark_edge(manager, child_gid, "exploring", reason=reason,
+                   lineage_state="comparing", dirty=False)
+        _update_action_detail(manager, created.get("action_id"),
+                              {"explore_mode": mode, "targeted_sensor": sensor,
+                               "session_id": session["session_id"], "candidate_dispatch": False})
         return created, session
 
     def workflow_explore(ref, payload):
@@ -780,19 +718,19 @@ def install(manager):
         _preflight_child(manager, generation, allow_coalesce=False)
         body = dict(payload or {})
         mode = str(body.get("mode") or "").strip()
+
         if mode == FREE_MODE:
             root = manager.store.get_agent_config(str(generation["root_agent_id"]))
             if not root:
                 raise ValueError("Root Live agent is unavailable")
-            current = experiments.status(root["id"])
-            previous = dict(current.get("config") or {})
+            previous = dict((experiments.status(root["id"]).get("config") or {}))
             requested = dict(previous)
             config = body.get("config") if isinstance(body.get("config"), dict) else body
             for key in ("focus", "intensity", "interval", "daily_budget", "observation_seconds", "max_step"):
                 if key in config:
                     requested[key] = config[key]
             requested["enabled"] = True
-            # Validation and all residual state remain inside the established subsystem.
+            # Existing Experiments validation owns every bound and safety parameter.
             experiments.configure(root, requested)
             try:
                 created, session = create_explore_child(
@@ -812,15 +750,13 @@ def install(manager):
                  "session_id": session["session_id"], "config": requested,
                  "active_probe_available": _active_probe_available(root)},
             )
-            return {
-                "ok": True, "action": "explore", "mode": FREE_MODE,
-                "parent_generation_id": generation["generation_id"],
-                "child_generation_id": created["child_generation_id"],
-                "session": _session_payload(manager, session),
-            }
+            return {"ok": True, "action": "explore", "mode": FREE_MODE,
+                    "parent_generation_id": generation["generation_id"],
+                    "child_generation_id": created["child_generation_id"],
+                    "session": _session_payload(manager, session)}
 
         if mode == TARGETED_MODE:
-            sensor = _validate_target_sensor(manager, generation, agent, body.get("sensor_entity"))
+            sensor = _validate_target_sensor(manager, agent, body.get("sensor_entity"))
             created, session = create_explore_child(
                 generation, TARGETED_REASON, TARGETED_MODE, sensor=sensor,
                 requested={"sensor_entity": sensor}, previous={}
@@ -829,20 +765,14 @@ def install(manager):
             child_agent = manager.store.get_agent_config(str((child or {}).get("agent_id") or ""))
             if not child_agent:
                 raise RuntimeError("Targeted Explore child is unavailable")
-            # A brand-new child should have no inherited Sensor Tournament proof. Remove
-            # only child-local challenger evidence defensively, never parent evidence.
+            # Never inherit proof from another generation. Only the hypothesis is copied.
             with manager.store.lock, manager.store.conn() as c:
-                c.execute(
-                    "DELETE FROM context_tournament_shadow WHERE agent_id=? AND challenger_entity=?",
-                    (str(child_agent["id"]), sensor),
-                )
-                if c.execute(
-                    "SELECT 1 FROM sqlite_master WHERE type='table' AND name='context_tournament_sensor_quality'"
-                ).fetchone():
-                    c.execute(
-                        "DELETE FROM context_tournament_sensor_quality WHERE agent_id=? AND entity_id=?",
-                        (str(child_agent["id"]), sensor),
-                    )
+                if c.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='context_tournament_shadow'").fetchone():
+                    c.execute("DELETE FROM context_tournament_shadow WHERE agent_id=? AND challenger_entity=?",
+                              (str(child_agent["id"]), sensor))
+                if c.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='context_tournament_sensor_quality'").fetchone():
+                    c.execute("DELETE FROM context_tournament_sensor_quality WHERE agent_id=? AND entity_id=?",
+                              (str(child_agent["id"]), sensor))
             service._shadow_models.pop((str(child_agent["id"]), sensor), None)
             policy = manager.engine.models.get(str(child_agent["id"])) or manager.engine.policy(child_agent)
             forced_sync(child_agent, policy=policy)
@@ -851,15 +781,14 @@ def install(manager):
                 generation["root_agent_id"], "info", "agent_explore_targeted_started",
                 "Targeted sensor registered as a forced Candidate challenger without bypassing Tournament evidence gates",
                 {"parent_generation_id": generation["generation_id"],
-                 "child_generation_id": created["child_generation_id"],
-                 "sensor": sensor, "candidate_dispatch": False},
+                 "child_generation_id": created["child_generation_id"], "sensor": sensor,
+                 "candidate_dispatch": False},
             )
-            return {
-                "ok": True, "action": "explore", "mode": TARGETED_MODE,
-                "parent_generation_id": generation["generation_id"],
-                "child_generation_id": created["child_generation_id"],
-                "session": _session_payload(manager, session),
-            }
+            return {"ok": True, "action": "explore", "mode": TARGETED_MODE,
+                    "parent_generation_id": generation["generation_id"],
+                    "child_generation_id": created["child_generation_id"],
+                    "session": _session_payload(manager, session)}
+
         raise ValueError("Explore mode must be 'free' or 'targeted_sensor'")
 
     def workflow_explore_status(ref):
@@ -929,8 +858,9 @@ def install(manager):
                 return
             try:
                 payload = http.read_json()
-                result = workflow_explore(unquote(tokens[2]), payload if isinstance(payload, dict) else {})
-                return http.send_json(202, result)
+                return http.send_json(202, workflow_explore(
+                    unquote(tokens[2]), payload if isinstance(payload, dict) else {}
+                ))
             except ValueError as exc:
                 return http.send_json(409, {"error": str(exc)})
             except Exception as exc:
