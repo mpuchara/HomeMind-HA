@@ -11,8 +11,6 @@ def prepare_runtime_extensions():
     # must be hidden from normal runtime enumeration before engine/history are imported.
     from agent_candidates import install_store_overlay
     install_store_overlay(core.STORE)
-    # Domain adapters must still precede imports of engine/history/executor, which capture
-    # context functions.
     from device_targets import install as install_device_targets
     install_device_targets()
     from manual_context_learning import install as install_manual_context_learning
@@ -44,8 +42,7 @@ def prepare_engine_extensions():
     changed = install_fast_runtime(core)
     if changed:
         core.STORE.event(None, "info", "fast_runtime_migration",
-                         f"Realtime timing applied to {len(changed)} fast agent(s)",
-                         {"agents": changed})
+                         f"Realtime timing applied to {len(changed)} fast agent(s)", {"agents": changed})
     install_paused_shadow_inference(core)
     install_fast_local_primary(core.STORE, core.ENGINE)
     install_runtime_physical_equivalence(core, core.ENGINE)
@@ -71,7 +68,8 @@ def prepare_engine_extensions():
     # and scores both policies on the same future target transitions.
     from agent_candidates import install as install_agent_candidates
     from agent_candidate_balance import install as install_candidate_balance
-    candidates = install_candidate_balance(install_agent_candidates(core))
+    from agent_candidate_debounce import install as install_candidate_debounce
+    candidates = install_candidate_debounce(install_candidate_balance(install_agent_candidates(core)))
     core.STORE.event(None, "info", "manual_feedback_ready", "Manual correction feedback path ready", None)
     core.STORE.event(None, "info", "teach_rl_ready", "Historical Teach RL pipeline ready", None)
     core.STORE.event(None, "info", "context_tournament_ready",
@@ -96,6 +94,7 @@ def prepare_engine_extensions():
                       "fast_light_tournament_metric": "timing_utility_with_balanced_accuracy_safety",
                       "agent_candidates": bool(candidates),
                       "candidate_build": "isolated_hidden_surrogate",
+                      "candidate_feedback_debounce_seconds": getattr(candidates, "candidate_feedback_debounce_seconds", 15.0),
                       "candidate_comparison": "paired_future_live_vs_candidate",
                       "candidate_promotion": "manual_to_shadow",
                       "candidate_binary_evidence": "20_future_samples_per_action",
