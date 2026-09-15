@@ -38,7 +38,7 @@ def prepare_engine_extensions():
     from teach_rl_rebenchmark import install_teach_rl_rebenchmark
     from control_diagnostics import install_control_diagnostics
     from context_ui_diagnostics import install_context_ui_diagnostics
-    from context_tournament_events import install as install_context_events
+    from context_tournament_events import install_context_events
     changed = install_fast_runtime(core)
     if changed:
         core.STORE.event(None, "info", "fast_runtime_migration",
