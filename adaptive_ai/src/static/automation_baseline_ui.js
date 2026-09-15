@@ -11,6 +11,18 @@
     const held=new Set(a?.control_lease?.disabled_automations||[]);
     return held.has(row.entity_id)?'held by Control':'known / off';
   };
+  const timingHtml = a => {
+    const t=a?.runtime?.fast_light_objective||{};
+    if(!t || t.mode!=='automation_residual_timing')return '';
+    const bits=[];
+    if(Number.isFinite(Number(t.mean_on_lead_seconds)))bits.push(`ON lead ${Number(t.mean_on_lead_seconds).toFixed(1)} s`);
+    if(Number.isFinite(Number(t.mean_off_saved_seconds)))bits.push(`OFF saved ${Number(t.mean_off_saved_seconds).toFixed(1)} s`);
+    if(Number(t.on_samples||0)>0)bits.push(`false ON ${Number(t.false_early_on||0)}/${Number(t.on_samples||0)}`);
+    if(Number(t.off_samples||0)>0)bits.push(`premature OFF ${Number(t.premature_off||0)}/${Number(t.off_samples||0)}`);
+    if(Number(t.retriggers||0)>0)bits.push(`retriggers ${Number(t.retriggers||0)}`);
+    if(!bits.length)return '<span>RL timing benchmark: collecting Shadow evidence against the active automation.</span>';
+    return `<span>RL timing vs automation: ${bits.map(esc).join(' · ')}</span>`;
+  };
   const baselineHtml = a => {
     const rows=rowsFor(a);
     if(!rows.length)return '';
@@ -19,7 +31,7 @@
     const primary=meta.primary_occupancy_source==='automation' ? meta.primary_occupancy_sensor : null;
     const chips=rows.slice(0,4).map(row=>`<span class="prior-chip" title="${esc(row.context_count||0)} context entities">${esc(row.name||row.entity_id)} · ${esc(statusFor(a,row))}</span>`).join('');
     const detail=entities.length?`<span>Baseline inputs: ${entities.map(esc).join(' · ')}${primary?` · primary ${esc(primary)}`:''}</span>`:`<span>Current HA automation is the first behavioural reference; extra sensors are evaluated as challengers.</span>`;
-    return `<b>Automation baseline</b>${chips}${detail}`;
+    return `<b>Automation baseline</b>${chips}${detail}${timingHtml(a)}`;
   };
   const decorate = a => {
     const card=document.querySelector(`article.agent[data-agent-id="${CSS.escape(String(a.id))}"]`);
