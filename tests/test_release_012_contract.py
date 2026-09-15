@@ -101,7 +101,7 @@ class Release012RequiredScenarios(unittest.TestCase):
 
 class Release012MigrationContract(unittest.TestCase):
     def test_release_keeps_linucb_and_feature_schema_persistence_compatible(self):
-        self.assertEqual(APP_VERSION, "0.13.1")
+        self.assertEqual(APP_VERSION, "0.13.2")
         self.assertEqual(MultiHorizonPolicy.VERSION, 10)
         self.assertEqual(ExplicitFeatureSchema.VERSION, 11)
 
