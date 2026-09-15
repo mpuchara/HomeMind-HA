@@ -76,6 +76,8 @@ def prepare_engine_extensions():
     from agent_candidate_lifecycle_hardening import install as install_candidate_lifecycle_hardening
     from agent_candidate_conservative_correct import install as install_candidate_conservative_correct
     from agent_candidate_lineage import install as install_candidate_lineage
+    from agent_candidate_lineage_retention import install as install_candidate_lineage_retention
+    from agent_candidate_lineage_guards import install as install_candidate_lineage_guards
     candidates = install_agent_candidates(core, start_worker=False)
     candidates = install_candidate_config_guard(candidates)
     candidates = install_candidate_balance(candidates)
@@ -84,6 +86,8 @@ def prepare_engine_extensions():
     candidates = install_candidate_lifecycle_hardening(candidates)
     candidates = install_candidate_conservative_correct(candidates)
     candidates = install_candidate_lineage(candidates)
+    candidates = install_candidate_lineage_retention(candidates)
+    candidates = install_candidate_lineage_guards(candidates)
     candidates.start()
     core.STORE.event(None, "info", "manual_feedback_ready", "Manual correction feedback path ready", None)
     core.STORE.event(None, "info", "teach_rl_ready", "Historical Teach RL pipeline ready", None)
