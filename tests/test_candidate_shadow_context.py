@@ -129,7 +129,7 @@ class CandidateShadowExactContextTests(unittest.TestCase):
             "binary_sensor.presence": {"entity_id": "binary_sensor.presence", "state": presence, "attributes": {}},
         }
 
-    def test_shadow_uses_exact_state_map_seen_by_parent_policy_not_outer_snapshot(self):
+    def test_shadow_uses_exact_state_map_and_timestamp_seen_by_parent_policy(self):
         outer = self.states("off")
         exact = self.states("on")
         self.engine.runtime[self.root["id"]] = {"last_prediction": 1.0, "last_confidence": .88, "last_inference_ts": 10.0}
@@ -139,12 +139,19 @@ class CandidateShadowExactContextTests(unittest.TestCase):
         # wrapper's outer snapshot. The exact-context guard observes this policy call.
         self.engine.runtime[self.root["id"]]["last_inference_ts"] = 20.0
         policy = self.engine.policy(self.root)
-        policy.features(exact, None, at_ts=20.0)
+        policy.features(exact, None, at_ts=20.25)
         bundle = self.manager.after_live_process(self.root, outer)
 
         self.assertIsNotNone(bundle)
         self.assertEqual(bundle["current"], 0.0)
+        self.assertEqual(bundle["ts"], 20.25)
         self.assertEqual(bundle["results"][self.generation_id]["desired"], 1.0)
+        with self.store.conn() as c:
+            row = dict(c.execute(
+                "SELECT * FROM candidate_generation_decisions WHERE generation_id=? ORDER BY ts DESC LIMIT 1",
+                (self.generation_id,),
+            ).fetchone())
+        self.assertEqual(row["ts"], 20.25)
         self.executor.service.assert_not_called()
 
     def test_shadow_does_not_run_when_parent_did_not_perform_fresh_inference(self):
