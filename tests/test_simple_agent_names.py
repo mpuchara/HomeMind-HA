@@ -1,3 +1,4 @@
+import json
 import shutil
 import subprocess
 import unittest
@@ -33,7 +34,8 @@ assert.equal(clean('Pompa QUALIFIED'),'Pompa QUALIFIED');
 
     def test_name_simplifier_is_loaded_after_other_agent_renderers(self):
         html = (ROOT / "adaptive_ai/src/static/index.html").read_text(encoding="utf-8")
-        self.assertIn('simple_agent_names.js?v=0.13.1', html)
+        version = json.loads((ROOT / "adaptive_ai/BUILD_INFO.json").read_text(encoding="utf-8"))["version"]
+        self.assertIn(f'simple_agent_names.js?v={version}', html)
         self.assertGreater(html.index('simple_agent_names.js'), html.index('candidate_ui.js'))
         self.assertGreater(html.index('simple_agent_names.js'), html.index('automation_baseline_ui.js'))
 
