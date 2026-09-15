@@ -5,7 +5,32 @@
   const api=async(path,opts={})=>{const r=await fetch(path,{headers:{'Content-Type':'application/json'},...opts});const b=await r.json();if(!r.ok)throw Error(b.error||`HTTP ${r.status}`);return b;};
   let busy=false;
 
+  // P0 owns the normal Live-agent nodes and periodically removes unknown children from
+  // #agents. Candidate cards are intentionally separate UI nodes, so preserve them
+  // across that reconciliation instead of letting them disappear until the next 1.5 s
+  // Candidate refresh. Detach/reattach is synchronous, so the browser never paints a gap.
+  const baseRenderAgents=window.renderAgents;
+  if(typeof baseRenderAgents==='function'&&!window.__candidateCardRenderGuard){
+    window.renderAgents=()=>{
+      const root=document.getElementById('agents');
+      if(!root)return baseRenderAgents();
+      const candidates=[...root.querySelectorAll(':scope > .candidate-agent')];
+      candidates.forEach(node=>node.remove());
+      try{return baseRenderAgents();}
+      finally{candidates.forEach(node=>root.appendChild(node));}
+    };
+    window.__candidateCardRenderGuard=true;
+  }
+
   const stateLabel=c=>({queued:'Queued',building:'Training',comparing:'A/B comparison',ready:'Ready to promote',failed:'Failed',discarding:'Discarding'}[c.state]||c.state);
+  const statusText=(c,m,perAction)=>{
+    if(c.stale)return 'New Teach feedback arrived after this build snapshot — a newer build will run next.';
+    if(c.state==='queued')return 'Candidate is queued to build the current Teach revision. No newer feedback is pending.';
+    if(c.state==='building')return 'Training the current Teach revision. Another build is needed only if you add or undo feedback now.';
+    if(m.per_action_ready===false)return `Promotion waits for ${perAction} future samples for each binary action.`;
+    if(c.promotable)return 'Future evidence passed the Candidate safety gate.';
+    return 'Live remains authoritative until enough future evidence is collected.';
+  };
   function card(c){
     const m=c.comparison||{}, q=c.queue||{};
     const progress=c.state==='building'?Math.max(0,Math.min(100,Math.round((c.training_progress||0)*100))):null;
@@ -15,7 +40,7 @@
     return `<article class="agent candidate-agent" data-candidate-parent="${esc(c.parent_agent_id)}">
       <div class="candidate-top"><div><span class="candidate-badge">CANDIDATE</span><h3>${esc(c.parent_name)} · Gen ${c.generation}</h3></div><span class="candidate-state">${esc(stateLabel(c))}${queueText}</span></div>
       <p class="candidate-sub">Next generation is isolated from Executor. Live keeps serving while this model trains and compares.</p>
-      ${progress==null?'':`<div class="candidate-progress"><span style="width:${progress}%"></span></div><p class="candidate-small">Training ${progress}% · feedback rev ${c.build_revision}/${c.feedback_revision}</p>`}
+      ${progress==null?'':`<div class="candidate-progress"><span style="width:${progress}%"></span></div><p class="candidate-small">Training ${progress}% · build rev ${c.build_revision} / feedback rev ${c.feedback_revision}</p>`}
       ${c.last_error?`<p class="candidate-error">${esc(c.last_error)}</p>`:''}
       <div class="candidate-compare">
         <div><span>Future samples</span><b>${m.samples||0}</b></div>
@@ -27,7 +52,7 @@
         <div><span>False early · Live / Candidate</span><b>${m.live_false_early||0} / ${m.candidate_false_early||0}</b></div>
         <div><span>Paired wins · Live / Candidate</span><b>${m.live_wins||0} / ${m.candidate_wins||0}</b></div>
       </div>
-      <p class="candidate-small">${c.stale?'New feedback arrived — another build is required.':m.per_action_ready===false?`Promotion waits for ${perAction} future samples for each binary action.`:c.promotable?'Future evidence passed the Candidate safety gate.':'Live remains authoritative until enough future evidence is collected.'}</p>
+      <p class="candidate-small">${statusText(c,m,perAction)}</p>
       <div class="candidate-actions"><button class="primary" data-promote ${c.promotable?'':'disabled'}>Promote</button><button class="ghost" data-discard>Discard</button></div>
     </article>`;
   }
