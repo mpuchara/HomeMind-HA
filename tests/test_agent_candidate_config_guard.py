@@ -1,5 +1,4 @@
 import json
-import sys
 import tempfile
 import unittest
 from contextlib import contextmanager
@@ -7,11 +6,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock
 
-ROOT = Path(__file__).resolve().parents[1]
-SRC = ROOT / "adaptive_ai" / "src"
-if str(SRC) not in sys.path:
-    sys.path.insert(0, str(SRC))
-
+import support  # adds adaptive_ai/src to sys.path and provides writable ADAPTIVE_AI_DATA
 import storage
 from agent_candidates import AgentCandidateManager, ensure_tables, install_store_overlay
 from agent_candidate_config_guard import install as install_config_guard
