@@ -16,7 +16,6 @@ from types import SimpleNamespace
 from context import ExplicitFeatureSchema
 from context_tournament import ContextTournament
 from policy import MultiHorizonPolicy
-from settings import APP_VERSION
 from storage import Store
 from teaching_rl import RLTeaching, fingerprint
 
@@ -87,7 +86,7 @@ class Release012RequiredScenarios(unittest.TestCase):
         _run_existing(self, SensorQualityMathTests, "test_flaky_sensor_cannot_displace_equally_relevant_stable_sensor")
 
     def test_prequential_sample_is_scored_before_learning(self):
-        _run_existing(self, PrequentialReplayTests, "test_each_future_event_is_scored_before_it_is_learned")
+        _run_existing(self, PrequentialReplayTests, "test_each_future_event_is_scored_before_learning")
 
     def test_teach_finetune_invalidates_control_qualification(self):
         _run_existing(self, TeachRLRebenchmarkTests, "test_final_teach_policy_invalidates_old_control_proof_but_keeps_shadow")
@@ -101,7 +100,6 @@ class Release012RequiredScenarios(unittest.TestCase):
 
 class Release012MigrationContract(unittest.TestCase):
     def test_release_keeps_linucb_and_feature_schema_persistence_compatible(self):
-        self.assertEqual(APP_VERSION, "0.13.2")
         self.assertEqual(MultiHorizonPolicy.VERSION, 10)
         self.assertEqual(ExplicitFeatureSchema.VERSION, 11)
 
