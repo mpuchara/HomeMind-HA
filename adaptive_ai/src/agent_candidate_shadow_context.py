@@ -155,6 +155,18 @@ def install(manager):
     manager._candidate_shadow_context_installed = True
     manager.candidate_shadow_context_contract = "exact_root_policy_features_snapshot_and_timestamp_same_process_inference"
 
+    # Correct history must use the actually observed Live Desired, never replay today's
+    # policy into the past. Candidate generations already have their own observed-only
+    # decision table; install the equivalent Live overlay before generation actions.
+    service = getattr(manager.engine, "rl_teaching", None)
+    if (
+        service is not None
+        and callable(getattr(service, "history", None))
+        and callable(getattr(service, "point", None))
+    ):
+        from teach_observed_history import install as install_observed_desired_history
+        install_observed_desired_history(manager.store, manager.engine, service)
+
     # Generation-aware user actions must wrap the final Shadow/context contract. Keeping
     # this installation here guarantees they are active before the Candidate worker starts
     # without introducing a second startup path.
