@@ -46,60 +46,32 @@ def prepare_engine_extensions():
         core.STORE.event(None, "info", "fast_runtime_migration",
                          f"Realtime timing applied to {len(changed)} fast agent(s)",
                          {"agents": changed})
-    # Runtime mode and offline-training state are separate concerns. A paused trained
-    # model may infer in Shadow, but this never changes Control qualification.
     install_paused_shadow_inference(core)
-    # Fast replay uses primary_occupancy_sensor as a semantic anchor, not merely a
-    # diagnostic. Normalize it before Tournament/history consumers see the policy so a
-    # remote correlation cannot outrank the current target automation's occupancy input.
     install_fast_local_primary(core.STORE, core.ENGINE)
     install_runtime_physical_equivalence(core, core.ENGINE)
     install_lifecycle(core)
     install_teaching_learning_bridge(core)
-    # Historical Teach is a separate offline-RL path.  The existing Teaching bridge is
-    # intentionally kept intact because Wrong decision already depends on that behaviour.
     core.ENGINE.rl_teaching = RLTeaching(core.STORE, core.ENGINE)
     tournament = install_context_tournament(core.STORE, core.ENGINE)
     install_context_tournament_metrics(tournament)
-    # Fast lights optimize residual timing against the still-running HA automation.
-    # Install before promotion so its paired timing evidence is what promotion windows
-    # consume; balanced accuracy remains a safety check rather than the ranking objective.
     install_fast_light_objective(tournament)
-    # Hysteresis patches only the promotion score boundary; install it before wiring the
-    # promotion state machine so every cumulative/window comparison uses strict margin.
     install_context_tournament_hysteresis()
     install_context_tournament_promotion(tournament)
-    # Primary feature protection runs after promotion wiring but patches the schema-slot
-    # chooser used by that state machine. It cannot create control actions of its own.
     install_primary_protection(tournament)
-    # Quality wraps the final replacement chooser and records active/challenger reliability
-    # before promotion is evaluated on each event.
     install_sensor_quality(tournament)
-    # Schema history sees the exact before/after state of a successful promotion after all
-    # hysteresis, primary-protection and quality gates have passed.
     install_schema_history(tournament)
-    # Requalification is outermost: only after a real promotion row exists can the affected
-    # Control agent be persisted back to Shadow and its previous Control handoff released.
     install_promotion_shadow_requalification(tournament)
-    # Probation sits outside promotion/history/requalification. It snapshots the old policy,
-    # compares both schemas on future outcomes and can restore only that agent's old model.
     install_schema_probation(tournament)
-    # Teach rebenchmark is the outermost process-agent observer at this stage. It invalidates
-    # the rebuild benchmark only after supervised Teach fine tuning, then scores future
-    # Shadow outcomes before inner online learning sees them. It never enables Control.
     install_teach_rl_rebenchmark(core.STORE, core.ENGINE, core.ENGINE.rl_teaching)
-    # Diagnostics are deliberately read-only wrappers around runtime payloads. Executor
-    # keeps its direct qualification import and never learns how sensors were picked.
     install_control_diagnostics(core, tournament)
     install_context_ui_diagnostics(tournament)
-    # Structured event reporting only deduplicates/logs numerical evidence and normalizes
-    # legacy Tournament event names; it cannot affect decisions.
     install_context_events(tournament)
     # Candidate generations are installed last. Their process wrapper observes the final
     # effective Live prediction, runs Candidate inference without ActionIntent/Executor,
     # and scores both policies on the same future target transitions.
     from agent_candidates import install as install_agent_candidates
-    candidates = install_agent_candidates(core)
+    from agent_candidate_balance import install as install_candidate_balance
+    candidates = install_candidate_balance(install_agent_candidates(core))
     core.STORE.event(None, "info", "manual_feedback_ready", "Manual correction feedback path ready", None)
     core.STORE.event(None, "info", "teach_rl_ready", "Historical Teach RL pipeline ready", None)
     core.STORE.event(None, "info", "context_tournament_ready",
@@ -126,6 +98,7 @@ def prepare_engine_extensions():
                       "candidate_build": "isolated_hidden_surrogate",
                       "candidate_comparison": "paired_future_live_vs_candidate",
                       "candidate_promotion": "manual_to_shadow",
+                      "candidate_binary_evidence": "20_future_samples_per_action",
                       "control_diagnostics": "schema_revision+schema_age+prequential_samples+feature_tournament_state",
                       "context_ui_diagnostics": "active+primary+challengers+evaluation+schema+last_update",
                       "context_events": "structured_numeric_no_generated_text",
@@ -147,7 +120,6 @@ def prepare_engine_extensions():
 
 core.prepare_runtime_extensions = prepare_runtime_extensions
 core.prepare_engine_extensions = prepare_engine_extensions
-# HTTP routes are cheap and need no database; observers are attached by the hook above.
 install_manual_feedback(core, attach_runtime=False)
 install_manual_feedback_static(core)
 
