@@ -3,7 +3,8 @@
 The project already has focused unit/integration coverage for each subsystem.  These tests
 bind the exact release-acceptance scenario names to those production-backed regressions so
 a future refactor cannot accidentally make the 0.12 checklist disappear while individual
-module tests are renamed.
+module tests are renamed.  Patch releases may advance APP_VERSION while keeping the
+LinUCB and explicit feature-schema persistence formats compatible.
 """
 import tempfile
 import threading
@@ -158,7 +159,7 @@ class Release012RequiredScenarios(unittest.TestCase):
 
 class Release012MigrationContract(unittest.TestCase):
     def test_release_keeps_linucb_and_feature_schema_persistence_compatible(self):
-        self.assertEqual(APP_VERSION, "0.12.0")
+        self.assertEqual(APP_VERSION, "0.12.1")
         self.assertEqual(MultiHorizonPolicy.VERSION, 10)
         self.assertEqual(ExplicitFeatureSchema.VERSION, 11)
 
@@ -257,6 +258,7 @@ class Release012MigrationContract(unittest.TestCase):
             "adaptive_ai/src/context_schema_history.py",
             "adaptive_ai/src/context_schema_probation.py",
             "adaptive_ai/src/context_tournament_events.py",
+            "adaptive_ai/src/fast_light_objective.py",
         )
         for rel in files:
             text = (ROOT / rel).read_text(encoding="utf-8")

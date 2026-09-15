@@ -25,6 +25,7 @@ def prepare_engine_extensions():
     from teaching_rl import RLTeaching
     from context_tournament import install as install_context_tournament
     from context_tournament_metrics import install_metrics as install_context_tournament_metrics
+    from fast_light_objective_runtime import install as install_fast_light_objective
     from context_tournament_hysteresis import install as install_context_tournament_hysteresis
     from context_tournament_promotion import install_promotion as install_context_tournament_promotion
     from context_tournament_primary_protection import install_primary_protection
@@ -46,7 +47,7 @@ def prepare_engine_extensions():
     install_paused_shadow_inference(core)
     # Fast replay uses primary_occupancy_sensor as a semantic anchor, not merely a
     # diagnostic. Normalize it before Tournament/history consumers see the policy so a
-    # remote correlation cannot outrank a known local/automation occupancy driver.
+    # remote correlation cannot outrank the current target automation's occupancy input.
     install_fast_local_primary(core.STORE, core.ENGINE)
     install_runtime_physical_equivalence(core, core.ENGINE)
     install_lifecycle(core)
@@ -56,6 +57,10 @@ def prepare_engine_extensions():
     core.ENGINE.rl_teaching = RLTeaching(core.STORE, core.ENGINE)
     tournament = install_context_tournament(core.STORE, core.ENGINE)
     install_context_tournament_metrics(tournament)
+    # Fast lights optimize residual timing against the still-running HA automation.
+    # Install before promotion so its paired timing evidence is what promotion windows
+    # consume; balanced accuracy remains a safety check rather than the ranking objective.
+    install_fast_light_objective(tournament)
     # Hysteresis patches only the promotion score boundary; install it before wiring the
     # promotion state machine so every cumulative/window comparison uses strict margin.
     install_context_tournament_hysteresis()
@@ -107,7 +112,9 @@ def prepare_engine_extensions():
                       "schema_rollback_min_samples": 30,
                       "teach_rl_control_rebenchmark": "prequential_shadow",
                       "paused_shadow_inference": "existing_model_only",
-                      "fast_primary_anchor": "local_then_target_automation",
+                      "fast_primary_anchor": "automation_first_then_sensor_tournament",
+                      "fast_light_objective": "automation_residual_timing",
+                      "fast_light_tournament_metric": "timing_utility_with_balanced_accuracy_safety",
                       "control_diagnostics": "schema_revision+schema_age+prequential_samples+feature_tournament_state",
                       "context_ui_diagnostics": "active+primary+challengers+evaluation+schema+last_update",
                       "context_events": "structured_numeric_no_generated_text",
@@ -120,7 +127,9 @@ def prepare_engine_extensions():
                       "schema_history_table": "context_schema_history",
                       "schema_probation_table": "context_schema_probation",
                       "context_event_state_table": "context_tournament_event_state",
-                      "binary_metric": "balanced_accuracy",
+                      "fast_light_timing_table": "fast_light_timing_metrics",
+                      "binary_metric": "fast_timing_utility_for_fast_lights; balanced_accuracy_otherwise",
+                      "binary_safety_metric": "balanced_accuracy",
                       "continuous_metric": "normalized_mae",
                       "installed": tournament is not None})
 
