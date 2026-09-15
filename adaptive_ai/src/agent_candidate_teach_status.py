@@ -99,7 +99,15 @@ def _install_build_request(core, manager):
     return manager
 
 
-def install(core, manager):
+def install(core, manager=None):
+    # Keep production's explicit ``install(core, manager)`` contract, while allowing
+    # integration stacks to compose the same extension as ``install(manager)``. The
+    # manager already owns its exact core object, so the two forms are equivalent and
+    # no runtime behavior changes.
+    if manager is None:
+        manager = core
+        core = manager.core
+
     manager = _install_build_request(core, manager)
     service = getattr(core.ENGINE, "rl_teaching", None)
     store = getattr(core, "STORE", None)
