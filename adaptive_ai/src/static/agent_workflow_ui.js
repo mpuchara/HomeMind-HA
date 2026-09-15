@@ -1,5 +1,6 @@
 // Generation-first agent actions: Autonomous, Correct, Explore (next PR), Change decision, Settings.
 (()=>{
+  const COLORS={current:'#73dbec',parent:'#c2a6ff',candidate:'#ff9f43',correct:'#ffd166'};
   const html=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const api=async(path,opts={})=>{const r=await fetch(path,{headers:{'Content-Type':'application/json'},...opts});let b={};try{b=await r.json();}catch(_){ }if(!r.ok)throw Error(b.error||`HTTP ${r.status}`);return b;};
   const fmt=(subject,v)=>v==null?'—':subject?.target_property==='power'?(Number(v)>=.5?'ON':'OFF'):Number(v).toFixed(3).replace(/\.000$/,'');
@@ -62,11 +63,11 @@
     dialog.innerHTML=`<div class="teach-head"><h2>Correct: ${html(subject.name)} · Gen ${subject.generation_number}</h2><button class="ghost" data-close>Zamknij</button></div>
       <p>Zaznacz błędny historyczny moment i podaj prawidłowe Desired. Correct nie zmienia Gen ${subject.generation_number} w miejscu — po zatwierdzeniu utworzy child Candidate.</p>
       <div class="teach-range"><label>Od<input data-start type="datetime-local" step="1"></label><label>Do<input data-end type="datetime-local" step="1"></label><button class="ghost" data-load>Pokaż</button><button class="ghost" data-prev>←</button><button class="ghost" data-next>→</button><button class="ghost" data-in>+</button><button class="ghost" data-out>−</button></div>
-      <p class="teach-legend"><span>● Current</span><span>┄ Observed Desired · Gen ${subject.generation_number}</span><span>● Correct labels</span></p>
+      <p class="teach-legend" data-legend></p>
       <div class="teach-chart" data-chart></div><p data-status role="status"></p><p data-error role="alert"></p>
       <form data-point><label>Wybrany moment<input data-time type="datetime-local" step="1" required></label><button type="button" class="ghost" data-inspect>Sprawdź punkt</button><p data-point-info>Wybierz moment na wykresie.</p><label>Poprawne Desired<input data-value type="number" step="any" required></label><button class="primary" type="submit" data-save disabled>Dodaj Correct</button><button class="ghost" type="button" data-undo>Cofnij ostatni Correct</button></form>
       <div class="dialog-actions"><button class="primary" type="button" data-apply>Apply Correct · create child Candidate</button></div>
-      <p>Historyczne Desired pochodzi wyłącznie z rzeczywiście zaobserwowanych decyzji tej generacji. Brak runtime pozostaje luką i nie jest odtwarzany obecną policy.</p>`;
+      <p>Wykres używa wyłącznie observed generation decision history. Candidate jest porównywany tylko z bezpośrednim parentem; brak runtime pozostaje luką i nie jest odtwarzany obecną policy.</p>`;
     dialog.querySelector('[data-close]').onclick=()=>dialog.close();
     dialog.querySelector('[data-load]').onclick=()=>{const a=Date.parse(dialog.querySelector('[data-start]').value)/1000,b=Date.parse(dialog.querySelector('[data-end]').value)/1000;if(Number.isFinite(a)&&Number.isFinite(b)){range={start:a,end:b};load();}};
     for(const [k,f] of [['in',.5],['out',2]])dialog.querySelector(`[data-${k}]`).onclick=()=>zoom(f);
@@ -88,6 +89,18 @@
   function zoom(factor){const width=Math.max(10,Math.min(31*86400,(range.end-range.start)*factor)),center=(range.start+range.end)/2;range={start:center-width/2,end:center+width/2};load();}
   function shift(direction){const width=range.end-range.start;range={start:range.start+direction*width,end:range.end+direction*width};load();}
 
+  function renderLegend(){
+    const legend=dialog.querySelector('[data-legend]');if(!legend||!data)return;
+    const series=data.series||{};
+    const rows=[];
+    if(series.current)rows.push([series.current.label||'Current',COLORS.current,false]);
+    if(data.chart_mode==='live'&&series.live_desired)rows.push([series.live_desired.label||'Live Desired',COLORS.candidate,true]);
+    if(data.chart_mode==='candidate_vs_parent'&&series.parent_desired)rows.push([series.parent_desired.label||'Parent Desired',COLORS.parent,true]);
+    if(data.chart_mode==='candidate_vs_parent'&&series.candidate_desired)rows.push([series.candidate_desired.label||'Candidate Desired',COLORS.candidate,true]);
+    rows.push(['Correct points',COLORS.correct,false]);
+    legend.innerHTML=rows.map(([label,color,dashed])=>`<span style="color:${color}">${dashed?'┄':'●'} ${html(label)}</span>`).join('');
+  }
+
   async function load(){
     const seq=++requestSeq,end=Math.min(range.end,Date.now()/1000);range={start:range.start,end};
     if(!Number.isFinite(range.start)||!Number.isFinite(end)||end<=range.start||end-range.start>31*86400){error(Error('Wybierz zakres od 1 sekundy do 31 dni'));return;}
@@ -95,9 +108,10 @@
     try{
       const out=await api(`api/agent-workflow/${encodeURIComponent(ref)}/correct-history?start=${range.start}&end=${end}`);
       if(seq!==requestSeq||!dialog.open)return;
-      data=out;draw();
-      const points=(out.points||[]).length,labels=(out.labels||[]).length,gaps=(out.gaps||[]).length;
-      dialog.querySelector('[data-status]').textContent=`${points} obserwacji · ${labels} Correct labels${gaps?` · ${gaps} luk runtime`:''}. Desired = observed generation prediction; policy replay wyłączony.`;
+      data=out;renderLegend();draw();
+      const current=(out.series?.current?.points||[]).length,labels=(out.labels||[]).length;
+      const childGaps=(out.gaps||[]).length,parentGaps=(out.parent_gaps||[]).length,gaps=childGaps+parentGaps;
+      dialog.querySelector('[data-status]').textContent=`${current} obserwacji · ${labels} Correct points${gaps?` · ${gaps} luk runtime`:''}. Direct parent comparison; policy replay wyłączony.`;
       dialog.querySelector('[data-undo]').disabled=!labels;
     }catch(e){if(seq===requestSeq)error(e);}
   }
@@ -109,8 +123,12 @@
       const p=await api(`api/agent-workflow/${encodeURIComponent(ref)}/correct-point?ts=${ts}`);
       selected=p;dialog.querySelector('[data-time]').value=local(p.ts);
       const info=dialog.querySelector('[data-point-info]');
-      if(p.gap||p.desired==null){info.textContent=`Current: ${fmt(subject,p.current)} · Observed Desired: GAP — tej generacji nie wolno tu korygować przez wymyśloną predykcję.`;return;}
-      info.textContent=`Current: ${fmt(subject,p.current)} · Observed Desired: ${fmt(subject,p.desired)}${p.confidence==null?'':` · Confidence ${(Number(p.confidence)*100).toFixed(1)}%`}${p.context_complete?'':' · niepełny kontekst'}`;
+      if(p.gap||p.desired==null){info.textContent=`Current: ${fmt(subject,p.current)} · Selected generation Desired: GAP — tej generacji nie wolno tu korygować przez wymyśloną predykcję.`;return;}
+      if(p.generation_type==='candidate'){
+        info.textContent=`Current: ${fmt(subject,p.current)} · ${p.parent_desired_label||'Parent Desired'}: ${fmt(subject,p.parent_desired)} · ${p.candidate_desired_label||'Candidate Desired'}: ${fmt(subject,p.candidate_desired)}${p.confidence==null?'':` · Candidate confidence ${(Number(p.confidence)*100).toFixed(1)}%`}${p.context_complete?'':' · niepełny kontekst'}`;
+      }else{
+        info.textContent=`Current: ${fmt(subject,p.current)} · Live Desired: ${fmt(subject,p.live_desired)}${p.confidence==null?'':` · Confidence ${(Number(p.confidence)*100).toFixed(1)}%`}${p.context_complete?'':' · niepełny kontekst'}`;
+      }
       const input=dialog.querySelector('[data-value]');input.min=subject.min_value;input.max=subject.max_value;input.value=subject.target_property==='power'?(Number(p.desired)>=.5?0:1):p.desired;
       dialog.querySelector('[data-save]').disabled=!(p.current!=null&&p.context_complete&&p.desired!=null);
       draw();
@@ -135,17 +153,23 @@
   }
 
   function draw(){
-    const box=dialog.querySelector('[data-chart]');if(!box||!data){return;}
-    const points=(data.points||[]).slice().sort((a,b)=>Number(a.ts)-Number(b.ts));
-    const values=points.flatMap(p=>[p.current,p.desired]).filter(v=>v!=null&&Number.isFinite(Number(v)));
+    const box=dialog.querySelector('[data-chart]');if(!box||!data)return;
+    const series=data.series||{},allSeries=[];
+    for(const key of ['current','live_desired','parent_desired','candidate_desired'])if(series[key])allSeries.push(series[key]);
+    const values=allSeries.flatMap(s=>(s.points||[]).map(p=>p.value)).concat((data.labels||[]).map(p=>p.desired)).filter(v=>v!=null&&Number.isFinite(Number(v)));
     const lo=Math.min(Number(subject.min_value),...(values.length?values:[Number(subject.min_value)]));
     const hi=Math.max(Number(subject.max_value),...(values.length?values:[Number(subject.max_value)]));
-    const span=Math.max(1e-6,hi-lo),start=Number(data.start??range.start),end=Number(data.end??range.end),width=Math.max(1,end-start);
+    const span=Math.max(1e-6,hi-lo),start=Number(data.start??range.start),end=Number(data.end??range.end),width=Math.max(1,end-start),stale=Number(data.stale_after_seconds||95);
     const x=t=>50+930*(Number(t)-start)/width,y=v=>300-255*(Number(v)-lo)/span;
-    const path=key=>{let d='',active=false,last=0;for(const p of points){const v=p[key],ts=Number(p.ts);if(v==null||!Number.isFinite(Number(v))||(last&&ts-last>95)){active=false;}if(v!=null&&Number.isFinite(Number(v))){d+=active?` H${x(ts)} V${y(v)}`:` M${x(ts)},${y(v)}`;active=true;last=ts;}}return d;};
-    const labels=(data.labels||[]).filter(r=>Number(r.sample_ts)>=start&&Number(r.sample_ts)<=end).map(r=>`<circle cx="${x(r.sample_ts)}" cy="${y(r.desired)}" r="5" fill="#ffd166"><title>Correct ${html(r.desired)}</title></circle>`).join('');
+    const path=points=>{let d='',active=false,last=0;for(const p of (points||[]).slice().sort((a,b)=>Number(a.ts)-Number(b.ts))){const v=p.value,ts=Number(p.ts);if(v==null||!Number.isFinite(Number(v))||(last&&ts-last>stale))active=false;if(v!=null&&Number.isFinite(Number(v))){d+=active?` H${x(ts)} V${y(v)}`:` M${x(ts)},${y(v)}`;active=true;last=ts;}}return d;};
+    const rendered=[];
+    if(series.current)rendered.push(`<path data-series="current" d="${path(series.current.points)}" fill="none" stroke="${COLORS.current}" stroke-width="2"/>`);
+    if(series.live_desired)rendered.push(`<path data-series="live_desired" d="${path(series.live_desired.points)}" fill="none" stroke="${COLORS.candidate}" stroke-width="2" stroke-dasharray="8 6"/>`);
+    if(series.parent_desired)rendered.push(`<path data-series="parent_desired" d="${path(series.parent_desired.points)}" fill="none" stroke="${COLORS.parent}" stroke-width="2" stroke-dasharray="8 6"/>`);
+    if(series.candidate_desired)rendered.push(`<path data-series="candidate_desired" d="${path(series.candidate_desired.points)}" fill="none" stroke="${COLORS.candidate}" stroke-width="2" stroke-dasharray="8 6"/>`);
+    const labels=(data.labels||[]).filter(r=>Number(r.sample_ts)>=start&&Number(r.sample_ts)<=end).map(r=>`<circle data-series="correct" cx="${x(r.sample_ts)}" cy="${y(r.desired)}" r="5" fill="${COLORS.correct}"><title>Correct ${html(r.desired)}</title></circle>`).join('');
     const chosen=selected&&selected.ts>=start&&selected.ts<=end?`<line x1="${x(selected.ts)}" x2="${x(selected.ts)}" y1="35" y2="305" stroke="#fff" opacity=".35"/>`:'';
-    box.innerHTML=`<svg viewBox="0 0 1030 350" role="img" aria-label="Correct history chart"><path d="${path('current')}" fill="none" stroke="currentColor" stroke-width="2"/><path d="${path('desired')}" fill="none" stroke="#a78bfa" stroke-width="2" stroke-dasharray="8 6"/>${labels}${chosen}<rect data-hit x="50" y="25" width="930" height="285" fill="transparent" style="cursor:crosshair"/></svg>`;
+    box.innerHTML=`<svg viewBox="0 0 1030 350" role="img" aria-label="Correct direct-parent generation history chart">${rendered.join('')}${labels}${chosen}<rect data-hit x="50" y="25" width="930" height="285" fill="transparent" style="cursor:crosshair"/></svg>`;
     box.querySelector('[data-hit]').onclick=ev=>{const svg=ev.currentTarget.ownerSVGElement,r=svg.getBoundingClientRect(),px=(ev.clientX-r.left)*1030/r.width,ts=start+(Math.max(50,Math.min(980,px))-50)/930*width;inspect(ts);};
   }
 
