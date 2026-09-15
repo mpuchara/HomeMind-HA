@@ -24,16 +24,24 @@
     window.__candidateCardRenderGuard=true;
   }
 
-  const stateLabel=c=>({queued:'Queued',building:'Fine-tuning',comparing:'A/B comparison',ready:'Ready to promote',offline_blocked:'Offline gate blocked',insufficient_evidence:'Insufficient evidence',failed:'Failed',discarding:'Discarding',parent:'Parent / champion'}[c.state]||c.state);
+  const stateLabel=c=>({queued:'Queued',building:'Fine-tuning',exploring:'Explore',comparing:'A/B comparison',ready:'Ready to promote',offline_blocked:'Offline gate blocked',insufficient_evidence:'Insufficient evidence',failed:'Failed',discarding:'Discarding',parent:'Parent / champion'}[c.state]||c.state);
   const statusText=(c,m,perAction)=>{
     if(c.stale)return 'New Correct / Change decision feedback arrived after this build snapshot — the same child will absorb the newer revision.';
     if(c.state==='queued')return 'Candidate is queued from its exact direct-parent snapshot.';
     if(c.state==='building')return 'Child training is running while the parent generation remains immutable.';
+    if(c.state==='exploring')return 'Explore is collecting evidence while the direct parent remains immutable.';
     if(c.state==='offline_blocked')return 'Offline regression gate failed. Shadow prediction remains observable, but future A/B is blocked.';
     if(c.state==='insufficient_evidence')return 'Offline regression gate has insufficient historical evidence. Shadow remains observable; future A/B has not started.';
     if(m.per_action_ready===false)return `Promotion waits for ${perAction} future samples for each binary action.`;
     if(c.promotable)return 'Offline regression and paired future evidence passed the Candidate safety gates.';
     return 'The direct parent remains authoritative until enough paired future evidence is collected.';
+  };
+  const exploreLine=c=>{
+    const x=c.explore;if(!x)return '';
+    const mode=x.mode==='targeted_sensor'?'Targeted sensor':'Free exploration';
+    const message=x.result_message||x.status||'collecting evidence';
+    const sensor=x.targeted_sensor?` · ${x.targeted_sensor}`:'';
+    return `<p class="candidate-small candidate-explore-result"><b>Explore · ${esc(mode)}</b>${esc(sensor)} · ${esc(message)}</p>`;
   };
 
   function card(c){
@@ -52,6 +60,7 @@
       <p class="candidate-sub">Direct-parent snapshot → generation training → persistent Shadow → paired future A/B. Candidate is isolated from Executor.</p>
       ${progress==null?'':`<div class="candidate-progress"><span style="width:${progress}%"></span></div><p class="candidate-small">Training ${progress}% · build rev ${c.build_revision} / feedback rev ${c.feedback_revision}</p>`}
       ${c.last_error?`<p class="candidate-error">${esc(c.last_error)}</p>`:''}
+      ${exploreLine(c)}
       <div class="candidate-compare candidate-compare-minimal">
         <div><span>Comparison</span><b>${esc(parentGain(m.accuracy_gain))}</b></div>
         <div><span>Future samples</span><b>${m.samples||0}</b></div>
@@ -75,7 +84,7 @@
         <div><span>False early · Parent / Candidate</span><b>${m.live_false_early||0} / ${m.candidate_false_early||0}</b></div>
         <div><span>Paired wins · Parent / Candidate</span><b>${m.live_wins||0} / ${m.candidate_wins||0}</b></div>
       </div></details>
-      <div class="actions candidate-workflow-actions"><button class="ghost" data-wf="auto">Autonomous</button><button class="primary" data-wf="correct">Correct</button><button class="ghost" data-wf="explore" disabled title="Explore będzie wdrożone w następnym PR">Explore</button><button class="ghost" data-wf="change">Change decision</button><button class="ghost" data-wf="settings">Settings</button></div>
+      <div class="actions candidate-workflow-actions"><button class="ghost" data-wf="auto">Autonomous</button><button class="primary" data-wf="correct">Correct</button><button class="ghost" data-wf="explore">Explore</button><button class="ghost" data-wf="change">Change decision</button><button class="ghost" data-wf="settings">Settings</button></div>
       <div class="candidate-actions candidate-lifecycle-actions"><button class="primary" data-promote ${c.promotable?'':'disabled'}>Promote</button><button class="ghost" data-discard>Discard</button></div>
     </article>`;
   }
@@ -92,6 +101,7 @@
         const el=root.lastElementChild,ref=c.generation_id||c.candidate_id;
         el.querySelector('[data-wf=auto]').onclick=e=>window.workflowAutonomous?.(ref,e.currentTarget);
         el.querySelector('[data-wf=correct]').onclick=()=>window.openWorkflowCorrect?.(ref);
+        el.querySelector('[data-wf=explore]').onclick=()=>window.openExplore?.(ref);
         el.querySelector('[data-wf=change]').onclick=e=>window.workflowChangeDecision?.(ref,e.currentTarget);
         el.querySelector('[data-wf=settings]').onclick=()=>window.workflowSettings?.(ref);
         el.querySelector('[data-promote]').onclick=async()=>{
