@@ -86,7 +86,7 @@ class Release012RequiredScenarios(unittest.TestCase):
         _run_existing(self, SensorQualityMathTests, "test_flaky_sensor_cannot_displace_equally_relevant_stable_sensor")
 
     def test_prequential_sample_is_scored_before_learning(self):
-        _run_existing(self, PrequentialReplayTests, "test_each_future_event_is_scored_before_learning")
+        _run_existing(self, PrequentialReplayTests, "test_each_future_event_is_scored_before_it_is_learned")
 
     def test_teach_finetune_invalidates_control_qualification(self):
         _run_existing(self, TeachRLRebenchmarkTests, "test_final_teach_policy_invalidates_old_control_proof_but_keeps_shadow")
