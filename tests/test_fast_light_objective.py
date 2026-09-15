@@ -2,11 +2,11 @@ import unittest
 
 from fast_light_objective import (
     TIMING_METRIC_MODE,
-    _patch_promotion_for_timing,
     benchmark_summary,
     timing_metric_row_factory,
     timing_utility,
 )
+from fast_light_objective_runtime import patch_promotion_for_timing
 from rewards import RewardEngine
 import context_tournament_metrics as metrics
 import context_tournament_promotion as promotion
@@ -106,7 +106,7 @@ class FastLightPromotionWindowTests(unittest.TestCase):
     def setUpClass(cls):
         timing_metric = timing_metric_row_factory(metrics.metric_row)
         metrics.metric_row = timing_metric
-        _patch_promotion_for_timing(timing_metric)
+        patch_promotion_for_timing(timing_metric)
 
     def test_promotion_window_consumes_timing_samples_not_state_samples(self):
         model = {
