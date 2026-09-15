@@ -171,4 +171,10 @@ def install(manager):
     # this installation here guarantees they are active before the Candidate worker starts
     # without introducing a second startup path.
     from agent_workflow_actions import install as install_agent_workflow_actions
-    return install_agent_workflow_actions(manager)
+    manager = install_agent_workflow_actions(manager)
+
+    # The Correct chart is a separate presentation/evidence contract layered on top of
+    # generation workflow. It compares only the selected child with its direct parent and
+    # reads observed decision history exclusively; it never replays today's policy.
+    from agent_correct_generation_history import install as install_correct_generation_history
+    return install_correct_generation_history(manager)
