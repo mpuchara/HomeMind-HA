@@ -78,6 +78,7 @@ def prepare_engine_extensions():
     from agent_candidate_lineage import install as install_candidate_lineage
     from agent_candidate_lineage_retention import install as install_candidate_lineage_retention
     from agent_candidate_lineage_guards import install as install_candidate_lineage_guards
+    from agent_candidate_shadow_runtime import install as install_candidate_shadow_runtime
     candidates = install_agent_candidates(core, start_worker=False)
     candidates = install_candidate_config_guard(candidates)
     candidates = install_candidate_balance(candidates)
@@ -88,6 +89,7 @@ def prepare_engine_extensions():
     candidates = install_candidate_lineage(candidates)
     candidates = install_candidate_lineage_retention(candidates)
     candidates = install_candidate_lineage_guards(candidates)
+    candidates = install_candidate_shadow_runtime(candidates)
     candidates.start()
     core.STORE.event(None, "info", "manual_feedback_ready", "Manual correction feedback path ready", None)
     core.STORE.event(None, "info", "teach_rl_ready", "Historical Teach RL pipeline ready", None)
@@ -117,6 +119,9 @@ def prepare_engine_extensions():
                       "candidate_offline_gate": getattr(candidates, "candidate_offline_gate_contract", "legacy"),
                       "candidate_lineage": getattr(candidates, "candidate_lineage_contract", "legacy"),
                       "candidate_model_retention": getattr(candidates, "candidate_model_retention", None),
+                      "candidate_shadow": getattr(candidates, "candidate_shadow_contract", "legacy"),
+                      "candidate_decision_history": getattr(candidates, "candidate_decision_history_contract", "legacy"),
+                      "candidate_pair_contract": getattr(candidates, "candidate_pair_contract", "legacy"),
                       "candidate_feedback_debounce_seconds": getattr(candidates, "candidate_feedback_debounce_seconds", 15.0),
                       "candidate_config_contract": getattr(candidates, "candidate_config_contract", "policy_config_must_match_live_at_build_and_promote"),
                       "candidate_comparison": "paired_future_direct_parent_vs_child",
