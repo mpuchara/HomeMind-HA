@@ -7,8 +7,12 @@ core = queued_runtime.core
 
 
 def prepare_runtime_extensions():
-    # The database is assigned by main before this hook. Domain adapters must still
-    # precede imports of engine/history/executor, which capture context functions.
+    # The database is assigned by main before this hook. Candidate training surrogates
+    # must be hidden from normal runtime enumeration before engine/history are imported.
+    from agent_candidates import install_store_overlay
+    install_store_overlay(core.STORE)
+    # Domain adapters must still precede imports of engine/history/executor, which capture
+    # context functions.
     from device_targets import install as install_device_targets
     install_device_targets()
     from manual_context_learning import install as install_manual_context_learning
@@ -80,19 +84,22 @@ def prepare_engine_extensions():
     # Probation sits outside promotion/history/requalification. It snapshots the old policy,
     # compares both schemas on future outcomes and can restore only that agent's old model.
     install_schema_probation(tournament)
-    # Teach rebenchmark is the outermost process-agent observer. It invalidates the rebuild
-    # benchmark only after supervised Teach fine tuning, then scores future Shadow outcomes
-    # before any inner online learning sees them. It never enables Control automatically.
+    # Teach rebenchmark is the outermost process-agent observer at this stage. It invalidates
+    # the rebuild benchmark only after supervised Teach fine tuning, then scores future
+    # Shadow outcomes before inner online learning sees them. It never enables Control.
     install_teach_rl_rebenchmark(core.STORE, core.ENGINE, core.ENGINE.rl_teaching)
-    # Diagnostics are deliberately installed last and only decorate HTTP/runtime payloads.
-    # Executor keeps its direct qualification import and never learns how sensors were picked.
+    # Diagnostics are deliberately read-only wrappers around runtime payloads. Executor
+    # keeps its direct qualification import and never learns how sensors were picked.
     install_control_diagnostics(core, tournament)
-    # UI diagnostics are an additional read-only wrapper around the already diagnostic
-    # runtime payload. They expose the last context update without entering the control path.
     install_context_ui_diagnostics(tournament)
-    # Structured event reporting is the final observer. It only deduplicates/logs numerical
-    # evidence and normalizes legacy Tournament event names; it cannot affect decisions.
+    # Structured event reporting only deduplicates/logs numerical evidence and normalizes
+    # legacy Tournament event names; it cannot affect decisions.
     install_context_events(tournament)
+    # Candidate generations are installed last. Their process wrapper observes the final
+    # effective Live prediction, runs Candidate inference without ActionIntent/Executor,
+    # and scores both policies on the same future target transitions.
+    from agent_candidates import install as install_agent_candidates
+    candidates = install_agent_candidates(core)
     core.STORE.event(None, "info", "manual_feedback_ready", "Manual correction feedback path ready", None)
     core.STORE.event(None, "info", "teach_rl_ready", "Historical Teach RL pipeline ready", None)
     core.STORE.event(None, "info", "context_tournament_ready",
@@ -115,6 +122,10 @@ def prepare_engine_extensions():
                       "fast_primary_anchor": "automation_first_then_sensor_tournament",
                       "fast_light_objective": "automation_residual_timing",
                       "fast_light_tournament_metric": "timing_utility_with_balanced_accuracy_safety",
+                      "agent_candidates": bool(candidates),
+                      "candidate_build": "isolated_hidden_surrogate",
+                      "candidate_comparison": "paired_future_live_vs_candidate",
+                      "candidate_promotion": "manual_to_shadow",
                       "control_diagnostics": "schema_revision+schema_age+prequential_samples+feature_tournament_state",
                       "context_ui_diagnostics": "active+primary+challengers+evaluation+schema+last_update",
                       "context_events": "structured_numeric_no_generated_text",
