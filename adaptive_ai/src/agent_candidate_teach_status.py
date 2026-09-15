@@ -14,8 +14,19 @@ from teach_observed_history import install as install_observed_history
 
 def install(core, manager):
     service = getattr(core.ENGINE, "rl_teaching", None)
-    if service is not None:
-        install_observed_history(core.STORE, core.ENGINE, service)
+    store = getattr(core, "STORE", None)
+    # Production Store/RLTeaching expose these persistence/history contracts.  Keep the
+    # Candidate status extension usable in lightweight test/diagnostic runtimes that only
+    # provide status(), without pretending they can serve historical Desired.
+    if (
+        service is not None
+        and callable(getattr(service, "history", None))
+        and callable(getattr(service, "point", None))
+        and store is not None
+        and hasattr(store, "lock")
+        and callable(getattr(store, "conn", None))
+    ):
+        install_observed_history(store, core.ENGINE, service)
 
     handler = core.Handler
     if getattr(handler, "_agent_candidate_teach_status", False):
