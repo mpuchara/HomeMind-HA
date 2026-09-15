@@ -69,7 +69,9 @@ def prepare_engine_extensions():
     from agent_candidates import install as install_agent_candidates
     from agent_candidate_balance import install as install_candidate_balance
     from agent_candidate_debounce import install as install_candidate_debounce
+    from agent_candidate_teach_status import install as install_candidate_teach_status
     candidates = install_candidate_debounce(install_candidate_balance(install_agent_candidates(core)))
+    install_candidate_teach_status(core, candidates)
     core.STORE.event(None, "info", "manual_feedback_ready", "Manual correction feedback path ready", None)
     core.STORE.event(None, "info", "teach_rl_ready", "Historical Teach RL pipeline ready", None)
     core.STORE.event(None, "info", "context_tournament_ready",
