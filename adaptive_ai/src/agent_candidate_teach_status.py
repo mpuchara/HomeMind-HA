@@ -42,6 +42,14 @@ def _install_build_request(core, manager):
         result["new_feedback_since_build"] = newer_feedback
         result["build_pending"] = bool(result.get("state") == "queued" or dirty)
         result["build_current_revision"] = bool(feedback_revision == build_revision and not dirty)
+        # Keep the safety gate available as an explicit top-level diagnostic as well as
+        # inside the comparison summary. This is additive and does not influence Promote.
+        row = manager._candidate_row(parent_id)
+        try:
+            gate = json.loads((row or {}).get("offline_gate_json") or "{}")
+        except Exception:
+            gate = {}
+        result["offline_gate_passed"] = bool(gate.get("passed"))
         return result
 
     def request_build(parent_id, reason="teach_train"):
