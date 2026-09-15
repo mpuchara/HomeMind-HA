@@ -5,10 +5,11 @@ inside the inference path. A websocket event can therefore arrive after the sche
 outer snapshot was taken. Candidate generations must not accidentally evaluate that older
 outer snapshot while their parent used the newer one.
 
-This guard observes the actual state-map object passed to the Root Live policy's
-``features()`` call and lets Candidate Shadow run only when that same process invocation
-performed a fresh parent inference. The Shadow layer then receives that exact state-map
-snapshot. It remains diagnostics-only and never touches Executor or HA services.
+This guard observes the actual state-map object and timestamp passed to the Root Live
+policy's ``features()`` call and lets Candidate Shadow run only when that same process
+invocation performed a fresh parent inference. The Shadow layer then receives that exact
+state-map snapshot and its shared event is stamped with the parent's inference-context
+timestamp. It remains diagnostics-only and never touches Executor or HA services.
 """
 import math
 import time
@@ -105,13 +106,52 @@ def install(manager):
             or abs(float(captured_inference) - final_inference) > 1e-6
         ):
             return None
+
         # This is the exact map supplied to the parent's policy feature builder, not a
         # later reconstruction and not the outer scheduler snapshot.
-        return original_after(agent, capture["state_map"])
+        bundle = original_after(agent, capture["state_map"])
+        if not bundle:
+            return bundle
+
+        # agent_candidate_shadow_runtime creates one shared event a few milliseconds after
+        # Root inference. Re-anchor that event to the timestamp that was actually passed to
+        # the Root policy. This makes parent/child decision-history timestamps refer to the
+        # same inference context rather than to a later bookkeeping instant.
+        try:
+            context_ts = float(capture["context_ts"])
+            old_ts = float(bundle["ts"])
+        except (KeyError, TypeError, ValueError):
+            return bundle
+        if not math.isfinite(context_ts):
+            return bundle
+        bundle["ts"] = context_ts
+        for result in (bundle.get("results") or {}).values():
+            try:
+                if abs(float(result.get("desired_since_ts")) - old_ts) <= 1e-6:
+                    result["desired_since_ts"] = context_ts
+            except (TypeError, ValueError):
+                pass
+        # Rows may not exist when the 30 s history heartbeat did not need a write. When
+        # they do exist, move only this exact shared event; no historical policy replay is
+        # involved and no other generation/event is touched.
+        try:
+            with manager.store.lock, manager.store.conn() as c:
+                c.execute(
+                    """UPDATE candidate_generation_decisions SET ts=?
+                       WHERE root_agent_id=? AND event_id=? AND ts=?""",
+                    (context_ts, str(agent["id"]), str(bundle["event_id"]), old_ts),
+                )
+        except Exception as exc:
+            manager.store.event(
+                agent["id"], "warning", "candidate_shadow_timestamp_alignment_failed",
+                "Candidate Shadow kept its observed decision but could not align the persisted timestamp",
+                {"event_id": bundle.get("event_id"), "error": f"{type(exc).__name__}: {exc}"},
+            )
+        return bundle
 
     engine.policy = policy
     manager.before_live_process = before_live_process
     manager.after_live_process = after_live_process
     manager._candidate_shadow_context_installed = True
-    manager.candidate_shadow_context_contract = "exact_root_policy_features_snapshot_same_process_inference"
+    manager.candidate_shadow_context_contract = "exact_root_policy_features_snapshot_and_timestamp_same_process_inference"
     return manager
