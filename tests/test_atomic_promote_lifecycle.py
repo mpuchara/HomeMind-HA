@@ -272,7 +272,20 @@ class ControlReleaseOwnershipTests(unittest.TestCase):
                 "min_value": 0, "max_value": 1, "deadband": .5, "action_interval": .25,
                 "exploration_step": 1,
             })
-            store.set_training_state(root["id"], "qualified", score=.95, samples=100, source="test", detail={})
+            store.set_training_state(
+                root["id"], "qualified", score=1.0, samples=200, source="test",
+                detail={
+                    "balanced": True,
+                    "counts": {
+                        "samples": 200,
+                        "correct": 200,
+                        "per_action": {
+                            "0": {"samples": 100, "correct": 100},
+                            "1": {"samples": 100, "correct": 100},
+                        },
+                    },
+                },
+            )
             store.update_agent(root["id"], {"mode": "control"})
             root = store.get_agent_config(root["id"])
             states = {
@@ -324,6 +337,15 @@ class PromoteUiContractTests(unittest.TestCase):
         self.assertIn("Disabled by HomeMind", source)
         self.assertIn("Previously linked", source)
         self.assertIn("only automations HomeMind disabled", source)
+
+    def test_atomic_promote_is_last_candidate_lifecycle_wrapper_before_worker_start(self):
+        root = Path(__file__).resolve().parents[1]
+        source = (root / "adaptive_ai/src/fast_queue_main.py").read_text(encoding="utf-8")
+        shadow = source.index("install_candidate_shadow_context(candidates)")
+        atomic = source.index("install_candidate_atomic_promote(candidates)")
+        start = source.index("candidates.start()")
+        self.assertLess(shadow, atomic)
+        self.assertLess(atomic, start)
 
 
 if __name__ == "__main__":
