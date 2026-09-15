@@ -177,4 +177,10 @@ def install(manager):
     # generation workflow. It compares only the selected child with its direct parent and
     # reads observed decision history exclusively; it never replays today's policy.
     from agent_correct_generation_history import install as install_correct_generation_history
-    return install_correct_generation_history(manager)
+    manager = install_correct_generation_history(manager)
+
+    # Explore is deliberately last: it coordinates the already-installed Experiments,
+    # Sensor Tournament, Candidate Shadow and generation workflow without replacing any of
+    # their safety/evidence paths.
+    from agent_explore import install as install_agent_explore
+    return install_agent_explore(manager)
