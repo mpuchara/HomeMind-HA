@@ -1,10 +1,10 @@
-"""Explicit acceptance contract for HomeMind 0.12 Sensor Tournament.
+"""Explicit acceptance contract for HomeMind Sensor Tournament compatibility.
 
-The project already has focused unit/integration coverage for each subsystem.  These tests
-bind the exact release-acceptance scenario names to those production-backed regressions so
-a future refactor cannot accidentally make the 0.12 checklist disappear while individual
-module tests are renamed.  Patch releases may advance APP_VERSION while keeping the
-LinUCB and explicit feature-schema persistence formats compatible.
+The project already has focused unit/integration coverage for each subsystem. These tests
+bind the exact 0.12 acceptance scenario names to those production-backed regressions so
+a future refactor cannot accidentally make that checklist disappear. New minor releases
+may advance APP_VERSION while keeping the LinUCB and explicit feature-schema persistence
+formats compatible.
 """
 import tempfile
 import threading
@@ -49,117 +49,59 @@ def _run_existing(owner, case_class, method_name):
 
 class Release012RequiredScenarios(unittest.TestCase):
     def test_negative_reward_reduces_predicted_action_calibration(self):
-        _run_existing(
-            self, PolicyTests,
-            "test_negative_validation_reduces_action_confidence",
-        )
+        _run_existing(self, PolicyTests, "test_negative_validation_reduces_action_confidence")
 
     def test_two_teach_labels_cannot_promote_sensor(self):
-        _run_existing(
-            self, TeachRLTests,
-            "test_insufficient_teach_evidence_preserves_existing_schema",
-        )
+        _run_existing(self, TeachRLTests, "test_insufficient_teach_evidence_preserves_existing_schema")
 
     def test_insufficient_binary_balance_cannot_promote_sensor(self):
-        _run_existing(
-            self, TeachRLTests,
-            "test_binary_feature_evidence_requires_five_per_class",
-        )
+        _run_existing(self, TeachRLTests, "test_binary_feature_evidence_requires_five_per_class")
 
     def test_manual_correction_still_immediately_updates_action(self):
-        # Physical correction still dispatches immediately; the companion explicit label
-        # scenario proves the same event immediately changes the base policy decision.
-        _run_existing(
-            self, DesiredTeachingTests,
-            "test_current_correction_still_toggles_physical_current_in_shadow",
-        )
-        _run_existing(
-            self, DesiredTeachingTests,
-            "test_binary_teaching_toggles_desired_not_opposite_current",
-        )
+        _run_existing(self, DesiredTeachingTests, "test_current_correction_still_toggles_physical_current_in_shadow")
+        _run_existing(self, DesiredTeachingTests, "test_binary_teaching_toggles_desired_not_opposite_current")
 
     def test_challenger_never_dispatches_service(self):
-        _run_existing(
-            self, ContextTournamentShadowTests,
-            "test_shadow_runs_without_rebuilding_policy_or_touching_schema",
-        )
-        _run_existing(
-            self, ContextTournamentShadowTests,
-            "test_shadow_status_is_diagnostics_only",
-        )
+        _run_existing(self, ContextTournamentShadowTests, "test_shadow_runs_without_rebuilding_policy_or_touching_schema")
+        _run_existing(self, ContextTournamentShadowTests, "test_shadow_status_is_diagnostics_only")
 
     def test_challenger_with_no_gain_is_rejected(self):
-        _run_existing(
-            self, PromotionMathTests,
-            "test_promotion_requires_every_gate",
-        )
+        _run_existing(self, PromotionMathTests, "test_promotion_requires_every_gate")
 
     def test_challenger_with_stable_gain_is_promoted(self):
-        _run_existing(
-            self, PromotionIntegrationTests,
-            "test_ready_challenger_is_promoted_without_exceeding_fast_limit",
-        )
+        _run_existing(self, PromotionIntegrationTests, "test_ready_challenger_is_promoted_without_exceeding_fast_limit")
 
     def test_primary_sensor_requires_larger_gain(self):
-        _run_existing(
-            self, PrimaryProtectionTests,
-            "test_primary_sensor_is_not_replaced_by_six_point_gain",
-        )
+        _run_existing(self, PrimaryProtectionTests, "test_primary_sensor_is_not_replaced_by_six_point_gain")
 
     def test_new_schema_enters_shadow(self):
-        _run_existing(
-            self, PromotionShadowRequalificationTests,
-            "test_only_promoted_control_agent_moves_to_shadow",
-        )
+        _run_existing(self, PromotionShadowRequalificationTests, "test_only_promoted_control_agent_moves_to_shadow")
 
     def test_failed_new_schema_rolls_back(self):
-        _run_existing(
-            self, ProbationIntegrationTests,
-            "test_underperforming_promoted_policy_restores_exact_previous_model",
-        )
+        _run_existing(self, ProbationIntegrationTests, "test_underperforming_promoted_policy_restores_exact_previous_model")
 
     def test_old_schema_preserved_for_rollback(self):
-        # The integration scenario asserts both previous_schema and the exact serialized
-        # previous model revision before exercising the automatic rollback.
-        _run_existing(
-            self, ProbationIntegrationTests,
-            "test_underperforming_promoted_policy_restores_exact_previous_model",
-        )
+        _run_existing(self, ProbationIntegrationTests, "test_underperforming_promoted_policy_restores_exact_previous_model")
 
     def test_sensor_unavailability_penalizes_challenger(self):
-        _run_existing(
-            self, SensorQualityMathTests,
-            "test_flaky_sensor_cannot_displace_equally_relevant_stable_sensor",
-        )
+        _run_existing(self, SensorQualityMathTests, "test_flaky_sensor_cannot_displace_equally_relevant_stable_sensor")
 
     def test_prequential_sample_is_scored_before_learning(self):
-        _run_existing(
-            self, PrequentialReplayTests,
-            "test_each_future_event_is_scored_before_it_is_learned",
-        )
+        _run_existing(self, PrequentialReplayTests, "test_each_future_event_is_scored_before_it_is_learned")
 
     def test_teach_finetune_invalidates_control_qualification(self):
-        _run_existing(
-            self, TeachRLRebenchmarkTests,
-            "test_final_teach_policy_invalidates_old_control_proof_but_keeps_shadow",
-        )
+        _run_existing(self, TeachRLRebenchmarkTests, "test_final_teach_policy_invalidates_old_control_proof_but_keeps_shadow")
 
     def test_schema_change_does_not_affect_other_agents(self):
-        _run_existing(
-            self, PromotionShadowRequalificationTests,
-            "test_only_promoted_control_agent_moves_to_shadow",
-        )
+        _run_existing(self, PromotionShadowRequalificationTests, "test_only_promoted_control_agent_moves_to_shadow")
 
     def test_restart_preserves_tournament_state(self):
-        _run_existing(
-            self, ContextTournamentShadowTests,
-            "test_shadow_model_persists_without_persisting_pending_prediction",
-        )
+        _run_existing(self, ContextTournamentShadowTests, "test_shadow_model_persists_without_persisting_pending_prediction")
 
 
 class Release012MigrationContract(unittest.TestCase):
     def test_release_keeps_linucb_and_feature_schema_persistence_compatible(self):
-        self.assertEqual(APP_VERSION, "0.12.1")
+        self.assertEqual(APP_VERSION, "0.13.0")
         self.assertEqual(MultiHorizonPolicy.VERSION, 10)
         self.assertEqual(ExplicitFeatureSchema.VERSION, 11)
 
@@ -181,33 +123,24 @@ class Release012MigrationContract(unittest.TestCase):
             })
             store.set_training_state(
                 agent["id"], "qualified", score=0.91, samples=80,
-                source="pre-012-benchmark",
-                detail={"counts": {"samples": 80, "correct": 73}},
+                source="pre-012-benchmark", detail={"counts": {"samples": 80, "correct": 73}},
             )
             raw_model = {
                 "version": 10,
-                "schema": {"version": 11, "dims": 128,
-                           "entities": ["binary_sensor.fixture"]},
-                "selection_meta": {},
-                "dims": 128,
-                "actions": [0.0, 1.0],
-                "horizons": [1],
-                "heads": {},
-                "model_revision": "pre-012",
+                "schema": {"version": 11, "dims": 128, "entities": ["binary_sensor.fixture"]},
+                "selection_meta": {}, "dims": 128, "actions": [0.0, 1.0], "horizons": [1],
+                "heads": {}, "model_revision": "pre-012",
             }
             store.save_model(agent["id"], raw_model)
             store.archive_batch([
                 ("binary_sensor.fixture", time.time() - 10, "on", {"device_class": "occupancy"}, None, "pre-012")
             ])
-            store.add_feedback(
-                agent["id"], 0, 0.0, -1.0, "pre-012 feedback", {0: 1.0}, "user"
-            )
+            store.add_feedback(agent["id"], 0, 0.0, -1.0, "pre-012 feedback", {0: 1.0}, "user")
 
             teaching = RLTeaching(store, SimpleNamespace())
             with store.lock, store.conn() as c:
                 c.execute(
-                    "INSERT INTO teaching_rl_labels(agent_id,created_ts,sample_ts,desired,previous_desired,fingerprint) "
-                    "VALUES(?,?,?,?,?,?)",
+                    "INSERT INTO teaching_rl_labels(agent_id,created_ts,sample_ts,desired,previous_desired,fingerprint) VALUES(?,?,?,?,?,?)",
                     (agent["id"], time.time(), time.time() - 5, 1.0, 0.0, fingerprint(agent)),
                 )
 
@@ -217,11 +150,7 @@ class Release012MigrationContract(unittest.TestCase):
             before_archive = dict(store.archive_stats())
             before_labels = teaching.labels(agent["id"])
 
-            # 0.12 tournament storage is created additively on the same SQLite database.
-            fake_engine = SimpleNamespace(
-                state_map={}, entity_registry={}, context_relevance={}, models={},
-                runtime={}, lock=threading.RLock(),
-            )
+            fake_engine = SimpleNamespace(state_map={}, entity_registry={}, context_relevance={}, models={}, runtime={}, lock=threading.RLock())
             ContextTournament(store, fake_engine)
 
             after_agent = store.get_agent_config(agent["id"])
@@ -241,11 +170,7 @@ class Release012MigrationContract(unittest.TestCase):
             self.assertEqual(after_labels, before_labels)
 
             with store.conn() as c:
-                names = {
-                    row[0] for row in c.execute(
-                        "SELECT name FROM sqlite_master WHERE type='table'"
-                    ).fetchall()
-                }
+                names = {row[0] for row in c.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()}
             self.assertIn("context_tournament_state", names)
             self.assertIn("context_tournament_shadow", names)
             self.assertIn("teaching_rl_labels", names)
@@ -259,6 +184,7 @@ class Release012MigrationContract(unittest.TestCase):
             "adaptive_ai/src/context_schema_probation.py",
             "adaptive_ai/src/context_tournament_events.py",
             "adaptive_ai/src/fast_light_objective.py",
+            "adaptive_ai/src/agent_candidates.py",
         )
         for rel in files:
             text = (ROOT / rel).read_text(encoding="utf-8")
