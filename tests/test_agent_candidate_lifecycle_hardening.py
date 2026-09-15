@@ -166,10 +166,12 @@ class CandidateLifecycleHardeningTests(unittest.TestCase):
         self.assertEqual([float(row["desired"]) for row in rows], [1.0])
 
     def test_discard_request_finishes_without_candidate_model(self):
+        # Parent has no persisted model, so the freshly-created surrogate also has none.
+        # Discard must still delete it without trying to validate or rebuild the model.
         status = self.manager.enqueue(self.parent["id"], "teach")
         candidate_id = status["candidate_id"]
+        self.assertIsNone(self.store.get_model(candidate_id))
         with self.store.lock, self.store.conn() as c:
-            c.execute("DELETE FROM models WHERE agent_id=?", (candidate_id,))
             c.execute(
                 "UPDATE agent_candidates SET state='discarding',discard_requested=1,dirty=0 WHERE parent_agent_id=?",
                 (self.parent["id"],),
@@ -180,7 +182,7 @@ class CandidateLifecycleHardeningTests(unittest.TestCase):
         self.assertIsNone(self.store.get_agent(candidate_id))
 
     def test_upgrade_restores_interrupted_discard_intent(self):
-        status = self.manager.enqueue(self.parent["id"], "teach")
+        self.manager.enqueue(self.parent["id"], "teach")
         with self.store.lock, self.store.conn() as c:
             c.execute(
                 "UPDATE agent_candidates SET state='queued',discard_requested=1,dirty=1 WHERE parent_agent_id=?",
