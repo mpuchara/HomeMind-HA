@@ -15,7 +15,7 @@ try:
 except Exception:
     ws_connect = None
 
-APP_VERSION = "0.12.1"
+APP_VERSION = "0.13.0"
 HISTORY_BOOTSTRAP_REVISION = "target-attrs-v2"
 TRAINING_REVISION = "shared-home-intents-v18"
 DATA_DIR = Path(os.environ.get("ADAPTIVE_AI_DATA", "/data"))
@@ -102,6 +102,10 @@ DEFAULT_OPTIONS = {
     "teach_rl_feature_evidence_samples": 24,
     "teach_rl_positive_weight": 6,
     "teach_rl_negative_weight": 3,
+    "agent_candidate_future_samples": 40,
+    "agent_candidate_future_samples_per_binary_action": 20,
+    "agent_candidate_max_accuracy_regression": 0.03,
+    "agent_candidate_backup_hours": 24,
 }
 
 SUPPORTED_TARGETS = {
