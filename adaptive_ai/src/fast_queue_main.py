@@ -67,10 +67,14 @@ def prepare_engine_extensions():
     # effective Live prediction, runs Candidate inference without ActionIntent/Executor,
     # and scores both policies on the same future target transitions.
     from agent_candidates import install as install_agent_candidates
+    from agent_candidate_config_guard import install as install_candidate_config_guard
     from agent_candidate_balance import install as install_candidate_balance
     from agent_candidate_debounce import install as install_candidate_debounce
     from agent_candidate_teach_status import install as install_candidate_teach_status
-    candidates = install_candidate_debounce(install_candidate_balance(install_agent_candidates(core)))
+    candidates = install_agent_candidates(core)
+    candidates = install_candidate_config_guard(candidates)
+    candidates = install_candidate_balance(candidates)
+    candidates = install_candidate_debounce(candidates)
     install_candidate_teach_status(core, candidates)
     core.STORE.event(None, "info", "manual_feedback_ready", "Manual correction feedback path ready", None)
     core.STORE.event(None, "info", "teach_rl_ready", "Historical Teach RL pipeline ready", None)
@@ -97,6 +101,7 @@ def prepare_engine_extensions():
                       "agent_candidates": bool(candidates),
                       "candidate_build": "isolated_hidden_surrogate",
                       "candidate_feedback_debounce_seconds": getattr(candidates, "candidate_feedback_debounce_seconds", 15.0),
+                      "candidate_config_contract": getattr(candidates, "candidate_config_contract", "policy_config_must_match_live_at_build_and_promote"),
                       "candidate_comparison": "paired_future_live_vs_candidate",
                       "candidate_promotion": "manual_to_shadow",
                       "candidate_binary_evidence": "20_future_samples_per_action",
