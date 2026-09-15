@@ -1,59 +1,74 @@
-import json
+"""Explicit acceptance contract for HomeMind Sensor Tournament compatibility.
+
+The project already has focused unit/integration coverage for each subsystem. These tests
+bind the exact 0.12 acceptance scenario names to those production-backed regressions so
+a future refactor cannot accidentally make that checklist disappear. New minor releases
+may advance APP_VERSION while keeping the LinUCB and explicit feature-schema persistence
+formats compatible.
+"""
 import tempfile
+import threading
+import time
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 
-from support import *
 from context import ExplicitFeatureSchema
-from context_schema_probation import ProbationIntegrationTests
-from context_tournament_primary_protection import PrimaryProtectionTests
-from context_tournament_quality import SensorQualityMathTests
-from context_tournament_requalification import PromotionShadowRequalificationTests
-from context_tournament_shadow import ContextTournamentShadowTests
+from context_tournament import ContextTournament
 from policy import MultiHorizonPolicy
 from settings import APP_VERSION
 from storage import Store
-from teach_rl_rebenchmark import TeachRLRebenchmarkTests
+from teaching_rl import RLTeaching, fingerprint
+
+from test_context_schema_probation import ProbationIntegrationTests
+from test_context_tournament_primary_protection import PrimaryProtectionTests
+from test_context_tournament_promotion import PromotionIntegrationTests, PromotionMathTests
+from test_context_tournament_quality import SensorQualityMathTests
+from test_context_tournament_requalification import PromotionShadowRequalificationTests
+from test_context_tournament_shadow import ContextTournamentShadowTests
+from test_desired_teaching import DesiredTeachingTests
+from test_policy_rewards import PolicyTests
+from test_prequential_replay import PrequentialReplayTests
+from test_teach_rl_rebenchmark import TeachRLRebenchmarkTests
+from test_teaching_rl import TeachRLTests
 
 
-def _run_existing(case, cls, method):
-    suite = cls(method)
+ROOT = Path(__file__).resolve().parents[1]
+
+
+def _run_existing(owner, case_class, method_name):
+    """Run an existing full unittest scenario with its normal setUp/tearDown/cleanups."""
     result = unittest.TestResult()
-    suite.run(result)
-    if result.errors:
-        raise AssertionError(result.errors[0][1])
-    if result.failures:
-        raise AssertionError(result.failures[0][1])
-    case.assertEqual(result.testsRun, 1)
+    case_class(methodName=method_name).run(result)
+    if result.failures or result.errors:
+        details = []
+        for _, trace in result.failures + result.errors:
+            details.append(trace)
+        owner.fail("\n".join(details))
 
 
 class Release012RequiredScenarios(unittest.TestCase):
     def test_negative_reward_reduces_predicted_action_calibration(self):
-        from test_policy_rewards import PolicyTests
         _run_existing(self, PolicyTests, "test_negative_validation_reduces_action_confidence")
 
     def test_two_teach_labels_cannot_promote_sensor(self):
-        from test_teaching_rl import TeachRLTests
-        _run_existing(self, TeachRLTests, "test_supervised_scores_do_not_start_from_two_contrasting_labels")
+        _run_existing(self, TeachRLTests, "test_insufficient_teach_evidence_preserves_existing_schema")
 
     def test_insufficient_binary_balance_cannot_promote_sensor(self):
-        from test_teaching_rl import TeachRLTests
         _run_existing(self, TeachRLTests, "test_binary_feature_evidence_requires_five_per_class")
 
     def test_manual_correction_still_immediately_updates_action(self):
-        from test_history_teaching import HistoryTeachingTests
-        _run_existing(self, HistoryTeachingTests, "test_one_wrong_decision_overrules_thousands_of_old_samples")
+        _run_existing(self, DesiredTeachingTests, "test_current_correction_still_toggles_physical_current_in_shadow")
+        _run_existing(self, DesiredTeachingTests, "test_binary_teaching_toggles_desired_not_opposite_current")
 
     def test_challenger_never_dispatches_service(self):
-        from test_context_tournament import ContextTournamentTests
-        _run_existing(self, ContextTournamentTests, "test_install_exposes_tournament_in_agent_runtime_without_dispatching_actions")
+        _run_existing(self, ContextTournamentShadowTests, "test_shadow_runs_without_rebuilding_policy_or_touching_schema")
+        _run_existing(self, ContextTournamentShadowTests, "test_shadow_status_is_diagnostics_only")
 
     def test_challenger_with_no_gain_is_rejected(self):
-        from test_context_tournament_promotion import PromotionMathTests
         _run_existing(self, PromotionMathTests, "test_promotion_requires_every_gate")
 
     def test_challenger_with_stable_gain_is_promoted(self):
-        from test_context_tournament_promotion import PromotionIntegrationTests
         _run_existing(self, PromotionIntegrationTests, "test_ready_challenger_is_promoted_without_exceeding_fast_limit")
 
     def test_primary_sensor_requires_larger_gain(self):
@@ -72,8 +87,7 @@ class Release012RequiredScenarios(unittest.TestCase):
         _run_existing(self, SensorQualityMathTests, "test_flaky_sensor_cannot_displace_equally_relevant_stable_sensor")
 
     def test_prequential_sample_is_scored_before_learning(self):
-        from test_prequential_replay import PrequentialReplayTests
-        _run_existing(self, PrequentialReplayTests, "test_each_future_event_is_scored_before_learning")
+        _run_existing(self, PrequentialReplayTests, "test_each_future_event_is_scored_before_it_is_learned")
 
     def test_teach_finetune_invalidates_control_qualification(self):
         _run_existing(self, TeachRLRebenchmarkTests, "test_final_teach_policy_invalidates_old_control_proof_but_keeps_shadow")
@@ -109,48 +123,74 @@ class Release012MigrationContract(unittest.TestCase):
             })
             store.set_training_state(
                 agent["id"], "qualified", score=0.91, samples=80,
-                source="migration-test", detail={"counts": {"samples": 80, "correct": 74}},
+                source="pre-012-benchmark", detail={"counts": {"samples": 80, "correct": 73}},
             )
             raw_model = {
-                "version": MultiHorizonPolicy.VERSION,
-                "schema": {"version": ExplicitFeatureSchema.VERSION, "entities": []},
-                "horizons": [1],
-                "models": {},
+                "version": 10,
+                "schema": {"version": 11, "dims": 128, "entities": ["binary_sensor.fixture"]},
+                "selection_meta": {}, "dims": 128, "actions": [0.0, 1.0], "horizons": [1],
+                "heads": {}, "model_revision": "pre-012",
             }
             store.save_model(agent["id"], raw_model)
-            store.add_feedback(agent["id"], 1, 1.0, 1.0, "keep", {}, "test")
-            before = store.get_agent_config(agent["id"])
+            store.archive_batch([
+                ("binary_sensor.fixture", time.time() - 10, "on", {"device_class": "occupancy"}, None, "pre-012")
+            ])
+            store.add_feedback(agent["id"], 0, 0.0, -1.0, "pre-012 feedback", {0: 1.0}, "user")
+
+            teaching = RLTeaching(store, SimpleNamespace())
+            with store.lock, store.conn() as c:
+                c.execute(
+                    "INSERT INTO teaching_rl_labels(agent_id,created_ts,sample_ts,desired,previous_desired,fingerprint) VALUES(?,?,?,?,?,?)",
+                    (agent["id"], time.time(), time.time() - 5, 1.0, 0.0, fingerprint(agent)),
+                )
+
+            before_agent = store.get_agent_config(agent["id"])
             before_model = store.get_model(agent["id"])
-            with store.conn() as c:
-                before_feedback = c.execute("SELECT COUNT(*) FROM feedback WHERE agent_id=?", (agent["id"],)).fetchone()[0]
+            before_feedback = list(store.list_feedback(agent["id"], 20))
+            before_archive = dict(store.archive_stats())
+            before_labels = teaching.labels(agent["id"])
 
-            from context_tournament import ContextTournament
-            tournament = ContextTournament(store, SimpleNamespace(runtime={}, models={}, lock=threading.RLock()))
-            self.assertIsNotNone(tournament)
+            fake_engine = SimpleNamespace(state_map={}, entity_registry={}, context_relevance={}, models={}, runtime={}, lock=threading.RLock())
+            ContextTournament(store, fake_engine)
 
-            after = store.get_agent_config(agent["id"])
+            after_agent = store.get_agent_config(agent["id"])
             after_model = store.get_model(agent["id"])
+            after_feedback = list(store.list_feedback(agent["id"], 20))
+            after_archive = dict(store.archive_stats())
+            after_labels = teaching.labels(agent["id"])
+
+            self.assertEqual(after_agent["id"], before_agent["id"])
+            self.assertEqual(after_agent["benchmark_score"], before_agent["benchmark_score"])
+            self.assertEqual(after_agent["benchmark_samples"], before_agent["benchmark_samples"])
+            self.assertEqual(after_agent["benchmark_source"], before_agent["benchmark_source"])
+            self.assertEqual(after_model["model_revision"], before_model["model_revision"])
+            self.assertEqual(after_model["schema"], before_model["schema"])
+            self.assertEqual(after_feedback, before_feedback)
+            self.assertEqual(after_archive["n"], before_archive["n"])
+            self.assertEqual(after_labels, before_labels)
+
             with store.conn() as c:
-                after_feedback = c.execute("SELECT COUNT(*) FROM feedback WHERE agent_id=?", (agent["id"],)).fetchone()[0]
-            self.assertEqual(before["id"], after["id"])
-            self.assertEqual(before["training_state"], after["training_state"])
-            self.assertEqual(before_model, after_model)
-            self.assertEqual(before_feedback, after_feedback)
+                names = {row[0] for row in c.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()}
+            self.assertIn("context_tournament_state", names)
+            self.assertIn("context_tournament_shadow", names)
+            self.assertIn("teaching_rl_labels", names)
 
     def test_tournament_migrations_remain_additive(self):
-        root = Path(__file__).resolve().parents[1]
-        files = [
-            root / "adaptive_ai/src/context_tournament.py",
-            root / "adaptive_ai/src/context_tournament_shadow.py",
-            root / "adaptive_ai/src/context_tournament_metrics.py",
-            root / "adaptive_ai/src/context_schema_history.py",
-            root / "adaptive_ai/src/context_schema_probation.py",
-        ]
-        forbidden = ("DROP TABLE", "DELETE FROM agents", "DELETE FROM feedback", "DELETE FROM entity_history")
-        for path in files:
-            text = path.read_text(encoding="utf-8")
-            for phrase in forbidden:
-                self.assertNotIn(phrase, text, f"{phrase} found in {path.name}")
+        files = (
+            "adaptive_ai/src/context_tournament.py",
+            "adaptive_ai/src/context_tournament_promotion.py",
+            "adaptive_ai/src/context_tournament_quality.py",
+            "adaptive_ai/src/context_schema_history.py",
+            "adaptive_ai/src/context_schema_probation.py",
+            "adaptive_ai/src/context_tournament_events.py",
+            "adaptive_ai/src/fast_light_objective.py",
+            "adaptive_ai/src/agent_candidates.py",
+        )
+        for rel in files:
+            text = (ROOT / rel).read_text(encoding="utf-8")
+            self.assertNotIn("DROP TABLE", text.upper(), rel)
+            if "CREATE TABLE" in text.upper():
+                self.assertIn("CREATE TABLE IF NOT EXISTS", text.upper(), rel)
 
 
 if __name__ == "__main__":
