@@ -69,6 +69,7 @@ def prepare_engine_extensions():
     # lifecycle/config guard before starting the worker so restart recovery cannot race
     # an old queued/discarding row during extension decoration.
     from agent_candidates import install as install_agent_candidates
+    from agent_candidate_manual_rebuild import install as install_candidate_manual_rebuild
     from agent_candidate_config_guard import install as install_candidate_config_guard
     from agent_candidate_balance import install as install_candidate_balance
     from agent_candidate_debounce import install as install_candidate_debounce
@@ -82,6 +83,9 @@ def prepare_engine_extensions():
     from agent_candidate_shadow_context import install as install_candidate_shadow_context
     from agent_candidate_atomic_promote import install as install_candidate_atomic_promote
     candidates = install_agent_candidates(core, start_worker=False)
+    # Install the manual-Rebuild queue correction before config/lifecycle wrappers so
+    # their validation/synchronization still runs before the full historical rebuild.
+    candidates = install_candidate_manual_rebuild(candidates)
     candidates = install_candidate_config_guard(candidates)
     candidates = install_candidate_balance(candidates)
     candidates = install_candidate_debounce(candidates)
@@ -122,6 +126,7 @@ def prepare_engine_extensions():
                       "fast_light_tournament_metric": "timing_utility_with_balanced_accuracy_safety",
                       "agent_candidates": bool(candidates),
                       "candidate_build": "isolated_hidden_surrogate",
+                      "candidate_manual_rebuild": getattr(candidates, "candidate_manual_rebuild_contract", "legacy"),
                       "candidate_correct": getattr(candidates, "candidate_correct_contract", "legacy"),
                       "candidate_offline_gate": getattr(candidates, "candidate_offline_gate_contract", "legacy"),
                       "candidate_lineage": getattr(candidates, "candidate_lineage_contract", "legacy"),
