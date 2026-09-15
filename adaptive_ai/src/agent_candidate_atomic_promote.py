@@ -1,24 +1,24 @@
 """Safety-critical Candidate promotion and Shadow/Control lifecycle.
 
-Promotion is a *generation swap* of the logical Root Live agent.  Candidate surrogates stay
-physically Shadow-only until the swap commits.  By default the new generation inherits the
+Promotion is a *generation swap* of the logical Root Live agent. Candidate surrogates stay
+physically Shadow-only until the swap commits. By default the new generation inherits the
 Root Live mode; the UI may store an explicit target mode (Shadow or Control) without ever
 turning the Candidate surrogate into a controller.
 
-For Control -> Control the target Executor lock is the dispatch freeze.  The existing
+For Control -> Control the target Executor lock is the dispatch freeze. The existing
 Control lease is neither released nor reacquired, so Home Assistant automations are never
-restored/re-disabled in the middle of a successful promotion.  Model, benchmark, mode and
-generation bookkeeping are committed in one SQLite transaction.  Until that transaction
-commits the old generation remains the Live policy.
+restored/re-disabled in the middle of a successful promotion. Model, benchmark, mode,
+current-live lineage pointer and generation bookkeeping are committed in one SQLite
+transaction. Until that transaction commits the old generation remains the Live policy.
 """
 from __future__ import annotations
 
 import json
 import time
-from urllib.parse import urlsplit
 
 from agent_candidate_config_guard import config_signature
 from agent_candidate_lineage import _retention, _row as lineage_row
+from qualification import assess_control_qualification
 from settings import iso_now
 
 
@@ -68,7 +68,7 @@ def _automation_item(info, state_map, disabled_by_homemind):
 def automation_ownership(manager, root):
     """Expose controller provenance without guessing who disabled an automation.
 
-    The lease is the only authority for "disabled by HomeMind".  An automation which was
+    The lease is the only authority for "disabled by HomeMind". An automation which was
     already OFF before takeover is therefore never relabelled as HomeMind-owned.
     """
     if not root:
@@ -151,7 +151,7 @@ def _preference(row, live_mode):
 def _restore_exact_lease(manager, root, lease_before):
     """Best-effort failure recovery after a Control -> Shadow release.
 
-    Only automations recorded in the pre-swap HomeMind lease are re-disabled.  This never
+    Only automations recorded in the pre-swap HomeMind lease are re-disabled. This never
     claims or toggles an automation that was user-disabled before takeover.
     """
     if not lease_before:
@@ -241,7 +241,7 @@ def install(manager):
         row = _edge_for_ref(manager, parent_ref)
         if not row:
             raise ValueError("Candidate not found")
-        # This is only a promotion preference.  Never mutate the hidden Candidate agent's
+        # This is only a promotion preference. Never mutate the hidden Candidate agent's
         # physical mode and never acquire/release Control here.
         with manager.store.lock, manager.store.conn() as c:
             c.execute(
@@ -258,7 +258,7 @@ def install(manager):
         return status(row["parent_agent_id"])
 
     def promote(parent_id, target_mode=None):
-        # Resolve only enough to find the physical target lock.  Every safety/eligibility
+        # Resolve only enough to find the physical target lock. Every safety/eligibility
         # fact is refreshed again *inside* that lock before any side effect.
         initial = _edge_for_ref(manager, parent_id)
         if not initial:
@@ -270,7 +270,7 @@ def install(manager):
         executor = manager.engine.executor
 
         # Executor.submit uses this same RLock, therefore no new dispatch for the target can
-        # cross the generation swap.  An old queued intent waits, then fails its model
+        # cross the generation swap. An old queued intent waits, then fails its model
         # revision check against the newly-loaded generation.
         with executor.target_lock(target_entity):
             with manager.lock:
@@ -301,6 +301,14 @@ def install(manager):
                 if current_mode not in VALID_TARGET_MODES:
                     current_mode = "shadow"
 
+                # A user may select "Promote as Control", but this preference cannot turn a
+                # statistically Shadow-qualified Candidate into a controller. Validate the
+                # Candidate's own held-out proof, not the incumbent Root's proof.
+                if mode == "control":
+                    qualification = assess_control_qualification(candidate)
+                    if not qualification.get("passed"):
+                        raise ValueError("Candidate Control qualification: " + qualification.get("reason", "failed"))
+
                 comparison = fresh_status.get("comparison") or {}
                 journal = executor.handoff.journal
                 lease_before = journal.get(target_entity)
@@ -315,8 +323,9 @@ def install(manager):
                 acquired_for_transition = False
                 released_for_transition = False
                 committed = False
+                control_lease_preserved = False
                 try:
-                    # Mode-changing promotions use the normal ownership boundary.  The
+                    # Mode-changing promotions use the normal ownership boundary. The
                     # safety-critical Control -> Control path deliberately does neither.
                     if current_mode != "control" and mode == "control":
                         executor.take_control(root, refresh=True)
@@ -343,7 +352,7 @@ def install(manager):
                         candidate.get("benchmark_detail") or {}, separators=(",", ":"), default=str
                     )
 
-                    # One DB transaction is the commit point.  No model cache is invalidated
+                    # One DB transaction is the commit point. No model cache is invalidated
                     # before this succeeds, so an exception leaves the previous generation
                     # immediately runnable.
                     with manager.store.lock, manager.store.conn() as c:
@@ -392,10 +401,26 @@ def install(manager):
                                    comparison_json=?,retired_ts=?,updated_ts=? WHERE generation_id=?""",
                                 (comparison_json, now, now, str(child_gen["generation_id"])),
                             )
+                            # The root lineage row is the durable current-Live pointer. Move
+                            # it to the promoted generation/model in the same transaction so
+                            # the next child becomes G(n+1), not a duplicate G1 after G1 was
+                            # promoted. The historical Candidate row still records provenance.
+                            c.execute(
+                                """UPDATE agent_candidate_generations SET generation_number=?,
+                                   model_identity=?,config_fingerprint=?,schema_revision=?,model_revision=?,
+                                   lifecycle_state='live',comparison_json=?,updated_ts=?
+                                   WHERE root_agent_id=? AND generation_type='live' AND agent_id=?""",
+                                (
+                                    generation_number, child_gen.get("model_identity"),
+                                    child_gen.get("config_fingerprint"), child_gen.get("schema_revision"),
+                                    child_gen.get("model_revision"), comparison_json, now, root_id, root_id,
+                                ),
+                            )
                             c.execute(
                                 """DELETE FROM agent_candidates WHERE parent_agent_id IN
                                    (SELECT agent_id FROM agent_candidate_generations
-                                    WHERE root_agent_id=? AND agent_id IS NOT NULL)""",
+                                    WHERE root_agent_id=? AND generation_type='candidate'
+                                      AND agent_id IS NOT NULL)""",
                                 (root_id,),
                             )
                         c.execute("DELETE FROM agent_candidates WHERE parent_agent_id=?", (root_id,))
@@ -414,13 +439,22 @@ def install(manager):
 
                     if current_mode == "control" and mode == "control":
                         lease_after = journal.get(target_entity)
-                        if _lease_signature(lease_after) != lease_sig_before:
-                            # No code in this path is allowed to touch the lease.  Treat a
-                            # concurrent/provenance mutation as a safety fault.  Target lock
-                            # prevents normal local lifecycle operations from racing here.
-                            raise RuntimeError("Control ownership lease changed during atomic Promote")
+                        control_lease_preserved = _lease_signature(lease_after) == lease_sig_before
+                        # The target lock means ordinary local lifecycle code cannot alter
+                        # the lease here. If external corruption is nevertheless observed,
+                        # the DB generation swap has already committed; do not falsely turn
+                        # that committed state into a failed/partial Promote response.
+                        if not control_lease_preserved:
+                            try:
+                                manager.store.event(
+                                    root_id, "error", "candidate_promote_lease_integrity_fault",
+                                    "Atomic Promote committed but Control lease provenance changed unexpectedly",
+                                    {"target_entity": target_entity},
+                                )
+                            except Exception:
+                                pass
 
-                    # Cache invalidation happens only after the DB commit.  Preserve pending
+                    # Cache invalidation happens only after the DB commit. Preserve pending
                     # physical acknowledgement/manual-hold state; only policy-derived values
                     # are invalidated so Executor resumes with the new generation cleanly.
                     manager.engine.models.pop(root_id, None)
@@ -450,32 +484,40 @@ def install(manager):
                 finally:
                     rt["generation_swap_frozen"] = False
 
-        manager.store.event(
-            root_id, "info", "agent_candidate_atomic_promoted",
-            "Candidate generation atomically replaced Root Live",
-            {
-                "generation": generation_number,
-                "target_mode": mode,
-                "previous_mode": current_mode,
-                "control_lease_preserved": bool(current_mode == "control" and mode == "control"),
-                "candidate_physical_mode_before_promote": "shadow",
-                "comparison": comparison,
-                "rollback_snapshot_hours": 24,
-            },
-        )
+        try:
+            manager.store.event(
+                root_id, "info", "agent_candidate_atomic_promoted",
+                "Candidate generation atomically replaced Root Live",
+                {
+                    "generation": generation_number,
+                    "target_mode": mode,
+                    "previous_mode": current_mode,
+                    "control_lease_preserved": control_lease_preserved,
+                    "candidate_physical_mode_before_promote": "shadow",
+                    "comparison": comparison,
+                    "rollback_snapshot_hours": 24,
+                },
+            )
+        except Exception:
+            # Audit persistence must not turn an already-committed generation swap into a
+            # false client-visible failure. The runtime state still records the commit.
+            pass
         manager.engine.wake_event.set()
         try:
             _retention(manager, root_id)
         except Exception as exc:
-            manager.store.event(
-                root_id, "warning", "candidate_retention_after_promote_failed",
-                "Promotion committed; post-commit Candidate retention cleanup was skipped",
-                {"error": f"{type(exc).__name__}: {exc}"},
-            )
+            try:
+                manager.store.event(
+                    root_id, "warning", "candidate_retention_after_promote_failed",
+                    "Promotion committed; post-commit Candidate retention cleanup was skipped",
+                    {"error": f"{type(exc).__name__}: {exc}"},
+                )
+            except Exception:
+                pass
         return {
             "ok": True, "agent_id": root_id, "generation": generation_number, "mode": mode,
             "previous_mode": current_mode,
-            "control_lease_preserved": bool(current_mode == "control" and mode == "control"),
+            "control_lease_preserved": control_lease_preserved,
         }
 
     if callable(original_runtime_for):
