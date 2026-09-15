@@ -4,7 +4,6 @@ import tempfile
 import threading
 import time
 import unittest
-from contextlib import contextmanager
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock
@@ -312,7 +311,10 @@ class GenerationWorkflowAcceptanceTests(unittest.TestCase):
             "model_revision": "g0-r0",
             "schema": {"version": 11, "entities": ["binary_sensor.presence"]},
             "selection_meta": {"schema_revision": 1},
-            "toy_mapping": {"1": 0, "2": 0, "3": 0},
+            # G0 is already balanced on unrelated held-out history (keys 2/3) but wrong
+            # in the explicit Correct context (key 1). This lets the real offline gate
+            # verify "no regression" without a one-class-collapse shortcut.
+            "toy_mapping": {"1": 0, "2": 0, "3": 1},
             "weights": {"parent_knowledge": [1, 2, 3, 4]},
         }
         self.store.save_model(self.root["id"], copy.deepcopy(self.root_model))
@@ -447,9 +449,13 @@ class GenerationWorkflowAcceptanceTests(unittest.TestCase):
         return self.engine.process_agent(root, dict(self.states))
 
     def _collect_alternating_pairs(self, cycles=20):
-        # Seed a prediction for OFF -> ON. Presence indicates the *next* external outcome.
+        # The prediction context represents the next external transition. G0 knows the
+        # ordinary OFF branch (key 2) but misses the explicit ON branch (key 1); G1 learns
+        # key 1 from Correct. This gives genuine future gain while retaining balanced
+        # evidence for both power actions.
         self._set_state("light.acceptance", "off")
         self._set_state("binary_sensor.presence", "on")
+        self._set_state("binary_sensor.other", "off")
         self._process()
         current = 0
         for _ in range(cycles * 2):
@@ -457,6 +463,7 @@ class GenerationWorkflowAcceptanceTests(unittest.TestCase):
             self._set_state("light.acceptance", "on" if outcome else "off")
             next_outcome = 1 - outcome
             self._set_state("binary_sensor.presence", "on" if next_outcome else "off")
+            self._set_state("binary_sensor.other", "off" if next_outcome else "on")
             self._process()
             current = outcome
 
