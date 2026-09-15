@@ -43,8 +43,10 @@ def _install_build_request(core, manager):
         result["build_pending"] = bool(result.get("state") == "queued" or dirty)
         result["build_current_revision"] = bool(feedback_revision == build_revision and not dirty)
         # Keep the safety gate available as an explicit top-level diagnostic as well as
-        # inside the comparison summary. This is additive and does not influence Promote.
-        row = manager._candidate_row(parent_id)
+        # inside the comparison summary. Lightweight status-only test/diagnostic managers
+        # need not expose Candidate persistence internals.
+        candidate_row = getattr(manager, "_candidate_row", None)
+        row = candidate_row(parent_id) if callable(candidate_row) else None
         try:
             gate = json.loads((row or {}).get("offline_gate_json") or "{}")
         except Exception:
