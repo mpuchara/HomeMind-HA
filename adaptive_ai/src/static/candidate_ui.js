@@ -27,7 +27,7 @@
   const statusText=(c,m,perAction)=>{
     if(c.stale)return 'New Teach feedback arrived after this build snapshot — a newer snapshot will be corrected next.';
     if(c.state==='queued')return 'Candidate is queued to clone the current Live generation and apply this Teach revision.';
-    if(c.state==='building')return 'Fine-tuning the exact Live snapshot. Correct keeps the parent schema and does not run a full rebuild.';
+    if(c.state==='building')return 'Training the current Teach revision by fine-tuning the exact Live snapshot. Correct keeps the parent schema and does not run a full rebuild.';
     if(c.state==='offline_blocked')return 'Offline regression gate failed. Future A/B is blocked until a safe Candidate is built.';
     if(c.state==='insufficient_evidence')return 'Offline regression gate has insufficient non-Teach historical evidence. Future A/B has not started.';
     if(m.per_action_ready===false)return `Promotion waits for ${perAction} future samples for each binary action.`;
