@@ -3,10 +3,20 @@
 Candidate work runs under a hidden surrogate ID.  The parent Live agent must remain
 editable: users may add/undo more Teach points while Candidate is queued or building; those
 edits only advance the Candidate feedback revision and cause a newer build when required.
+
+This late Teach extension also installs the observed-Desired history overlay after
+``RLTeaching`` exists, so the Teach chart shows the same effective Desired that was visible
+on the live agent card instead of replaying today's policy over yesterday's context.
 """
+
+from teach_observed_history import install as install_observed_history
 
 
 def install(core, manager):
+    service = getattr(core.ENGINE, "rl_teaching", None)
+    if service is not None:
+        install_observed_history(core.STORE, core.ENGINE, service)
+
     handler = core.Handler
     if getattr(handler, "_agent_candidate_teach_status", False):
         return manager
