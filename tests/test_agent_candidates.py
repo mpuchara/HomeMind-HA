@@ -6,6 +6,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock
 
+import support  # adds adaptive_ai/src to sys.path for the repository test harness
 import storage
 from agent_candidates import AgentCandidateManager, ensure_tables, install_store_overlay
 from agent_candidate_balance import install as install_balance
