@@ -224,9 +224,7 @@ class AgentExploreTests(unittest.TestCase):
                        "daily_budget": 1, "observation_seconds": 10, "max_step": 1},
         })
         data = self.engine.experiments._get(self.root["id"])
-        data["active"] = {
-            "arm": 1, "x": {"bias": 1.0}, "kind": "probe", "focus": "presence",
-        }
+        data["active"] = {"arm": 1, "x": {"bias": 1.0}, "kind": "probe", "focus": "presence"}
         self.engine.experiments._finish(self.root["id"], .2, "measured test outcome")
         session = self.manager.workflow_explore_status(self.root["id"])["session"]
         self.assertEqual(session["status"], "training")
@@ -278,6 +276,24 @@ class AgentExploreTests(unittest.TestCase):
         self.assertFalse(result["session"]["candidate_dispatch"])
         self.executor.submit.assert_not_called()
         self.executor.service.assert_not_called()
+
+    def test_targeted_candidate_shadow_is_passive_and_never_dispatches(self):
+        import agent_candidate_shadow_runtime as shadow_runtime
+        result = self.manager.workflow_explore(self.root["id"], {
+            "mode": "targeted_sensor", "sensor_entity": "binary_sensor.new_presence",
+        })
+        child = self.manager.lineage_status(result["child_generation_id"])
+        observed = shadow_runtime._predict_candidate(
+            self.manager, child, dict(self.engine.state_map), time.time()
+        )
+        self.assertIsNotNone(observed)
+        runtime = self.engine.context_tournament.shadow_status(
+            self.store.get_agent_config(child["agent_id"])
+        )
+        self.assertFalse(runtime["controls_device"])
+        self.executor.submit.assert_not_called()
+        self.executor.service.assert_not_called()
+        self.executor._service.assert_not_called()
 
     def test_targeted_sensor_priority_does_not_override_negative_future_evidence(self):
         result = self.manager.workflow_explore(self.root["id"], {
@@ -348,9 +364,11 @@ class ExploreUiContractTests(unittest.TestCase):
         root = Path(__file__).resolve().parents[1]
         binding = (root / "adaptive_ai/src/static/explore_ui.js").read_text(encoding="utf-8")
         html = (root / "adaptive_ai/src/static/index.html").read_text(encoding="utf-8")
+        candidate = (root / "adaptive_ai/src/static/candidate_ui.js").read_text(encoding="utf-8")
         self.assertIn("button.disabled=false", binding)
         self.assertIn("window.openExplore", binding)
-        self.assertIn("data-generation-id", (root / "adaptive_ai/src/static/candidate_ui.js").read_text(encoding="utf-8"))
+        self.assertIn("data-generation-id", candidate)
+        self.assertIn("candidate-explore-result", candidate)
         self.assertIn("explore_ui.js?v=0.13.2", html)
 
     def test_backend_is_orchestration_not_a_second_learning_subsystem(self):
