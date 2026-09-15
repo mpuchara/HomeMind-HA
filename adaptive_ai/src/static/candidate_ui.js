@@ -2,6 +2,7 @@
   const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot',"'":'&#39;'}[c]));
   const pct=v=>v==null?'—':`${(Number(v)*100).toFixed(1)}%`;
   const sec=v=>v==null?'—':`${Number(v).toFixed(1)} s`;
+  const pp=v=>v==null?'—':`${Number(v)>=0?'+':''}${(Number(v)*100).toFixed(1)} pp`;
   const api=async(path,opts={})=>{const r=await fetch(path,{headers:{'Content-Type':'application/json'},...opts});const b=await r.json();if(!r.ok)throw Error(b.error||`HTTP ${r.status}`);return b;};
   let busy=false;
 
@@ -22,27 +23,37 @@
     window.__candidateCardRenderGuard=true;
   }
 
-  const stateLabel=c=>({queued:'Queued',building:'Training',comparing:'A/B comparison',ready:'Ready to promote',failed:'Failed',discarding:'Discarding'}[c.state]||c.state);
+  const stateLabel=c=>({queued:'Queued',building:'Fine-tuning',comparing:'A/B comparison',ready:'Ready to promote',offline_blocked:'Offline gate blocked',insufficient_evidence:'Insufficient evidence',failed:'Failed',discarding:'Discarding'}[c.state]||c.state);
   const statusText=(c,m,perAction)=>{
-    if(c.stale)return 'New Teach feedback arrived after this build snapshot — a newer build will run next.';
-    if(c.state==='queued')return 'Candidate is queued to build the current Teach revision. No newer feedback is pending.';
-    if(c.state==='building')return 'Training the current Teach revision. Another build is needed only if you add or undo feedback now.';
+    if(c.stale)return 'New Teach feedback arrived after this build snapshot — a newer snapshot will be corrected next.';
+    if(c.state==='queued')return 'Candidate is queued to clone the current Live generation and apply this Teach revision.';
+    if(c.state==='building')return 'Training the current Teach revision by fine-tuning the exact Live snapshot. Correct keeps the parent schema and does not run a full rebuild.';
+    if(c.state==='offline_blocked')return 'Offline regression gate failed. Future A/B is blocked until a safe Candidate is built.';
+    if(c.state==='insufficient_evidence')return 'Offline regression gate has insufficient non-Teach historical evidence. Future A/B has not started.';
     if(m.per_action_ready===false)return `Promotion waits for ${perAction} future samples for each binary action.`;
-    if(c.promotable)return 'Future evidence passed the Candidate safety gate.';
+    if(c.promotable)return 'Offline regression and future evidence passed the Candidate safety gates.';
     return 'Live remains authoritative until enough future evidence is collected.';
   };
   function card(c){
-    const m=c.comparison||{}, q=c.queue||{};
+    const m=c.comparison||{}, q=c.queue||{}, gate=c.offline_gate||{};
     const progress=c.state==='building'?Math.max(0,Math.min(100,Math.round((c.training_progress||0)*100))):null;
     const gain=m.accuracy_gain==null?'—':`${m.accuracy_gain>=0?'+':''}${(m.accuracy_gain*100).toFixed(1)} pp`;
     const queueText=q.state==='queued'?` · queue #${q.position||1}`:q.state==='active'?' · active':'';
     const perAction=m.required_future_samples_per_action||20;
+    const teachTotal=c.teach_fit_total;
+    const teachFit=teachTotal==null?'—':`${c.teach_fit_before_count??0}/${teachTotal} → ${c.teach_fit_after_count??0}/${teachTotal}`;
+    const regression=c.historical_regression_delta==null?'—':pp(c.historical_regression_delta);
+    const gateSamples=c.historical_benchmark_samples==null?'—':String(c.historical_benchmark_samples);
     return `<article class="agent candidate-agent" data-candidate-parent="${esc(c.parent_agent_id)}">
       <div class="candidate-top"><div><span class="candidate-badge">CANDIDATE</span><h3>${esc(c.parent_name)} · Gen ${c.generation}</h3></div><span class="candidate-state">${esc(stateLabel(c))}${queueText}</span></div>
-      <p class="candidate-sub">Next generation is isolated from Executor. Live keeps serving while this model trains and compares.</p>
-      ${progress==null?'':`<div class="candidate-progress"><span style="width:${progress}%"></span></div><p class="candidate-small">Training ${progress}% · build rev ${c.build_revision} / feedback rev ${c.feedback_revision}</p>`}
+      <p class="candidate-sub">Exact Live snapshot → conservative Correct → offline regression gate → future A/B. Candidate is isolated from Executor.</p>
+      ${progress==null?'':`<div class="candidate-progress"><span style="width:${progress}%"></span></div><p class="candidate-small">Fine-tuning ${progress}% · build rev ${c.build_revision} / feedback rev ${c.feedback_revision}</p>`}
       ${c.last_error?`<p class="candidate-error">${esc(c.last_error)}</p>`:''}
       <div class="candidate-compare">
+        <div><span>Teach fit</span><b>${esc(teachFit)}</b></div>
+        <div><span>Historical regression</span><b>${esc(regression)}</b></div>
+        <div><span>Offline benchmark samples</span><b>${esc(gateSamples)}</b></div>
+        <div><span>Offline gate</span><b>${esc(gate.status||'pending')}</b></div>
         <div><span>Future samples</span><b>${m.samples||0}</b></div>
         <div><span>Live accuracy</span><b>${pct(m.live_accuracy)}</b></div>
         <div><span>Candidate accuracy</span><b>${pct(m.candidate_accuracy)}</b></div>
@@ -91,10 +102,10 @@
       queueMicrotask(()=>{
         const dialog=document.getElementById('teachDialog');if(!dialog?.open)return;
         const intro=dialog.querySelector('.teach-head + p');
-        if(intro)intro.textContent='Dodaj prawidłowe Desired. Każdy punkt aktualizuje dane Candidate; Live agent pracuje bez przerwy.';
+        if(intro)intro.textContent='Dodaj prawidłowe Desired. Każdy punkt koryguje snapshot Candidate; Live agent pracuje bez przerwy.';
         const train=dialog.querySelector('[data-train]');if(train)train.textContent='Build Candidate now';
         const notes=dialog.querySelectorAll('p');
-        if(notes.length)notes[notes.length-1].textContent='Candidate uczy się obok Live. Kolejne punkty Teach mogą być dodawane podczas treningu; jeśli zmienią dane, Candidate przebuduje nowszą rewizję.';
+        if(notes.length)notes[notes.length-1].textContent='Correct zachowuje model i sensory Live. Po korekcie Candidate musi przejść offline regression gate, zanim zacznie future A/B.';
       });
     };
   }
