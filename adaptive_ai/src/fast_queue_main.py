@@ -38,7 +38,7 @@ def prepare_engine_extensions():
     from teach_rl_rebenchmark import install_teach_rl_rebenchmark
     from control_diagnostics import install_control_diagnostics
     from context_ui_diagnostics import install_context_ui_diagnostics
-    from context_tournament_events import install_context_events
+    from context_tournament_events import install as install_context_events
     changed = install_fast_runtime(core)
     if changed:
         core.STORE.event(None, "info", "fast_runtime_migration",
@@ -71,11 +71,13 @@ def prepare_engine_extensions():
     from agent_candidate_balance import install as install_candidate_balance
     from agent_candidate_debounce import install as install_candidate_debounce
     from agent_candidate_teach_status import install as install_candidate_teach_status
+    from agent_candidate_lifecycle_hardening import install as install_candidate_lifecycle_hardening
     candidates = install_agent_candidates(core)
     candidates = install_candidate_config_guard(candidates)
     candidates = install_candidate_balance(candidates)
     candidates = install_candidate_debounce(candidates)
-    install_candidate_teach_status(core, candidates)
+    candidates = install_candidate_teach_status(core, candidates)
+    candidates = install_candidate_lifecycle_hardening(candidates)
     core.STORE.event(None, "info", "manual_feedback_ready", "Manual correction feedback path ready", None)
     core.STORE.event(None, "info", "teach_rl_ready", "Historical Teach RL pipeline ready", None)
     core.STORE.event(None, "info", "context_tournament_ready",
