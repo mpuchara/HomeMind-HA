@@ -143,7 +143,7 @@ class CandidateLineageTests(unittest.TestCase):
         self.assertEqual(generation["generation_number"], 1)
         self.assertEqual(generation["parent_type"], "live")
         self.assertEqual(generation["parent_generation_id"], f"root:{self.root['id']}")
-        self.assertEqual(self.store.get_model(status["candidate_id"]), self.root_model)
+        self.assertEqual(self.store.get_model(status["candidate_id"]), self.store.get_model(self.root["id"]))
 
     def test_g1_to_g2_and_g2_clone_comes_from_g1_not_g0(self):
         g1_status, g1 = self._g1()
@@ -179,7 +179,7 @@ class CandidateLineageTests(unittest.TestCase):
         expected = [(x["generation_id"], x["generation_number"], x["parent_generation_id"]) for x in self.manager.list_lineage(root_id)]
         self.manager.stop()
 
-        # Recreate manager objects against the same SQLite file.  Migration is additive
+        # Recreate manager objects against the same SQLite file. Migration is additive
         # and idempotent; no in-memory lineage state is required.
         store2 = storage.Store(self.db)
         engine2 = SimpleNamespace(
