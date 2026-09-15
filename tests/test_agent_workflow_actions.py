@@ -86,6 +86,12 @@ class FakeRLTeaching:
                 """
             )
 
+    def add_label(self, agent, desired, sample_ts):
+        return {"ok": True, "desired_value": float(desired), "sample_ts": float(sample_ts)}
+
+    def undo(self, agent):
+        return {"ok": True}
+
     def labels(self, agent_id):
         with self.store.conn() as c:
             return [dict(r) for r in c.execute(
