@@ -3,6 +3,7 @@
   const pct=v=>v==null?'—':`${(Number(v)*100).toFixed(1)}%`;
   const sec=v=>v==null?'—':`${Number(v).toFixed(1)} s`;
   const pp=v=>v==null?'—':`${Number(v)>=0?'+':''}${(Number(v)*100).toFixed(1)} pp`;
+  const val=v=>v==null?'—':Number(v).toFixed(Math.abs(Number(v))<10?2:1);
   const api=async(path,opts={})=>{const r=await fetch(path,{headers:{'Content-Type':'application/json'},...opts});const b=await r.json();if(!r.ok)throw Error(b.error||`HTTP ${r.status}`);return b;};
   let busy=false;
 
@@ -23,16 +24,16 @@
     window.__candidateCardRenderGuard=true;
   }
 
-  const stateLabel=c=>({queued:'Queued',building:'Fine-tuning',comparing:'A/B comparison',ready:'Ready to promote',offline_blocked:'Offline gate blocked',insufficient_evidence:'Insufficient evidence',failed:'Failed',discarding:'Discarding'}[c.state]||c.state);
+  const stateLabel=c=>({queued:'Queued',building:'Fine-tuning',comparing:'A/B comparison',ready:'Ready to promote',offline_blocked:'Offline gate blocked',insufficient_evidence:'Insufficient evidence',failed:'Failed',discarding:'Discarding',parent:'Parent / champion'}[c.state]||c.state);
   const statusText=(c,m,perAction)=>{
     if(c.stale)return 'New Teach feedback arrived after this build snapshot — a newer snapshot will be corrected next.';
-    if(c.state==='queued')return 'Candidate is queued to clone the current Live generation and apply this Teach revision.';
-    if(c.state==='building')return 'Training the current Teach revision by fine-tuning the exact Live snapshot. Correct keeps the parent schema and does not run a full rebuild.';
-    if(c.state==='offline_blocked')return 'Offline regression gate failed. Future A/B is blocked until a safe Candidate is built.';
-    if(c.state==='insufficient_evidence')return 'Offline regression gate has insufficient non-Teach historical evidence. Future A/B has not started.';
+    if(c.state==='queued')return 'Candidate is queued to clone its direct parent generation and apply this Teach revision.';
+    if(c.state==='building')return 'Training the current Teach revision by fine-tuning the exact parent snapshot. Correct keeps the parent schema and does not run a full rebuild.';
+    if(c.state==='offline_blocked')return 'Offline regression gate failed. Shadow prediction remains observable, but future A/B is blocked.';
+    if(c.state==='insufficient_evidence')return 'Offline regression gate has insufficient non-Teach historical evidence. Shadow prediction remains observable; future A/B has not started.';
     if(m.per_action_ready===false)return `Promotion waits for ${perAction} future samples for each binary action.`;
-    if(c.promotable)return 'Offline regression and future evidence passed the Candidate safety gates.';
-    return 'Live remains authoritative until enough future evidence is collected.';
+    if(c.promotable)return 'Offline regression and paired future evidence passed the Candidate safety gates.';
+    return 'The direct parent remains authoritative until enough paired future evidence is collected.';
   };
   function card(c){
     const m=c.comparison||{}, q=c.queue||{}, gate=c.offline_gate||{};
@@ -44,25 +45,30 @@
     const teachFit=teachTotal==null?'—':`${c.teach_fit_before_count??0}/${teachTotal} → ${c.teach_fit_after_count??0}/${teachTotal}`;
     const regression=c.historical_regression_delta==null?'—':pp(c.historical_regression_delta);
     const gateSamples=c.historical_benchmark_samples==null?'—':String(c.historical_benchmark_samples);
+    const generation=c.generation_number??c.generation;
     return `<article class="agent candidate-agent" data-candidate-parent="${esc(c.parent_agent_id)}">
-      <div class="candidate-top"><div><span class="candidate-badge">CANDIDATE</span><h3>${esc(c.parent_name)} · Gen ${c.generation}</h3></div><span class="candidate-state">${esc(stateLabel(c))}${queueText}</span></div>
-      <p class="candidate-sub">Exact Live snapshot → conservative Correct → offline regression gate → future A/B. Candidate is isolated from Executor.</p>
+      <div class="candidate-top"><div><span class="candidate-badge">CANDIDATE</span><h3>${esc(c.parent_name)} · Gen ${esc(generation)}</h3></div><span class="candidate-state">${esc(stateLabel(c))}${queueText}</span></div>
+      <p class="candidate-sub">Direct-parent snapshot → conservative Correct → persistent Shadow → paired future A/B. Candidate is isolated from Executor.</p>
       ${progress==null?'':`<div class="candidate-progress"><span style="width:${progress}%"></span></div><p class="candidate-small">Fine-tuning ${progress}% · build rev ${c.build_revision} / feedback rev ${c.feedback_revision}</p>`}
       ${c.last_error?`<p class="candidate-error">${esc(c.last_error)}</p>`:''}
       <div class="candidate-compare">
+        <div><span>Current</span><b>${val(c.shadow_current)}</b></div>
+        <div><span>Candidate Desired</span><b>${val(c.candidate_desired)}</b></div>
+        <div><span>Confidence</span><b>${pct(c.candidate_confidence)}</b></div>
         <div><span>Teach fit</span><b>${esc(teachFit)}</b></div>
         <div><span>Historical regression</span><b>${esc(regression)}</b></div>
         <div><span>Offline benchmark samples</span><b>${esc(gateSamples)}</b></div>
         <div><span>Offline gate</span><b>${esc(gate.status||'pending')}</b></div>
         <div><span>Future samples</span><b>${m.samples||0}</b></div>
-        <div><span>Live accuracy</span><b>${pct(m.live_accuracy)}</b></div>
+        <div><span>Parent accuracy</span><b>${pct(m.live_accuracy)}</b></div>
         <div><span>Candidate accuracy</span><b>${pct(m.candidate_accuracy)}</b></div>
         <div><span>Accuracy gain</span><b>${gain}</b></div>
-        <div><span>ON lead · Live / Candidate</span><b>${sec(m.live_on_lead_seconds)} / ${sec(m.candidate_on_lead_seconds)}</b></div>
-        <div><span>OFF lead · Live / Candidate</span><b>${sec(m.live_off_lead_seconds)} / ${sec(m.candidate_off_lead_seconds)}</b></div>
-        <div><span>False early · Live / Candidate</span><b>${m.live_false_early||0} / ${m.candidate_false_early||0}</b></div>
-        <div><span>Paired wins · Live / Candidate</span><b>${m.live_wins||0} / ${m.candidate_wins||0}</b></div>
+        <div><span>ON lead · Parent / Candidate</span><b>${sec(m.live_on_lead_seconds)} / ${sec(m.candidate_on_lead_seconds)}</b></div>
+        <div><span>OFF lead · Parent / Candidate</span><b>${sec(m.live_off_lead_seconds)} / ${sec(m.candidate_off_lead_seconds)}</b></div>
+        <div><span>False early · Parent / Candidate</span><b>${m.live_false_early||0} / ${m.candidate_false_early||0}</b></div>
+        <div><span>Paired wins · Parent / Candidate</span><b>${m.live_wins||0} / ${m.candidate_wins||0}</b></div>
       </div>
+      <p class="candidate-small">${c.shadow_active?'Shadow is running on the same current context as its parent.':'No fresh Shadow observation yet — historical Desired stays a gap until this generation actually runs.'}</p>
       <p class="candidate-small">${statusText(c,m,perAction)}</p>
       <div class="candidate-actions"><button class="primary" data-promote ${c.promotable?'':'disabled'}>Promote</button><button class="ghost" data-discard>Discard</button></div>
     </article>`;
@@ -79,12 +85,12 @@
         root.insertAdjacentHTML('beforeend',card(c));
         const el=root.lastElementChild;
         el.querySelector('[data-promote]').onclick=async()=>{
-          if(!confirm(`Promote Candidate Gen ${c.generation} for ${c.parent_name}? The new generation will start in Shadow.`))return;
+          if(!confirm(`Promote Candidate Gen ${c.generation_number??c.generation} for ${c.parent_name}? The new generation will start in Shadow.`))return;
           try{await api(`api/agents/${encodeURIComponent(c.parent_agent_id)}/candidate/promote`,{method:'POST',body:'{}'});await refresh();}
           catch(e){alert(e.message);}
         };
         el.querySelector('[data-discard]').onclick=async()=>{
-          if(!confirm(`Discard Candidate Gen ${c.generation}? Live is not affected.`))return;
+          if(!confirm(`Discard Candidate Gen ${c.generation_number??c.generation}? The parent generation is not deleted.`))return;
           try{await api(`api/agents/${encodeURIComponent(c.parent_agent_id)}/candidate`,{method:'DELETE'});await refresh();}
           catch(e){alert(e.message);}
         };
@@ -102,10 +108,10 @@
       queueMicrotask(()=>{
         const dialog=document.getElementById('teachDialog');if(!dialog?.open)return;
         const intro=dialog.querySelector('.teach-head + p');
-        if(intro)intro.textContent='Dodaj prawidłowe Desired. Każdy punkt koryguje snapshot Candidate; Live agent pracuje bez przerwy.';
+        if(intro)intro.textContent='Dodaj prawidłowe Desired. Każdy punkt koryguje snapshot Candidate; parent pracuje bez przerwy.';
         const train=dialog.querySelector('[data-train]');if(train)train.textContent='Build Candidate now';
         const notes=dialog.querySelectorAll('p');
-        if(notes.length)notes[notes.length-1].textContent='Correct zachowuje model i sensory Live. Po korekcie Candidate musi przejść offline regression gate, zanim zacznie future A/B.';
+        if(notes.length)notes[notes.length-1].textContent='Correct zachowuje model i sensory parenta. Historyczne Desired pochodzi wyłącznie z realnie zaobserwowanego Shadow, nigdy z replay obecnej policy.';
       });
     };
   }
