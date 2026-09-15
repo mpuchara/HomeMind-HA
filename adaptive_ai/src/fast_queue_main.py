@@ -25,7 +25,7 @@ def prepare_engine_extensions():
     from teaching_rl import RLTeaching
     from context_tournament import install as install_context_tournament
     from context_tournament_metrics import install_metrics as install_context_tournament_metrics
-    from fast_light_objective import install as install_fast_light_objective
+    from fast_light_objective_runtime import install as install_fast_light_objective
     from context_tournament_hysteresis import install as install_context_tournament_hysteresis
     from context_tournament_promotion import install_promotion as install_context_tournament_promotion
     from context_tournament_primary_protection import install_primary_protection
