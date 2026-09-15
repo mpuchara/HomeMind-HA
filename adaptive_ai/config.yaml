@@ -1,5 +1,5 @@
 name: "Adaptive AI"
-version: "0.12.1"
+version: "0.13.0"
 slug: "adaptive_ai"
 description: >-
   History-first local reinforcement-learning policies for Home Assistant. Imports
@@ -58,6 +58,10 @@ options:
   automation_context_reserve: 8
   candidate_benchmark_threshold: 0.78
   candidate_benchmark_min_samples: 12
+  agent_candidate_future_samples: 40
+  agent_candidate_future_samples_per_binary_action: 20
+  agent_candidate_max_accuracy_regression: 0.03
+  agent_candidate_backup_hours: 24
   agent_training_chunk_hours: 24
   agent_training_overlap_hours: 6
   min_historical_support: 0.20
@@ -139,6 +143,10 @@ schema:
   automation_context_reserve: "int(0,20)"
   candidate_benchmark_threshold: "float(0.50,0.99)"
   candidate_benchmark_min_samples: "int(4,100)"
+  agent_candidate_future_samples: "int(20,5000)"
+  agent_candidate_future_samples_per_binary_action: "int(10,1000)"
+  agent_candidate_max_accuracy_regression: "float(0.0,0.25)"
+  agent_candidate_backup_hours: "int(1,168)"
   agent_training_chunk_hours: "int(6,168)"
   agent_training_overlap_hours: "int(0,48)"
   min_historical_support: "float(0.0,1.0)"
