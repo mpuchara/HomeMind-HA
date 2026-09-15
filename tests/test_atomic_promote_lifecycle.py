@@ -114,6 +114,19 @@ class FakeManager:
         return self.status(self.root_id)
 
 
+CONTROL_PROOF = {
+    "balanced": True,
+    "counts": {
+        "samples": 200,
+        "correct": 200,
+        "per_action": {
+            "0": {"samples": 100, "correct": 100},
+            "1": {"samples": 100, "correct": 100},
+        },
+    },
+}
+
+
 class AtomicPromoteTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
@@ -130,7 +143,9 @@ class AtomicPromoteTests(unittest.TestCase):
             "schema": {"version": 11, "entities": ["binary_sensor.presence"]},
             "selection_meta": {"schema_revision": 3},
         })
-        self.store.set_training_state(self.root["id"], "qualified", score=.92, samples=100, source="test", detail={})
+        self.store.set_training_state(
+            self.root["id"], "qualified", score=1.0, samples=200, source="test", detail=CONTROL_PROOF
+        )
         self.root = self.store.get_agent_config(self.root["id"])
 
         self.candidate = self.store.create_agent({
@@ -143,7 +158,10 @@ class AtomicPromoteTests(unittest.TestCase):
             "schema": {"version": 11, "entities": ["binary_sensor.presence"]},
             "selection_meta": {"schema_revision": 4},
         })
-        self.store.set_training_state(self.candidate["id"], "qualified", score=.96, samples=120, source="candidate", detail={"ok": True})
+        self.store.set_training_state(
+            self.candidate["id"], "qualified", score=1.0, samples=200,
+            source="candidate", detail=CONTROL_PROOF,
+        )
         self.candidate = self.store.get_agent_config(self.candidate["id"])
         now = time.time()
         with self.store.lock, self.store.conn() as c:
@@ -194,6 +212,13 @@ class AtomicPromoteTests(unittest.TestCase):
         self.assertEqual(live["mode"], "shadow")
         self.assertEqual(self.store.get_model(self.root["id"])["model_revision"], "candidate-r1")
         self.assertEqual(self.manager._generation(self.root["id"]), 1)
+        with self.store.conn() as c:
+            root_lineage = c.execute(
+                "SELECT generation_number,model_revision FROM agent_candidate_generations WHERE generation_type='live' AND agent_id=?",
+                (self.root["id"],),
+            ).fetchone()
+        self.assertEqual(int(root_lineage["generation_number"]), 1)
+        self.assertEqual(root_lineage["model_revision"], "candidate-r1")
         self.executor.take_control.assert_not_called()
         self.executor.release_control.assert_not_called()
 
@@ -273,18 +298,7 @@ class ControlReleaseOwnershipTests(unittest.TestCase):
                 "exploration_step": 1,
             })
             store.set_training_state(
-                root["id"], "qualified", score=1.0, samples=200, source="test",
-                detail={
-                    "balanced": True,
-                    "counts": {
-                        "samples": 200,
-                        "correct": 200,
-                        "per_action": {
-                            "0": {"samples": 100, "correct": 100},
-                            "1": {"samples": 100, "correct": 100},
-                        },
-                    },
-                },
+                root["id"], "qualified", score=1.0, samples=200, source="test", detail=CONTROL_PROOF
             )
             store.update_agent(root["id"], {"mode": "control"})
             root = store.get_agent_config(root["id"])
