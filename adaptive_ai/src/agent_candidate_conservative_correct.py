@@ -9,7 +9,7 @@ build semantics for Correct/Teach only:
                -> future paired A/B (only after the offline gate passes)
 
 Explicit Full Rebuild / config-change workflows keep the existing historical rebuild
-path.  Candidate policies remain hidden from normal runtime enumeration and this module
+path. Candidate policies remain hidden from normal runtime enumeration and this module
 never creates ActionIntent, calls Executor, or invokes Home Assistant services.
 """
 import json
@@ -45,7 +45,7 @@ def _copy_parent_snapshot(manager, parent_id, candidate_id):
 
     ``rl_models.model_json`` is copied byte-for-byte so policy weights, schema,
     selection metadata, model revision and benchmark internals start identically.
-    Historical experiences and feedback/audit rows are copied as well.  The only
+    Historical experiences and feedback/audit rows are copied as well. The only
     intentional runtime difference is ``mode='paused'``: a Candidate is never allowed to
     own physical control.
     """
@@ -53,7 +53,9 @@ def _copy_parent_snapshot(manager, parent_id, candidate_id):
     with store.lock, store.conn() as c:
         parent = c.execute("SELECT * FROM agents WHERE id=?", (str(parent_id),)).fetchone()
         candidate = c.execute("SELECT * FROM agents WHERE id=?", (str(candidate_id),)).fetchone()
-        model = c.execute("SELECT model_json,updated_at FROM rl_models WHERE agent_id=?", (str(parent_id),)).fetchone()
+        model = c.execute(
+            "SELECT model_json,updated_at FROM rl_models WHERE agent_id=?", (str(parent_id),)
+        ).fetchone()
         if not parent or not candidate:
             raise RuntimeError("Live or Candidate agent disappeared before snapshot")
         if not model:
@@ -67,7 +69,10 @@ def _copy_parent_snapshot(manager, parent_id, candidate_id):
         if copied:
             assignments = ",".join(f"{name}=?" for name in copied)
             values = [parent[name] for name in copied]
-            c.execute(f"UPDATE agents SET {assignments},mode='paused' WHERE id=?", values + [str(candidate_id)])
+            c.execute(
+                f"UPDATE agents SET {assignments},mode='paused' WHERE id=?",
+                values + [str(candidate_id)],
+            )
 
         c.execute("DELETE FROM rl_models WHERE agent_id=?", (str(candidate_id),))
         c.execute(
@@ -95,7 +100,9 @@ def _copy_parent_snapshot(manager, parent_id, candidate_id):
 
         # Leftovers from the pre-fix Candidate rebuild pipeline must not re-enter the
         # destructive TrainingQueue path after an upgrade/retry.
-        if c.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='teaching_rl_jobs'").fetchone():
+        if c.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='teaching_rl_jobs'"
+        ).fetchone():
             c.execute("DELETE FROM teaching_rl_jobs WHERE agent_id=?", (str(candidate_id),))
 
     manager.engine.models.pop(str(candidate_id), None)
@@ -143,9 +150,9 @@ def _teach_rows(service, candidate):
 def _conservative_fine_tune(manager, candidate):
     """Fine-tune the snapshot without feature selection or historical rebuilding.
 
-    All pre-correction predictions are collected before the first policy update.  A
+    All pre-correction predictions are collected before the first policy update. A
     negative correction therefore targets exactly the action this Candidate snapshot
-    actually chose at that Teach context.  ``previous_desired`` is retained in storage
+    actually chose at that Teach context. ``previous_desired`` is retained in storage
     for diagnostics but is never used as a negative-learning target.
     """
     service = getattr(manager.engine, "rl_teaching", None)
@@ -159,6 +166,9 @@ def _conservative_fine_tune(manager, candidate):
     negative_weight = max(0, int(OPTIONS.get("teach_rl_negative_weight", 3)))
     deadband = max(.01, float(candidate.get("deadband") or .01))
 
+    # Critically, collect every prediction from the untouched snapshot first. Later
+    # corrections cannot change which action is considered the rejected action for an
+    # earlier Teach sample in the same revision.
     usable = []
     before_correct = 0
     for label in labels:
@@ -210,12 +220,12 @@ def _conservative_fine_tune(manager, candidate):
 
     after_correct = 0
     for sample in usable:
-        chosen_idx, chosen_value = _prediction_index(policy, sample["features"])
+        _, chosen_value = _prediction_index(policy, sample["features"])
         after_correct += int(abs(chosen_value - sample["desired_value"]) <= deadband)
 
     manager.store.save_model(candidate["id"], policy.serialize())
     manager.engine.models[candidate["id"]] = policy
-    report = {
+    return {
         "mode": "conservative_snapshot_finetune",
         "labels_applied": len(usable),
         "teach_fit_before_count": int(before_correct),
@@ -230,7 +240,6 @@ def _conservative_fine_tune(manager, candidate):
         "base_model_revision": base_revision or None,
         "candidate_model_revision": str(getattr(policy, "model_revision", "") or "") or None,
     }
-    return report, [float(x["label"]["sample_ts"]) for x in usable]
 
 
 def _history_rows(store, agent_id, teach_times=()):
@@ -243,7 +252,7 @@ def _history_rows(store, agent_id, teach_times=()):
             (str(agent_id),),
         ).fetchall()]
 
-    # The Teach context is not allowed to certify itself.  Historical experiences are
+    # The Teach context is not allowed to certify itself. Historical experiences are
     # target-transition rows rather than arbitrary chart points, so exclude an experience
     # only when its transition timestamp is the Teach sample itself (small storage/float
     # tolerance); unrelated neighbouring history remains available for regression proof.
@@ -309,13 +318,59 @@ def _score(policy, agent, rows):
     }
 
 
+def _benchmark_stats(agent):
+    """Adapt the existing HistoryManager held-out benchmark for explicit Full Rebuilds.
+
+    Correct uses the stricter same-row comparison above because its schema is frozen. A
+    schema-changing Full Rebuild cannot safely replay the old model's serialized feature
+    vector through the new schema, so reuse each policy's already-qualified historical
+    benchmark instead of pretending those feature indexes are interchangeable.
+    """
+    detail = dict(agent.get("benchmark_detail") or {})
+    counts = dict(detail.get("counts") or {})
+    raw_per = dict(counts.get("per_action") or {})
+    per_action = {
+        str(key): {
+            "samples": int(value.get("samples") or 0),
+            "correct": int(value.get("correct") or 0),
+        }
+        for key, value in raw_per.items()
+        if isinstance(value, dict)
+    }
+    per_accuracy = dict(detail.get("per_action_accuracy") or {})
+    if not per_accuracy:
+        per_accuracy = {
+            key: float(value["correct"]) / max(1, int(value["samples"]))
+            for key, value in per_action.items() if int(value.get("samples") or 0) > 0
+        }
+    binary = bool(detail.get("balanced")) or str(agent.get("target_property") or "") == "power"
+    class_coverage = bool(detail.get("class_coverage", len(per_action) >= (2 if binary else 1)))
+    qualified = str(agent.get("training_state") or "") == "qualified"
+    predicted_coverage = 2 if binary and qualified and class_coverage else (1 if int(agent.get("benchmark_samples") or 0) else 0)
+    return {
+        "samples": int(agent.get("benchmark_samples") or counts.get("samples") or 0),
+        "correct": int(counts.get("correct") or 0),
+        "score": agent.get("benchmark_score"),
+        "balanced": bool(binary),
+        "per_action": per_action,
+        "per_action_accuracy": {str(k): float(v) for k, v in per_accuracy.items()},
+        "actual_class_coverage": len([1 for v in per_action.values() if int(v.get("samples") or 0) > 0]),
+        "predicted_class_coverage": predicted_coverage,
+    }
+
+
 def _offline_gate(parent, parent_stats, candidate_stats, teach_report=None):
     max_regression = max(0.0, float(OPTIONS.get("agent_candidate_max_accuracy_regression", .03)))
     min_samples = max(1, int(OPTIONS.get("candidate_benchmark_min_samples", 12)))
     teach_report = dict(teach_report or {})
     before = teach_report.get("teach_fit_before")
     after = teach_report.get("teach_fit_after")
-    teach_ok = True if before is None or after is None else float(after) + 1e-12 >= float(before)
+    teach_total = teach_report.get("teach_fit_total")
+    conservative_correct = teach_report.get("mode") == "conservative_snapshot_finetune"
+    teach_evidence = not conservative_correct or int(teach_total or 0) > 0
+    teach_ok = teach_evidence and (
+        True if before is None or after is None else float(after) + 1e-12 >= float(before)
+    )
 
     n = min(int(parent_stats.get("samples") or 0), int(candidate_stats.get("samples") or 0))
     binary = bool(parent_stats.get("balanced") or candidate_stats.get("balanced"))
@@ -325,14 +380,21 @@ def _offline_gate(parent, parent_stats, candidate_stats, teach_report=None):
     )
     parent_score = parent_stats.get("score")
     candidate_score = candidate_stats.get("score")
-    sufficient = bool(n >= min_samples and class_evidence and parent_score is not None and candidate_score is not None)
+    sufficient = bool(
+        teach_evidence and n >= min_samples and class_evidence
+        and parent_score is not None and candidate_score is not None
+    )
 
     if not sufficient:
         status = "insufficient_evidence"
         passed = False
         regression = None
         collapse = False
-        reasons = [f"need at least {min_samples} non-Teach historical samples with required class coverage"]
+        reasons = []
+        if not teach_evidence:
+            reasons.append("no usable Teach context could be reconstructed")
+        if n < min_samples or not class_evidence or parent_score is None or candidate_score is None:
+            reasons.append(f"need at least {min_samples} non-Teach historical samples with required class coverage")
     else:
         regression = float(candidate_score) - float(parent_score)
         collapse = False
@@ -361,7 +423,7 @@ def _offline_gate(parent, parent_stats, candidate_stats, teach_report=None):
         "teach_fit_after": after,
         "teach_fit_before_count": teach_report.get("teach_fit_before_count"),
         "teach_fit_after_count": teach_report.get("teach_fit_after_count"),
-        "teach_fit_total": teach_report.get("teach_fit_total"),
+        "teach_fit_total": teach_total,
         "historical_parent_score": parent_score,
         "historical_candidate_score": candidate_score,
         "regression_delta": regression,
@@ -421,6 +483,8 @@ def install(manager):
     original_finish = manager._finish_build_if_ready
     original_status = manager.status
     original_summary = manager._comparison_summary
+    original_before = manager.before_live_process
+    original_after = manager.after_live_process
 
     def create_candidate(parent):
         row = original_create(parent)
@@ -462,22 +526,17 @@ def install(manager):
             synced = manager._sync_feedback(parent, candidate)
             candidate = manager.store.get_agent_config(candidate["id"]) or candidate
 
-            # Parent score is measured from the exact Candidate snapshot before a single
-            # correction update. The same held-out rows are reused after fine-tuning.
+            # Parent and Candidate are scored on the exact same immutable held-out row
+            # list. Exclude every active Teach timestamp up front, even if one Teach
+            # context later proves unusable; this cannot leak a training point into the
+            # regression benchmark and avoids changing the denominator after fine-tune.
             labels = _teach_rows(manager.engine.rl_teaching, candidate)
             teach_times = [float(x["sample_ts"]) for x in labels]
             rows = _history_rows(manager.store, candidate["id"], teach_times)
             parent_policy = _policy_for(manager, candidate)
             parent_stats = _score(parent_policy, candidate, rows)
 
-            report, used_teach_times = _conservative_fine_tune(manager, candidate)
-            # Recompute exclusion with the actually usable Teach contexts. It can only
-            # add held-out rows compared with the conservative pre-pass above.
-            if set(used_teach_times) != set(teach_times):
-                rows = _history_rows(manager.store, candidate["id"], used_teach_times)
-                parent_policy = _policy_for(manager, candidate)
-                # parent_policy now points at the tuned model; retain the previously
-                # measured baseline rather than accidentally certifying against itself.
+            report = _conservative_fine_tune(manager, candidate)
             candidate = manager.store.get_agent_config(candidate["id"]) or candidate
             candidate_policy = _policy_for(manager, candidate)
             candidate_stats = _score(candidate_policy, candidate, rows)
@@ -512,9 +571,9 @@ def install(manager):
             return True
 
     def finish_build_if_ready(row):
-        # The conservative Correct path is synchronous and never enters TrainingQueue.
-        # Full Rebuild remains asynchronous; once it finishes, intercept the transition
-        # to future A/B and require the same offline regression gate first.
+        # Conservative Correct never enters TrainingQueue. Explicit Full Rebuild remains
+        # asynchronous; once its own historical qualification finishes, compare those
+        # established held-out benchmark scores before permitting future A/B.
         reason = str(row.get("reason") or "")
         result = original_finish(row)
         if not result or reason not in _FULL_REBUILD_REASONS:
@@ -530,10 +589,7 @@ def install(manager):
         if not parent or not candidate or not manager.store.get_model(candidate["id"]):
             return result
         try:
-            rows = _history_rows(manager.store, parent["id"], ())
-            parent_stats = _score(_policy_for(manager, parent), parent, rows)
-            candidate_stats = _score(_policy_for(manager, candidate), candidate, rows)
-            gate = _offline_gate(parent, parent_stats, candidate_stats, {})
+            gate = _offline_gate(parent, _benchmark_stats(parent), _benchmark_stats(candidate), {})
             _persist_gate(manager, fresh, gate)
         except Exception as exc:
             manager._fail(fresh, f"offline regression gate failed: {type(exc).__name__}: {exc}")
@@ -545,6 +601,24 @@ def install(manager):
         out["offline_gate_passed"] = bool(gate.get("passed"))
         out["promotable"] = bool(out.get("promotable") and gate.get("passed"))
         return out
+
+    def _future_gate_passed(agent):
+        row = manager._candidate_row(agent["id"])
+        if not row or str(row.get("state") or "") not in ("comparing", "ready"):
+            return True
+        return bool(_json(row.get("offline_gate_json"), {}).get("passed"))
+
+    def before_live_process(agent, state_map):
+        # Even the tiny interval between a legacy rebuild completing and its regression
+        # gate being persisted cannot collect future A/B evidence.
+        if not _future_gate_passed(agent):
+            return None
+        return original_before(agent, state_map)
+
+    def after_live_process(agent, state_map):
+        if not _future_gate_passed(agent):
+            return None
+        return original_after(agent, state_map)
 
     def status(parent_id):
         result = original_status(parent_id)
@@ -572,8 +646,23 @@ def install(manager):
     manager._start_build = start_build
     manager._finish_build_if_ready = finish_build_if_ready
     manager._comparison_summary = comparison_summary
+    manager.before_live_process = before_live_process
+    manager.after_live_process = after_live_process
     manager.status = status
     manager._candidate_conservative_correct = True
     manager.candidate_correct_contract = "exact_live_snapshot_then_conservative_finetune"
     manager.candidate_offline_gate_contract = "held_out_history_before_future_ab"
+
+    # A pre-upgrade Candidate that was already comparing never passed this new gate.
+    # Requeue it instead of silently grandfathering stale future evidence.
+    now = time.time()
+    with manager.store.lock, manager.store.conn() as c:
+        c.execute(
+            """UPDATE agent_candidates SET state='queued',dirty=1,comparison_json='{}',
+               queued_ts=?,updated_ts=?
+               WHERE state IN ('comparing','ready')
+                 AND (offline_gate_json IS NULL OR offline_gate_json='' OR offline_gate_json='{}')""",
+            (now, now),
+        )
+    manager.wake_event.set()
     return manager
