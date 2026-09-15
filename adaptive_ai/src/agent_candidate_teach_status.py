@@ -120,7 +120,7 @@ def install(core, manager):
     if getattr(handler, "_agent_candidate_teach_status", False):
         return manager
     original_get = handler.do_GET
-    original_post = handler.do_POST
+    original_post = getattr(handler, "do_POST", None)
 
     def do_get(http):
         path, _, _ = http.path.partition("?")
@@ -157,9 +157,10 @@ def install(core, manager):
                                             "training_queue": candidate.get("queue") if candidate else None})
             except ValueError as exc:
                 return http.send_json(404, {"error": str(exc)})
-        return original_post(http)
+        return original_post(http) if original_post is not None else None
 
     handler.do_GET = do_get
-    handler.do_POST = do_post
+    if original_post is not None:
+        handler.do_POST = do_post
     handler._agent_candidate_teach_status = True
     return manager
