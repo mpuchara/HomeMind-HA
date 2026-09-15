@@ -1,8 +1,8 @@
 {
-  "version": "0.13.0",
+  "version": "0.13.1",
   "release_date": "2026-09-15",
-  "base_version": "0.12.1",
-  "base_commit": "b73f9eca",
+  "base_version": "0.13.0",
+  "base_commit": "0a180f9b",
   "profile": "rpi4-low-memory-manual-training",
   "manual_agent_training": true,
   "max_concurrent_training_jobs": 1,
@@ -13,7 +13,7 @@
   "home_model_version": 1,
   "reward_version": 3,
   "release_status": "ci-validated-source-release",
-  "tests_passed": 444,
+  "tests_passed": 451,
   "docker_build": "github-actions-smoke-passed",
   "pi4": "not_measured",
   "bootstrap_catchup": "bounded-live-statistics",
@@ -41,7 +41,8 @@
   "agent_rendering": "event-time renderer dispatch; stable card ownership by normalized agent ID; Candidate generation uses a distinct secondary card",
   "button_teaching": "Dedicated Teach RL label log, bounded Recorder context refresh, full-context candidate scoring, isolated offline Candidate rebuild and supervised LinUCB fine-tuning; Wrong decision remains on the legacy teaching endpoint.",
   "live_ui": "Independent 500 ms lightweight non-overlapping polling; Candidate diagnostics poll separately",
-  "teaching_history": "Teach RL defaults to 600 seconds; replay is bounded, uses the base RL policy and redraws after retraining; gray translucent drag selection is visible on dark charts.",
+  "teaching_history": "Teach chart uses recorded effective runtime Desired from decision_history, matching the last_prediction shown on the agent card. Current-policy replay is not presented as historical Desired; missing or stale runtime records render as gaps.",
+  "teach_desired_history": "effective post-teaching/post-experiment runtime Desired; 95-second freshness; pending in-memory decision records are included before SQLite flush",
   "teach_rl": "labels -> Candidate -> bounded Recorder context -> feature reselection -> deterministic rebuild -> supervised LinUCB -> paired future comparison",
   "teach_rl_default_window_seconds": 600,
   "teach_rl_feature_reselection": "full eligible context after Recorder refresh; strong supervised features can replace occupied context slots inside Candidate",
@@ -78,7 +79,7 @@
     "agent_generation_state",
     "agent_generation_backups"
   ],
-  "migration": "additive SQLite only; Live agents, archive history, Teach labels, feedback, models, benchmarks and existing Tournament state are preserved",
-  "anticipation_simulator": "Production anticipation, dispatch and reward simulator passes together with dedicated confidence-gate tests",
-  "fast_light_timing_simulator": "automation-relative ON lead/OFF saved-time rewards plus false/premature penalties and timing-aware Tournament gain"
+  "migration": "additive SQLite only; Live agents, archive history, Teach labels, feedback, models, benchmarks, decision history and Tournament state are preserved",
+  "anticipation_simulator": "Production anticipation, dispatch and reward simulator remains mandatory",
+  "fast_light_timing_simulator": "automation-relative ON lead/OFF saved-time rewards plus false/premature penalties remain mandatory"
 }
