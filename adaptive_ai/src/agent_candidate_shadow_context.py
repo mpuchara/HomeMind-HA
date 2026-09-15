@@ -154,4 +154,9 @@ def install(manager):
     manager.after_live_process = after_live_process
     manager._candidate_shadow_context_installed = True
     manager.candidate_shadow_context_contract = "exact_root_policy_features_snapshot_and_timestamp_same_process_inference"
-    return manager
+
+    # Generation-aware user actions must wrap the final Shadow/context contract. Keeping
+    # this installation here guarantees they are active before the Candidate worker starts
+    # without introducing a second startup path.
+    from agent_workflow_actions import install as install_agent_workflow_actions
+    return install_agent_workflow_actions(manager)
