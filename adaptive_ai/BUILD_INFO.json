@@ -1,8 +1,8 @@
 {
-  "version": "0.14.3",
+  "version": "0.14.4",
   "release_date": "2026-09-16",
-  "base_version": "0.14.2",
-  "base_commit": "281d193f",
+  "base_version": "0.14.3",
+  "base_commit": "24c02934",
   "profile": "rpi4-low-memory-manual-training",
   "manual_agent_training": true,
   "max_concurrent_training_jobs": 1,
@@ -12,9 +12,9 @@
   "feature_schema": 11,
   "home_model_version": 1,
   "reward_version": 3,
-  "release_status": "release-0.14.3-balanced-correct-and-stable-blocked-shadow-ci-required",
-  "tests_passed": 549,
-  "docker_build": "github-actions-0.14.3-smoke-required",
+  "release_status": "release-0.14.4-hard-user-corrections-ci-required",
+  "tests_passed": 552,
+  "docker_build": "github-actions-0.14.4-smoke-required",
   "pi4": "not_measured",
   "bootstrap_catchup": "bounded-live-statistics",
   "presence_admission": "binary-first-per-device-and-area",
@@ -42,8 +42,8 @@
   "candidate_future_evidence_restore": "passive blocked-Candidate observation no longer rewrites persisted lifecycle state; future A/B summaries are stored while offline_blocked or insufficient_evidence remains stable",
   "candidate_custom_promotion": "user may choose future sample/class/regression thresholds and explicitly override offline evidence gate; atomic/config/Control qualification guards remain mandatory",
   "candidate_correct_balance": "binary Correct treats user labels as error sampling; one-sided desired labels are balanced with nearest correctly-predicted positive historical anchors from the opposite class",
-  "candidate_correct_update_budget": "at most three balanced positive rounds; one rejected-action negative update per marked error; training stops when corrections fit and stability anchors remain correct",
-  "candidate_correct_balance_gate": "standard promotion blocks if marked errors do not improve, opposite-class anchors are insufficient, or selected stability anchors are damaged",
+  "candidate_correct_update_budget": "up to three balanced rounds, then up to twelve bounded desired-arm-only hard repair rounds for unresolved explicit corrections; rejected-action negative update remains one-time",
+  "candidate_correct_balance_gate": "explicit marked corrections are hard fit targets; opposite-class anchors are soft regularization/evidence; missing opposite-class anchors remains insufficient evidence; held-out per-class/global regression and one-class-collapse remain authoritative",
   "manual_feedback": "Correct is historical supervised correction on observed Desired; Change decision is immediate contextual feedback; both evolve a child generation instead of training the parent in place.",
   "manual_feedback_ui": "Live and Candidate cards expose Autonomous, Correct, Explore, Change decision and Settings; Candidate lifecycle keeps Promote and Discard separately.",
   "manual_feedback_context": "Change decision records full-context feedback. Candidate Change decision changes only Candidate Shadow behavior and never dispatches physical control.",
@@ -65,7 +65,8 @@
     "full_rebuild_negative_previous": 3,
     "candidate_correct_positive_per_round": 1,
     "candidate_correct_rejected_negative": 1,
-    "candidate_correct_max_rounds": 3
+    "candidate_correct_max_rounds": 3,
+    "candidate_correct_hard_repair_max_rounds": 12
   },
   "wrong_decision": "renamed Change decision; immediate contextual behavior correction plus exact-parent child Candidate revision",
   "sensor_tournament": "persistent candidate-pool -> context challenger -> future-only prequential validation -> promotion -> probation/rollback",
@@ -115,8 +116,10 @@
     "observed Desired is never invented by policy replay",
     "Promote is atomic and generation identity is preserved",
     "automation ownership is preserved through Promote and Control-to-Shadow",
-    "binary Correct does not interpret error-only labels as the natural ON/OFF prior"
+    "binary Correct does not interpret error-only labels as the natural ON/OFF prior",
+    "every usable user-marked Correct point is a hard fit target; stability anchors cannot veto it individually"
   ],
   "anticipation_simulator": "Production anticipation, dispatch and reward simulator remains mandatory",
-  "fast_light_timing_simulator": "automation-relative ON lead/OFF saved-time rewards plus false/premature penalties remain mandatory"
+  "fast_light_timing_simulator": "automation-relative ON lead/OFF saved-time rewards plus false/premature penalties remain mandatory",
+  "candidate_correct_hard_constraints": "every usable user-marked Correct point must match its explicit Desired after bounded repair or standard offline promotion is blocked with Correct did not satisfy all marked corrections"
 }
