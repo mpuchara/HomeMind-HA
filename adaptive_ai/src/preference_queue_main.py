@@ -6,6 +6,7 @@ the standard Candidate status function. This makes the timing/preference gate th
 standard promotion gate while preserving the later explicit custom-promotion override.
 """
 import fast_queue_main as runtime
+from agent_candidate_card_summary import install as install_candidate_card_summary
 from agent_candidate_preference_metrics import install as install_candidate_preference_metrics
 
 core = runtime.core
@@ -38,6 +39,11 @@ def prepare_engine_extensions():
     )
     if manager is None:
         return
+
+    # Card-only decision decoration is deliberately installed after the complete lifecycle
+    # stack.  Atomic promotion therefore keeps its existing safety snapshot, while the UI
+    # receives the latest direct-parent Desired from the same observed Shadow event.
+    manager = install_candidate_card_summary(manager)
     core.STORE.event(
         None, "info", "candidate_preference_metrics_ready",
         "Candidate preference confidence and fast timing objective enabled",
@@ -46,6 +52,7 @@ def prepare_engine_extensions():
             "metric": getattr(manager, "candidate_fast_metric", None),
             "half_life_opportunities": getattr(manager, "candidate_preference_half_life_opportunities", None),
             "install_order": "after_candidate_shadow_context_before_atomic_promote",
+            "card_decisions": getattr(manager, "candidate_card_decision_contract", None),
         },
     )
 
