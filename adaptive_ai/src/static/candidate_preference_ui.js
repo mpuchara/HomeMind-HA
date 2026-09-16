@@ -45,13 +45,25 @@
     document.head.appendChild(style);
   }
 
-  function decisionTile(label,value,classes=''){
-    const node=document.createElement('div');
-    node.className=classes;
-    const span=document.createElement('span');span.textContent=label;
-    const bold=document.createElement('b');bold.textContent=value;
-    node.append(span,bold);
+  function ensureDecisionCell(strip,key,label,classes=''){
+    let node=strip.querySelector(`[data-candidate-decision="${key}"]`);
+    if(!node){
+      node=document.createElement('div');
+      node.dataset.candidateDecision=key;
+      node.className=classes;
+      const span=document.createElement('span');span.textContent=label;
+      const bold=document.createElement('b');
+      node.append(span,bold);
+      strip.appendChild(node);
+    }
     return node;
+  }
+
+  function setDecisionValue(strip,key,label,value,classes=''){
+    const node=ensureDecisionCell(strip,key,label,classes);
+    const bold=node.querySelector('b');
+    const next=String(value);
+    if(bold&&bold.textContent!==next)bold.textContent=next;
   }
 
   function ensureDecisionStrip(card,c){
@@ -63,12 +75,10 @@
       if(anchor)anchor.insertAdjacentElement('beforebegin',strip);
       else card.querySelector('.candidate-top')?.insertAdjacentElement('afterend',strip);
     }
-    strip.replaceChildren(
-      decisionTile('Current',decisionValue(c,c.shadow_current),'state-metric current'),
-      decisionTile('Desired',decisionValue(c,c.parent_desired),'state-metric desired'),
-      decisionTile('Candidate Desired',decisionValue(c,c.candidate_desired),'state-metric candidate-desired'),
-      decisionTile('Confidence',pct(c.candidate_confidence??c.model_confidence))
-    );
+    setDecisionValue(strip,'current','Current',decisionValue(c,c.shadow_current),'state-metric current');
+    setDecisionValue(strip,'desired','Desired',decisionValue(c,c.parent_desired),'state-metric desired');
+    setDecisionValue(strip,'candidate','Candidate Desired',decisionValue(c,c.candidate_desired),'state-metric candidate-desired');
+    setDecisionValue(strip,'confidence','Confidence',pct(c.candidate_confidence??c.model_confidence));
   }
 
   function pruneDuplicatedDecisionDetails(card){
@@ -148,11 +158,49 @@
     }
   }
 
+  const realtimeFields=['shadow_current','parent_desired','candidate_desired','candidate_confidence','model_confidence','target_property'];
+
   function decorate(c){
     const ref=refOf(c);
     if(!ref)return;
+    const previous=latestByRef.get(ref);
+    const realtimeTs=Number(previous?._realtime_ts||0);
+    const persistedTs=Number(c.shadow_timestamp||0);
+    if(previous&&realtimeTs>persistedTs){
+      c={...c,_realtime_ts:realtimeTs};
+      for(const key of realtimeFields)if(previous[key]!==undefined)c[key]=previous[key];
+    }
     latestByRef.set(ref,c);
     decorateCard(findCard(ref),c);
+  }
+
+  function applyRealtimeCandidate(item){
+    const ref=refOf(item);
+    if(!ref)return;
+    const ts=Number(item.ts||0);
+    const previous=latestByRef.get(ref)||{};
+    if(ts<Number(previous._realtime_ts||0))return;
+    const merged={...previous,...item,_realtime_ts:ts};
+    latestByRef.set(ref,merged);
+    const card=findCard(ref);
+    if(card)ensureDecisionStrip(card,merged);
+  }
+
+  async function refreshRealtime(){
+    if(document.hidden)return;
+    try{
+      const response=await fetch('api/candidate-live',{cache:'no-store'});
+      if(!response.ok)return;
+      const data=await response.json();
+      for(const item of data.candidates||[])applyRealtimeCandidate(item);
+    }catch(_e){
+      // Durable Candidate status remains the fallback.
+    }
+  }
+
+  async function realtimeLoop(){
+    await refreshRealtime();
+    setTimeout(realtimeLoop,200);
   }
 
   function hydrateAddedNode(node){
@@ -207,7 +255,8 @@
       queueMicrotask(()=>{queued=false;refresh();});
     }).observe(root,{childList:true});
   }
-  document.addEventListener('visibilitychange',()=>{if(!document.hidden)refresh();});
+  document.addEventListener('visibilitychange',()=>{if(!document.hidden){refresh();refreshRealtime();}});
   setInterval(refresh,1500);
+  realtimeLoop();
   refresh();
 })();
