@@ -83,6 +83,7 @@ def prepare_engine_extensions():
     from agent_candidate_shadow_context import install as install_candidate_shadow_context
     from agent_candidate_atomic_promote import install as install_candidate_atomic_promote
     from agent_candidate_user_promotion import install as install_candidate_user_promotion
+    from agent_candidate_blocked_shadow_evidence import install as install_candidate_blocked_shadow_evidence
     candidates = install_agent_candidates(core, start_worker=False)
     # Install the manual-Rebuild queue correction before config/lifecycle wrappers so
     # their validation/synchronization still runs before the full historical rebuild.
@@ -103,6 +104,10 @@ def prepare_engine_extensions():
     # and may relax evidence gates only, never the atomic/config/Control guards.
     candidates = install_candidate_atomic_promote(candidates)
     candidates = install_candidate_user_promotion(candidates)
+    # 0.14.3: passive future A/B may observe an offline-blocked leaf without ever
+    # rewriting the persisted lifecycle to `comparing`. Keep this as the last Candidate
+    # runtime patch so UI/status readers can never see an observation-only transient.
+    candidates = install_candidate_blocked_shadow_evidence(candidates)
     candidates.start()
     core.STORE.event(None, "info", "manual_feedback_ready", "Manual correction feedback path ready", None)
     core.STORE.event(None, "info", "teach_rl_ready", "Historical Teach RL pipeline ready", None)
