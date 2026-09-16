@@ -15,7 +15,7 @@ const c={document:{hidden:false,body:{append(){}},createElement(){return {addEve
  setTimeout(){return 1},clearTimeout(){},setInterval(){},
  fetch(path){requests.push(path);if(path==='api/status')return new Promise(()=>{});
    assert.equal(path,'api/live?bootstrap=1');
-   return Promise.resolve({ok:true,json:async()=>({configs:[{id:'a',mode:'shadow'}],agents:[{id:'a',current_value:1,last_prediction:0}]})});}
+   return Promise.resolve({ok:true,json:async()=>({configs:[{id:'a',mode:'shadow'}],agents:[{id:'a',current_value:1,last_prediction:0,last_confidence:.87,last_inference_ts:123}]})});}
 };c.window=c;vm.createContext(c);
 vm.runInContext(fs.readFileSync('adaptive_ai/src/static/app.js','utf8'),c);
 c.renderAgents=()=>{renders++;c.applyLiveValues();};
@@ -25,6 +25,8 @@ setImmediate(()=>{
  assert.equal(renders,1);
  assert.equal(vm.runInContext('lastAgents[0].runtime.current_value',c),1);
  assert.equal(vm.runInContext('lastAgents[0].runtime.last_prediction',c),0);
+ assert.equal(vm.runInContext('lastAgents[0].runtime.last_confidence',c),.87);
+ assert.equal(vm.runInContext('lastAgents[0].runtime.last_inference_ts',c),123);
 });
 '''
         result = subprocess.run(['node', '-e', script], cwd=ROOT, capture_output=True, text=True)
