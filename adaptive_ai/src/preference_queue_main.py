@@ -8,6 +8,7 @@ standard promotion gate while preserving the later explicit custom-promotion ove
 import fast_queue_main as runtime
 from agent_candidate_card_summary import install as install_candidate_card_summary
 from agent_candidate_preference_metrics import install as install_candidate_preference_metrics
+from agent_live_card_refresh import install as install_agent_live_card_refresh
 
 core = runtime.core
 _original_prepare_engine_extensions = core.prepare_engine_extensions
@@ -44,6 +45,11 @@ def prepare_engine_extensions():
     # stack.  Atomic promotion therefore keeps its existing safety snapshot, while the UI
     # receives the latest direct-parent Desired from the same observed Shadow event.
     manager = install_candidate_card_summary(manager)
+
+    # Normal Live-agent cards use the same principle as Candidate cards: fast runtime
+    # values are served independently from the heavy diagnostics/status response.
+    install_agent_live_card_refresh(core)
+
     core.STORE.event(
         None, "info", "candidate_preference_metrics_ready",
         "Candidate preference confidence and fast timing objective enabled",
@@ -53,6 +59,7 @@ def prepare_engine_extensions():
             "half_life_opportunities": getattr(manager, "candidate_preference_half_life_opportunities", None),
             "install_order": "after_candidate_shadow_context_before_atomic_promote",
             "card_decisions": getattr(manager, "candidate_card_decision_contract", None),
+            "live_agent_cards": bool(getattr(core, "_agent_live_card_refresh_installed", False)),
         },
     )
 
