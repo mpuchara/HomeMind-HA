@@ -59,6 +59,31 @@ def _binary(value):
     return 1.0 if _finite(value) >= 0.5 else 0.0
 
 
+def _false_early_safety(summary):
+    """Preserve the independent false-early promotion veto across metric composition.
+
+    The base Candidate comparison historically owned this guard. Preference metrics may
+    replace evidence-count/accuracy thresholds for fast targets, but they must never turn
+    a Candidate promotable when the base comparison observed materially more false-early
+    decisions than Live. An explicit contract field wins; older summaries are derived
+    from the immutable counters using the original margin formula.
+    """
+    explicit = summary.get("false_early_safety_passed")
+    if explicit is not None:
+        return bool(explicit)
+    try:
+        samples = int(summary.get("samples") or summary.get("meaningful_opportunities") or 0)
+    except (TypeError, ValueError):
+        samples = 0
+    false_margin = max(2, int(math.ceil(max(0, samples) * 0.10)))
+    try:
+        candidate_false_early = int(summary.get("candidate_false_early") or 0)
+        live_false_early = int(summary.get("live_false_early") or 0)
+    except (TypeError, ValueError):
+        return False
+    return candidate_false_early <= live_false_early + false_margin
+
+
 def _window_for(outcome):
     if _binary(outcome) >= 0.5:
         return _option_float("fast_precursor_on_seconds", DEFAULT_ON_WINDOW_SECONDS, 1.0)
@@ -381,6 +406,8 @@ def install(manager):
         enough_preference = float(out.get("preference_confidence") or 0.0) >= float(
             out.get("preference_confidence_threshold") or DEFAULT_MIN_PREFERENCE_CONFIDENCE
         )
+        false_early_safety = _false_early_safety(out)
+        out["false_early_safety_passed"] = false_early_safety
         out["promotable"] = bool(
             fresh
             and trained
@@ -390,6 +417,7 @@ def install(manager):
             and out.get("timing_safety_passed")
             and out.get("teach_anchor_passed")
             and out.get("no_new_corrections")
+            and false_early_safety
             and enough_preference
         )
         return out
