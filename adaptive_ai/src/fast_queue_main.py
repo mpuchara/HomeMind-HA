@@ -5,6 +5,33 @@ from manual_feedback_static import install as install_manual_feedback_static
 
 core = queued_runtime.core
 
+# Final entrypoints may add cross-cutting observers at the two dependency-sensitive
+# composition points below. This is an explicit composition contract rather than module
+# function replacement: hooks are named, deterministic, instance-returning transforms.
+_ENGINE_EXTENSION_HOOKS = {
+    "after_fast_light": {},
+    "after_candidate_shadow_context": {},
+}
+
+
+def set_engine_extension_hook(stage, name, callback):
+    if stage not in _ENGINE_EXTENSION_HOOKS:
+        raise ValueError(f"Unknown engine extension hook stage: {stage}")
+    hooks = _ENGINE_EXTENSION_HOOKS[stage]
+    if callback is None:
+        hooks.pop(str(name), None)
+    else:
+        hooks[str(name)] = callback
+
+
+def _apply_engine_extension_hooks(stage, value):
+    for name, callback in tuple(_ENGINE_EXTENSION_HOOKS[stage].items()):
+        updated = callback(value)
+        if updated is None:
+            raise RuntimeError(f"Engine extension hook {stage}:{name} returned None")
+        value = updated
+    return value
+
 
 def prepare_runtime_extensions():
     # The database is assigned by main before this hook. Candidate training surrogates
@@ -52,6 +79,7 @@ def prepare_engine_extensions():
     tournament = install_context_tournament(core.STORE, core.ENGINE)
     install_context_tournament_metrics(tournament)
     install_fast_light_objective(tournament)
+    tournament = _apply_engine_extension_hooks("after_fast_light", tournament)
     install_context_tournament_hysteresis()
     install_context_tournament_promotion(tournament)
     install_primary_protection(tournament)
@@ -99,6 +127,7 @@ def prepare_engine_extensions():
     candidates = install_candidate_lineage_guards(candidates)
     candidates = install_candidate_shadow_runtime(candidates)
     candidates = install_candidate_shadow_context(candidates)
+    candidates = _apply_engine_extension_hooks("after_candidate_shadow_context", candidates)
     # Promotion must wrap the final lineage/Correct/Explore manager. This remains the
     # hard atomic swap layer; user-defined promotion criteria are installed outside it
     # and may relax evidence gates only, never the atomic/config/Control guards.
