@@ -202,7 +202,7 @@ class Executor:
             return reject('experiment: settings changed before dispatch')
         if intent.teaching_id and not engine.teaching.valid(agent, intent, engine):
             return reject('teaching: user label revoked before dispatch')
-        if intent.experiment_token and not engine.experiments.begin(agent, intent):
+        if intent.experiment_token and not engine.experiments.begin(agent, intent, engine.state_map):
             return reject('experiment: another probe is active or this trial was revoked', decision='waiting')
         rt.update(last_service_ts=now_ts(), last_service=f'{domain}.{service}', last_service_data=data)
         engine.record_command(agent, value)
@@ -218,7 +218,7 @@ class Executor:
             return reject('service: ' + str(exc), decision='error')
         self.dispatched[intent.intent_id] = started
         if intent.experiment_token:
-            engine.experiments.dispatched(agent, intent)
+            engine.experiments.dispatched(agent, intent, engine.state_map)
         if len(self.dispatched) > 1024:
             self.dispatched.popitem(last=False)
         rt.update(last_ai_ts=started, last_ai_value=value, last_service_ok=True,
