@@ -9,6 +9,7 @@ from urllib.parse import parse_qs, unquote, urlsplit
 
 from agent_candidate_lineage import _row as lineage_row
 from agent_workflow_actions import _resolve_generation
+from context import archived_state, target_value
 from teaching_rl import fingerprint as rl_fingerprint
 
 
@@ -32,6 +33,44 @@ def _values(rows, field):
             out.append({"ts": float(row["ts"]), "value": float(value)})
         except (KeyError, TypeError, ValueError):
             continue
+    return out
+
+
+def _physical_current_points(manager, agent, start, end):
+    """Factual HA target state for the chart, independent of Candidate inference cadence."""
+    entity_id = str(agent["target_entity"])
+    prop = str(agent["target_property"])
+    start, end = float(start), float(end)
+    rows = []
+    with manager.store.conn() as c:
+        seed = c.execute(
+            "SELECT * FROM entity_history WHERE entity_id=? AND ts<=? ORDER BY ts DESC,id DESC LIMIT 1",
+            (entity_id, start),
+        ).fetchone()
+        if seed:
+            rows.append(dict(seed))
+    rows.extend(manager.store.archive_iter(start, end, [entity_id], chunk_size=512))
+
+    out = []
+    last = None
+    have_last = False
+    for row in rows:
+        try:
+            value = target_value(archived_state(dict(row)), prop)
+            if value is None:
+                continue
+            value = float(value)
+            ts = max(start, min(end, float(row["ts"])))
+        except (KeyError, TypeError, ValueError):
+            continue
+        if have_last and abs(float(last) - value) <= 1e-9:
+            continue
+        out.append({"ts": ts, "value": value})
+        last = value
+        have_last = True
+
+    if out and out[-1]["ts"] < end:
+        out.append({"ts": end, "value": out[-1]["value"]})
     return out
 
 
@@ -77,12 +116,14 @@ def build_correct_history(manager, ref, start, end, legacy_history):
             "parent_generation_id": None,
             "series_order": ["current", "live_desired", "correct"],
             "series": {
-                "current": {"label": "Current", "points": _values(points, "current")},
+                "current": {"label": "Current", "points": _physical_current_points(manager, agent, start, end)},
                 "live_desired": {"label": "Live Desired", "points": _values(points, "desired")},
             },
             "labels": labels,
             "points": points,
             "gaps": list(observed.get("gaps") or []),
+            "current_source": "home_assistant_entity_history",
+            "current_semantics": "factual physical target state recorded from Home Assistant history",
             "desired_source": observed.get("desired_source") or "observed_live_generation_runtime",
             "desired_semantics": "Live Desired actually observed from this generation",
         })
@@ -104,16 +145,16 @@ def build_correct_history(manager, ref, start, end, legacy_history):
         "parent_generation_type": parent["generation_type"],
         "series_order": ["current", "parent_desired", "candidate_desired", "correct"],
         "series": {
-            "current": {"label": "Current", "points": _values(child_points, "current")},
+            "current": {"label": "Current", "points": _physical_current_points(manager, agent, start, end)},
             "parent_desired": {"label": _generation_label(parent), "points": _values(parent_points, "desired")},
             "candidate_desired": {"label": _generation_label(generation), "points": _values(child_points, "desired")},
         },
         "labels": labels,
-        # Keep the selected generation's observed rows available for backwards-compatible
-        # consumers. No values below are synthesized from a policy replay.
         "points": child_points,
         "gaps": list(child_history.get("gaps") or []),
         "parent_gaps": list(parent_history.get("gaps") or []),
+        "current_source": "home_assistant_entity_history",
+        "current_semantics": "factual physical target state recorded from Home Assistant history",
         "desired_source": "observed_candidate_generation_shadow_runtime",
         "parent_desired_source": parent_history.get("desired_source") or "observed_generation_runtime",
         "desired_semantics": "Candidate Desired actually observed from the selected generation",
