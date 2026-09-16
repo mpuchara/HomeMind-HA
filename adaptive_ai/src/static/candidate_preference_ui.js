@@ -2,8 +2,9 @@
   const pct=v=>v==null?'—':`${(Number(v)*100).toFixed(1)}%`;
   const signed=v=>v==null?'—':`${Number(v)>=0?'+':''}${(Number(v)*100).toFixed(1)} pp`;
   const sec=v=>v==null?'—':`${Number(v).toFixed(1)} s`;
-  let busy=false;
+  let busy=false,liveBusy=false;
   const latestByRef=new Map();
+  const DECISION_FIELDS=['parent_desired','candidate_desired','candidate_confidence','shadow_timestamp','target_property'];
 
   const refOf=c=>String(c?.generation_id||c?.candidate_id||'');
   const cardRef=card=>String(card?.dataset?.candidateRef||card?.dataset?.generationId||'');
@@ -45,9 +46,10 @@
     document.head.appendChild(style);
   }
 
-  function decisionTile(label,value,classes=''){
+  function decisionTile(key,label,value,classes=''){
     const node=document.createElement('div');
     node.className=classes;
+    node.dataset.decisionKey=key;
     const span=document.createElement('span');span.textContent=label;
     const bold=document.createElement('b');bold.textContent=value;
     node.append(span,bold);
@@ -56,19 +58,26 @@
 
   function ensureDecisionStrip(card,c){
     let strip=card.querySelector('.candidate-decision-strip');
+    const values=[
+      ['current','Current',decisionValue(c,c.shadow_current),'state-metric current'],
+      ['desired','Desired',decisionValue(c,c.parent_desired),'state-metric desired'],
+      ['candidate','Candidate Desired',decisionValue(c,c.candidate_desired),'state-metric candidate-desired'],
+      ['confidence','Confidence',pct(c.candidate_confidence??c.model_confidence),''],
+    ];
     if(!strip){
       strip=document.createElement('div');
       strip.className='agent-primary candidate-decision-strip';
       const anchor=card.querySelector('.candidate-compare-minimal');
       if(anchor)anchor.insertAdjacentElement('beforebegin',strip);
       else card.querySelector('.candidate-top')?.insertAdjacentElement('afterend',strip);
+      strip.replaceChildren(...values.map(v=>decisionTile(...v)));
+      return;
     }
-    strip.replaceChildren(
-      decisionTile('Current',decisionValue(c,c.shadow_current),'state-metric current'),
-      decisionTile('Desired',decisionValue(c,c.parent_desired),'state-metric desired'),
-      decisionTile('Candidate Desired',decisionValue(c,c.candidate_desired),'state-metric candidate-desired'),
-      decisionTile('Confidence',pct(c.candidate_confidence??c.model_confidence))
-    );
+    // Fast refresh changes text only, avoiding a DOM rebuild four times per second.
+    for(const [key,_label,value] of values){
+      const bold=strip.querySelector(`[data-decision-key="${key}"] b`);
+      if(bold&&bold.textContent!==value)bold.textContent=value;
+    }
   }
 
   function pruneDuplicatedDecisionDetails(card){
@@ -148,11 +157,61 @@
     }
   }
 
-  function decorate(c){
+  function mergeCandidate(c,{live=false}={}){
     const ref=refOf(c);
-    if(!ref)return;
-    latestByRef.set(ref,c);
-    decorateCard(findCard(ref),c);
+    if(!ref)return null;
+    const previous=latestByRef.get(ref)||{};
+    const merged={...previous,...c};
+    if(live){
+      merged._liveSnapshotTs=Number(c.live_snapshot_ts||Date.now()/1000);
+    }else if(previous._liveSnapshotTs&&Date.now()/1000-previous._liveSnapshotTs<2){
+      // Full Candidate status can arrive after a fresher lightweight physical-state
+      // snapshot. Never let the slower response rewind Current or a newer decision.
+      merged.shadow_current=previous.shadow_current;
+      const previousDecisionTs=Number(previous.shadow_timestamp||0);
+      const incomingDecisionTs=Number(c.shadow_timestamp||0);
+      if(previousDecisionTs>incomingDecisionTs){
+        for(const key of DECISION_FIELDS)merged[key]=previous[key];
+      }
+      merged._liveSnapshotTs=previous._liveSnapshotTs;
+    }
+    latestByRef.set(ref,merged);
+    return merged;
+  }
+
+  function decorate(c){
+    const merged=mergeCandidate(c);
+    if(!merged)return;
+    decorateCard(findCard(refOf(merged)),merged);
+  }
+
+  function applyLiveSnapshots(items){
+    for(const item of items||[]){
+      const merged=mergeCandidate(item,{live:true});
+      if(!merged)continue;
+      const card=findCard(refOf(merged));
+      if(card)ensureDecisionStrip(card,merged);
+    }
+  }
+
+  async function refreshLive(){
+    if(liveBusy||document.hidden)return;
+    liveBusy=true;
+    try{
+      const response=await fetch('api/candidate-live',{cache:'no-store'});
+      if(!response.ok)return;
+      const data=await response.json();
+      applyLiveSnapshots(data.candidates||[]);
+    }catch(_e){
+      // Full Candidate refresh remains the fallback if the lightweight route is unavailable.
+    }finally{
+      liveBusy=false;
+    }
+  }
+
+  async function liveLoop(){
+    await refreshLive();
+    setTimeout(liveLoop,250);
   }
 
   function hydrateAddedNode(node){
@@ -207,7 +266,8 @@
       queueMicrotask(()=>{queued=false;refresh();});
     }).observe(root,{childList:true});
   }
-  document.addEventListener('visibilitychange',()=>{if(!document.hidden)refresh();});
+  document.addEventListener('visibilitychange',()=>{if(!document.hidden){refreshLive();refresh();}});
   setInterval(refresh,1500);
+  liveLoop();
   refresh();
 })();
