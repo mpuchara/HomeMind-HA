@@ -1,8 +1,9 @@
 """Final runtime wrapper installing preference-aware Candidate evaluation.
 
-The existing fast_queue_main stack remains authoritative. This wrapper adds the
-preference/timing metric after the full Candidate lifecycle has been composed, without
-changing the underlying training, lineage or atomic-promotion layers.
+The existing ``fast_queue_main`` stack remains authoritative. Preference metrics must be
+installed after exact Shadow context/history exists but *before* atomic promotion captures
+the standard Candidate status function. This makes the timing/preference gate the real
+standard promotion gate while preserving the later explicit custom-promotion override.
 """
 import fast_queue_main as runtime
 from agent_candidate_preference_metrics import install as install_candidate_preference_metrics
@@ -12,11 +13,31 @@ _original_prepare_engine_extensions = core.prepare_engine_extensions
 
 
 def prepare_engine_extensions():
-    _original_prepare_engine_extensions()
-    manager = getattr(core.ENGINE, "agent_candidates", None) if core.ENGINE is not None else None
+    # fast_queue_main imports Candidate extensions inside its preparation function. Patch
+    # the immediately-pre-atomic shadow-context installer so preference metrics become
+    # part of the composed manager before atomic promotion snapshots manager.status.
+    import agent_candidate_shadow_context as shadow_context_module
+
+    original_shadow_context_install = shadow_context_module.install
+    installed = {"manager": None}
+
+    def install_shadow_context_then_preference(manager):
+        manager = original_shadow_context_install(manager)
+        manager = install_candidate_preference_metrics(manager)
+        installed["manager"] = manager
+        return manager
+
+    shadow_context_module.install = install_shadow_context_then_preference
+    try:
+        _original_prepare_engine_extensions()
+    finally:
+        shadow_context_module.install = original_shadow_context_install
+
+    manager = installed["manager"] or (
+        getattr(core.ENGINE, "agent_candidates", None) if core.ENGINE is not None else None
+    )
     if manager is None:
         return
-    install_candidate_preference_metrics(manager)
     core.STORE.event(
         None, "info", "candidate_preference_metrics_ready",
         "Candidate preference confidence and fast timing objective enabled",
@@ -24,6 +45,7 @@ def prepare_engine_extensions():
             "contract": getattr(manager, "candidate_preference_contract", None),
             "metric": getattr(manager, "candidate_fast_metric", None),
             "half_life_opportunities": getattr(manager, "candidate_preference_half_life_opportunities", None),
+            "install_order": "after_candidate_shadow_context_before_atomic_promote",
         },
     )
 
