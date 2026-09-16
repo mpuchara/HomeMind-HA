@@ -188,7 +188,7 @@ class CorrectGenerationUiContractTests(unittest.TestCase):
         self.assertNotIn("Candidate accuracy", minimal)
         self.assertNotIn("Historical regression", minimal)
         self.assertNotIn("Offline gate", minimal)
-        details = source.split('<details class="candidate-details">', 1)[1].split('</details>', 1)[0]
+        details = source.split('<details class="candidate-details"', 1)[1].split('</details>', 1)[0]
         self.assertIn("Parent accuracy", details)
         self.assertIn("Candidate accuracy", details)
         self.assertIn("Historical regression", details)
