@@ -66,7 +66,12 @@ def _window_for(outcome):
 
 
 def _timing_utility(correct, lead_seconds, window_seconds):
-    """Fast-target utility in [-1, 1]. Wrong direction is a hard failure."""
+    """Fast-target utility in [-1, 1]. Wrong direction is a hard failure.
+
+    Correct direction earns utility proportional to safe lead. This mirrors the existing
+    fast-light objective: timing is the optimization target while transition accuracy
+    remains a safety guard.
+    """
     if not bool(correct):
         return -1.0
     lead = max(0.0, _finite(lead_seconds))
@@ -343,6 +348,7 @@ def install(manager):
     original_lineage_status = getattr(manager, "lineage_status", None)
     handler = manager.core.Handler
     original_get = handler.do_GET
+    original_static = handler.static
 
     def comparison_summary(row, parent=None, candidate=None):
         out = original_summary(row, parent, candidate)
@@ -430,11 +436,23 @@ def install(manager):
             return http.static("candidate_preference_ui.js", "application/javascript; charset=utf-8")
         return original_get(http)
 
+    def static(http, name, content_type):
+        if name == "index.html":
+            path = manager.core.STATIC_DIR / name
+            if path.exists():
+                body = path.read_text(encoding="utf-8")
+                marker = '<script src="candidate_preference_ui.js?v=0.14.5"></script>'
+                if marker not in body:
+                    body = body.replace('</body>', marker + '\n</body>')
+                return http.send_bytes(200, body.encode("utf-8"), content_type)
+        return original_static(http, name, content_type)
+
     manager.status = status
     manager.list_status = list_status
     if original_lineage_status is not None:
         manager.lineage_status = lineage_status
     handler.do_GET = do_get
+    handler.static = static
     manager._candidate_preference_metrics_installed = True
     manager.candidate_preference_contract = (
         "teach_anchor_plus_confirmed_fast_transitions_plus_opportunity_decayed_manual_corrections"
