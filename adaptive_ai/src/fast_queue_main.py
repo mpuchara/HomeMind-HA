@@ -82,6 +82,7 @@ def prepare_engine_extensions():
     from agent_candidate_shadow_runtime import install as install_candidate_shadow_runtime
     from agent_candidate_shadow_context import install as install_candidate_shadow_context
     from agent_candidate_atomic_promote import install as install_candidate_atomic_promote
+    from agent_candidate_user_promotion import install as install_candidate_user_promotion
     candidates = install_agent_candidates(core, start_worker=False)
     # Install the manual-Rebuild queue correction before config/lifecycle wrappers so
     # their validation/synchronization still runs before the full historical rebuild.
@@ -97,10 +98,11 @@ def prepare_engine_extensions():
     candidates = install_candidate_lineage_guards(candidates)
     candidates = install_candidate_shadow_runtime(candidates)
     candidates = install_candidate_shadow_context(candidates)
-    # Promotion must wrap the final lineage/Correct/Explore manager.  This is the last
-    # lifecycle layer so no earlier wrapper can reintroduce the legacy "always Shadow"
-    # release-promote-reacquire sequence.
+    # Promotion must wrap the final lineage/Correct/Explore manager. This remains the
+    # hard atomic swap layer; user-defined promotion criteria are installed outside it
+    # and may relax evidence gates only, never the atomic/config/Control guards.
     candidates = install_candidate_atomic_promote(candidates)
+    candidates = install_candidate_user_promotion(candidates)
     candidates.start()
     core.STORE.event(None, "info", "manual_feedback_ready", "Manual correction feedback path ready", None)
     core.STORE.event(None, "info", "teach_rl_ready", "Historical Teach RL pipeline ready", None)
@@ -129,6 +131,8 @@ def prepare_engine_extensions():
                       "candidate_manual_rebuild": getattr(candidates, "candidate_manual_rebuild_contract", "legacy"),
                       "candidate_correct": getattr(candidates, "candidate_correct_contract", "legacy"),
                       "candidate_offline_gate": getattr(candidates, "candidate_offline_gate_contract", "legacy"),
+                      "candidate_offline_gate_observation": getattr(candidates, "candidate_offline_gate_observation_contract", "legacy"),
+                      "candidate_custom_promotion": getattr(candidates, "candidate_custom_promotion_contract", "legacy"),
                       "candidate_lineage": getattr(candidates, "candidate_lineage_contract", "legacy"),
                       "candidate_model_retention": getattr(candidates, "candidate_model_retention", None),
                       "candidate_shadow": getattr(candidates, "candidate_shadow_contract", "legacy"),
@@ -141,7 +145,7 @@ def prepare_engine_extensions():
                       "candidate_promotion": getattr(candidates, "candidate_promotion_contract", "atomic_generation_swap_preserve_live_mode_or_explicit_target"),
                       "candidate_control_promotion": getattr(candidates, "candidate_control_promote_contract", "target_lock_preserve_ownership_lease_no_release_reacquire"),
                       "candidate_physical_mode": getattr(candidates, "candidate_physical_mode_contract", "candidate_always_shadow_until_committed_promote"),
-                      "candidate_binary_evidence": "20_future_samples_per_action",
+                      "candidate_binary_evidence": "20_future_samples_per_action_standard; user-defined_custom_thresholds_available",
                       "control_diagnostics": "schema_revision+schema_age+prequential_samples+feature_tournament_state",
                       "context_ui_diagnostics": "active+primary+challengers+evaluation+schema+last_update",
                       "context_events": "structured_numeric_no_generated_text",
