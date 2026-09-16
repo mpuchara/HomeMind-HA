@@ -441,7 +441,7 @@ def install(manager):
             path = manager.core.STATIC_DIR / name
             if path.exists():
                 body = path.read_text(encoding="utf-8")
-                marker = '<script src="candidate_preference_ui.js?v=0.14.5"></script>'
+                marker = '<script src="candidate_preference_ui.js?v=0.14.6"></script>'
                 if marker not in body:
                     body = body.replace('</body>', marker + '\n</body>')
                 return http.send_bytes(200, body.encode("utf-8"), content_type)
