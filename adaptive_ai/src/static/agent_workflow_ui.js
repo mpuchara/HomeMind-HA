@@ -61,7 +61,7 @@
 
   function shell(){
     dialog.innerHTML=`<div class="teach-head"><h2>Correct: ${html(subject.name)} · Gen ${subject.generation_number}</h2><button class="ghost" data-close>Zamknij</button></div>
-      <p>Zaznacz błędny historyczny moment i podaj prawidłowe Desired. Correct nie zmienia Gen ${subject.generation_number} w miejscu — po zatwierdzeniu utworzy child Candidate.</p>
+      <p>Kliknij wykres, aby wskazać moment, albo przeciągnij poziomo po wykresie, aby zaznaczyć zakres i go przybliżyć. Kółko myszy przybliża wokół kursora. Correct nie zmienia Gen ${subject.generation_number} w miejscu — po zatwierdzeniu utworzy child Candidate.</p>
       <div class="teach-range"><label>Od<input data-start type="datetime-local" step="1"></label><label>Do<input data-end type="datetime-local" step="1"></label><button class="ghost" data-load>Pokaż</button><button class="ghost" data-prev>←</button><button class="ghost" data-next>→</button><button class="ghost" data-in>+</button><button class="ghost" data-out>−</button></div>
       <p class="teach-legend" data-legend></p>
       <div class="teach-chart" data-chart></div><p data-status role="status"></p><p data-error role="alert"></p>
@@ -86,7 +86,7 @@
     }catch(e){notifyError(e);}
   };
 
-  function zoom(factor){const width=Math.max(10,Math.min(31*86400,(range.end-range.start)*factor)),center=(range.start+range.end)/2;range={start:center-width/2,end:center+width/2};load();}
+  function zoom(factor,anchor=.5){if(!Number.isFinite(range.end-range.start))return;const oldWidth=range.end-range.start,width=Math.max(10,Math.min(31*86400,oldWidth*factor)),center=range.start+oldWidth*anchor;range={start:center-width*anchor,end:center+width*(1-anchor)};load();}
   function shift(direction){const width=range.end-range.start;range={start:range.start+direction*width,end:range.end+direction*width};load();}
 
   function renderLegend(){
@@ -169,8 +169,17 @@
     if(series.candidate_desired)rendered.push(`<path data-series="candidate_desired" d="${path(series.candidate_desired.points)}" fill="none" stroke="${COLORS.candidate}" stroke-width="2" stroke-dasharray="8 6"/>`);
     const labels=(data.labels||[]).filter(r=>Number(r.sample_ts)>=start&&Number(r.sample_ts)<=end).map(r=>`<circle data-series="correct" cx="${x(r.sample_ts)}" cy="${y(r.desired)}" r="5" fill="${COLORS.correct}"><title>Correct ${html(r.desired)}</title></circle>`).join('');
     const chosen=selected&&selected.ts>=start&&selected.ts<=end?`<line x1="${x(selected.ts)}" x2="${x(selected.ts)}" y1="35" y2="305" stroke="#fff" opacity=".35"/>`:'';
-    box.innerHTML=`<svg viewBox="0 0 1030 350" role="img" aria-label="Correct direct-parent generation history chart">${rendered.join('')}${labels}${chosen}<rect data-hit x="50" y="25" width="930" height="285" fill="transparent" style="cursor:crosshair"/></svg>`;
-    box.querySelector('[data-hit]').onclick=ev=>{const svg=ev.currentTarget.ownerSVGElement,r=svg.getBoundingClientRect(),px=(ev.clientX-r.left)*1030/r.width,ts=start+(Math.max(50,Math.min(980,px))-50)/930*width;inspect(ts);};
+    box.innerHTML=`<svg viewBox="0 0 1030 350" role="img" aria-label="Correct direct-parent generation history chart" tabindex="0">${rendered.join('')}${labels}${chosen}<rect data-selection x="50" y="25" width="0" height="285" fill="#9aa0a6" fill-opacity="0.28" stroke="#d4d7da" stroke-opacity="0.75" visibility="hidden"/><rect data-hit x="50" y="25" width="930" height="285" fill="transparent" style="cursor:crosshair;touch-action:none"/></svg>`;
+    const svg=box.querySelector('svg'),hit=box.querySelector('[data-hit]'),selection=box.querySelector('[data-selection]');let down=null;
+    const fraction=ev=>{const r=svg.getBoundingClientRect(),px=(ev.clientX-r.left)*1030/r.width;return Math.max(0,Math.min(1,(px-50)/930));};
+    const hideSelection=()=>selection.setAttribute('visibility','hidden');
+    const showSelection=endFraction=>{if(down==null)return;const a=50+930*Math.min(down,endFraction),b=50+930*Math.max(down,endFraction);selection.setAttribute('x',a);selection.setAttribute('width',Math.max(1,b-a));selection.setAttribute('visibility','visible');};
+    svg.onwheel=ev=>{ev.preventDefault();zoom(ev.deltaY<0?.5:2,fraction(ev));};
+    hit.onpointerdown=ev=>{down=fraction(ev);showSelection(down);hit.setPointerCapture(ev.pointerId);};
+    hit.onpointermove=ev=>{if(down!=null)showSelection(fraction(ev));};
+    hit.onpointercancel=()=>{down=null;hideSelection();};
+    hit.onlostpointercapture=()=>{if(down!=null){down=null;hideSelection();}};
+    hit.onpointerup=ev=>{if(down==null)return;const endFraction=fraction(ev),startFraction=down;down=null;hideSelection();try{hit.releasePointerCapture(ev.pointerId);}catch(_){ }if(Math.abs(endFraction-startFraction)>.015){range={start:start+Math.min(startFraction,endFraction)*width,end:start+Math.max(startFraction,endFraction)*width};load();}else inspect(start+endFraction*width);};
   }
 
   function liveActions(card,a){
