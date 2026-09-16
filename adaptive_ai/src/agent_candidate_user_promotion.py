@@ -9,9 +9,10 @@ a qualified model, Root/Candidate configuration must still match, Control promot
 still pass Control qualification, the generation swap remains atomic, and a Candidate
 never dispatches before the commit.
 
-A failed offline gate is also made advisory for passive Shadow observation only. That lets
-future A/B evidence keep accumulating instead of freezing forever at zero samples. It does
-not make the normal Promote button pass.
+A failed offline gate is also advisory for passive Shadow observation only. That lets
+future A/B evidence keep accumulating instead of freezing forever at zero samples. The
+observation wrapper always resolves the active lineage leaf, including G2/G3 descendants;
+it does not assume that the active edge is rooted directly at Live G0.
 """
 from __future__ import annotations
 
@@ -147,12 +148,53 @@ def evaluate_custom_rules(status, raw_rules=None):
     }
 
 
+def _active_observation_row(manager, root_id):
+    """Resolve the current leaf edge for a Root Live agent.
+
+    `agent_candidates.parent_agent_id` is the direct parent of an edge. From G2 onward
+    that parent is a hidden Candidate id, not the Root Live id. Looking up only
+    `_candidate_row(root_id)` therefore returns the old G0->G1 parent edge and leaves a
+    blocked G1->G2/G2->G3 leaf invisible to the observation override. The Shadow runtime
+    then rejects the real leaf and `Future samples` stays at zero forever.
+    """
+    try:
+        with manager.store.conn() as c:
+            row = c.execute(
+                """SELECT e.*
+                   FROM agent_candidates e
+                   JOIN agent_candidate_generations child ON child.agent_id=e.candidate_id
+                   WHERE child.root_agent_id=?
+                     AND child.generation_type='candidate'
+                     AND child.lifecycle_state NOT IN ('discarded','pruned','promoted')
+                   ORDER BY child.generation_number DESC,child.created_ts DESC
+                   LIMIT 1""",
+                (str(root_id),),
+            ).fetchone()
+        if row:
+            return dict(row)
+    except Exception:
+        pass
+    return manager._candidate_row(str(root_id))
+
+
+def _generation_state(manager, candidate_id):
+    try:
+        with manager.store.conn() as c:
+            row = c.execute(
+                "SELECT generation_id,lifecycle_state FROM agent_candidate_generations WHERE agent_id=?",
+                (str(candidate_id),),
+            ).fetchone()
+        return dict(row) if row else None
+    except Exception:
+        return None
+
+
 @contextmanager
 def _temporary_offline_gate_pass(manager, row, *, purpose):
-    """Let existing passive comparison / atomic promoter cross only the offline gate.
+    """Let passive comparison / atomic promoter cross only the offline evidence gate.
 
-    The original row state and gate are restored unless the Candidate disappears because a
-    successful atomic promotion consumed it. No model/config/control checks are bypassed.
+    Both the active-edge row and lineage ledger state are restored unless a successful
+    atomic promotion consumes the Candidate. No model/config/control checks are bypassed.
     """
     if not row:
         yield
@@ -161,6 +203,8 @@ def _temporary_offline_gate_pass(manager, row, *, purpose):
     original_state = str(row.get("state") or "")
     original_gate_raw = row.get("offline_gate_json") or "{}"
     original_gate = _json(original_gate_raw, {})
+    generation = _generation_state(manager, row.get("candidate_id"))
+    original_generation_state = str((generation or {}).get("lifecycle_state") or "")
     if original_gate.get("passed") and original_state not in _BLOCKED_STATES:
         yield
         return
@@ -179,6 +223,11 @@ def _temporary_offline_gate_pass(manager, row, *, purpose):
             "UPDATE agent_candidates SET state=?,offline_gate_json=?,updated_ts=? WHERE parent_agent_id=?",
             (temporary_state, json.dumps(temporary_gate, separators=(",", ":")), time.time(), parent_id),
         )
+        if generation and original_generation_state in _BLOCKED_STATES:
+            c.execute(
+                "UPDATE agent_candidate_generations SET lifecycle_state='comparing',updated_ts=? WHERE generation_id=?",
+                (time.time(), generation["generation_id"]),
+            )
     try:
         yield
     finally:
@@ -189,6 +238,11 @@ def _temporary_offline_gate_pass(manager, row, *, purpose):
                     "UPDATE agent_candidates SET state=?,offline_gate_json=?,updated_ts=? WHERE parent_agent_id=?",
                     (original_state, original_gate_raw, time.time(), parent_id),
                 )
+                if generation and original_generation_state:
+                    c.execute(
+                        "UPDATE agent_candidate_generations SET lifecycle_state=?,updated_ts=? WHERE generation_id=?",
+                        (original_generation_state, time.time(), generation["generation_id"]),
+                    )
 
 
 def install(manager):
@@ -210,14 +264,15 @@ def install(manager):
         return out
 
     def _observation_call(fn, agent, state_map):
-        row = manager._candidate_row(str(agent.get("id") or ""))
+        row = _active_observation_row(manager, str(agent.get("id") or ""))
         if not row:
             return fn(agent, state_map)
         gate = _json(row.get("offline_gate_json"), {})
         if gate.get("passed") and str(row.get("state") or "") not in _BLOCKED_STATES:
             return fn(agent, state_map)
         # Passive A/B observation is safe to continue even when the offline benchmark is
-        # blocked. The gate remains visible and still blocks the normal Promote path.
+        # blocked. Resolve the lineage leaf first: from G2 onward parent_agent_id is not
+        # the Root Live id. The gate remains visible and still blocks normal Promote.
         with _temporary_offline_gate_pass(manager, row, purpose="observation"):
             return fn(agent, state_map)
 
@@ -282,6 +337,6 @@ def install(manager):
         "user_defined_future_thresholds_optional_offline_override_hard_atomic_control_guards_preserved"
     )
     manager.candidate_offline_gate_observation_contract = (
-        "offline_gate_blocks_standard_promotion_but_not_passive_future_ab_collection"
+        "active_lineage_leaf_offline_gate_blocks_standard_promotion_but_not_passive_future_ab_collection"
     )
     return manager
