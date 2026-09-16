@@ -9,9 +9,17 @@
   const api=async(path,opts={})=>{const r=await fetch(path,{headers:{'Content-Type':'application/json'},...opts});const b=await r.json();if(!r.ok)throw Error(b.error||`HTTP ${r.status}`);return b;};
   let busy=false;
   const uiState=new Map();
-  const defaultUi=()=>({detailsOpen:false,minFuture:'6',minPerAction:'2',maxRegression:'15',allowOffline:false});
+  // Promote is an explicit human acceptance action. Default evidence rules therefore do
+  // not add a second hidden gate; hard model/config/atomic/Control guards stay backend-owned.
+  const defaultUi=()=>({detailsOpen:false,minFuture:'0',minPerAction:'0',maxRegression:'',allowOffline:true});
   const candidateRef=c=>String(c.generation_id||c.candidate_id||'');
   const stateFor=ref=>{if(!uiState.has(ref))uiState.set(ref,defaultUi());return uiState.get(ref);};
+  const candidateBaseName=c=>{
+    const raw=String(c?.parent_name||c?.candidate_name||c?.root_agent_id||c?.parent_agent_id||'Agent').trim();
+    return raw.replace(/(?:\s*[·-]\s*Candidate)+\s*$/i,'').trim()||raw;
+  };
+  const candidateTitle=c=>String(c?.candidate_name||`${candidateBaseName(c)} · Candidate`).replace(/(?:\s*[·-]\s*Candidate)+\s*$/i,' · Candidate').trim();
+  const candidateGeneration=c=>c?.candidate_generation_number??c?.generation_number??c?.generation??1;
 
   // P0 owns normal Live-agent nodes and periodically reconciles #agents. Candidate cards
   // are separate generation nodes, so detach/reattach them synchronously during Live render.
@@ -34,11 +42,11 @@
     if(c.state==='queued')return 'Candidate is queued from its exact direct-parent snapshot.';
     if(c.state==='building')return 'Child training is running while the parent generation remains immutable.';
     if(c.state==='exploring')return 'Explore is collecting evidence while the direct parent remains immutable.';
-    if(c.state==='offline_blocked')return 'Offline regression gate blocks standard promotion, but passive Shadow A/B evidence keeps accumulating. You may use explicit custom promotion rules below.';
-    if(c.state==='insufficient_evidence')return 'Offline history is insufficient for the standard gate. Passive Shadow A/B still runs; custom promotion remains an explicit user choice.';
-    if(m.per_action_ready===false)return `Standard promotion waits for ${perAction} future samples for each binary action.`;
+    if(c.state==='offline_blocked')return 'Offline regression gate blocks automatic promotion, but passive Shadow A/B evidence keeps accumulating. Explicit Promote may accept the current evidence after confirmation.';
+    if(c.state==='insufficient_evidence')return 'Offline history is insufficient for automatic promotion. Explicit Promote may accept the current evidence after confirmation.';
+    if(m.per_action_ready===false)return `Automatic promotion waits for ${perAction} future samples for each binary action; explicit Promote remains a user choice.`;
     if(c.promotable)return 'Offline regression and paired future evidence passed the standard Candidate safety gates.';
-    return 'The direct parent remains authoritative until standard gates pass or you explicitly promote under custom rules.';
+    return 'The direct parent remains authoritative until standard gates pass or you explicitly confirm Promote.';
   };
   const exploreLine=c=>{
     const x=c.explore;if(!x)return '';
@@ -67,13 +75,13 @@
     const correctionFit=correctionTotal==null?'—':`${c.teach_fit_before_count??0}/${correctionTotal} → ${c.teach_fit_after_count??0}/${correctionTotal}`;
     const regression=c.historical_regression_delta==null?'—':pp(c.historical_regression_delta);
     const gateSamples=c.historical_benchmark_samples==null?'—':String(c.historical_benchmark_samples);
-    const generation=c.generation_number??c.generation;
+    const generation=candidateGeneration(c);
     const timing=m.on_lead_gain_seconds!=null?`ON timing ${signedSec(m.on_lead_gain_seconds)}`:m.off_lead_gain_seconds!=null?`OFF timing ${signedSec(m.off_lead_gain_seconds)}`:null;
     const targetMode=c.promotion_target_mode==='control'?'control':'shadow';
     const gateReason=(gate.reasons||[]).join(' · ')||'—';
     const customEligible=c.training_state==='qualified'&&!['queued','building','exploring','failed','discarding'].includes(c.state);
     return `<article class="agent candidate-agent" data-candidate-parent="${esc(c.parent_agent_id)}" data-generation-id="${esc(c.generation_id||'')}" data-candidate-ref="${esc(candidateRef(c))}">
-      <div class="candidate-top"><div><span class="candidate-badge">CANDIDATE</span><h3>${esc(c.parent_name)} · Gen ${esc(generation)}</h3></div><span class="candidate-state">${esc(stateLabel(c))}${queueText}</span></div>
+      <div class="candidate-top"><div><span class="candidate-badge">CANDIDATE</span><h3>${esc(candidateTitle(c))} · Gen ${esc(generation)}</h3></div><span class="candidate-state">${esc(stateLabel(c))}${queueText}</span></div>
       <p class="candidate-sub">Direct-parent snapshot → generation training → persistent Shadow → paired future A/B. Candidate is isolated from Executor.</p>
       ${progress==null?'':`<div class="candidate-progress"><span style="width:${progress}%"></span></div><p class="candidate-small">Training ${progress}% · build rev ${c.build_revision} / feedback rev ${c.feedback_revision}</p>`}
       ${c.last_error?`<p class="candidate-error">${esc(c.last_error)}</p>`:''}
@@ -106,14 +114,14 @@
         <div><span>Paired wins · Parent / Candidate</span><b>${m.live_wins||0} / ${m.candidate_wins||0}</b></div>
       </div>
       <div class="candidate-custom-promotion">
-        <p class="candidate-small"><b>Custom promotion</b> — you choose how much future evidence is enough. These rules may relax evidence gates only; model/config checks, atomic swap and Control qualification are never bypassed.</p>
+        <p class="candidate-small"><b>Promotion rules</b> — by default explicit confirmation accepts the Candidate with the evidence currently available. You can tighten these thresholds; hard model/config checks, atomic swap and Control qualification are never bypassed.</p>
         <div class="candidate-compare candidate-custom-rules">
           <label><span>Min future samples</span><input type="number" min="0" step="1" data-custom-min-future value="${esc(draft.minFuture)}"></label>
           <label><span>Min ON/OFF each</span><input type="number" min="0" step="1" data-custom-min-action value="${esc(draft.minPerAction)}"></label>
           <label><span>Max future regression (pp)</span><input type="number" min="0" max="100" step="0.5" data-custom-max-regression value="${esc(draft.maxRegression)}" placeholder="blank = ignore"></label>
           <label><span>Offline gate</span><span><input type="checkbox" data-custom-offline ${draft.allowOffline?'checked':''}> allow explicit override</span></label>
         </div>
-        <button class="ghost" data-promote-custom ${customEligible?'':'disabled'}>Promote with my rules</button>
+        <button class="ghost" data-promote-custom ${customEligible?'':'disabled'}>Promote</button>
       </div>
       ${ownershipDetails(c)}</details>
       <div class="actions candidate-workflow-actions"><button class="ghost" data-wf="auto">Autonomous</button><button class="primary" data-wf="correct">Correct</button><button class="ghost" data-wf="explore">Explore</button><button class="ghost" data-wf="change">Change decision</button><button class="ghost" data-wf="settings">Settings</button></div>
@@ -163,16 +171,18 @@
           finally{modeSelect.disabled=false;}
         };
         el.querySelector('[data-promote]').onclick=async()=>{
-          const targetMode=modeSelect.value;
+          const targetMode=modeSelect.value,generation=candidateGeneration(c),title=candidateTitle(c);
           const continuity=targetMode===(c.live_mode||'shadow')?'preserving the current Live mode':`changing Live from ${(c.live_mode||'shadow').toUpperCase()} to ${targetMode.toUpperCase()}`;
-          if(!confirm(`Promote Candidate Gen ${c.generation_number??c.generation} for ${c.parent_name} as ${targetMode.toUpperCase()}? This performs an atomic generation swap, ${continuity}. The Candidate itself remains Shadow until commit.`))return;
-          try{await api(`api/agents/${encodeURIComponent(c.parent_agent_id)}/candidate/promote`,{method:'POST',body:JSON.stringify({target_mode:targetMode})});await refresh();if(typeof window.load==='function')await window.load();}
-          catch(e){alert(e.message);}
+          if(!confirm(`Promote ${title} · Gen ${generation} as ${targetMode.toUpperCase()}?\n\nYes will atomically replace the active agent with this Candidate, ${continuity}. The Candidate card will disappear after the commit and the next Candidate cycle will start at Gen 1.`))return;
+          try{
+            await api(`api/agents/${encodeURIComponent(c.parent_agent_id)}/candidate/promote`,{method:'POST',body:JSON.stringify({target_mode:targetMode})});
+            el.remove();uiState.delete(ref);await refresh();if(typeof window.load==='function')await window.load();
+          }catch(e){alert(e.message);}
         };
         const customBtn=el.querySelector('[data-promote-custom]');
         if(customBtn)customBtn.onclick=async()=>{
           remember(el,ref);
-          const d=stateFor(ref),targetMode=modeSelect.value;
+          const d=stateFor(ref),targetMode=modeSelect.value,generation=candidateGeneration(c),title=candidateTitle(c);
           const maxRegression=d.maxRegression===''?null:Number(d.maxRegression);
           const conditions={
             min_future_samples:Math.max(0,Number.parseInt(d.minFuture||'0',10)||0),
@@ -180,18 +190,19 @@
             max_future_regression_pp:Number.isFinite(maxRegression)?maxRegression:null,
             allow_offline_gate_override:!!d.allowOffline,
           };
-          const warning=conditions.allow_offline_gate_override&&!((c.offline_gate||{}).passed)?'\n\nWARNING: you are explicitly overriding the blocked/insufficient offline historical gate.':'';
-          const reg=conditions.max_future_regression_pp==null?'ignored':`${conditions.max_future_regression_pp.toFixed(1)} pp`;
-          if(!confirm(`Promote Candidate Gen ${c.generation_number??c.generation} under YOUR rules?\n\nMinimum future samples: ${conditions.min_future_samples}\nMinimum ON/OFF each: ${conditions.min_per_binary_action}\nMaximum future regression: ${reg}\nTarget mode: ${targetMode.toUpperCase()}${warning}\n\nHard model/config/atomic/Control qualification checks still apply.`))return;
+          const warning=conditions.allow_offline_gate_override&&!((c.offline_gate||{}).passed)?'\n\nWARNING: this confirmation explicitly accepts the blocked/insufficient offline historical gate.':'';
+          const tightened=conditions.min_future_samples>0||conditions.min_per_binary_action>0||conditions.max_future_regression_pp!=null;
+          const rules=tightened?`\n\nPromotion rules: ${conditions.min_future_samples} future samples, ${conditions.min_per_binary_action} ON/OFF each, max regression ${conditions.max_future_regression_pp==null?'ignored':conditions.max_future_regression_pp.toFixed(1)+' pp'}.`:'';
+          if(!confirm(`Promote ${title} · Gen ${generation} as ${targetMode.toUpperCase()}?\n\nYes will atomically replace the active agent with this Candidate. The Candidate card will disappear after the commit and the next Candidate cycle will start at Gen 1.${rules}${warning}\n\nHard model/config/atomic/Control qualification checks still apply.`))return;
           customBtn.disabled=true;
           try{
             await api(`api/agents/${encodeURIComponent(c.parent_agent_id)}/candidate/promote-custom`,{method:'POST',body:JSON.stringify({target_mode:targetMode,conditions})});
-            uiState.delete(ref);await refresh();if(typeof window.load==='function')await window.load();
+            el.remove();uiState.delete(ref);await refresh();if(typeof window.load==='function')await window.load();
           }catch(e){alert(e.message);}
-          finally{customBtn.disabled=false;}
+          finally{if(customBtn.isConnected)customBtn.disabled=false;}
         };
         el.querySelector('[data-discard]').onclick=async()=>{
-          if(!confirm(`Discard Candidate Gen ${c.generation_number??c.generation}? The parent generation is not deleted.`))return;
+          if(!confirm(`Discard ${candidateTitle(c)} · Gen ${candidateGeneration(c)}? The parent generation is not deleted.`))return;
           try{await api(`api/agents/${encodeURIComponent(c.parent_agent_id)}/candidate`,{method:'DELETE'});uiState.delete(ref);await refresh();}
           catch(e){alert(e.message);}
         };
