@@ -447,7 +447,7 @@ class ProvenanceJournal:
                 (str(experience_key), CONTRACT_VERSION, created_time, str(agent_id), decision_id,
                  source_event_id, experiment_id, episode_id, str(source), str(origin or UNKNOWN),
                  None if action_index is None else int(action_index), _finite(action_value), _finite(reward),
-                 _json({str(k): v for k, v in (features or {}).items()) if features is not None else None,
+                 _json({str(k): v for k, v in (features or {}).items()}) if features is not None else None,
                  _json(metadata or {}) if metadata is not None else None),
             )
         return bool(cur.rowcount)
