@@ -78,6 +78,13 @@ def _meta(state, key, default=None):
         return default
     if key in state:
         return state.get(key)
+    # v12.0 briefly wrote live transport metadata as top-level ``_hm_*`` fields while
+    # replay restored the same fields under attributes. Read both during rolling upgrade,
+    # but all new live samples are written to attributes below so one canonical shape is
+    # used by live, replay and Teach.
+    legacy = "_hm_" + str(key)
+    if legacy in state:
+        return state.get(legacy)
     return _attrs(state).get("__hm_" + key, default)
 
 
@@ -486,10 +493,19 @@ def register_live_sample(temporal, entity_id, state, event_time, received_time, 
     ts, sample = dq[-1]
     if abs(float(ts) - event_time) > 1e-6:
         return False
-    sample["_hm_event_time"] = event_time
-    sample["_hm_received_time"] = max(float(sample.get("_hm_received_time") or 0.0), received_time)
-    sample["_hm_feature_source"] = str(source)
-    sample["_hm_quality"] = 1.0
+    attrs = sample.get("attributes")
+    if not isinstance(attrs, dict):
+        attrs = {}
+        sample["attributes"] = attrs
+    previous_received = attrs.get("__hm_received_time", sample.get("_hm_received_time"))
+    try:
+        previous_received = float(previous_received)
+    except (TypeError, ValueError):
+        previous_received = 0.0
+    attrs["__hm_event_time"] = event_time
+    attrs["__hm_received_time"] = max(previous_received, received_time)
+    attrs["__hm_feature_source"] = str(source)
+    attrs["__hm_quality"] = 1.0
     return True
 
 
