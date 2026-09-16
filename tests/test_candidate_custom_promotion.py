@@ -87,13 +87,14 @@ class CustomPromotionUiContractTests(unittest.TestCase):
 
     def test_custom_promotion_controls_and_endpoint_are_exposed(self):
         text = (ROOT / "adaptive_ai/src/static/candidate_ui.js").read_text(encoding="utf-8")
-        self.assertIn("Promote with my rules", text)
+        self.assertIn("data-promote-custom", text)
         self.assertIn("data-custom-min-future", text)
         self.assertIn("data-custom-min-action", text)
         self.assertIn("data-custom-max-regression", text)
         self.assertIn("data-custom-offline", text)
         self.assertIn("candidate/promote-custom", text)
         self.assertIn("Offline gate reason", text)
+        self.assertIn("explicit confirmation accepts the Candidate", text)
 
     def test_custom_layer_is_installed_outside_atomic_promoter(self):
         text = (ROOT / "adaptive_ai/src/fast_queue_main.py").read_text(encoding="utf-8")
