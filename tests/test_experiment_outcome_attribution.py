@@ -64,7 +64,7 @@ class PresenceOutcomeAttributionTests(unittest.TestCase):
         }
         labels = dict(f.labels)
         labels[8] = ['binary_sensor.hall:value']
-        features = dict(f.features, **{8: -1.0})
+        features = {**f.features, 8: -1.0}
         registry = self.registry | {'binary_sensor.hall': {'area_id': 'hall'}}
 
         trial = f.start(labels=labels, features=features, registry=registry)
@@ -148,7 +148,7 @@ class PresenceOutcomeAttributionTests(unittest.TestCase):
                 base.reverse()
             labels = {0: ['bias'], 5: ['sensor.radar_presence:value'],
                       **{index: value for index, value in base}, 7: ['sensor.lux:value']}
-            features = dict(f.features, **{8: -1.0})
+            features = {**f.features, 8: -1.0}
             registry = {
                 'light.kitchen': {'area_id': 'kitchen'},
                 'binary_sensor.pir': {'area_id': 'kitchen'},
