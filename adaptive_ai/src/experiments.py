@@ -33,7 +33,7 @@ def activity_scalar(state):
 
 
 def state_change_ts(state):
-    """Return a trustworthy HA transition timestamp, or None when it is not observable."""
+    """Return a HA transition timestamp when one is available."""
     if not state:
         return None
     raw = state.get('last_changed') or state.get('last_updated')
@@ -219,7 +219,7 @@ class Experiments:
             before = state_scalar(state)
             if before is None:
                 continue
-            sources[eid] = {'role': kind, 'area_id': source_area, 'before': before}
+            sources[eid] = {'role': kind, 'area_id': source_area, 'before': before, 'anchored_at': None}
         return sources
 
     @staticmethod
@@ -227,6 +227,16 @@ class Experiments:
         if not state or state.get('state') in ('unavailable', 'unknown'):
             return None
         return activity_scalar(state) if 'device:' + eid in trial.get('x', {}) else state_scalar(state)
+
+    def _rebase_outcome_sources(self, trial, states, at):
+        if not states:
+            return
+        for eid, source in (trial.get('outcome_sources') or {}).items():
+            state = states.get(eid)
+            value = self._observed_value(trial, eid, state)
+            if value is not None:
+                source['before'] = value
+                source['anchored_at'] = at
 
     @staticmethod
     def _score(learner, arm, x):
@@ -290,6 +300,8 @@ class Experiments:
                 self._presence_outcome_sources(agent, selected, states, registry)
                 if cfg['focus'] == 'presence' else {}
             )
+            for source in outcome_sources.values():
+                source['anchored_at'] = now
             if len(x) <= 1 or (cfg['focus'] == 'presence' and not any(v > .01 for k, v in x.items() if k != 'bias')):
                 self.messages[aid] = 'No usable signal for this focus in the selected context'
                 return None
@@ -389,7 +401,7 @@ class Experiments:
                 and trial['property'] == agent['target_property'] and trial['value'] == intent.desired_value
                 and trial['model_revision'] == intent.model_revision and trial['confidence'] >= agent['confidence_threshold'])
 
-    def begin(self, agent, intent):
+    def begin(self, agent, intent, states=None):
         """Reserve before HTTP, including uncertain transport failures in the budget."""
         with self.lock:
             if not self.valid(agent, intent):
@@ -398,16 +410,18 @@ class Experiments:
                 return False
             trial = self.prepared[agent['id']]
             if not self._get(agent['id']).get('active'):
+                self._rebase_outcome_sources(trial, states, self.clock())
                 self._start(agent['id'], trial)
             return True
 
-    def dispatched(self, agent, intent):
+    def dispatched(self, agent, intent, states=None):
         """Bind a successful probe to the actual Executor dispatch boundary and window."""
         with self.lock:
             now = self.clock()
             data = self._get(agent['id'])
             trial = data.get('active')
             if trial and trial.get('kind') == 'probe' and trial.get('trial_id'):
+                self._rebase_outcome_sources(trial, states, now)
                 trial['action_at'] = now
                 trial['observation_start'] = now
                 trial['observation_end'] = now + trial['window']
@@ -423,6 +437,8 @@ class Experiments:
             trial['observation_start'] = now
             trial['observation_end'] = now + trial['window']
             trial['ack'] = now
+            for source in (trial.get('outcome_sources') or {}).values():
+                source['anchored_at'] = now
         data.update(active=trial, last_started=now)
         data['trials'].append(now)
         self._save(aid)
@@ -476,11 +492,19 @@ class Experiments:
             if changes:
                 outcome_sources = trial.get('outcome_sources') or {}
                 candidate_events = []
-                for eid, before, after, state in changes:
+                for eid, _before, after, state in changes:
                     source = outcome_sources.get(eid)
+                    source_before = source.get('before') if source else None
                     if (source and trial['focus'] == 'presence' and trial['property'] == 'power'
-                        and state.get('state') in ('on', 'home') and before < 0 and after > 0):
-                        candidate_events.append((eid, state_change_ts(state)))
+                        and state.get('state') in ('on', 'home')
+                        and source_before is not None and source_before < 0 and after > 0):
+                        changed_at = state_change_ts(state)
+                        if changed_at is None and source.get('anchored_at') is not None:
+                            # The source was re-snapshotted at the action boundary, so a
+                            # later observed transition remains attributable even when HA
+                            # omitted last_changed from this state payload.
+                            changed_at = now
+                        candidate_events.append((eid, changed_at))
 
                 if candidate_events and trial['ack'] is not None:
                     start = trial.get('observation_start')
