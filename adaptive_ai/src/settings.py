@@ -15,7 +15,7 @@ try:
 except Exception:
     ws_connect = None
 
-APP_VERSION = "0.14.9"
+APP_VERSION = "0.14.10"
 HISTORY_BOOTSTRAP_REVISION = "target-attrs-v2"
 TRAINING_REVISION = "shared-home-intents-v18"
 DATA_DIR = Path(os.environ.get("ADAPTIVE_AI_DATA", "/data"))
@@ -153,7 +153,6 @@ SUPPORTED_TARGETS = {
     ],
 }
 
-# Domain -> sensor capabilities that usually reduce policy uncertainty.
 SENSOR_NEEDS = {
     "light": [
         ("illuminance", "Illuminance", "Lets the agent distinguish dark rooms from daylight without guessing from time."),
@@ -248,8 +247,6 @@ def load_options():
             for key in options:
                 if key in data:
                     options[key] = data[key]
-            # v0.4 migrations: preserve explicit custom values, but move the old shipped
-            # defaults to the new event-driven/discovery defaults on upgrade.
             if data.get("poll_seconds") == 2:
                 options["poll_seconds"] = 30
             if data.get("auto_agent_min_changes") == 4:
@@ -258,14 +255,10 @@ def load_options():
                 options["auto_agent_recent_days"] = 10
             if data.get("feature_dimensions") == 192:
                 options["feature_dimensions"] = 128
-            # v0.7.3: migrate the old shipped realtime debounce so existing installs
-            # actually receive the local-first fast-light latency improvement.
             if data.get("realtime_inference_debounce_ms") == 75:
                 options["realtime_inference_debounce_ms"] = 25
     except Exception as exc:
         print(f"[options] Failed to read options: {exc}", flush=True)
-    # 0.9 never starts heavy replay implicitly, including installations with the
-    # legacy automatic option. One shared job covers agent AND global bootstrap.
     options["manual_agent_training"] = True
     options["max_concurrent_training_jobs"] = 1
     return options
