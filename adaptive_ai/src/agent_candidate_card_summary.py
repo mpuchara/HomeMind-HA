@@ -1,16 +1,14 @@
 """Compact Candidate-card decision summary.
 
 The Candidate card should show the same decision vocabulary as a Live agent: physical
-Current, direct-parent Desired, Candidate Desired and Candidate model Confidence.  The
+Current, direct-parent Desired, Candidate Desired and Candidate model Confidence. The
 Shadow runtime persists every retained generation under one event id, so the parent value
 shown here is taken from the *same observed Shadow event* as the Candidate whenever
-possible.  No policy is replayed and no physical action is dispatched.
+possible. No policy is replayed and no physical action is dispatched.
 """
 from __future__ import annotations
 
-import math
 import time
-from urllib.parse import urlsplit
 
 from context import target_value
 
@@ -93,7 +91,7 @@ def decorate_candidate_status(store, result, *, now=None):
         store, parent_generation_id, child.get("event_id")
     )
     if parent_decision is None:
-        # A pre-upgrade database may lack a matching event row.  Falling back to a fresh
+        # A pre-upgrade database may lack a matching event row. Falling back to a fresh
         # observed parent row is still better than replaying today's parent policy.
         parent_decision = _latest_decision(store, parent_generation_id)
     if (
@@ -114,69 +112,63 @@ def decorate_candidate_status(store, result, *, now=None):
     return result
 
 
-def live_candidate_snapshots(manager):
-    """Fast UI-only snapshots without rebuilding Candidate metrics/status.
+def live_decision_snapshots(manager, *, now=None):
+    """Cheap UI snapshot for Current / parent Desired / Candidate Desired.
 
-    Current is read directly from the websocket-backed engine state. Desired values come
-    only from Candidate Shadow decisions that actually ran and were persisted, never from
-    policy replay. The query is read-only and does not touch Executor or learning state.
+    This intentionally avoids full Candidate status/comparison calculation. Current is read
+    from the in-memory Home Assistant state map; Desired values are the latest actually
+    observed Shadow event for the active lineage tip and its direct parent.
     """
-    now = time.time()
+    from agent_candidate_lineage import _active_tip
+
+    now = time.time() if now is None else float(now)
     with manager.store.conn() as c:
-        rows = [dict(r) for r in c.execute(
-            """SELECT g.generation_id,g.parent_generation_id,g.root_agent_id,g.agent_id,
-                      child.ts AS child_ts,child.event_id AS child_event_id,
-                      child.desired AS child_desired,child.confidence AS child_confidence,
-                      parent.desired AS parent_desired,parent.confidence AS parent_confidence
-               FROM agent_candidate_generations g
-               LEFT JOIN candidate_generation_decisions child
-                 ON child.generation_id=g.generation_id
-                AND child.ts=(SELECT MAX(d.ts) FROM candidate_generation_decisions d
-                              WHERE d.generation_id=g.generation_id)
-               LEFT JOIN candidate_generation_decisions parent
-                 ON parent.generation_id=g.parent_generation_id
-                AND parent.event_id=child.event_id
-               WHERE g.generation_type='candidate' AND g.agent_id IS NOT NULL
-                 AND g.lifecycle_state NOT IN ('discarded','pruned','promoted')
-               ORDER BY g.root_agent_id,g.generation_number,g.created_ts"""
+        roots = [str(r[0]) for r in c.execute(
+            """SELECT DISTINCT root_agent_id FROM agent_candidate_generations
+               WHERE generation_type='candidate'
+                 AND lifecycle_state NOT IN ('discarded','pruned','promoted')"""
         ).fetchall()]
     with manager.engine.lock:
         state_map = dict(manager.engine.state_map)
 
-    roots = {}
-    snapshots = []
-    for row in rows:
-        root_id = str(row.get("root_agent_id") or "")
-        if not root_id:
+    output = []
+    for root in roots:
+        tip = _active_tip(manager.store, root)
+        if not tip or not tip.get("agent_id") or not tip.get("parent_generation_id"):
             continue
-        root = roots.get(root_id)
-        if root is None:
-            root = manager.store.get_agent_config(root_id)
-            roots[root_id] = root
-        if not root:
+        subject = manager.store.get_agent_config(str(tip["agent_id"])) or manager.store.get_agent_config(root)
+        if not subject:
             continue
-        current = target_value(state_map.get(root.get("target_entity")), root.get("target_property"))
+        current = target_value(state_map.get(subject["target_entity"]), subject["target_property"])
         try:
             current = None if current is None else float(current)
-            if current is not None and not math.isfinite(current):
-                current = None
         except (TypeError, ValueError):
             current = None
-        child_ts = row.get("child_ts")
-        fresh = child_ts is not None and now - float(child_ts) <= DECISION_STALE_SECONDS
-        snapshots.append({
-            "generation_id": row.get("generation_id"),
-            "candidate_id": row.get("agent_id"),
-            "root_agent_id": root_id,
-            "target_property": root.get("target_property"),
-            "shadow_current": current,
-            "parent_desired": row.get("parent_desired") if fresh else None,
-            "candidate_desired": row.get("child_desired") if fresh else None,
-            "candidate_confidence": row.get("child_confidence") if fresh else None,
-            "shadow_timestamp": float(child_ts) if fresh else None,
-            "live_snapshot_ts": now,
+
+        child = _latest_decision(manager.store, tip["generation_id"])
+        fresh_child = bool(child and now - float(child.get("ts") or 0.0) <= DECISION_STALE_SECONDS)
+        parent = None
+        if fresh_child:
+            parent = _decision_for_event(
+                manager.store, tip["parent_generation_id"], child.get("event_id")
+            )
+            if parent is None:
+                parent = _latest_decision(manager.store, tip["parent_generation_id"])
+            if parent and now - float(parent.get("ts") or 0.0) > DECISION_STALE_SECONDS:
+                parent = None
+
+        output.append({
+            "root_agent_id": root,
+            "generation_id": str(tip["generation_id"]),
+            "parent_generation_id": str(tip["parent_generation_id"]),
+            "target_property": subject.get("target_property"),
+            "current": current,
+            "parent_desired": None if parent is None else parent.get("desired"),
+            "candidate_desired": None if not fresh_child else child.get("desired"),
+            "candidate_confidence": None if not fresh_child else child.get("confidence"),
+            "shadow_timestamp": None if not fresh_child else child.get("ts"),
         })
-    return snapshots
+    return output
 
 
 def install(manager):
@@ -186,8 +178,6 @@ def install(manager):
     original_status = manager.status
     original_list_status = manager.list_status
     original_lineage_status = getattr(manager, "lineage_status", None)
-    handler = manager.core.Handler
-    original_get = handler.do_GET
 
     def status(parent_id):
         return decorate_candidate_status(manager.store, original_status(parent_id))
@@ -203,22 +193,13 @@ def install(manager):
         result = original_lineage_status(ref) if original_lineage_status is not None else None
         return decorate_candidate_status(manager.store, result)
 
-    def do_get(http):
-        path = urlsplit(http.path).path
-        if path == "/api/candidate-live":
-            if not http.require_trusted_client() or not http.require_runtime():
-                return
-            return http.send_json(200, {"ts": time.time(), "candidates": live_candidate_snapshots(manager)})
-        return original_get(http)
-
     manager.status = status
     manager.list_status = list_status
-    manager.live_snapshots = lambda: live_candidate_snapshots(manager)
     if original_lineage_status is not None:
         manager.lineage_status = lineage_status
-    handler.do_GET = do_get
+    manager.live_decision_snapshots = lambda: live_decision_snapshots(manager)
     manager._candidate_card_summary_installed = True
     manager.candidate_card_decision_contract = (
-        "current_plus_same_observed_event_direct_parent_desired_plus_candidate_desired"
+        "realtime_physical_current_plus_same_observed_event_direct_parent_desired_plus_candidate_desired"
     )
     return manager
