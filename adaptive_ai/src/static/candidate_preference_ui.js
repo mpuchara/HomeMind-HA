@@ -78,6 +78,7 @@
       );
       return;
     }
+    // Fast refresh changes text only, avoiding a DOM rebuild four times per second.
     for(const [key,_label,value] of values){
       const bold=strip.querySelector(`[data-decision-key="${key}"] b`);
       if(bold&&bold.textContent!==value)bold.textContent=value;
