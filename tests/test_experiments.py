@@ -35,7 +35,11 @@ class ExperimentTests(unittest.TestCase):
         self.temp.cleanup()
 
     def propose(self, **kwargs):
-        defaults = dict(agent=self.a, policy=self.policy, states=self.states, registry={}, features=self.features,
+        registry = {
+            'light.kitchen': {'area_id': 'kitchen'},
+            'binary_sensor.pir': {'area_id': 'kitchen'},
+        }
+        defaults = dict(agent=self.a, policy=self.policy, states=self.states, registry=registry, features=self.features,
             labels=self.labels, chosen=self.arms[0], confidence=.9, arms=self.arms, horizon=1, rt={})
         return self.e.propose(**(defaults | kwargs))
 
@@ -43,8 +47,8 @@ class ExperimentTests(unittest.TestCase):
         trial = self.propose(**kwargs)
         self.assertIsNotNone(trial)
         intent = SimpleNamespace(experiment_token=trial['token'], desired_value=trial['value'], model_revision='test')
-        self.assertTrue(self.e.begin(self.a, intent))
-        self.e.dispatched(self.a, intent)
+        self.assertTrue(self.e.begin(self.a, intent, self.states))
+        self.e.dispatched(self.a, intent, self.states)
         return trial
 
     def ack(self):
