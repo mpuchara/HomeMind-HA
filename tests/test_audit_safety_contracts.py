@@ -6,9 +6,9 @@ import agent_candidate_preference_metrics as pref
 from agent_candidate_atomic_promote import install as install_atomic_promote
 from agent_candidate_shadow_runtime import ensure_shadow_tables
 from agent_candidate_user_promotion import install as install_user_promotion
-from test_atomic_promote_lifecycle import AtomicPromoteTests, FakeManager
-from test_candidate_preference_metrics import CandidatePreferenceMetricTests
-from test_experiments import ExperimentTests
+import test_atomic_promote_lifecycle as atomic_fixture
+import test_candidate_preference_metrics as preference_fixture
+import test_experiments as experiment_fixture
 
 
 EXPECTED_FAST_GATES = {
@@ -20,7 +20,7 @@ EXPECTED_FAST_GATES = {
 
 class CandidatePromotionSafetyRegressionTests(unittest.TestCase):
     def _summary(self, candidate_false_early=0, live_false_early=0, pair_count=40):
-        fixture = CandidatePreferenceMetricTests()
+        fixture = preference_fixture.CandidatePreferenceMetricTests()
         fixture.setUp()
         for i in range(pair_count):
             fixture._pair(200 + i * 200, i % 2, True, True, 1, 1)
@@ -105,7 +105,7 @@ class ProductionPromotionCompositionTests(unittest.TestCase):
     """Compose the same preference -> atomic -> custom layers used by production."""
 
     def setUp(self):
-        self.fixture = AtomicPromoteTests()
+        self.fixture = atomic_fixture.AtomicPromoteTests()
         self.fixture.setUp()
         ensure_shadow_tables(self.fixture.store)
         with self.fixture.store.conn() as c:
@@ -129,7 +129,7 @@ class ProductionPromotionCompositionTests(unittest.TestCase):
                     ),
                 )
 
-        manager = FakeManager(self.fixture.store, self.fixture.engine, self.fixture.root['id'])
+        manager = atomic_fixture.FakeManager(self.fixture.store, self.fixture.engine, self.fixture.root['id'])
         manager.core.Handler.static = lambda self, *args: None
         manager.before_live_process = lambda agent, state_map: None
         manager.after_live_process = lambda agent, state_map: None
@@ -189,7 +189,7 @@ class ProductionPromotionCompositionTests(unittest.TestCase):
 
 class ExperimentOutcomeSafetyRegressionTests(unittest.TestCase):
     def setUp(self):
-        self.fixture = ExperimentTests()
+        self.fixture = experiment_fixture.ExperimentTests()
         self.fixture.setUp()
 
     def tearDown(self):
