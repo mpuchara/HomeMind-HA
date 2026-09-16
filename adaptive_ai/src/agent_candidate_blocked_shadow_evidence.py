@@ -13,10 +13,9 @@ This hotfix keeps the persisted lifecycle authoritative and stable:
 * standard Promote remains blocked by the unchanged offline gate,
 * explicit custom Promote may still use the existing audited one-shot offline override.
 
-The same corrective bundle also installs the binary Correct class-balancing layer before
-observation hooks are finalized.  Error-only user labels are therefore balanced with
-context-matched, correctly-predicted historical anchors instead of being interpreted as
-the natural ON/OFF class distribution.
+The same corrective bundle installs the binary Correct learning layers before observation
+hooks are finalized. Error-only user labels are balanced with context-matched historical
+anchors, while every explicitly marked wrong point remains a hard correction target.
 
 No ActionIntent or Executor ownership is added here.
 """
@@ -28,7 +27,7 @@ import time
 
 import agent_candidate_shadow_runtime as shadow_runtime
 import agent_candidate_user_promotion as user_promotion
-from agent_candidate_balanced_correct import install as install_balanced_correct
+from agent_candidate_hard_correct import install as install_hard_correct
 
 
 _BLOCKED_STATES = {"offline_blocked", "insufficient_evidence"}
@@ -117,9 +116,9 @@ def _persist_summary(manager, edge, summary):
 
 def install(manager):
     global _PATCHED, _ORIGINAL_TEMPORARY_GATE
-    # Install learning semantics first.  This is idempotent and patches the module-level
+    # Install learning semantics first. This is idempotent and patches the module-level
     # Correct hooks that the already-decorated Candidate manager resolves at call time.
-    manager = install_balanced_correct(manager)
+    manager = install_hard_correct(manager)
     if getattr(manager, "_candidate_stable_blocked_shadow_installed", False):
         return manager
 
