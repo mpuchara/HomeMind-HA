@@ -1,7 +1,7 @@
 """Durable provenance for HA events, policy decisions and learning experiences.
 
-Contract v1 is additive.  Missing provenance is represented as ``unknown``; migrations
-never infer a historical user/automation origin from incomplete old rows.  This module
+Contract v1 is additive. Missing provenance is represented as ``unknown``; migrations
+never infer a historical user/automation origin from incomplete old rows. This module
 also owns the persistent command/context evidence used to recognise HomeMind echoes
 across a process restart.
 """
@@ -46,6 +46,10 @@ class ProvenanceJournal:
         self.clock = clock
         self._migrate()
 
+    @staticmethod
+    def _columns(c, table):
+        return {row[1] for row in c.execute(f"PRAGMA table_info({table})").fetchall()}
+
     def _migrate(self):
         with self.store.lock, self.store.conn() as c:
             c.executescript(
@@ -61,7 +65,8 @@ class ProvenanceJournal:
                     user_id TEXT,
                     source TEXT NOT NULL,
                     origin TEXT NOT NULL DEFAULT 'unknown',
-                    state_json TEXT
+                    state_json TEXT,
+                    processed_time REAL
                 );
                 CREATE INDEX IF NOT EXISTS idx_provenance_events_entity_time
                     ON provenance_events(entity_id,event_time);
@@ -123,7 +128,8 @@ class ProvenanceJournal:
                     created_time REAL NOT NULL,
                     dispatched_time REAL,
                     expires_time REAL NOT NULL,
-                    status TEXT NOT NULL
+                    status TEXT NOT NULL,
+                    command_origin TEXT NOT NULL DEFAULT 'own_command'
                 );
                 CREATE INDEX IF NOT EXISTS idx_provenance_commands_entity
                     ON provenance_commands(entity_id,expires_time);
@@ -161,6 +167,17 @@ class ProvenanceJournal:
                     ON provenance_experiences(decision_id);
                 """
             )
+            # Additive forward migration for databases that briefly saw an earlier v1
+            # draft. Existing rows stay unknown/own_command; no historical attribution is
+            # fabricated from context_user_id or automation heuristics.
+            event_cols = self._columns(c, "provenance_events")
+            if "processed_time" not in event_cols:
+                c.execute("ALTER TABLE provenance_events ADD COLUMN processed_time REAL")
+            command_cols = self._columns(c, "provenance_commands")
+            if "command_origin" not in command_cols:
+                c.execute(
+                    "ALTER TABLE provenance_commands ADD COLUMN command_origin TEXT NOT NULL DEFAULT 'own_command'"
+                )
 
     def record_event(self, entity_id, state, *, event_time, received_time=None,
                      source="ha_state_changed", origin=UNKNOWN, event_id=None):
@@ -181,8 +198,8 @@ class ProvenanceJournal:
             cur = c.execute(
                 """INSERT OR IGNORE INTO provenance_events
                    (event_id,contract_version,event_time,received_time,entity_id,context_id,
-                    context_parent_id,user_id,source,origin,state_json)
-                   VALUES(?,?,?,?,?,?,?,?,?,?,?)""",
+                    context_parent_id,user_id,source,origin,state_json,processed_time)
+                   VALUES(?,?,?,?,?,?,?,?,?,?,?,NULL)""",
                 (event_id, CONTRACT_VERSION, event_time, received_time, str(entity_id),
                  context_id, parent_id, user_id, str(source), origin,
                  _json(payload) if payload is not None else None),
@@ -200,6 +217,20 @@ class ProvenanceJournal:
         with self.store.conn() as c:
             row = c.execute("SELECT * FROM provenance_events WHERE event_id=?", (str(event_id),)).fetchone()
         return dict(row) if row else None
+
+    def event_processed(self, event_id):
+        row = self.event(event_id)
+        return bool(row and row.get("processed_time") is not None)
+
+    def mark_event_processed(self, event_id, processed_time=None):
+        if not event_id:
+            return
+        processed_time = float(self.clock() if processed_time is None else processed_time)
+        with self.store.lock, self.store.conn() as c:
+            c.execute(
+                "UPDATE provenance_events SET processed_time=COALESCE(processed_time,?) WHERE event_id=?",
+                (processed_time, str(event_id)),
+            )
 
     def history_provenance(self, entity_id, event_time):
         with self.store.conn() as c:
@@ -303,23 +334,29 @@ class ProvenanceJournal:
                 (_finite(reward), None if reason is None else str(reason), outcome_time, str(decision_id)),
             )
 
-    def reserve_command(self, agent, value, *, decision_id=None, command_id=None, created_time=None):
+    def reserve_command(self, agent, value, *, decision_id=None, command_id=None,
+                        created_time=None, command_origin="own_command"):
         created_time = float(self.clock() if created_time is None else created_time)
         expires = created_time + max(30.0, float(agent.get("ack_timeout") or 0.0) * 2.0, 10.0)
         command_id = command_id or decision_id or str(uuid.uuid4())
+        command_origin = str(command_origin or "own_command")
         with self.store.lock, self.store.conn() as c:
             c.execute(
                 """INSERT INTO provenance_commands
                    (command_id,decision_id,entity_id,target_property,desired_value,deadband,
-                    created_time,dispatched_time,expires_time,status)
-                   VALUES(?,?,?,?,?,?,?,?,?,?)
+                    created_time,dispatched_time,expires_time,status,command_origin)
+                   VALUES(?,?,?,?,?,?,?,?,?,?,?)
                    ON CONFLICT(command_id) DO UPDATE SET
                      decision_id=COALESCE(excluded.decision_id,provenance_commands.decision_id),
                      desired_value=excluded.desired_value,deadband=excluded.deadband,
                      expires_time=MAX(provenance_commands.expires_time,excluded.expires_time),
+                     command_origin=CASE
+                       WHEN provenance_commands.command_origin='user_intent' THEN provenance_commands.command_origin
+                       ELSE excluded.command_origin END,
                      status=CASE WHEN provenance_commands.status='dispatched' THEN provenance_commands.status ELSE excluded.status END""",
                 (str(command_id), decision_id, agent["target_entity"], agent["target_property"],
-                 float(value), float(agent.get("deadband") or 0.0), created_time, None, expires, "pending"),
+                 float(value), float(agent.get("deadband") or 0.0), created_time, None, expires,
+                 "pending", command_origin),
             )
         return str(command_id)
 
@@ -410,7 +447,7 @@ class ProvenanceJournal:
                 (str(experience_key), CONTRACT_VERSION, created_time, str(agent_id), decision_id,
                  source_event_id, experiment_id, episode_id, str(source), str(origin or UNKNOWN),
                  None if action_index is None else int(action_index), _finite(action_value), _finite(reward),
-                 _json({str(k): v for k, v in (features or {}).items()}) if features is not None else None,
+                 _json({str(k): v for k, v in (features or {}).items()) if features is not None else None,
                  _json(metadata or {}) if metadata is not None else None),
             )
         return bool(cur.rowcount)
@@ -420,12 +457,12 @@ class ProvenanceJournal:
                               decision_id=None, source_event_id=None, episode_id=None,
                               experiment_id=None, source="live", origin=UNKNOWN,
                               metadata=None):
-        """Atomically persist one learned feedback update and the already-mutated model.
+        """Atomically persist one learned feedback update and its idempotency key.
 
-        Caller must hold ``store.lock`` while checking ``experience_exists``, mutating the
-        in-memory policy and calling this method.  The re-entrant Store lock makes that
-        sequence single-writer.  A crash cannot persist the model without its idempotency
-        key (or vice versa).
+        Caller holds ``store.lock`` while checking ``experience_exists``, mutating the
+        in-memory policy and entering this method. Store.lock is re-entrant. The model,
+        feedback row and experience key commit in one SQLite transaction, so retry after
+        restart cannot apply the same update twice.
         """
         model = dict(model)
         with self.store.lock, self.store.conn() as c:
