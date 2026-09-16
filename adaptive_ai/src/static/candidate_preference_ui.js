@@ -46,10 +46,10 @@
     document.head.appendChild(style);
   }
 
-  function decisionTile(key,label,value,classes=''){
+  function decisionTile(label,value,classes='',key=''){
     const node=document.createElement('div');
     node.className=classes;
-    node.dataset.decisionKey=key;
+    node.dataset.decisionKey=key||String(label).toLowerCase().replace(/\s+/g,'-');
     const span=document.createElement('span');span.textContent=label;
     const bold=document.createElement('b');bold.textContent=value;
     node.append(span,bold);
@@ -70,7 +70,12 @@
       const anchor=card.querySelector('.candidate-compare-minimal');
       if(anchor)anchor.insertAdjacentElement('beforebegin',strip);
       else card.querySelector('.candidate-top')?.insertAdjacentElement('afterend',strip);
-      strip.replaceChildren(...values.map(v=>decisionTile(...v)));
+      strip.replaceChildren(
+        decisionTile('Current',decisionValue(c,c.shadow_current),'state-metric current','current'),
+        decisionTile('Desired',decisionValue(c,c.parent_desired),'state-metric desired','desired'),
+        decisionTile('Candidate Desired',decisionValue(c,c.candidate_desired),'state-metric candidate-desired','candidate'),
+        decisionTile('Confidence',pct(c.candidate_confidence??c.model_confidence),'','confidence'),
+      );
       return;
     }
     // Fast refresh changes text only, avoiding a DOM rebuild four times per second.
