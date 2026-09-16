@@ -13,7 +13,7 @@
   "home_model_version": 1,
   "reward_version": 3,
   "release_status": "release-0.14.11-candidate-promotion-cycle",
-  "tests_passed": 577,
+  "tests_passed": 583,
   "docker_build": "github-actions-0.14.11-smoke-required",
   "pi4": "not_measured",
   "bootstrap_catchup": "bounded-live-statistics",
