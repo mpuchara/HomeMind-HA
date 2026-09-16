@@ -819,12 +819,18 @@ def install(core):
         state = (data or {}).get("new_state")
         received = now_ts()
         event_time = parse_ts((state or {}).get("last_updated") or (state or {}).get("last_changed")) or received
-        if entity_id and state is not None and entity_id in watched():
+        # Engine.on_state_changed owns the live temporal acceptance rule, including its
+        # monotonic last_updated guard. Persist high-resolution evidence only when that
+        # exact event made it into the live temporal buffer; otherwise replay would learn
+        # from a stale/out-of-order sample that live inference never observed.
+        result = original_on_state_changed(data)
+        accepted = False
+        if entity_id and state is not None:
+            accepted = register_live_sample(engine.temporal_history, entity_id, state, event_time,
+                                            received, "ha_state_changed")
+        if accepted and entity_id in watched():
             journal.record(entity_id, state, event_time=event_time, received_time=received,
                            source="ha_state_changed")
-        result = original_on_state_changed(data)
-        if entity_id and state is not None:
-            register_live_sample(engine.temporal_history, entity_id, state, event_time, received, "ha_state_changed")
         return result
     engine.on_state_changed = on_state_changed
 
