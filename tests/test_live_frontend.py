@@ -10,7 +10,7 @@ class LiveFrontendTests(unittest.TestCase):
         script = r'''
 const vm=require('node:vm'),fs=require('node:fs'),assert=require('node:assert/strict');
 const requests=[],nodes=new Map();let renders=0;
-const c={document:{hidden:false,body:{append(){}},createElement(){return {addEventListener(){}}},querySelectorAll(){return []},querySelector(s){if(!nodes.has(s))nodes.set(s,{value:'',classList:{add(){},remove(){}}});return nodes.get(s);}},
+const c={document:{hidden:false,body:{append(){}},createElement(){return {addEventListener(){}}},querySelectorAll(){return []},querySelector(s){if(!nodes.has(s))nodes.set(s,{value:'',classList:{add(){},remove(){}}});return nodes.get(s);},addEventListener(){}},
  localStorage:{getItem(){return null},setItem(){}},AbortController,
  setTimeout(){return 1},clearTimeout(){},setInterval(){},
  fetch(path){requests.push(path);if(path==='api/status')return new Promise(()=>{});
@@ -31,3 +31,11 @@ setImmediate(()=>{
 '''
         result = subprocess.run(['node', '-e', script], cwd=ROOT, capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    def test_live_card_loop_keeps_full_snapshot_at_250ms(self):
+        text = (ROOT / 'adaptive_ai/src/static/manual_feedback.js').read_text(encoding='utf-8')
+        self.assertIn('for(const item of data.agents)liveValues.set(String(item.id),{...item});', text)
+        self.assertNotIn('last_prediction_label:null', text)
+        self.assertIn('window.updateAgentLive?.(card,a);', text)
+        self.assertIn('setTimeout(liveLoop,250)', text)
+        self.assertIn("document.addEventListener('visibilitychange'", text)
