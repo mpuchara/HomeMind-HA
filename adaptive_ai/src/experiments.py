@@ -158,6 +158,33 @@ class Experiments:
         return selected, x, snapshot
 
     @staticmethod
+    def _presence_confirmers(agent, selected, states, registry):
+        """Return focus inputs allowed to confirm local arrival for a presence trial.
+
+        Background snapshot entities may abort an observation when they change, but they
+        are never outcome evidence. Only binary/tracker presence inputs that actually
+        participated in the presence-focused proposal can confirm an arrival. When the
+        target has a known HA area, the confirming source must belong to the same area.
+        """
+        target_area = (registry.get(agent['target_entity'], {}) or {}).get('area_id')
+        confirmers = []
+        for name in selected.values():
+            eid, _, suffix = str(name).partition(':')
+            if suffix != 'value' or eid == agent['target_entity']:
+                continue
+            state = states.get(eid)
+            if not state:
+                continue
+            reg = registry.get(eid, {}) or {}
+            kind, _ = source_kind(eid, state, reg)
+            if kind not in {'binary', 'tracker'}:
+                continue
+            if target_area and reg.get('area_id') != target_area:
+                continue
+            confirmers.append(eid)
+        return sorted(set(confirmers))
+
+    @staticmethod
     def _score(learner, arm, x):
         weights = learner['weights'][arm]
         norm = max(1.0, math.sqrt(sum(v*v for v in x.values())))
@@ -215,6 +242,10 @@ class Experiments:
                 self.screen_after[aid] = now+10
             registry = registry() if callable(registry) else registry
             selected, x, snapshot = self._inputs(agent, policy, states, registry, features, labels, cfg['focus'], data)
+            outcome_confirmers = (
+                self._presence_confirmers(agent, selected, states, registry)
+                if cfg['focus'] == 'presence' else []
+            )
             if len(x) <= 1 or (cfg['focus'] == 'presence' and not any(v > .01 for k, v in x.items() if k != 'bias')):
                 self.messages[aid] = 'No usable signal for this focus in the selected context'
                 return None
@@ -222,7 +253,8 @@ class Experiments:
             x['baseline_setting'] = (chosen['value']-agent['min_value'])/span
             x['trial_strength'] = cfg['intensity']
             # Background context still terminates an observation if it changes;
-            # only the requested focus enters the residual learner.
+            # only the requested focus enters the residual learner and only the explicit
+            # local confirmer manifest may establish a successful presence outcome.
             for eid in getattr(getattr(policy, 'schema', None), 'entities', ()):
                 state = states.get(eid)
                 value = state_scalar(state) if state and state.get('state') not in ('unknown', 'unavailable') else None
@@ -278,6 +310,7 @@ class Experiments:
             trial = dict(kind='reference' if reference else 'probe', arm=0 if reference else arm_id,
                 value=chosen['value'] if reference else arm['value'], baseline=chosen['value'],
                 index=chosen['index'] if reference else arm['index'], x=x, snapshot=snapshot,
+                outcome_confirmers=outcome_confirmers,
                 focus=cfg['focus'], revision=data['revision'], policy_version=policy.VERSION,
                 model_revision=policy.model_revision, target=agent['target_entity'], property=agent['target_property'],
                 confidence=confidence, support=arm['support'], novelty=arm['novelty'], gap=gap, gain=gain,
@@ -352,16 +385,27 @@ class Experiments:
                 return self._finish(aid, None, 'no device acknowledgement')
             if trial['ack'] is not None and not matches:
                 return self._finish(aid, None, 'external or ordinary control changed the target')
+
+            changes = []
             for eid, before in trial['snapshot'].items():
                 state = states.get(eid)
                 after = (activity_scalar(state) if 'device:'+eid in trial['x'] else state_scalar(state)) if state and state.get('state') not in ('unavailable', 'unknown') else None
                 if after is None:
                     return self._finish(aid, None, 'context unavailable')
                 if abs(after-before) > .05:
-                    if (trial['ack'] is not None and trial['focus'] == 'presence'
-                        and trial['property'] == 'power' and state.get('state') in ('on', 'home') and before < 0 and after > 0):
-                        return self._finish(aid, .6 if trial['value'] >= .5 else -.2, 'presence confirmed after decision')
-                    return self._finish(aid, None, 'context changed; ordinary control resumes')
+                    changes.append((eid, before, after, state))
+
+            if changes:
+                confirmers = set(trial.get('outcome_confirmers') or ())
+                if (trial['ack'] is not None and trial['focus'] == 'presence'
+                    and trial['property'] == 'power'):
+                    for eid, before, after, state in changes:
+                        if (eid in confirmers and state.get('state') in ('on', 'home')
+                            and before < 0 and after > 0):
+                            return self._finish(aid, .6 if trial['value'] >= .5 else -.2,
+                                                'presence confirmed after decision')
+                return self._finish(aid, None, 'context changed; ordinary control resumes')
+
             if trial['ack'] is not None and now-trial['ack'] >= trial['window']:
                 return self._finish(aid, .02 if trial['kind'] == 'probe' else .05, 'weak preference: observed without correction')
             if now >= trial['deadline']:
