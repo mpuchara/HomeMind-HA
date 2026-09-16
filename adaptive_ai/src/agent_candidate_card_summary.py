@@ -87,9 +87,7 @@ def decorate_candidate_status(store, result, *, now=None):
         return result
 
     parent_generation_id = generation["parent_generation_id"]
-    parent_decision = _decision_for_event(
-        store, parent_generation_id, child.get("event_id")
-    )
+    parent_decision = _decision_for_event(store, parent_generation_id, child.get("event_id"))
     if parent_decision is None:
         # A pre-upgrade database may lack a matching event row. Falling back to a fresh
         # observed parent row is still better than replaying today's parent policy.
@@ -149,9 +147,7 @@ def live_decision_snapshots(manager, *, now=None):
         fresh_child = bool(child and now - float(child.get("ts") or 0.0) <= DECISION_STALE_SECONDS)
         parent = None
         if fresh_child:
-            parent = _decision_for_event(
-                manager.store, tip["parent_generation_id"], child.get("event_id")
-            )
+            parent = _decision_for_event(manager.store, tip["parent_generation_id"], child.get("event_id"))
             if parent is None:
                 parent = _latest_decision(manager.store, tip["parent_generation_id"])
             if parent and now - float(parent.get("ts") or 0.0) > DECISION_STALE_SECONDS:
@@ -178,6 +174,8 @@ def install(manager):
     original_status = manager.status
     original_list_status = manager.list_status
     original_lineage_status = getattr(manager, "lineage_status", None)
+    handler = manager.core.Handler
+    original_get = handler.do_GET
 
     def status(parent_id):
         return decorate_candidate_status(manager.store, original_status(parent_id))
@@ -193,11 +191,23 @@ def install(manager):
         result = original_lineage_status(ref) if original_lineage_status is not None else None
         return decorate_candidate_status(manager.store, result)
 
+    def do_get(http):
+        path, _, _ = http.path.partition("?")
+        if path == "/api/candidate-live":
+            if not http.require_trusted_client() or not http.require_runtime():
+                return
+            return http.send_json(200, {
+                "ts": time.time(),
+                "candidates": live_decision_snapshots(manager),
+            })
+        return original_get(http)
+
     manager.status = status
     manager.list_status = list_status
     if original_lineage_status is not None:
         manager.lineage_status = lineage_status
     manager.live_decision_snapshots = lambda: live_decision_snapshots(manager)
+    handler.do_GET = do_get
     manager._candidate_card_summary_installed = True
     manager.candidate_card_decision_contract = (
         "realtime_physical_current_plus_same_observed_event_direct_parent_desired_plus_candidate_desired"
