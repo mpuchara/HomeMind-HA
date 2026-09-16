@@ -8,8 +8,9 @@ transition evidence only when independently labelled coverage is sufficient.
 
 EpisodeEvaluator itself is created before the fast runtime extensions, so Live outcomes,
 Experiments and Sensor Tournament all share one persistent contract before any worker can
-observe HA. Durable provenance and the observation schema are then composed before the
-Engine/EventStream/History workers start.
+observe HA. Dependency-sensitive additions use the explicit composition hooks exposed by
+``fast_queue_main``; no installer function is monkey-patched. Durable provenance and the
+observation schema are then composed before Engine/EventStream/History workers start.
 """
 import fast_queue_main as runtime
 from agent_candidate_card_summary import install as install_candidate_card_summary
@@ -38,39 +39,31 @@ def prepare_engine_extensions():
         evaluator = EpisodeEvaluator(core.STORE)
     install_core_episode_evaluator(core, evaluator)
 
-    # fast_queue_main imports these installers inside its preparation function. The
-    # current architecture therefore requires a temporary composition interception to
-    # place the episode adapters at the correct lifecycle points. Both module functions
-    # are restored in finally; the installed service methods remain instance-local.
-    import agent_candidate_shadow_context as shadow_context_module
-    import fast_light_objective_runtime as fast_light_module
-
-    original_shadow_context_install = shadow_context_module.install
-    original_fast_light_install = fast_light_module.install
     installed = {"manager": None, "tournament": None}
 
-    def install_fast_light_then_episodes(service):
-        service = original_fast_light_install(service)
+    def after_fast_light(service):
         service = install_tournament_episode_evaluator(service, evaluator)
         installed["tournament"] = service
         return service
 
-    def install_shadow_context_then_preference(manager):
-        manager = original_shadow_context_install(manager)
+    def after_candidate_shadow_context(manager):
+        # Stage-01 preference metrics and stage-05 episode evidence must both precede
+        # atomic promotion so status/UI and the committed swap consume identical gates.
         manager = install_candidate_preference_metrics(manager)
-        # Must precede atomic promotion so manager.status/_comparison_summary captured by
-        # the atomic layer already contains episode-aware named gates.
         manager = install_candidate_episode_evaluator(manager, evaluator)
         installed["manager"] = manager
         return manager
 
-    fast_light_module.install = install_fast_light_then_episodes
-    shadow_context_module.install = install_shadow_context_then_preference
+    runtime.set_engine_extension_hook("after_fast_light", "episode_evaluator", after_fast_light)
+    runtime.set_engine_extension_hook(
+        "after_candidate_shadow_context", "preference_and_episode", after_candidate_shadow_context
+    )
     try:
         _original_prepare_engine_extensions()
     finally:
-        fast_light_module.install = original_fast_light_install
-        shadow_context_module.install = original_shadow_context_install
+        # Hooks are composition-time dependencies, not process-global runtime state.
+        runtime.set_engine_extension_hook("after_fast_light", "episode_evaluator", None)
+        runtime.set_engine_extension_hook("after_candidate_shadow_context", "preference_and_episode", None)
 
     # Cross-cutting event identity follows the already-created episode evaluator. Neither
     # migration rewrites old vectors/labels; missing old provenance remains unknown.
@@ -104,7 +97,7 @@ def prepare_engine_extensions():
             "contract": getattr(manager, "candidate_preference_contract", None),
             "metric": getattr(manager, "candidate_fast_metric", None),
             "half_life_opportunities": getattr(manager, "candidate_preference_half_life_opportunities", None),
-            "install_order": "episode_core_before_fast_stack;episode_candidate_after_preference_before_atomic_promote",
+            "install_order": "episode_core_before_fast_stack;explicit_hooks;episode_candidate_after_preference_before_atomic_promote",
             "episode_evaluator_contract": 1,
             "episode_domain": "light_power",
             "episode_candidate_contract": getattr(manager, "candidate_episode_contract", None),
@@ -112,6 +105,7 @@ def prepare_engine_extensions():
                 getattr(installed.get("tournament"), "_episode_evaluator_installed", False)
             ),
             "episode_action_boundary": "observer_only_no_actionintent_no_executor_dispatch",
+            "composition_contract": "fast_queue_named_engine_extension_hooks",
             "card_decisions": getattr(manager, "candidate_card_decision_contract", None),
             "candidate_display": getattr(manager, "candidate_display_contract", None),
             "live_agent_cards": bool(getattr(core, "_agent_live_card_refresh_installed", False)),
