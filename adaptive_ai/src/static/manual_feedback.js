@@ -19,7 +19,9 @@
     try{
       const data=await api('api/live'+(!lastAgents.length?'?bootstrap=1':''),{signal:controller.signal});
       liveValues.clear();
-      for(const item of data.agents)liveValues.set(String(item.id),{...item,last_prediction_label:null});
+      // Keep the complete runtime snapshot. Current, Desired, categorical Desired label
+      // and Confidence are all live card values; none should fall back to the heavy status poll.
+      for(const item of data.agents)liveValues.set(String(item.id),{...item});
       window.applyLiveValues();
       if(!lastAgents.length&&data.configs?.length){
         lastAgents=data.configs.map(a=>({...a,control_qualification:{passed:false,reason:'Ładuję kwalifikację agenta…'}}));
@@ -27,6 +29,7 @@
       }
       document.querySelectorAll('#agents > .agent').forEach(card=>{
         const a=agentFor(card.dataset.agentId);if(!a)return;
+        // p0.js refreshes Current / Desired / Confidence from the merged live snapshot.
         window.updateAgentLive?.(card,a);
         for(const [key,v] of [['current',a.runtime.current_value],['desired',a.runtime.last_prediction]]){
           const el=card.querySelector(`[data-p0="${key}"]`);if(el)el.textContent=value(a,v);
@@ -35,7 +38,8 @@
     }catch(_){/* Heavy diagnostics keep their own connection indicator; next lightweight poll retries. */}
     finally{clearTimeout(timer);liveBusy=false;}
   }
-  async function liveLoop(){await refreshLive();setTimeout(liveLoop,500);}
+  async function liveLoop(){await refreshLive();setTimeout(liveLoop,250);}
+  document.addEventListener('visibilitychange',()=>{if(!document.hidden)refreshLive();});
   liveLoop();
 
   // Existing Wrong decision contract. Keep this path independent from historical Teach RL.
