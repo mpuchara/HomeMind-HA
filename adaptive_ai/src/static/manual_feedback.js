@@ -11,6 +11,12 @@
   const local=ts=>{const d=new Date(ts*1000);return new Date(d-d.getTimezoneOffset()*60000).toISOString().slice(0,19);};
   const value=(a,n)=>n==null?'—':a.target_property==='power'?(n>=.5?'ON':'OFF'):String(Number(n.toFixed(3)));
   const error=e=>{const el=dialog.open?dialog.querySelector('[data-error]'):null;if(el)el.textContent=e.message;else alert(e.message);};
+  const tileText=(card,key,next)=>{const el=card.querySelector(`[data-p0="${key}"]`);const text=String(next??'—');if(el&&el.textContent!==text)el.textContent=text;};
+  const liveConfidence=a=>{
+    const r=a.runtime||{},training=r.training_state||a.training_state||'paused';
+    const raw=training==='qualified'&&r.last_prediction!=null?r.last_confidence:(a.benchmark_score??r.last_confidence);
+    const n=Number(raw);return Number.isFinite(n)?`${(n*100).toFixed(1)}%`:'—';
+  };
 
   window.applyLiveValues=()=>{for(const a of lastAgents){const live=liveValues.get(String(a.id));if(live)a.runtime={...a.runtime,...live};}};
   async function refreshLive(){
@@ -19,23 +25,27 @@
     try{
       const data=await api('api/live'+(!lastAgents.length?'?bootstrap=1':''),{signal:controller.signal});
       liveValues.clear();
-      for(const item of data.agents)liveValues.set(String(item.id),{...item,last_prediction_label:null});
+      // Keep the complete runtime snapshot. Current, Desired, categorical Desired label
+      // and Confidence are all live card values; none should fall back to the heavy status poll.
+      for(const item of data.agents)liveValues.set(String(item.id),{...item});
       window.applyLiveValues();
       if(!lastAgents.length&&data.configs?.length){
         lastAgents=data.configs.map(a=>({...a,control_qualification:{passed:false,reason:'Ładuję kwalifikację agenta…'}}));
         renderAgents();
       }
-      document.querySelectorAll('#agents > .agent').forEach(card=>{
+      // Fast path changes only the three decision tiles. Lifecycle, diagnostics and
+      // actions remain on the slower full refresh, avoiding needless DOM work at 4 Hz.
+      document.querySelectorAll('#agents > .agent[data-agent-id]').forEach(card=>{
         const a=agentFor(card.dataset.agentId);if(!a)return;
-        window.updateAgentLive?.(card,a);
-        for(const [key,v] of [['current',a.runtime.current_value],['desired',a.runtime.last_prediction]]){
-          const el=card.querySelector(`[data-p0="${key}"]`);if(el)el.textContent=value(a,v);
-        }
+        tileText(card,'current',currentValue(a));
+        tileText(card,'desired',prediction(a));
+        tileText(card,'confidence',liveConfidence(a));
       });
     }catch(_){/* Heavy diagnostics keep their own connection indicator; next lightweight poll retries. */}
     finally{clearTimeout(timer);liveBusy=false;}
   }
-  async function liveLoop(){await refreshLive();setTimeout(liveLoop,500);}
+  async function liveLoop(){await refreshLive();setTimeout(liveLoop,250);}
+  document.addEventListener('visibilitychange',()=>{if(!document.hidden)refreshLive();});
   liveLoop();
 
   // Existing Wrong decision contract. Keep this path independent from historical Teach RL.
