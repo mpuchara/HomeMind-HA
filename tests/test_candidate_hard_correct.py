@@ -70,7 +70,8 @@ class HardCorrectTests(unittest.TestCase):
         manager = SimpleNamespace(store=store, engine=engine)
         candidate = {"id": "candidate-1", "deadband": 0.5}
 
-        original = hard._BASE_BALANCED_FINE_TUNE
+        original_base = hard._BASE_BALANCED_FINE_TUNE
+        original_collect = hard._collect_explicit_corrections
         try:
             hard._BASE_BALANCED_FINE_TUNE = lambda manager, candidate: {
                 "mode": "conservative_snapshot_finetune",
@@ -86,9 +87,15 @@ class HardCorrectTests(unittest.TestCase):
                 "stability_anchor_shortfall": {"0": 0, "1": 0},
                 "class_balance_required": True,
             }
+            hard._collect_explicit_corrections = lambda manager, candidate, policy: [{
+                "label": {"sample_ts": 1000.0, "desired": 1.0},
+                "features": {0: 1.0, 1: 1.0},
+                "desired_idx": 1,
+            }]
             report = hard._hard_correct_fine_tune(manager, candidate)
         finally:
-            hard._BASE_BALANCED_FINE_TUNE = original
+            hard._BASE_BALANCED_FINE_TUNE = original_base
+            hard._collect_explicit_corrections = original_collect
 
         self.assertEqual(report["teach_fit_after_count"], 1)
         self.assertEqual(report["teach_fit_after"], 1.0)
