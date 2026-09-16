@@ -41,9 +41,10 @@ class CandidatePromotionCycleTests(unittest.TestCase):
             c.execute(
                 """INSERT INTO agent_candidate_generations
                    (generation_id,root_agent_id,parent_generation_id,agent_id,generation_number,
-                    generation_type,parent_type,created_reason,lifecycle_state,created_ts,updated_ts)
-                   VALUES('live-g',?,NULL,?,'""" + str(int(live_generation)) + """','live','live','test','live',1,1)""",
-                (self.root["id"], self.root["id"]),
+                    generation_type,parent_type,config_fingerprint,created_reason,lifecycle_state,
+                    created_ts,updated_ts)
+                   VALUES('live-g',?,NULL,?,?,'live','live','test-fingerprint','test','live',1,1)""",
+                (self.root["id"], self.root["id"], int(live_generation)),
             )
 
     def test_repeated_candidate_suffixes_collapse_to_one_logical_base(self):
