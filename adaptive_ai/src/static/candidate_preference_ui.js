@@ -3,9 +3,12 @@
   const signed=v=>v==null?'—':`${Number(v)>=0?'+':''}${(Number(v)*100).toFixed(1)} pp`;
   const sec=v=>v==null?'—':`${Number(v).toFixed(1)} s`;
   let busy=false;
+  const latestByRef=new Map();
 
+  const refOf=c=>String(c?.generation_id||c?.candidate_id||'');
+  const cardRef=card=>String(card?.dataset?.candidateRef||card?.dataset?.generationId||'');
   const findCard=ref=>[...document.querySelectorAll('.candidate-agent')]
-    .find(el=>(el.dataset.candidateRef||el.dataset.generationId||'')===String(ref));
+    .find(el=>cardRef(el)===String(ref));
 
   const ensureMetric=(root,key,label,value)=>{
     let node=root.querySelector(`[data-pref-metric="${key}"]`);
@@ -114,10 +117,8 @@
     }
   }
 
-  function decorate(c){
-    const ref=String(c.generation_id||c.candidate_id||'');
-    const card=findCard(ref);
-    if(!card)return;
+  function decorateCard(card,c){
+    if(!card||!c)return;
     const m=c.comparison||{};
 
     ensureDecisionStrip(card,c);
@@ -147,6 +148,26 @@
     }
   }
 
+  function decorate(c){
+    const ref=refOf(c);
+    if(!ref)return;
+    latestByRef.set(ref,c);
+    decorateCard(findCard(ref),c);
+  }
+
+  function hydrateAddedNode(node){
+    if(!(node instanceof Element))return false;
+    const cards=node.matches('.candidate-agent')?[node]:[...node.querySelectorAll('.candidate-agent')];
+    let missing=false;
+    for(const card of cards){
+      const ref=cardRef(card);
+      const cached=latestByRef.get(ref);
+      if(cached)decorateCard(card,cached);
+      else missing=true;
+    }
+    return missing;
+  }
+
   async function refresh(){
     if(busy||document.hidden)return;
     busy=true;
@@ -154,7 +175,13 @@
       const response=await fetch('api/candidates',{cache:'no-store'});
       if(!response.ok)return;
       const data=await response.json();
-      for(const candidate of data.candidates||[])decorate(candidate);
+      const liveRefs=new Set();
+      for(const candidate of data.candidates||[]){
+        const ref=refOf(candidate);
+        if(ref)liveRefs.add(ref);
+        decorate(candidate);
+      }
+      for(const ref of [...latestByRef.keys()])if(!liveRefs.has(ref))latestByRef.delete(ref);
     }catch(_e){
       // The base Candidate UI owns connectivity/error messaging.
     }finally{
@@ -166,11 +193,19 @@
   const root=document.getElementById('agents');
   if(root){
     let queued=false;
-    new MutationObserver(()=>{
-      if(queued)return;
+    new MutationObserver(records=>{
+      let missing=false;
+      for(const record of records){
+        for(const node of record.addedNodes)missing=hydrateAddedNode(node)||missing;
+      }
+      // Base candidate_ui rebuilds whole cards every poll. Rehydrate from the last
+      // payload synchronously in the MutationObserver microtask so the browser never
+      // paints a transient card without the decision/preference tiles. Only refetch
+      // when a genuinely new generation appears and therefore has no cached payload.
+      if(!missing||queued)return;
       queued=true;
       queueMicrotask(()=>{queued=false;refresh();});
-    }).observe(root,{childList:true,subtree:true});
+    }).observe(root,{childList:true});
   }
   document.addEventListener('visibilitychange',()=>{if(!document.hidden)refresh();});
   setInterval(refresh,1500);
