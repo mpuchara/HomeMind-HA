@@ -1,11 +1,12 @@
 """Production composition for provenance contract v1.
 
 This installer runs from the existing runtime-extension hook before Engine/EventStream/
-History workers consume events.  It decorates the established contracts rather than
+History workers consume events. It decorates the established contracts rather than
 adding a second dispatcher: Executor remains the only HA command boundary.
 """
 from __future__ import annotations
 
+from contextlib import contextmanager
 import threading
 
 from provenance import ProvenanceJournal, UNKNOWN
@@ -24,12 +25,13 @@ def _event_time(state, fallback=None):
 def _origin(journal, state):
     command = journal.match_command_state(state)
     if command:
-        # Commands explicitly marked as user-intent stay human intent even though the HA
-        # state transition itself is an echo of a HomeMind service call.
-        return ("user_intent" if command.get("status") == "user_intent" else "own_command"), command
+        return str(command.get("command_origin") or "own_command"), command
     context = (state or {}).get("context") or {}
     if context.get("user_id") and not context.get("parent_id"):
         return "user", None
+    # A physical state change without a user id is deliberately ambiguous. Automation,
+    # integration and direct-device changes cannot be distinguished reliably from the HA
+    # state object alone.
     return UNKNOWN, None
 
 
@@ -85,6 +87,20 @@ def install(core):
     engine._provenance_latest_events = {}
     engine._provenance_contract_installed = True
 
+    @contextmanager
+    def command_origin(origin):
+        previous = getattr(_TLS, "command_origin", None)
+        _TLS.command_origin = str(origin or "own_command")
+        try:
+            yield
+        finally:
+            _TLS.command_origin = previous
+
+    # Explicit UI corrections use this scope. Ordinary Executor control never sets it and
+    # therefore remains own_command. Exposing a narrow context manager avoids a second
+    # service boundary or caller-specific SQL writes.
+    engine.provenance_command_origin = command_origin
+
     # --- Event contract -----------------------------------------------------
     original_on_state_changed = engine.on_state_changed
 
@@ -96,14 +112,14 @@ def install(core):
         received = now_ts()
         event_time = _event_time(state, received)
         origin, command = _origin(journal, state)
-        event_id, inserted = journal.record_event(
+        event_id, _inserted = journal.record_event(
             entity_id, state, event_time=event_time, received_time=received,
             source="ha_state_changed", origin=origin,
         )
-        # A retried websocket event is the same observation, not another learning event.
-        # Initial state after restart is already recovered by refresh_states before the
-        # websocket worker starts, so suppressing an existing event cannot erase state.
-        if not inserted:
+        # Exactly-once at the learning boundary, but crash-safe: an event inserted before
+        # a crash is retried while processed_time is NULL. Only a completed prior handler
+        # suppresses the duplicate.
+        if journal.event_processed(event_id):
             return None
         engine._provenance_latest_events[entity_id] = (event_time, event_id)
         previous_event = getattr(_TLS, "event_id", None)
@@ -111,11 +127,12 @@ def install(core):
         _TLS.event_id, _TLS.event_origin = event_id, origin
         try:
             result = original_on_state_changed(data)
+            if command and command.get("decision_id"):
+                journal.mark_ack(command["decision_id"], event_id=event_id, ack_time=event_time)
+            journal.mark_event_processed(event_id, processed_time=now_ts())
+            return result
         finally:
             _TLS.event_id, _TLS.event_origin = previous_event, previous_origin
-        if command and command.get("decision_id"):
-            journal.mark_ack(command["decision_id"], event_id=event_id, ack_time=event_time)
-        return result
 
     engine.on_state_changed = on_state_changed
 
@@ -146,15 +163,10 @@ def install(core):
         decision_id = getattr(_TLS, "decision_id", None)
         if command_id is None:
             command_id = journal.reserve_command(
-                agent, value, decision_id=decision_id, created_time=now_ts()
+                agent, value, decision_id=decision_id, created_time=now_ts(),
+                command_origin=getattr(_TLS, "command_origin", None) or "own_command",
             )
             _TLS.command_id = command_id
-            if getattr(_TLS, "command_origin", None) == "user_intent":
-                with store.lock, store.conn() as c:
-                    c.execute(
-                        "UPDATE provenance_commands SET status='user_intent' WHERE command_id=?",
-                        (command_id,),
-                    )
         else:
             journal.dispatch_command(command_id, response=response, dispatched_time=now_ts())
             if decision_id:
@@ -222,8 +234,8 @@ def install(core):
             teaching_id=intent.teaching_id or None,
             teaching_desired=intent.desired_value if intent.teaching_id else None,
             experiment_id=experiment_id,
-            # LinUCB production choose() is deterministic here.  No propensity is
-            # available, so the optional probability deliberately stays NULL.
+            # Production LinUCB exposes no true action propensity. NULL is truthful; do
+            # not manufacture a probability from confidence or the action score.
             action_probability=None,
         )
         old_decision = getattr(_TLS, "decision_id", None)
@@ -232,13 +244,10 @@ def install(core):
         try:
             result = original_submit(intent, features, action_index)
         finally:
-            _TLS.decision_id = old_decision
-            # Any successful command is closed by record_command(response). A leftover
-            # reservation means no successful dispatch reached that second boundary.
             leftover = getattr(_TLS, "command_id", None)
             if leftover:
                 journal.fail_command(leftover)
-            _TLS.command_id = old_command
+            _TLS.decision_id, _TLS.command_id = old_decision, old_command
         journal.mark_decision_status(intent.intent_id, result.get("status"), result.get("reason"))
         pending = (engine.runtime.get(intent.agent_id) or {}).get("pending")
         if result.get("status") == "ACCEPTED" and pending:
@@ -328,7 +337,8 @@ def install(core):
             _TLS.event_id, _TLS.event_origin = old_event, old_origin
         after_rt = engine.runtime.get(aid) or {}
         after_pending = after_rt.get("pending")
-        if before_pending is after_pending and before_pending and before_ack is None and before_pending.get("acknowledged_ts") is not None:
+        if (before_pending is after_pending and before_pending and before_ack is None
+                and before_pending.get("acknowledged_ts") is not None):
             journal.mark_ack(
                 before_pending.get("decision_id"), event_id=event_id,
                 ack_time=before_pending.get("acknowledged_ts"),
@@ -336,8 +346,8 @@ def install(core):
         if event_id:
             event = journal.event(event_id) or {}
             if event.get("origin") in {"user", "user_intent"}:
-                # Physical/UI user demonstrations are already persisted by the existing
-                # learning path. Add a stable provenance row without replaying learning.
+                # Existing manual-learning code remains authoritative. This row only
+                # supplies durable provenance and an idempotency identity for audit/replay.
                 for row in store.list_feedback(aid, limit=4):
                     if "manual demonstration" not in str(row.get("reason") or ""):
                         continue
@@ -375,9 +385,6 @@ def install(core):
         if not trial:
             return original_finish(aid, reward, reason)
         outcome_key = "experiment:" + str(trial.get("trial_id")) + ":outcome"
-        # A restored/retried finish with the same trial cannot update the contextual
-        # bandit twice. Normally active=None already provides this guard; the durable key
-        # closes the restart/retry case explicitly.
         if journal.experience_exists(outcome_key):
             data["active"] = None
             engine.experiments._save(aid)
@@ -412,8 +419,8 @@ def install(core):
         }
         origin = str(provenance.get("origin") or UNKNOWN)
         if origin == "own_command":
-            # The row remains in the raw archive and still advances the target trajectory,
-            # but it can never become an independent behavioural demonstration.
+            # Preserve raw history for chronology but refuse to turn the system's own ACK
+            # into an independent user demonstration during rebuild.
             journal.record_experience(
                 experience_key=f"history-excluded:{agent_id}:{target_history_id}",
                 agent_id=agent_id, source="historical_replay_excluded", origin=origin,
@@ -425,8 +432,8 @@ def install(core):
         inserted = original_add_historical(
             agent_id, target_history_id, action_index, action_value,
             reward, dwell_seconds, features,
-            # Old context_user_id is not promoted to a manual origin. Only a provenance
-            # event explicitly classified as user/user_intent may retain user identity.
+            # Legacy context_user_id is not upgraded to an origin. Only a v1 event that
+            # was explicitly classified as user/user_intent carries user identity.
             user_id if origin in {"user", "user_intent"} else None,
         )
         if inserted:
@@ -441,9 +448,9 @@ def install(core):
 
     store.add_historical_experience = add_historical_experience
 
-    # Legacy benchmark code historically guessed manual/automation provenance. Replace
-    # only that diagnostic field at persistence boundaries with counts derived from the
-    # durable journal. No historical row is rewritten.
+    # Legacy benchmark code guessed manual/automation provenance. Replace only the
+    # diagnostic count at persistence boundaries with journal-derived values. Old rows
+    # with no v1 link count as unknown and are never rewritten.
     original_set_partial = store.set_partial_benchmark
 
     def set_partial_benchmark(agent_id, stat):
