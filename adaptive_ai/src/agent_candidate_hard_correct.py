@@ -10,14 +10,6 @@ conflicts, not two simultaneously satisfiable targets. New journaled feedback no
 prevents such a pair from entering training at all; this layer also protects legacy rows.
 Conflicting groups are reported and excluded from the extra hard-repair loop. They are
 never turned into repeated evidence and never make 100% fit a promotion requirement.
-
-Non-conflicting corrections keep the existing hierarchy:
-1. explicit usable corrections are hard fit targets;
-2. class-balancing anchors are soft regularization/evidence;
-3. the ordinary held-out regression gate and one-class-collapse protection stay active;
-4. repair is strictly bounded.
-
-No ActionIntent is created and no Executor authority is changed here.
 """
 from __future__ import annotations
 
@@ -45,16 +37,11 @@ def _collect_explicit_corrections(manager, candidate, policy):
         if features is None:
             continue
         desired_idx = conservative._nearest_action(policy, float(label["desired"]))
-        usable.append({
-            "label": label,
-            "features": features,
-            "desired_idx": int(desired_idx),
-        })
+        usable.append({"label": label, "features": features, "desired_idx": int(desired_idx)})
     return usable
 
 
 def _observable_key(features):
-    """Stable equivalence key for what this frozen policy can actually distinguish."""
     out = []
     for key, value in sorted((features or {}).items(), key=lambda item: int(item[0])):
         try:
@@ -68,30 +55,20 @@ def _partition_conflicts(samples):
     groups = {}
     for sample in samples:
         groups.setdefault(_observable_key(sample.get("features")), []).append(sample)
-
-    usable = []
-    conflicts = []
+    usable, conflicts = [], []
     for key, group in groups.items():
         desired = {int(sample["desired_idx"]) for sample in group}
         if len(desired) <= 1:
             usable.extend(group)
             continue
-        ids = [
-            int(sample["label"]["id"])
-            for sample in group
-            if sample.get("label", {}).get("id") is not None
-        ]
-        conflicts.append({
-            "label_ids": ids,
-            "desired_action_indices": sorted(desired),
-            "samples": len(group),
-            "observable_features": len(key),
-        })
+        ids = [int(sample["label"]["id"]) for sample in group
+               if sample.get("label", {}).get("id") is not None]
+        conflicts.append({"label_ids": ids, "desired_action_indices": sorted(desired),
+                          "samples": len(group), "observable_features": len(key)})
     return usable, conflicts
 
 
 def _hard_correct_fine_tune(manager, candidate):
-    """Run balanced Correct, then hard-repair only satisfiable explicit corrections."""
     report = dict(_BASE_BALANCED_FINE_TUNE(manager, candidate) or {})
     if report.get("balance_mode") != "error_only_labels_plus_context_matched_historical_anchors":
         return report
@@ -104,7 +81,6 @@ def _hard_correct_fine_tune(manager, candidate):
     all_explicit = _collect_explicit_corrections(manager, candidate, policy)
     usable, conflicts = _partition_conflicts(all_explicit)
     conflicting_ids = sorted({label_id for group in conflicts for label_id in group["label_ids"]})
-
     report["conflicting_correction_count"] = len(conflicting_ids)
     report["conflicting_correction_groups"] = conflicts
     report["conflicting_label_ids"] = conflicting_ids
@@ -114,16 +90,22 @@ def _hard_correct_fine_tune(manager, candidate):
     if not usable:
         report["hard_correction_required"] = False
         report["hard_correction_satisfied"] = True
+        report["hard_fit_before_count"] = 0
         report["hard_fit_after_count"] = 0
         report["hard_repair_rounds"] = 0
         report["hard_repair_updates"] = 0
+        # Keep public/legacy report fields meaningful: they describe only satisfiable
+        # hard targets after stage-06 conflict filtering.
+        report["teach_fit_before_count"] = 0
+        report["teach_fit_after_count"] = 0
+        report["teach_fit_total"] = 0
+        report["teach_fit_before"] = None
+        report["teach_fit_after"] = None
         return report
 
     fit = balanced._fit_count(policy, usable)
     before_fit = fit
-    repair_rounds = 0
-    repair_updates = 0
-
+    repair_rounds = repair_updates = 0
     while fit < len(usable) and repair_rounds < _MAX_HARD_REPAIR_ROUNDS:
         repair_rounds += 1
         unresolved = []
@@ -131,15 +113,12 @@ def _hard_correct_fine_tune(manager, candidate):
             predicted_idx, _ = conservative._prediction_index(policy, sample["features"])
             if int(predicted_idx) != int(sample["desired_idx"]):
                 unresolved.append(sample)
-
         if not unresolved:
             break
-
         for sample in unresolved:
             for horizon in policy.horizons:
                 policy.update(horizon, sample["desired_idx"], sample["features"], 1.0)
                 repair_updates += 1
-
         fit = balanced._fit_count(policy, usable)
 
     if repair_updates:
@@ -148,18 +127,24 @@ def _hard_correct_fine_tune(manager, candidate):
         manager.engine.models[candidate["id"]] = policy
 
     fit = balanced._fit_count(policy, usable)
+    total = len(usable)
     report["hard_fit_before_count"] = int(before_fit)
     report["hard_fit_after_count"] = int(fit)
-    report["hard_correction_required"] = before_fit < len(usable)
-    report["hard_correction_satisfied"] = bool(fit == len(usable))
+    report["hard_correction_required"] = before_fit < total
+    report["hard_correction_satisfied"] = bool(fit == total)
     report["hard_repair_rounds"] = int(repair_rounds)
     report["hard_repair_updates"] = int(repair_updates)
     report["correction_rounds"] = int(report.get("correction_rounds") or 0) + int(repair_rounds)
+    # Preserve the established diagnostics contract for all non-conflicting examples.
+    report["teach_fit_before_count"] = int(before_fit)
+    report["teach_fit_after_count"] = int(fit)
+    report["teach_fit_total"] = int(total)
+    report["teach_fit_before"] = before_fit / total if total else None
+    report["teach_fit_after"] = fit / total if total else None
     return report
 
 
 def _hard_offline_gate(parent, parent_stats, candidate_stats, teach_report=None):
-    """Require satisfiable explicit corrections; surface conflicts as missing context."""
     report = dict(teach_report or {})
     gate = _BASE_OFFLINE_GATE(parent, parent_stats, candidate_stats, report)
     if report.get("balance_mode") != "error_only_labels_plus_context_matched_historical_anchors":
@@ -178,20 +163,26 @@ def _hard_offline_gate(parent, parent_stats, candidate_stats, teach_report=None)
     gate["conflicting_correction_groups"] = report.get("conflicting_correction_groups") or []
     gate["conflicting_label_ids"] = report.get("conflicting_label_ids") or []
     gate["conflict_warning"] = bool(gate["conflicting_correction_count"])
-    gate["conflict_resolution"] = (
-        "collect_additional_context_or_narrow_feedback_scope"
-        if gate["conflict_warning"] else None
-    )
+    gate["conflict_resolution"] = ("collect_additional_context_or_narrow_feedback_scope"
+                                   if gate["conflict_warning"] else None)
 
     reasons = list(gate.get("reasons") or [])
-    hard_total = int(report.get("hard_fit_target_total") or 0)
-    hard_after = int(report.get("hard_fit_after_count") or 0)
+    # Old callers provide only teach_fit_*; new stage-06 fine-tune also publishes
+    # hard_fit_* after removing contradictions. Supporting both is intentional API
+    # compatibility, not a return to requiring impossible conflicting labels.
+    hard_total = int(report.get("hard_fit_target_total")
+                     if report.get("hard_fit_target_total") is not None
+                     else report.get("teach_fit_total") or 0)
+    hard_after = int(report.get("hard_fit_after_count")
+                     if report.get("hard_fit_after_count") is not None
+                     else report.get("teach_fit_after_count") or 0)
 
     if hard_total > 0 and hard_after < hard_total:
         gate["passed"] = False
         gate["status"] = "failed"
-        if "Correct did not satisfy all non-conflicting marked corrections" not in reasons:
-            reasons.append("Correct did not satisfy all non-conflicting marked corrections")
+        legacy_reason = "Correct did not satisfy all marked corrections"
+        if legacy_reason not in reasons:
+            reasons.append(legacy_reason)
 
     shortfall = sum(int(v or 0) for v in (report.get("stability_anchor_shortfall") or {}).values())
     if bool(report.get("class_balance_required")) and shortfall > 0:
@@ -208,7 +199,6 @@ def _hard_offline_gate(parent, parent_stats, candidate_stats, teach_report=None)
     gate["hard_correction_satisfied"] = bool(hard_total <= 0 or hard_after == hard_total)
     gate["hard_fit_target_total"] = hard_total
     gate["hard_fit_after_count"] = hard_after
-
     gate["reasons"] = reasons
     gate["updated_ts"] = time.time()
     return gate
