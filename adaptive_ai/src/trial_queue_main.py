@@ -1,13 +1,15 @@
-"""Final Stage-11 composition for durable experiment knowledge.
+"""Final runtime composition for durable trial knowledge and calibrated confidence semantics.
 
 Runtime path:
     run.sh -> trial_queue_main.py -> preference_queue_main.py -> fast_queue_main.py -> queue_main.py
 
-The underlying preference/episode/manual-feedback stack remains authoritative.  This outer
-layer installs TrialRecord knowledge only after Agent Explore exists and before workers
-start, so no physical-control boundary is added or reordered.
+Stage 11 binds durable TrialRecord knowledge to generation-aware Explore. Stage 13 then
+installs the semantic/calibration contract after all Candidate comparison layers exist and
+before workers start. Neither layer adds a physical-control path; Executor remains the only
+Home Assistant service dispatcher.
 """
 import preference_queue_main as runtime
+from confidence_contract import install as install_confidence_contract
 from trial_knowledge import install as install_trial_knowledge
 
 core = runtime.core
@@ -20,6 +22,7 @@ def prepare_engine_extensions():
     if manager is None:
         return
     manager = install_trial_knowledge(manager)
+    manager = install_confidence_contract(manager)
     core.ENGINE.agent_candidates = manager
     core.STORE.event(
         None, "info", "trial_knowledge_ready",
@@ -31,6 +34,15 @@ def prepare_engine_extensions():
             "rollback": getattr(manager, "trial_rollback_contract", None),
             "install_order": "after_agent_explore_before_workers",
             "action_boundary": "existing_experiments_to_actionintent_to_executor_only",
+        },
+    )
+    core.STORE.event(
+        None, "info", "confidence_contract_ready",
+        "Confidence semantics and independent future evaluation are active",
+        {
+            "contract": getattr(manager, "confidence_contract", None),
+            "install_order": "after_trial_knowledge_before_workers",
+            "action_boundary": "diagnostics_and_promotion_gate_only_no_dispatch",
         },
     )
 
