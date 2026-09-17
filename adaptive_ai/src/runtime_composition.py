@@ -2,9 +2,9 @@
 
 This is intentionally an incremental root.  The proven fast/preference stack is invoked as
 one base composition step; Stage 11/13/14/15 services and the first Stage-16 contracts are
-then attached explicitly.  The root owns dependencies and selected HTTP routes per runtime
-instance.  Unmigrated legacy overlays stay behind the explicit router as compatibility
-fallbacks and can be removed feature-by-feature in later PRs.
+then attached explicitly.  Stage 17 adds bounded/cursor-based performance services after
+their source contracts exist.  Unmigrated legacy overlays stay behind the explicit router
+as compatibility fallbacks and can be removed feature-by-feature in later PRs.
 """
 from __future__ import annotations
 
@@ -15,12 +15,14 @@ from cold_start_drift import install as install_cold_start_drift
 from confidence_contract import install as install_confidence_contract
 from confidence_runtime import install_runtime_semantics
 from device_agents import install_runtime as install_device_agent_runtime
+from performance_f22 import install as install_performance_f22
+from performance_f22_order_guard import install as install_performance_f22_order_guard
 from promotion_validation import install as install_promotion_validation
 from runtime_http import install_dispatch, register_feedback_routes, register_promotion_routes
 from trial_knowledge import install as install_trial_knowledge
 
 
-CONTRACT_VERSION = 1
+CONTRACT_VERSION = 2
 ENTRYPOINT_CHAIN = (
     "run.sh",
     "trial_queue_main.py",
@@ -88,6 +90,11 @@ class RuntimeCompositionRoot:
                 "owner": "engine.executor",
                 "contract": "ActionIntent_to_Executor_only_physical_dispatch",
             },
+            "performance": {
+                "owner": "manager.performance_f22",
+                "contract": getattr(manager, "performance_f22_contract", None),
+                "semantics": "bounded computation only; raw evidence remains authoritative",
+            },
             "transport": router.descriptor(),
             "dependencies": {
                 "clock": type(self.clock).__name__,
@@ -126,6 +133,11 @@ class RuntimeCompositionRoot:
         manager = install_promotion_validation(
             manager, clock=self.clock, repository=self.core.STORE
         )
+
+        # Stage 17: bounded/cursor-based computation after Candidate, Teach and drift
+        # contracts are present.  It never creates ActionIntent or dispatches HA services.
+        manager = install_performance_f22(manager, core=self.core)
+        manager = install_performance_f22_order_guard(manager)
         engine.agent_candidates = manager
 
         # Stage 16: one final HTTP dispatcher owns migrated feedback/promotion routes.
@@ -184,6 +196,16 @@ class RuntimeCompositionRoot:
                 "contract": device_service.contract() if device_service is not None else None,
                 "install_order": "executor_contract_then_runtime_diagnostics_before_workers",
                 "action_boundary": "resource_arbiter_never_dispatches_executor_only",
+            },
+        )
+        self.core.STORE.event(
+            None, "info", "performance_f22_ready",
+            "Bounded history, diagnostics and training-cost controls are active",
+            {
+                "contract": getattr(manager, "performance_f22_contract", None),
+                "install_order": "after_candidate_confidence_drift_device_contracts_before_workers",
+                "raw_evidence_retained": True,
+                "action_boundary": "performance_only_no_dispatch",
             },
         )
         self.core.STORE.event(
