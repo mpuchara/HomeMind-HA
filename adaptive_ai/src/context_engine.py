@@ -85,16 +85,18 @@ class ContextEngine:
         return sorted(self.admitted & self.mapping.keys())
 
     def evidence_metadata(self, eid):
-        """Role metadata consumed identically by live and causal replay."""
         return dict(self.source_details.get(eid) or {})
+
+    def _discard_orphan_movement_state(self):
+        # Engine's initial REST snapshot intentionally clears `arrivals` + legacy `pending`
+        # so startup states are not interpreted as fresh movement. RoomBelief keeps a richer
+        # hypothesis set, therefore mirror that established signal without patching Engine.
+        if getattr(self.home, 'hypotheses', None) and self.home.pending is None and not self.home.arrivals:
+            self.home.reset_movement_state()
 
     @staticmethod
     def probability(eid, state):
-        """Normalize transport values only; RoomBeliefModel decides their semantics.
-
-        Numeric percentages become [0,1] transport values, but they are *not* automatically
-        treated as calibrated probabilities. The explicit source role determines that.
-        """
+        """Normalize transport values; the explicit source role decides semantics."""
         value = str((state or {}).get('state', '')).lower()
         if value in ('unknown', 'unavailable', '', 'none'):
             return None
@@ -113,6 +115,7 @@ class ContextEngine:
 
     def observe(self, eid, state, ts, learn=True):
         with self.lock:
+            self._discard_orphan_movement_state()
             if eid not in self.admitted:
                 previous_area = self.home.source_area(eid)
                 if previous_area:
@@ -137,14 +140,14 @@ class ContextEngine:
         return self.probability(eid, st)
 
     def forecast(self, eid, ts):
-        return self.home.forecast(self.area_for(eid), ts)
+        with self.lock:
+            self._discard_orphan_movement_state()
+            return self.home.forecast(self.area_for(eid), ts)
 
     def save(self, force=False):
         with self.lock:
             now = time.time()
             if self.store and (force or now - self.last_save >= 60):
-                # Additive migration: v1 remains untouched for rollback. New checkpoints
-                # have an explicit v2 key and model version.
                 self.store.meta_set(self.ROOM_MODEL_KEY,
                                     json.dumps(self.home.export(), separators=(',', ':')))
                 self.room_checkpoint_source = self.ROOM_MODEL_KEY
