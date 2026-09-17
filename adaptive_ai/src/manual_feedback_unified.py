@@ -73,6 +73,19 @@ class UnifiedManualFeedbackJournal(ManualFeedbackJournal):
                 conflicts.append(str(row["feedback_id"]))
         return conflicts
 
+    def set_status(self, feedback_id, status, *, immediate_effect=None, learning_effect=None,
+                   undo_status=None):
+        """A conflict cannot be accidentally reactivated by a downstream compatibility path."""
+        current = self.get(feedback_id)
+        requested = str(status)
+        if current and str(current.get("application_status") or "") == "conflict":
+            if requested not in {"conflict", "undone"}:
+                requested = "conflict"
+        return super().set_status(
+            feedback_id, requested, immediate_effect=immediate_effect,
+            learning_effect=learning_effect, undo_status=undo_status,
+        )
+
     def _retire_linked_labels(self, feedback_id, timestamp):
         # Capture auxiliary effects before the base method marks every effect undone.
         with self.store.conn() as c:
