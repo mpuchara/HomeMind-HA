@@ -1,16 +1,10 @@
 """Stage 14: explicit cold-start evidence and controlled adaptation to drift.
 
-This layer is deliberately non-controlling.  It summarizes cold-start evidence, monitors
-immutable episode outcomes / explicit corrections / sensor health / topology, and asks the
-existing Candidate workflow to build an isolated child when sustained drift is detected.
-It never lowers qualification thresholds, creates ActionIntent, or dispatches Home Assistant
-services.  Promotion remains owned by the existing Candidate + Stage-13 future-evidence
-contract.
-
-A promoted adaptation generation is monitored against its pre-drift quality.  If quality
-materially worsens, the exact pre-promotion backup is restored under the Executor target
-lock.  Regression anchors are durable evaluation references with training_weight=0: old
-examples stay useful for regression checks without accumulating unlimited training force.
+This observer is deliberately non-controlling. It reports cold-start evidence, monitors
+immutable episode outcomes / corrections / sensor health / topology, and asks the existing
+Candidate workflow for an isolated child after sustained drift. It never lowers safety
+gates, creates ActionIntent, or dispatches Home Assistant services. Promotion remains owned
+by the existing Candidate + Stage-13 fixed-future-evidence contract.
 """
 from __future__ import annotations
 
@@ -38,8 +32,6 @@ SENSOR_HEALTH_DROP = 0.20
 MAX_OPTIONAL_QUESTIONS = 2
 OBSERVE_THROTTLE_SECONDS = 30.0
 POST_PROMOTION_EPISODES = 6
-
-
 ACTIVE_PREFERENCE_STATUSES = {"recorded", "applied", "learning_queued", "rebuild_queued"}
 
 
@@ -98,12 +90,11 @@ def _tv_distance(left, right):
     if not a or not b:
         return 0.0
     na, nb = float(sum(a.values())), float(sum(b.values()))
-    keys = set(a) | set(b)
-    return 0.5 * sum(abs(a.get(k, 0) / na - b.get(k, 0) / nb) for k in keys)
+    return 0.5 * sum(abs(a.get(k, 0) / na - b.get(k, 0) / nb) for k in set(a) | set(b))
 
 
 def decay_contract():
-    """One explicit meaning table for evidence decay across HomeMind subsystems."""
+    """Report the meaning of decay instead of conflating instructions with statistics."""
     return {
         "version": CONTRACT_VERSION,
         "policy_learning": {
@@ -114,16 +105,16 @@ def decay_contract():
         "future_evaluation": {
             "basis": "episode_order",
             "half_life_episodes": float(DEFAULT_HALF_LIFE_EPISODES),
-            "meaning": "old evaluation evidence decays outside the fixed Stage-13 test window",
+            "meaning": "old evaluation evidence decays outside the locked Stage-13 future test",
         },
         "persistent_instruction": {
             "decays": False,
-            "meaning": "explicit persistent preference is an instruction, not a historical statistic",
+            "meaning": "explicit persistent preference is an instruction, not historical statistics",
         },
         "regression_anchor": {
             "decays_for_retention": False,
             "training_weight": 0.0,
-            "meaning": "retained for regression evaluation only; never multiplied into training weight",
+            "meaning": "durable regression reference only; never multiplied into training weight",
         },
     }
 
@@ -203,9 +194,8 @@ def ensure_tables(store):
 
 def _quality_from_metrics(metrics):
     metrics = dict(metrics or {})
-    meaningful = bool(metrics.get("meaningful"))
     corrections = int(metrics.get("manual_correction_count") or 0)
-    if not meaningful and corrections <= 0:
+    if not bool(metrics.get("meaningful")) and corrections <= 0:
         return None, None
     cost = 0.0
     cost += min(1.0, corrections * 0.50)
@@ -250,7 +240,7 @@ class AdaptationService:
             c.execute(
                 """INSERT OR IGNORE INTO adaptation_state
                    (agent_id,contract_version,status,preference_revision_seen,updated_ts)
-                   VALUES(?,?,?, ?,?)""",
+                   VALUES(?,?,?,?,?)""",
                 (aid, CONTRACT_VERSION, "monitoring", int(revision), now),
             )
         with self.store.conn() as c:
@@ -264,11 +254,10 @@ class AdaptationService:
         fields = dict(fields)
         fields["updated_ts"] = time.time()
         names = list(fields)
-        values = [fields[name] for name in names] + [str(agent_id)]
         with self.store.lock, self.store.conn() as c:
             c.execute(
                 "UPDATE adaptation_state SET " + ",".join(f"{name}=?" for name in names) + " WHERE agent_id=?",
-                values,
+                [fields[name] for name in names] + [str(agent_id)],
             )
         return self._state(agent_id)
 
@@ -307,11 +296,11 @@ class AdaptationService:
                     (str(agent_id), str(agent_id)),
                 ).fetchall()
                 values.extend(_finite(row[0]) for row in rows)
-        values = [v for v in values if v is not None]
+        values = [value for value in values if value is not None]
         return {
             "total": len(values),
-            "on": sum(1 for v in values if v >= 0.5),
-            "off": sum(1 for v in values if v < 0.5),
+            "on": sum(value >= 0.5 for value in values),
+            "off": sum(value < 0.5 for value in values),
         }
 
     def _recognized_sensors(self, agent, state_map=None):
@@ -320,33 +309,28 @@ class AdaptationService:
         schema = dict(model.get("schema") or {})
         entities = list(schema.get("entities") or [])
         if not entities:
-            configured = list(agent.get("input_entities") or [])
-            entities = [x for x in configured if x != "*"]
-        if not entities:
-            context = getattr(self.engine, "context", None)
-            if context is not None and callable(getattr(context, "relevant_entities", None)):
-                try:
-                    entities = list(context.relevant_entities())[:32]
-                except Exception:
-                    entities = []
-        entities = [str(x) for x in entities if str(x) != str(agent.get("target_entity"))]
+            entities = [x for x in list(agent.get("input_entities") or []) if x != "*"]
         context = getattr(self.engine, "context", None)
+        if not entities and context is not None and callable(getattr(context, "relevant_entities", None)):
+            try:
+                entities = list(context.relevant_entities())[:32]
+            except Exception:
+                entities = []
+        entities = [str(x) for x in entities if str(x) != str(agent.get("target_entity"))]
         result = []
         for eid in sorted(set(entities)):
             state = states.get(eid) or {}
-            raw_state = str(state.get("state") or "").lower()
-            available = raw_state not in ("", "unknown", "unavailable", "none")
-            area = None
-            role = None
+            available = str(state.get("state") or "").lower() not in ("", "unknown", "unavailable", "none")
+            area = role = None
             if context is not None:
                 try:
                     area = context.area_for(eid)
                 except Exception:
-                    area = None
+                    pass
                 try:
                     role = (context.evidence_metadata(eid) or {}).get("role")
                 except Exception:
-                    role = None
+                    pass
             result.append({"entity_id": eid, "available": available, "area_id": area, "role": role})
         return result
 
@@ -371,7 +355,6 @@ class AdaptationService:
                 "SELECT COUNT(*) FROM entity_history WHERE entity_id=?", (str(agent["target_entity"]),)
             ).fetchone()[0])
         automations = self._automation_fallback(agent)
-        model = self.store.get_model(aid)
         missing = []
         if target_history <= 0:
             missing.append("target_history")
@@ -384,20 +367,17 @@ class AdaptationService:
         questions = []
         if demonstrations["on"] <= 0:
             questions.append({
-                "id": "cold_start_on_preference",
-                "optional": True,
+                "id": "cold_start_on_preference", "optional": True,
                 "question": "W jednej niepewnej sytuacji: czy urządzenie powinno wtedy przejść do ON?",
-                "creates": "explicit_demonstration",
-                "auto_dispatch": False,
+                "creates": "explicit_demonstration", "auto_dispatch": False,
             })
         if demonstrations["off"] <= 0:
             questions.append({
-                "id": "cold_start_off_preference",
-                "optional": True,
+                "id": "cold_start_off_preference", "optional": True,
                 "question": "W jednej niepewnej sytuacji: czy urządzenie powinno wtedy pozostać/przejść do OFF?",
-                "creates": "explicit_demonstration",
-                "auto_dispatch": False,
+                "creates": "explicit_demonstration", "auto_dispatch": False,
             })
+        model = self.store.get_model(aid)
         fallback = "existing_home_assistant_automation" if automations else "manual_or_existing_device_behavior"
         if model is not None:
             recommended = "shadow"
@@ -457,8 +437,7 @@ class AdaptationService:
                    FROM episode_evaluator_episodes e
                    JOIN episode_evaluator_policy_results r ON r.episode_id=e.episode_id
                    WHERE e.agent_id=? AND r.role='live' AND r.executed=1
-                   ORDER BY e.end_ts,e.episode_id""",
-                (aid,),
+                   ORDER BY e.end_ts,e.episode_id""", (aid,),
             ).fetchall()
         added = 0
         last_ts = None
@@ -501,9 +480,8 @@ class AdaptationService:
     def _environment_from_runtime(self, agent, state_map=None):
         sensors = self._recognized_sensors(agent, state_map)
         context = getattr(self.engine, "context", None)
-        health_values = []
+        health_values, topology = [], []
         unavailable = 0
-        topology = []
         for row in sensors:
             eid = row["entity_id"]
             value = 1.0 if row["available"] else 0.0
@@ -511,27 +489,18 @@ class AdaptationService:
             if context is not None:
                 source = dict(getattr(getattr(context, "home", None), "sources", {}).get(eid) or {})
             if source:
-                communication = max(0.0, min(1.0, float(source.get("communication_reliability") or 0.0)))
-                value *= communication
+                value *= max(0.0, min(1.0, float(source.get("communication_reliability") or 0.0)))
             if not row["available"]:
                 unavailable += 1
             health_values.append(value)
-            topology.append({
-                "entity_id": eid,
-                "area_id": row.get("area_id"),
-                "role": row.get("role"),
-            })
-        sensor_health = sum(health_values) / len(health_values) if health_values else None
-        unavailable_fraction = unavailable / len(sensors) if sensors else 1.0
-        signature = _hash(topology) if topology else None
+            topology.append({"entity_id": eid, "area_id": row.get("area_id"), "role": row.get("role")})
         revision, latest = self._preference_state(agent["id"])
-        registry_revision = getattr(context, "registry_revision", None) if context is not None else None
         return {
-            "sensor_health": sensor_health,
-            "unavailable_fraction": unavailable_fraction,
-            "topology_signature": signature,
+            "sensor_health": (sum(health_values) / len(health_values) if health_values else None),
+            "unavailable_fraction": (unavailable / len(sensors) if sensors else 0.0),
+            "topology_signature": (_hash(topology) if topology else None),
             "topology": topology,
-            "registry_revision": registry_revision,
+            "registry_revision": getattr(context, "registry_revision", None) if context is not None else None,
             "preference_revision": revision,
             "preference_latest_ts": latest,
         }
@@ -539,33 +508,27 @@ class AdaptationService:
     def _episode_rows(self, agent_id):
         with self.store.conn() as c:
             return [dict(row) for row in c.execute(
-                """SELECT * FROM adaptation_episode_observations
-                   WHERE agent_id=? ORDER BY ts,episode_id""", (str(agent_id),)
+                "SELECT * FROM adaptation_episode_observations WHERE agent_id=? ORDER BY ts,episode_id",
+                (str(agent_id),),
             ).fetchall()]
 
     def _env_rows(self, agent_id):
         with self.store.conn() as c:
             return [dict(row) for row in c.execute(
-                """SELECT * FROM adaptation_environment_snapshots
-                   WHERE agent_id=? ORDER BY ts,id""", (str(agent_id),)
+                "SELECT * FROM adaptation_environment_snapshots WHERE agent_id=? ORDER BY ts,id",
+                (str(agent_id),),
             ).fetchall()]
 
     def _episode_shift(self, agent_id):
         rows = [row for row in self._episode_rows(agent_id) if row.get("quality") is not None]
         if len(rows) < BASELINE_EPISODES + RECENT_EPISODES:
-            return {
-                "ready": False, "episodes": len(rows), "required": BASELINE_EPISODES + RECENT_EPISODES,
-            }
+            return {"ready": False, "episodes": len(rows), "required": BASELINE_EPISODES + RECENT_EPISODES}
         baseline = rows[-(BASELINE_EPISODES + RECENT_EPISODES):-RECENT_EPISODES]
         recent = rows[-RECENT_EPISODES:]
         bq = sum(float(row["quality"]) for row in baseline) / len(baseline)
         rq = sum(float(row["quality"]) for row in recent) / len(recent)
         bh = _circular_mean(row.get("activity_hour") for row in baseline)
         rh = _circular_mean(row.get("activity_hour") for row in recent)
-        context_tv = _tv_distance(
-            [row.get("context_bucket") for row in baseline],
-            [row.get("context_bucket") for row in recent],
-        )
         return {
             "ready": True,
             "baseline_quality": bq,
@@ -574,7 +537,10 @@ class AdaptationService:
             "baseline_hour": bh,
             "recent_hour": rh,
             "hour_shift": _circular_hour_distance(bh, rh),
-            "context_tv": context_tv,
+            "context_tv": _tv_distance(
+                [row.get("context_bucket") for row in baseline],
+                [row.get("context_bucket") for row in recent],
+            ),
             "recent_corrections": sum(int(row.get("correction_count") or 0) for row in recent),
             "baseline_episode_ids": [row["episode_id"] for row in baseline],
             "recent_episode_ids": [row["episode_id"] for row in recent],
@@ -586,12 +552,13 @@ class AdaptationService:
             return {"ready": False, "snapshots": len(rows)}
         previous = rows[-ENV_STABLE_SNAPSHOTS * 2:-ENV_STABLE_SNAPSHOTS]
         recent = rows[-ENV_STABLE_SNAPSHOTS:]
+
         def mean(name, values):
             clean = [_finite(row.get(name)) for row in values]
-            clean = [x for x in clean if x is not None]
+            clean = [value for value in clean if value is not None]
             return sum(clean) / len(clean) if clean else None
+
         old_health, new_health = mean("sensor_health", previous), mean("sensor_health", recent)
-        new_unavailable = mean("unavailable_fraction", recent)
         old_signatures = [row.get("topology_signature") for row in previous]
         new_signatures = [row.get("topology_signature") for row in recent]
         stable_old = len(set(old_signatures)) == 1 and old_signatures[0] is not None
@@ -601,7 +568,8 @@ class AdaptationService:
             "old_sensor_health": old_health,
             "new_sensor_health": new_health,
             "health_drop": (old_health - new_health) if old_health is not None and new_health is not None else 0.0,
-            "new_unavailable_fraction": new_unavailable,
+            "new_unavailable_fraction": mean("unavailable_fraction", recent),
+            "new_sensor_count": int(recent[-1].get("sensor_count") or 0),
             "topology_changed": bool(stable_old and stable_new and old_signatures[0] != new_signatures[0]),
             "old_topology": old_signatures[0] if stable_old else None,
             "new_topology": new_signatures[0] if stable_new else None,
@@ -615,16 +583,15 @@ class AdaptationService:
             for episode_id in list(episode_ids or [])[:8]:
                 c.execute(
                     """INSERT OR IGNORE INTO adaptation_regression_anchors
-                       (agent_id,episode_id,reason,retained_ts,training_weight)
-                       VALUES(?,?,?,?,0)""",
+                       (agent_id,episode_id,reason,retained_ts,training_weight) VALUES(?,?,?,?,0)""",
                     (str(agent_id), str(episode_id), str(reason), now),
                 )
 
     def regression_anchors(self, agent_id):
         with self.store.conn() as c:
             return [dict(row) for row in c.execute(
-                """SELECT * FROM adaptation_regression_anchors
-                   WHERE agent_id=? ORDER BY retained_ts,episode_id""", (str(agent_id),)
+                "SELECT * FROM adaptation_regression_anchors WHERE agent_id=? ORDER BY retained_ts,episode_id",
+                (str(agent_id),),
             ).fetchall()]
 
     def detect(self, agent_id):
@@ -635,11 +602,15 @@ class AdaptationService:
         kind = reason = None
         score = 0.0
         if env.get("ready"):
+            sensor_count = int(env.get("new_sensor_count") or 0)
             new_health = env.get("new_sensor_health")
-            persistent_bad = (
-                new_health is not None and new_health < SENSOR_HEALTH_BAD
-                and float(env.get("health_drop") or 0.0) >= SENSOR_HEALTH_DROP
-            ) or float(env.get("new_unavailable_fraction") or 0.0) >= 0.40
+            persistent_bad = sensor_count > 0 and (
+                (
+                    new_health is not None and new_health < SENSOR_HEALTH_BAD
+                    and float(env.get("health_drop") or 0.0) >= SENSOR_HEALTH_DROP
+                )
+                or float(env.get("new_unavailable_fraction") or 0.0) >= 0.40
+            )
             if persistent_bad:
                 kind = "sensor_failure"
                 reason = "sensor health degraded persistently across independent runtime snapshots"
@@ -662,13 +633,15 @@ class AdaptationService:
             if quality_drop >= QUALITY_DROP_THRESHOLD and (shifted or corrected):
                 kind = "new_habit"
                 reason = "episode quality dropped together with a sustained context/time/correction shift"
-                score = max(quality_drop, float(episode.get("context_tv") or 0.0),
-                            min(1.0, float(episode.get("hour_shift") or 0.0) / 6.0))
-        detected = bool(kind)
+                score = max(
+                    quality_drop,
+                    float(episode.get("context_tv") or 0.0),
+                    min(1.0, float(episode.get("hour_shift") or 0.0) / 6.0),
+                )
         return {
             "contract_version": CONTRACT_VERSION,
             "agent_id": aid,
-            "detected": detected,
+            "detected": bool(kind),
             "kind": kind,
             "reason": reason,
             "score": score,
@@ -684,7 +657,7 @@ class AdaptationService:
             row = c.execute(
                 """SELECT * FROM agent_candidate_generations
                    WHERE root_agent_id=? AND generation_type='candidate'
-                     AND lifecycle_state NOT IN ('discarded','pruned','promoted')
+                     AND lifecycle_state NOT IN ('discarded','pruned','promoted','rolled_back')
                      AND agent_id IS NOT NULL
                    ORDER BY generation_number DESC,created_ts DESC LIMIT 1""",
                 (str(root_id),),
@@ -695,8 +668,7 @@ class AdaptationService:
         existing = self._active_candidate(agent_id)
         if existing:
             return existing
-        reason = f"drift:{detection['kind']}"
-        self.manager.enqueue(str(agent_id), reason=reason)
+        self.manager.enqueue(str(agent_id), reason=f"drift:{detection['kind']}")
         return self._active_candidate(agent_id)
 
     def _start_adaptation(self, agent_id, detection):
@@ -711,11 +683,6 @@ class AdaptationService:
         baseline_ids = episode.get("baseline_episode_ids") or []
         self.retain_regression_anchors(aid, baseline_ids, reason=f"pre_{detection['kind']}_baseline")
         env = detection.get("environment_shift") or {}
-        preference_seen = max(
-            int(state.get("preference_revision_seen") or 0),
-            int(env.get("latest_preference_revision") or 0),
-        )
-        baseline_quality = _finite(episode.get("baseline_quality"), _finite(state.get("baseline_quality")))
         self._update_state(
             aid,
             status="candidate_active",
@@ -723,11 +690,14 @@ class AdaptationService:
             drift_reason=detection.get("reason"),
             drift_score=float(detection.get("score") or 0.0),
             detected_ts=time.time(),
-            baseline_quality=baseline_quality,
+            baseline_quality=_finite(episode.get("baseline_quality"), _finite(state.get("baseline_quality"))),
             baseline_episode_count=len(baseline_ids),
             candidate_generation_id=candidate.get("generation_id"),
             candidate_agent_id=candidate.get("agent_id"),
-            preference_revision_seen=preference_seen,
+            preference_revision_seen=max(
+                int(state.get("preference_revision_seen") or 0),
+                int(env.get("latest_preference_revision") or 0),
+            ),
             promoted_ts=None,
             rollback_backup_id=None,
             recovered_ts=None,
@@ -737,7 +707,8 @@ class AdaptationService:
             aid, "warning", "controlled_drift_adaptation_started",
             "Sustained drift created an isolated Candidate; Live policy was not reset",
             {
-                "kind": detection.get("kind"), "score": detection.get("score"),
+                "kind": detection.get("kind"),
+                "score": detection.get("score"),
                 "candidate_generation_id": candidate.get("generation_id"),
                 "candidate_can_dispatch": False,
                 "promotion": "existing Stage-13 fixed future evidence remains mandatory",
@@ -750,12 +721,13 @@ class AdaptationService:
         state = self._state(aid)
         if str(state.get("candidate_generation_id") or "") != str(generation_id or ""):
             return False
+        now = time.time()
         with self.store.conn() as c:
             backup = c.execute(
-                """SELECT id FROM agent_generation_backups WHERE agent_id=?
-                   ORDER BY id DESC LIMIT 1""", (aid,)
+                """SELECT id FROM agent_generation_backups
+                   WHERE agent_id=? AND expires_ts>? ORDER BY id DESC LIMIT 1""",
+                (aid, now),
             ).fetchone()
-        now = time.time()
         self._update_state(
             aid,
             status="promoted_monitoring",
@@ -777,13 +749,14 @@ class AdaptationService:
 
     def _restore_backup(self, agent_id, backup_id):
         aid = str(agent_id)
+        now = time.time()
         with self.store.conn() as c:
             backup = c.execute(
-                "SELECT * FROM agent_generation_backups WHERE id=? AND agent_id=?",
-                (int(backup_id), aid),
+                "SELECT * FROM agent_generation_backups WHERE id=? AND agent_id=? AND expires_ts>?",
+                (int(backup_id), aid, now),
             ).fetchone()
         if not backup:
-            raise RuntimeError("Adaptation rollback backup is unavailable")
+            raise RuntimeError("Adaptation rollback backup is unavailable or expired")
         backup = dict(backup)
         old_agent = _json(backup.get("agent_json"), {})
         old_model_json = backup.get("model_json")
@@ -791,10 +764,9 @@ class AdaptationService:
         if not current:
             raise RuntimeError("Root Live agent unavailable during adaptation rollback")
         executor = self.engine.executor
-        target = current["target_entity"]
         old_mode = str(old_agent.get("mode") or "shadow")
         current_mode = str(current.get("mode") or "shadow")
-        with executor.target_lock(target):
+        with executor.target_lock(current["target_entity"]):
             if current_mode == "control" and old_mode != "control":
                 executor.release_control(current, reason="adaptation_quality_rollback")
             stamp = iso_now()
@@ -841,9 +813,11 @@ class AdaptationService:
                         (aid, int(backup.get("generation") or 0)),
                     ).fetchone()
                     if current_live and previous:
+                        # The failed promoted generation remains immutable provenance but is
+                        # inactive. "promoted" is already an inactive lineage state.
                         c.execute(
                             """UPDATE agent_candidate_generations SET agent_id=NULL,generation_type='candidate',
-                               lifecycle_state='rolled_back',retired_ts=?,updated_ts=? WHERE generation_id=?""",
+                               lifecycle_state='promoted',retired_ts=?,updated_ts=? WHERE generation_id=?""",
                             (now, now, current_live["generation_id"]),
                         )
                         c.execute(
@@ -915,8 +889,7 @@ class AdaptationService:
             self.ingest_episode_evaluator(aid)
             last = _finite(state.get("last_observe_ts"), 0.0) or 0.0
             if now - last >= OBSERVE_THROTTLE_SECONDS:
-                env = self._environment_from_runtime(agent, state_map)
-                self.record_environment(aid, now, **env)
+                self.record_environment(aid, now, **self._environment_from_runtime(agent, state_map))
                 self._update_state(aid, last_observe_ts=now)
             self._post_promotion_monitor(aid)
             state = self._state(aid)
@@ -937,8 +910,7 @@ class AdaptationService:
             "state": state,
             "current_detection": detection,
             "regression_anchors": {
-                "count": len(anchors),
-                "training_weight": 0.0,
+                "count": len(anchors), "training_weight": 0.0,
                 "episode_ids": [row["episode_id"] for row in anchors],
             },
             "decay": decay_contract(),
@@ -964,11 +936,14 @@ def contract_descriptor():
             "history_absence_relaxes_safety": False,
             "optional_question_budget": MAX_OPTIONAL_QUESTIONS,
         },
-        "drift_inputs": ["episode_quality", "manual_corrections", "context_distribution", "sensor_health", "topology", "persistent_preference"],
+        "drift_inputs": [
+            "episode_quality", "manual_corrections", "context_distribution",
+            "sensor_health", "topology", "persistent_preference",
+        ],
         "drift_classes": ["sensor_failure", "topology_change", "new_habit", "new_preference"],
         "adaptation": "isolated_candidate_only_no_live_reset",
         "promotion": "existing Stage-13 fixed future gate only; never automatic here",
-        "rollback": "exact pre-promotion generation backup restored after post-promotion degradation",
+        "rollback": "exact unexpired pre-promotion generation backup restored after degradation",
         "decay": decay_contract(),
         "regression_anchors": "durable evaluation references with training_weight=0",
     }
@@ -997,18 +972,11 @@ def install(manager):
         return result
 
     def promote(parent_id, target_mode=None):
-        state_before = None
-        try:
-            if service._state(str(parent_id)).get("status") == "candidate_active":
-                state_before = service._state(str(parent_id))
-        except Exception:
-            state_before = None
         result = original_promote(parent_id, target_mode)
         root_id = str((result or {}).get("agent_id") or parent_id)
-        if state_before is None:
-            state_before = service._state(root_id)
         generation_id = (result or {}).get("generation_id")
-        if generation_id and str(state_before.get("candidate_generation_id") or "") == str(generation_id):
+        state = service._state(root_id)
+        if generation_id and str(state.get("candidate_generation_id") or "") == str(generation_id):
             service.mark_promoted(root_id, generation_id)
         return result
 
