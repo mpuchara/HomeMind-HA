@@ -56,6 +56,7 @@ def prepare_engine_extensions():
     from context_tournament_promotion import install_promotion as install_context_tournament_promotion
     from context_tournament_primary_protection import install_primary_protection
     from context_tournament_quality import install_sensor_quality
+    from context_tournament_policy_candidate import install_policy_candidates
     from context_schema_history import install_schema_history
     from context_tournament_requalification import install_promotion_shadow_requalification
     from context_schema_probation import install_schema_probation
@@ -83,6 +84,7 @@ def prepare_engine_extensions():
     install_context_tournament_promotion(tournament)
     install_primary_protection(tournament)
     install_sensor_quality(tournament)
+    install_policy_candidates(tournament)
     install_schema_history(tournament)
     install_promotion_shadow_requalification(tournament)
     install_schema_probation(tournament)
@@ -180,7 +182,7 @@ def prepare_engine_extensions():
     core.STORE.event(None, "info", "teach_rl_ready", "Historical Teach RL pipeline ready", None)
     core.STORE.event(
         None, "info", "context_tournament_ready",
-        "Sensor Tournament shadow evaluates incremental predictive value and auto-promotes proven sensors",
+        "Sensor Tournament screens broad context then validates the exact deployable policy on future predictive gain",
         {
             "challenger_count": int(core.OPTIONS.get("context_challenger_count", 4)) if hasattr(core, "OPTIONS") else 4,
             "enabled": bool(core.OPTIONS.get("context_tournament_enabled", True)) if hasattr(core, "OPTIONS") else True,
@@ -188,9 +190,21 @@ def prepare_engine_extensions():
             "min_days": float(core.OPTIONS.get("context_tournament_min_days", 3)) if hasattr(core, "OPTIONS") else 3,
             "min_gain": float(core.OPTIONS.get("context_tournament_min_gain", 0.03)) if hasattr(core, "OPTIONS") else 0.03,
             "primary_replacement_gain": float(core.OPTIONS.get("context_primary_replacement_gain", 0.07)) if hasattr(core, "OPTIONS") else 0.07,
-            "hysteresis": "challenger_score > baseline_score + required_gain",
-            "sensor_quality": "availability",
-            "ranking": "predictive_gain * sensor_quality",
+            "hysteresis": "challenger_score > baseline_score + required_predictive_gain",
+            "sensor_quality": "availability plus observed health and own-action leakage gate",
+            "ranking": "historical+semantic screening only; promotion uses paired future predictive_gain",
+            "observed_vs_active": "broad observed pool is separate from compact active feature schema",
+            "semantic_groups": "value+quality+lags+trend+time_since_edge+selected_interactions",
+            "targeted_sensor": "research priority only; never promotion evidence",
+            "multiple_testing": "explicit gain penalty based on screened hypothesis count",
+            "feature_cost": "explicit gain penalty for schema/interactions and event frequency",
+            "redundancy": "contemporaneous duplicate sensor correlation gate",
+            "own_action_leakage": "post-command sensor effects cannot justify promotion",
+            "policy_candidate_contract": getattr(tournament, "policy_candidate_contract", None),
+            "policy_candidate_training": "predict -> paired score -> candidate learn",
+            "policy_candidate_deployment": "the exact trained target-schema policy is promoted; no zero-weight column migration",
+            "result_name": "predictive_gain",
+            "causal_claim": False,
             "promotion_requalification": "control_to_shadow",
             "schema_probation_samples": int(core.OPTIONS.get("context_schema_probation_samples", 50)) if hasattr(core, "OPTIONS") else 50,
             "schema_rollback_margin": 0.03,
@@ -221,7 +235,7 @@ def prepare_engine_extensions():
             "candidate_physical_mode": getattr(candidates, "candidate_physical_mode_contract", "candidate_always_shadow_until_committed_promote"),
             "candidate_binary_evidence": "20_future_samples_per_action_standard; user-defined_custom_thresholds_available",
             "control_diagnostics": "schema_revision+schema_age+prequential_samples+feature_tournament_state",
-            "context_ui_diagnostics": "active+primary+challengers+evaluation+schema+last_update",
+            "context_ui_diagnostics": "active+observed_pool+primary+challengers+evaluation+schema+last_update",
             "context_events": "structured_numeric_no_generated_text",
             "consecutive_wins": int(core.OPTIONS.get("context_tournament_consecutive_wins", 3)) if hasattr(core, "OPTIONS") else 3,
             "evaluation_hours": float(core.OPTIONS.get("context_tournament_evaluation_hours", 24)) if hasattr(core, "OPTIONS") else 24,
@@ -229,6 +243,7 @@ def prepare_engine_extensions():
             "state_table": "context_tournament_state",
             "promotion_table": "context_tournament_promotions",
             "quality_table": "context_tournament_sensor_quality",
+            "observed_pool_table": "context_tournament_observed_pool",
             "schema_history_table": "context_schema_history",
             "schema_probation_table": "context_schema_probation",
             "context_event_state_table": "context_tournament_event_state",
