@@ -4,6 +4,12 @@ The HistoryManager intentionally permits only one heavy replay at a time so Home
 Assistant keeps CPU/RAM priority. This queue turns that resource limit into normal
 product behaviour: Train/Resume/Rebuild requests are accepted, deduplicated and run
 in order as soon as the shared heavy-job gate becomes available.
+
+Explicit user training has priority over the periodic low-memory discovery refresh.
+Discovery is safe to defer because per-agent Rebuild performs its own authoritative
+Recorder backfill before replay.  The queue therefore asks an in-progress discovery
+to stop issuing new Recorder requests, then reschedules a complete discovery pass once
+the explicit queue becomes idle.  User-requested Home bootstrap is never preempted.
 """
 from collections import deque
 import json
@@ -27,6 +33,9 @@ class TrainingQueue(threading.Thread):
         self.jobs = deque()
         self.pending = {}
         self.active = None
+        self._training_priority = threading.Event()
+        self._discovery_preempted = False
+        self._install_discovery_priority_bridge()
 
     def _history_active_ids(self):
         lock = getattr(self.history, "agent_jobs_lock", None)
@@ -39,6 +48,86 @@ class TrainingQueue(threading.Thread):
     def _agent_label(self, agent_id):
         agent = self.store.get_agent(agent_id)
         return (agent or {}).get("name") or agent_id
+
+    def _mark_discovery_preempted(self):
+        first = False
+        with self.cv:
+            if not self._discovery_preempted:
+                self._discovery_preempted = True
+                first = True
+        if first:
+            try:
+                self.store.event(
+                    None, "info", "discovery_yielded_to_training",
+                    "Background discovery yielded to explicit agent training",
+                    {"heavy_job": HEAVY_JOBS.owner},
+                )
+            except Exception:
+                pass
+
+    def _install_discovery_priority_bridge(self):
+        """Cooperatively shorten background discovery when Train is explicitly pressed.
+
+        HistoryManager is intentionally kept independent from the admission queue.  The
+        queue therefore installs two instance-local adapters after HistoryManager exists:
+        a discovery call can be skipped if training is already pending, and an in-flight
+        discovery stops making additional Recorder requests as soon as a user queues work.
+        No raw history is deleted; the next idle discovery pass is forced to rebuild its
+        refresh window, while the selected agent performs its own full backfill.
+        """
+        original_cycle = getattr(self.history, "_manual_lightweight_cycle", None)
+        if callable(original_cycle) and not getattr(self.history, "_training_priority_cycle_bridge", False):
+            def priority_cycle(current, controllable, end_ts):
+                if self._training_priority.is_set():
+                    self._mark_discovery_preempted()
+                    setter = getattr(self.history, "set_status", None)
+                    if callable(setter):
+                        setter(
+                            "manual_ready", message="Agent training requested; background discovery is deferred",
+                            phase_detail="Explicit Train has priority over Recorder discovery",
+                        )
+                    return None
+                return original_cycle(current, controllable, end_ts)
+            self.history._manual_lightweight_cycle = priority_cycle
+            self.history._training_priority_cycle_bridge = True
+
+        original_fetch = getattr(self.history, "_fetch_history_resilient", None)
+        if callable(original_fetch) and not getattr(self.history, "_training_priority_fetch_bridge", False):
+            def priority_fetch(*args, **kwargs):
+                if self._training_priority.is_set() and HEAVY_JOBS.owner == "discovery":
+                    self._mark_discovery_preempted()
+                    return 0
+                return original_fetch(*args, **kwargs)
+            self.history._fetch_history_resilient = priority_fetch
+            self.history._training_priority_fetch_bridge = True
+
+    def _request_training_priority(self):
+        self._training_priority.set()
+        with self.cv:
+            self.cv.notify_all()
+
+    def _release_training_priority_if_idle(self):
+        reschedule = False
+        with self.cv:
+            if self.jobs or self.active:
+                return False
+            self._training_priority.clear()
+            if self._discovery_preempted:
+                self._discovery_preempted = False
+                reschedule = True
+        if reschedule:
+            try:
+                # Empty value makes the next maintenance cycle use the normal initial
+                # discovery window instead of treating the shortened pass as complete.
+                self.store.meta_set("manual_discovery_refresh", "")
+                self.store.event(
+                    None, "info", "discovery_rescheduled_after_training",
+                    "Background discovery will run a complete refresh after explicit training",
+                    None,
+                )
+            except Exception:
+                pass
+        return True
 
     def _preserve_waiting_state(self, agent):
         """Block Control while queued without throwing away benchmark evidence."""
@@ -100,8 +189,10 @@ class TrainingQueue(threading.Thread):
 
         with self.cv:
             if self.active and self.active["agent_id"] == agent_id:
+                self._request_training_priority()
                 return self.status_for(agent_id)
             if agent_id in self._history_active_ids():
+                self._request_training_priority()
                 return {"state": "active", "position": 0, "ahead": 0,
                         "rebuild": bool(rebuild), "agent_id": agent_id}
             existing = self.pending.get(agent_id)
@@ -117,6 +208,7 @@ class TrainingQueue(threading.Thread):
                         existing["reason"] = "full_rebuild"
                     self.store.event(agent_id, "info", "training_queue_upgraded",
                                      "Queued training upgraded to a full rebuild", None)
+                self._request_training_priority()
                 return self.status_for(agent_id)
 
         # Do this outside the queue lock: restoring legacy automations can call HA.
@@ -141,6 +233,7 @@ class TrainingQueue(threading.Thread):
                     existing["rebuild"] = True
                     if existing.get("reason") != "teach_rl":
                         existing["reason"] = "full_rebuild"
+                self._request_training_priority()
                 return self.status_for(agent_id)
             self.jobs.append(job)
             self.pending[agent_id] = job
@@ -148,6 +241,7 @@ class TrainingQueue(threading.Thread):
             self.store.event(agent_id, "info", "training_queued",
                              f"Training queued at position {position}",
                              {"position": position, "rebuild": bool(rebuild), "reason": str(reason)})
+            self._request_training_priority()
             self.cv.notify_all()
             return self.status_for(agent_id)
 
@@ -168,6 +262,7 @@ class TrainingQueue(threading.Thread):
             except Exception as exc:
                 self.store.event(agent_id, "warning", "teach_rl_cancel_cleanup_failed",
                                  str(exc), {"error": f"{type(exc).__name__}: {exc}"})
+        self._release_training_priority_if_idle()
         return True
 
     def status_for(self, agent_id):
@@ -194,6 +289,7 @@ class TrainingQueue(threading.Thread):
                         "rebuild": bool(job.get("rebuild")),
                         "reason": job.get("reason"),
                         "queued_at": job.get("queued_at"),
+                        "blocked_by": HEAVY_JOBS.owner,
                         "agent_id": agent_id,
                     }
             return None
@@ -210,8 +306,13 @@ class TrainingQueue(threading.Thread):
                     "name": self._agent_label(job["agent_id"]),
                     "position": index + 1,
                     "ahead": index + (1 if self.active else 0),
+                    "blocked_by": HEAVY_JOBS.owner,
                 })
-            return {"active": active, "queued": queued, "queued_count": len(queued)}
+            return {
+                "active": active, "queued": queued, "queued_count": len(queued),
+                "heavy_job": HEAVY_JOBS.owner,
+                "explicit_training_priority": self._training_priority.is_set(),
+            }
 
     def _drop_head(self, event_code, message, detail=None):
         with self.cv:
@@ -221,7 +322,8 @@ class TrainingQueue(threading.Thread):
             self.pending.pop(job["agent_id"], None)
             self.store.event(job["agent_id"], "warning", event_code, message, detail)
             self.cv.notify_all()
-            return job
+        self._release_training_priority_if_idle()
+        return job
 
     def _try_start_head(self):
         with self.cv:
@@ -315,6 +417,7 @@ class TrainingQueue(threading.Thread):
         self.store.event(job["agent_id"], "info", "training_queue_finished",
                          "Training slot released; next queued job may start",
                          {"training_state": (agent or {}).get("training_state"), "reason": job.get("reason")})
+        self._release_training_priority_if_idle()
         return True
 
     def run(self):
@@ -331,5 +434,6 @@ class TrainingQueue(threading.Thread):
 
     def stop(self):
         self.stop_event.set()
+        self._training_priority.clear()
         with self.cv:
             self.cv.notify_all()
