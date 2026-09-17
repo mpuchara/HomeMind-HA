@@ -1,14 +1,11 @@
 """Explicit user corrections for Adaptive AI.
 
 Stage 06 separates two effects that older code mixed together:
-
 * an immediate user effect (physical command/manual hold or contextual override), and
-* learning, which is recorded in ManualFeedbackJournal and evolves an isolated Candidate.
+* learning, recorded in ManualFeedbackJournal and applied to an isolated Candidate.
 
-The established ActionIntent/Executor boundary remains unchanged. A UI manual correction
-is an explicit user command and may call the existing Executor service boundary; Shadow
-and unpromoted Candidate paths never do. Bare negative feedback records only the rejected
-action and does not invent an alternative action.
+The ActionIntent/Executor boundary is unchanged. Bare negative feedback records only the
+rejected action and never invents a supposedly correct alternative.
 """
 import math
 import time
@@ -25,7 +22,6 @@ def _same(agent, a, b):
 
 
 def _manual_value(agent, state, desired):
-    """Validate an explicitly chosen user value without autonomous step guards."""
     value = float(desired)
     if not math.isfinite(value):
         raise ValueError("desired_value must be finite")
@@ -81,12 +77,7 @@ def _policy_features(engine, agent, state_map, timestamp):
 
 
 def _negative_prediction(engine, agent, state_map, predicted, desired, user_id, reason):
-    """Legacy direct update retained for old core physical events only.
-
-    New UI/Teaching/Teach-RL paths do not call this helper. Their learning goes to an
-    isolated Candidate. The helper remains for backwards-compatible physical-event code
-    until the core event learner itself is versioned away.
-    """
+    """Legacy direct update retained only for pre-stage-06 compatibility callers."""
     if predicted is None or _same(agent, predicted, desired):
         return False
     timestamp = time.time()
@@ -101,16 +92,14 @@ def _negative_prediction(engine, agent, state_map, predicted, desired, user_id, 
     rt = engine.runtime.setdefault(agent["id"], {})
     rt["last_reward"] = -1.0
     rt["last_reward_reason"] = reason
-    STORE.event(
-        agent["id"], "warning", "manual_prediction_rejected",
-        f"Manual correction rejected predicted value {predicted}",
-        {"predicted": predicted, "desired": desired, "user_id": user_id},
-    )
+    STORE.event(agent["id"], "warning", "manual_prediction_rejected",
+                f"Manual correction rejected predicted value {predicted}",
+                {"predicted": predicted, "desired": desired, "user_id": user_id})
     return True
 
 
 def _positive_demonstration(engine, agent, state_map, desired, user_id, reason):
-    """Legacy direct update retained for compatibility with pre-stage-06 callers."""
+    """Legacy direct update retained only for pre-stage-06 compatibility callers."""
     timestamp = time.time()
     policy, features = _policy_features(engine, agent, state_map, timestamp)
     idx = min(range(len(policy.actions)), key=lambda i: abs(float(policy.actions[i]) - float(desired)))
@@ -135,13 +124,26 @@ def _context_signature(engine, agent, state_map, timestamp):
 def _record_feedback(engine, agent, state_map, timestamp, *, source, rejected_action=None,
                      correct_action=None, error_kind="state", scope="similar_context",
                      decision_id=None, episode_id=None, generation_id=None, feedback_id=None):
+    """Record feedback even when context is incomplete, without making it generalizable."""
     journal = getattr(engine, "manual_feedback_journal", None)
     if journal is None:
         return None
     policy, stamp, sig = _context_signature(engine, agent, state_map, timestamp)
-    if not sig:
-        raise ValueError("Incomplete context for manual feedback")
-    return journal.record(
+    complete = bool(sig)
+    if sig:
+        sig = dict(sig)
+        sig["meta:context_complete"] = 1.0
+    else:
+        # Missing inputs are a fact, not zero-valued context. This signature deliberately
+        # contains metadata only, so Teaching.distance cannot match it as a reusable rule.
+        sig = {
+            "meta:signature_contract": 2.0,
+            "meta:context_complete": 0.0,
+            "meta:home_known": 0.0,
+            "meta:feature_schema_version": float(getattr(policy.schema, "VERSION", 0) or 0),
+            "meta:policy_version": float(getattr(policy, "VERSION", 0) or 0),
+        }
+    row = journal.record(
         agent_id=agent["id"], selected_ts=timestamp, source=source,
         rejected_action=rejected_action, correct_action=correct_action,
         error_kind=error_kind, scope=scope, decision_id=decision_id,
@@ -151,6 +153,20 @@ def _record_feedback(engine, agent, state_map, timestamp, *, source, rejected_ac
         policy_version=getattr(policy, "VERSION", None),
         deadband=float(agent.get("deadband") or .01), feedback_id=feedback_id,
     )
+    if not complete:
+        row = journal.set_status(
+            row["feedback_id"], "recorded",
+            learning_effect={"context_complete": False, "label_recorded": False,
+                             "candidate_queued": False},
+        )
+    return row
+
+
+def _feedback_context_complete(feedback_row):
+    if not feedback_row:
+        return False
+    signature = dict(feedback_row.get("context_signature") or {})
+    return float(signature.get("meta:context_complete", 1.0) or 0.0) >= .5
 
 
 def _queue_candidate_label(engine, agent, state_map, timestamp, *, desired, rejected,
@@ -160,14 +176,20 @@ def _queue_candidate_label(engine, agent, state_map, timestamp, *, desired, reje
         return None
     if feedback_row.get("application_status") == "conflict":
         return None
+    if not _feedback_context_complete(feedback_row):
+        if journal is not None:
+            journal.set_status(
+                feedback_row["feedback_id"], "applied",
+                learning_effect={"context_complete": False, "label_recorded": False,
+                                 "candidate_queued": False},
+            )
+        return None
     if desired is None:
         if journal is not None:
             journal.set_status(
                 feedback_row["feedback_id"], "applied",
-                learning_effect={
-                    "negative_only": True, "label_recorded": False,
-                    "candidate_queued": False,
-                },
+                learning_effect={"negative_only": True, "label_recorded": False,
+                                 "candidate_queued": False},
             )
         return None
 
@@ -237,11 +259,9 @@ def apply_ui_correction(core, agent, desired_value=None, keep_current=False, *,
         engine.experiments.cancel(agent["id"], "explicit user correction")
         pending = rt.get("pending")
         predicted = rt.get("last_prediction")
-        rejected = (
-            pending.get("action_value")
-            if pending and not _same(agent, pending.get("action_value"), desired)
-            else predicted
-        )
+        rejected = (pending.get("action_value")
+                    if pending and not _same(agent, pending.get("action_value"), desired)
+                    else predicted)
         feedback = _record_feedback(
             engine, agent, state_map, timestamp,
             source="ui_keep_current" if keep_current else "ui_manual_correction",
@@ -251,16 +271,12 @@ def apply_ui_correction(core, agent, desired_value=None, keep_current=False, *,
             feedback_id=feedback_id,
         )
         if pending:
-            # The explicit user correction owns this outcome. Do not let a later settling
-            # timer reinterpret it as weak acceptance of the rejected autonomous action.
             rt["pending"] = None
 
         service_name = None
         data = None
         if not keep_current:
-            domain, service, data = target_call(
-                agent["target_entity"], agent["target_property"], desired, state
-            )
+            domain, service, data = target_call(agent["target_entity"], agent["target_property"], desired, state)
             service_name = f"{domain}.{service}"
             origin_scope = getattr(engine, "provenance_command_origin", None)
             context = origin_scope("user_intent") if callable(origin_scope) else None
@@ -273,25 +289,19 @@ def apply_ui_correction(core, agent, desired_value=None, keep_current=False, *,
                     response = engine.executor._service(domain, service, data)
                     engine.record_command(agent, desired, response)
                 except Exception as exc:
-                    rt.update(
-                        last_service_ts=started, last_service=service_name,
-                        last_service_ok=False, last_service_error=f"{type(exc).__name__}: {exc}",
-                    )
+                    rt.update(last_service_ts=started, last_service=service_name,
+                              last_service_ok=False, last_service_error=f"{type(exc).__name__}: {exc}")
                     if feedback and getattr(engine, "manual_feedback_journal", None):
                         engine.manual_feedback_journal.set_status(
                             feedback["feedback_id"], "failed",
                             immediate_effect={"physical_change": False, "error": str(exc)},
                         )
-                    store.event(
-                        agent["id"], "error", "manual_correction_service_failed", str(exc),
-                        {"current": current, "desired": desired, "service": service_name},
-                    )
+                    store.event(agent["id"], "error", "manual_correction_service_failed", str(exc),
+                                {"current": current, "desired": desired, "service": service_name})
                     raise
-                rt.update(
-                    last_service_ts=started, last_service=service_name,
-                    last_service_data=data, last_service_ok=True, last_service_error=None,
-                    last_service_latency_ms=(time.time() - started) * 1000.0,
-                )
+                rt.update(last_service_ts=started, last_service=service_name,
+                          last_service_data=data, last_service_ok=True, last_service_error=None,
+                          last_service_latency_ms=(time.time() - started) * 1000.0)
             finally:
                 if context is not None:
                     context.__exit__(None, None, None)
@@ -314,10 +324,8 @@ def apply_ui_correction(core, agent, desired_value=None, keep_current=False, *,
         if feedback and journal is not None:
             feedback = journal.set_status(
                 feedback["feedback_id"], "applied",
-                immediate_effect={
-                    "physical_change": not keep_current, "runtime_override": False,
-                    "manual_hold": True, "service": service_name,
-                },
+                immediate_effect={"physical_change": not keep_current, "runtime_override": False,
+                                  "manual_hold": True, "service": service_name},
             )
         learning = _queue_candidate_label(
             engine, agent, state_map, timestamp, desired=desired, rejected=rejected,
@@ -327,15 +335,11 @@ def apply_ui_correction(core, agent, desired_value=None, keep_current=False, *,
         if learning and learning.get("feedback"):
             feedback = learning["feedback"]
 
-        store.event(
-            agent["id"], "info", "manual_correction_ui",
-            f"User correction {current} → {desired}" if not keep_current else f"User confirmed current value {current}",
-            {
-                "current": current, "desired": desired, "service": service_name,
-                "keep_current": keep_current, "feedback_id": (feedback or {}).get("feedback_id"),
-                "learning_path": "candidate", "live_model_updated": False,
-            },
-        )
+        store.event(agent["id"], "info", "manual_correction_ui",
+                    f"User correction {current} → {desired}" if not keep_current else f"User confirmed current value {current}",
+                    {"current": current, "desired": desired, "service": service_name,
+                     "keep_current": keep_current, "feedback_id": (feedback or {}).get("feedback_id"),
+                     "learning_path": "candidate", "live_model_updated": False})
         return {
             "ok": True, "current_value": current, "desired_value": desired,
             "service": service_name, "keep_current": keep_current,
@@ -347,19 +351,112 @@ def apply_ui_correction(core, agent, desired_value=None, keep_current=False, *,
         }
 
 
+def _observe_teach_context(core, agent, state_map, desired, predicted, rt):
+    from manual_context_learning import observe as observe_manual_context
+    return observe_manual_context(
+        core, agent, state_map, desired, rejected=predicted,
+        source="ui_teach_desired", user_id=UI_USER_ID,
+        refresh_policy=not bool(rt.get("pending") or rt.get("outcomes")),
+    )
+
+
 def teach_desired(core, agent, desired_value=None, *, error_kind="state",
                   scope="similar_context", decision_id=None, episode_id=None):
-    """Contextual Teaching: no HA service, immediate override + Candidate learning."""
+    """Teach Desired without dispatching a device command or mutating Live weights.
+
+    A complete semantic context gets the normal retractable Teaching label and Candidate
+    learning. If some policy input is unavailable, the user's immediate Desired correction
+    still works as a one-shot runtime override, but it is deliberately not generalized or
+    trained as if the missing context were known.
+    """
+    from context import target_value
+
     engine, store = core.ENGINE, core.STORE
     if engine is None or store is None:
         raise RuntimeError("runtime unavailable")
-    result = engine.teaching.teach(
-        engine, agent, desired=desired_value, sample_ts=None,
-        source="teach_desired", error_kind=error_kind, scope=scope,
-        decision_id=decision_id, episode_id=episode_id,
-    )
-    result["service"] = None
-    result["learning_path"] = "candidate"
+    agent = store.get_agent_config(agent["id"])
+    if agent is None:
+        raise ValueError("Agent no longer exists")
+    if str(agent.get("training_state") or "") == "training":
+        raise ValueError("Trwa trening historyczny. Naucz Desired po jego zakończeniu.")
+
+    with engine.lock:
+        state_map = dict(engine.state_map)
+    state = state_map.get(agent["target_entity"])
+    current = target_value(state, agent["target_property"])
+    if current is None or not math.isfinite(float(current)):
+        raise ValueError("Target state/value unavailable")
+    rt = engine.runtime.setdefault(agent["id"], {})
+    predicted = rt.get("last_prediction")
+
+    if desired_value is None:
+        if agent["target_property"] != "power" or predicted is None:
+            raise ValueError("desired_value is required when Desired is unavailable or non-binary")
+        desired_value = 0.0 if float(predicted) >= .5 else 1.0
+    desired = _manual_value(agent, state, desired_value)
+    negative = predicted is not None and not _same(agent, predicted, desired)
+
+    bridge_installed = bool(getattr(core, "_TEACHING_LEARNING_BRIDGE_INSTALLED", False))
+    context_learning = None
+    if not bridge_installed:
+        context_learning = _observe_teach_context(core, agent, state_map, desired, predicted, rt)
+
+    try:
+        result = engine.teaching.teach(
+            engine, agent, desired=desired, sample_ts=None,
+            source="teach_desired", error_kind=error_kind, scope=scope,
+            decision_id=decision_id, episode_id=episode_id,
+        )
+    except ValueError as exc:
+        if "Niepełny kontekst" not in str(exc):
+            raise
+        if context_learning is None:
+            context_learning = _observe_teach_context(core, agent, state_map, desired, predicted, rt)
+        timestamp = time.time()
+        feedback = _record_feedback(
+            engine, agent, state_map, timestamp, source="teach_desired",
+            rejected_action=predicted, correct_action=desired, error_kind=error_kind,
+            scope="one_time", decision_id=decision_id, episode_id=episode_id,
+        )
+        journal = getattr(engine, "manual_feedback_journal", None)
+        if feedback and journal is not None:
+            feedback = journal.set_status(
+                feedback["feedback_id"], "applied",
+                immediate_effect={"runtime_override": True, "physical_change": False,
+                                  "manual_hold": False, "context_complete": False},
+                learning_effect={"label_recorded": False, "candidate_queued": False,
+                                 "context_complete": False},
+            )
+        rt.update(last_prediction=desired, teaching_id=None, last_inference_ts=0,
+                  decision_state="manual_teach",
+                  decision_reason="Desired changed now; incomplete context prevents generalization")
+        engine.wake_event.set()
+        store.event(agent["id"], "info", "desired_teaching_ui",
+                    f"User changed Desired to {desired}; incomplete context kept it one-shot",
+                    {"previous_desired": predicted, "taught_desired": desired,
+                     "learning_path": "runtime_override_only", "live_model_updated": False,
+                     "feedback_id": (feedback or {}).get("feedback_id")})
+        return {
+            "ok": True, "current_value": float(current), "desired_value": desired,
+            "prediction_after": desired, "service": None,
+            "negative_applied": bool(negative), "positive_applied": True,
+            "learning_path": "runtime_override_only", "live_model_updated": False,
+            "context_learning": context_learning,
+            "feedback_id": (feedback or {}).get("feedback_id"), "feedback": feedback,
+            "ui_message": (journal.ui_summary(feedback) if journal and feedback
+                           else "Desired changed now; context incomplete, so it was not generalized"),
+        }
+
+    if context_learning is None:
+        context_learning = result.get("context_learning")
+    result.update({
+        "service": None,
+        "negative_applied": bool(negative),
+        "positive_applied": True,
+        "learning_path": "candidate",
+        "live_model_updated": False,
+        "context_learning": context_learning or {},
+    })
     return result
 
 
@@ -391,8 +488,7 @@ def record_negative_feedback(core, agent, *, selected_ts=None, rejected_action=N
         )
     return {
         "ok": True, "feedback_id": (feedback or {}).get("feedback_id"),
-        "feedback": feedback, "correct_action": None,
-        "learning_path": "journal_only",
+        "feedback": feedback, "correct_action": None, "learning_path": "journal_only",
         "ui_message": journal.ui_summary(feedback) if journal and feedback else "Feedback recorded",
     }
 
@@ -418,9 +514,8 @@ def _physical_manual_snapshot(engine, agent, state_map):
         return None
     pending = rt.get("pending")
     own_echo = engine.own_command_echo(agent, state, current)
-    expected_ack = bool(
-        pending and same_value(float(current), float(pending["action_value"]), float(agent.get("deadband") or 0.0))
-    )
+    expected_ack = bool(pending and same_value(float(current), float(pending["action_value"]),
+                                               float(agent.get("deadband") or 0.0)))
     if own_echo or expected_ack:
         return None
     return {
@@ -434,13 +529,7 @@ def _physical_manual_snapshot(engine, agent, state_map):
 
 
 def install_runtime_physical_equivalence(core, engine):
-    """Journal physical corrections and feed the same Candidate learning contract.
-
-    Core 0.14.x still performs its legacy positive online update for a physical wall/device
-    action. We preserve it for compatibility, record that fact explicitly, and also create
-    the retractable Candidate label. Undo therefore requests a clean full rebuild and can
-    remove the complete manual-label influence without inverse updates.
-    """
+    """Journal physical corrections and feed the same Candidate learning contract."""
     if getattr(engine, "_manual_feedback_equivalence_installed", False):
         return
     original = engine.process_agent
@@ -466,7 +555,8 @@ def install_runtime_physical_equivalence(core, engine):
             if journal is not None:
                 feedback = journal.set_status(
                     feedback["feedback_id"], "applied",
-                    immediate_effect={"physical_change": True, "manual_hold": True, "observed_external_user_action": True},
+                    immediate_effect={"physical_change": True, "manual_hold": True,
+                                      "observed_external_user_action": True},
                     learning_effect={"legacy_live_model_update": True, "rebuild_required": True},
                 )
             rejected = snapshot.get("pending_value") if snapshot.get("had_pending") else snapshot.get("predicted")
@@ -499,10 +589,8 @@ def install(core, attach_runtime=True):
             install_runtime_physical_equivalence(core, core.ENGINE)
             core.STORE.event(None, "info", "manual_feedback_ready", "Manual correction feedback path ready", None)
 
-    actions = {
-        "manual-correction", "teach-desired", "teaching", "undo-teaching",
-        "manual-feedback", "undo-feedback",
-    }
+    actions = {"manual-correction", "teach-desired", "teaching", "undo-teaching",
+               "manual-feedback", "undo-feedback"}
 
     def do_post(self):
         path, _, _ = self.path.partition("?")
@@ -553,14 +641,10 @@ def install(core, attach_runtime=True):
                         feedback_id = (latest or {}).get("feedback_id")
                     if not feedback_id:
                         raise ValueError("No manual feedback to undo")
-                    row = journal.undo(
-                        feedback_id, engine=core.ENGINE,
-                        candidate_manager=getattr(core.ENGINE, "agent_candidates", None),
-                    )
-                    return self.send_json(200, {
-                        "ok": True, "feedback_id": feedback_id, "feedback": row,
-                        "ui_message": journal.ui_summary(row),
-                    })
+                    row = journal.undo(feedback_id, engine=core.ENGINE,
+                                       candidate_manager=getattr(core.ENGINE, "agent_candidates", None))
+                    return self.send_json(200, {"ok": True, "feedback_id": feedback_id,
+                                                "feedback": row, "ui_message": journal.ui_summary(row)})
                 keep_current = bool(payload.get("keep_current", False))
                 return self.send_json(200, apply_ui_correction(
                     core, agent, desired, keep_current=keep_current,
