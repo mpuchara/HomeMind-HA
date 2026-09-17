@@ -69,8 +69,12 @@ class HomeTests(unittest.TestCase):
 
     def test_sensor_remapping_does_not_leave_phantom_occupancy(self):
         m=SharedHomeStateModel();m.observe('sensor','old',1,1);m.observe('sensor','new',1,2)
-        self.assertFalse(m.forecast('old',2)['known'])
-        self.assertEqual(m.forecast('old',2)['occupancy_now'],0)
+        old=m.forecast('old',2)
+        self.assertFalse(old['known'])
+        # Stage 08 represents no evidence as an uninformed distribution, not a fabricated
+        # empty room. High uncertainty is the authority signal.
+        self.assertEqual(old['occupancy_now'],.5)
+        self.assertEqual(old['uncertainty'],1)
         self.assertEqual(m.forecast('new',2)['occupancy_now'],1)
 
     def test_unknown_sensor_is_not_known_empty(self):
