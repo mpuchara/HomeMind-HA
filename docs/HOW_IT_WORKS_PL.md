@@ -1,201 +1,178 @@
-> Dokument archiwalny 0.7.x. Aktualna wersja: [0.9.0](README.md), [architektura](ARCHITECTURE_0_9.md), [obsługa](QUICK_START_PL.md).
+# Jak działa HomeMind Adaptive AI — aktualny model uczenia
 
-# Jak działa Adaptive AI – krok po kroku
+Ten dokument opisuje bieżący produkt. W szczególności rozdziela mechanizmy, które wcześniej bywały zbiorczo nazywane „RL”, choć mają inne znaczenie dowodowe.
 
-## 1. Home Assistant jest źródłem stanu i historii
+## 1. Home Assistant dostarcza obserwacje, nie prawdę o preferencji
 
-Adaptive AI korzysta z dwóch ścieżek:
+HomeMind odbiera bieżące `state_changed` przez WebSocket oraz korzysta z historii Recorder. Dane są zapisywane lokalnie, aby replay, Teach, benchmarki i odbudowa modeli nie musiały za każdym razem pobierać całej historii z HA.
 
-- **bieżący stan/realtime** – zdarzenia `state_changed` przez WebSocket,
-- **historia** – Recorder Home Assistant.
+Stan sensora lub targetu mówi, **co zostało zaobserwowane**. Sam fakt, że światło było ON, nie oznacza jeszcze „światło było potrzebne”, a brak ręcznej korekty nie jest automatyczną pozytywną etykietą komfortu.
 
-Dane są kopiowane do lokalnej bazy Adaptive AI, dzięki czemu późniejsze przebudowy modeli nie muszą za każdym razem odpytywać Recordera o wszystko od zera.
+## 2. Percepcja buduje osobny model obecności/ruchu
 
-## 2. Wykrywane są urządzenia, którymi można sterować
+`ContextEngine` i `RoomBeliefModel` łączą źródła o jawnych rolach: PIR, binary occupancy, radar, raw activity, tracker, door i pomocnicze źródła.
 
-Aktualnie wspierane są m.in. światła, przełączniki, climate, rolety, wentylatory, number/input_number, media_player, humidifier, water_heater i select/input_select.
+Wyniki percepcji obejmują osobno:
+- occupancy now,
+- arrival/departure probability,
+- prognozę dla horyzontów,
+- uncertainty,
+- observability,
+- evidence sources i ich jakość.
 
-Dla jednej encji może istnieć więcej niż jedna potencjalna właściwość, np. dla światła ON/OFF i jasność.
+Prawdziwe pola probabilistyczne są kalibrowane na niezależnych przyszłych epizodach. Nie są tym samym co `Decision strength` polityki.
 
-## 3. Budowany jest szeroki candidate pool kontekstu
+## 3. Urządzenie ma logiczną tożsamość ponad encjami HA
 
-Wersja 0.7.12 stosuje zasadę **broad context**: prawie każda parsowalna encja HA może udowodnić, że jest predykcyjna.
+`DeviceAgent/DeviceCapabilities` wiąże agentów z fizycznym zasobem przez jawny mapping lub HA `device_id`. Friendly name nie jest używany do zgadywania tożsamości.
 
-Przykłady dopuszczonych kandydatów:
+Dzięki temu np. power i brightness jednej lampy współdzielą manual override, lease i min dwell. Dla HVAC/rolet obowiązuje kontrakt procesu o dłuższej dynamice; polityka szybkiego światła nie jest przedstawiana jako pełny model komfortu HVAC.
 
-- `binary_sensor` presence/motion,
-- ESPHome LD2411: Presence, Still Energy %, Move Energy %, odległości,
-- camera / AI score bez jednostki elektrycznej,
-- dane telefonu,
-- `person` i `device_tracker`,
-- samochód,
-- pogoda,
-- sun,
-- helpery i template sensors,
-- wirtualne encje,
-- nietypowe własne sensory,
-- kalendarz lub inne stany, jeżeli można je sparsować,
-- cechy czasu generowane przez aplikację.
+## 4. Historia targetu może być demonstracją
 
-### Twarde wykluczenia
-
-#### A. Sterowalne urządzenia
-
-Aktuator nie może być wejściem innego agenta. Adaptive AI wyklucza sterowalne encje oraz encje powiązane z wykrytym urządzeniem sterowalnym, aby uniknąć skrótów typu:
-
-`light.kitchen ON → prawdopodobnie light.stairs ON`.
-
-Model ma uczyć się przyczyny, a nie kopiować stan innego aktuatora.
-
-#### B. Telemetria elektryczna po jednostce
-
-Wykluczana jest pojedyncza encja, gdy `unit_of_measurement` jednoznacznie oznacza pomiar elektryczny, np.:
-
-- V, mV, kV,
-- A, mA,
-- W, kW,
-- VA,
-- var,
-- Wh, kWh,
-- Ah,
-- Hz,
-- ohm.
-
-Nazwa encji nie ma znaczenia. Przykładowo:
-
-- `Still Energy` z `%` → **dozwolone**,
-- `camera power score` bez `W` → **dozwolone**,
-- `sensor.x` z jednostką `W` → **wykluczone**.
-
-Nie jest wykluczane całe urządzenie tylko dlatego, że jedna z jego encji raportuje W/V/A.
-
-## 4. Aplikacja wybiera mały zestaw najbardziej użytecznych wejść
-
-Szeroki candidate pool jest używany głównie w trakcie indeksacji. Do pracy realtime nie trafiają setki encji.
-
-Model wybiera najbardziej predykcyjne sygnały dla konkretnego targetu.
-
-W UI:
-
-- `Context candidates screened` = ile encji rozważono,
-- `Selected context` = co naprawdę weszło do modelu.
-
-## 5. Dla szybkich świateł liczy się krótki szereg czasowy
-
-Dla binarnych świateł/switchy agent utrzymuje kompaktowy kontekst, domyślnie maksymalnie około 8 najważniejszych encji.
-
-Dla każdej istotnej cechy model może uwzględniać:
+Przy cold start system może wykorzystać istniejącą automatyzację i historyczne zachowanie targetu jako **demonstrację**:
 
 ```text
-wartość teraz
-zmiana względem ~1 s
-zmiana względem ~3 s
-zmiana względem ~10 s
+obserwowany kontekst -> obserwowana akcja/stan targetu
 ```
 
-Dzięki temu rozróżnia np. świeże wejście do pokoju od obecności trwającej już długo.
+To użyteczne do bootstrapu, ale nie jest fizycznym eksperymentem ani kontrfaktycznym dowodem, że każda inna akcja byłaby gorsza. Replay automatyzacji jest proxy zachowania, nie etykietą „potrzeby światła”.
 
-## 6. Wykrywany jest behavioural driver
+## 5. Domyślna polityka jest lekkim contextual bandit
 
-Adaptive AI analizuje, które zmiany kontekstu historycznie poprzedzały przełączenia targetu.
+Domyślny backend pozostaje oparty o DiagonalLinUCB / `MultiHorizonPolicy`. Działa na kompaktowym, jawnym schemacie cech wybranych z szerokiego candidate pool.
 
-Przykład:
+Ważna zasada contextual bandit:
 
 ```text
-kitchen_presence OFF → ON
-              150 ms
-IKEA light     OFF → ON
-
-kitchen_presence ON → OFF
-                ...
-IKEA light      ON → OFF
+reward znamy tylko dla logowanej / wykonanej akcji
 ```
 
-Jeżeli relacja jest powtarzalna, sensor może zostać oznaczony jako **Primary behavioural driver** i dostać zarezerwowane miejsce w kontekście, nawet jeśli nazwa lub `area_id` nie są idealnie dopasowane.
+Niewybrana akcja ma nieznany reward. System nie przypisuje jej automatycznie porażki ani sukcesu. Full-ridge LinUCB istnieje jako challenger benchmarkowy/Shadow; nie jest automatycznie instalowany jako nowy backend.
 
-## 7. Automatyzacje HA są wskazówką i benchmarkiem
+## 6. Correct i preference są jawną informacją użytkownika
 
-Adaptive AI skanuje istniejące automatyzacje, aby poznać:
+`Correct` oraz `Change decision` nie są tylko słabym rewardem do wspólnego worka danych. Są wiązane z konkretnym kontekstem, generacją i czasem.
 
-- jakie encje były triggerami,
-- jakie encje występowały w warunkach,
-- które automatyzacje sterowały targetem.
+- Correct wskazuje oczekiwaną decyzję dla obserwowanego punktu/historii.
+- Change decision zapisuje bieżącą jawnie podaną preferencję.
+- Jednorazowy wyjątek nie musi stać się trwałą regułą.
+- Trwała instrukcja nie wygasa jak statystyczna obserwacja historyczna.
+- Undo wycofuje właściwą etykietę bez kasowania niezwiązanego uczenia.
 
-Nie kopiuje automatyzacji 1:1. Są one structural prior / wskazówką do szukania istotnego kontekstu.
+## 7. Explore używa kontrolowanych eksperymentów
 
-Ostateczny benchmark jest porównywany przede wszystkim z **rzeczywistym zachowaniem targetu w historii**. Dzięki temu sterowanie przez grupę, script lub device target nie powinno zerować wyniku tylko dlatego, że trudno przypisać każdą zmianę do jednej automatyzacji.
+Eksperyment ma wersjonowany `TrialRecord` zawierający m.in.:
+- hipotezę,
+- zbiór legalnych akcji,
+- przypisaną akcję i propensity,
+- moment dispatchu i ACK,
+- źródła outcome,
+- wynik/termination reason,
+- reward, jeśli outcome jest znany,
+- marker dokładnie-jednokrotnej aplikacji do konkretnej generacji.
 
-## 8. Offline contextual RL
+ACK oznacza, że transport/urządzenie wykonało komendę. **ACK sam nie jest rewardem komfortu.** Brak wiarygodnego outcome pozostaje nieznany.
 
-Dla kolejnych fragmentów historii powstają przykłady:
+## 8. Candidate uczy się w izolacji
+
+Nowy Candidate zaczyna od dokładnego snapshotu bezpośredniego rodzica. Live nie jest trenowany „w miejscu” przez eksperyment lub dryf.
+
+Przepływ wygląda w uproszczeniu tak:
 
 ```text
-kontekst → akcja/stan targetu → ocena
+Live G0
+  -> Correct / Explore / Autonomous / Change decision
+  -> Candidate G1 (Shadow)
+  -> dalsza nauka
+  -> Candidate G2 (Shadow, porównany z G1)
 ```
 
-Model jest lokalną polityką contextual RL opartą o rodzinę LinUCB. Uczy się przewidywać stan/nastawę, która historycznie była akceptowana w podobnym kontekście.
+Rodzic pozostaje nienaruszony, a rollback może przywrócić dokładny wcześniejszy model.
 
-Historyczny reward bierze pod uwagę m.in. czas utrzymania stanu i szybkie korekty użytkownika.
+## 9. Shadow jest proxy, nie fizycznym wynikiem
 
-## 9. Benchmark na danych chronologicznie odłożonych
+W Shadow polityka wykonuje inference i może być oceniana na tych samych przyszłych epizodach co rodzic, ale nie wysyła usług HA.
 
-Model nie powinien oceniać sam siebie na tych samych przykładach, na których właśnie się nauczył. Dlatego część danych jest traktowana jako chronologiczny held-out benchmark.
+Dlatego wynik Shadow oznacza:
 
-Dla binarnych urządzeń benchmark jest zbalansowany między ON i OFF.
+> „co model przewidziałby w obserwowanym kontekście”
 
-Domyślnie kandydat musi:
+Nie oznacza:
 
-- mieć co najmniej 12 próbek benchmarkowych,
-- mieć pokrycie obu klas dla binarnego celu,
-- uzyskać **więcej niż 78%**.
+> „wiemy, jaki byłby fizyczny skutek tej niewykonanej akcji”.
 
-## 10. Kwalifikacja
+To rozróżnienie jest zachowane w provenance, EpisodeEvaluator i benchmarkach.
+
+## 10. Fizyczny outcome zaczyna się dopiero po Executorze
+
+Jedyna fizyczna ścieżka sterowania to:
 
 ```text
-pełna historia → bieżące dane
-           ↓
-Behaviour benchmark
-           ↓
-  >78%              ≤78%
-    ↓                  ↓
-QUALIFIED            PAUSED
-    ↓
-  Shadow
+policy -> ActionIntent -> safety/resource guards -> Executor -> HA service -> ACK/outcome
 ```
 
-PAUSED ogranicza zużycie CPU przez słabe modele.
+Executor sprawdza m.in. manual priority, kwalifikację, aktualność modelu i konfiguracji, legal action mask, wspólne lease, cooldown/min dwell, support/novelty, ownership i ACK.
 
-## 11. Realtime inference
+Dopiero outcome po rzeczywiście wykonanej komendzie można traktować jako skutek fizycznej akcji — i nadal trzeba poprawnie przypisać go do konkretnej próby oraz okna obserwacji.
 
-Dla zakwalifikowanego agenta zmiana wybranej encji kontekstu wybudza inference niemal natychmiast. Domyślny debounce to 25 ms.
+## 11. Confidence nie jest jedną liczbą o jednym znaczeniu
 
-Cel dla szybkiego światła nie polega na przewidywaniu ruchu kilkanaście sekund w przyszłość. Chodzi o reakcję na **pierwszy sygnał przyczynowy**, np. radar obecności, wystarczająco szybko, aby światło włączyło się przed ręcznym naciśnięciem włącznika.
+Runtime rozdziela:
+- presence probability,
+- forecast uncertainty,
+- expected action utility,
+- data coverage,
+- empirical policy quality,
+- preference alignment,
+- decision strength.
 
-## 12. Kalibracja Live confidence
+Legacy `confidence` jest zachowane dla kompatybilności, ale UI nie powinno opisywać go jako prawdopodobieństwa komfortu.
 
-Bieżący confidence nie pochodzi wyłącznie z matematycznej przewagi jednej akcji nad drugą.
+## 12. Kwalifikacja Control pozostaje konserwatywna
 
-Aplikacja pokazuje m.in.:
+Dla binarnego targetu sam wysoki średni wynik nie wystarcza. Każdy kierunek ON/OFF musi mieć osobne held-out evidence. Bieżący kontrakt wymaga co najmniej 20 próbek na akcję oraz 95% dolnej granicy Wilsona powyżej 78%.
 
-- `Structural confidence`,
-- held-out backtest accuracy,
-- confidence ceiling,
-- support,
-- novelty.
+Cold start bez dowodów daje Shadow/fallback i informację o brakującym evidence — nie niższy próg.
 
-Finalne Live confidence jest ograniczane przez historyczną kalibrację, aby model nie pokazywał np. 95% tylko dlatego, że jego wewnętrzny score jest mocny.
+## 13. Promocja używa oddzielnego przyszłego testu
 
-## 13. Control
+Candidate ma oddzielone:
+1. dane użyte do budowy/wyboru challengera,
+2. przyszłe dane finalnej oceny.
 
-W Control przed wysłaniem komendy sprawdzane są m.in.:
+Po rozpoczęciu final evaluation okno jest zamrażane. Regularne podglądanie statusu nie może rozszerzać testu, aż wynik stanie się korzystny. Named validation gates zachowują każde veto, a promocja jest atomowa.
 
-- kwalifikacja agenta,
-- confidence,
-- history support,
-- novelty,
-- cooldown/action interval,
-- pending feedback i timing urządzenia,
-- konflikt z automatyzacjami,
-- priorytet ręcznej zmiany użytkownika.
+## 14. Dryf tworzy Candidate zamiast resetować Live
 
-Dopiero wtedy wywoływana jest usługa Home Assistant.
+Monitor może rozróżnić:
+- awarię sensora,
+- zmianę topologii/przeniesienie sensora,
+- nowy zwyczaj,
+- nową preferencję.
+
+Trwałe pogorszenie może rozpocząć izolowaną adaptację. Przejściowa awaria nie powinna powodować natychmiastowego retrainingu. Po promocji monitorowana jest liczba epizodów do odzyskania jakości oraz możliwość rollbacku.
+
+## 15. Historia i trening mają ograniczony koszt operacyjny
+
+Normalny status korzysta z cursorów i sufficient statistics. Teach-RL wykonuje bounded batch as-of zamiast N+1 zapytań. Heavy jobs mają ograniczoną kolejkę i backpressure. Surowe dowody potrzebne do audytu, Undo, replay i rollbacku pozostają zachowane.
+
+## 16. Benchmark produktu F24
+
+`tools/benchmark_product_runtime.py` symuluje ukrytą prawdziwą obecność oraz ukrytą potrzebę światła **poza** mapą obserwacji. Sensory mają opóźnienia, noise, missingness oraz różne formaty. Światło wpływa na późniejszy odczyt lux, więc model może zostać ukarany za skróty oparte na skutku własnej akcji.
+
+Scenariusze obejmują:
+- jednego i dwóch domowników,
+- rozwidlenie ruchu,
+- bezruch,
+- brak przyjścia,
+- szybki powrót,
+- dzień/noc,
+- jawną zmianę preferencji,
+- fałszywy sensor,
+- przeniesiony sensor,
+- zmianę zwyczaju.
+
+Dane są dzielone na train, validation i untouched future test. Porównywane są fixed automation, bieżąca polityka produkcyjna, challenger full-ridge w Shadow i conservative fallback. Raportuje się needed light, false ON, premature OFF, opóźnienie, chatter, korekty/100 epizodów i koszt obliczeń z wieloma seedami i przedziałami niepewności.
+
+Benchmark nie obniża progu kwalifikacji i nie wstawia gotowego pozytywnego `benchmark_score`. Jeżeli bieżąca polityka lub challenger nie spełnia kryteriów, raport ma to pokazać. **Brak poprawy jest prawidłowym wynikiem.** Benchmark sam nigdy nie wdraża nowego backendu.
