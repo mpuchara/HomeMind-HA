@@ -7,7 +7,7 @@ import math
 import threading
 from collections import OrderedDict
 from control import timing_for, legal_value, review_status, same_value
-from context import target_value
+from context import target_value, target_call
 from settings import (OPTIONS, now_ts)
 from storage import STORE
 from ha import HA, AUTOMATION_KNOWLEDGE
