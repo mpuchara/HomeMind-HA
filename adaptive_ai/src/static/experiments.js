@@ -2,7 +2,13 @@
 (() => {
   const focusNames={presence:'Presence boundary',environment:'Environment boundary',devices:'Other device activity'};
   const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-  const request=async(path,opts={})=>{const r=await fetch(path,{headers:{'Content-Type':'application/json'},...opts});let body={};try{body=await r.json();}catch(_){ }if(!r.ok)throw Error(body.error||`HTTP ${r.status}`);return body;};
+  const request=async(path,opts={})=>{
+    const method=String(opts.method||'GET').toUpperCase();
+    const timeout=(method==='GET'||method==='HEAD')?{adaptiveAiTimeoutMs:20000}:{};
+    const r=await fetch(path,{headers:{'Content-Type':'application/json'},...timeout,...opts});
+    let body={};try{body=await r.json();}catch(_){ }
+    if(!r.ok)throw Error(body.error||`HTTP ${r.status}`);return body;
+  };
   const pct=v=>v==null?'—':`${Number(v)>=0?'+':''}${(Number(v)*100).toFixed(1)}%`;
 
   const dialog=document.createElement('dialog');
@@ -93,9 +99,9 @@
       };
       setMode(explore.session?.mode==='targeted_sensor'?'targeted_sensor':'free');
       if(!dialog.open)dialog.showModal();
-    }catch(error){alert(error.message);}
+    }catch(error){alert(`Explore failed: ${error.message}`);}
   };
 
-  // Compatibility entry point for any old card cached in a browser during upgrade.
+  // Compatibility entry point for old cards cached in a browser during upgrade.
   window.openExperiments=id=>window.openExplore(id);
 })();
