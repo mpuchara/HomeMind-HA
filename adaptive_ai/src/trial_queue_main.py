@@ -5,14 +5,16 @@ Runtime path:
 
 Stage 11 binds durable TrialRecord knowledge to generation-aware Explore. Stage 13 installs
 the semantic/calibration contract after all Candidate comparison layers exist. Stage 14
-then adds cold-start evidence reporting and drift monitoring. These layers are installed
-before workers start and do not add a physical-control path; Executor remains the only
-Home Assistant service dispatcher.
+adds cold-start evidence reporting and drift monitoring. Stage 15 exposes the registry-backed
+DeviceAgent/DeviceCapabilities contract already enforced directly by Executor. These layers
+are installed before workers start and do not add a physical-control path; Executor remains
+the only Home Assistant service dispatcher.
 """
 import preference_queue_main as runtime
 from cold_start_drift import install as install_cold_start_drift
 from confidence_contract import install as install_confidence_contract
 from confidence_runtime import install_runtime_semantics
+from device_agents import install_runtime as install_device_agent_runtime
 from trial_knowledge import install as install_trial_knowledge
 
 core = runtime.core
@@ -28,6 +30,7 @@ def prepare_engine_extensions():
     manager = install_confidence_contract(manager)
     install_runtime_semantics(core.ENGINE, manager.confidence_probability_journal)
     manager = install_cold_start_drift(manager)
+    install_device_agent_runtime(core.ENGINE)
     core.ENGINE.agent_candidates = manager
     core.STORE.event(
         None, "info", "trial_knowledge_ready",
@@ -61,6 +64,16 @@ def prepare_engine_extensions():
             "candidate_isolation": True,
             "promotion": "existing_stage13_fixed_future_gate",
             "action_boundary": "monitoring_and_candidate_orchestration_only_no_dispatch",
+        },
+    )
+    device_service = getattr(getattr(core.ENGINE, "executor", None), "device_agents", None)
+    core.STORE.event(
+        None, "info", "device_agent_contract_ready",
+        "Registry-backed DeviceAgent capabilities and shared-resource arbitration are active",
+        {
+            "contract": device_service.contract() if device_service is not None else None,
+            "install_order": "executor_contract_then_runtime_diagnostics_before_workers",
+            "action_boundary": "resource_arbiter_never_dispatches_executor_only",
         },
     )
 

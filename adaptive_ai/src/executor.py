@@ -1,13 +1,13 @@
 """The ONLY module permitted to send Home Assistant service actions.
 
 All predictions, including Shadow, arrive as immutable ActionIntent instances.
-Each target has a serial dispatch lock; validation uses fresh store/state values.
+Each logical device/resource has a serial dispatch lock; validation uses fresh store/state values.
 """
 import math
 import threading
 from collections import OrderedDict
 from control import timing_for, legal_value, review_status, same_value
-from context import target_call, target_value
+from context import target_value, target_call
 from settings import (OPTIONS, now_ts)
 from storage import STORE
 from ha import HA, AUTOMATION_KNOWLEDGE
@@ -15,6 +15,7 @@ from telemetry import TELEMETRY
 from rewards import RewardEngine
 from control_handoff import ControlHandoff
 from qualification import assess_control_qualification
+from device_agents import DeviceAgentService
 
 
 class Executor:
@@ -24,6 +25,7 @@ class Executor:
         self.locks = {}
         self.locks_guard = threading.Lock()
         self.dispatched = OrderedDict()
+        self.device_agents = DeviceAgentService(engine, STORE)
         self.handoff = ControlHandoff(
             STORE,
             lambda: dict(self.engine.state_map),
@@ -37,8 +39,12 @@ class Executor:
         )
 
     def target_lock(self, entity):
+        # Backwards-compatible API used by training/promote paths.  Entity identity is
+        # normalized to the physical/logical device so sibling power/brightness entities
+        # cannot enter independent critical sections.
+        key = self.device_agents.primary_resource_for_entity(entity)
         with self.locks_guard:
-            return self.locks.setdefault(entity, threading.RLock())
+            return self.locks.setdefault(key, threading.RLock())
 
     def _service(self, domain, action, data):
         return HA.service(domain, action, data)
@@ -49,13 +55,16 @@ class Executor:
             current = STORE.get_agent_config(agent['id'])
             if not current or not current['enabled'] or current.get('training_state') != 'qualified':
                 raise ValueError('Control requires an enabled, qualified agent')
+            device_gate = self.device_agents.control_eligibility(current)
+            if not device_gate['allowed']:
+                raise ValueError('Device contract: ' + str(device_gate['reason']))
             qualification = assess_control_qualification(current)
             if not qualification['passed']:
                 raise ValueError('Control qualification: ' + qualification['reason'])
             conflicts = [a for a in STORE.list_agent_configs() if a['id'] != current['id'] and a['enabled']
-                         and a['mode'] == 'control' and a['target_entity'] == current['target_entity']]
+                         and a['mode'] == 'control' and self.device_agents.conflicts(a, current)]
             if conflicts:
-                raise ValueError('Another Control agent owns this entity')
+                raise ValueError('Another Control agent owns this shared device/resource')
             disabled = self.handoff.acquire(current, refresh_scan=refresh)
             warning = AUTOMATION_KNOWLEDGE.error
             self.engine.runtime.setdefault(agent['id'], {})['automation_scan_warning'] = warning
@@ -71,6 +80,8 @@ class Executor:
             return self.handoff.release(agent, reason)
 
     def reconcile_control(self):
+        # Existing entity-level handoff journals remain authoritative for restoring HA
+        # automations.  Shared-device conflicts are prevented on every new Control take.
         return self.handoff.reconcile()
 
     def release_all_control(self, reason='shutdown'):
@@ -85,6 +96,8 @@ class Executor:
         return result
 
     def submit(self, intent, features=None, action_index=None):
+        # target_lock normalizes entity -> logical device, so two agents or two entity ids
+        # that address one physical lamp serialize before validation/dispatch.
         with self.target_lock(intent.target_entity):
             return self._submit(intent, features or {}, action_index)
 
@@ -156,6 +169,9 @@ class Executor:
             return reject('novelty: context outside supported distribution')
         if timestamp < rt.get('manual_override_until', 0):
             return reject('manual: explicit user override active')
+        shared_manual_until = self.device_agents.shared_manual_hold_until(agent, engine.runtime)
+        if timestamp < shared_manual_until:
+            return reject('manual: explicit user override active on shared device/resource')
         if timestamp < rt.get('takeover_retry_after', 0):
             return reject('takeover: retry backoff', decision='waiting')
         if state.get('state') in ('opening', 'closing') and agent['target_property'] == 'position':
@@ -188,6 +204,11 @@ class Executor:
             return reject('retry: device backoff', decision='waiting')
         if timestamp - rt.get('last_ai_ts', 0) < max(float(agent['action_interval']), timing.settling):
             return reject('cooldown: minimum action interval', decision='waiting')
+        resource_mask = self.device_agents.legal_action_mask(
+            agent, state, [value], runtime_by_agent=engine.runtime, now=timestamp
+        )
+        if not resource_mask['actions'][0]['legal']:
+            return reject('resource: ' + str(resource_mask['actions'][0]['reason']), decision='waiting')
         if intent.expired(now_ts()):
             return reject('expired: TTL exceeded before dispatch', 'EXPIRED')
         fresh = STORE.get_agent_config(agent['id'])
@@ -197,25 +218,42 @@ class Executor:
             if engine.state_map.get(intent.target_entity) != state or engine.context.home.revision != intent.context_revision or any(
                     engine.entity_revisions.get(eid, 0) != rev for eid, rev in intent.context_dependencies):
                 return reject('context: state changed before dispatch', decision='waiting')
-        domain, service, data = target_call(intent.target_entity, intent.target_property, value, state)
+        plan = self.device_agents.dispatch_plan(agent, state, value)
+        domain, service, data = plan['domain'], plan['service'], plan['data']
         if intent.experiment_token and not engine.experiments.valid(agent, intent):
             return reject('experiment: settings changed before dispatch')
         if intent.teaching_id and not engine.teaching.valid(agent, intent, engine):
             return reject('teaching: user label revoked before dispatch')
+
+        reservation = self.device_agents.reserve_dispatch(
+            agent, intent.intent_id, now=timestamp,
+            ttl=max(float(agent['action_interval']), timing.settling),
+        )
+        if not reservation:
+            return reject('resource: shared resource lease/min-dwell is active', decision='waiting')
         if intent.experiment_token and not engine.experiments.begin(agent, intent, engine.state_map):
+            self.device_agents.finish_dispatch(reservation, success=False)
             return reject('experiment: another probe is active or this trial was revoked', decision='waiting')
-        rt.update(last_service_ts=now_ts(), last_service=f'{domain}.{service}', last_service_data=data)
+        rt.update(last_service_ts=now_ts(), last_service=f'{domain}.{service}', last_service_data=data,
+                  device_dispatch_semantics=plan.get('semantics'))
         engine.record_command(agent, value)
         started = now_ts()
         try:
             response = self._service(domain, service, data)
             engine.record_command(agent, value, response)
         except Exception as exc:
+            self.device_agents.finish_dispatch(reservation, success=False)
             if intent.experiment_token:
                 engine.experiments.cancel(agent['id'], 'service failure: outcome unknown')
             rt.update(retry_after=now_ts()+max(2, timing.settling), last_service_ok=False,
                       last_service_error=f'{type(exc).__name__}: {exc}')
             return reject('service: ' + str(exc), decision='error')
+        self.device_agents.finish_dispatch(
+            reservation, success=True,
+            action={"domain": domain, "service": service, "data": data, "value": value,
+                    "property": agent['target_property']},
+            now=started,
+        )
         self.dispatched[intent.intent_id] = started
         if intent.experiment_token:
             engine.experiments.dispatched(agent, intent, engine.state_map)
@@ -249,22 +287,46 @@ class Executor:
             agent = STORE.get_agent_config(agent['id'])
             if not agent or agent['mode'] != 'control' or not agent['enabled'] or agent.get('training_state') != 'qualified':
                 raise ValueError('Verify sends a service and is available only in qualified Control')
+            device_gate = self.device_agents.control_eligibility(agent)
+            if not device_gate['allowed']:
+                raise ValueError('Device contract: ' + str(device_gate['reason']))
             qualification = assess_control_qualification(agent)
             if not qualification['passed']:
                 raise ValueError('Control qualification: ' + qualification['reason'])
             rt = self.engine.runtime.setdefault(agent['id'], {})
             if now_ts() < rt.get('manual_override_until', 0) or rt.get('pending'):
                 raise ValueError('Manual override or pending command')
+            if now_ts() < self.device_agents.shared_manual_hold_until(agent, self.engine.runtime):
+                raise ValueError('Manual override active on shared device/resource')
             self.take_control(agent)
             state = self.engine.state_map.get(agent['target_entity'])
             value = target_value(state, agent['target_property'])
             if value is None:
                 raise ValueError('Target unavailable')
             value = legal_value(agent, state, value)
-            domain, service, data = target_call(agent['target_entity'], agent['target_property'], value, state)
+            mask = self.device_agents.legal_action_mask(agent, state, [value], runtime_by_agent=self.engine.runtime)
+            if not mask['actions'][0]['legal']:
+                raise ValueError('Shared resource guard: ' + str(mask['actions'][0]['reason']))
+            plan = self.device_agents.dispatch_plan(agent, state, value)
+            reservation = self.device_agents.reserve_dispatch(
+                agent, f"verify:{agent['id']}:{now_ts()}",
+                ttl=max(float(agent['action_interval']), timing_for(agent).settling),
+            )
+            if not reservation:
+                raise ValueError('Shared resource lease/min-dwell is active')
             self.engine.record_command(agent, value)
-            response = self._service(domain, service, data)
-            self.engine.record_command(agent, value, response)
-            rt.update(last_service_ts=now_ts(), last_service=f'{domain}.{service}', last_service_ok=True)
-            return {'ok': True, 'service': f'{domain}.{service}', 'service_data': data,
+            try:
+                response = self._service(plan['domain'], plan['service'], plan['data'])
+                self.engine.record_command(agent, value, response)
+            except Exception:
+                self.device_agents.finish_dispatch(reservation, success=False)
+                raise
+            self.device_agents.finish_dispatch(
+                reservation, success=True,
+                action={"domain": plan['domain'], "service": plan['service'], "data": plan['data'],
+                        "value": value, "property": agent['target_property']},
+            )
+            rt.update(last_service_ts=now_ts(), last_service=f"{plan['domain']}.{plan['service']}",
+                      last_service_ok=True, device_dispatch_semantics=plan.get('semantics'))
+            return {'ok': True, 'service': f"{plan['domain']}.{plan['service']}", 'service_data': plan['data'],
                     'current_value': value, 'ha_response': response}
