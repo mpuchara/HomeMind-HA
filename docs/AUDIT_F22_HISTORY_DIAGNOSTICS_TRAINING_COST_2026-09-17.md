@@ -110,6 +110,58 @@ The script reports:
 
 The CI workflow runs a smaller smoke profile. CI/desktop numbers are **not Raspberry Pi measurements**. The script labels a run as Raspberry Pi only if `/proc/device-tree/model` identifies Pi hardware.
 
+### Measured CI smoke on exact PR head
+
+Exact head: `df8d396fb5a1ddc98c3a0a8b1fc7ceaecdddc7b5`
+
+Workflow: `Validate HomeMind`, run `35232855153`, Python 3.11 benchmark job. The test matrix also passed on Python 3.13; the benchmark is intentionally executed only once on Python 3.11.
+
+Environment reported by the benchmark:
+
+- GitHub-hosted Ubuntu 24.04 runner / Azure x86_64;
+- Linux `6.17.0-1022-azure`;
+- Python `3.11.16`;
+- 4 logical CPUs;
+- `raspberry_pi=false`;
+- measurement scope: **non-Pi host; do not quote as Raspberry Pi performance**.
+
+Synthetic smoke dataset:
+
+- 500 Candidate pairs;
+- 4 decision rows per pair;
+- 48 Teach sensor candidates;
+- 12 active Teach labels.
+
+Same-data correctness:
+
+- maximum absolute fast-metric difference: `5.3290705182007514e-14` (floating-point accumulation order only);
+- Teach supervised score maximum difference: `0.0`;
+- Teach `scores_equal=true`.
+
+Query shape and elapsed time on this CI host:
+
+- legacy fast metrics: `1004` SELECT statements, `14.85 ms`;
+- optimized cold fast metrics: `8` SELECT statements, `10.05 ms`;
+- optimized warm 20 status polls: `100` SELECT statements total, `2.55 ms` total, `0.153 ms` p95 per poll;
+- legacy Teach supervised scoring: `96` SELECT statements, `10.33 ms`;
+- optimized Teach scoring: `2` SELECT statements, `10.81 ms`.
+
+The small Teach smoke deliberately demonstrates the query-count reduction, not a claimed wall-clock speedup: on this tiny in-memory/CI-sized case the batched query overhead is approximately equal to the old path. The expected scaling advantage is that the optimized query count and Python materialization no longer grow as two full history reads per sensor.
+
+Concurrent synthetic load on this CI host:
+
+- inference calls: `1800`;
+- inference p50: `0.0616 ms`;
+- inference p95: `0.0756 ms`;
+- inference max: `0.154 ms`;
+- Candidate/status p95 while Teach scoring runs: `4.91 ms`;
+- Candidate/status max: `5.14 ms`;
+- Stage-17 write commit p95/max observed in the smoke: about `0.100 ms`;
+- peak process RSS: `25.41 MB`;
+- peak RSS increase from benchmark start: `2.75 MB`.
+
+These numbers validate the scaling shape and non-blocking behavior on the CI machine only. They are not Home Assistant deployment numbers and are not Pi numbers.
+
 ## Proposed Raspberry Pi budgets
 
 These are initial acceptance **budgets, not measured Pi results**:
