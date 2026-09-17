@@ -7,9 +7,11 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class ManualFeedbackButtonContract(unittest.TestCase):
-    def test_card_has_exactly_five_generation_workflow_actions(self):
+    def test_model_ready_card_has_exactly_five_generation_workflow_actions(self):
         text = (ROOT / "adaptive_ai/src/static/agent_workflow_ui.js").read_text(encoding="utf-8")
-        template = text.split("actions.innerHTML=", 1)[1].split("`;", 1)[0]
+        templates = re.findall(r'actions\.innerHTML=`([^`]+)`;', text)
+        template = next((value for value in templates if 'data-wf="auto"' in value), None)
+        self.assertIsNotNone(template, "model-ready generation workflow action template missing")
         actions = re.findall(r'data-wf="([^"]+)"', template)
         self.assertEqual(actions, ["auto", "correct", "explore", "change", "settings"])
         self.assertIn(">Autonomous<", template)
