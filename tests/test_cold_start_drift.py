@@ -1,5 +1,6 @@
 import json
 import tempfile
+import time
 import unittest
 from contextlib import contextmanager
 from pathlib import Path
@@ -129,6 +130,14 @@ class ColdStartTests(unittest.TestCase):
         self.assertLessEqual(len(report['optional_questions']), 2)
         self.assertTrue(all(item['optional'] for item in report['optional_questions']))
         self.assertTrue(all(item['auto_dispatch'] is False for item in report['optional_questions']))
+
+    def test_no_recognized_sensors_stays_cold_start_not_sensor_failure(self):
+        for ts in range(1, 7):
+            env = self.service._environment_from_runtime(self.agent, {})
+            self.service.record_environment(self.agent['id'], ts, **env)
+        detection = self.service.detect(self.agent['id'])
+        self.assertFalse(detection['detected'])
+        self.assertEqual(detection['environment_shift']['new_sensor_count'], 0)
 
     def test_decay_contract_never_expires_persistent_instruction_or_trains_regression_anchor(self):
         contract = decay_contract()
@@ -279,13 +288,14 @@ class RecoveryTests(unittest.TestCase):
         new_model = {'version': 10, 'model_revision': 'new', 'schema': {'version': 11}}
         self.store.save_model(self.aid, old_model)
         root = self.store.get_agent_config(self.aid)
+        now = time.time()
         with self.store.lock, self.store.conn() as c:
             row = c.execute(
                 """INSERT INTO agent_generation_backups
                    (agent_id,generation,created_ts,expires_ts,model_json,agent_json,comparison_json)
                    VALUES(?,?,?,?,?,?,?)""",
                 (
-                    self.aid, 0, 100.0, 100000.0, json.dumps(old_model),
+                    self.aid, 0, now, now + 86400.0, json.dumps(old_model),
                     json.dumps(root, default=str), '{}',
                 ),
             )
