@@ -132,7 +132,11 @@
           };
           const title=labels[reason]||'Background training';
           const elapsed=active.started_at?Math.max(0,Date.now()/1000-Number(active.started_at)):0;
-          panel.innerHTML=`<div class="history-head"><div><b>${esc(title)}</b><span>${esc(active.name||active.agent_id||'agent')} · ${esc(reason)}</span></div><div class="history-percent"><strong>ACTIVE</strong><small>${Math.round(elapsed)} s</small></div></div><div class="history-timing"><b>Low-power historical worker</b><span>Only one heavy job runs at a time. Live control remains available.</span></div>`;
+          const lp=status.low_power_runtime||{};
+          const duty=Math.round(Number(lp.training_cpu_duty_cycle||0)*100);
+          const batch=Number(lp.archive_batch_rows||0);
+          const budget=duty?`CPU budget ${duty}%${batch?` · batch ${batch}`:''}`:'Pi-safe CPU budget';
+          panel.innerHTML=`<div class="history-head"><div><b>${esc(title)}</b><span>${esc(active.name||active.agent_id||'agent')} · ${esc(reason)}</span></div><div class="history-percent"><strong>ACTIVE</strong><small>${Math.round(elapsed)} s</small></div></div><div class="history-timing"><b>${esc(budget)}</b><span>Only one heavy job runs at a time. UI/status use lightweight reads while training.</span></div>`;
         }
       }
       return result;
