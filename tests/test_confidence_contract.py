@@ -135,11 +135,18 @@ class FixedFutureEvaluationTests(unittest.TestCase):
         selection = [pair(i, i % 2, True) for i in range(12)]
         first = self.epochs.ensure('g0', 'g1', 'rev-a', 'diagonal_linucb:v10', selection)
         self.assertIsNotNone(first)
+
+        # Backend-only change must create a distinct evaluation identity even when a
+        # producer accidentally reuses the source model revision string.
+        backend_only = self.epochs.ensure('g0', 'g1', 'rev-a', 'full_ridge_linucb:v1', selection)
+        self.assertIsNotNone(backend_only)
+        self.assertNotEqual(first['model_revision'], backend_only['model_revision'])
+        self.assertNotEqual(first['backend_key'], backend_only['backend_key'])
+
         self.assertIsNone(self.epochs.get('g0', 'g1', 'rev-b'))
         second = self.epochs.ensure('g0', 'g1', 'rev-b', 'full_ridge_linucb:v1', selection)
         self.assertIsNotNone(second)
         self.assertNotEqual(first['model_revision'], second['model_revision'])
-        self.assertNotEqual(first['backend_key'], second['backend_key'])
 
 
 class ContractParityTests(unittest.TestCase):
@@ -149,6 +156,7 @@ class ContractParityTests(unittest.TestCase):
         self.assertEqual(descriptor['selection_min_independent_episodes'], DEFAULT_SELECTION_EPISODES)
         self.assertEqual(descriptor['final_min_independent_episodes'], DEFAULT_FINAL_EPISODES)
         self.assertEqual(descriptor['final_min_per_action'], DEFAULT_MIN_PER_ACTION)
+        self.assertIn('backend identity', descriptor['backend_recalibration'])
 
         build = json.loads((ROOT / 'adaptive_ai' / 'BUILD_INFO.json').read_text(encoding='utf-8'))
         self.assertEqual(build['confidence_contract_version'], CONTRACT_VERSION)
