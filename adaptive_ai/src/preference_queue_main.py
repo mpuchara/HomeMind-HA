@@ -4,10 +4,11 @@ The existing ``fast_queue_main`` stack remains authoritative. Dependency-sensiti
 Candidate/Tournament additions use the explicit composition hooks exposed there; no
 installer function is monkey-patched.
 
-EpisodeEvaluator and the unified ManualFeedbackJournal are first-class services created
-before the fast runtime extensions, so Live outcomes, Experiments, Teaching/Teach-RL,
-Candidate and Sensor Tournament share durable contracts before any HA worker can observe
-state. Provenance and the observation schema are composed before EventStream/History start.
+EpisodeEvaluator, the unified ManualFeedbackJournal and the explicit light PreferenceModel
+are first-class services created before the fast runtime extensions, so Live outcomes,
+Experiments, Teaching/Teach-RL, Candidate and Sensor Tournament share durable contracts
+before any HA worker can observe state. Provenance and the observation schema are composed
+before EventStream/History start.
 """
 import fast_queue_main as runtime
 from agent_candidate_card_summary import install as install_candidate_card_summary
@@ -23,6 +24,7 @@ from episode_evaluator_runtime import (
 from manual_feedback_live_isolation import install as install_manual_feedback_live_isolation
 from manual_feedback_unified import UnifiedManualFeedbackJournal
 from manual_feedback_workflow import install as install_manual_feedback_workflow
+from preference_model import LightingPreferenceModel, PreferenceDecisionComposer
 from provenance_runtime import install as install_provenance_runtime
 from observation_contract import install as install_observation_contract
 
@@ -45,6 +47,13 @@ def prepare_engine_extensions():
         core.ENGINE.manual_feedback_journal = feedback
     if getattr(core.ENGINE, "teaching", None) is not None:
         core.ENGINE.teaching.feedback_journal = feedback
+
+    # Stage 07 is an explicit service, not another process_agent monkey patch. Engine owns
+    # the decision-composition contract; the final entrypoint only supplies the light-power
+    # preference model backed by Stage-06 durable feedback facts.
+    preference = LightingPreferenceModel(core.STORE)
+    core.ENGINE.preference_model = preference
+    core.ENGINE.decision_composer = PreferenceDecisionComposer(core.ENGINE, preference)
 
     installed = {"manager": None, "tournament": None}
 
@@ -72,7 +81,8 @@ def prepare_engine_extensions():
         runtime.set_engine_extension_hook("after_candidate_shadow_context", "preference_and_episode", None)
 
     # The legacy Engine still contains direct manual-demonstration updates. Suppress only
-    # those exact physical-user updates; ordinary outcome rewards remain untouched.
+    # those exact physical-user updates; ordinary physical/environment outcomes remain
+    # separate from Stage-07 preference evidence.
     install_manual_feedback_live_isolation(core)
 
     # Provenance can now resolve decision_id/episode_id for all feedback recorded after
@@ -96,12 +106,12 @@ def prepare_engine_extensions():
 
     core.STORE.event(
         None, "info", "candidate_preference_metrics_ready",
-        "Candidate preference, episode evaluation and unified manual feedback enabled",
+        "Candidate metrics, episode evaluation, unified feedback and explicit preference model enabled",
         {
             "contract": getattr(manager, "candidate_preference_contract", None),
             "metric": getattr(manager, "candidate_fast_metric", None),
             "half_life_opportunities": getattr(manager, "candidate_preference_half_life_opportunities", None),
-            "install_order": "episode_and_manual_feedback_before_fast_stack;explicit_hooks;candidate_before_atomic_promote",
+            "install_order": "episode_manual_feedback_preference_before_fast_stack;explicit_hooks;candidate_before_atomic_promote",
             "episode_evaluator_contract": 1,
             "episode_domain": "light_power",
             "episode_candidate_contract": getattr(manager, "candidate_episode_contract", None),
@@ -116,7 +126,16 @@ def prepare_engine_extensions():
             "manual_feedback_live_weights": "physical_manual_updates_suppressed_candidate_only",
             "manual_feedback_undo": "retire_labels_and_context_then_full_rebuild_candidate_no_inverse_update",
             "manual_feedback_workflow": getattr(manager, "manual_feedback_workflow_contract", None),
-            "composition_contract": "fast_queue_named_engine_extension_hooks",
+            "preference_contract": preference.CONTRACT_VERSION,
+            "preference_model_version": preference.MODEL_VERSION,
+            "preference_domain": "light_power",
+            "preference_sources": "explicit_action_label+explicit_action_rating_only",
+            "preference_bootstrap": "historical_policy_fallback_not_preference_evidence",
+            "preference_episode_outcome": "separate_environment_measurement_not_preference_evidence",
+            "preference_no_feedback": "no_preference_evidence",
+            "preference_decision_order": "executor_constraints_after_scoped_instruction_then_preference_then_bootstrap_or_experiment",
+            "preference_action_boundary": "decision_only_no_actionintent_creation_no_executor_dispatch",
+            "composition_contract": "engine_decision_composer+fast_queue_named_engine_extension_hooks",
             "card_decisions": getattr(manager, "candidate_card_decision_contract", None),
             "candidate_display": getattr(manager, "candidate_display_contract", None),
             "live_agent_cards": bool(getattr(core, "_agent_live_card_refresh_installed", False)),
