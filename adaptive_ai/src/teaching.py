@@ -274,8 +274,6 @@ class Teaching:
             agent = self.store.get_agent_config(agent["id"])
             if not agent:
                 raise ValueError("Agent no longer exists")
-            if str(agent.get("training_state") or "") == "training":
-                raise ValueError("Trwa trening historyczny. Naucz Desired po jego zakończeniu.")
             if sample_ts is None:
                 timestamp = time.time()
                 with engine.lock:
@@ -300,8 +298,6 @@ class Teaching:
 
             journal_row = None
             journal = self.feedback_journal or getattr(engine, "manual_feedback_journal", None)
-            # Preserve the established public Teaching sources. Stage-06-specific callers
-            # pass an explicit source; old chart/live callers still see history/wrong_decision.
             effective_source = source or ("history" if sample_ts is not None else "wrong_decision")
             if journal is not None:
                 journal_row = journal.record(
@@ -340,10 +336,8 @@ class Teaching:
                 self.cache.pop(agent["id"], None)
 
             if journal is not None and journal_row is not None:
-                journal.link(
-                    journal_row["feedback_id"], "learning", "teaching_label", label_id,
-                    metadata={"source": effective_source},
-                )
+                journal.link(journal_row["feedback_id"], "learning", "teaching_label", label_id,
+                             metadata={"source": effective_source})
                 journal_row = journal.set_status(
                     journal_row["feedback_id"], "applied",
                     immediate_effect={"runtime_override": True, "physical_change": False},
@@ -352,15 +346,11 @@ class Teaching:
                 )
 
             self.refresh(engine, agent)
-            result = {
-                "ok": True, "label_id": label_id, "desired_value": desired,
-                "sample_ts": timestamp, "current_value": current,
-            }
+            result = {"ok": True, "label_id": label_id, "desired_value": desired,
+                      "sample_ts": timestamp, "current_value": current}
             if journal_row is not None:
-                result.update(
-                    feedback_id=journal_row["feedback_id"], feedback=journal_row,
-                    ui_message=journal.ui_summary(journal_row),
-                )
+                result.update(feedback_id=journal_row["feedback_id"], feedback=journal_row,
+                              ui_message=journal.ui_summary(journal_row))
             listener = self.candidate_feedback_listener
             if callable(listener):
                 listener("teaching_added", agent, result)
@@ -387,10 +377,8 @@ class Teaching:
                 result = journal.undo(linked_feedback, engine=engine, candidate_manager=manager)
                 self.cache.pop(agent["id"], None)
                 self.refresh(engine, agent)
-                return {
-                    "ok": True, "feedback_id": linked_feedback, "feedback": result,
-                    "undone_id": None, "ui_message": journal.ui_summary(result),
-                }
+                return {"ok": True, "feedback_id": linked_feedback, "feedback": result,
+                        "undone_id": None, "ui_message": journal.ui_summary(result)}
 
             with self.lock, self.store.lock, self.store.conn() as c:
                 row = c.execute(
@@ -456,20 +444,16 @@ class Teaching:
 
     @staticmethod
     def lags():
-        return {
-            0, *parse_fast_series_lags(), float(OPTIONS.get("temporal_short_seconds", 60)),
-            float(OPTIONS.get("temporal_long_seconds", 300)),
-        }
+        return {0, *parse_fast_series_lags(), float(OPTIONS.get("temporal_short_seconds", 60)),
+                float(OPTIONS.get("temporal_long_seconds", 300))}
 
     def point(self, engine, agent, timestamp):
         timestamp = self.timestamp(timestamp)
         states, temporal, policy = self.point_context(engine, agent, timestamp)
         current = target_value(states.get(agent["target_entity"]), agent["target_property"])
         value, label = self.predict(agent, policy, states, temporal, timestamp)
-        return {
-            "ts": timestamp, "current": current, "desired": value if current is not None else None,
-            "teaching_id": label, "context_complete": bool(signature(policy, states, temporal, timestamp)),
-        }
+        return {"ts": timestamp, "current": current, "desired": value if current is not None else None,
+                "teaching_id": label, "context_complete": bool(signature(policy, states, temporal, timestamp))}
 
     def history(self, engine, agent, start, end):
         start, end = self.timestamp(start), self.timestamp(end)
@@ -528,16 +512,12 @@ class Teaching:
                     "SELECT ts,desired FROM decision_history WHERE agent_id=? AND ts>=? AND ts<=? ORDER BY ts LIMIT 2001",
                     (agent["id"], start, end),
                 )]
-            return {
-                "points": points, "recorded": recorded[:2000],
-                "recorded_truncated": len(recorded) > 2000,
-                "start": start, "end": end, "reduced": reduced,
-                "desired_source": "current_policy_replay",
-                "labels": [
-                    {k: r[k] for k in ("id", "sample_ts", "desired", "source")}
-                    for r in self.labels(agent["id"])
-                ],
-            }
+            return {"points": points, "recorded": recorded[:2000],
+                    "recorded_truncated": len(recorded) > 2000,
+                    "start": start, "end": end, "reduced": reduced,
+                    "desired_source": "current_policy_replay",
+                    "labels": [{k: r[k] for k in ("id", "sample_ts", "desired", "source")}
+                               for r in self.labels(agent["id"])]}
         finally:
             self.history_slots.release()
 
