@@ -53,12 +53,39 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Build install package
-        run: zip -r HomeMind-Adaptive-AI.zip adaptive_ai
-      - name: Upload install package
+      - name: Build both install package layouts
+        run: |
+          zip -r HomeMind-Adaptive-AI-repository.zip adaptive_ai
+          (cd adaptive_ai && zip -r ../HomeMind-Adaptive-AI-addon-root.zip .)
+      - name: Verify packaged active version and layout
+        run: |
+          python - <<'PY'
+          import json, re, zipfile
+          from pathlib import Path
+          expected = re.search(r'^version: "([^"]+)"', Path('adaptive_ai/config.yaml').read_text(), re.M).group(1)
+          assert expected == '0.14.14', expected
+          cases = [
+              ('HomeMind-Adaptive-AI-repository.zip', 'adaptive_ai/config.yaml', 'adaptive_ai/src/settings.py'),
+              ('HomeMind-Adaptive-AI-addon-root.zip', 'config.yaml', 'src/settings.py'),
+          ]
+          for archive, config_name, settings_name in cases:
+              with zipfile.ZipFile(archive) as z:
+                  names = set(z.namelist())
+                  assert config_name in names, (archive, config_name)
+                  assert settings_name in names, (archive, settings_name)
+                  config = z.read(config_name).decode()
+                  settings = z.read(settings_name).decode()
+                  assert f'version: "{expected}"' in config, archive
+                  assert f'APP_VERSION = "{expected}"' in settings, archive
+                  assert 'startup_train_guard.py' in '\n'.join(names), archive
+          print('verified package version/layout:', expected)
+          PY
+      - name: Upload install packages
         uses: actions/upload-artifact@v4
         with:
           name: HomeMind-Adaptive-AI-main
-          path: HomeMind-Adaptive-AI.zip
+          path: |
+            HomeMind-Adaptive-AI-repository.zip
+            HomeMind-Adaptive-AI-addon-root.zip
           if-no-files-found: error
           retention-days: 30
