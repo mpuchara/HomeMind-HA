@@ -35,7 +35,10 @@ handler = core.Handler.__new__(core.Handler)
 payload = handler.status_payload()
 assert payload['startup']['ready'] is False, payload
 assert payload['history']['phase'] == 'starting', payload
-assert core.runtime_available() is False
+# Internal installers historically use runtime_available() once the three core objects
+# exist, before startup.ready. The release guard must not change that contract.
+assert core.runtime_available() is True
+assert core.startup_train_guard_contract['internal_runtime_available_semantics'] == 'preserved_for_extension_installers'
 ''')
 
     def test_plain_train_claims_idle_slot_without_queue_worker_schedule(self):
