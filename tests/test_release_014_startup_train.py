@@ -1,4 +1,4 @@
-"""0.14.14 regressions for the real shipped startup/initial-training path."""
+"""0.14.14+ regressions for the real shipped startup/initial-training path."""
 import os
 import subprocess
 import sys
@@ -105,12 +105,13 @@ assert contract['training_queue_order'] == 'before_history_discovery'
 assert contract['explicit_train_idle_slot'] == 'immediate_admission_attempt'
 ''')
 
-    def test_frontend_fetch_guard_bounds_first_startup_request(self):
+    def test_frontend_fetch_guard_bounds_startup_reads_without_aborting_mutations(self):
         source = (ROOT/'adaptive_ai/src/static/home.js').read_text(encoding='utf-8')
         index = (ROOT/'adaptive_ai/src/static/index.html').read_text(encoding='utf-8')
         self.assertIn('window.__adaptiveAiFetchTimeoutGuard', source)
         self.assertIn('new AbortController()', source)
-        self.assertIn('setTimeout(()=>controller.abort(),6000)', source)
+        self.assertIn("if(method!=='GET'&&method!=='HEAD')return nativeFetch(input,fetchInit);", source)
+        self.assertIn('Adaptive AI read timeout', source)
         self.assertLess(index.index('home.js'), index.index('app.js'))
 
 
