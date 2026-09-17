@@ -4,8 +4,13 @@ Teaching now owns the semantic context/signature contract directly. This compati
 bridge only feeds the existing full-context relevance learner after a Teaching label is
 accepted. It no longer replaces ``teaching.distance``; stage 06 therefore has one context
 matcher, including home-trajectory/version metadata, in the proper Teaching contract.
+
+The broad context row is linked to the same ManualFeedbackJournal fact so undo can retire
+that influence together with the explicit Teaching label.
 """
 import time
+
+from manual_feedback_unified import observe_linked_context
 
 
 def _historical_broad_state(core, engine, timestamp):
@@ -36,7 +41,6 @@ def install(core):
         return
 
     import teaching as teaching_module
-    import manual_context_learning as manual_context
 
     cls = teaching_module.Teaching
     original_teach = cls.teach
@@ -68,15 +72,15 @@ def install(core):
             except (TypeError, ValueError):
                 pass
 
-        learning = manual_context.observe(
+        learning = observe_linked_context(
             core, fresh, broad_states, float(result["desired_value"]), rejected=rejected,
             source="teach_history" if sample_ts is not None else "teach_live",
-            user_id="teach-ui", refresh_policy=True,
+            user_id="teach-ui", feedback_id=result.get("feedback_id"),
         )
         result["context_learning"] = learning
 
-        # A schema refresh may have happened after the label was stored. Re-evaluate using
-        # the same Teaching.distance contract rather than a bridge-specific matcher.
+        # A schema refresh is deliberately not performed here. Re-evaluate the runtime
+        # override using the same Teaching.distance contract against the current schema.
         self.refresh(engine, fresh)
         journal = getattr(engine, "manual_feedback_journal", None)
         if journal is not None and result.get("feedback_id"):
@@ -85,9 +89,10 @@ def install(core):
                 result.get("feedback", {}).get("application_status") or "applied",
                 learning_effect={
                     "context_learning": True,
-                    "context_schema_changed": bool(learning.get("schema_changed")),
-                    "context_added": learning.get("added") or [],
-                    "context_removed": learning.get("removed") or [],
+                    "manual_context_observation_id": learning.get("observation_id"),
+                    "context_schema_changed": False,
+                    "context_added": [],
+                    "context_removed": [],
                 },
             )
             result["feedback"] = row
@@ -100,9 +105,8 @@ def install(core):
                 "label_id": result.get("label_id"),
                 "feedback_id": result.get("feedback_id"),
                 "sample_ts": result.get("sample_ts"),
-                "schema_changed": bool(learning.get("schema_changed")),
-                "added": learning.get("added") or [],
-                "removed": learning.get("removed") or [],
+                "schema_changed": False,
+                "manual_context_observation_id": learning.get("observation_id"),
                 "scores": learning.get("scores") or {},
             },
         )
@@ -113,5 +117,6 @@ def install(core):
     core.STORE.event(
         None, "info", "teaching_learning_bridge_ready",
         "Teach corrections feed supervised context learning through the shared Teaching contract",
-        {"context_matcher": "teaching.distance", "signature_contract": 2},
+        {"context_matcher": "teaching.distance", "signature_contract": 2,
+         "undo_context": "linked_manual_context_feedback"},
     )
