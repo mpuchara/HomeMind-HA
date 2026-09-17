@@ -7,9 +7,9 @@ in order as soon as the shared heavy-job gate becomes available.
 
 Explicit user training has priority over the periodic low-memory discovery refresh.
 Discovery is safe to defer because per-agent Rebuild performs its own authoritative
-Recorder backfill before replay.  The queue therefore asks an in-progress discovery
-to stop issuing new Recorder requests, then reschedules a complete discovery pass once
-the explicit queue becomes idle.  User-requested Home bootstrap is never preempted.
+Recorder backfill before replay. The queue therefore ends an in-progress discovery
+between Recorder requests, then reschedules a complete discovery pass once the explicit
+queue becomes idle. User-requested Home bootstrap is never preempted.
 """
 from collections import deque
 import json
@@ -17,6 +17,10 @@ import threading
 import time
 
 from telemetry import HEAVY_JOBS
+
+
+class _YieldDiscovery(Exception):
+    """Private cooperative signal used only to leave automatic discovery promptly."""
 
 
 class TrainingQueue(threading.Thread):
@@ -65,29 +69,35 @@ class TrainingQueue(threading.Thread):
             except Exception:
                 pass
 
-    def _install_discovery_priority_bridge(self):
-        """Cooperatively shorten background discovery when Train is explicitly pressed.
+    def _set_discovery_deferred_status(self):
+        setter = getattr(self.history, "set_status", None)
+        if callable(setter):
+            setter(
+                "manual_ready", message="Agent training requested; background discovery is deferred",
+                phase_detail="Explicit Train has priority over Recorder discovery",
+            )
 
-        HistoryManager is intentionally kept independent from the admission queue.  The
-        queue therefore installs two instance-local adapters after HistoryManager exists:
-        a discovery call can be skipped if training is already pending, and an in-flight
-        discovery stops making additional Recorder requests as soon as a user queues work.
-        No raw history is deleted; the next idle discovery pass is forced to rebuild its
-        refresh window, while the selected agent performs its own full backfill.
+    def _install_discovery_priority_bridge(self):
+        """Cooperatively end automatic discovery when Train is explicitly pressed.
+
+        HistoryManager stays independent from queue admission. Instance-local adapters are
+        installed after HistoryManager exists. If Train is already pending, a new discovery
+        pass is skipped. If discovery is already running, its next Recorder request raises a
+        private signal that is caught at the discovery-cycle boundary, so we do not walk the
+        remaining chunks or pay their background pauses. No raw history is deleted.
         """
         original_cycle = getattr(self.history, "_manual_lightweight_cycle", None)
         if callable(original_cycle) and not getattr(self.history, "_training_priority_cycle_bridge", False):
             def priority_cycle(current, controllable, end_ts):
                 if self._training_priority.is_set():
                     self._mark_discovery_preempted()
-                    setter = getattr(self.history, "set_status", None)
-                    if callable(setter):
-                        setter(
-                            "manual_ready", message="Agent training requested; background discovery is deferred",
-                            phase_detail="Explicit Train has priority over Recorder discovery",
-                        )
+                    self._set_discovery_deferred_status()
                     return None
-                return original_cycle(current, controllable, end_ts)
+                try:
+                    return original_cycle(current, controllable, end_ts)
+                except _YieldDiscovery:
+                    self._set_discovery_deferred_status()
+                    return None
             self.history._manual_lightweight_cycle = priority_cycle
             self.history._training_priority_cycle_bridge = True
 
@@ -96,13 +106,15 @@ class TrainingQueue(threading.Thread):
             def priority_fetch(*args, **kwargs):
                 if self._training_priority.is_set() and HEAVY_JOBS.owner == "discovery":
                     self._mark_discovery_preempted()
-                    return 0
+                    raise _YieldDiscovery()
                 return original_fetch(*args, **kwargs)
             self.history._fetch_history_resilient = priority_fetch
             self.history._training_priority_fetch_bridge = True
 
     def _request_training_priority(self):
         self._training_priority.set()
+        if HEAVY_JOBS.owner == "discovery":
+            self._mark_discovery_preempted()
         with self.cv:
             self.cv.notify_all()
 
