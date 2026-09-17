@@ -55,10 +55,6 @@ def _json(raw, default=None):
         return {} if default is None else default
 
 
-def _dumps(value):
-    return json.dumps(value, separators=(",", ":"), sort_keys=True, default=str, allow_nan=False)
-
-
 def _backend_key(model):
     model = dict(model or {})
     backend = str(model.get("backend") or "diagonal_linucb")
@@ -93,10 +89,22 @@ def wilson_interval(success_weight, total_weight, effective_n, z=1.96):
     }
 
 
-def _episode_weight(index, total, half_life=DEFAULT_HALF_LIFE_EPISODES):
-    half_life = max(1.0, float(half_life))
+def _episode_weight(index, total, half_life=DEFAULT_HALF_LIFE_EPISODES,
+                    recent_full_weight=DEFAULT_FINAL_EPISODES):
+    """Decay old evidence while keeping the declared fixed-test window unshrunk.
+
+    A fixed target of 12 independent future episodes must mean exactly that: the first
+    12 independent episodes can satisfy the target. Evidence older than the current
+    declared window is still exponentially down-weighted, so long-running histories do
+    not dominate forever.
+    """
     age = max(0, int(total) - 1 - int(index))
-    return 0.5 ** (float(age) / half_life)
+    fresh = max(0, int(recent_full_weight))
+    if age < fresh:
+        return 1.0
+    half_life = max(1.0, float(half_life))
+    decay_age = age - fresh + 1
+    return 0.5 ** (float(decay_age) / half_life)
 
 
 def _dependency_cluster(row, window=DEFAULT_DEPENDENCY_WINDOW_SECONDS):
@@ -112,7 +120,7 @@ def independent_episode_rows(rows, *, id_key="prediction_event_id", end_ts=None)
     """Deduplicate episode evidence and sort chronologically.
 
     Replaying the same episode never creates another calibration sample. When an explicit
-    episode id is missing, the timestamp+scope tuple is used only as a compatibility key.
+    episode id is missing, timestamp+scope is used only as a compatibility key.
     """
     unique = {}
     for raw in rows or ():
@@ -123,15 +131,30 @@ def independent_episode_rows(rows, *, id_key="prediction_event_id", end_ts=None)
         explicit = row.get(id_key) or row.get("episode_id")
         key = str(explicit) if explicit else f"compat:{row.get('root_agent_id')}:{ts:.6f}"
         previous = unique.get(key)
-        if previous is None or ts < _finite(previous.get("outcome_ts"), _finite(previous.get("ts"), ts)):
+        previous_ts = (_finite(previous.get("outcome_ts"), _finite(previous.get("ts")))
+                       if previous is not None else None)
+        if previous is None or previous_ts is None or ts < previous_ts:
             unique[key] = row
-    return sorted(unique.values(), key=lambda row: _finite(row.get("outcome_ts"), _finite(row.get("ts"), 0.0)) or 0.0)
+    return sorted(
+        unique.values(),
+        key=lambda row: _finite(row.get("outcome_ts"), _finite(row.get("ts"), 0.0)) or 0.0,
+    )
 
 
 def dependency_adjusted_weights(rows, *, half_life=DEFAULT_HALF_LIFE_EPISODES,
-                                window=DEFAULT_DEPENDENCY_WINDOW_SECONDS):
+                                window=DEFAULT_DEPENDENCY_WINDOW_SECONDS,
+                                recent_full_weight=DEFAULT_FINAL_EPISODES):
+    """Return row weights with each dependency cluster capped to one evidence unit.
+
+    These weights are used for weighted means. Effective N is computed separately at the
+    cluster level because scaling every row in one cluster does not itself reduce ordinary
+    Kish ESS.
+    """
     rows = list(rows or ())
-    raw = [_episode_weight(i, len(rows), half_life) for i in range(len(rows))]
+    raw = [
+        _episode_weight(i, len(rows), half_life, recent_full_weight)
+        for i in range(len(rows))
+    ]
     clusters = defaultdict(list)
     for idx, row in enumerate(rows):
         clusters[_dependency_cluster(row, window)].append(idx)
@@ -140,9 +163,28 @@ def dependency_adjusted_weights(rows, *, half_life=DEFAULT_HALF_LIFE_EPISODES,
         cluster_sum = sum(raw[i] for i in indices)
         if cluster_sum > 1.0:
             scale = 1.0 / cluster_sum
-            for i in indices:
-                adjusted[i] *= scale
+            for idx in indices:
+                adjusted[idx] *= scale
     return adjusted
+
+
+def dependency_effective_sample_size(rows, weights,
+                                     window=DEFAULT_DEPENDENCY_WINDOW_SECONDS):
+    """Kish effective N over dependency clusters, not repeated rows.
+
+    Twenty replay-like observations from one burst therefore contribute at most roughly
+    one independent unit even when all row weights are equal.
+    """
+    cluster_weights = defaultdict(float)
+    for row, weight in zip(rows or (), weights or ()):
+        value = max(0.0, float(weight))
+        if value <= 0:
+            continue
+        cluster_weights[_dependency_cluster(row, window)] += value
+    # dependency_adjusted_weights caps a cluster at 1; keep the cap here too so callers
+    # that provide custom weights cannot inflate one cluster.
+    units = [min(1.0, value) for value in cluster_weights.values() if value > 0]
+    return effective_sample_size(units)
 
 
 def probability_calibration(rows, *, scope_id=None, model_key=None,
@@ -169,10 +211,15 @@ def probability_calibration(rows, *, scope_id=None, model_key=None,
         row["observed"] = 1.0 if y >= .5 else 0.0
         filtered.append(row)
     rows = independent_episode_rows(filtered, id_key="episode_id")
-    weights = dependency_adjusted_weights(rows, half_life=half_life)
+    weights = dependency_adjusted_weights(
+        rows,
+        half_life=half_life,
+        recent_full_weight=DEFAULT_FINAL_EPISODES,
+    )
     total_w = sum(weights)
-    n_eff = effective_sample_size(weights)
-    bucket = [dict(weight=0.0, prediction=0.0, observed=0.0, episodes=0) for _ in range(int(bins))]
+    n_eff = dependency_effective_sample_size(rows, weights)
+    bucket = [dict(weight=0.0, prediction=0.0, observed=0.0, episodes=0)
+              for _ in range(int(bins))]
     brier_num = 0.0
     forecast_num = 0.0
     observed_num = 0.0
@@ -201,7 +248,7 @@ def probability_calibration(rows, *, scope_id=None, model_key=None,
         })
     mean_prediction = forecast_num / total_w if total_w else None
     observed_rate = observed_num / total_w if total_w else None
-    gap = None if mean_prediction is None else mean_prediction - observed_rate
+    gap = None if mean_prediction is None or observed_rate is None else mean_prediction - observed_rate
     overconfident = bool(n_eff >= 8 and gap is not None and gap > DEFAULT_OVERCONFIDENCE_GAP)
     return {
         "metric": "probability_calibration",
@@ -216,7 +263,8 @@ def probability_calibration(rows, *, scope_id=None, model_key=None,
         "observed_frequency": observed_rate,
         "calibration_gap": gap,
         "overconfident": overconfident,
-        "sufficient_evidence": n_eff >= DEFAULT_FINAL_EPISODES,
+        "sufficient_evidence": bool(len(rows) >= DEFAULT_FINAL_EPISODES
+                                    and n_eff >= DEFAULT_FINAL_EPISODES),
     }
 
 
@@ -234,7 +282,11 @@ def action_quality_report(rows, *, scope_id=None, end_ts=None,
                 continue
         selected.append(row)
     rows = independent_episode_rows(selected, end_ts=end_ts)
-    weights = dependency_adjusted_weights(rows, half_life=half_life)
+    weights = dependency_adjusted_weights(
+        rows,
+        half_life=half_life,
+        recent_full_weight=max(1, int(min_total)),
+    )
     by_action = {"OFF": [], "ON": []}
     all_success = 0.0
     all_weight = 0.0
@@ -243,21 +295,23 @@ def action_quality_report(rows, *, scope_id=None, end_ts=None,
     for row, weight in zip(rows, weights):
         outcome = 1 if float(row.get("outcome") or 0.0) >= .5 else 0
         correct = bool(row.get("child_correct"))
-        by_action["ON" if outcome else "OFF"].append((correct, weight))
+        name = "ON" if outcome else "OFF"
+        by_action[name].append((row, correct, weight))
         all_weight += weight
         all_success += weight if correct else 0.0
         strength = _finite(row.get("child_confidence"))
         if strength is not None:
             strengths_num += max(0.0, min(1.0, strength)) * weight
             strengths_weight += weight
-    total_eff = effective_sample_size(weights)
+    total_eff = dependency_effective_sample_size(rows, weights)
     overall = wilson_interval(all_success, all_weight, total_eff)
     per_action = {}
     for name, values in by_action.items():
-        action_weights = [weight for _, weight in values]
+        action_rows = [row for row, _, _ in values]
+        action_weights = [weight for _, _, weight in values]
         total = sum(action_weights)
-        success = sum(weight for correct, weight in values if correct)
-        eff = effective_sample_size(action_weights)
+        success = sum(weight for _, correct, weight in values if correct)
+        eff = dependency_effective_sample_size(action_rows, action_weights)
         interval = wilson_interval(success, total, eff)
         per_action[name] = {
             "episodes": len(values),
@@ -266,15 +320,19 @@ def action_quality_report(rows, *, scope_id=None, end_ts=None,
             "quality_lower_bound": interval["lower"],
             "quality_upper_bound": interval["upper"],
             "error_rate": None if interval["mean"] is None else 1.0 - interval["mean"],
-            "sufficient_evidence": eff >= float(min_per_action),
+            "sufficient_evidence": bool(len(values) >= int(min_per_action)
+                                        and eff >= float(min_per_action)),
         }
     strength = strengths_num / strengths_weight if strengths_weight else None
     observed = overall["mean"]
     overstated = bool(total_eff >= 8 and strength is not None and observed is not None
                       and strength - observed > DEFAULT_OVERCONFIDENCE_GAP)
-    ready = bool(total_eff >= float(min_total)
-                 and per_action["OFF"]["sufficient_evidence"]
-                 and per_action["ON"]["sufficient_evidence"])
+    ready = bool(
+        len(rows) >= int(min_total)
+        and total_eff >= float(min_total)
+        and per_action["OFF"]["sufficient_evidence"]
+        and per_action["ON"]["sufficient_evidence"]
+    )
     return {
         "metric": "future_episode_action_quality",
         "probability_claim": False,
@@ -376,12 +434,16 @@ class ProbabilityCalibrationJournal:
             ).fetchall()]
 
     def report(self, metric_id, model_key, scope_id):
-        return probability_calibration(self.rows(metric_id, model_key, scope_id),
-                                       scope_id=str(scope_id), model_key=str(model_key))
+        return probability_calibration(
+            self.rows(metric_id, model_key, scope_id),
+            scope_id=str(scope_id),
+            model_key=str(model_key),
+        )
 
 
 class EvaluationEpochJournal:
     """Freeze challenger selection data before collecting a fixed future final test."""
+
     def __init__(self, store):
         self.store = store
         ensure_tables(store)
@@ -404,9 +466,12 @@ class EvaluationEpochJournal:
         if existing:
             return existing
         rows = independent_episode_rows(pairs)
-        selection = action_quality_report(rows, scope_id=None,
-                                          min_total=selection_target,
-                                          min_per_action=min_per_action)
+        selection = action_quality_report(
+            rows,
+            scope_id=None,
+            min_total=selection_target,
+            min_per_action=min_per_action,
+        )
         if not selection["sufficient_evidence"]:
             return None
         cutoff = max(float(row.get("outcome_ts") or 0.0) for row in rows)
@@ -431,11 +496,15 @@ class EvaluationEpochJournal:
                 "contract_version": CONTRACT_VERSION,
             }
         cutoff = float(epoch["selection_cutoff_ts"])
-        rows = [row for row in independent_episode_rows(pairs)
-                if float(row.get("outcome_ts") or 0.0) > cutoff]
+        rows = [
+            row for row in independent_episode_rows(pairs)
+            if float(row.get("outcome_ts") or 0.0) > cutoff
+        ]
         end_ts = _finite(epoch.get("final_end_ts"))
         report = action_quality_report(
-            rows, scope_id=scope_id, end_ts=end_ts,
+            rows,
+            scope_id=scope_id,
+            end_ts=end_ts,
             min_total=int(epoch["final_target"]),
             min_per_action=int(epoch["min_per_action"]),
         )
@@ -443,7 +512,8 @@ class EvaluationEpochJournal:
             locked_end = None
             for idx in range(1, len(rows) + 1):
                 prefix = action_quality_report(
-                    rows[:idx], scope_id=scope_id,
+                    rows[:idx],
+                    scope_id=scope_id,
                     min_total=int(epoch["final_target"]),
                     min_per_action=int(epoch["min_per_action"]),
                 )
@@ -461,10 +531,15 @@ class EvaluationEpochJournal:
                         (locked_end, now, epoch["parent_generation_id"], epoch["child_generation_id"],
                          epoch["model_revision"], CONTRACT_VERSION),
                     )
-                epoch = self.get(epoch["parent_generation_id"], epoch["child_generation_id"],
-                                 epoch["model_revision"])
+                epoch = self.get(
+                    epoch["parent_generation_id"],
+                    epoch["child_generation_id"],
+                    epoch["model_revision"],
+                )
                 report = action_quality_report(
-                    rows, scope_id=scope_id, end_ts=epoch.get("final_end_ts"),
+                    rows,
+                    scope_id=scope_id,
+                    end_ts=epoch.get("final_end_ts"),
                     min_total=int(epoch["final_target"]),
                     min_per_action=int(epoch["min_per_action"]),
                 )
@@ -492,8 +567,14 @@ def contract_descriptor():
         "final_min_per_action": DEFAULT_MIN_PER_ACTION,
         "dependency_window_seconds": DEFAULT_DEPENDENCY_WINDOW_SECONDS,
         "probability_metrics": ["brier_score", "reliability_bins"],
-        "action_metrics": ["episode_error_rate", "mean_binary_cost", "quality_lower_bound", "quality_upper_bound"],
-        "promotion_rule": "selection evidence freezes first; promotion needs a later fixed future test with separate ON/OFF evidence",
+        "action_metrics": [
+            "episode_error_rate", "mean_binary_cost",
+            "quality_lower_bound", "quality_upper_bound",
+        ],
+        "promotion_rule": (
+            "selection evidence freezes first; promotion needs a later fixed future test "
+            "with separate ON/OFF evidence"
+        ),
         "legacy_confidence": "compatibility_only_decision_strength_not_probability",
         "abstain": "insufficient independent evidence keeps Shadow/fallback",
     }
@@ -519,10 +600,11 @@ def _pair_rows(store, parent_generation_id, child_generation_id):
 
 def _decorate_summary(manager, epochs, row, summary, parent, candidate):
     summary = dict(summary or {})
-    summary.setdefault("confidence_contract", contract_descriptor())
+    descriptor = contract_descriptor()
+    summary.setdefault("confidence_contract", descriptor)
     if not is_fast_target(parent) or str(parent.get("target_property") or "") != "power":
         summary["confidence_contract"] = {
-            **contract_descriptor(),
+            **descriptor,
             "final_evaluation": {
                 "status": "not_applicable_non_fast_binary",
                 "sufficient_evidence": None,
@@ -530,30 +612,46 @@ def _decorate_summary(manager, epochs, row, summary, parent, candidate):
         }
         summary["decision_strength_semantics"] = METRIC_SEMANTICS["decision_strength"]
         return summary
+
     generation = _generation_for_candidate(manager.store, row.get("candidate_id"))
     if not generation or not generation.get("parent_generation_id"):
-        summary["confidence_contract"] = contract_descriptor()
+        summary["confidence_contract"] = descriptor
         return summary
+
     parent_gid = str(generation["parent_generation_id"])
     child_gid = str(generation["generation_id"])
     pairs = _pair_rows(manager.store, parent_gid, child_gid)
     model = manager.store.get_model(candidate["id"]) if candidate and candidate.get("id") else None
-    model_revision = str((model or {}).get("model_revision") or generation.get("model_revision") or "unknown")
+    model_revision = str(
+        (model or {}).get("model_revision")
+        or generation.get("model_revision")
+        or "unknown"
+    )
     backend_key = _backend_key(model)
     selection_target = max(DEFAULT_SELECTION_EPISODES, int(summary.get("required_future_samples") or 0))
     min_per_action = max(DEFAULT_MIN_PER_ACTION, int(summary.get("required_future_samples_per_action") or 0))
-    epoch = epochs.ensure(parent_gid, child_gid, model_revision, backend_key, pairs,
-                          selection_target=selection_target,
-                          final_target=DEFAULT_FINAL_EPISODES,
-                          min_per_action=min_per_action)
-    final = epochs.final_report(epoch, pairs, scope_id=str(generation.get("root_agent_id") or ""))
+    epoch = epochs.ensure(
+        parent_gid,
+        child_gid,
+        model_revision,
+        backend_key,
+        pairs,
+        selection_target=selection_target,
+        final_target=DEFAULT_FINAL_EPISODES,
+        min_per_action=min_per_action,
+    )
+    final = epochs.final_report(
+        epoch,
+        pairs,
+        scope_id=str(generation.get("root_agent_id") or ""),
+    )
 
     legacy_preference = summary.get("preference_confidence")
     summary["preference_alignment_score"] = legacy_preference
     summary["preference_alignment_semantics"] = METRIC_SEMANTICS["preference_alignment"]
     summary["decision_strength_semantics"] = METRIC_SEMANTICS["decision_strength"]
     summary["confidence_contract"] = {
-        **contract_descriptor(),
+        **descriptor,
         "backend_key": backend_key,
         "model_revision": model_revision,
         "final_evaluation": final,
@@ -565,26 +663,34 @@ def _decorate_summary(manager, epochs, row, summary, parent, candidate):
     old_pref = gates.get("preference_evidence")
     if isinstance(old_pref, dict):
         old_pref = dict(old_pref)
-        old_pref["reason"] = ("preference alignment reached the selection threshold" if old_pref.get("passed")
-                              else "preference alignment is below the selection threshold")
+        old_pref["reason"] = (
+            "preference alignment reached the selection threshold"
+            if old_pref.get("passed")
+            else "preference alignment is below the selection threshold"
+        )
         old_pref["metric_semantics"] = METRIC_SEMANTICS["preference_alignment"]
         observed = dict(old_pref.get("observed") or {})
         observed["probability_claim"] = False
         old_pref["observed"] = observed
         gates["preference_evidence"] = old_pref
+
     final_passed = bool(final.get("sufficient_evidence"))
     gates["independent_final_evaluation"] = {
         "passed": final_passed,
-        "reason": ("fixed future evaluation complete with separate ON/OFF evidence"
-                   if final_passed else
-                   "fixed future evaluation is incomplete; remain Shadow/fallback"),
+        "reason": (
+            "fixed future evaluation complete with separate ON/OFF evidence"
+            if final_passed
+            else "fixed future evaluation is incomplete; remain Shadow/fallback"
+        ),
         "custom_override": "never",
         "metric_semantics": METRIC_SEMANTICS["empirical_policy_quality"],
         "observed": final,
     }
     summary["promotion_gates"] = gates
-    vetoes = [dict(item) for item in (summary.get("promotion_vetoes") or [])
-              if item.get("gate") != "independent_final_evaluation"]
+    vetoes = [
+        dict(item) for item in (summary.get("promotion_vetoes") or [])
+        if item.get("gate") != "independent_final_evaluation"
+    ]
     if not final_passed:
         vetoes.append({
             "gate": "independent_final_evaluation",
@@ -602,6 +708,7 @@ def install(manager):
     """Install Stage-13 semantics after the existing Candidate/Trial composition."""
     if getattr(manager, "_confidence_contract_installed", False):
         return manager
+
     ensure_tables(manager.store)
     epochs = EvaluationEpochJournal(manager.store)
     probabilities = ProbabilityCalibrationJournal(manager.store)
@@ -648,7 +755,9 @@ def install(manager):
         return out
 
     manager.status = lambda parent_id: _decorate(original_status(parent_id))
-    manager.list_status = lambda: [_decorate(item) for item in (original_list_status() or []) if item]
+    manager.list_status = lambda: [
+        _decorate(item) for item in (original_list_status() or []) if item
+    ]
     if original_lineage_status is not None:
         manager.lineage_status = lambda ref: _decorate(original_lineage_status(ref))
 
@@ -662,7 +771,10 @@ def install(manager):
             if path == "/confidence_contract_ui.js":
                 if not http.require_trusted_client():
                     return
-                return http.static("confidence_contract_ui.js", "application/javascript; charset=utf-8")
+                return http.static(
+                    "confidence_contract_ui.js",
+                    "application/javascript; charset=utf-8",
+                )
             return original_get(http)
 
         def static(http, name, content_type):
@@ -670,9 +782,9 @@ def install(manager):
                 path = manager.core.STATIC_DIR / name
                 if path.exists():
                     body = path.read_text(encoding="utf-8")
-                    marker = '<script src="confidence_contract_ui.js?v=0.14.11-f13"></script>'
+                    marker = '<script src="confidence_contract_ui.js?v=0.14.11"></script>'
                     if marker not in body:
-                        body = body.replace('</body>', marker + '\n</body>')
+                        body = body.replace("</body>", marker + "\n</body>")
                     return http.send_bytes(200, body.encode("utf-8"), content_type)
             return original_static(http, name, content_type)
 
