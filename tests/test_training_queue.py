@@ -171,8 +171,9 @@ class TrainingQueueTests(unittest.TestCase):
         result = self.queue.enqueue('a', rebuild=True, reason='training')
         self.assertEqual(result['state'], 'queued')
         self.assertEqual(result['blocked_by'], 'discovery')
-        # New Recorder requests from the background discovery are cooperatively skipped.
-        self.assertEqual(self.history._fetch_history_resilient(['light.a'], 0, 1), 0)
+        # The entire discovery pass exits at its next Recorder boundary; it does not
+        # walk all remaining chunks or pay their inter-chunk background delays.
+        self.assertIsNone(self.history._manual_lightweight_cycle({}, ['light.a'], 1))
         self.assertEqual(self.history.fetch_calls, 0)
         self.assertTrue(any(e[2] == 'discovery_yielded_to_training' for e in self.store.events))
         HEAVY_JOBS.release('discovery')
