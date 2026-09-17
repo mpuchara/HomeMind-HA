@@ -159,7 +159,9 @@ Normalny status korzysta z cursorów i sufficient statistics. Teach-RL wykonuje 
 
 ## 16. Benchmark produktu F24
 
-`tools/benchmark_product_runtime.py` symuluje ukrytą prawdziwą obecność oraz ukrytą potrzebę światła **poza** mapą obserwacji. Sensory mają opóźnienia, noise, missingness oraz różne formaty. Światło wpływa na późniejszy odczyt lux, więc model może zostać ukarany za skróty oparte na skutku własnej akcji.
+Oficjalny benchmark uruchamia `tools/run_product_runtime_benchmark.py`. Biblioteka świata syntetycznego znajduje się w `tools/benchmark_product_runtime.py`, natomiast executable instaluje przed treningiem ten sam finalny `RuntimeCompositionRoot`, który osiąga `run.sh -> trial_queue_main.py`. Każdy seed uruchamia się w świeżym procesie, aby globalne instalatory kompatybilności nie przenosiły stanu między syntetycznymi domami.
+
+Benchmark symuluje ukrytą prawdziwą obecność oraz ukrytą potrzebę światła **poza** mapą obserwacji. Sensory mają opóźnienia, noise, missingness oraz różne formaty. Światło wpływa na późniejszy odczyt lux, więc model może zostać ukarany za skróty oparte na skutku własnej akcji.
 
 Scenariusze obejmują:
 - jednego i dwóch domowników,
