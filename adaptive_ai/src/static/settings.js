@@ -16,6 +16,11 @@ window.editAgent = function(id) {
     ['manual_hold_seconds', 'Pierwszeństwo ręcznej nastawy (s; 0 = profil)', 1, 0, 86400],
   ];
   const review = a.control_review || {};
+  const training = a.runtime?.training_state || a.training_state || 'waiting';
+  const hasLearnedModel = Boolean(a.runtime?.model || a.benchmark_score != null || (a.training_cursor_ts && training !== 'waiting'));
+  const exploreTool = hasLearnedModel && training !== 'training'
+    ? '<button type="button" class="ghost" data-tool="experiments" title="Create an Explore child Candidate; the Live generation remains unchanged">Explore / Eksperymenty</button>'
+    : '';
   const reviewBlock = review.approval_required ? `<div class="context-all"><b>Control review required</b><span>Generic number/select targets can represent engineering settings. Review the entity, range and meaning before Control. A change of device limits or select options invalidates this approval automatically.</span></div>
     <label><input name="control_reviewed" type="checkbox" ${review.approved && review.fingerprint_match ? 'checked' : ''}> I reviewed this target and approve autonomous Control with the limits shown above</label>` : '';
   settingsDialog.innerHTML = `<form><h2>Ustawienia: ${esc(a.name)}</h2>
@@ -33,14 +38,33 @@ window.editAgent = function(id) {
       <button type="button" class="ghost" data-tool="train">Train</button>
       <button type="button" class="ghost" data-tool="resume">Resume</button>
       <button type="button" class="ghost" data-tool="rebuild">Rebuild model</button>
-      <button type="button" class="ghost" data-tool="experiments">Eksperymenty</button>
+      ${exploreTool}
       <button type="button" class="ghost danger" data-tool="delete">Delete</button>
     </div></div>
     <p class="settings-error" role="alert"></p>
     <div class="dialog-actions"><button type="button" class="ghost">Anuluj</button><button class="primary" type="submit">Zapisz</button></div></form>`;
   settingsDialog.querySelector('.dialog-actions button[type=button]').onclick = () => settingsDialog.close();
-  const operations={undo:()=>undoTeaching(id),paused:()=>setMode(id,'paused'),train:()=>trainAgent(id),resume:()=>resumeLearning(id),rebuild:()=>resetLearning(id),experiments:()=>openExperiments(id),delete:()=>removeAgent(id)};
-  settingsDialog.querySelectorAll('[data-tool]').forEach(b=>b.onclick=()=>{settingsDialog.close();operations[b.dataset.tool]();});
+  const operations={
+    undo:()=>undoTeaching(id),
+    paused:()=>setMode(id,'paused'),
+    train:()=>trainAgent(id),
+    resume:()=>resumeLearning(id),
+    rebuild:()=>resetLearning(id),
+    experiments:async()=>{
+      if(typeof window.openExplore!=='function'){
+        alert('Explore UI is not available in this runtime.');
+        return;
+      }
+      await window.openExplore(id);
+    },
+    delete:()=>removeAgent(id),
+  };
+  settingsDialog.querySelectorAll('[data-tool]').forEach(b=>b.onclick=async()=>{
+    const op=operations[b.dataset.tool];
+    if(!op)return;
+    settingsDialog.close();
+    try{await op();}catch(e){alert(e?.message||String(e));}
+  });
   settingsDialog.querySelector('form').onsubmit = async event => {
     event.preventDefault();
     const form = event.target, body = {};
