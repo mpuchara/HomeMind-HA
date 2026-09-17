@@ -15,7 +15,7 @@ try:
 except Exception:
     ws_connect = None
 
-APP_VERSION = "0.14.14"
+APP_VERSION = "0.14.15"
 HISTORY_BOOTSTRAP_REVISION = "target-attrs-v2"
 TRAINING_REVISION = "shared-home-intents-v18"
 DATA_DIR = Path(os.environ.get("ADAPTIVE_AI_DATA", "/data"))
@@ -67,7 +67,7 @@ DEFAULT_OPTIONS = {
     "automation_context_reserve": 8,
     "candidate_benchmark_threshold": 0.78,
     "candidate_benchmark_min_samples": 12,
-    "agent_training_chunk_hours": 24,
+    "agent_training_chunk_hours": 6,
     "agent_training_overlap_hours": 6,
     "min_historical_support": 0.20,
     "max_context_novelty": 0.85,
@@ -89,9 +89,10 @@ DEFAULT_OPTIONS = {
     "history_fast_target_hours": 6,
     "history_parallel_requests": 1,
     "history_context_import_interval_seconds": 60,
-    "history_background_pause_ms": 500,
+    "history_background_pause_ms": 1500,
     "history_background_start_delay_seconds": 10,
     "process_nice": 10,
+    "training_cpu_duty_cycle": 0.55,
     "manual_agent_training": True,
     "max_concurrent_training_jobs": 1,
     "manual_discovery_hours": 24,
@@ -262,6 +263,13 @@ def load_options():
             # actually receive the local-first fast-light latency improvement.
             if data.get("realtime_inference_debounce_ms") == 75:
                 options["realtime_inference_debounce_ms"] = 25
+            # 0.14.15: migrate only the previously shipped defaults. Explicit custom
+            # values remain untouched; the new defaults make long historical replay
+            # suitable for Raspberry Pi class hosts.
+            if data.get("agent_training_chunk_hours") == 24:
+                options["agent_training_chunk_hours"] = 6
+            if data.get("history_background_pause_ms") == 500:
+                options["history_background_pause_ms"] = 1500
     except Exception as exc:
         print(f"[options] Failed to read options: {exc}", flush=True)
     # 0.9 never starts heavy replay implicitly, including installations with the
