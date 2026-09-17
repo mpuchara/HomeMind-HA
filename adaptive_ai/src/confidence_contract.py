@@ -28,6 +28,7 @@ DEFAULT_MIN_PER_ACTION = 4
 DEFAULT_DEPENDENCY_WINDOW_SECONDS = 30.0
 DEFAULT_HALF_LIFE_EPISODES = 40.0
 DEFAULT_OVERCONFIDENCE_GAP = 0.15
+EVALUATION_REVISION_SEPARATOR = "::backend="
 
 METRIC_SEMANTICS = {
     "presence_probability": "calibrated_probability_candidate_0_to_1",
@@ -62,6 +63,17 @@ def _backend_key(model):
     return f"{backend}:v{version}"
 
 
+def _evaluation_revision(model_revision, backend_key):
+    raw = str(model_revision or "unknown")
+    if EVALUATION_REVISION_SEPARATOR in raw:
+        return raw
+    return f"{raw}{EVALUATION_REVISION_SEPARATOR}{backend_key}"
+
+
+def _source_model_revision(evaluation_revision):
+    return str(evaluation_revision or "unknown").split(EVALUATION_REVISION_SEPARATOR, 1)[0]
+
+
 def effective_sample_size(weights):
     clean = [max(0.0, float(w)) for w in weights if _finite(w) is not None and float(w) > 0]
     if not clean:
@@ -91,13 +103,7 @@ def wilson_interval(success_weight, total_weight, effective_n, z=1.96):
 
 def _episode_weight(index, total, half_life=DEFAULT_HALF_LIFE_EPISODES,
                     recent_full_weight=DEFAULT_FINAL_EPISODES):
-    """Decay old evidence while keeping the declared fixed-test window unshrunk.
-
-    A fixed target of 12 independent future episodes must mean exactly that: the first
-    12 independent episodes can satisfy the target. Evidence older than the current
-    declared window is still exponentially down-weighted, so long-running histories do
-    not dominate forever.
-    """
+    """Decay old evidence while keeping the declared fixed-test window unshrunk."""
     age = max(0, int(total) - 1 - int(index))
     fresh = max(0, int(recent_full_weight))
     if age < fresh:
@@ -117,11 +123,7 @@ def _dependency_cluster(row, window=DEFAULT_DEPENDENCY_WINDOW_SECONDS):
 
 
 def independent_episode_rows(rows, *, id_key="prediction_event_id", end_ts=None):
-    """Deduplicate episode evidence and sort chronologically.
-
-    Replaying the same episode never creates another calibration sample. When an explicit
-    episode id is missing, timestamp+scope is used only as a compatibility key.
-    """
+    """Deduplicate episode evidence and sort chronologically."""
     unique = {}
     for raw in rows or ():
         row = dict(raw or {})
@@ -144,12 +146,7 @@ def independent_episode_rows(rows, *, id_key="prediction_event_id", end_ts=None)
 def dependency_adjusted_weights(rows, *, half_life=DEFAULT_HALF_LIFE_EPISODES,
                                 window=DEFAULT_DEPENDENCY_WINDOW_SECONDS,
                                 recent_full_weight=DEFAULT_FINAL_EPISODES):
-    """Return row weights with each dependency cluster capped to one evidence unit.
-
-    These weights are used for weighted means. Effective N is computed separately at the
-    cluster level because scaling every row in one cluster does not itself reduce ordinary
-    Kish ESS.
-    """
+    """Return row weights with each dependency cluster capped to one evidence unit."""
     rows = list(rows or ())
     raw = [
         _episode_weight(i, len(rows), half_life, recent_full_weight)
@@ -170,19 +167,13 @@ def dependency_adjusted_weights(rows, *, half_life=DEFAULT_HALF_LIFE_EPISODES,
 
 def dependency_effective_sample_size(rows, weights,
                                      window=DEFAULT_DEPENDENCY_WINDOW_SECONDS):
-    """Kish effective N over dependency clusters, not repeated rows.
-
-    Twenty replay-like observations from one burst therefore contribute at most roughly
-    one independent unit even when all row weights are equal.
-    """
+    """Kish effective N over dependency clusters, not repeated rows."""
     cluster_weights = defaultdict(float)
     for row, weight in zip(rows or (), weights or ()):
         value = max(0.0, float(weight))
         if value <= 0:
             continue
         cluster_weights[_dependency_cluster(row, window)] += value
-    # dependency_adjusted_weights caps a cluster at 1; keep the cap here too so callers
-    # that provide custom weights cannot inflate one cluster.
     units = [min(1.0, value) for value in cluster_weights.values() if value > 0]
     return effective_sample_size(units)
 
@@ -442,27 +433,46 @@ class ProbabilityCalibrationJournal:
 
 
 class EvaluationEpochJournal:
-    """Freeze challenger selection data before collecting a fixed future final test."""
+    """Freeze challenger selection data before collecting a fixed future final test.
+
+    ``model_revision`` in persistence is an evaluation revision composed from the source
+    model revision and backend key. This preserves additive schema compatibility while
+    guaranteeing that a backend switch cannot inherit an old calibration epoch even when
+    the source revision string happens to be reused.
+    """
 
     def __init__(self, store):
         self.store = store
         ensure_tables(store)
 
-    def get(self, parent_gid, child_gid, model_revision):
+    def get(self, parent_gid, child_gid, model_revision, backend_key=None):
+        requested = str(model_revision)
+        if backend_key is not None:
+            requested = _evaluation_revision(requested, backend_key)
         with self.store.conn() as c:
             row = c.execute(
                 """SELECT * FROM confidence_evaluation_epochs
                    WHERE parent_generation_id=? AND child_generation_id=?
                      AND model_revision=? AND contract_version=?""",
-                (str(parent_gid), str(child_gid), str(model_revision), CONTRACT_VERSION),
+                (str(parent_gid), str(child_gid), requested, CONTRACT_VERSION),
             ).fetchone()
+            if row is None and backend_key is None and EVALUATION_REVISION_SEPARATOR not in requested:
+                row = c.execute(
+                    """SELECT * FROM confidence_evaluation_epochs
+                       WHERE parent_generation_id=? AND child_generation_id=?
+                         AND model_revision LIKE ? AND contract_version=?
+                       ORDER BY created_ts DESC LIMIT 1""",
+                    (str(parent_gid), str(child_gid),
+                     requested + EVALUATION_REVISION_SEPARATOR + "%", CONTRACT_VERSION),
+                ).fetchone()
         return dict(row) if row else None
 
     def ensure(self, parent_gid, child_gid, model_revision, backend_key, pairs,
                *, selection_target=DEFAULT_SELECTION_EPISODES,
                final_target=DEFAULT_FINAL_EPISODES,
                min_per_action=DEFAULT_MIN_PER_ACTION):
-        existing = self.get(parent_gid, child_gid, model_revision)
+        evaluation_revision = _evaluation_revision(model_revision, backend_key)
+        existing = self.get(parent_gid, child_gid, evaluation_revision)
         if existing:
             return existing
         rows = independent_episode_rows(pairs)
@@ -482,10 +492,10 @@ class EvaluationEpochJournal:
                    (parent_generation_id,child_generation_id,model_revision,backend_key,
                     contract_version,selection_cutoff_ts,final_target,min_per_action,created_ts)
                    VALUES(?,?,?,?,?,?,?,?,?)""",
-                (str(parent_gid), str(child_gid), str(model_revision), str(backend_key),
+                (str(parent_gid), str(child_gid), evaluation_revision, str(backend_key),
                  CONTRACT_VERSION, cutoff, int(final_target), int(min_per_action), now),
             )
-        return self.get(parent_gid, child_gid, model_revision)
+        return self.get(parent_gid, child_gid, evaluation_revision)
 
     def final_report(self, epoch, pairs, *, scope_id=None):
         if not epoch:
@@ -551,7 +561,8 @@ class EvaluationEpochJournal:
             "min_per_action": int(epoch["min_per_action"]),
             "final_end_ts": epoch.get("final_end_ts"),
             "backend_key": epoch.get("backend_key"),
-            "model_revision": epoch.get("model_revision"),
+            "model_revision": _source_model_revision(epoch.get("model_revision")),
+            "evaluation_revision": epoch.get("model_revision"),
             "peek_safe": True,
             "optional_stopping_protection": "fixed_target_and_locked_final_end",
         })
@@ -576,6 +587,7 @@ def contract_descriptor():
             "with separate ON/OFF evidence"
         ),
         "legacy_confidence": "compatibility_only_decision_strength_not_probability",
+        "backend_recalibration": "evaluation revision includes backend identity",
         "abstain": "insufficient independent evidence keeps Shadow/fallback",
     }
 
