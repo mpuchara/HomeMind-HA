@@ -186,15 +186,50 @@
     hit.onpointerup=ev=>{if(down==null)return;const endFraction=fraction(ev),startFraction=down;down=null;hideSelection();try{hit.releasePointerCapture(ev.pointerId);}catch(_){ }if(Math.abs(endFraction-startFraction)>.015){range={start:start+Math.min(startFraction,endFraction)*width,end:start+Math.max(startFraction,endFraction)*width};load();}else inspect(start+endFraction*width);};
   }
 
+  function liveLearningState(a){
+    const rt=a.runtime||{};
+    const training=rt.training_state||a.training_state||'paused';
+    const paused=['paused','waiting','needs_retrain'].includes(training);
+    const indexing=training==='training';
+    const neverTrained=training==='waiting'||training==='needs_retrain'||(paused&&a.benchmark_score==null&&!a.training_cursor_ts);
+    return {training,paused,indexing,neverTrained};
+  }
+
+  function liveSettings(a){
+    if(typeof window.editAgent==='function')return window.editAgent(a.id);
+    return workflowSettings(a.id);
+  }
+
   function liveActions(card,a){
     const actions=card.querySelector('.actions');if(!actions)return;
-    if(actions.dataset.generationWorkflow==='1')return;
-    actions.dataset.generationWorkflow='1';
-    actions.innerHTML=`<button class="ghost" data-wf="auto">Autonomous</button><button class="primary" data-wf="correct">Correct</button><button class="ghost" data-wf="explore" disabled title="Explore będzie wdrożone w następnym PR">Explore</button><button class="ghost" data-wf="change">Change decision</button><button class="ghost" data-wf="settings">Settings</button>`;
+    const state=liveLearningState(a);
+    const signature=[state.training,state.neverTrained?'new':'model',a.training_cursor_ts??'',a.benchmark_score??''].join('|');
+    if(actions.dataset.generationWorkflow===signature)return;
+    actions.dataset.generationWorkflow=signature;
+
+    // A fresh discovery generation has no model yet. Generation workflow actions require
+    // a parent model, so exposing only those actions creates a UI deadlock: their status
+    // endpoint rejects the agent while the original Train button has already been replaced.
+    if(state.indexing){
+      actions.innerHTML=`<button class="ghost" disabled data-wf="training">Training…</button><button class="ghost" data-wf="settings">Settings</button>`;
+      actions.querySelector('[data-wf=settings]').onclick=()=>liveSettings(a);
+      return;
+    }
+    if(state.neverTrained){
+      actions.innerHTML=`<button class="primary" data-wf="train">Train</button><button class="ghost" data-wf="settings">Settings</button>`;
+      actions.querySelector('[data-wf=train]').onclick=()=>window.trainAgent?.(a.id);
+      actions.querySelector('[data-wf=settings]').onclick=()=>liveSettings(a);
+      return;
+    }
+
+    const resume=state.paused?'<button class="ghost resume" data-wf="resume">Resume</button>':'';
+    actions.innerHTML=`${resume}<button class="ghost" data-wf="auto">Autonomous</button><button class="primary" data-wf="correct">Correct</button><button class="ghost" data-wf="explore" disabled title="Explore będzie aktywowane przez warstwę Explore">Explore</button><button class="ghost" data-wf="change">Change decision</button><button class="ghost" data-wf="settings">Settings</button>`;
+    if(state.paused)actions.querySelector('[data-wf=resume]').onclick=()=>window.resumeLearning?.(a.id);
     actions.querySelector('[data-wf=auto]').onclick=e=>workflowAutonomous(a.id,e.currentTarget);
     actions.querySelector('[data-wf=correct]').onclick=()=>openWorkflowCorrect(a.id);
     actions.querySelector('[data-wf=change]').onclick=e=>workflowChangeDecision(a.id,e.currentTarget);
-    actions.querySelector('[data-wf=settings]').onclick=()=>workflowSettings(a.id);
+    actions.querySelector('[data-wf=settings]').onclick=()=>liveSettings(a);
+    window.bindExploreButtons?.();
   }
 
   const baseRender=window.renderAgents;
