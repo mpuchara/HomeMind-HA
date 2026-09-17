@@ -1,9 +1,9 @@
 import unittest
 
+from support import state
 from adaptive_presence import AdaptivePresenceModel, HardwareThresholdAdapterContract
 from context_engine import ContextEngine
 from settings import DEFAULT_OPTIONS
-from support import state
 
 
 def raw(entity='sensor.raw', value=.4, quality=1.0):
