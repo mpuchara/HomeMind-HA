@@ -54,36 +54,21 @@ class RuntimeCompositionRoot:
         return {
             "version": CONTRACT_VERSION,
             "entrypoint_chain": list(ENTRYPOINT_CHAIN),
-            "context": {
-                "owner": "engine.context",
-                "contract": "shared_context_service",
-            },
-            "policy": {
-                "owner": "engine.policy+engine.decision_composer",
-                "contract": "policy_decision_before_actionintent",
-            },
-            "feedback": {
-                "owner": "engine.manual_feedback_journal",
-                "contract": "durable_feedback_fact_then_candidate_listener",
-                "http": "explicit_named_routes",
-            },
-            "episode_evaluation": {
-                "owner": "engine.episode_evaluator",
-                "contract": "observer_only_shared_episode_ids",
-            },
-            "candidates": {
-                "owner": "engine.agent_candidates",
-                "contract": "isolated_shadow_generation_manager",
+            "context": {"owner": "engine.context", "contract": "shared_context_service"},
+            "policy": {"owner": "engine.policy+engine.decision_composer", "contract": "policy_decision_before_actionintent"},
+            "feedback": {"owner": "engine.manual_feedback_journal", "contract": "durable_feedback_fact_then_candidate_listener", "http": "explicit_named_routes"},
+            "episode_evaluation": {"owner": "engine.episode_evaluator", "contract": "observer_only_shared_episode_ids"},
+            "candidates": {"owner": "engine.agent_candidates", "contract": "isolated_shadow_generation_manager"},
+            "workflow_actions": {
+                "contract": getattr(manager, "agent_workflow_contract", None),
+                "explore": getattr(manager, "agent_explore_contract", None),
             },
             "promotion_gates": {
                 "owner": "manager.promotion_validation_service",
                 "contract": getattr(manager, "promotion_validation_contract", None),
                 "source_of_truth": "promotion_validations[]",
             },
-            "execution": {
-                "owner": "engine.executor",
-                "contract": "ActionIntent_to_Executor_only_physical_dispatch",
-            },
+            "execution": {"owner": "engine.executor", "contract": "ActionIntent_to_Executor_only_physical_dispatch"},
             "performance": {
                 "owner": "manager.performance_f22",
                 "contract": getattr(manager, "performance_f22_contract", None),
@@ -111,8 +96,10 @@ class RuntimeCompositionRoot:
         if key in self._prepared_engine_ids:
             return
 
-        # These imports intentionally happen in main.py's background runtime-init thread,
-        # never while trial_queue_main.py is still trying to bind Home Assistant Ingress.
+        # Imports remain off the pre-HTTP path; final composition happens in the
+        # background runtime-init thread after Ingress is already listening.
+        from agent_workflow_actions import install as install_agent_workflow_actions
+        from agent_explore import install as install_agent_explore
         from cold_start_drift import install as install_cold_start_drift
         from confidence_contract import install as install_confidence_contract
         from confidence_runtime import install_runtime_semantics
@@ -130,39 +117,33 @@ class RuntimeCompositionRoot:
         if manager is None:
             return
 
-        # RPi-class resource control is orthogonal to learning semantics. Install it after
-        # the Candidate/History services exist but before later final composition returns.
+        # These are user-facing product capabilities. Install them explicitly in the
+        # shipped root rather than depending on a legacy overlay side effect. Both
+        # installers are idempotent, so upgrades never stack duplicate HTTP handlers.
+        manager = install_agent_workflow_actions(manager)
+        manager = install_agent_explore(manager)
+
+        # RPi resource control changes scheduling only, never learning semantics.
         manager = install_rpi_low_power_runtime(self.core, manager)
         engine.agent_candidates = manager
 
-        # Stage 11 -> 15 keep their established order and public behaviour.
+        # Trial knowledge intentionally wraps generation-aware Explore.
         manager = install_trial_knowledge(manager)
         manager = install_confidence_contract(manager)
         install_runtime_semantics(engine, manager.confidence_probability_journal)
         manager = install_cold_start_drift(manager)
         install_device_agent_runtime(engine)
 
-        # Stage 16: one authoritative named validation projection after all existing gates.
-        manager = install_promotion_validation(
-            manager, clock=self.clock, repository=self.core.STORE
-        )
-
-        # Stage 17: bounded/cursor-based computation after Candidate, Teach and drift
-        # contracts are present.  It never creates ActionIntent or dispatches HA services.
+        manager = install_promotion_validation(manager, clock=self.clock, repository=self.core.STORE)
         manager = install_performance_f22(manager, core=self.core)
         manager = install_performance_f22_order_guard(manager)
         engine.agent_candidates = manager
 
-        # Stage 16: one final HTTP dispatcher owns migrated feedback/promotion routes.
         router = install_dispatch(self.core)
         register_feedback_routes(router, self.core)
         register_promotion_routes(router, self.core, manager)
 
-        self.dependencies = RuntimeDependencies(
-            clock=self.clock,
-            repository=self.core.STORE,
-            transport=router,
-        )
+        self.dependencies = RuntimeDependencies(clock=self.clock, repository=self.core.STORE, transport=router)
         self.contracts = self._contract_snapshot(manager, router)
         self.core.RUNTIME_DEPENDENCIES = self.dependencies
         self.core.RUNTIME_COMPOSITION_CONTRACT = self.contracts
