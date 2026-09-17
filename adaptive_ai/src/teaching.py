@@ -52,8 +52,6 @@ def signature(policy, states, temporal, timestamp):
             continue
         result[name] = float(features.get(index, 0.0))
 
-    # Policy.features only writes the tail when a historical/live home provider exists.
-    # Persist all seven names anyway so a missing forecast is explicit and versioned.
     forecast = dict((meta or {}).get("home_forecast") or {})
     for offset, name in enumerate(FEATURE_NAMES):
         key = "home:" + name
@@ -84,13 +82,7 @@ def _metadata_key(name):
 
 
 def distance(left, right):
-    """Semantic distance across compatible feature-schema revisions.
-
-    New signatures compare shared base features and, when both sides have an observable
-    home forecast, also the seven trajectory features. Legacy signatures are not rewritten:
-    missing v2 metadata simply means the comparison falls back to their stored semantic
-    features. Strong occupancy/activity sign flips remain hard mismatches.
-    """
+    """Semantic distance across compatible feature-schema revisions."""
     left = dict(left or {})
     right = dict(right or {})
     if not left or not right:
@@ -127,8 +119,6 @@ def distance(left, right):
     shared = old_keys & new_keys
     if not shared:
         return None
-    # Preserve compatibility across a bounded schema migration, but never let a label bind
-    # to a policy whose semantic context is mostly unrelated.
     if len(shared) / max(1, len(old_keys)) < 0.50:
         return None
 
@@ -240,15 +230,12 @@ class Teaching:
             return None
         best = min(x[0] for x in matches)
         nearest = [x for x in matches if x[0] <= best + .015]
-        # A contradictory legacy pair that is genuinely indistinguishable is ambiguity,
-        # not an instruction to prefer whichever happened to be written last.
         values = {round(float(x[2]["desired"]), 9) for x in nearest if x[0] <= .015}
         if len(values) > 1:
             return None
         return min(nearest, key=lambda x: x[1])[2]
 
     def physical_correction(self, engine, agent, states, desired, timestamp):
-        """A newer real user action retires conflicting contextual overrides."""
         rows = self.labels(agent["id"])
         if not rows:
             return
@@ -287,6 +274,8 @@ class Teaching:
             agent = self.store.get_agent_config(agent["id"])
             if not agent:
                 raise ValueError("Agent no longer exists")
+            if str(agent.get("training_state") or "") == "training":
+                raise ValueError("Trwa trening historyczny. Naucz Desired po jego zakończeniu.")
             if sample_ts is None:
                 timestamp = time.time()
                 with engine.lock:
@@ -303,8 +292,6 @@ class Teaching:
             if desired is None:
                 if agent["target_property"] != "power" or previous is None:
                     raise ValueError("Podaj poprawną wartość Desired")
-                # Teaching is an explicit correction command, not a bare negative rating.
-                # Binary toggle remains for backward compatibility with this action only.
                 desired = 0 if previous >= .5 else 1
             desired = _manual_value(agent, states[agent["target_entity"]], desired)
             sig = signature(policy, states, temporal, timestamp)
@@ -313,7 +300,9 @@ class Teaching:
 
             journal_row = None
             journal = self.feedback_journal or getattr(engine, "manual_feedback_journal", None)
-            effective_source = source or ("teaching_history" if sample_ts is not None else "change_decision")
+            # Preserve the established public Teaching sources. Stage-06-specific callers
+            # pass an explicit source; old chart/live callers still see history/wrong_decision.
+            effective_source = source or ("history" if sample_ts is not None else "wrong_decision")
             if journal is not None:
                 journal_row = journal.record(
                     agent_id=agent["id"], selected_ts=timestamp, source=effective_source,
@@ -326,13 +315,12 @@ class Teaching:
                     deadband=float(agent.get("deadband") or .01), feedback_id=feedback_id,
                 )
                 if journal_row.get("application_status") == "conflict":
-                    result = {
+                    return {
                         "ok": True, "label_id": None, "desired_value": desired,
                         "sample_ts": timestamp, "current_value": current,
                         "feedback_id": journal_row["feedback_id"], "feedback": journal_row,
                         "conflict": True, "ui_message": journal.ui_summary(journal_row),
                     }
-                    return result
 
             with self.lock, self.store.lock, self.store.conn() as c:
                 count = c.execute(
@@ -421,7 +409,6 @@ class Teaching:
             return result
 
     def refresh(self, engine, agent):
-        # No HA call here: normal Control pipeline consumes the corrected decision.
         with engine.lock:
             states = dict(engine.state_map)
         policy = engine.policy(agent)
