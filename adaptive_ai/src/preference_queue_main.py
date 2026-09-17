@@ -4,35 +4,38 @@ The existing ``fast_queue_main`` stack remains authoritative. Dependency-sensiti
 Candidate/Tournament additions use the explicit composition hooks exposed there; no
 installer function is monkey-patched.
 
-EpisodeEvaluator, the unified ManualFeedbackJournal and the explicit light PreferenceModel
-are first-class services created before the fast runtime extensions, so Live outcomes,
-Experiments, Teaching/Teach-RL, Candidate and Sensor Tournament share durable contracts
-before any HA worker can observe state. Provenance and the observation schema are composed
-before EventStream/History start.
+The final entrypoint must stay cheap enough for Home Assistant Ingress to bind before
+runtime composition.  Heavy Candidate/episode/preference modules are therefore imported
+inside ``prepare_engine_extensions()``, which main.py invokes from its background runtime
+initialization thread after the HTTP server is already listening.
 """
 import fast_queue_main as runtime
-from agent_candidate_card_summary import install as install_candidate_card_summary
-from agent_candidate_preference_metrics import install as install_candidate_preference_metrics
-from agent_candidate_promotion_cycle import install as install_candidate_promotion_cycle
-from agent_live_card_refresh import install as install_agent_live_card_refresh
-from episode_evaluator import EpisodeEvaluator
-from episode_evaluator_runtime import (
-    install_candidate as install_candidate_episode_evaluator,
-    install_core as install_core_episode_evaluator,
-    install_tournament as install_tournament_episode_evaluator,
-)
-from manual_feedback_live_isolation import install as install_manual_feedback_live_isolation
-from manual_feedback_unified import UnifiedManualFeedbackJournal
-from manual_feedback_workflow import install as install_manual_feedback_workflow
-from preference_model import LightingPreferenceModel, PreferenceDecisionComposer
-from provenance_runtime import install as install_provenance_runtime
-from observation_contract import install as install_observation_contract
+
 
 core = runtime.core
 _original_prepare_engine_extensions = core.prepare_engine_extensions
 
 
 def prepare_engine_extensions():
+    # Keep these imports off the pre-HTTP entrypoint path. They initialize substantial
+    # Candidate/Trial/feedback code but are only needed once ENGINE and STORE exist.
+    from agent_candidate_card_summary import install as install_candidate_card_summary
+    from agent_candidate_preference_metrics import install as install_candidate_preference_metrics
+    from agent_candidate_promotion_cycle import install as install_candidate_promotion_cycle
+    from agent_live_card_refresh import install as install_agent_live_card_refresh
+    from episode_evaluator import EpisodeEvaluator
+    from episode_evaluator_runtime import (
+        install_candidate as install_candidate_episode_evaluator,
+        install_core as install_core_episode_evaluator,
+        install_tournament as install_tournament_episode_evaluator,
+    )
+    from manual_feedback_live_isolation import install as install_manual_feedback_live_isolation
+    from manual_feedback_unified import UnifiedManualFeedbackJournal
+    from manual_feedback_workflow import install as install_manual_feedback_workflow
+    from preference_model import LightingPreferenceModel, PreferenceDecisionComposer
+    from provenance_runtime import install as install_provenance_runtime
+    from observation_contract import install as install_observation_contract
+
     # Shared episode evaluation is available before Tournament/Candidate workers exist.
     evaluator = getattr(core.ENGINE, "episode_evaluator", None)
     if evaluator is None:
