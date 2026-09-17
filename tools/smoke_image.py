@@ -1,4 +1,5 @@
-"""Start the built add-on image with no HA network or data; verify HTTP readiness."""
+"""Start the built add-on image and verify the actual shipped entrypoint and HTTP readiness."""
+import json
 import subprocess
 import sys
 
@@ -29,7 +30,15 @@ def main():
     container = subprocess.check_output(
         ['docker', 'run', '--detach', '--network', 'none', image], text=True).strip()
     try:
+        # run.sh uses exec, therefore PID 1 must be the final Python entrypoint rather
+        # than an untested helper shell or an older queue_main layer.
+        cmdline = subprocess.check_output(
+            ['docker', 'exec', container, 'sh', '-c', "tr '\\000' ' ' </proc/1/cmdline"], text=True
+        ).strip()
+        if 'trial_queue_main.py' not in cmdline:
+            raise RuntimeError(f'Unexpected image PID1: {cmdline}')
         subprocess.run(['docker', 'exec', container, 'python3', '-c', CHECK], check=True, timeout=60)
+        print(json.dumps({'image': image, 'pid1': cmdline, 'entrypoint_verified': True}))
     except Exception:
         subprocess.run(['docker', 'logs', container], check=False)
         raise
