@@ -22,6 +22,7 @@ class ActionIntent:
     context_revision: int
     target_revision: int
     reason: str
+    decision_source: str = 'historical_policy_bootstrap'
     contributors: tuple = ()
     context_dependencies: tuple = ()
     policy_head: int = 1
@@ -30,6 +31,7 @@ class ActionIntent:
     teaching_revision: int = 0
 
     def __post_init__(self):
+        object.__setattr__(self, 'decision_source', str(self.decision_source or 'historical_policy_bootstrap'))
         object.__setattr__(self, 'contributors', tuple((str(k), float(v)) for k,v in self.contributors))
         object.__setattr__(self, 'context_dependencies', tuple((str(k), int(v)) for k,v in self.context_dependencies))
         numbers = (self.desired_value, self.confidence, self.support, self.novelty,
