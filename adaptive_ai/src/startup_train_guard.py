@@ -1,16 +1,19 @@
 """Release guard for responsive startup and deterministic initial Train admission.
 
 This module is installed by the final shipped entrypoint after all runtime wrappers are
-composed but before ``core.main()`` binds/serves the application.  It deliberately
-keeps the fixes narrow:
+composed but before ``core.main()`` binds/serves the application. It deliberately keeps
+the fixes narrow:
 
 * status stays lightweight until the runtime reports ready, so a half-built Engine can
-  never make the first UI poll block;
-* API routes that need the runtime return 503 until the same ready boundary;
+  never make the first UI status poll block;
 * the FIFO training queue is created before HistoryManager starts background discovery;
 * an explicit normal Train gets an immediate admission attempt when the heavy slot is
   idle, instead of depending solely on thread scheduling;
 * the queue worker survives an unexpected iteration error and reports it to events.
+
+``core.runtime_available()`` is intentionally NOT changed here. Internal extension
+installers use that predicate while the Engine exists but before startup is marked ready.
+Changing its semantics would skip safety/feedback adapters during normal startup.
 
 No persisted model, feedback, generation, label, setting or rollback state is changed.
 """
@@ -30,11 +33,6 @@ def install(runtime):
 
     # ---- HTTP/status readiness boundary -------------------------------------
     previous_status_payload = core.Handler.status_payload
-    previous_runtime_available = core.runtime_available
-
-    def runtime_available():
-        startup = core.startup_snapshot()
-        return bool(startup.get("ready")) and bool(previous_runtime_available())
 
     def status_payload(self):
         startup = core.startup_snapshot()
@@ -66,7 +64,6 @@ def install(runtime):
             }
         return previous_status_payload(self)
 
-    core.runtime_available = runtime_available
     core.Handler.status_payload = status_payload
 
     # ---- Training queue reliability ----------------------------------------
@@ -75,7 +72,7 @@ def install(runtime):
 
     def idempotent_start(self):
         # queue_main's legacy post-initialize hook may call start() again after the
-        # pre-discovery queue below has already been started.  A Thread cannot normally
+        # pre-discovery queue below has already been started. A Thread cannot normally
         # be started twice; treating the second call as a no-op keeps one worker only.
         if self.ident is not None or self.is_alive():
             return None
@@ -83,7 +80,7 @@ def install(runtime):
 
     def enqueue(self, agent_id, rebuild=False, reason="training"):
         result = original_enqueue(self, agent_id, rebuild=rebuild, reason=reason)
-        # Teach-RL owns a context-selection preflight and remains worker-driven.  Plain
+        # Teach-RL owns a context-selection preflight and remains worker-driven. Plain
         # Train/Rebuild/Resume can safely claim an idle slot immediately because the
         # HistoryManager itself performs the expensive replay in its own worker thread.
         if str(reason) != "teach_rl" and isinstance(result, dict) and result.get("state") == "queued":
@@ -147,7 +144,7 @@ def install(runtime):
 
     def initialize_runtime():
         # History is intentionally imported here, in the background init thread, not at
-        # entrypoint import time.  HTTP therefore remains the first externally visible
+        # entrypoint import time. HTTP therefore remains the first externally visible
         # service even with the final production entrypoint.
         import history as history_module
 
@@ -178,5 +175,6 @@ def install(runtime):
         "training_queue_order": "before_history_discovery",
         "explicit_train_idle_slot": "immediate_admission_attempt",
         "worker_failure": "recover_and_continue",
+        "internal_runtime_available_semantics": "preserved_for_extension_installers",
     }
     return core
