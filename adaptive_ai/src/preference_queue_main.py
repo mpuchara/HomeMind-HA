@@ -1,16 +1,13 @@
-"""Final runtime composition for preference and episode-aware Candidate evaluation.
+"""Final runtime composition for preference, episode and manual-feedback contracts.
 
-The existing ``fast_queue_main`` stack remains authoritative. Preference and episode
-metrics are installed after exact Shadow context/history exists but *before* atomic
-promotion captures the standard Candidate status function. This keeps the stage-01 named
-promotion gates authoritative while allowing stage-05 episode evidence to replace legacy
-transition evidence only when independently labelled coverage is sufficient.
+The existing ``fast_queue_main`` stack remains authoritative. Dependency-sensitive
+Candidate/Tournament additions use the explicit composition hooks exposed there; no
+installer function is monkey-patched.
 
-EpisodeEvaluator itself is created before the fast runtime extensions, so Live outcomes,
-Experiments and Sensor Tournament all share one persistent contract before any worker can
-observe HA. Dependency-sensitive additions use the explicit composition hooks exposed by
-``fast_queue_main``; no installer function is monkey-patched. Durable provenance and the
-observation schema are then composed before Engine/EventStream/History workers start.
+EpisodeEvaluator and ManualFeedbackJournal are first-class services created before the
+fast runtime extensions, so Live outcomes, Experiments, Teaching/Teach-RL, Candidate and
+Sensor Tournament share durable contracts before any worker can observe HA. Provenance
+and the observation schema are composed before Engine/EventStream/History workers start.
 """
 import fast_queue_main as runtime
 from agent_candidate_card_summary import install as install_candidate_card_summary
@@ -23,6 +20,7 @@ from episode_evaluator_runtime import (
     install_core as install_core_episode_evaluator,
     install_tournament as install_tournament_episode_evaluator,
 )
+from manual_feedback_contract import ManualFeedbackJournal
 from provenance_runtime import install as install_provenance_runtime
 from observation_contract import install as install_observation_contract
 
@@ -31,13 +29,20 @@ _original_prepare_engine_extensions = core.prepare_engine_extensions
 
 
 def prepare_engine_extensions():
-    # Episode evaluation is a first-class runtime service. Install it before fast_queue_main
-    # constructs Tournament/Candidate extensions, so those extensions all bind the same
-    # evaluator and no worker can race ahead of the additive episode schema migration.
+    # Shared episode evaluation is available before Tournament/Candidate workers exist.
     evaluator = getattr(core.ENGINE, "episode_evaluator", None)
     if evaluator is None:
         evaluator = EpisodeEvaluator(core.STORE)
     install_core_episode_evaluator(core, evaluator)
+
+    # Manual feedback is a durable fact before any learning layer consumes it. This
+    # migration is additive; legacy labels remain valid/unlinked and are not reinterpreted.
+    feedback = getattr(core.ENGINE, "manual_feedback_journal", None)
+    if feedback is None:
+        feedback = ManualFeedbackJournal(core.STORE)
+        core.ENGINE.manual_feedback_journal = feedback
+    if getattr(core.ENGINE, "teaching", None) is not None:
+        core.ENGINE.teaching.feedback_journal = feedback
 
     installed = {"manager": None, "tournament": None}
 
@@ -61,12 +66,11 @@ def prepare_engine_extensions():
     try:
         _original_prepare_engine_extensions()
     finally:
-        # Hooks are composition-time dependencies, not process-global runtime state.
         runtime.set_engine_extension_hook("after_fast_light", "episode_evaluator", None)
         runtime.set_engine_extension_hook("after_candidate_shadow_context", "preference_and_episode", None)
 
-    # Cross-cutting event identity follows the already-created episode evaluator. Neither
-    # migration rewrites old vectors/labels; missing old provenance remains unknown.
+    # Provenance can now resolve decision_id/episode_id for all feedback recorded after
+    # runtime readiness. Missing historical links remain NULL/unknown, never fabricated.
     install_provenance_runtime(core)
     install_observation_contract(core)
 
@@ -76,28 +80,18 @@ def prepare_engine_extensions():
     if manager is None:
         return
 
-    # Card-only decision decoration is deliberately installed after the complete lifecycle
-    # stack. Atomic promotion therefore keeps its existing safety snapshot, while the UI
-    # receives the latest direct-parent Desired from the same observed Shadow event.
     manager = install_candidate_card_summary(manager)
-
-    # User-facing Candidate names/counters are a display lifecycle layered outside the
-    # immutable internal lineage. Promotion may therefore reset visible Gen numbering
-    # without reusing historical generation IDs or weakening atomic promotion semantics.
     manager = install_candidate_promotion_cycle(manager)
-
-    # Normal Live-agent cards use the same principle as Candidate cards: fast runtime
-    # values are served independently from the heavy diagnostics/status response.
     install_agent_live_card_refresh(core)
 
     core.STORE.event(
         None, "info", "candidate_preference_metrics_ready",
-        "Candidate preference, episode evaluation and fast timing objective enabled",
+        "Candidate preference, episode evaluation and unified manual feedback enabled",
         {
             "contract": getattr(manager, "candidate_preference_contract", None),
             "metric": getattr(manager, "candidate_fast_metric", None),
             "half_life_opportunities": getattr(manager, "candidate_preference_half_life_opportunities", None),
-            "install_order": "episode_core_before_fast_stack;explicit_hooks;episode_candidate_after_preference_before_atomic_promote",
+            "install_order": "episode_and_manual_feedback_before_fast_stack;explicit_hooks;candidate_before_atomic_promote",
             "episode_evaluator_contract": 1,
             "episode_domain": "light_power",
             "episode_candidate_contract": getattr(manager, "candidate_episode_contract", None),
@@ -105,6 +99,10 @@ def prepare_engine_extensions():
                 getattr(installed.get("tournament"), "_episode_evaluator_installed", False)
             ),
             "episode_action_boundary": "observer_only_no_actionintent_no_executor_dispatch",
+            "manual_feedback_contract": 1,
+            "manual_feedback_context_contract": 2,
+            "manual_feedback_action_boundary": "journal_only_no_actionintent_no_executor_dispatch",
+            "manual_feedback_undo": "retire_labels_then_full_rebuild_candidate_no_inverse_update",
             "composition_contract": "fast_queue_named_engine_extension_hooks",
             "card_decisions": getattr(manager, "candidate_card_decision_contract", None),
             "candidate_display": getattr(manager, "candidate_display_contract", None),
