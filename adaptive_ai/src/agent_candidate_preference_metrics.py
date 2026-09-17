@@ -1,24 +1,15 @@
-"""Preference-aware Candidate metrics for fast binary targets.
+"""Preference-aware Candidate metrics and named promotion gates for fast targets.
 
-The Candidate Shadow runtime already records two kinds of durable evidence:
-
-* observed generation predictions paired with later physical target transitions;
-* explicit user corrections (Teach / Change decision) with their creation timestamps.
-
-For fast binary devices the physical automation is a baseline, not ground truth. A
-Candidate that proposes OFF early and is later confirmed by the physical OFF transition
-must therefore receive positive timing evidence instead of being penalized merely because
-``Current`` stayed ON for a while.
-
-This extension keeps model confidence separate from behavioural trust. ``model_confidence``
-is the policy's instantaneous statistical confidence. ``preference_confidence`` is a
-conservative, persistent score derived from confirmed transition opportunities and the
-manual-correction timeline. Old corrections decay only when newer decision opportunities
-arrive; wall-clock silence is not evidence.
+The Candidate Shadow runtime records future transition evidence and explicit corrections.
+For fast binary devices the physical automation is a baseline, not ground truth, so the
+preference metric may replace legacy evidence-count thresholds. It must not erase
+independent safety vetoes such as false-early behaviour, stale feedback/configuration, or
+missing execution prerequisites.
 """
 import math
 from urllib.parse import urlsplit
 
+from agent_candidate_config_guard import config_signature
 from fast_runtime import is_fast_target
 from settings import OPTIONS
 
@@ -32,6 +23,10 @@ DEFAULT_MIN_PREFERENCE_CONFIDENCE = 0.65
 DEFAULT_MAX_ACCURACY_REGRESSION = 0.03
 DEFAULT_CORRECTION_PENALTY = 2.0
 DECISION_STALE_SECONDS = 95.0
+
+CUSTOM_OVERRIDE_NEVER = "never"
+CUSTOM_OVERRIDE_EVIDENCE = "custom_evidence"
+CUSTOM_OVERRIDE_OFFLINE = "explicit_offline"
 
 
 def _finite(value, default=0.0):
@@ -59,6 +54,156 @@ def _binary(value):
     return 1.0 if _finite(value) >= 0.5 else 0.0
 
 
+def _false_early_details(summary):
+    explicit = summary.get("false_early_safety_passed")
+    try:
+        samples = int(summary.get("samples") or summary.get("meaningful_opportunities") or 0)
+    except (TypeError, ValueError):
+        samples = 0
+    margin = max(2, int(math.ceil(max(0, samples) * 0.10)))
+    try:
+        candidate_false_early = int(summary.get("candidate_false_early") or 0)
+        live_false_early = int(summary.get("live_false_early") or 0)
+    except (TypeError, ValueError):
+        return False, margin, None, None
+    derived = candidate_false_early <= live_false_early + margin
+    return (bool(explicit) if explicit is not None else derived), margin, candidate_false_early, live_false_early
+
+
+def _false_early_safety(summary):
+    """Compatibility helper used by regression probes/tests."""
+    return _false_early_details(summary)[0]
+
+
+def _gate(passed, reason, custom_override, observed=None):
+    return {
+        "passed": bool(passed),
+        "reason": str(reason),
+        "custom_override": str(custom_override),
+        "observed": observed or {},
+    }
+
+
+def _promotion_gate_report(manager, row, parent, candidate, summary):
+    """Build the authoritative standard fast-target promotion decision.
+
+    Legacy sample-count thresholds are intentionally not inherited as one opaque boolean.
+    The preference contract owns its own evidence coverage while independent safety gates
+    remain visible and non-removable by later metric composition.
+    """
+    model = manager.store.get_model(candidate["id"]) if candidate and candidate.get("id") else None
+    row_state = str(row.get("state") or "comparing")
+    fresh = bool(summary.get("fresh_feedback_revision"))
+    config_matches = bool(parent and candidate and config_signature(parent) == config_signature(candidate))
+    model_version = model.get("version") if isinstance(model, dict) else None
+    version_config_ok = bool(config_matches and model_version is not None)
+    execution_ok = bool(
+        candidate
+        and candidate.get("training_state") == "qualified"
+        and model
+        and row_state not in {"queued", "building", "exploring", "failed", "discarding"}
+    )
+
+    count = int(summary.get("meaningful_opportunities") or 0)
+    required = int(summary.get("required_future_samples") or DEFAULT_MIN_OPPORTUNITIES)
+    per_action_ready = bool(summary.get("per_action_ready"))
+    coverage_ok = bool(count >= required and per_action_ready)
+
+    regression_ok = bool(summary.get("accuracy_safety_passed"))
+    false_ok, false_margin, candidate_false, live_false = _false_early_details(summary)
+    corrections_ok = bool(summary.get("teach_anchor_passed")) and bool(summary.get("no_new_corrections"))
+    timing_ok = bool(summary.get("timing_safety_passed"))
+    enough_preference = float(summary.get("preference_confidence") or 0.0) >= float(
+        summary.get("preference_confidence_threshold") or DEFAULT_MIN_PREFERENCE_CONFIDENCE
+    )
+    offline_ok = bool(summary.get("offline_gate_passed"))
+
+    gates = {
+        "data_freshness": _gate(
+            fresh,
+            "feedback/build revision is current and Candidate is not dirty" if fresh
+            else "feedback revision changed after build or Candidate is dirty",
+            CUSTOM_OVERRIDE_NEVER,
+            {"feedback_revision": row.get("feedback_revision"), "build_revision": row.get("build_revision"),
+             "dirty": bool(row.get("dirty"))},
+        ),
+        "version_configuration": _gate(
+            version_config_ok,
+            "Candidate model is versioned and policy configuration matches its direct parent" if version_config_ok
+            else "Candidate model version/configuration does not match the current direct parent",
+            CUSTOM_OVERRIDE_NEVER,
+            {"config_matches": config_matches, "model_version": model_version},
+        ),
+        "offline_gate": _gate(
+            offline_ok,
+            "offline gate passed" if offline_ok else "offline gate did not pass",
+            CUSTOM_OVERRIDE_OFFLINE,
+        ),
+        "action_coverage": _gate(
+            coverage_ok,
+            f"future evidence {count}/{required}; per-action coverage {'ready' if per_action_ready else 'insufficient'}",
+            CUSTOM_OVERRIDE_EVIDENCE,
+            {"opportunities": count, "required": required, "per_action_ready": per_action_ready,
+             "per_action": summary.get("fast_per_action_samples")},
+        ),
+        "quality_regression": _gate(
+            regression_ok,
+            "Candidate transition accuracy is within the allowed regression" if regression_ok
+            else "Candidate transition accuracy exceeds the allowed regression",
+            CUSTOM_OVERRIDE_EVIDENCE,
+            {"parent_accuracy": summary.get("parent_transition_accuracy"),
+             "candidate_accuracy": summary.get("candidate_transition_accuracy")},
+        ),
+        "false_early": _gate(
+            false_ok,
+            (
+                f"false-early {candidate_false} <= Live {live_false} + margin {false_margin}"
+                if false_ok else
+                f"false-early veto: Candidate {candidate_false} > Live {live_false} + margin {false_margin}"
+            ),
+            CUSTOM_OVERRIDE_NEVER,
+            {"candidate_false_early": candidate_false, "live_false_early": live_false,
+             "margin": false_margin},
+        ),
+        "corrections": _gate(
+            corrections_ok,
+            "Teach anchors fit and no new explicit corrections exist" if corrections_ok
+            else "Teach anchors do not fit or a new explicit correction exists",
+            CUSTOM_OVERRIDE_NEVER,
+            {"teach_anchor_passed": bool(summary.get("teach_anchor_passed")),
+             "manual_corrections": int(summary.get("manual_corrections_since_generation") or 0)},
+        ),
+        "timing": _gate(
+            timing_ok,
+            "timing objective is within the standard safety tolerance" if timing_ok
+            else "timing objective is below the standard safety tolerance",
+            CUSTOM_OVERRIDE_EVIDENCE,
+            {"timing_objective_gain": summary.get("timing_objective_gain")},
+        ),
+        "preference_evidence": _gate(
+            enough_preference,
+            "preference confidence reached the standard threshold" if enough_preference
+            else "preference confidence is below the standard threshold",
+            CUSTOM_OVERRIDE_EVIDENCE,
+            {"confidence": summary.get("preference_confidence"),
+             "threshold": summary.get("preference_confidence_threshold")},
+        ),
+        "execution_prerequisites": _gate(
+            execution_ok,
+            "qualified persisted Candidate model is ready for atomic promotion" if execution_ok
+            else "Candidate is not in an executable qualified/model-ready lifecycle state",
+            CUSTOM_OVERRIDE_NEVER,
+            {"training_state": (candidate or {}).get("training_state"), "row_state": row_state,
+             "model_present": bool(model)},
+        ),
+    }
+    vetoes = [
+        {"gate": name, "reason": gate["reason"], "custom_override": gate["custom_override"]}
+        for name, gate in gates.items() if not gate["passed"]
+    ]
+    return gates, vetoes
+
+
 def _window_for(outcome):
     if _binary(outcome) >= 0.5:
         return _option_float("fast_precursor_on_seconds", DEFAULT_ON_WINDOW_SECONDS, 1.0)
@@ -66,12 +211,7 @@ def _window_for(outcome):
 
 
 def _timing_utility(correct, lead_seconds, window_seconds):
-    """Fast-target utility in [-1, 1]. Wrong direction is a hard failure.
-
-    Correct direction earns utility proportional to safe lead. This mirrors the existing
-    fast-light objective: timing is the optimization target while transition accuracy
-    remains a safety guard.
-    """
+    """Fast-target utility in [-1, 1]. Wrong direction is a hard failure."""
     if not bool(correct):
         return -1.0
     lead = max(0.0, _finite(lead_seconds))
@@ -80,7 +220,6 @@ def _timing_utility(correct, lead_seconds, window_seconds):
 
 
 def _wilson_lower(success_weight, failure_weight, z=1.0):
-    """Wilson-style conservative lower bound for non-negative weighted evidence."""
     success = max(0.0, _finite(success_weight))
     failure = max(0.0, _finite(failure_weight))
     total = success + failure
@@ -95,7 +234,6 @@ def _wilson_lower(success_weight, failure_weight, z=1.0):
 
 
 def _opportunity_weight(index, total, half_life=None):
-    """Recency in *opportunities*, never wall-clock time."""
     half_life = max(1.0, _finite(
         half_life if half_life is not None else OPTIONS.get(
             "candidate_preference_half_life_opportunities", DEFAULT_HALF_LIFE_OPPORTUNITIES
@@ -107,7 +245,6 @@ def _opportunity_weight(index, total, half_life=None):
 
 
 def _preference_confidence(success_weight, failure_weight):
-    """Persistent trust score: conservative reliability multiplied by evidence support."""
     success = max(0.0, _finite(success_weight))
     failure = max(0.0, _finite(failure_weight))
     evidence = success + failure
@@ -139,13 +276,6 @@ def _pair_rows(store, parent_generation_id, child_generation_id):
 
 
 def _observed_lead(store, generation_id, outcome, outcome_ts, window_seconds):
-    """Recover contiguous observed lead from immutable Shadow history.
-
-    ``candidate_generation_pairs`` historically capped lead at 30 s. For bathroom-style
-    OFF timing we need the real 60-120 s interval, so walk the observed decision history
-    backwards while Desired remains equal to the later confirmed outcome. Desired changes
-    are persisted immediately; heartbeat rows bound any gap in observation.
-    """
     outcome_ts = float(outcome_ts)
     window = max(1.0, float(window_seconds))
     start = outcome_ts - max(window, DECISION_STALE_SECONDS)
@@ -171,7 +301,6 @@ def _observed_lead(store, generation_id, outcome, outcome_ts, window_seconds):
 
 
 def _manual_corrections(store, generation, since_ts):
-    """Return deduplicated explicit corrections created on this exact generation."""
     agent_id = str(generation.get("agent_id") or "")
     if not agent_id:
         return []
@@ -289,12 +418,12 @@ def _fast_metrics(manager, row, parent, candidate, base_summary, candidate_statu
         "agent_candidate_max_accuracy_regression", DEFAULT_MAX_ACCURACY_REGRESSION, 0.0
     )
     accuracy_safety = bool(
-        count >= min_samples
-        and child_accuracy is not None
+        child_accuracy is not None
         and parent_accuracy is not None
         and child_accuracy + max_regression >= parent_accuracy
     )
     timing_safety = bool(timing_gain is not None and timing_gain >= -0.02)
+    count_ready = count >= min_samples
     per_action_ready = all(int(per_action.get(str(v), 0)) >= min_per_action for v in (0.0, 1.0))
     no_new_corrections = len(corrections) == 0
 
@@ -302,6 +431,7 @@ def _fast_metrics(manager, row, parent, candidate, base_summary, candidate_statu
         "comparison_metric": "fast_timing_preference",
         "meaningful_opportunities": count,
         "required_future_samples": min_samples,
+        "future_sample_count_ready": count_ready,
         "required_future_samples_per_action": min_per_action,
         "per_action_ready": per_action_ready,
         "fast_per_action_samples": per_action,
@@ -323,18 +453,10 @@ def _fast_metrics(manager, row, parent, candidate, base_summary, candidate_statu
         "accuracy_safety_passed": accuracy_safety,
         "timing_safety_passed": timing_safety,
         "no_new_corrections": no_new_corrections,
-        "fast_on_parent_lead_seconds": (
-            sum(x[0] for x in on_leads) / len(on_leads) if on_leads else None
-        ),
-        "fast_on_candidate_lead_seconds": (
-            sum(x[1] for x in on_leads) / len(on_leads) if on_leads else None
-        ),
-        "fast_off_parent_lead_seconds": (
-            sum(x[0] for x in off_leads) / len(off_leads) if off_leads else None
-        ),
-        "fast_off_candidate_lead_seconds": (
-            sum(x[1] for x in off_leads) / len(off_leads) if off_leads else None
-        ),
+        "fast_on_parent_lead_seconds": sum(x[0] for x in on_leads) / len(on_leads) if on_leads else None,
+        "fast_on_candidate_lead_seconds": sum(x[1] for x in on_leads) / len(on_leads) if on_leads else None,
+        "fast_off_parent_lead_seconds": sum(x[0] for x in off_leads) / len(off_leads) if off_leads else None,
+        "fast_off_candidate_lead_seconds": sum(x[1] for x in off_leads) / len(off_leads) if off_leads else None,
     }
 
 
@@ -359,39 +481,27 @@ def install(manager):
 
         try:
             import json
-            gate = json.loads(row.get("offline_gate_json") or "{}")
+            offline = json.loads(row.get("offline_gate_json") or "{}")
         except Exception:
-            gate = {}
+            offline = {}
         anchor_status = {
-            "teach_fit_total": gate.get("teach_fit_total"),
-            "teach_fit_after_count": gate.get("teach_fit_after_count"),
+            "teach_fit_total": offline.get("teach_fit_total"),
+            "teach_fit_after_count": offline.get("teach_fit_after_count"),
         }
         metrics = _fast_metrics(manager, row, parent_agent, candidate_agent, out, anchor_status)
         if not metrics:
             return out
         out.update(metrics)
+        if out.get("offline_gate_passed") is None:
+            out["offline_gate_passed"] = bool(offline.get("passed"))
 
-        fresh = bool(out.get("fresh_feedback_revision"))
-        trained = bool(
-            candidate_agent
-            and candidate_agent.get("training_state") == "qualified"
-            and manager.store.get_model(candidate_agent["id"])
-        )
-        offline_gate = bool(out.get("offline_gate_passed"))
-        enough_preference = float(out.get("preference_confidence") or 0.0) >= float(
-            out.get("preference_confidence_threshold") or DEFAULT_MIN_PREFERENCE_CONFIDENCE
-        )
-        out["promotable"] = bool(
-            fresh
-            and trained
-            and offline_gate
-            and out.get("per_action_ready")
-            and out.get("accuracy_safety_passed")
-            and out.get("timing_safety_passed")
-            and out.get("teach_anchor_passed")
-            and out.get("no_new_corrections")
-            and enough_preference
-        )
+        false_ok, _, _, _ = _false_early_details(out)
+        out["false_early_safety_passed"] = false_ok
+        gates, vetoes = _promotion_gate_report(manager, row, parent_agent, candidate_agent, out)
+        out["promotion_gates"] = gates
+        out["promotion_vetoes"] = vetoes
+        out["promotion_veto_reasons"] = [item["reason"] for item in vetoes]
+        out["promotable"] = not vetoes
         return out
 
     manager._comparison_summary = comparison_summary
@@ -413,6 +523,9 @@ def install(manager):
             result["preference_metric"] = summary.get("comparison_metric")
             result["meaningful_opportunities"] = summary.get("meaningful_opportunities")
             result["manual_corrections_since_generation"] = summary.get("manual_corrections_since_generation")
+            result["promotion_gates"] = summary.get("promotion_gates") or {}
+            result["promotion_vetoes"] = summary.get("promotion_vetoes") or []
+            result["promotion_veto_reasons"] = summary.get("promotion_veto_reasons") or []
             result["promotable"] = bool(summary.get("promotable"))
             if result.get("state") == "comparing" and result["promotable"]:
                 result["state"] = "ready"
@@ -455,7 +568,7 @@ def install(manager):
     handler.static = static
     manager._candidate_preference_metrics_installed = True
     manager.candidate_preference_contract = (
-        "teach_anchor_plus_confirmed_fast_transitions_plus_opportunity_decayed_manual_corrections"
+        "named_fast_promotion_gates_preserve_hard_vetoes_and_expose_reasons"
     )
     manager.candidate_fast_metric = "timing_utility_with_transition_accuracy_safety"
     manager.candidate_preference_half_life_opportunities = _option_float(

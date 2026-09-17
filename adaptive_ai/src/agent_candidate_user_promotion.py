@@ -4,15 +4,12 @@ The standard Candidate gates remain the default. This extension adds an explicit
 promotion path where the user chooses how much paired future evidence is enough and may
 explicitly override a failed/insufficient *offline* regression gate.
 
-Hard invariants are still owned by the existing atomic promoter: the Candidate must have
-a qualified model, Root/Candidate configuration must still match, Control promotion must
-still pass Control qualification, the generation swap remains atomic, and a Candidate
-never dispatches before the commit.
-
-A failed offline gate is also advisory for passive Shadow observation only. That lets
-future A/B evidence keep accumulating instead of freezing forever at zero samples. The
-observation wrapper always resolves the active lineage leaf, including G2/G3 descendants;
-it does not assume that the active edge is rooted directly at Live G0.
+For fast targets the preference layer exposes named promotion gates. Custom promotion may
+replace evidence policy (sample/action coverage, regression budget, preference/timing
+confidence) and may explicitly override the offline gate, but it may never override stale
+data/configuration, false-early safety, unresolved corrections, or missing execution
+prerequisites. Atomic generation swap, configuration re-check and Control qualification
+remain mandatory as well.
 """
 from __future__ import annotations
 
@@ -86,43 +83,82 @@ def normalize_rules(raw):
     }
 
 
+def _named_gates(status):
+    comparison = dict((status or {}).get("comparison") or {})
+    gates = comparison.get("promotion_gates") or (status or {}).get("promotion_gates") or {}
+    return gates if isinstance(gates, dict) else {}
+
+
+def _non_overridable_gate_failures(status):
+    failures = []
+    for name, gate in _named_gates(status).items():
+        if not isinstance(gate, dict) or bool(gate.get("passed")):
+            continue
+        if str(gate.get("custom_override") or "never") == "never":
+            failures.append(f"{name}: {gate.get('reason') or 'mandatory promotion gate failed'}")
+    return failures
+
+
+def _custom_override_report(status, rules):
+    overrides = []
+    gates = _named_gates(status)
+    for name, gate in gates.items():
+        if not isinstance(gate, dict) or bool(gate.get("passed")):
+            continue
+        policy = str(gate.get("custom_override") or "never")
+        if policy == "custom_evidence":
+            overrides.append({"gate": name, "reason": gate.get("reason"), "via": "custom_evidence_rules"})
+        elif policy == "explicit_offline" and rules.get("allow_offline_gate_override"):
+            overrides.append({"gate": name, "reason": gate.get("reason"), "via": "explicit_offline_override"})
+    return overrides
+
+
 def evaluate_custom_rules(status, raw_rules=None):
-    """Return a transparent pass/fail report against the user's explicit criteria."""
+    """Return a transparent pass/fail report against explicit custom criteria."""
     status = dict(status or {})
     rules = normalize_rules(raw_rules)
     comparison = dict(status.get("comparison") or {})
     gate = dict(status.get("offline_gate") or {})
-    failures = []
+    failures = _non_overridable_gate_failures(status)
 
     state = str(status.get("state") or "")
     training_state = str(status.get("training_state") or "")
-    if training_state != "qualified":
+    if training_state != "qualified" and not any(item.startswith("execution_prerequisites:") for item in failures):
         failures.append("Candidate model is not qualified yet")
     if state in {"queued", "building", "exploring", "failed", "discarding"}:
         failures.append(f"Candidate state {state or 'unknown'} cannot be promoted")
 
     gate_passed = bool(gate.get("passed"))
+    named_offline = _named_gates(status).get("offline_gate") or {}
+    if named_offline:
+        gate_passed = bool(named_offline.get("passed"))
     if not gate_passed and not rules["allow_offline_gate_override"]:
         failures.append("offline gate did not pass (enable explicit offline-gate override to accept this risk)")
 
-    samples = int(comparison.get("samples") or 0)
+    samples = int(comparison.get("samples") or comparison.get("meaningful_opportunities") or 0)
     if samples < rules["min_future_samples"]:
-        failures.append(
-            f"future samples {samples} < required {rules['min_future_samples']}"
-        )
+        failures.append(f"future samples {samples} < required {rules['min_future_samples']}")
 
     binary = "required_future_samples_per_action" in comparison
-    on_events = int(comparison.get("on_events") or 0)
-    off_events = int(comparison.get("off_events") or 0)
+    if comparison.get("fast_per_action_samples"):
+        per = comparison.get("fast_per_action_samples") or {}
+        on_events = int(per.get("1.0") or 0)
+        off_events = int(per.get("0.0") or 0)
+    else:
+        on_events = int(comparison.get("on_events") or 0)
+        off_events = int(comparison.get("off_events") or 0)
     if binary and rules["min_per_binary_action"] > 0:
         need = int(rules["min_per_binary_action"])
         if on_events < need or off_events < need:
-            failures.append(
-                f"binary future evidence ON/OFF {on_events}/{off_events} < {need}/{need}"
-            )
+            failures.append(f"binary future evidence ON/OFF {on_events}/{off_events} < {need}/{need}")
 
     max_regression_pp = rules["max_future_regression_pp"]
     gain = comparison.get("accuracy_gain")
+    if gain is None:
+        parent_acc = comparison.get("parent_transition_accuracy")
+        child_acc = comparison.get("candidate_transition_accuracy")
+        if parent_acc is not None and child_acc is not None:
+            gain = float(child_acc) - float(parent_acc)
     if max_regression_pp is not None and samples > 0:
         if gain is None:
             failures.append("future accuracy regression cannot be evaluated yet")
@@ -131,10 +167,12 @@ def evaluate_custom_rules(status, raw_rules=None):
                 f"future accuracy regression {float(gain) * 100.0:.1f} pp exceeds allowed {-float(max_regression_pp):.1f} pp"
             )
 
+    overrides = _custom_override_report(status, rules) if not failures else []
     return {
         "passed": not failures,
         "rules": rules,
         "failures": failures,
+        "standard_overrides": overrides,
         "observed": {
             "state": state,
             "training_state": training_state,
@@ -149,14 +187,6 @@ def evaluate_custom_rules(status, raw_rules=None):
 
 
 def _active_observation_row(manager, root_id):
-    """Resolve the current leaf edge for a Root Live agent.
-
-    `agent_candidates.parent_agent_id` is the direct parent of an edge. From G2 onward
-    that parent is a hidden Candidate id, not the Root Live id. Looking up only
-    `_candidate_row(root_id)` therefore returns the old G0->G1 parent edge and leaves a
-    blocked G1->G2/G2->G3 leaf invisible to the observation override. The Shadow runtime
-    then rejects the real leaf and `Future samples` stays at zero forever.
-    """
     try:
         with manager.store.conn() as c:
             row = c.execute(
@@ -191,11 +221,7 @@ def _generation_state(manager, candidate_id):
 
 @contextmanager
 def _temporary_offline_gate_pass(manager, row, *, purpose):
-    """Let passive comparison / atomic promoter cross only the offline evidence gate.
-
-    Both the active-edge row and lineage ledger state are restored unless a successful
-    atomic promotion consumes the Candidate. No model/config/control checks are bypassed.
-    """
+    """Let passive comparison / atomic promoter cross only the offline evidence gate."""
     if not row:
         yield
         return
@@ -259,8 +285,13 @@ def install(manager):
     def comparison_summary(row, parent=None, candidate=None):
         out = original_summary(row, parent, candidate)
         if bool(getattr(_PROMOTION_TLS, "active", False)):
-            out["promotable"] = True
+            hard_vetoes = [
+                item for item in (out.get("promotion_vetoes") or [])
+                if str(item.get("custom_override") or "never") == "never"
+            ]
+            out["promotable"] = not hard_vetoes
             out["user_promotion_override"] = True
+            out["user_promotion_hard_vetoes"] = hard_vetoes
         return out
 
     def _observation_call(fn, agent, state_map):
@@ -270,9 +301,6 @@ def install(manager):
         gate = _json(row.get("offline_gate_json"), {})
         if gate.get("passed") and str(row.get("state") or "") not in _BLOCKED_STATES:
             return fn(agent, state_map)
-        # Passive A/B observation is safe to continue even when the offline benchmark is
-        # blocked. Resolve the lineage leaf first: from G2 onward parent_agent_id is not
-        # the Root Live id. The gate remains visible and still blocks normal Promote.
         with _temporary_offline_gate_pass(manager, row, purpose="observation"):
             return fn(agent, state_map)
 
@@ -295,7 +323,7 @@ def install(manager):
 
         manager.store.event(
             str(status.get("root_agent_id") or status.get("parent_agent_id") or parent_id),
-            "warning" if report["rules"]["allow_offline_gate_override"] and not report["observed"]["offline_gate_passed"] else "info",
+            "warning" if report["standard_overrides"] else "info",
             "candidate_custom_promotion_requested",
             "User accepted explicit custom Candidate promotion conditions",
             report,
@@ -334,7 +362,7 @@ def install(manager):
     handler.do_POST = do_post
     manager._candidate_user_promotion_installed = True
     manager.candidate_custom_promotion_contract = (
-        "user_defined_future_thresholds_optional_offline_override_hard_atomic_control_guards_preserved"
+        "custom_evidence_and_explicit_offline_overrides_only_hard_named_gates_preserved"
     )
     manager.candidate_offline_gate_observation_contract = (
         "active_lineage_leaf_offline_gate_blocks_standard_promotion_but_not_passive_future_ab_collection"

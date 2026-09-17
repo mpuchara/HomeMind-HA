@@ -5,6 +5,7 @@ near a learned boundary, not a HA sensor. Only Executor may dispatch it. Sparse
 named features keep other-device discoveries out of historical feature slots.
 """
 import copy
+from datetime import datetime
 import json
 import math
 import random
@@ -29,6 +30,29 @@ def activity_scalar(state):
         return None
     activity = str((state.get('attributes') or {}).get('hvac_action') or state['state'])
     return -1. if activity in ('off', 'idle', 'standby', 'docked', 'paused') else 1.
+
+
+def state_change_ts(state):
+    """Return a HA transition timestamp when one is available."""
+    if not state:
+        return None
+    raw = state.get('last_changed') or state.get('last_updated')
+    if raw is None:
+        return None
+    if isinstance(raw, (int, float)) and not isinstance(raw, bool):
+        value = float(raw)
+        return value if math.isfinite(value) else None
+    text = str(raw).strip()
+    try:
+        value = float(text)
+        return value if math.isfinite(value) else None
+    except ValueError:
+        pass
+    try:
+        parsed = datetime.fromisoformat(text.replace('Z', '+00:00'))
+        return parsed.timestamp()
+    except (TypeError, ValueError, OverflowError):
+        return None
 
 
 class Experiments:
@@ -98,22 +122,33 @@ class Experiments:
                     if name.startswith('device:'):
                         influences.append(dict(entity_id=name[7:], contribution=round(b/a, 4), samples=learner['counts'][arm]))
             influences.sort(key=lambda x: abs(x['contribution']), reverse=True)
+            active_keys = ('trial_id', 'kind', 'value', 'baseline', 'started', 'deadline',
+                           'action_at', 'observation_start', 'observation_end')
             return copy.deepcopy(dict(config=data['config'], revision=data['revision'],
-                active={k: active[k] for k in ('kind', 'value', 'baseline', 'started', 'deadline')} if active else None,
+                active={k: active.get(k) for k in active_keys} if active else None,
                 counts=learner['counts'], rewards=learner['rewards'],
                 trials_today=sum(t > self.clock()-86400 for t in data['trials']),
                 next_trial_after=max(data['last_started']+data['config']['interval'], data['cooldown_until']),
                 last_outcome=data.get('last_outcome'), reason=self.messages.get(aid, 'Waiting for an eligible context'),
                 device_influences=influences[:12]))
 
+    @staticmethod
+    def _watch_entities(trial):
+        if not trial:
+            return set()
+        return (set(trial.get('prediction_inputs') or {})
+                | set(trial.get('background_dependencies') or {})
+                | set(trial.get('outcome_sources') or {})
+                | set(trial.get('snapshot') or {}))
+
     def watches(self, aid):
         with self.lock:
             data = self._get(aid)
-            return set((data.get('active') or {}).get('snapshot', {})) | set((self.prepared.get(aid) or {}).get('snapshot', {}))
+            return self._watch_entities(data.get('active')) | self._watch_entities(self.prepared.get(aid))
 
     def _inputs(self, agent, policy, states, registry, features, labels, focus, data):
-        """Read all operating devices, then bound the per-agent input manifest to 32."""
-        selected, x, snapshot = {}, {'bias': 1.0}, {}
+        """Build prediction inputs only; outcome evidence and background watches stay separate."""
+        selected, x, prediction_inputs = {}, {'bias': 1.0}, {}
         for index, names in labels.items():
             name = names[0]
             eid, _, suffix = name.partition(':')
@@ -127,7 +162,7 @@ class Experiments:
             if (focus == 'presence' and kind) or (focus == 'environment' and environment):
                 selected[index] = name
                 x[name] = float(features.get(index, 0))
-                snapshot[eid] = state_scalar(state)
+                prediction_inputs[eid] = state_scalar(state)
         if focus == 'presence':
             for index, names in labels.items():
                 if names[0].startswith('home:occupancy'):
@@ -153,9 +188,55 @@ class Experiments:
             # Named weights survive rotating discovery without reinterpreting columns.
             for _, _, eid, value in candidates[:32]:
                 x['device:' + eid] = value
-                snapshot[eid] = value
+                prediction_inputs[eid] = value
             self.messages[agent['id']] = f'Scanned {len(candidates)} other devices; {min(32, len(candidates))} trial inputs'
-        return selected, x, snapshot
+        return selected, x, prediction_inputs
+
+    @staticmethod
+    def _presence_outcome_sources(agent, selected, states, registry):
+        """Return verified same-area presence sources allowed to settle a presence outcome.
+
+        A predictor is not automatically an outcome source. Both the target and source
+        must have explicit HA area mappings, and the source must have a verified binary
+        or tracker presence role. Missing mapping deliberately leaves the outcome unknown.
+        """
+        target_area = (registry.get(agent['target_entity'], {}) or {}).get('area_id')
+        if not target_area:
+            return {}
+        sources = {}
+        for name in selected.values():
+            eid, _, suffix = str(name).partition(':')
+            if suffix != 'value' or eid == agent['target_entity']:
+                continue
+            state = states.get(eid)
+            if not state or state.get('state') in ('unavailable', 'unknown'):
+                continue
+            reg = registry.get(eid, {}) or {}
+            kind, _ = source_kind(eid, state, reg)
+            source_area = reg.get('area_id')
+            if kind not in {'binary', 'tracker'} or not source_area or source_area != target_area:
+                continue
+            before = state_scalar(state)
+            if before is None:
+                continue
+            sources[eid] = {'role': kind, 'area_id': source_area, 'before': before, 'anchored_at': None}
+        return sources
+
+    @staticmethod
+    def _observed_value(trial, eid, state):
+        if not state or state.get('state') in ('unavailable', 'unknown'):
+            return None
+        return activity_scalar(state) if 'device:' + eid in trial.get('x', {}) else state_scalar(state)
+
+    def _rebase_outcome_sources(self, trial, states, at):
+        if not states:
+            return
+        for eid, source in (trial.get('outcome_sources') or {}).items():
+            state = states.get(eid)
+            value = self._observed_value(trial, eid, state)
+            if value is not None:
+                source['before'] = value
+                source['anchored_at'] = at
 
     @staticmethod
     def _score(learner, arm, x):
@@ -214,20 +295,29 @@ class Experiments:
                     return None
                 self.screen_after[aid] = now+10
             registry = registry() if callable(registry) else registry
-            selected, x, snapshot = self._inputs(agent, policy, states, registry, features, labels, cfg['focus'], data)
+            selected, x, prediction_inputs = self._inputs(agent, policy, states, registry, features, labels, cfg['focus'], data)
+            outcome_sources = (
+                self._presence_outcome_sources(agent, selected, states, registry)
+                if cfg['focus'] == 'presence' else {}
+            )
+            for source in outcome_sources.values():
+                source['anchored_at'] = now
             if len(x) <= 1 or (cfg['focus'] == 'presence' and not any(v > .01 for k, v in x.items() if k != 'bias')):
                 self.messages[aid] = 'No usable signal for this focus in the selected context'
                 return None
             span = max(.01, agent['max_value']-agent['min_value'])
             x['baseline_setting'] = (chosen['value']-agent['min_value'])/span
             x['trial_strength'] = cfg['intensity']
-            # Background context still terminates an observation if it changes;
-            # only the requested focus enters the residual learner.
+            background_dependencies = {}
             for eid in getattr(getattr(policy, 'schema', None), 'entities', ()):
                 state = states.get(eid)
                 value = state_scalar(state) if state and state.get('state') not in ('unknown', 'unavailable') else None
-                if value is not None and eid != agent['target_entity'] and eid not in snapshot:
-                    snapshot[eid] = value
+                if (value is not None and eid != agent['target_entity']
+                    and eid not in prediction_inputs and eid not in outcome_sources):
+                    background_dependencies[eid] = value
+            # Compatibility view for older diagnostics only. Outcome attribution below
+            # consumes the three named manifests, never this merged snapshot.
+            snapshot = {**prediction_inputs, **background_dependencies}
             candidates = []
             head = policy.heads[horizon]
             with policy.lock:
@@ -275,14 +365,21 @@ class Experiments:
             # Interleaved controls distinguish doing nothing from a useful change.
             reference = self.rng.random() < .25 or self._score(learner, 0, x) > self._score(learner, arm_id, x)
             timing = timing_for(agent)
-            trial = dict(kind='reference' if reference else 'probe', arm=0 if reference else arm_id,
-                value=chosen['value'] if reference else arm['value'], baseline=chosen['value'],
-                index=chosen['index'] if reference else arm['index'], x=x, snapshot=snapshot,
+            window = max(cfg['observation_seconds'], timing.settling)
+            trial = dict(trial_id=str(uuid4()), kind='reference' if reference else 'probe',
+                arm=0 if reference else arm_id, value=chosen['value'] if reference else arm['value'],
+                baseline=chosen['value'], index=chosen['index'] if reference else arm['index'], x=x,
+                prediction_inputs=prediction_inputs, background_dependencies=background_dependencies,
+                outcome_sources=outcome_sources, snapshot=snapshot,
+                # Deprecated compatibility alias; outcome logic consumes outcome_sources.
+                outcome_confirmers=sorted(outcome_sources),
                 focus=cfg['focus'], revision=data['revision'], policy_version=policy.VERSION,
                 model_revision=policy.model_revision, target=agent['target_entity'], property=agent['target_property'],
                 confidence=confidence, support=arm['support'], novelty=arm['novelty'], gap=gap, gain=gain,
-                started=now, deadline=now+timing.acknowledgement+max(cfg['observation_seconds'], timing.settling),
-                ack=now if reference else None, window=max(cfg['observation_seconds'], timing.settling))
+                started=now, deadline=now+timing.acknowledgement+window,
+                action_at=None, observation_start=now if reference else None,
+                observation_end=now+window if reference else None,
+                ack=now if reference else None, window=window)
             if reference:
                 self._start(aid, trial)
                 return None
@@ -304,7 +401,7 @@ class Experiments:
                 and trial['property'] == agent['target_property'] and trial['value'] == intent.desired_value
                 and trial['model_revision'] == intent.model_revision and trial['confidence'] >= agent['confidence_threshold'])
 
-    def begin(self, agent, intent):
+    def begin(self, agent, intent, states=None):
         """Reserve before HTTP, including uncertain transport failures in the budget."""
         with self.lock:
             if not self.valid(agent, intent):
@@ -313,21 +410,40 @@ class Experiments:
                 return False
             trial = self.prepared[agent['id']]
             if not self._get(agent['id']).get('active'):
+                self._rebase_outcome_sources(trial, states, self.clock())
                 self._start(agent['id'], trial)
             return True
 
-    def dispatched(self, agent, intent):
+    def dispatched(self, agent, intent, states=None):
+        """Bind a successful probe to the actual Executor dispatch boundary and window."""
         with self.lock:
+            now = self.clock()
+            data = self._get(agent['id'])
+            trial = data.get('active')
+            if trial and trial.get('kind') == 'probe' and trial.get('trial_id'):
+                self._rebase_outcome_sources(trial, states, now)
+                trial['action_at'] = now
+                trial['observation_start'] = now
+                trial['observation_end'] = now + trial['window']
+                self._save(agent['id'])
             self.prepared.pop(agent['id'], None)
 
     def _start(self, aid, trial):
         data, now = self._get(aid), self.clock()
-        trial = dict(trial, started=now, deadline=now+(trial['deadline']-trial['started']))
+        duration = trial['deadline'] - trial['started']
+        trial = dict(trial, trial_id=trial.get('trial_id') or str(uuid4()),
+                     started=now, deadline=now+duration)
+        if trial['kind'] == 'reference':
+            trial['observation_start'] = now
+            trial['observation_end'] = now + trial['window']
+            trial['ack'] = now
+            for source in (trial.get('outcome_sources') or {}).values():
+                source['anchored_at'] = now
         data.update(active=trial, last_started=now)
         data['trials'].append(now)
         self._save(aid)
         self.store.event(aid, 'info', 'experiment_started', trial['kind'] + ': ' + trial['focus'],
-                         {k: trial[k] for k in ('kind', 'value', 'baseline', 'focus', 'gap', 'gain')})
+                         {k: trial[k] for k in ('trial_id', 'kind', 'value', 'baseline', 'focus', 'gap', 'gain')})
 
     def observe(self, agent, states, current, manual=False):
         aid, now = agent['id'], self.clock()
@@ -352,18 +468,68 @@ class Experiments:
                 return self._finish(aid, None, 'no device acknowledgement')
             if trial['ack'] is not None and not matches:
                 return self._finish(aid, None, 'external or ordinary control changed the target')
-            for eid, before in trial['snapshot'].items():
+
+            manifests = {}
+            for role in ('prediction_inputs', 'background_dependencies'):
+                for eid, before in (trial.get(role) or {}).items():
+                    manifests.setdefault(eid, before)
+            # Legacy in-flight data is safe-by-default after upgrade: it may abort but
+            # cannot become positive outcome evidence without an explicit outcome source.
+            if not manifests:
+                manifests.update(trial.get('snapshot') or {})
+
+            changes, unavailable = [], []
+            for eid, before in manifests.items():
                 state = states.get(eid)
-                after = (activity_scalar(state) if 'device:'+eid in trial['x'] else state_scalar(state)) if state and state.get('state') not in ('unavailable', 'unknown') else None
+                after = self._observed_value(trial, eid, state)
                 if after is None:
-                    return self._finish(aid, None, 'context unavailable')
-                if abs(after-before) > .05:
-                    if (trial['ack'] is not None and trial['focus'] == 'presence'
-                        and trial['property'] == 'power' and state.get('state') in ('on', 'home') and before < 0 and after > 0):
-                        return self._finish(aid, .6 if trial['value'] >= .5 else -.2, 'presence confirmed after decision')
-                    return self._finish(aid, None, 'context changed; ordinary control resumes')
-            if trial['ack'] is not None and now-trial['ack'] >= trial['window']:
-                return self._finish(aid, .02 if trial['kind'] == 'probe' else .05, 'weak preference: observed without correction')
+                    unavailable.append(eid)
+                elif abs(after-before) > .05:
+                    changes.append((eid, before, after, state))
+            if unavailable:
+                return self._finish(aid, None, 'context unavailable')
+
+            if changes:
+                outcome_sources = trial.get('outcome_sources') or {}
+                candidate_events = []
+                for eid, _before, after, state in changes:
+                    source = outcome_sources.get(eid)
+                    source_before = source.get('before') if source else None
+                    if (source and trial['focus'] == 'presence' and trial['property'] == 'power'
+                        and state.get('state') in ('on', 'home')
+                        and source_before is not None and source_before < 0 and after > 0):
+                        changed_at = state_change_ts(state)
+                        if changed_at is None and source.get('anchored_at') is not None:
+                            # The source was re-snapshotted at the action boundary, so a
+                            # later observed transition remains attributable even when HA
+                            # omitted last_changed from this state payload.
+                            changed_at = now
+                        candidate_events.append((eid, changed_at))
+
+                if candidate_events and trial['ack'] is not None:
+                    start = trial.get('observation_start')
+                    end = trial.get('observation_end')
+                    valid_events = [(eid, changed_at) for eid, changed_at in candidate_events
+                                    if changed_at is not None and start is not None and end is not None
+                                    and start <= changed_at <= end]
+                    if valid_events:
+                        if trial['kind'] == 'reference':
+                            return self._finish(aid, None,
+                                'reference arrival observed; no comfort-loss outcome defined')
+                        if trial.get('action_at') is None:
+                            return self._finish(aid, None, 'presence timing unknown: action timestamp unavailable')
+                        return self._finish(aid, .6, 'presence confirmed after decision')
+                    return self._finish(aid, None,
+                        'presence transition outside observable trial window')
+
+                return self._finish(aid, None, 'context changed; ordinary control resumes')
+
+            observation_end = trial.get('observation_end')
+            if trial['ack'] is not None and observation_end is not None and now >= observation_end:
+                if trial['focus'] == 'presence' and not (trial.get('outcome_sources') or {}):
+                    return self._finish(aid, None, 'presence outcome unobservable: no verified local source')
+                return self._finish(aid, .02 if trial['kind'] == 'probe' else .05,
+                                    'weak preference: observed without correction')
             if now >= trial['deadline']:
                 return self._finish(aid, None, 'observation deadline exceeded')
 
@@ -392,7 +558,11 @@ class Experiments:
                 learner['weights'][arm] = dict(sorted(weights.items(), key=lambda kv: kv[1][0], reverse=True)[:256])
             learner['counts'][arm] += 1
             learner['rewards'][arm] += reward
-        data['last_outcome'] = dict(reason=reason, reward=reward, kind=trial['kind'], focus=trial['focus'], at=self.clock())
+        data['last_outcome'] = dict(
+            trial_id=trial.get('trial_id'), reason=reason, reward=reward,
+            kind=trial['kind'], focus=trial['focus'], at=self.clock(),
+            started=trial.get('started'), action_at=trial.get('action_at'), ack_at=trial.get('ack'),
+            observation_start=trial.get('observation_start'), observation_end=trial.get('observation_end'))
         data['active'] = None
         self.prepared.pop(aid, None)
         self.messages[aid] = reason

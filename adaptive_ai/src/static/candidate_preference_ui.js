@@ -98,9 +98,6 @@
   function normalizePromotion(card){
     const keep=card.querySelector('[data-promote-custom]');
     if(!keep)return;
-
-    // There is one user-facing promotion action. Keep the least restrictive/custom path
-    // and remove every standard/duplicate Promote button injected by older UI layers.
     for(const button of [...card.querySelectorAll('button')]){
       if(button===keep)continue;
       const text=(button.textContent||'').trim().toLowerCase();
@@ -127,7 +124,7 @@
     const rules=card.querySelector('.candidate-custom-promotion');
     const description=rules?.querySelector(':scope > p');
     if(description){
-      description.innerHTML='<b>Promotion rules</b> — choose the minimum future evidence you accept. Hard model/config, atomic swap and Control qualification checks remain mandatory.';
+      description.innerHTML='<b>Promotion rules</b> — custom Promote may replace future-evidence thresholds and explicitly override the offline gate. Freshness/configuration, false-early safety, corrections, execution prerequisites, atomic swap and Control qualification remain mandatory.';
     }
   }
 
@@ -141,6 +138,9 @@
 
     const details=card.querySelector('.candidate-compare-details');
     if(details){
+      const vetoes=c.promotion_vetoes||m.promotion_vetoes||[];
+      const vetoText=vetoes.length?vetoes.map(v=>`${v.gate}: ${v.reason}`).join(' · '):'all standard gates passed';
+      ensureMetric(details,'promotion-gates','Promotion gates',vetoText);
       ensureMetric(details,'preference-confidence','Preference confidence',pct(c.preference_confidence??m.preference_confidence));
       ensureMetric(details,'opportunities','Confirmed opportunities',String(m.meaningful_opportunities??m.samples??0));
       ensureMetric(details,'corrections','Corrections since generation',String(m.manual_corrections_since_generation??0));
@@ -170,8 +170,6 @@
     if(live){
       merged._liveSnapshotTs=Number(c.live_snapshot_ts||Date.now()/1000);
     }else if(previous._liveSnapshotTs&&Date.now()/1000-previous._liveSnapshotTs<2){
-      // Full Candidate status can arrive after a fresher lightweight physical-state
-      // snapshot. Never let the slower response rewind Current or a newer decision.
       merged.shadow_current=previous.shadow_current;
       const previousDecisionTs=Number(previous.shadow_timestamp||0);
       const incomingDecisionTs=Number(c.shadow_timestamp||0);
@@ -208,7 +206,6 @@
       const data=await response.json();
       applyLiveSnapshots(data.candidates||[]);
     }catch(_e){
-      // Full Candidate refresh remains the fallback if the lightweight route is unavailable.
     }finally{
       liveBusy=false;
     }
@@ -247,7 +244,6 @@
       }
       for(const ref of [...latestByRef.keys()])if(!liveRefs.has(ref))latestByRef.delete(ref);
     }catch(_e){
-      // The base Candidate UI owns connectivity/error messaging.
     }finally{
       busy=false;
     }
@@ -262,10 +258,6 @@
       for(const record of records){
         for(const node of record.addedNodes)missing=hydrateAddedNode(node)||missing;
       }
-      // Base candidate_ui rebuilds whole cards every poll. Rehydrate from the last
-      // payload synchronously in the MutationObserver microtask so the browser never
-      // paints a transient card without the decision/preference tiles. Only refetch
-      // when a genuinely new generation appears and therefore has no cached payload.
       if(!missing||queued)return;
       queued=true;
       queueMicrotask(()=>{queued=false;refresh();});
