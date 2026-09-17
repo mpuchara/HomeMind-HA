@@ -21,7 +21,23 @@ Before Stage 17, `_fast_metrics()` loaded every pair for the generation edge and
 
 Stage 17 persists versioned sufficient statistics in `candidate_fast_metric_state`. Pair evidence is consumed in bounded batches and each batch fetches parent+child observed decisions in one time-range query. A warm status call checks only for rows after the durable cursor. Option changes that alter metric semantics invalidate the state through an option fingerprint and cause a bounded streaming rebuild from raw evidence.
 
-Opportunity-order decay is preserved exactly: old success/failure sufficient statistics are multiplied by `0.5 ** (1 / half_life)` for each newly consumed opportunity. Manual-correction penalties remain separate, are individually retained in bounded state, decay only for later opportunities and disappear from the metric after Undo. Raw Teach/manual rows remain untouched.
+Opportunity-order decay is preserved exactly on the normal online stream: old success/failure sufficient statistics are multiplied by `0.5 ** (1 / half_life)` for each newly consumed opportunity. Manual-correction penalties remain separate, are individually retained in bounded state, decay only for later opportunities and disappear from the metric after Undo. Raw Teach/manual rows remain untouched.
+
+#### Late/out-of-order outcome protection
+
+The legacy metric orders opportunities by `outcome_ts`. A final review found that an incremental cursor based only on insertion `rowid` could change half-life weighting if a delayed pair were inserted later with an older `outcome_ts`.
+
+Stage 17 therefore adds `candidate_fast_order_guard` and an explicit repair path:
+
+- an edge is checked once for historical `rowid` vs `outcome_ts` inversions;
+- later calls inspect only pair rows newer than the guard cursor;
+- normal chronological edges stay on the bounded incremental fast-metric path;
+- if a late outcome is detected, only that edge switches to the exact legacy `ORDER BY outcome_ts` calculation;
+- the exact repair result is persisted and reused on repeated status polls;
+- new pair evidence, active correction facts, metric options or Teach-anchor inputs invalidate the repair cache and cause one new exact recomputation;
+- raw pair evidence is never reordered, rewritten or deleted.
+
+This preserves the old numerical semantics even for exceptional delayed data without turning every status request back into a full-history scan.
 
 ### Candidate comparison summary
 
@@ -29,7 +45,7 @@ Before Stage 17, `_rebuild_summary()` read the complete `candidate_generation_pa
 
 Stage 17 adds `candidate_generation_summary_cursors`. The summary and pair cursor are committed atomically with Candidate/generation comparison state. Restart therefore cannot apply the same pair twice. First use on an old installation streams the historical edge in batches; later updates consume only pair rows after the cursor. Raw pairs remain immutable lineage evidence.
 
-False-early counters are not pair-derived. They continue to be updated by their existing event path and are folded into the next cursor update without being reset.
+Summary components are commutative counts/sums, so insertion order does not change their result. False-early counters are not pair-derived. They continue to be updated by their existing event path and are folded into the next cursor update without being reset.
 
 ### Teach-RL supervised feature scoring
 
@@ -64,6 +80,7 @@ Stage 17 adds only accelerators/metadata:
 
 - `candidate_generation_summary_cursors`
 - `candidate_fast_metric_state`
+- `candidate_fast_order_guard`
 - index `idx_candidate_pairs_edge_outcome_f22`
 - index `idx_candidate_decisions_generation_ts_f22`
 - index `idx_entity_history_entity_ts_id_f22`
@@ -86,6 +103,10 @@ No existing model vector, schema, TrialRecord, Candidate pair, Teach label, epis
 7. Teach materialization stays within the declared batch bound;
 8. active regression anchors remain bounded while audit rows remain retained;
 9. queue backpressure is bounded and does not break dedup of an already queued agent.
+
+`tests/test_performance_f22_order_guard.py` adds the order-sensitive exceptional case:
+
+10. a pair inserted later with an older `outcome_ts` triggers exact legacy ordering for that edge, and subsequent unchanged status calls reuse the durable repair cache rather than repeating the full calculation.
 
 Existing Candidate Shadow, promotion, fixed-future evidence, device arbitration and Executor tests remain authoritative for safety behavior.
 
@@ -110,11 +131,13 @@ The script reports:
 
 The CI workflow runs a smaller smoke profile. CI/desktop numbers are **not Raspberry Pi measurements**. The script labels a run as Raspberry Pi only if `/proc/device-tree/model` identifies Pi hardware.
 
-### Measured CI smoke on exact PR head
+### Measured CI smoke on the code head
 
-Exact head: `df8d396fb5a1ddc98c3a0a8b1fc7ceaecdddc7b5`
+Benchmarked code head: `8a76986b12653a80b07457baa005e3b962385050`
 
-Workflow: `Validate HomeMind`, run `35232855153`, Python 3.11 benchmark job. The test matrix also passed on Python 3.13; the benchmark is intentionally executed only once on Python 3.11.
+Workflow: `Validate HomeMind`, run `35234589736`, Python 3.11 benchmark job. Python 3.11 and Python 3.13 both passed the full test suite; the benchmark is intentionally executed only once on Python 3.11.
+
+The branch may have a later documentation-only commit; the measurements below correspond to the exact code head above.
 
 Environment reported by the benchmark:
 
@@ -140,27 +163,43 @@ Same-data correctness:
 
 Query shape and elapsed time on this CI host:
 
-- legacy fast metrics: `1004` SELECT statements, `14.85 ms`;
-- optimized cold fast metrics: `8` SELECT statements, `10.05 ms`;
-- optimized warm 20 status polls: `100` SELECT statements total, `2.55 ms` total, `0.153 ms` p95 per poll;
-- legacy Teach supervised scoring: `96` SELECT statements, `10.33 ms`;
-- optimized Teach scoring: `2` SELECT statements, `10.81 ms`.
+- legacy fast metrics: `1004` SELECT statements, `10.63 ms`;
+- optimized cold fast metrics: `8` SELECT statements, `7.94 ms`;
+- optimized warm 20 status polls: `100` SELECT statements total, `1.96 ms` total, `0.116 ms` p95 per poll;
+- legacy Teach supervised scoring: `96` SELECT statements, `7.89 ms`;
+- optimized Teach scoring: `2` SELECT statements, `8.46 ms`.
 
-The small Teach smoke deliberately demonstrates the query-count reduction, not a claimed wall-clock speedup: on this tiny in-memory/CI-sized case the batched query overhead is approximately equal to the old path. The expected scaling advantage is that the optimized query count and Python materialization no longer grow as two full history reads per sensor.
+The small Teach smoke deliberately demonstrates the query-count reduction, not a claimed wall-clock speedup: on this tiny CI-sized case the batched query overhead is approximately equal to the old path. The scaling advantage is that query count and Python materialization no longer grow as two full history reads per sensor.
 
 Concurrent synthetic load on this CI host:
 
-- inference calls: `1800`;
-- inference p50: `0.0616 ms`;
-- inference p95: `0.0756 ms`;
-- inference max: `0.154 ms`;
-- Candidate/status p95 while Teach scoring runs: `4.91 ms`;
-- Candidate/status max: `5.14 ms`;
-- Stage-17 write commit p95/max observed in the smoke: about `0.100 ms`;
-- peak process RSS: `25.41 MB`;
-- peak RSS increase from benchmark start: `2.75 MB`.
+- inference calls: `2325`;
+- inference p50: `0.0479 ms`;
+- inference p95: `0.0575 ms`;
+- inference max: `0.0886 ms`;
+- Candidate/status p95 while Teach scoring runs: `3.62 ms`;
+- Candidate/status max: `6.72 ms`;
+- Stage-17 write commit p95/max observed in the smoke: `0.0828 ms`;
+- peak process RSS: `25.64 MB`;
+- peak RSS increase from benchmark start: `2.87 MB`.
 
 These numbers validate the scaling shape and non-blocking behavior on the CI machine only. They are not Home Assistant deployment numbers and are not Pi numbers.
+
+## Full validation
+
+On code head `8a76986b12653a80b07457baa005e3b962385050`:
+
+- Python 3.11: **778 tests**, success;
+- Python 3.13: success on the same suite;
+- `compileall`: success;
+- configured JavaScript syntax checks: success;
+- `simulate_anticipation.py`: success;
+- `simulate_context_tournament.py`: success;
+- `simulate_fast_light_timing.py`: success;
+- Docker build `homemind:0.14.11`: success;
+- packaged image smoke: success.
+
+The added late-outcome test passed on both Python versions.
 
 ## Proposed Raspberry Pi budgets
 
@@ -184,14 +223,16 @@ Do not compare wall-clock values between different Python builds/storage media w
 ## Retention policy
 
 - immutable episode/pair/Teach/manual evidence: retained according to its existing audit/undo policy;
-- summary and metric cursors: replaceable derived state; rebuildable from raw evidence;
+- summary, fast-metric and order-guard cursors/cache: replaceable derived state; authoritative source remains raw evidence;
 - active regression anchor references: latest 64 per agent; older references stay persisted as inactive audit rows;
 - in-memory diagnostics: latest 256 samples;
 - Teach labels: existing 256 active-label limit remains unchanged;
-- Candidate/Teach computations: bounded batches, never one unbounded Python materialization of the full archive.
+- Candidate/Teach computations: bounded batches, never one unbounded Python materialization of the full archive on the normal path.
 
 ## Limitations / follow-up
 
-Stage 17 is a performance layer installed explicitly by the runtime composition root, but two legacy modules still expose internal global helper functions (`_rebuild_summary`, `_fast_metrics`). To avoid a large behavior-changing rewrite in this PR, Stage 17 replaces those helper implementations during composition. This is visible to the existing F23 overlay characterization and should be removed when those Candidate modules are migrated to explicit service contracts in the next F23 extraction. The replacements carry no per-runtime state; durable state is keyed in SQLite and diagnostics are attached to the concrete manager/service instance.
+Stage 17 is a performance layer installed explicitly by the runtime composition root, but legacy Candidate modules still expose internal global helper functions (`_rebuild_summary`, `_fast_metrics`). Stage 17 replaces/wraps those helpers during composition to preserve the public behavior without a large architectural rewrite in this PR. The existing F23 overlay characterization sees these replacements. They should be moved into explicit per-runtime service contracts during the next F23 extraction.
 
-The benchmark is synthetic. It validates scaling shape and same-data equivalence; it does not substitute for a multi-day Home Assistant deployment or a real Raspberry Pi measurement.
+The exceptional late/out-of-order edge intentionally prioritizes exact legacy semantics over incremental speed. It performs an exact recomputation only when relevant evidence/configuration changes and persists the result for subsequent status polls.
+
+The benchmark is synthetic. It validates scaling shape, same-data equivalence and UI/inference responsiveness under a controlled workload; it does not substitute for a multi-day Home Assistant deployment or a real Raspberry Pi measurement.
