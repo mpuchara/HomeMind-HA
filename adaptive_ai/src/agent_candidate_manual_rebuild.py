@@ -1,13 +1,19 @@
 """Route Candidate manual Rebuild through the normal full historical rebuild path.
 
-Manual Rebuild is not Correct/Teach.  The hidden Candidate must enter the same
+Manual Rebuild is not Correct/Teach. The hidden Candidate must enter the same
 TrainingQueue/HistoryManager rebuild used by a normal agent, while the Live parent keeps
-serving.  This shim is installed immediately after the base Candidate manager and before
+serving. Stage 06 uses the same path for feedback undo: removing a durable label is a
+forward rebuild from the remaining journal/history, never an inverse weight update.
+
+This shim is installed immediately after the base Candidate manager and before
 config/lifecycle wrappers, so those wrappers still synchronize and validate the Candidate
 before this final queue hand-off.
 """
 import json
 import time
+
+
+FULL_REBUILD_REASONS = {"manual_rebuild", "manual_feedback_undo_rebuild"}
 
 
 def _blank_comparison():
@@ -39,7 +45,7 @@ def install(manager):
 
     def start_build(row):
         reason = str(row.get("reason") or "feedback")
-        if reason != "manual_rebuild":
+        if reason not in FULL_REBUILD_REASONS:
             return original_start(row)
 
         queue = manager._queue()
@@ -55,8 +61,10 @@ def install(manager):
 
         try:
             # Crucial distinction from Correct/Teach: do not create a Teach-RL job and
-            # do not run feature-selection preflight.  TrainingQueue owns the ordinary
+            # do not run feature-selection preflight. TrainingQueue owns the ordinary
             # full historical rebuild and HistoryManager exposes its real progress.
+            # The withdrawn feedback row/label has already been retired in the journal,
+            # so replay cannot accidentally bake it back into the child policy.
             queued = queue.enqueue(candidate["id"], rebuild=True, reason="full_rebuild")
             now = time.time()
             with manager.store.lock, manager.store.conn() as c:
@@ -70,7 +78,7 @@ def install(manager):
                 row["parent_agent_id"], "info", "agent_candidate_full_rebuild_started",
                 "Candidate full historical rebuild started while the Live agent keeps serving",
                 {"candidate_id": candidate["id"], "generation": row.get("generation"),
-                 "queue": queued, "reason": "manual_rebuild"},
+                 "queue": queued, "reason": reason},
             )
             return True
         except Exception as exc:
@@ -79,5 +87,7 @@ def install(manager):
 
     manager._start_build = start_build
     manager._candidate_manual_rebuild_fix = True
-    manager.candidate_manual_rebuild_contract = "training_queue_full_rebuild_without_teach_preflight"
+    manager.candidate_manual_rebuild_contract = (
+        "training_queue_full_rebuild_without_teach_preflight_for_manual_rebuild_and_feedback_undo"
+    )
     return manager
