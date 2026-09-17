@@ -1,3 +1,12 @@
+# 0.14.12 — 2026-09-17
+
+- Release the Stage 13–18 runtime: calibrated confidence semantics, controlled cold-start/drift adaptation, DeviceAgent shared-resource arbitration, explicit RuntimeCompositionRoot and bounded history/training costs.
+- Add the deterministic F24 product benchmark with hidden occupancy/light need, sensor noise/delay/missingness, action-to-lux feedback, train/validation/future separation and multiple seeds.
+- Keep Candidate and backend challengers in Shadow unless the existing promotion/Control gates pass; no qualification threshold is relaxed for this release.
+- Final F24 result is intentionally non-passing: current runtime reduces false-ON time but under-serves needed light and increases premature-OFF/chatter/corrections; all three seeds remain below the unchanged per-action Wilson Control gate.
+- Preserve additive migrations, lineage, rollback, TrialRecords, labels and user settings. `ActionIntent -> Executor` remains the only physical Home Assistant dispatch path.
+- 786 automated tests pass on Python 3.11; the full Python 3.13 suite, compile/JS checks, Stage 17/18 benchmarks, source-entrypoint smoke and Docker image smoke pass. Raspberry Pi performance remains not measured.
+
 # 0.11.2 — 2026-09-14
 
 - Separate historical Teach from Wrong decision; Wrong decision keeps its existing immediate correction path unchanged.
