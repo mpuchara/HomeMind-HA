@@ -101,7 +101,7 @@ class TrialKnowledgeTests(unittest.TestCase):
         return self.manager.workflow_explore(self.root["id"], {
             "mode": "free", "information_exploration": info,
             "config": {"focus": "presence", "intensity": .2, "interval": 300,
-                       "daily_budget": 1, "observation_seconds": 5, "max_step": 1},
+                       "daily_budget": 1, "observation_seconds": 10, "max_step": 1},
         })
 
     def trial(self, ack=True):
@@ -117,7 +117,7 @@ class TrialKnowledgeTests(unittest.TestCase):
             "target": "light.trial", "property": "power", "confidence": .95,
             "support": .9, "novelty": .1, "gap": 0.0, "gain": .1, "started": now,
             "deadline": now + 20, "action_at": now, "observation_start": now,
-            "observation_end": now + 5, "ack": now if ack else None, "window": 5,
+            "observation_end": now + 10, "ack": now if ack else None, "window": 10,
             "trial_record": {
                 "hypothesis": {"id": "earlier_on", "catalog_version": 1, "information_exploration": False},
                 "policy_features": {"0": 1.0, "1": .75}, "horizon": 1.0,
@@ -191,7 +191,7 @@ class TrialKnowledgeTests(unittest.TestCase):
         previous = copy.deepcopy(self.engine.experiments.status(self.root["id"])["config"])
         started = self.manager.workflow_explore(self.root["id"], {
             "mode": "free", "config": {"focus": "presence", "intensity": .2, "interval": 300,
-                                        "daily_budget": 1, "observation_seconds": 5, "max_step": 1}})
+                                        "daily_budget": 1, "observation_seconds": 10, "max_step": 1}})
         trial = self.trial()
         self.engine.experiments._start(self.root["id"], trial)
         self.engine.experiments._finish(self.root["id"], .2, "measured")
