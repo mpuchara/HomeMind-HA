@@ -1,18 +1,24 @@
-// Bound every frontend request so one stalled Supervisor/Ingress request cannot freeze
-// the global app.js loadInFlight flag forever. home.js is loaded before app.js, so this
-// guard also covers the very first api/status request after opening the add-on.
+// Bound background/read requests so one stalled Supervisor/Ingress request cannot freeze
+// the global app.js loadInFlight flag forever. Mutating requests are deliberately NOT
+// aborted here: the server may already have accepted Train/Autonomous/etc., and aborting
+// only the browser side would produce a false failure while the action keeps running.
 (()=>{
   if(window.__adaptiveAiFetchTimeoutGuard)return;
   const nativeFetch=window.fetch.bind(window);
   window.fetch=(input,init={})=>{
+    const {adaptiveAiTimeoutMs,...fetchInit}=init||{};
+    const method=String(fetchInit.method||'GET').toUpperCase();
+    if(method!=='GET'&&method!=='HEAD')return nativeFetch(input,fetchInit);
+    const timeoutMs=adaptiveAiTimeoutMs===0?0:(Number.isFinite(Number(adaptiveAiTimeoutMs))?Math.max(1000,Number(adaptiveAiTimeoutMs)):12000);
+    if(!timeoutMs)return nativeFetch(input,fetchInit);
     const controller=new AbortController();
-    const upstream=init.signal;
+    const upstream=fetchInit.signal;
     if(upstream){
-      if(upstream.aborted)controller.abort();
-      else if(upstream.addEventListener)upstream.addEventListener('abort',()=>controller.abort(),{once:true});
+      if(upstream.aborted)controller.abort(upstream.reason);
+      else if(upstream.addEventListener)upstream.addEventListener('abort',()=>controller.abort(upstream.reason),{once:true});
     }
-    const timer=setTimeout(()=>controller.abort(),6000);
-    return nativeFetch(input,{...init,signal:controller.signal}).finally(()=>clearTimeout(timer));
+    const timer=setTimeout(()=>controller.abort(new DOMException(`Adaptive AI read timeout after ${timeoutMs} ms`,'TimeoutError')),timeoutMs);
+    return nativeFetch(input,{...fetchInit,signal:controller.signal}).finally(()=>clearTimeout(timer));
   };
   window.__adaptiveAiFetchTimeoutGuard=true;
 })();
