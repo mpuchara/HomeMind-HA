@@ -122,6 +122,12 @@ ACK potwierdza wykonanie transportowe, a nie komfort. Replay automatyzacji nie j
 
 Repo zawiera deterministyczny benchmark produktu z ukrytą obecnością i ukrytą potrzebą światła. Obserwacje mają delay, noise, missingness, różne formaty oraz sprzężenie `light -> lux`. Scenariusze obejmują m.in. jednego/dwóch domowników, rozwidlenie, bezruch, brak przyjścia, quick return, dzień/noc, ręczną zmianę, fałszywy/przeniesiony sensor i zmianę zwyczaju.
 
-Porównywane są stała automatyzacja, bieżący runtime, full-ridge Shadow oraz ostrożny fallback na oddzielnych train/validation/future danych i wielu seedach.
+Oficjalne uruchomienie:
 
-Benchmark nie promuje modelu. Brak poprawy lub niespełnione kryteria są prawidłowym wynikiem. Wynik syntetyczny nie zastępuje testu na realnym Home Assistant ani fizycznego M&V.
+```bash
+python tools/run_product_runtime_benchmark.py --seeds 11,23,37 --replicas 1
+```
+
+Executable instaluje finalny `RuntimeCompositionRoot` przed treningiem i uruchamia każdy seed w świeżym procesie. Porównywane są stała automatyzacja, bieżący runtime, full-ridge Shadow oraz ostrożny fallback na oddzielnych train/validation/future danych. Wynik zawiera średnie, 95% przedziały niepewności i jawną listę `unmet_criteria`.
+
+Benchmark nie promuje modelu i nie obniża progów. Brak poprawy lub niespełnione kryteria są prawidłowym wynikiem. Wynik syntetyczny nie zastępuje testu na realnym Home Assistant ani fizycznego M&V.
