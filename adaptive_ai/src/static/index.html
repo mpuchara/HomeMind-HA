@@ -33,8 +33,8 @@
         <div class="toolbar-controls">
           <input id="agentSearch" class="toolbar-input" type="search" placeholder="Search agents…" aria-label="Search agents">
           <select id="agentSort" class="toolbar-select" aria-label="Sort agents">
-            <option value="confidence_desc">Confidence ↓</option>
-            <option value="confidence_asc">Confidence ↑</option>
+            <option value="confidence_desc">Decision strength ↓</option>
+            <option value="confidence_asc">Decision strength ↑</option>
             <option value="name_asc">Name A–Z</option>
             <option value="name_desc">Name Z–A</option>
             <option value="history_desc">Most history</option>
@@ -68,7 +68,7 @@
   <div class="two"><label>Minimum<input name="min_value" type="number" step="any" required></label><label>Maximum<input name="max_value" type="number" step="any" required></label></div>
   <label>Maximum optional micro-exploration step <span class="hint">Exploration is disabled by default.</span><input name="exploration_step" type="number" min="0.01" step="any" required></label>
   <details><summary>Safety & policy</summary>
-    <div class="two"><label>Control confidence threshold<input name="confidence_threshold" type="number" min="0" max="0.99" step="0.05" value="0.78"></label><label>Deadband<input name="deadband" type="number" min="0" step="any" value="3"></label></div>
+    <div class="two"><label>Control decision-strength threshold<input name="confidence_threshold" type="number" min="0" max="0.99" step="0.05" value="0.78"></label><label>Deadband<input name="deadband" type="number" min="0" step="any" value="3"></label></div>
     <label>Minimum seconds between control actions<input name="action_interval" type="number" min="0.1" step="0.05" value="0.25"></label>
   </details>
   <div class="dialog-actions"><button type="button" class="ghost" id="cancelDialog">Cancel</button><button type="submit" class="primary">Create waiting for Train</button></div>
@@ -90,6 +90,7 @@
 <script src="agent_workflow_ui.js?v=0.14.11"></script>
 <script src="explore_ui.js?v=0.14.11"></script>
 <script src="promotion_lifecycle_ui.js?v=0.14.11"></script>
+<script src="confidence_contract_ui.js?v=0.14.11"></script>
 <script src="simple_agent_names.js?v=0.14.11"></script>
 </body>
 </html>
