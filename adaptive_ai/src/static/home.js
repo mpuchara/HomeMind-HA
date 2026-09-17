@@ -1,3 +1,22 @@
+// Bound every frontend request so one stalled Supervisor/Ingress request cannot freeze
+// the global app.js loadInFlight flag forever. home.js is loaded before app.js, so this
+// guard also covers the very first api/status request after opening the add-on.
+(()=>{
+  if(window.__adaptiveAiFetchTimeoutGuard)return;
+  const nativeFetch=window.fetch.bind(window);
+  window.fetch=(input,init={})=>{
+    const controller=new AbortController();
+    const upstream=init.signal;
+    if(upstream){
+      if(upstream.aborted)controller.abort();
+      else if(upstream.addEventListener)upstream.addEventListener('abort',()=>controller.abort(),{once:true});
+    }
+    const timer=setTimeout(()=>controller.abort(),6000);
+    return nativeFetch(input,{...init,signal:controller.signal}).finally(()=>clearTimeout(timer));
+  };
+  window.__adaptiveAiFetchTimeoutGuard=true;
+})();
+
 function homeSources(h,names){
   const sources=h.source_details||[];
   const reasons={active:'Used for occupancy',missing_area:'No HA area',disabled_in_ha:'Disabled in HA',
