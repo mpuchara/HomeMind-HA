@@ -1,10 +1,10 @@
 """0.14.16 Raspberry-Pi startup and background-load guard.
 
-This release changes scheduling and transport pressure only.  It deliberately leaves
+This release changes scheduling and transport pressure only. It deliberately leaves
 models, labels, generation state, Executor dispatch and persisted history semantics
 unchanged.
 
-The important boundary is that importing the shipped entrypoint must remain cheap.  The
+The important boundary is that importing the shipped entrypoint must remain cheap. The
 actual History/HA patches are therefore installed from ``core.initialize_runtime`` in the
 background initializer, never while the HTTP entrypoint is being imported.
 """
@@ -57,7 +57,9 @@ def install(runtime):
             now = time.monotonic()
             return {
                 **state,
-                "background_throttle_sleep_seconds": round(state["background_throttle_sleep_seconds"], 3),
+                "background_throttle_sleep_seconds": round(
+                    state["background_throttle_sleep_seconds"], 3
+                ),
                 "recorder_backoff_remaining_seconds": round(
                     max(0.0, state["recorder_backoff_until_monotonic"] - now), 1
                 ),
@@ -78,7 +80,7 @@ def install(runtime):
         with state_lock:
             if state["runtime_patches_installed"]:
                 return
-            # Claim installation before patching so nested initialization can't double-wrap.
+            # Claim installation before patching so nested initialization cannot double-wrap.
             state["runtime_patches_installed"] = True
 
         import history as history_module
@@ -94,42 +96,68 @@ def install(runtime):
                 current = dict(history_self.engine.state_map)
             if not current:
                 return False
+
             controllable = [
-                eid for eid, st in current.items()
+                eid
+                for eid, st in current.items()
                 if history_module.target_options_for_state(st)
             ]
             history_self.discovered_controllable = len(controllable)
             existing = [a for a in store.list_agents() if a.get("enabled")]
-            history_self.discovered_active = len([
-                a for a in existing if a.get("target_entity") in current
-            ])
+            history_self.discovered_active = len(
+                [a for a in existing if a.get("target_entity") in current]
+            )
             history_self.discovery_eligible = len(controllable)
+
+            # Purely local diagnostics: this only reads the in-memory HA state/registry.
             try:
                 history_self._eligible_rebuild_context()
             except Exception as exc:
-                store.event(None, "warning", "startup_context_diagnostics_partial", str(exc), None)
+                store.event(
+                    None,
+                    "warning",
+                    "startup_context_diagnostics_partial",
+                    str(exc),
+                    None,
+                )
+
             q = len(store.qualified_agents())
-            waiting = len([
-                a for a in existing
-                if a.get("training_state") in ("paused", "waiting", "needs_retrain")
-            ])
+            waiting = len(
+                [
+                    a
+                    for a in existing
+                    if a.get("training_state")
+                    in ("paused", "waiting", "needs_retrain")
+                ]
+            )
             history_self.last_run = history_module.now_ts()
             history_self.set_status(
-                "ready", 1.0,
-                f"Fast startup ready · {q} trained / {waiting} waiting · Recorder idle",
+                "ready",
+                1.0,
+                f"Fast startup ready - {q} trained / {waiting} waiting - Recorder idle",
                 stage_eta_seconds=0,
                 work_done=0,
                 work_total=0,
                 work_unit="startup I/O",
                 eta_source="idle",
-                phase_detail="Saved agents + realtime only; no Recorder/API backfill during startup",
+                phase_detail=(
+                    "Saved agents + realtime only; no Recorder/API backfill during startup"
+                ),
             )
             with state_lock:
                 state["quiet_start_completed"] = True
             store.event(
-                None, "info", "startup_io_quiet",
-                "Startup completed from saved agents/current state without Recorder or automation-config backfill",
-                {"existing_agents": len(existing), "controllable_now": len(controllable)},
+                None,
+                "info",
+                "startup_io_quiet",
+                (
+                    "Startup completed from saved agents/current state without Recorder "
+                    "or automation-config backfill"
+                ),
+                {
+                    "existing_agents": len(existing),
+                    "controllable_now": len(controllable),
+                },
             )
             return True
 
@@ -140,6 +168,7 @@ def install(runtime):
                 if not history_self.engine.state_map:
                     history_self.stop_event.wait(1.0)
                     continue
+
                 if not quiet_done:
                     try:
                         quiet_done = quiet_start(history_self)
@@ -148,7 +177,10 @@ def install(runtime):
                         history_self.error = f"{type(exc).__name__}: {exc}"
                         history_self.set_status("error", message=history_self.error)
                         store.event(
-                            None, "error", "history_quiet_start_error", history_self.erroq,
+                            None,
+                            "error",
+                            "history_quiet_start_error",
+                            history_self.error,
                             {"trace": traceback.format_exc(limit=6)},
                         )
                     if not quiet_done:
@@ -156,8 +188,9 @@ def install(runtime):
                         continue
                     if history_self.stop_event.wait(state["background_grace_seconds"]):
                         return
+
                 try:
-                    # Cached mappings are enough for the first maintenance pass.  Do not
+                    # Cached mappings are enough for the first maintenance pass. Do not
                     # overlap automation-config API calls with its Recorder traffic.
                     old_scan = core.OPTIONS.get("automation_scan_enabled", True)
                     if first_heavy:
@@ -173,9 +206,13 @@ def install(runtime):
                     history_self.error = f"{type(exc).__name__}: {exc}"
                     history_self.set_status("error", message=history_self.error)
                     store.event(
-                        None, "error", "history_manager_error", history_self.erroq,
+                        None,
+                        "error",
+                        "history_manager_error",
+                        history_self.error,
                         {"trace": traceback.format_exc(limit=6)},
                     )
+
                 mins = max(5, int(core.OPTIONS["history_maintenance_minutes"]))
                 history_self.stop_event.wait(mins * 60)
 
@@ -189,9 +226,15 @@ def install(runtime):
             if threading.current_thread().name != "adaptive-ai-history":
                 yield from iterator
                 return
+
             duty = _clamp(
-                float(core.OPTIONS.get("background_cpu_duty_cycle", BACKGROUND_DUTY_CYCLE)),
-                0.10, 0.60,
+                float(
+                    core.OPTIONS.get(
+                        "background_cpu_duty_cycle", BACKGROUND_DUTY_CYCLE
+                    )
+                ),
+                0.10,
+                0.60,
             )
             batch_started = time.perf_counter()
             rows = 0
@@ -201,7 +244,9 @@ def install(runtime):
                 if rows % BACKGROUND_BATCH_ROWS:
                     continue
                 active = max(0.0, time.perf_counter() - batch_started)
-                pause = _clamp(active * (1.0 - duty) / max(duty, 1e-6), 0.005, 0.500)
+                pause = _clamp(
+                    active * (1.0 - duty) / max(duty, 1e-6), 0.005, 0.500
+                )
                 time.sleep(pause)
                 with state_lock:
                     state["background_cpu_duty_cycle"] = duty
@@ -222,14 +267,23 @@ def install(runtime):
                     now = time.monotonic()
                     with state_lock:
                         first = now >= state["recorder_backoff_until_monotonic"]
-                        state["recorder_backoff_until_monotonic"] = now + RECORDER_BACKOFF_SECONDS
+                        state["recorder_backoff_until_monotonic"] = (
+                            now + RECORDER_BACKOFF_SECONDS
+                        )
                         state["recorder_timeout_count"] += 1
                     if first:
                         store.event(
-                            None, "warning", "history_background_backoff",
-                            f"Recorder background request failed; pausing discovery for {int(RECORDER_BACKOFF_SECONDS)} s",
-                            {"error": f"{type(exc).__name__}: {exc}",
-                             "backoff_seconds": RECORDER_BACKOFF_SECONDS},
+                            None,
+                            "warning",
+                            "history_background_backoff",
+                            (
+                                "Recorder background request failed; pausing discovery "
+                                f"for {int(RECORDER_BACKOFF_SECONDS)} s"
+                            ),
+                            {
+                                "error": f"{type(exc).__name__}: {exc}",
+                                "backoff_seconds": RECORDER_BACKOFF_SECONDS,
+                            },
                         )
                 raise
 
@@ -239,14 +293,17 @@ def install(runtime):
         def fetch_with_circuit_breaker(history_self, *args, **kwargs):
             if HEAVY_JOBS.owner == "discovery":
                 with state_lock:
-                    if time.monotonic() < state["recorder_backoff_until_monotonic"]:
+                    if (
+                        time.monotonic()
+                        < state["recorder_backoff_until_monotonic"]
+                    ):
                         return 0
             return original_fetch(history_self, *args, **kwargs)
 
         history_module.HistoryManager._fetch_history_resilient = fetch_with_circuit_breaker
 
         # ----- Automation API pressure ------------------------------------
-        # ha.py uses this imported executor for config reads.  Serialize those reads on
+        # ha.py uses this imported executor for config reads. Serialize those reads on
         # Raspberry-Pi class hardware rather than starting up to eight simultaneous calls.
         original_executor = ha_module.ThreadPoolExecutor
 
@@ -275,8 +332,8 @@ def install(runtime):
 
         ha_module.AUTOMATION_KNOWLEDGE.scan = persistent_scan
 
-    # Defer all history/HA imports to the existing background initializer.  Thh�Keeps
-    # the proven HTTP-first startup contract from 0.14.14/0.14.15 intact.
+    # Defer all history/HA imports to the existing background initializer.
+    # This keeps the proven HTTP-first startup contract from 0.14.14/0.14.15 intact.
     original_initialize_runtime = core.initialize_runtime
 
     def initialize_runtime():
