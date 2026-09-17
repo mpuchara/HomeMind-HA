@@ -78,7 +78,9 @@ Status i diagnostyka korzystają z cursorów, sufficient statistics i bounded ba
 
 ## Benchmark produktu F24
 
-`tools/benchmark_product_runtime.py` tworzy deterministyczny świat z ukrytą prawdziwą obecnością oraz ukrytą potrzebą światła, osobnymi od obserwacji. Sensory mają opóźnienia, noise, missingness i różne reprezentacje; akcja lampy wpływa na obserwowany lux.
+`tools/benchmark_product_runtime.py` definiuje deterministyczny świat z ukrytą prawdziwą obecnością oraz ukrytą potrzebą światła, osobnymi od obserwacji. Oficjalny executable to `tools/run_product_runtime_benchmark.py`: przed generowaniem train/validation instaluje ten sam finalny `RuntimeCompositionRoot`, którego używa shipped `trial_queue_main.py`, a każdy seed uruchamia w świeżym procesie. Dzięki temu Observation Contract, preference/episode/provenance, Tournament, Candidate, TrialKnowledge, confidence/drift, DeviceAgent, promotion validation i Stage17 performance composition są takie jak w produkcyjnym rootcie, bez przenoszenia globalnego stanu installerów między syntetycznymi domami.
+
+Sensory mają opóźnienia, noise, missingness i różne reprezentacje; akcja lampy wpływa na obserwowany lux. Benchmark-only clock bridge zapewnia wspólny event-time dla `Engine` i `Executor`, aby syntetyczny historyczny timestamp nie wygaszał intentu względem zegara runnera. Nie zmienia to produkcyjnego TTL ani progów.
 
 Benchmark rozdziela:
 
@@ -92,4 +94,4 @@ Porównywane są: stała automatyzacja, bieżący produkcyjny runtime w Shadow, 
 
 Benchmark **nie** obniża kwalifikacji, nie wstawia gotowego `benchmark_score` i nie promuje backendu. Niespełnione kryteria są prawidłowym wynikiem. Wynik syntetyczny/CI nie zastępuje fizycznego M&V.
 
-CI dodatkowo uruchamia dokładny source entrypoint oraz obraz i sprawdza, że PID 1 obrazu kończy w `trial_queue_main.py`. Dzięki temu benchmark jakości i test uruchomienia dotyczą tego samego stosu kompozycji.
+CI dodatkowo uruchamia dokładny source entrypoint oraz obraz i sprawdza, że PID 1 obrazu startuje przez `/app/run.sh`, który kończy w `trial_queue_main.py`. Dzięki temu benchmark jakości i test uruchomienia dotyczą tego samego stosu kompozycji.
