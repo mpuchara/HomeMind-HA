@@ -24,7 +24,9 @@ jobs:
         run: python tools/benchmark_history_costs.py --pairs 500 --teach-sensors 48 --teach-labels 12
       - name: Stage 18 deterministic product runtime benchmark
         if: matrix.python == '3.11'
-        run: python tools/benchmark_product_runtime.py --seeds 11,23,37 --replicas 1 --compact > product-benchmark-f24.json
+        env:
+          ADAPTIVE_AI_DATA: ${{ runner.temp }}/homemind-product-benchmark
+        run: python tools/benchmark_product_runtime.py --seeds 11,23,37 --replicas 1 --compact | tee product-benchmark-f24.json
       - name: Stage 18 actual source entrypoint smoke
         if: matrix.python == '3.11'
         run: python tools/smoke_entrypoint.py
