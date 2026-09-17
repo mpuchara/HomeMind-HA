@@ -4,10 +4,10 @@ The existing ``fast_queue_main`` stack remains authoritative. Dependency-sensiti
 Candidate/Tournament additions use the explicit composition hooks exposed there; no
 installer function is monkey-patched.
 
-EpisodeEvaluator and ManualFeedbackJournal are first-class services created before the
-fast runtime extensions, so Live outcomes, Experiments, Teaching/Teach-RL, Candidate and
-Sensor Tournament share durable contracts before any worker can observe HA. Provenance
-and the observation schema are composed before Engine/EventStream/History workers start.
+EpisodeEvaluator and the unified ManualFeedbackJournal are first-class services created
+before the fast runtime extensions, so Live outcomes, Experiments, Teaching/Teach-RL,
+Candidate and Sensor Tournament share durable contracts before any HA worker can observe
+state. Provenance and the observation schema are composed before EventStream/History start.
 """
 import fast_queue_main as runtime
 from agent_candidate_card_summary import install as install_candidate_card_summary
@@ -20,7 +20,9 @@ from episode_evaluator_runtime import (
     install_core as install_core_episode_evaluator,
     install_tournament as install_tournament_episode_evaluator,
 )
-from manual_feedback_contract import ManualFeedbackJournal
+from manual_feedback_live_isolation import install as install_manual_feedback_live_isolation
+from manual_feedback_unified import UnifiedManualFeedbackJournal
+from manual_feedback_workflow import install as install_manual_feedback_workflow
 from provenance_runtime import install as install_provenance_runtime
 from observation_contract import install as install_observation_contract
 
@@ -39,7 +41,7 @@ def prepare_engine_extensions():
     # migration is additive; legacy labels remain valid/unlinked and are not reinterpreted.
     feedback = getattr(core.ENGINE, "manual_feedback_journal", None)
     if feedback is None:
-        feedback = ManualFeedbackJournal(core.STORE)
+        feedback = UnifiedManualFeedbackJournal(core.STORE)
         core.ENGINE.manual_feedback_journal = feedback
     if getattr(core.ENGINE, "teaching", None) is not None:
         core.ENGINE.teaching.feedback_journal = feedback
@@ -69,6 +71,10 @@ def prepare_engine_extensions():
         runtime.set_engine_extension_hook("after_fast_light", "episode_evaluator", None)
         runtime.set_engine_extension_hook("after_candidate_shadow_context", "preference_and_episode", None)
 
+    # The legacy Engine still contains direct manual-demonstration updates. Suppress only
+    # those exact physical-user updates; ordinary outcome rewards remain untouched.
+    install_manual_feedback_live_isolation(core)
+
     # Provenance can now resolve decision_id/episode_id for all feedback recorded after
     # runtime readiness. Missing historical links remain NULL/unknown, never fabricated.
     install_provenance_runtime(core)
@@ -80,6 +86,10 @@ def prepare_engine_extensions():
     if manager is None:
         return
 
+    # Stage 06 does not own the generation-workflow composition order. If that workflow is
+    # present, bind Correct/Change decision to the same journal; otherwise Prompt 16 can
+    # install the workflow first and this adapter remains a deterministic no-op today.
+    manager = install_manual_feedback_workflow(manager)
     manager = install_candidate_card_summary(manager)
     manager = install_candidate_promotion_cycle(manager)
     install_agent_live_card_refresh(core)
@@ -101,8 +111,11 @@ def prepare_engine_extensions():
             "episode_action_boundary": "observer_only_no_actionintent_no_executor_dispatch",
             "manual_feedback_contract": 1,
             "manual_feedback_context_contract": 2,
+            "manual_feedback_conflicts": "unresolved_conflicts_remain_non_trainable_until_undo",
             "manual_feedback_action_boundary": "journal_only_no_actionintent_no_executor_dispatch",
-            "manual_feedback_undo": "retire_labels_then_full_rebuild_candidate_no_inverse_update",
+            "manual_feedback_live_weights": "physical_manual_updates_suppressed_candidate_only",
+            "manual_feedback_undo": "retire_labels_and_context_then_full_rebuild_candidate_no_inverse_update",
+            "manual_feedback_workflow": getattr(manager, "manual_feedback_workflow_contract", None),
             "composition_contract": "fast_queue_named_engine_extension_hooks",
             "card_decisions": getattr(manager, "candidate_card_decision_contract", None),
             "candidate_display": getattr(manager, "candidate_display_contract", None),
