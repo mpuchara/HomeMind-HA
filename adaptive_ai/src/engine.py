@@ -133,6 +133,10 @@ class Engine(threading.Thread):
         self.temporal_history = TemporalHistory(maxlen=24)
         self.lock = threading.RLock()
         self.teaching = Teaching(STORE)
+        # Optional final-entrypoint services. The core Engine owns the decision-composition
+        # contract; runtimes that do not install Stage 07 retain legacy behaviour exactly.
+        self.preference_model = None
+        self.decision_composer = None
 
     def prime_temporal_from_archive(self, start_ts, end_ts):
         # Startup must not scan/replay the archive; live states warm temporal context.
@@ -658,16 +662,47 @@ class Engine(threading.Thread):
 
         teaching_revision = self.teaching.revision(aid)
         chosen, confidence, arms, horizon, support, novelty = policy.predict(features)
-        baseline_value = chosen['value']
-        teaching = self.teaching.match(agent, policy, state_map, self.temporal_history, now_ts())
-        if teaching:
-            chosen = dict(chosen, value=teaching['desired'], index=min(range(len(policy.actions)), key=lambda i: abs(policy.actions[i]-teaching['desired'])))
+        composer = self.decision_composer
+        preference = None
+        instruction = None
+        decision_source = "historical_policy_bootstrap"
+        if composer is not None:
+            composed = composer.compose(
+                agent=agent, policy=policy, state_map=state_map, temporal=self.temporal_history,
+                timestamp=now_ts(), features=features, labels=labels, chosen=chosen,
+                confidence=confidence, arms=arms, horizon=horizon, support=support,
+                novelty=novelty, runtime=rt, registry=self.context.resolved_registry,
+            )
+            chosen = composed["chosen"]
+            confidence = composed["confidence"]
+            arms = composed["arms"]
+            horizon = composed["horizon"]
+            support = composed["support"]
+            novelty = composed["novelty"]
+            baseline_value = composed["baseline_value"]
+            teaching = composed["teaching"]
+            instruction = composed.get("instruction")
+            preference = composed.get("preference")
+            trial = composed["trial"]
+            decision_source = composed["source"]
+        else:
+            # Compatibility path for non-final entrypoints. Stage 07 changes only the
+            # shipped preference_queue_main composition and does not reinterpret old data.
+            baseline_value = chosen['value']
+            teaching = self.teaching.match(agent, policy, state_map, self.temporal_history, now_ts())
+            if teaching:
+                chosen = dict(chosen, value=teaching['desired'], index=min(range(len(policy.actions)), key=lambda i: abs(policy.actions[i]-teaching['desired'])))
+                decision_source = "legacy_teaching"
+            trial = None if teaching else self.experiments.propose(agent, policy, state_map, self.context.resolved_registry,
+                features, labels, chosen, confidence, arms, horizon, rt)
+            if trial:
+                chosen = dict(chosen, value=trial['value'], index=trial['index'])
+                support, novelty = trial['support'], trial['novelty']
+                decision_source = "experiment"
         rt['teaching_id'] = teaching['id'] if teaching else None
-        trial = None if teaching else self.experiments.propose(agent, policy, state_map, self.context.resolved_registry,
-            features, labels, chosen, confidence, arms, horizon, rt)
-        if trial:
-            chosen = dict(chosen, value=trial['value'], index=trial['index'])
-            support, novelty = trial['support'], trial['novelty']
+        rt['decision_source'] = decision_source
+        rt['preference_model'] = preference
+        rt['instruction_scope'] = (instruction or {}).get('scope') if instruction else None
         micro_explore = bool(trial)
         rt['baseline_prediction'] = baseline_value
         rt["last_prediction"] = chosen["value"]
@@ -689,6 +724,7 @@ class Engine(threading.Thread):
         forecast = context_meta.get('home_forecast', {})
         if chosen['value'] >= .5 and agent['target_property'] == 'power' and forecast.get('occupancy_now', 0) < .5:
             intent_horizon = next((h for h in (1,3,5) if forecast.get(f'occupancy_in_{h}s', 0) >= .5), horizon)
+        preference_count = int((preference or {}).get('independent_evidence_count') or 0)
         intent = ActionIntent.create(
             agent_id=aid, target_entity=agent['target_entity'], target_property=agent['target_property'],
             desired_value=chosen['value'], confidence=confidence, support=support, novelty=novelty,
@@ -697,8 +733,11 @@ class Engine(threading.Thread):
             context_revision=context_revision, target_revision=target_revision,
             teaching_id=teaching['id'] if teaching else 0,
             teaching_revision=teaching_revision,
-            reason=(f"User teaching #{teaching['id']}: Desired {chosen['value']} in matching context" if teaching else f"Context experiment ({trial['focus']}): {baseline_value} → {chosen['value']}; baseline confidence {confidence:.0%}" if trial else
-                f"Policy desires {chosen['value']}; confidence {confidence:.0%}, support {support:.0%}, novelty {novelty:.0%}"),
+            decision_source=decision_source,
+            reason=(f"User instruction #{teaching['id']} ({rt.get('instruction_scope') or 'legacy'}): Desired {chosen['value']}" if teaching else
+                f"Explicit preference model: Desired {chosen['value']} from {preference_count} independent feedback fact(s)" if preference and preference.get('applied') else
+                f"Context experiment ({trial['focus']}): {baseline_value} → {chosen['value']}; baseline confidence {confidence:.0%}" if trial else
+                f"Historical policy bootstrap desires {chosen['value']}; confidence {confidence:.0%}, support {support:.0%}, novelty {novelty:.0%}"),
             experiment_token=trial['token'] if trial else '',
             contributors=tuple((x['feature'], x['contribution']) for x in rt['top_context']),
             context_dependencies=tuple((eid, input_revisions.get(eid, 0)) for eid in sorted(set(policy.schema.entities) | set(trial['snapshot'] if trial else ()))))
@@ -714,6 +753,7 @@ class Engine(threading.Thread):
         forecast = rt.get('context_meta', {}).get('home_forecast', {})
         drivers = ', '.join(x['feature'] for x in rt.get('top_context', [])[:3]) or 'no stable contributors yet'
         return (f"{agent['target_entity']}: desired {rt.get('last_prediction')}; "
+                f"source {rt.get('decision_source') or 'historical_policy_bootstrap'}; "
                 f"target area {forecast.get('area_id') or 'unmapped'}, "
                 f"occupancy within 3 s {forecast.get('occupancy_in_3s', 0):.0%}. "
                 f"Largest linear contributions: {drivers}. This describes learned evidence, not a rule.")
@@ -753,6 +793,9 @@ class Engine(threading.Thread):
             "baseline_prediction": rt.get('baseline_prediction'),
             "last_prediction": rt.get("last_prediction"),
             "teaching_id": rt.get("teaching_id"),
+            "decision_source": rt.get("decision_source") or "historical_policy_bootstrap",
+            "preference_model": rt.get("preference_model"),
+            "instruction_scope": rt.get("instruction_scope"),
             "current_value": target_value(target_state, agent["target_property"]) if target_state else None,
             "last_prediction_label": prediction_label,
             "last_confidence": confidence,
@@ -800,7 +843,7 @@ class Engine(threading.Thread):
             "benchmark_samples": int(agent.get("benchmark_samples") or 0),
             "benchmark_source": agent.get("benchmark_source"),
             "benchmark_detail": agent.get("benchmark_detail") or {},
-            "model": "Shared home state + diagonal LinUCB → ActionIntent → Executor",
+            "model": "Shared home state + scoped instruction + explicit light preference + diagonal LinUCB bootstrap → ActionIntent → Executor",
             "intent": rt.get('intent'), "last_intent": rt.get('last_intent'),
             "home_forecast": self.context.forecast(agent['target_entity'], now_ts()),
             "behavior_summary": rt.get('behavior_summary'),
