@@ -16,6 +16,7 @@ from confidence_contract import install as install_confidence_contract
 from confidence_runtime import install_runtime_semantics
 from device_agents import install_runtime as install_device_agent_runtime
 from performance_f22 import install as install_performance_f22
+from performance_f22_order_guard import install as install_performance_f22_order_guard
 from promotion_validation import install as install_promotion_validation
 from runtime_http import install_dispatch, register_feedback_routes, register_promotion_routes
 from trial_knowledge import install as install_trial_knowledge
@@ -136,6 +137,7 @@ class RuntimeCompositionRoot:
         # Stage 17: bounded/cursor-based computation after Candidate, Teach and drift
         # contracts are present.  It never creates ActionIntent or dispatches HA services.
         manager = install_performance_f22(manager, core=self.core)
+        manager = install_performance_f22_order_guard(manager)
         engine.agent_candidates = manager
 
         # Stage 16: one final HTTP dispatcher owns migrated feedback/promotion routes.
