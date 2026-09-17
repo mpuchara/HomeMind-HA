@@ -17,7 +17,7 @@ jobs:
         with:
           node-version: '22'
       - run: python -m unittest discover -s tests -v
-      - run: python -m compileall -q adaptive_ai/src tools/benchmark_product_runtime.py tools/smoke_entrypoint.py
+      - run: python -m compileall -q adaptive_ai/src tools/benchmark_product_runtime.py tools/run_product_runtime_benchmark.py tools/smoke_entrypoint.py
       - run: node --check adaptive_ai/src/static/app.js && node --check adaptive_ai/src/static/home.js && node --check adaptive_ai/src/static/settings.js && node --check adaptive_ai/src/static/p0.js && node --check adaptive_ai/src/static/automation_baseline_ui.js && node --check adaptive_ai/src/static/queue.js && node --check adaptive_ai/src/static/experiments.js && node --check adaptive_ai/src/static/manual_feedback.js && node --check adaptive_ai/src/static/teach_observed_ui.js && node --check adaptive_ai/src/static/candidate_ui.js && node --check adaptive_ai/src/static/candidate_preference_ui.js && node --check adaptive_ai/src/static/agent_workflow_ui.js && node --check adaptive_ai/src/static/explore_ui.js && node --check adaptive_ai/src/static/promotion_lifecycle_ui.js && node --check adaptive_ai/src/static/confidence_contract_ui.js && node --check adaptive_ai/src/static/simple_agent_names.js
       - name: Stage 17 synthetic history-cost benchmark smoke
         if: matrix.python == '3.11'
@@ -26,7 +26,7 @@ jobs:
         if: matrix.python == '3.11'
         env:
           ADAPTIVE_AI_DATA: ${{ runner.temp }}/homemind-product-benchmark
-        run: python tools/benchmark_product_runtime.py --seeds 11,23,37 --replicas 1 --compact | tee product-benchmark-f24.json
+        run: python tools/run_product_runtime_benchmark.py --seeds 11,23,37 --replicas 1 --compact | tee product-benchmark-f24.json
       - name: Stage 18 actual source entrypoint smoke
         if: matrix.python == '3.11'
         run: python tools/smoke_entrypoint.py
