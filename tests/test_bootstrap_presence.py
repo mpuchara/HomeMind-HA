@@ -42,12 +42,20 @@ class PresenceAdmissionTests(unittest.TestCase):
         reg = {eid:{'device_id':'radar','platform':'esphome'} for eid in values}
         c = ContextEngine(DEFAULT_OPTIONS)
         c.configure(values, entities=reg, devices=[{'id':'radar','area_id':'kitchen'}])
-        self.assertEqual(c.admitted, {'binary_sensor.kitchen_presence'})
+        # Stage 08 keeps raw activity as supporting evidence but never lets it assert a
+        # calibrated occupancy probability. Distance/config/connectivity remain excluded.
+        self.assertEqual(c.admitted, {'binary_sensor.kitchen_presence',
+                                      'sensor.kitchen_presence_still_energy'})
+        self.assertEqual(c.source_details['binary_sensor.kitchen_presence']['role'],'radar_occupancy')
+        self.assertEqual(c.source_details['sensor.kitchen_presence_still_energy']['role'],'radar_activity')
+        self.assertFalse(c.source_details['sensor.kitchen_presence_still_energy']['occupancy_authority'])
         for eid, value in values.items():c.observe(eid,value,100)
-        self.assertEqual(c.home.forecast('kitchen',100)['occupancy_now'],0)
+        belief=c.home.forecast('kitchen',100)
+        self.assertLess(belief['occupancy_now'],.5)
+        self.assertGreater(belief['uncertainty'],0)
         excluded,_=controllable_context_exclusions(values,reg)
         self.assertNotIn('sensor.kitchen_presence_still_energy',excluded)
-        self.assertEqual(c.source_details['sensor.kitchen_presence_still_energy']['reason'],'binary_presence_on_same_device')
+        self.assertEqual(c.source_details['sensor.kitchen_presence_still_energy']['reason'],'activity_support_only')
 
     def test_numeric_score_without_binary_is_still_used(self):
         eid='sensor.camera_ai_detection_score';c=ContextEngine(DEFAULT_OPTIONS)
@@ -177,7 +185,10 @@ class BootstrapDeltaTests(unittest.TestCase):
                     self.assertGreaterEqual(e.context.home.updated,12000)
                     self.assertIsNone(e.context.bootstrap_delta)
                     self.assertIsNone(HEAVY_JOBS.owner)
-                    self.assertEqual(json.loads(store.meta_get('shared_home_model_v1'))['updates'],e.context.home.updated)
+                    persisted=json.loads(store.meta_get(ContextEngine.ROOM_MODEL_KEY))
+                    self.assertEqual(persisted['version'],2)
+                    self.assertEqual(persisted['updates'],e.context.home.updated)
+                    self.assertIsNone(store.meta_get(ContextEngine.LEGACY_ROOM_MODEL_KEY))
                 finally:
                     e.control_workers.shutdown();e.poll_worker.shutdown()
 

@@ -2,7 +2,7 @@
 import json
 import sqlite3
 from context import archived_state, TemporalHistory, state_scalar
-from home_state import SharedHomeStateModel
+from home_state import RoomBeliefModel
 
 
 class BoundedUsage:
@@ -24,19 +24,7 @@ class BoundedUsage:
 
 
 class DeferredUpdates:
-    """Compatibility queue with prequential test-then-learn semantics.
-
-    History replay calls ``head.validate(...)`` before appending an item here.  Prior to
-    v0.12, appended validation examples were written to a temporary file and all folded
-    into the policy only after the whole held-out slice had been scored.  That made the
-    validation slice a fixed backtest rather than a true online/prequential sequence.
-
-    Appending now performs the policy update immediately.  Therefore every chronological
-    event is first evaluated by the model that existed before that event, and only then
-    becomes training evidence for the next event.  The iterator intentionally yields no
-    items so the legacy end-of-pass fold in ``history.py`` is a no-op and cannot double
-    learn the same sample.  ``count`` is preserved for diagnostics.
-    """
+    """Compatibility queue with prequential test-then-learn semantics."""
     def __init__(self, policies):
         self.policies = policies
         self.count = 0
@@ -46,8 +34,6 @@ class DeferredUpdates:
         if self.closed:
             raise RuntimeError("DeferredUpdates is closed")
         policy, horizon, action, features, reward, ts = update
-        # Callers validate/benchmark before append.  Learning here makes the ordering:
-        # predict/score -> learn, exactly once, in chronological replay order.
         policy.update(int(horizon), int(action), features, float(reward), float(ts))
         self.count += 1
 
@@ -55,8 +41,6 @@ class DeferredUpdates:
         return self.count
 
     def __iter__(self):
-        # history.py retains its old final fold loop for compatibility.  Samples are
-        # already learned at append-time, so yielding them again would double-update.
         return iter(())
 
     def close(self):
@@ -69,12 +53,12 @@ class DeferredUpdates:
 class HistoricalHomeView:
     def __init__(self, context, raw):
         self.context, self.raw = context, raw
-        self.home = SharedHomeStateModel(context.options.get('home_model_half_life_days',45), raw)
-        self.stats = self.home.graph, self.home.dwell
+        self.home = RoomBeliefModel(context.options.get('home_model_half_life_days', 45), raw)
+        self.stats = self.home.graph, self.home.dwell, self.home.calibration
 
     def reset(self):
-        self.home = SharedHomeStateModel(self.context.options.get('home_model_half_life_days',45))
-        self.home.graph, self.home.dwell = self.stats
+        self.home = RoomBeliefModel(self.context.options.get('home_model_half_life_days', 45))
+        self.home.graph, self.home.dwell, self.home.calibration = self.stats
 
     def forecast(self, target, ts):
         return self.home.forecast(self.context.area_for(target), ts)
@@ -83,9 +67,9 @@ class HistoricalHomeView:
 class SQLiteTemporalTracker:
     """Indexed as-of queries support rewinds without future-state leakage.
 
-    RAM: <=64 samples per selected input plus current mapped occupancy sources.
-    Room graph statistics come from the last global checkpoint before this chunk.
-    Each agent reads the graph; only global bootstrap / live events learn it.
+    RAM: <=64 samples per selected input plus current mapped room-belief sources.
+    Room statistics come from the last global checkpoint before this chunk. Replay uses the
+    same source roles, freshness rules and communication semantics as live runtime.
     """
     def __init__(self, store, watched, context, start, end):
         self.conn = sqlite3.connect(store.path, timeout=30)
@@ -97,14 +81,18 @@ class SQLiteTemporalTracker:
         self.state_map = {}
         self.history = TemporalHistory(maxlen=64)
         try:
-            row = self.conn.execute('SELECT model FROM home_checkpoints WHERE ts<? ORDER BY ts DESC LIMIT 1', (start,)).fetchone()
+            row = self.conn.execute(
+                'SELECT model FROM home_checkpoints WHERE ts<? ORDER BY ts DESC LIMIT 1', (start,)
+            ).fetchone()
         except sqlite3.OperationalError:
             row = None
         self.home_view = HistoricalHomeView(context, json.loads(row[0]) if row else None)
 
     def _before(self, eid, ts, count=64):
-        cursor = self.conn.execute('SELECT * FROM entity_history WHERE entity_id=? AND ts<=? ORDER BY ts DESC,id DESC LIMIT ?', (eid, ts, count))
-        # Explicit hard LIMIT, independent of archive length.
+        cursor = self.conn.execute(
+            'SELECT * FROM entity_history WHERE entity_id=? AND ts<=? ORDER BY ts DESC,id DESC LIMIT ?',
+            (eid, ts, count),
+        )
         return list(reversed([dict(r) for r in cursor]))
 
     def advance(self, ts):
@@ -120,27 +108,37 @@ class SQLiteTemporalTracker:
         view = self.home_view
         view.reset()
         ids = self.context.relevant_entities()
-        # Seed occupancy as-of t-30, then stream only the short observed trajectory.
-        # Seeding does not create fictitious arrivals at the query boundary.
+        # Seed values as-of t-30 without learning transitions, then replay only the short
+        # causal window. No post-query packet can participate.
         for eid in ids:
-            rows = self._before(eid, ts-30, 1)
+            rows = self._before(eid, ts - 30, 1)
             if rows:
                 st = archived_state(rows[0])
-                view.home.observe(eid, self.context.area_for(eid), self.context.sensor_probability(eid,st), ts-30, learn=False)
-        view.home.arrivals.clear()
-        view.home.pending = None
+                view.home.observe(
+                    eid, self.context.area_for(eid), self.context.sensor_probability(eid, st),
+                    ts - 30, learn=False, evidence=self.context.evidence_metadata(eid),
+                )
+        view.home.reset_movement_state()
         if ids:
-            sql = 'SELECT * FROM entity_history WHERE ts>? AND ts<=? AND entity_id IN (%s) ORDER BY ts,id' % ','.join('?' for _ in ids)
-            for r in self.conn.execute(sql, [ts-30, ts] + ids):
+            sql = ('SELECT * FROM entity_history WHERE ts>? AND ts<=? AND entity_id IN (%s) '
+                   'ORDER BY ts,id') % ','.join('?' for _ in ids)
+            for r in self.conn.execute(sql, [ts - 30, ts] + ids):
                 row = dict(r)
                 eid = row['entity_id']
-                view.home.observe(eid, self.context.area_for(eid), self.context.sensor_probability(eid,archived_state(row)), row['ts'], learn=False)
+                view.home.observe(
+                    eid, self.context.area_for(eid),
+                    self.context.sensor_probability(eid, archived_state(row)), row['ts'],
+                    learn=False, evidence=self.context.evidence_metadata(eid),
+                )
         self.history.home_context = view
 
     def _edges(self, eid, lo, hi):
         previous = self._before(eid, lo, 1)
         prev = state_scalar(archived_state(previous[-1])) if previous else None
-        for row in self.conn.execute('SELECT * FROM entity_history WHERE entity_id=? AND ts>? AND ts<=? ORDER BY ts,id', (eid,lo,hi)):
+        for row in self.conn.execute(
+            'SELECT * FROM entity_history WHERE entity_id=? AND ts>? AND ts<=? ORDER BY ts,id',
+            (eid, lo, hi),
+        ):
             cur = state_scalar(archived_state(dict(row)))
             if prev is not None and cur is not None:
                 if cur > .25 and prev <= .25:
@@ -151,13 +149,13 @@ class SQLiteTemporalTracker:
 
     def directional_transition_before(self, eid, at_ts, positive, window):
         latest = None
-        for ts, direction in self._edges(eid, at_ts-window, at_ts):
+        for ts, direction in self._edges(eid, at_ts - window, at_ts):
             if direction == positive:
                 latest = ts
         return latest
 
     def first_directional_transition_after(self, eid, start, end, positive):
-        for ts, direction in self._edges(eid,start,end):
+        for ts, direction in self._edges(eid, start, end):
             if direction == positive:
                 return ts
         return None

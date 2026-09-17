@@ -1,14 +1,17 @@
-"""Registry-based room mapping and a single shared live home state."""
+"""Registry-based room mapping and shared versioned room belief state."""
 import json
 import math
 import threading
 import time
 from context import controllable_context_exclusions, electrical_context_exclusions
 from home_sources import select_sources
-from home_state import SharedHomeStateModel
+from home_state import RoomBeliefModel
 
 
 class ContextEngine:
+    ROOM_MODEL_KEY = 'room_belief_model_v2'
+    LEGACY_ROOM_MODEL_KEY = 'shared_home_model_v1'
+
     def __init__(self, options, store=None):
         self.options, self.store = options, store
         self.lock = threading.RLock()
@@ -23,13 +26,19 @@ class ContextEngine:
         self.bootstrap_delta = None
         self.bootstrap_started = 0
         self.source_details = {}
+        self.room_checkpoint_source = None
         raw = None
         if store:
-            try:
-                raw = json.loads(store.meta_get('shared_home_model_v1', 'null'))
-            except (ValueError, TypeError):
-                pass
-        self.home = SharedHomeStateModel(options.get('home_model_half_life_days', 45), raw)
+            for key in (self.ROOM_MODEL_KEY, self.LEGACY_ROOM_MODEL_KEY):
+                try:
+                    value = json.loads(store.meta_get(key, 'null'))
+                except (ValueError, TypeError):
+                    value = None
+                if isinstance(value, dict):
+                    raw = value
+                    self.room_checkpoint_source = key
+                    break
+        self.home = RoomBeliefModel(options.get('home_model_half_life_days', 45), raw)
 
     def configure(self, states, entities=None, devices=None, areas=None):
         with self.lock:
@@ -58,9 +67,11 @@ class ContextEngine:
             electrical, _ = electrical_context_exclusions(states, self.entities)
             self.excluded = control | electrical
             self.admitted, self.source_details = select_sources(states, self.entities, self.mapping, self.excluded)
-            self.source_metadata = {eid: {k:v for k,v in (states[eid].get('attributes') or {}).items()
-                                          if k in ('unit_of_measurement','device_class')}
-                                    for eid in self.admitted}
+            self.source_metadata = {
+                eid: {k: v for k, v in (states[eid].get('attributes') or {}).items()
+                      if k in ('unit_of_measurement', 'device_class')}
+                for eid in self.admitted
+            }
             self.registry_revision += 1
 
     def resolved_registry(self):
@@ -73,14 +84,25 @@ class ContextEngine:
     def relevant_entities(self):
         return sorted(self.admitted & self.mapping.keys())
 
+    def evidence_metadata(self, eid):
+        return dict(self.source_details.get(eid) or {})
+
+    def _discard_orphan_movement_state(self):
+        # Engine's initial REST snapshot intentionally clears `arrivals` + legacy `pending`
+        # so startup states are not interpreted as fresh movement. RoomBelief keeps a richer
+        # hypothesis set, therefore mirror that established signal without patching Engine.
+        if getattr(self.home, 'hypotheses', None) and self.home.pending is None and not self.home.arrivals:
+            self.home.reset_movement_state()
+
     @staticmethod
     def probability(eid, state):
+        """Normalize transport values; the explicit source role decides semantics."""
         value = str((state or {}).get('state', '')).lower()
         if value in ('unknown', 'unavailable', '', 'none'):
             return None
-        if value in ('on', 'home', 'occupied', 'detected', 'true'):
+        if value in ('on', 'home', 'occupied', 'detected', 'true', 'open'):
             return 1.0
-        if value in ('off', 'not_home', 'away', 'clear', 'false'):
+        if value in ('off', 'not_home', 'away', 'clear', 'false', 'closed'):
             return 0.0
         try:
             value = float(value)
@@ -93,18 +115,24 @@ class ContextEngine:
 
     def observe(self, eid, state, ts, learn=True):
         with self.lock:
+            self._discard_orphan_movement_state()
             if eid not in self.admitted:
-                previous = self.home.sources.get(eid)
-                if previous:
+                previous_area = self.home.source_area(eid)
+                if previous_area:
+                    previous_role = self.home.source_role(eid)
+                    evidence = {'role': previous_role} if previous_role else None
                     if self.bootstrap_delta is not None:
-                        self.bootstrap_delta.observe(eid, previous[0], None, ts, learn=False)
-                    return self.home.observe(eid, previous[0], None, ts, learn=False)
+                        self.bootstrap_delta.observe(eid, previous_area, None, ts, learn=False, evidence=evidence)
+                    return self.home.observe(eid, previous_area, None, ts, learn=False, evidence=evidence)
                 return False
-            probability = self.sensor_probability(eid, state)
+            value = self.sensor_probability(eid, state)
+            evidence = self.evidence_metadata(eid)
             if self.bootstrap_delta is not None and ts > self.bootstrap_started:
-                self.bootstrap_delta.observe(eid, self.area_for(eid), probability, ts, learn=learn)
-            return self.home.observe(eid, self.area_for(eid), probability, ts,
-                                     learn=learn and ts > self.bootstrap_cutoff)
+                self.bootstrap_delta.observe(eid, self.area_for(eid), value, ts,
+                                             learn=learn, evidence=evidence)
+            return self.home.observe(eid, self.area_for(eid), value, ts,
+                                     learn=learn and ts > self.bootstrap_cutoff,
+                                     evidence=evidence)
 
     def sensor_probability(self, eid, state):
         st = dict(state or {})
@@ -112,24 +140,33 @@ class ContextEngine:
         return self.probability(eid, st)
 
     def forecast(self, eid, ts):
-        return self.home.forecast(self.area_for(eid), ts)
+        with self.lock:
+            self._discard_orphan_movement_state()
+            return self.home.forecast(self.area_for(eid), ts)
 
     def save(self, force=False):
         with self.lock:
             now = time.time()
-            if self.store and (force or now-self.last_save >= 60):
-                self.store.meta_set('shared_home_model_v1', json.dumps(self.home.export(), separators=(',', ':')))
+            if self.store and (force or now - self.last_save >= 60):
+                self.store.meta_set(self.ROOM_MODEL_KEY,
+                                    json.dumps(self.home.export(), separators=(',', ':')))
+                self.room_checkpoint_source = self.ROOM_MODEL_KEY
                 self.last_save = now
 
     def diagnostics(self):
         with self.lock:
             result = self.home.diagnostics(time.time())
-            result.update({'mapped_entities': len(self.mapping), 'occupancy_sources': len(self.admitted),
-                           'mapped_sources': len(self.admitted & self.mapping.keys()),
-                           'unmapped_sources': len(self.admitted - self.mapping.keys()),
-                           'source_details': list(self.source_details.values())[:500],
-                           'source_details_total': len(self.source_details),
-                           'bootstrap_live_updates': self.bootstrap_delta.updated if self.bootstrap_delta else 0,
-                           'mapping_error': self.mapping_error,
-                           'area_names': {k:v.get('name', k) for k,v in self.areas.items()}})
+            result.update({
+                'mapped_entities': len(self.mapping),
+                'occupancy_sources': len(self.admitted),
+                'mapped_sources': len(self.admitted & self.mapping.keys()),
+                'unmapped_sources': len(self.admitted - self.mapping.keys()),
+                'source_details': list(self.source_details.values())[:500],
+                'source_details_total': len(self.source_details),
+                'bootstrap_live_updates': self.bootstrap_delta.updated if self.bootstrap_delta else 0,
+                'mapping_error': self.mapping_error,
+                'area_names': {k: v.get('name', k) for k, v in self.areas.items()},
+                'checkpoint_key': self.room_checkpoint_source,
+                'checkpoint_contract': 'room_belief_v2_additive_legacy_v1_read_only',
+            })
             return result

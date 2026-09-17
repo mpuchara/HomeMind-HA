@@ -1,6 +1,6 @@
 """Explicit global bootstrap, streamed through the same single heavy-job gate.
 
-Daily snapshots allow agent replay to use only home statistics learned BEFORE its
+Daily snapshots allow agent replay to use only room statistics learned BEFORE its
 training window. This avoids leakage of validation trajectories into forecasts.
 """
 import json
@@ -13,7 +13,7 @@ import math
 from pathlib import Path
 from context import archived_state
 from context_engine import ContextEngine
-from home_state import SharedHomeStateModel
+from home_state import RoomBeliefModel
 from telemetry import HEAVY_JOBS, rss_mb
 
 
@@ -52,28 +52,31 @@ class HomeBootstrap:
         try:
             ids = self.context.relevant_entities()
             if not ids:
-                raise ValueError('No mapped occupancy/activity sources; assign HA areas first')
+                raise ValueError('No mapped occupancy/activity/door sources; assign HA areas first')
             with self.context.lock:
                 cutoff = time.time()
                 self.context.bootstrap_started = cutoff
                 self.context.bootstrap_delta = self.context.home.live_delta(cutoff)
                 mapping = {eid: self.context.area_for(eid) for eid in ids}
                 metadata = {eid: dict(self.context.source_metadata.get(eid, {})) for eid in ids}
-            begin = cutoff - float(self.context.options.get('history_bootstrap_days', 10))*86400
+                evidence = {eid: self.context.evidence_metadata(eid) for eid in ids}
+            begin = cutoff - float(self.context.options.get('history_bootstrap_days', 10)) * 86400
             if import_recorder:
                 windows = self.history._time_windows(begin, cutoff, max_hours=1)
-                total = math.ceil((cutoff-begin)/3600)*((len(ids)+5)//6)
+                total = math.ceil((cutoff - begin) / 3600) * ((len(ids) + 5) // 6)
                 done = 0
                 for lo, hi in windows:
                     for offset in range(0, len(ids), 6):
                         self._check()
-                        self.history._fetch_history_resilient(ids[offset:offset+6], lo, hi,
-                            minimal=True, no_attributes=True, source='ha_home_bootstrap')
+                        self.history._fetch_history_resilient(
+                            ids[offset:offset + 6], lo, hi,
+                            minimal=True, no_attributes=True, source='ha_home_bootstrap'
+                        )
                         done += 1
-                        self.status.update(progress=.4*done/max(1,total), recorder_chunks=done)
+                        self.status.update(progress=.4 * done / max(1, total), recorder_chunks=done)
                         self.cancel_event.wait(.02)
             self.status['state'] = 'TRAINING'
-            model = SharedHomeStateModel(self.context.options.get('home_model_half_life_days',45))
+            model = RoomBeliefModel(self.context.options.get('home_model_half_life_days', 45))
             next_checkpoint = begin + 86400
             rows = 0
             with tempfile.TemporaryDirectory(prefix='homemind-bootstrap-') as temp:
@@ -84,47 +87,59 @@ class HomeBootstrap:
                         self._check()
                         ts = row['ts']
                         if ts >= next_checkpoint:
-                            checkpoint.execute('INSERT OR REPLACE INTO home_checkpoints VALUES (?,?)',
-                                               (next_checkpoint, json.dumps(model.export(), separators=(',', ':'))))
+                            checkpoint.execute(
+                                'INSERT OR REPLACE INTO home_checkpoints VALUES (?,?)',
+                                (next_checkpoint, json.dumps(model.export(), separators=(',', ':'))),
+                            )
                             next_checkpoint = ts + 86400
                         eid = row['entity_id']
                         state = archived_state(row)
-                        # Minimal Recorder responses omit units: use current metadata.
                         state['attributes'] = {**metadata[eid], **state['attributes']}
-                        model.observe(eid, mapping[eid], ContextEngine.probability(eid,state), ts)
+                        model.observe(
+                            eid, mapping[eid], ContextEngine.probability(eid, state), ts,
+                            evidence=evidence[eid],
+                        )
                         rows += 1
                         if rows % 256 == 0:
-                            elapsed = max(.001, time.monotonic()-started)
-                            fraction = max(0, min(1, (ts-begin)/max(1,cutoff-begin)))
-                            self.status.update(rows=rows, progress=.4+.6*fraction, rows_per_second=rows/elapsed,
-                                               eta_seconds=elapsed*(1-fraction)/max(.001,fraction))
+                            elapsed = max(.001, time.monotonic() - started)
+                            fraction = max(0, min(1, (ts - begin) / max(1, cutoff - begin)))
+                            self.status.update(
+                                rows=rows, progress=.4 + .6 * fraction, rows_per_second=rows / elapsed,
+                                eta_seconds=elapsed * (1 - fraction) / max(.001, fraction),
+                            )
                             self.cancel_event.wait(.001)
                     model.expire(cutoff)
                     self._check()
                     checkpoint.commit()
-                # Fold bounded live statistics into history, never retain every raw event.
-                # Commit checkpoints and model together; failure leaves both old versions.
+                # Commit checkpoints and v2 model together. The legacy v1 key is retained
+                # untouched for rollback; new live state is never serialized.
                 with self.context.lock, self.context.home.lock:
                     self._check()
                     if mapping != {eid: self.context.area_for(eid) for eid in self.context.relevant_entities()}:
-                        raise RuntimeError('Presence sources or areas changed during bootstrap; restart bootstrap with the new mapping')
+                        raise RuntimeError('Room-belief sources or areas changed during bootstrap; restart bootstrap with the new mapping')
                     model.merge_statistics(self.context.bootstrap_delta)
                     raw = json.dumps(model.export(), separators=(',', ':'))
                     with self.store.conn() as destination:
                         destination.execute('ATTACH DATABASE ? AS bootstrap', (path,))
                         destination.execute('DELETE FROM home_checkpoints')
                         destination.execute('INSERT INTO home_checkpoints SELECT * FROM bootstrap.home_checkpoints')
-                        destination.execute("INSERT INTO app_meta(key,value) VALUES('shared_home_model_v1',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", (raw,))
+                        destination.execute(
+                            "INSERT INTO app_meta(key,value) VALUES(?,?) "
+                            "ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+                            (ContextEngine.ROOM_MODEL_KEY, raw),
+                        )
                     current = self.context.home
                     current.graph, current.dwell = model.graph, model.dwell
+                    current.calibration = model.calibration
                     current.updated = model.updated
                     current.revision += 1
                     current.last_decay_ts = model.last_decay_ts
                     self.context.bootstrap_cutoff = cutoff
                     self.context.bootstrap_delta = None
+                    self.context.room_checkpoint_source = ContextEngine.ROOM_MODEL_KEY
                     self.context.last_save = time.time()
             self.status.update(state='READY', progress=1, rows=rows, eta_seconds=0,
-                               rows_per_second=rows/max(.001,time.monotonic()-started))
+                               rows_per_second=rows / max(.001, time.monotonic() - started))
         except InterruptedError as exc:
             self.status.update(state='CANCELLED', error=str(exc))
         except Exception as exc:
