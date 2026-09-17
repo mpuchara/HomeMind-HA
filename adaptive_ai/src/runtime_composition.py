@@ -5,21 +5,14 @@ one base composition step; Stage 11/13/14/15 services and the first Stage-16 con
 then attached explicitly.  Stage 17 adds bounded/cursor-based performance services after
 their source contracts exist.  Unmigrated legacy overlays stay behind the explicit router
 as compatibility fallbacks and can be removed feature-by-feature in later PRs.
+
+The module itself stays deliberately lightweight: stage implementations are imported only
+from ``prepare_engine_extensions()`` after main.py has already bound the HTTP server.
 """
 from __future__ import annotations
 
 from dataclasses import dataclass
 import time
-
-from cold_start_drift import install as install_cold_start_drift
-from confidence_contract import install as install_confidence_contract
-from confidence_runtime import install_runtime_semantics
-from device_agents import install_runtime as install_device_agent_runtime
-from performance_f22 import install as install_performance_f22
-from performance_f22_order_guard import install as install_performance_f22_order_guard
-from promotion_validation import install as install_promotion_validation
-from runtime_http import install_dispatch, register_feedback_routes, register_promotion_routes
-from trial_knowledge import install as install_trial_knowledge
 
 
 CONTRACT_VERSION = 2
@@ -115,6 +108,18 @@ class RuntimeCompositionRoot:
         key = id(engine)
         if key in self._prepared_engine_ids:
             return
+
+        # These imports intentionally happen in main.py's background runtime-init thread,
+        # never while trial_queue_main.py is still trying to bind Home Assistant Ingress.
+        from cold_start_drift import install as install_cold_start_drift
+        from confidence_contract import install as install_confidence_contract
+        from confidence_runtime import install_runtime_semantics
+        from device_agents import install_runtime as install_device_agent_runtime
+        from performance_f22 import install as install_performance_f22
+        from performance_f22_order_guard import install as install_performance_f22_order_guard
+        from promotion_validation import install as install_promotion_validation
+        from runtime_http import install_dispatch, register_feedback_routes, register_promotion_routes
+        from trial_knowledge import install as install_trial_knowledge
 
         # Existing fast + preference + episode composition is the characterized base.
         self.base_prepare_engine_extensions()
