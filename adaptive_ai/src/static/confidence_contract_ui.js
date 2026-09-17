@@ -1,7 +1,9 @@
 (()=>{
   const pct=v=>v==null?'—':`${(Number(v)*100).toFixed(1)}%`;
   const n1=v=>v==null?'—':Number(v).toFixed(1);
+  const signed=v=>v==null?'—':`${Number(v)>=0?'+':''}${Number(v).toFixed(3)}`;
   let cachedCandidates=[];
+  let cachedAgents=[];
 
   function renameLegacyLabels(){
     for(const span of document.querySelectorAll('.agent-primary span,.candidate-decision-strip span,.candidate-compare-details span,.candidate-compare-minimal span')){
@@ -25,6 +27,10 @@
 
   function cardRef(card){return String(card?.dataset?.candidateRef||card?.dataset?.generationId||'');}
   function candidateRef(c){return String(c?.generation_id||c?.candidate_id||'');}
+  function liveDetails(agentId){
+    return [...document.querySelectorAll('.agent-details[data-agent-id]')]
+      .find(x=>String(x.dataset.agentId)===String(agentId));
+  }
   function ensureMetric(root,key,label,value,title=''){
     if(!root)return;
     let node=root.querySelector(`[data-confidence-metric="${key}"]`);
@@ -39,6 +45,27 @@
     const small=node.querySelector('small');
     small.textContent=title;
     small.style.display=title?'':'none';
+  }
+
+  function decorateLive(a){
+    const rt=a?.runtime||{};
+    const details=liveDetails(a?.id);
+    if(!details)return;
+    let panel=details.querySelector('[data-confidence-contract-live]');
+    if(!panel){
+      panel=document.createElement('div');
+      panel.className='detail confidence-contract-live';
+      panel.dataset.confidenceContractLive='1';
+      details.appendChild(panel);
+    }
+    ensureMetric(panel,'live-decision-strength','Decision strength',pct(rt.decision_strength??rt.last_confidence),'heuristic gate score · not a probability');
+    ensureMetric(panel,'live-utility','Expected action utility',signed(rt.expected_action_utility),'expected reward/utility · not a probability');
+    ensureMetric(panel,'live-coverage','Data coverage',pct(rt.data_coverage),'context support / effective coverage · not quality');
+    ensureMetric(panel,'live-presence','Presence probability · 3 s',pct(rt.presence_probability),'probability claim; calibration requires independent labelled episodes');
+    ensureMetric(panel,'live-uncertainty','Forecast uncertainty',pct(rt.forecast_uncertainty),'uncertainty score · not probability of failure');
+    const diagnostic=rt.policy_validation_diagnostic||{};
+    ensureMetric(panel,'live-policy-diagnostic','Policy validation diagnostic',diagnostic.accuracy==null?'—':pct(diagnostic.accuracy),
+      diagnostic.samples==null?'legacy held-out diagnostic':`${diagnostic.samples} weighted samples · not Stage-13 final evaluation`);
   }
 
   function decorateCandidate(card,c){
@@ -68,6 +95,7 @@
 
   function decorateAll(){
     renameLegacyLabels();
+    for(const a of cachedAgents)decorateLive(a);
     for(const c of cachedCandidates){
       const ref=candidateRef(c);
       if(!ref)continue;
@@ -78,9 +106,13 @@
 
   async function refresh(){
     try{
-      const r=await fetch('api/candidates',{cache:'no-store'});
-      if(r.ok){
-        const data=await r.json();
+      const [agents,candidates]=await Promise.all([
+        fetch('api/agents',{cache:'no-store'}),
+        fetch('api/candidates',{cache:'no-store'}),
+      ]);
+      if(agents.ok)cachedAgents=await agents.json();
+      if(candidates.ok){
+        const data=await candidates.json();
         cachedCandidates=data.candidates||[];
       }
     }catch(_e){}
@@ -89,6 +121,6 @@
 
   const root=document.body;
   if(root)new MutationObserver(()=>decorateAll()).observe(root,{childList:true,subtree:true});
-  setInterval(refresh,1500);
+  setInterval(refresh,2000);
   refresh();
 })();
