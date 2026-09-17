@@ -97,12 +97,16 @@ class JournaledRLTeaching(RLTeaching):
                 journal_row["feedback_id"], "learning", "teach_rl_label", label_id,
                 metadata={"source": source, "generation_id": generation_id},
             )
+            # Recording a label alone has not changed a policy yet.  The Candidate
+            # listener (or Correct commit) upgrades this to learning_queued and sets the
+            # concrete generation; only then does undo require a clean rebuild.
             journal_row = journal.set_status(
-                journal_row["feedback_id"], "learning_queued",
+                journal_row["feedback_id"], "applied",
                 immediate_effect={"physical_change": False, "runtime_override": False},
                 learning_effect={
                     "label_recorded": True, "teach_rl_label_id": label_id,
-                    "candidate_queued": False, "rebuild_required": True,
+                    "candidate_queued": False, "rebuild_required": False,
+                    "live_model_updated": False,
                 },
             )
 
@@ -118,6 +122,7 @@ class JournaledRLTeaching(RLTeaching):
         result = {
             "ok": True, "label_id": label_id, "sample_ts": timestamp,
             "desired_value": float(desired), "previous_desired": previous,
+            "generation_id": generation_id,
         }
         if journal_row is not None:
             result.update(
@@ -173,7 +178,8 @@ class JournaledRLTeaching(RLTeaching):
             result = journal.undo(linked_feedback, engine=self.engine, candidate_manager=None)
             out = {
                 "ok": True, "undone_id": label_id, "feedback_id": str(linked_feedback),
-                "feedback": result, "full_rebuild_required": True,
+                "feedback": result,
+                "full_rebuild_required": bool((result.get("learning_effect") or {}).get("rebuild_required")),
                 "ui_message": journal.ui_summary(result),
             }
             listener = self.candidate_feedback_listener
