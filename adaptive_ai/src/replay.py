@@ -1,6 +1,7 @@
 """Bounded-memory historical views. Large timelines and held-out vectors stay on disk."""
 import json
 import sqlite3
+from adaptive_presence import AdaptivePresenceModel
 from context import archived_state, TemporalHistory, state_scalar
 from home_state import RoomBeliefModel
 
@@ -55,13 +56,35 @@ class HistoricalHomeView:
         self.context, self.raw = context, raw
         self.home = RoomBeliefModel(context.options.get('home_model_half_life_days', 45), raw)
         self.stats = self.home.graph, self.home.dwell, self.home.calibration
+        self.adaptive = AdaptivePresenceModel()
+        self.adaptive_cache = {}
 
     def reset(self):
         self.home = RoomBeliefModel(self.context.options.get('home_model_half_life_days', 45))
         self.home.graph, self.home.dwell, self.home.calibration = self.stats
+        # Virtual ON/hysteresis is causal runtime state, not checkpoint state. Rebuild it
+        # from the same as-of event window on every replay query.
+        self.adaptive = AdaptivePresenceModel()
+        self.adaptive_cache = {}
+
+    def observe_adaptive(self, area, ts):
+        if not area:
+            return
+        base = self.home.forecast(area, ts)
+        self.context.augment_home_forecast(
+            self.home, area, base, ts,
+            presence_model=self.adaptive,
+            cache=self.adaptive_cache,
+        )
 
     def forecast(self, target, ts):
-        return self.home.forecast(self.context.area_for(target), ts)
+        area = self.context.area_for(target)
+        base = self.home.forecast(area, ts)
+        return self.context.augment_home_forecast(
+            self.home, area, base, ts,
+            presence_model=self.adaptive,
+            cache=self.adaptive_cache,
+        )
 
 
 class SQLiteTemporalTracker:
@@ -70,6 +93,8 @@ class SQLiteTemporalTracker:
     RAM: <=64 samples per selected input plus current mapped room-belief sources.
     Room statistics come from the last global checkpoint before this chunk. Replay uses the
     same source roles, freshness rules and communication semantics as live runtime.
+    Stage-10 adaptive-presence hysteresis is rebuilt causally from the same short event
+    window; no post-query packet participates.
     """
     def __init__(self, store, watched, context, start, end):
         self.conn = sqlite3.connect(store.path, timeout=30)
@@ -110,26 +135,34 @@ class SQLiteTemporalTracker:
         ids = self.context.relevant_entities()
         # Seed values as-of t-30 without learning transitions, then replay only the short
         # causal window. No post-query packet can participate.
+        seeded_areas = set()
         for eid in ids:
             rows = self._before(eid, ts - 30, 1)
             if rows:
                 st = archived_state(rows[0])
+                area = self.context.area_for(eid)
                 view.home.observe(
-                    eid, self.context.area_for(eid), self.context.sensor_probability(eid, st),
+                    eid, area, self.context.sensor_probability(eid, st),
                     ts - 30, learn=False, evidence=self.context.evidence_metadata(eid),
                 )
+                if area:
+                    seeded_areas.add(area)
         view.home.reset_movement_state()
+        for area in sorted(seeded_areas):
+            view.observe_adaptive(area, ts - 30)
         if ids:
             sql = ('SELECT * FROM entity_history WHERE ts>? AND ts<=? AND entity_id IN (%s) '
                    'ORDER BY ts,id') % ','.join('?' for _ in ids)
             for r in self.conn.execute(sql, [ts - 30, ts] + ids):
                 row = dict(r)
                 eid = row['entity_id']
+                area = self.context.area_for(eid)
                 view.home.observe(
-                    eid, self.context.area_for(eid),
+                    eid, area,
                     self.context.sensor_probability(eid, archived_state(row)), row['ts'],
                     learn=False, evidence=self.context.evidence_metadata(eid),
                 )
+                view.observe_adaptive(area, row['ts'])
         self.history.home_context = view
 
     def _edges(self, eid, lo, hi):
