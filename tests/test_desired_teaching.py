@@ -40,8 +40,12 @@ class DesiredTeachingTests(unittest.TestCase):
         self.assertEqual(self.store.get_agent_config(self.a["id"])["mode"], "shadow")
         self.assertNotIn("manual_override_until", self.rt)
         self.service.assert_not_called()
-        saved = self.store.get_model(self.a["id"])
-        self.assertIsNotNone(saved)
+        # Stage 06 separates the immediate decision override from policy learning. In this
+        # fixture the compact policy context is incomplete, so Teach Desired is deliberately
+        # one-shot and must not persist/mutate a Live model as a side effect.
+        self.assertIsNone(self.store.get_model(self.a["id"]))
+        self.assertFalse(result["live_model_updated"])
+        self.assertEqual(result["learning_path"], "runtime_override_only")
         with self.store.conn() as c:
             row = c.execute("SELECT desired_value,rejected_value,source FROM manual_context_feedback WHERE agent_id=?", (self.a["id"],)).fetchone()
         self.assertEqual(tuple(row), (1.0, 0.0, "ui_teach_desired"))
