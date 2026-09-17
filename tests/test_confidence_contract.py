@@ -171,7 +171,9 @@ class ContractParityTests(unittest.TestCase):
         self.assertIn('OFF future safety', ui)
         self.assertIn('ON future safety', ui)
 
-        runtime = (ROOT / 'adaptive_ai' / 'src' / 'trial_queue_main.py').read_text(encoding='utf-8')
+        entrypoint = (ROOT / 'adaptive_ai' / 'src' / 'trial_queue_main.py').read_text(encoding='utf-8')
+        runtime = (ROOT / 'adaptive_ai' / 'src' / 'runtime_composition.py').read_text(encoding='utf-8')
+        self.assertIn('bind_final_composition', entrypoint)
         self.assertIn('install_confidence_contract', runtime)
         self.assertIn('confidence_contract_ready', runtime)
 
