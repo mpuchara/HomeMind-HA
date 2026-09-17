@@ -64,6 +64,16 @@ class ProductRuntimeBenchmarkContractTests(unittest.TestCase):
         self.assertIn("full_ridge_shadow", result["comparators"])
         self.assertEqual(result["runtime_scope"]["ha_service_dispatch"], "forbidden/asserted in Shadow benchmark")
 
+    def test_build_info_records_real_entrypoint_and_failed_product_criterion(self):
+        build = json.loads((ROOT / "adaptive_ai" / "BUILD_INFO.json").read_text(encoding="utf-8"))
+        self.assertEqual(build["product_benchmark_contract"], 1)
+        self.assertIn("trial_queue_main.py", build["production_entrypoint"])
+        self.assertEqual(build["product_benchmark_seeds"], [11, 23, 37])
+        self.assertEqual(build["product_benchmark_unmet_criteria"], ["false_on_not_worse_than_fixed"])
+        self.assertIn("not deployed", build["product_benchmark_full_ridge"])
+        self.assertIn("component fixture", build["anticipation_simulator"])
+        self.assertGreaterEqual(build["tests_passed"], 784)
+
 
 class ProductRuntimeBenchmarkFixtureNamingTests(unittest.TestCase):
     def test_legacy_anticipation_simulator_admits_component_fixture_scope(self):
