@@ -24,7 +24,6 @@ def _role(eid, state, registry):
     dc = str(attrs.get('device_class') or registry.get('original_device_class') or '').lower()
     text = _text(eid, state)
     caps = entity_capability_tags(eid, state)
-
     if domain in {'person', 'device_tracker'}:
         return 'tracker', 'tracker'
     if domain == 'binary_sensor' and (
@@ -32,14 +31,10 @@ def _role(eid, state, registry):
     ):
         return 'door', 'door'
     if domain == 'binary_sensor':
-        explicit = (
-            dc in OCCUPANCY_CLASSES
-            or bool(re.search(r'\b(pir|ruch|ruchu|human|person|people|occupancy|presence|motion)\b|obecno|człowiek|czlowiek', text))
-            or any(term in text for term in ('still target', 'moving target', 'move target'))
-        )
-        if not explicit:
-            return None, None
-        if dc and dc not in OCCUPANCY_CLASSES:
+        explicit = (dc in OCCUPANCY_CLASSES
+                    or bool(re.search(r'\b(pir|ruch|ruchu|human|person|people|occupancy|presence|motion)\b|obecno|człowiek|czlowiek', text))
+                    or any(term in text for term in ('still target', 'moving target', 'move target')))
+        if not explicit or (dc and dc not in OCCUPANCY_CLASSES):
             return None, None
         radar = any(token in text for token in ('radar', 'mmwave', 'ld2410', 'ld2411', 'still target', 'moving target'))
         pir = dc == 'motion' or bool(re.search(r'\b(pir|motion|ruch|ruchu)\b', text))
@@ -48,7 +43,6 @@ def _role(eid, state, registry):
         if pir:
             return 'pir', 'binary'
         return 'occupancy_binary', 'binary'
-
     if domain != 'sensor':
         return None, None
     unit = str(attrs.get('unit_of_measurement') or '').lower()
@@ -81,6 +75,15 @@ def source_kind(eid, state, registry):
     return kind, None
 
 
+def _semantics(role):
+    return {
+        'pir': 'event_presence', 'radar_occupancy': 'stationary_occupancy',
+        'occupancy_binary': 'binary_occupancy', 'radar_activity': 'activity_likelihood',
+        'auxiliary_probability': 'probability_like_score', 'tracker': 'aggregate_tracker',
+        'door': 'transition_only', 'auxiliary': 'auxiliary_likelihood',
+    }.get(role)
+
+
 def select_sources(states, registry, mapping, excluded):
     candidates, details = {}, {}
     for eid, state in states.items():
@@ -97,43 +100,39 @@ def select_sources(states, registry, mapping, excluded):
             role, kind, reason = None, None, 'actuator_or_electrical'
         attrs = (state.get('attributes') or {}) if isinstance(state, dict) else {}
         details[eid] = {
-            'entity_id': eid,
-            'name': attrs.get('friendly_name') or eid,
-            'area_id': mapping.get(eid),
-            'platform': reg.get('platform'),
+            'entity_id': eid, 'name': attrs.get('friendly_name') or eid,
+            'area_id': mapping.get(eid), 'platform': reg.get('platform'),
             'device_id': reg.get('device_id'),
             'available': str((state or {}).get('state', '')).lower() not in {'unknown', 'unavailable', '', 'none'},
-            'kind': kind,
-            'role': role,
-            'value_semantics': {
-                'pir': 'event_presence',
-                'radar_occupancy': 'stationary_occupancy',
-                'occupancy_binary': 'binary_occupancy',
-                'radar_activity': 'activity_likelihood',
-                'auxiliary_probability': 'probability_like_score',
-                'tracker': 'aggregate_tracker',
-                'door': 'transition_only',
-                'auxiliary': 'auxiliary_likelihood',
-            }.get(role),
+            'kind': kind, 'role': role, 'value_semantics': _semantics(role),
             'calibrated_probability': role == 'auxiliary_probability',
             'occupancy_authority': role in {'pir', 'radar_occupancy', 'occupancy_binary', 'tracker', 'auxiliary_probability'},
-            'reason': reason,
-            'selected': bool(role),
+            'reason': reason, 'selected': bool(role),
         }
         if role:
             candidates[eid] = role
 
-    # Raw radar activity remains admitted as supporting evidence even when a calibrated
-    # binary occupancy channel exists on the same device. It no longer owns occupancy,
-    # therefore it cannot pin a room ON by itself.
+    # Some mmWave integrations name the binary output simply "presence" while exposing
+    # sibling still/move-energy channels. Treat that binary as radar occupancy based on
+    # the device relationship, not a name guess.
+    radar_devices = {(registry.get(eid, {}).get('device_id'), mapping.get(eid))
+                     for eid, role in candidates.items() if role == 'radar_activity'
+                     and registry.get(eid, {}).get('device_id')}
+    for eid, role in list(candidates.items()):
+        device_area = (registry.get(eid, {}).get('device_id'), mapping.get(eid))
+        if role == 'occupancy_binary' and device_area in radar_devices:
+            candidates[eid] = 'radar_occupancy'
+            details[eid].update(role='radar_occupancy', value_semantics=_semantics('radar_occupancy'),
+                                calibrated_probability=False, occupancy_authority=True)
+
     radar_owners = {(registry.get(eid, {}).get('device_id'), mapping.get(eid))
                     for eid, role in candidates.items() if role == 'radar_occupancy'
                     and registry.get(eid, {}).get('device_id')}
     admitted = set()
     for eid, role in candidates.items():
         admitted.add(eid)
-        device = registry.get(eid, {}).get('device_id')
-        if role == 'radar_activity' and device and (device, mapping.get(eid)) in radar_owners:
+        device_area = (registry.get(eid, {}).get('device_id'), mapping.get(eid))
+        if role == 'radar_activity' and device_area in radar_owners:
             details[eid]['reason'] = 'activity_support_only'
             details[eid]['occupancy_authority'] = False
         else:
