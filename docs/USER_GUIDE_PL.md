@@ -1,148 +1,127 @@
-> Dokument archiwalny sprzed 0.9. Aktualna wersja: [obsługa](QUICK_START_PL.md), [architektura](ARCHITECTURE_0_9.md).
+# Adaptive AI — aktualna obsługa
 
-# Obsługa Adaptive AI
+Ten dokument opisuje bieżący produkt. Starsze wersje instrukcji pozostają w repo jako dokumenty historyczne.
 
 ## Główny ekran
 
-### Status połączenia
+Aplikacja uruchamia interfejs HTTP przed cięższą inicjalizacją runtime. Status startu pokazuje, czy gotowe są baza, Engine, realtime Home Assistant, historia i workery. Normalnie stan HA jest odbierany przez WebSocket; REST pozostaje ścieżką resynchronizacji/fallbacku.
 
-Na górze aplikacji widać połączenie z Home Assistant. Normalnie powinien być aktywny strumień realtime oparty o WebSocket. Gdy realtime nie działa, aplikacja może korzystać z odczytu REST jako fallbacku.
-
-### Panel historii
-
-Panel pokazuje m.in.:
-
-- aktualną fazę,
-- procent postępu,
-- ETA,
-- liczbę zmian w lokalnym archiwum,
-- liczbę encji,
-- zakres historii,
-- liczbę wykrytych celów.
-
-### Rescan devices
-
-`Rescan devices` ponownie sprawdza aktywnie używane, obsługiwane cele sterowania i może utworzyć nowych agentów.
-
-Użyj po dodaniu nowego urządzenia albo gdy istniejący cel nie został wykryty.
-
-## Karta agenta
+## Karta Live
 
 ### Current
-
-Aktualna wartość odczytana z Home Assistant.
+Aktualna wartość targetu z Home Assistant.
 
 ### Desired
+Bieżąca decyzja polityki. W Shadow jest wyłącznie predykcją. W Control może przejść dalej do `ActionIntent`, ale dopiero Executor może wysłać usługę HA.
 
-Wartość, którą polityka aktualnie uważa za właściwą.
+### Decision strength
+Starsze pole nazywane `confidence` pozostaje kompatybilne w API, ale nie jest prezentowane jako prawdopodobieństwo komfortu. To siła decyzji wynikająca m.in. z separacji akcji, niepewności modelu i pokrycia kontekstu.
 
-W Shadow Desired jest tylko prognozą. W Control może stać się komendą.
+### Presence probability / Forecast uncertainty
+To osobne wielkości modelu percepcji. Jeżeli pole jest prawdziwym prawdopodobieństwem, jego kalibracja jest oceniana na niezależnych przyszłych epizodach (Brier/reliability). Nie należy go utożsamiać z Decision strength.
 
-### Candidate confidence
+### Data coverage / Held-out policy quality
+Pokrycie mówi, ile odpowiednich dowodów ma model. Jakość polityki opisuje wynik na odłożonych danych. Dla bezpieczeństwa ON i OFF są oceniane osobno.
 
-Pokazywany przede wszystkim podczas/po historycznym benchmarku. To nie jest chwilowa pewność jednej decyzji, lecz wynik historycznej zdolności agenta do odtwarzania zachowania celu.
-
-### Live confidence
-
-Po kwalifikacji i uruchomieniu inference aplikacja pokazuje bieżącą, kalibrowaną pewność decyzji.
-
-### Behaviour benchmark
-
-Najważniejszy wynik kwalifikacji. Domyślny próg to **>78%**.
-
-Dla binarnych celów ON/OFF liczone są oba kierunki tak, aby dominujący stan OFF nie zawyżał wyniku.
-
-### Support
-
-Informuje, jak dużo historycznego wsparcia ma podobny kontekst. Niski support oznacza, że bieżąca sytuacja była rzadko obserwowana.
-
-### Novelty
-
-Miara nietypowości aktualnego kontekstu. Wysoka novelty oznacza, że model działa poza dobrze poznanym zakresem.
-
-## Tryby agenta
+## Shadow, Control i Paused
 
 ### Shadow
+- polityka wykonuje inference,
+- Desired jest widoczne,
+- może powstawać future evidence i porównanie Candidate,
+- **żadna komenda fizyczna nie jest wysyłana**.
 
-- inference jest aktywne,
-- Desired jest aktualizowane,
-- brak komend sterujących,
-- najlepszy tryb do walidacji.
+Shadow to proxy kontrfaktyczne: pokazuje, co model chciałby zrobić. Nie dowodzi fizycznego skutku niewykonanej akcji.
 
 ### Control
+Control przechodzi dodatkowe zabezpieczenia niezależne od rewardu:
+- ważna kwalifikacja,
+- wystarczające osobne dowody dla ON/OFF,
+- legal action mask,
+- support/novelty i abstain,
+- manual override,
+- cooldown/min dwell,
+- ownership/lease współdzielonego urządzenia,
+- aktualność modelu i konfiguracji,
+- ACK oraz bezpieczeństwo Executora.
 
-- agent może bezpośrednio wywoływać usługi HA,
-- dostępny tylko po kwalifikacji historycznej,
-- dodatkowo stosowane są bramki confidence/support/novelty, timingi i zabezpieczenia konfliktów.
+Dla binarnego Control bieżący kontrakt statystyczny wymaga co najmniej 20 held-out próbek na akcję i 95% dolnej granicy Wilsona powyżej progu 78% dla każdego kierunku. Sam wysoki procent accuracy nie wystarcza.
 
 ### Paused
+Normalne realtime inference/trening jest wyłączone lub ograniczone. Brak historii nie powoduje automatycznego obniżenia progów; system powinien pokazać brak dowodu i korzystać z fallback/Shadow.
 
-- brak normalnego realtime inference,
-- brak normalnego bieżącego treningu,
-- minimalne użycie CPU przez danego agenta.
+## Live i Candidate
 
-Agent może być PAUSED automatycznie po nieudanym benchmarku lub można ręcznie ustawić tryb `paused`.
+Live jest aktualną stabilną generacją. Candidate jest izolowanym bezpośrednim dzieckiem konkretnego rodzica i pozostaje Shadow do jawnej, atomowej promocji.
 
-## Resume
+Karta generacji udostępnia:
+- **Autonomous** — rozwój dziecka z dostępnych danych,
+- **Correct** — jawna korekta na obserwowanej historii,
+- **Explore** — kontrolowane badanie, w tym targeted sensor,
+- **Change decision** — natychmiastowa jawna informacja o decyzji w konkretnym kontekście,
+- **Promote** — osobny krok lifecycle,
+- **Discard** — odrzucenie dziecka bez niszczenia rodzica.
 
-`Resume` jest przeznaczony dla agenta w stanie PAUSED.
+Dalsza nauka Candidate tworzy kolejne dziecko. Feedback nie może przechodzić przez granicę niewłaściwego parent generation.
 
-Resume:
+## Correct i Change decision
 
-- nie usuwa modelu,
-- nie usuwa benchmarku,
-- nie usuwa doświadczeń,
-- nie zeruje kursora,
-- kontynuuje indeksację od ostatniego zapisanego punktu, z niewielkim overlapem.
+**Correct** jest etykietą użytkownika dla konkretnego obserwowanego kontekstu/Desired. Nie jest zwykłym rewardem „+1”. Model dziecka musi spełnić zaznaczone korekty i przejść regresję względem ważnych anchorów.
 
-Używaj, gdy od poprzedniej kwalifikacji pojawiły się nowe dane i chcesz sprawdzić, czy model zyskał wystarczającą jakość.
+**Change decision** opisuje bieżącą preferencję/oczekiwaną decyzję. Brak feedbacku nie oznacza akceptacji. Negatywna ocena jednej akcji nie wymyśla automatycznie poprawnej przeciwnej akcji.
 
-## Rebuild
+Trwała instrukcja użytkownika nie wygasa tak jak statystyka z historii.
 
-`Rebuild` to pełna przebudowa pojedynczego agenta.
+## Explore i eksperymenty
 
-Rebuild:
+Explore korzysta z istniejącej infrastruktury eksperymentów. Próba ma wersjonowany `TrialRecord`: hipotezę, dostępne akcje i propensity, przypisaną akcję, dispatch/ACK, źródła outcome, wynik i status aplikacji do konkretnego dziecka.
 
-- czyści model,
-- czyści wynik benchmarku,
-- zeruje kursor treningu,
-- przebudowuje doświadczenia agenta,
-- zachowuje surowe lokalne archiwum,
-- odświeża szerszy zestaw kandydatów z Recorder.
+Candidate nie przejmuje fizycznego sterowania. Jeżeli Explore wymaga fizycznej próby, jej właścicielem pozostaje root Live oraz istniejący Executor. Brak outcome pozostaje nieznany zamiast być zamieniany na sukces/porażkę.
 
-Używaj szczególnie gdy:
+## Promocja
 
-- dodano nowy sensor,
-- zmieniono integrację sensora,
-- zmieniono ręcznie listę context entities,
-- zmieniono zakres sterowania,
-- podejrzewasz, że model wybrał zły kontekst.
+Promocja nie opiera się na jednym `promotable=true`. Runtime składa listę nazwanych wyników walidacji. Każde veto pozostaje widoczne; kolejność modułów nie może go usunąć.
 
-Nie używaj Rebuild jako zwykłego sposobu wznowienia nauki – od tego jest Resume.
+Dane do wyboru challengera i finalnej oceny są rozdzielone. Po selection zbierany jest fixed future test; regularne odpytywanie UI nie wydłuża go opportunistycznie. Same poprawne OFF nie kwalifikują ON.
 
-## Ustawienia agenta
+Promote wykonuje atomowy swap modelu/generacji/trybu/ownership. W razie błędu poprzedni snapshot jest odtwarzany.
 
-Przycisk `Ustawienia` pozwala zmieniać m.in.:
+## Cold start i dryf
 
-- minimum i maksimum nastawy,
-- deadband,
-- wymagane confidence,
-- minimalny odstęp między komendami,
-- timeout potwierdzenia,
-- czas stabilizacji,
-- czas priorytetu ręcznej zmiany,
-- listę encji kontekstu.
+Nowy dom lub agent bez historii pozostaje w fallback/Shadow i raportuje brak danych. System może zasugerować niewielką liczbę opcjonalnych pytań użytkownikowi, ale odpowiedź nie omija zabezpieczeń.
 
-`*` w polu kontekstu oznacza automatyczny dobór ze wszystkich dopuszczonych kandydatów.
+Monitor dryfu rozróżnia:
+- awarię sensora,
+- zmianę topologii/przeniesienie sensora,
+- zmianę zwyczaju,
+- nową preferencję.
 
-Zmiana zakresu lub kontekstu resetuje model danego agenta i wymaga ponownej nauki.
+Pogorszenie tworzy izolowanego Candidate. Live nie jest natychmiast resetowany. Po promocji monitorowane jest odzyskanie jakości i możliwy rollback.
 
-## Explore
+## DeviceAgent i współdzielone urządzenia
 
-`Explore` włącza ograniczoną mikroeksplorację. Funkcja jest dostępna tylko dla zakwalifikowanych agentów i może celowo testować pobliskie akcje.
+Kilka encji HA może reprezentować jeden fizyczny zasób. HomeMind używa `device_id` lub jawnego mappingu, a nie friendly name. Power i brightness jednej lampy współdzielą arbiter, manual override i lease. Wydanie brightness jest spójną pojedynczą komendą; 0% oznacza OFF.
 
-Dla pierwszych wdrożeń pozostaw ją wyłączoną.
+Nieopisane `switch/number/select` nie dostają autonomii tylko dlatego, że są zapisywalne. HVAC i rolety mają inną dynamikę niż szybkie światło i wymagają odpowiedniego modelu procesu.
 
-## Delete
+## Co oznacza „RL” w HomeMind
 
-Usuwa agenta i jego model. Auto-discovery może go później utworzyć ponownie, jeżeli urządzenie nadal spełnia kryteria.
+W produkcie występuje kilka różnych mechanizmów, których nie należy mieszać:
+
+- **historyczna demonstracja**: obserwowane zachowanie targetu; służy do bootstrapu/uczenia, ale nie jest prawdą o komforcie,
+- **contextual bandit**: aktualizuje tylko logowaną/wykonaną akcję; niewybrana akcja ma nieznany reward,
+- **model obecności**: osobna percepcja/prognoza z własną kalibracją,
+- **Correct/preference**: jawna informacja użytkownika,
+- **experiment/TrialRecord**: kontrolowana próba z outcome attribution,
+- **Shadow**: kontrfaktyczna predykcja/proxy,
+- **physical outcome**: obserwowany skutek faktycznie wysłanej komendy po Executorze.
+
+ACK potwierdza wykonanie transportowe, a nie komfort. Replay automatyzacji nie jest etykietą potrzeby światła.
+
+## Benchmark produktu F24
+
+Repo zawiera deterministyczny benchmark produktu z ukrytą obecnością i ukrytą potrzebą światła. Obserwacje mają delay, noise, missingness, różne formaty oraz sprzężenie `light -> lux`. Scenariusze obejmują m.in. jednego/dwóch domowników, rozwidlenie, bezruch, brak przyjścia, quick return, dzień/noc, ręczną zmianę, fałszywy/przeniesiony sensor i zmianę zwyczaju.
+
+Porównywane są stała automatyzacja, bieżący runtime, full-ridge Shadow oraz ostrożny fallback na oddzielnych train/validation/future danych i wielu seedach.
+
+Benchmark nie promuje modelu. Brak poprawy lub niespełnione kryteria są prawidłowym wynikiem. Wynik syntetyczny nie zastępuje testu na realnym Home Assistant ani fizycznego M&V.
