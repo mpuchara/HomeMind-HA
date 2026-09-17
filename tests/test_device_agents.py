@@ -147,12 +147,30 @@ class DeviceAgentIdentityTests(unittest.TestCase):
         service = DeviceAgentService(_Engine(entities, {'dev-identity': {'id': 'dev-identity'}}, states), self.store)
         original = _agent(self.store, 'light.kitchen', 'brightness_pct', maximum=100)
         original_id = original['id']
-        service.descriptor(original)
+        service.migrate_agent_identity(original)
         migrated = self.store.get_agent_config(original_id)
         self.assertEqual(migrated['id'], original_id)
         self.assertEqual(migrated['logical_device_id'], 'ha-device:dev-identity')
         self.assertEqual(migrated['device_property'], 'brightness_pct')
         self.assertEqual(int(migrated['device_contract_version']), CONTRACT_VERSION)
+
+    def test_explicit_logical_property_mapping_does_not_rewrite_physical_target(self):
+        states = {'number.fixture_level': {
+            'entity_id': 'number.fixture_level', 'state': '40',
+            'attributes': {'min': 0, 'max': 100, 'step': 1},
+        }}
+        service = DeviceAgentService(_Engine({}, {}, states), self.store)
+        original = _agent(self.store, 'number.fixture_level', 'value', maximum=100)
+        service.set_explicit_mapping(
+            'number.fixture_level', 'fixture-logic', property_name='brightness_pct', autonomy_enabled=True
+        )
+        migrated = self.store.get_agent_config(original['id'])
+        self.assertEqual(migrated['logical_device_id'], 'fixture-logic')
+        self.assertEqual(migrated['device_property'], 'brightness_pct')
+        self.assertEqual(migrated['target_property'], 'value')
+        desc = service.descriptor(migrated)
+        self.assertEqual(desc['device_property'], 'brightness_pct')
+        self.assertEqual(desc['physical_target_property'], 'value')
 
     def test_exact_entity_fallback_never_merges_equal_friendly_names(self):
         states = {'light.a': _light_state('light.a'), 'light.b': _light_state('light.b')}
@@ -194,6 +212,18 @@ class SharedResourceTests(unittest.TestCase):
         restarted = DeviceAgentService(self.engine, self.store)
         self.assertIsNone(restarted.reserve_dispatch(second, 'intent-b', now=100.5, ttl=1.0))
         self.assertIsNotNone(restarted.reserve_dispatch(second, 'intent-b', now=101.1, ttl=1.0))
+
+    def test_completed_dispatch_clears_lease_but_keeps_cross_agent_dwell(self):
+        first = _agent(self.store, 'light.kitchen', 'power', action_interval=2)
+        second = _agent(self.store, 'light.kitchen', 'brightness_pct', maximum=100, action_interval=2)
+        reservation = self.service.reserve_dispatch(first, 'intent-a', now=100.0, ttl=5.0)
+        self.service.finish_dispatch(reservation, success=True, action={'value': 1}, now=100.1)
+        self.assertEqual(self.service.active_lease(first, now=100.2), [])
+        own = self.service.legal_action_mask(first, self.states['light.kitchen'], [1], now=100.2)
+        sibling = self.service.legal_action_mask(second, self.states['light.kitchen'], [40], now=100.2)
+        self.assertTrue(own['actions'][0]['legal'])  # Executor owns same-agent cooldown.
+        self.assertFalse(sibling['actions'][0]['legal'])
+        self.assertIn('dwell', sibling['actions'][0]['reason'])
 
     def test_concurrent_sibling_reservations_have_one_winner_and_no_deadlock(self):
         power = _agent(self.store, 'light.kitchen', 'power', action_interval=.25)
