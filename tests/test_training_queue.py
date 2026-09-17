@@ -14,6 +14,7 @@ class FakeStore:
             'b': agent(id='b', name='B', mode='shadow', training_state='paused'),
         }
         self.events = []
+        self.meta = {}
 
     def get_agent(self, agent_id):
         row = self.agents.get(agent_id)
@@ -28,6 +29,9 @@ class FakeStore:
 
     def event(self, agent_id, level, code, message, detail=None):
         self.events.append((agent_id, level, code, message, detail))
+
+    def meta_set(self, key, value):
+        self.meta[str(key)] = str(value)
 
 
 class FakeExecutor:
@@ -78,6 +82,20 @@ class FakeHistory:
         self.agent_jobs_lock = threading.RLock()
         self.blocked = False
         self.started = []
+        self.fetch_calls = 0
+        self.status_updates = []
+
+    def _fetch_history_resilient(self, *args, **kwargs):
+        self.fetch_calls += 1
+        self.trace.append(('discovery_fetch', self.fetch_calls))
+        return 1
+
+    def _manual_lightweight_cycle(self, current, controllable, end_ts):
+        self.trace.append(('discovery_cycle', tuple(controllable)))
+        return self._fetch_history_resilient(controllable, 0, end_ts)
+
+    def set_status(self, *args, **kwargs):
+        self.status_updates.append((args, kwargs))
 
     def _start(self, agent_id, rebuild):
         with self.agent_jobs_lock:
@@ -104,7 +122,8 @@ class FakeHistory:
 class TrainingQueueTests(unittest.TestCase):
     def setUp(self):
         # A failed prior test must never leave the process-wide heavy slot occupied.
-        HEAVY_JOBS.release('bootstrap-test')
+        for owner in ('bootstrap-test', 'discovery', 'home_bootstrap'):
+            HEAVY_JOBS.release(owner)
         self.trace = []
         self.store = FakeStore()
         self.history = FakeHistory(self.store, self.trace)
@@ -113,7 +132,8 @@ class TrainingQueueTests(unittest.TestCase):
         self.queue.start()
 
     def tearDown(self):
-        HEAVY_JOBS.release('bootstrap-test')
+        for owner in ('bootstrap-test', 'discovery', 'home_bootstrap'):
+            HEAVY_JOBS.release(owner)
         self.queue.stop()
         self.queue.join(timeout=1)
 
@@ -145,6 +165,33 @@ class TrainingQueueTests(unittest.TestCase):
         self.assertEqual(self.history.started, [])
         self.history.blocked = False
         self.assertTrue(self.wait_for(lambda: self.history.started == [('a', False)]))
+
+    def test_fresh_train_preempts_background_discovery_and_rebuilds(self):
+        self.assertTrue(HEAVY_JOBS.acquire('discovery'))
+        result = self.queue.enqueue('a', rebuild=True, reason='training')
+        self.assertEqual(result['state'], 'queued')
+        self.assertEqual(result['blocked_by'], 'discovery')
+        # New Recorder requests from the background discovery are cooperatively skipped.
+        self.assertEqual(self.history._fetch_history_resilient(['light.a'], 0, 1), 0)
+        self.assertEqual(self.history.fetch_calls, 0)
+        self.assertTrue(any(e[2] == 'discovery_yielded_to_training' for e in self.store.events))
+        HEAVY_JOBS.release('discovery')
+        self.assertTrue(self.wait_for(lambda: self.history.started == [('a', True)]))
+        self.assertEqual(self.queue.status_for('a')['state'], 'active')
+        self.history.complete('a')
+        self.assertTrue(self.wait_for(lambda: self.queue.status_for('a') is None))
+        self.assertEqual(self.store.meta.get('manual_discovery_refresh'), '')
+        self.assertTrue(any(e[2] == 'discovery_rescheduled_after_training' for e in self.store.events))
+
+    def test_explicit_home_bootstrap_is_not_preempted_by_train(self):
+        self.assertTrue(HEAVY_JOBS.acquire('home_bootstrap'))
+        self.queue.enqueue('a', rebuild=True)
+        self.assertEqual(self.history._fetch_history_resilient(['light.a'], 0, 1), 1)
+        self.assertEqual(self.history.fetch_calls, 1)
+        time.sleep(.05)
+        self.assertEqual(self.history.started, [])
+        HEAVY_JOBS.release('home_bootstrap')
+        self.assertTrue(self.wait_for(lambda: self.history.started == [('a', True)]))
 
     def test_duplicate_request_is_deduplicated_and_can_upgrade_to_rebuild(self):
         self.history.blocked = True
