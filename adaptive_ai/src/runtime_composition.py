@@ -50,6 +50,7 @@ class RuntimeCompositionRoot:
 
     def _contract_snapshot(self, manager, router):
         engine = self.core.ENGINE
+        low_power = getattr(self.core, "LOW_POWER_RUNTIME", None)
         return {
             "version": CONTRACT_VERSION,
             "entrypoint_chain": list(ENTRYPOINT_CHAIN),
@@ -88,6 +89,7 @@ class RuntimeCompositionRoot:
                 "contract": getattr(manager, "performance_f22_contract", None),
                 "semantics": "bounded computation only; raw evidence remains authoritative",
             },
+            "low_power": low_power() if callable(low_power) else None,
             "transport": router.descriptor(),
             "dependencies": {
                 "clock": type(self.clock).__name__,
@@ -118,6 +120,7 @@ class RuntimeCompositionRoot:
         from performance_f22 import install as install_performance_f22
         from performance_f22_order_guard import install as install_performance_f22_order_guard
         from promotion_validation import install as install_promotion_validation
+        from rpi_low_power_runtime import install as install_rpi_low_power_runtime
         from runtime_http import install_dispatch, register_feedback_routes, register_promotion_routes
         from trial_knowledge import install as install_trial_knowledge
 
@@ -126,6 +129,11 @@ class RuntimeCompositionRoot:
         manager = getattr(engine, "agent_candidates", None)
         if manager is None:
             return
+
+        # RPi-class resource control is orthogonal to learning semantics. Install it after
+        # the Candidate/History services exist but before later final composition returns.
+        manager = install_rpi_low_power_runtime(self.core, manager)
+        engine.agent_candidates = manager
 
         # Stage 11 -> 15 keep their established order and public behaviour.
         manager = install_trial_knowledge(manager)
