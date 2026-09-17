@@ -10,6 +10,7 @@ Home Assistant service dispatcher.
 """
 import preference_queue_main as runtime
 from confidence_contract import install as install_confidence_contract
+from confidence_runtime import install_runtime_semantics
 from trial_knowledge import install as install_trial_knowledge
 
 core = runtime.core
@@ -23,6 +24,7 @@ def prepare_engine_extensions():
         return
     manager = install_trial_knowledge(manager)
     manager = install_confidence_contract(manager)
+    install_runtime_semantics(core.ENGINE, manager.confidence_probability_journal)
     core.ENGINE.agent_candidates = manager
     core.STORE.event(
         None, "info", "trial_knowledge_ready",
@@ -42,6 +44,8 @@ def prepare_engine_extensions():
         {
             "contract": getattr(manager, "confidence_contract", None),
             "install_order": "after_trial_knowledge_before_workers",
+            "live_runtime_semantics": True,
+            "probability_calibration_service": "engine.confidence_calibration",
             "action_boundary": "diagnostics_and_promotion_gate_only_no_dispatch",
         },
     )
