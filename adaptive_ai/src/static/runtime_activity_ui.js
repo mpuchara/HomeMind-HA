@@ -1,6 +1,34 @@
 // Explain generation actions and surface hidden Candidate/background work on Live cards.
 (()=>{
   if(window.__runtimeActivityUiInstalled)return;
+
+  // candidate_preference_ui historically asks for Candidate Current/Desired four times
+  // per second even when no Candidate exists. Keep its UI contract while collapsing the
+  // backend traffic to <=1 request/s and zero requests when there is no Candidate card.
+  const upstreamFetch=window.fetch.bind(window);
+  let candidateLiveCache={at:0,body:'{"candidates":[]}'};
+  window.fetch=(input,init={})=>{
+    const method=String(init?.method||'GET').toUpperCase();
+    const raw=typeof input==='string'?input:(input?.url||'');
+    const path=String(raw).split('?')[0].replace(/^\.\//,'');
+    if(method==='GET'&&path.endsWith('api/candidate-live')){
+      if(!document.querySelector('.candidate-agent')){
+        return Promise.resolve(new Response('{"candidates":[]}',{status:200,headers:{'Content-Type':'application/json'}}));
+      }
+      const now=performance.now();
+      if(now-candidateLiveCache.at<1000){
+        return Promise.resolve(new Response(candidateLiveCache.body,{status:200,headers:{'Content-Type':'application/json'}}));
+      }
+      return upstreamFetch(input,init).then(async response=>{
+        if(!response.ok)return response;
+        const body=await response.text();
+        candidateLiveCache={at:performance.now(),body};
+        return new Response(body,{status:response.status,headers:response.headers});
+      });
+    }
+    return upstreamFetch(input,init);
+  };
+
   const json=async(path,opts={})=>{
     const response=await fetch(path,{headers:{'Content-Type':'application/json'},...opts});
     let body={};try{body=await response.json();}catch(_e){}
@@ -8,17 +36,18 @@
     return body;
   };
   const activeCandidateFor=id=>document.querySelector(`.candidate-agent[data-candidate-parent="${CSS.escape(String(id))}"]`);
+  const setText=(node,value)=>{if(node&&node.textContent!==value)node.textContent=value;};
 
   async function autonomous(ref,button){
     const old=button?.textContent||'Autonomous learn';
-    if(button){button.disabled=true;button.textContent='Checking…';}
+    if(button){button.disabled=true;setText(button,'Checking…');}
     try{
       const s=await json(`api/agent-workflow/${encodeURIComponent(ref)}/status`,{adaptiveAiTimeoutMs:20000});
       const next=Number(s.generation_number||0)+1;
       if(!confirm(`Autonomous learning is a one-shot action, not a mode.\n\nCreate Candidate Gen ${next} from Gen ${s.generation_number}? The current generation stays unchanged and keeps serving. The Candidate will continue learning in Shadow.\n\nYou can stop/remove the Candidate at any time with Discard Candidate.`))return;
-      if(button)button.textContent='Starting Candidate…';
+      if(button)setText(button,'Starting Candidate…');
       await json(`api/agent-workflow/${encodeURIComponent(ref)}/autonomous`,{method:'POST',body:'{}'});
-      if(button)button.textContent='Candidate queued…';
+      if(button)setText(button,'Candidate queued…');
       try{await window.refreshCandidates?.();}catch(_e){}
       try{await window.load?.();}catch(_e){}
       decorate();
@@ -26,7 +55,7 @@
       alert(`Autonomous failed: ${e?.message||e}`);
     }finally{
       if(button&&button.isConnected&&!activeCandidateFor(ref)){
-        button.disabled=false;button.textContent=old==='Autonomous'?'Autonomous learn':old;
+        button.disabled=false;setText(button,old==='Autonomous'?'Autonomous learn':old);
       }
     }
   }
@@ -34,13 +63,14 @@
   async function discardCandidate(id,button){
     if(!confirm('Discard the active Candidate? The current Live generation, its model and history remain unchanged.'))return;
     const old=button.textContent;
-    button.disabled=true;button.textContent='Discarding…';
+    button.disabled=true;setText(button,'Discarding…');
     try{
       await json(`api/agents/${encodeURIComponent(id)}/candidate`,{method:'DELETE'});
+      candidateLiveCache={at:0,body:'{"candidates":[]}'};
       try{await window.refreshCandidates?.();}catch(_e){}
       try{await window.load?.();}catch(_e){}
     }catch(e){alert(`Discard Candidate failed: ${e?.message||e}`);}
-    finally{if(button.isConnected){button.disabled=false;button.textContent=old;}decorate();}
+    finally{if(button.isConnected){button.disabled=false;setText(button,old);}decorate();}
   }
 
   function decorate(){
@@ -50,10 +80,11 @@
       const auto=actions.querySelector('[data-wf="auto"]');
       const candidate=activeCandidateFor(id);
       if(auto){
-        auto.textContent=candidate?'Candidate active':'Autonomous learn';
-        auto.title=candidate
+        setText(auto,candidate?'Candidate active':'Autonomous learn');
+        const title=candidate
           ? 'A child Candidate already exists. Discard it or finish its lifecycle before creating another.'
           : 'Create one child Candidate that continues learning in Shadow. This is not a persistent mode.';
+        if(auto.title!==title)auto.title=title;
         auto.disabled=Boolean(candidate);
         auto.onclick=e=>autonomous(id,e.currentTarget);
       }
@@ -74,7 +105,7 @@
     document.querySelectorAll('#agents > .candidate-agent [data-wf="auto"]').forEach(button=>{
       if(!button.dataset.activityExplained){
         button.dataset.activityExplained='1';
-        button.textContent='Autonomous learn';
+        setText(button,'Autonomous learn');
         button.title='Create the next child generation. This is a one-shot learning action, not a mode.';
       }
     });
