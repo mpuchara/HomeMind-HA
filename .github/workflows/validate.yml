@@ -18,7 +18,7 @@ jobs:
           node-version: '22'
       - run: python -m unittest discover -s tests -v
       - run: python -m compileall -q adaptive_ai/src tools/benchmark_product_runtime.py tools/run_product_runtime_benchmark.py tools/smoke_entrypoint.py
-      - run: node --check adaptive_ai/src/static/app.js && node --check adaptive_ai/src/static/home.js && node --check adaptive_ai/src/static/settings.js && node --check adaptive_ai/src/static/p0.js && node --check adaptive_ai/src/static/automation_baseline_ui.js && node --check adaptive_ai/src/static/queue.js && node --check adaptive_ai/src/static/experiments.js && node --check adaptive_ai/src/static/manual_feedback.js && node --check adaptive_ai/src/static/teach_observed_ui.js && node --check adaptive_ai/src/static/candidate_ui.js && node --check adaptive_ai/src/static/candidate_preference_ui.js && node --check adaptive_ai/src/static/agent_workflow_ui.js && node --check adaptive_ai/src/static/explore_ui.js && node --check adaptive_ai/src/static/promotion_lifecycle_ui.js && node --check adaptive_ai/src/static/confidence_contract_ui.js && node --check adaptive_ai/src/static/simple_agent_names.js && node --check adaptive_ai/src/static/runtime_activity_ui.js
+      - run: node --check adaptive_ai/src/static/app.js && node --check adaptive_ai/src/static/home.js && node --check adaptive_ai/src/static/polling_guard.js && node --check adaptive_ai/src/static/settings.js && node --check adaptive_ai/src/static/p0.js && node --check adaptive_ai/src/static/automation_baseline_ui.js && node --check adaptive_ai/src/static/queue.js && node --check adaptive_ai/src/static/experiments.js && node --check adaptive_ai/src/static/manual_feedback.js && node --check adaptive_ai/src/static/teach_observed_ui.js && node --check adaptive_ai/src/static/candidate_ui.js && node --check adaptive_ai/src/static/candidate_preference_ui.js && node --check adaptive_ai/src/static/agent_workflow_ui.js && node --check adaptive_ai/src/static/explore_ui.js && node --check adaptive_ai/src/static/promotion_lifecycle_ui.js && node --check adaptive_ai/src/static/confidence_contract_ui.js && node --check adaptive_ai/src/static/simple_agent_names.js && node --check adaptive_ai/src/static/runtime_activity_ui.js
       - name: Stage 17 synthetic history-cost benchmark smoke
         if: matrix.python == '3.11'
         run: python tools/benchmark_history_costs.py --pairs 500 --teach-sensors 48 --teach-labels 12
@@ -63,7 +63,7 @@ jobs:
           import re, zipfile
           from pathlib import Path
           expected = re.search(r'^version: "([^"]+)"', Path('adaptive_ai/config.yaml').read_text(), re.M).group(1)
-          assert expected == '0.14.15', expected
+          assert expected == '0.14.16', expected
           cases = [
               ('HomeMind-Adaptive-AI-repository.zip', 'adaptive_ai/config.yaml', 'adaptive_ai/src/settings.py', 'adaptive_ai/'),
               ('HomeMind-Adaptive-AI-addon-root.zip', 'config.yaml', 'src/settings.py', ''),
@@ -80,6 +80,8 @@ jobs:
                   for required in (
                       prefix+'src/startup_train_guard.py',
                       prefix+'src/rpi_low_power_runtime.py',
+                      prefix+'src/release_016_guard.py',
+                      prefix+'src/static/polling_guard.js',
                       prefix+'src/static/runtime_activity_ui.js',
                   ):
                       assert required in names, (archive, required)
