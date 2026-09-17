@@ -1,3 +1,4 @@
+from contextlib import contextmanager
 from pathlib import Path
 import sqlite3
 import sys
@@ -52,10 +53,18 @@ class _Store:
             },
         }
 
+    @contextmanager
     def conn(self):
+        # sqlite3.Connection.__exit__ commits/rolls back but does not close the handle.
+        # Keep the fixture aligned with production Store.conn so Windows can unlink the
+        # temporary database deterministically in tearDown.
         c = sqlite3.connect(self.tmp.name)
         c.row_factory = sqlite3.Row
-        return c
+        try:
+            with c:
+                yield c
+        finally:
+            c.close()
 
     def get_agent_config(self, agent_id):
         return self.agents.get(str(agent_id))
