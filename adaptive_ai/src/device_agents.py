@@ -1,8 +1,8 @@
 """Stage 15: registry-backed DeviceAgent/DeviceCapabilities and shared-resource arbitration.
 
-The existing logical agent id remains the owner of policy/history/generation data.  This
-module adds a device/resource identity *above* Home Assistant entities so two properties
-or two entities of one physical device cannot independently believe that they own it.
+The existing logical agent id remains the owner of policy/history/generation data. This
+module adds a device/resource identity above Home Assistant entities so two properties or
+two entities of one physical device cannot independently believe that they own it.
 
 Identity is deliberately conservative:
 - an explicit mapping row wins;
@@ -10,7 +10,7 @@ Identity is deliberately conservative:
 - otherwise the exact entity_id is the fallback.
 Friendly names are never used for identity.
 
-Executor remains the only Home Assistant service dispatcher.  The arbiter only returns
+Executor remains the only Home Assistant service dispatcher. The arbiter only returns
 capabilities, legal-action masks and durable reservations/holds.
 """
 from __future__ import annotations
@@ -18,7 +18,6 @@ from __future__ import annotations
 from contextlib import contextmanager, ExitStack
 from dataclasses import dataclass, asdict
 import json
-import math
 import threading
 import time
 
@@ -49,16 +48,18 @@ class ProcessModelBackendContract:
         return asdict(self)
 
 
+def _ensure_column(c, table, column, ddl):
+    cols = {row[1] for row in c.execute(f"PRAGMA table_info({table})").fetchall()}
+    if column not in cols:
+        c.execute(f"ALTER TABLE {table} ADD COLUMN {column} {ddl}")
+
+
 def ensure_tables(store):
     """Additive migration only; existing model vectors and agent ids are untouched."""
     with store.lock, store.conn() as c:
-        cols = {row[1] for row in c.execute("PRAGMA table_info(agents)").fetchall()}
-        if "logical_device_id" not in cols:
-            c.execute("ALTER TABLE agents ADD COLUMN logical_device_id TEXT")
-        if "device_property" not in cols:
-            c.execute("ALTER TABLE agents ADD COLUMN device_property TEXT")
-        if "device_contract_version" not in cols:
-            c.execute("ALTER TABLE agents ADD COLUMN device_contract_version INTEGER NOT NULL DEFAULT 1")
+        _ensure_column(c, "agents", "logical_device_id", "TEXT")
+        _ensure_column(c, "agents", "device_property", "TEXT")
+        _ensure_column(c, "agents", "device_contract_version", "INTEGER NOT NULL DEFAULT 1")
         c.executescript(
             """
             CREATE TABLE IF NOT EXISTS device_explicit_mappings (
@@ -76,6 +77,7 @@ def ensure_tables(store):
                 owner_intent_id TEXT,
                 lease_until REAL NOT NULL DEFAULT 0,
                 last_dispatch_ts REAL,
+                last_dispatch_agent_id TEXT,
                 last_action_json TEXT,
                 manual_hold_until REAL NOT NULL DEFAULT 0,
                 updated_ts REAL NOT NULL
@@ -90,6 +92,7 @@ def ensure_tables(store):
             );
             """
         )
+        _ensure_column(c, "device_resource_state", "last_dispatch_agent_id", "TEXT")
 
 
 def _safe_json(value, fallback):
@@ -103,7 +106,7 @@ def _safe_json(value, fallback):
 
 
 class DeviceAgentService:
-    """Device capabilities + deterministic, persistent shared-resource arbiter."""
+    """Device capabilities plus deterministic, persistent shared-resource arbitration."""
 
     def __init__(self, engine, store):
         self.engine = engine
@@ -136,6 +139,9 @@ class DeviceAgentService:
                 (entity_id, logical_device_id, property_name, int(bool(autonomy_enabled)),
                  resource_group, zone_id, time.time()),
             )
+        # Explicit operator mapping is authoritative immediately. Physical target_property
+        # is untouched; only the additive logical property/device metadata is migrated.
+        self.migrate_agent_identities(entity_ids={entity_id})
         return self.explicit_mapping(entity_id)
 
     def explicit_mapping(self, entity_id):
@@ -187,6 +193,11 @@ class DeviceAgentService:
             "explicit_mapping": explicit,
         }
 
+    def logical_property_for(self, agent, identity=None):
+        identity = identity or self.identity_for_entity(agent["target_entity"])
+        explicit = identity.get("explicit_mapping") or {}
+        return str(explicit.get("property_name") or agent.get("target_property") or "")
+
     def primary_resource_for_entity(self, entity_id):
         return "device:" + self.identity_for_entity(entity_id)["logical_device_id"]
 
@@ -205,17 +216,32 @@ class DeviceAgentService:
             out.append(identity["entity_id"])
         return sorted(set(out))
 
-    def _sync_agent_identity(self, agent, identity):
+    def migrate_agent_identity(self, agent):
+        """Persist additive logical metadata without changing physical target semantics."""
+        if not agent:
+            return None
+        identity = self.identity_for_entity(agent["target_entity"])
         logical = identity["logical_device_id"]
-        prop = str(agent.get("target_property") or "")
-        if (agent.get("logical_device_id") == logical and agent.get("device_property") == prop
-                and int(agent.get("device_contract_version") or 0) == CONTRACT_VERSION):
-            return
-        with self.store.lock, self.store.conn() as c:
-            c.execute(
-                """UPDATE agents SET logical_device_id=?,device_property=?,device_contract_version=? WHERE id=?""",
-                (logical, prop, CONTRACT_VERSION, str(agent["id"])),
-            )
+        prop = self.logical_property_for(agent, identity)
+        if (agent.get("logical_device_id") != logical or agent.get("device_property") != prop
+                or int(agent.get("device_contract_version") or 0) != CONTRACT_VERSION):
+            with self.store.lock, self.store.conn() as c:
+                c.execute(
+                    """UPDATE agents SET logical_device_id=?,device_property=?,device_contract_version=? WHERE id=?""",
+                    (logical, prop, CONTRACT_VERSION, str(agent["id"])),
+                )
+        return {"agent_id": str(agent["id"]), "logical_device_id": logical, "device_property": prop}
+
+    def migrate_agent_identities(self, entity_ids=None):
+        wanted = set(str(x) for x in (entity_ids or ()))
+        migrated = []
+        for agent in self.store.list_agent_configs():
+            if wanted and str(agent.get("target_entity")) not in wanted:
+                continue
+            result = self.migrate_agent_identity(agent)
+            if result:
+                migrated.append(result)
+        return migrated
 
     # ------------------------------------------------------------------
     # Capabilities / backend semantics
@@ -228,15 +254,11 @@ class DeviceAgentService:
                 "current_fast_bandit_role": "shadow_or_explicit_compatibility_only",
                 "process_model": ProcessModelBackendContract().export(),
             }
-        return {
-            "kind": "contextual_bandit",
-            "process_model": None,
-            "long_horizon_comfort_claim": False,
-        }
+        return {"kind": "contextual_bandit", "process_model": None, "long_horizon_comfort_claim": False}
 
     def descriptor(self, agent):
+        # Read-only on the decision path. Registry/mapping callbacks perform persistence.
         identity = self.identity_for_entity(agent["target_entity"])
-        self._sync_agent_identity(agent, identity)
         domain = str(agent["target_entity"]).split(".", 1)[0]
         explicit = identity.get("explicit_mapping") or {}
         states = dict(getattr(self.engine, "state_map", {}) or {})
@@ -246,8 +268,10 @@ class DeviceAgentService:
             state = states.get(eid)
             for option in target_options_for_state(state) if state else []:
                 properties.append({"entity_id": eid, "property": option.get("property")})
-        property_keys = sorted({(x["entity_id"], x["property"]) for x in properties})
-        properties = [{"entity_id": eid, "property": prop} for eid, prop in property_keys]
+        properties = [
+            {"entity_id": eid, "property": prop}
+            for eid, prop in sorted({(x["entity_id"], x["property"]) for x in properties})
+        ]
 
         auto_created = bool(agent.get("auto_created"))
         config_owned = identity.get("entity_category") in CONFIG_CATEGORIES
@@ -266,20 +290,17 @@ class DeviceAgentService:
             autonomy_reason = "manual agent or described domain contract"
 
         resource_keys = ["device:" + identity["logical_device_id"]]
-        group = explicit.get("resource_group")
-        if group:
-            resource_keys.append("group:" + str(group))
+        if explicit.get("resource_group"):
+            resource_keys.append("group:" + str(explicit["resource_group"]))
         zone = identity.get("area_id")
         if zone and domain in PROCESS_DOMAINS:
-            if domain == "cover":
-                resource_keys.append(f"zone:{zone}:solar_shading")
-            else:
-                resource_keys.append(f"zone:{zone}:thermal")
+            resource_keys.append(f"zone:{zone}:solar_shading" if domain == "cover" else f"zone:{zone}:thermal")
 
         return {
             "contract_version": CONTRACT_VERSION,
             **identity,
-            "device_property": str(agent.get("target_property") or ""),
+            "device_property": self.logical_property_for(agent, identity),
+            "physical_target_property": str(agent.get("target_property") or ""),
             "entities": entity_ids,
             "properties": properties,
             "resource_keys": sorted(set(resource_keys)),
@@ -296,19 +317,14 @@ class DeviceAgentService:
 
     def control_eligibility(self, agent):
         desc = self.descriptor(agent)
-        allowed = bool(desc["autonomy_allowed"])
-        return {
-            "allowed": allowed,
-            "reason": None if allowed else desc["autonomy_reason"],
-            "descriptor": desc,
-        }
+        return {"allowed": bool(desc["autonomy_allowed"]),
+                "reason": None if desc["autonomy_allowed"] else desc["autonomy_reason"],
+                "descriptor": desc}
 
     def conflicts(self, left, right):
         if not left or not right or str(left.get("id")) == str(right.get("id")):
             return False
-        a = set(self.descriptor(left)["resource_keys"])
-        b = set(self.descriptor(right)["resource_keys"])
-        return bool(a & b)
+        return bool(set(self.descriptor(left)["resource_keys"]) & set(self.descriptor(right)["resource_keys"]))
 
     # ------------------------------------------------------------------
     # Locks / durable reservations
@@ -346,8 +362,6 @@ class DeviceAgentService:
                 continue
             runtime = (runtime_by_agent or {}).get(other["id"], {}) if runtime_by_agent is not None else {}
             value = float(runtime.get("manual_override_until") or 0.0)
-            # Restart-safe legacy/manual hold journal remains authoritative when runtime
-            # for a sibling agent has not been materialized yet.
             if self.store.meta_get("manual_hold_source:" + other["id"], "") == "explicit_user_v8":
                 try:
                     value = max(value, float(self.store.meta_get("manual_hold:" + other["id"], "0") or 0.0))
@@ -379,35 +393,36 @@ class DeviceAgentService:
 
     def active_lease(self, agent, now=None):
         now = time.time() if now is None else float(now)
-        keys = self.descriptor(agent)["resource_keys"]
-        rows = self._resource_rows(keys)
-        active = []
-        for key in keys:
-            row = rows.get(key)
-            if row and float(row.get("lease_until") or 0.0) > now:
-                active.append(row)
-        return active
+        rows = self._resource_rows(self.descriptor(agent)["resource_keys"])
+        return [row for row in rows.values() if float(row.get("lease_until") or 0.0) > now]
 
     def legal_action_mask(self, agent, state, values, *, runtime_by_agent=None, now=None):
         now = time.time() if now is None else float(now)
+        desc = self.descriptor(agent)
         eligibility = self.control_eligibility(agent)
         hold_until = self.shared_manual_hold_until(agent, runtime_by_agent)
         leases = self.active_lease(agent, now)
-        rows = self._resource_rows(self.descriptor(agent)["resource_keys"])
-        last_dispatch = max([float((row or {}).get("last_dispatch_ts") or 0.0) for row in rows.values()] or [0.0])
+        rows = self._resource_rows(desc["resource_keys"])
+        # Same-agent cooldown/pending is already enforced by Executor. Shared dwell exists
+        # to keep a sibling property/entity from immediately fighting the last command.
+        sibling_dwell = False
         dwell = self.min_dwell_seconds(agent)
+        for row in rows.values():
+            last = float(row.get("last_dispatch_ts") or 0.0)
+            last_agent = str(row.get("last_dispatch_agent_id") or "")
+            if last and last_agent and last_agent != str(agent["id"]) and now - last < dwell:
+                sibling_dwell = True
+                break
         out = []
         for desired in values:
-            legal = True
-            reason = None
-            value = desired
+            legal, reason, value = True, None, desired
             if not eligibility["allowed"]:
                 legal, reason = False, eligibility["reason"]
             elif hold_until > now:
                 legal, reason = False, "manual override has priority for this shared resource"
             elif leases:
-                legal, reason = False, "shared resource lease/min-dwell is active"
-            elif last_dispatch and now - last_dispatch < dwell:
+                legal, reason = False, "shared resource in-flight lease is active"
+            elif sibling_dwell:
                 legal, reason = False, "shared resource minimum dwell is active"
             else:
                 try:
@@ -416,7 +431,7 @@ class DeviceAgentService:
                     legal, reason = False, str(exc)
             out.append({"requested": desired, "value": value, "legal": legal, "reason": reason})
         return {
-            "resource_keys": self.descriptor(agent)["resource_keys"],
+            "resource_keys": desc["resource_keys"],
             "actions": out,
             "fallback": "abstain" if not any(x["legal"] for x in out) else "policy_choice_within_mask",
             "manual_priority": True,
@@ -425,20 +440,23 @@ class DeviceAgentService:
 
     def reserve_dispatch(self, agent, intent_id, *, now=None, ttl=None):
         now = time.time() if now is None else float(now)
-        desc = self.descriptor(agent)
-        keys = desc["resource_keys"]
-        ttl = max(self.min_dwell_seconds(agent), float(ttl or 0.0))
+        keys = self.descriptor(agent)["resource_keys"]
+        # This is an in-flight/restart lease, not the completed-action dwell. The latter
+        # is recorded separately as last_dispatch_ts + last_dispatch_agent_id.
+        ttl = max(0.1, float(ttl or self.min_dwell_seconds(agent)))
         until = now + ttl
         with self.lock_resources(keys):
             with self.store.lock, self.store.conn() as c:
                 rows = {row["resource_key"]: dict(row) for row in c.execute(
-                    "SELECT * FROM device_resource_state WHERE resource_key IN (%s)" % ",".join("?" for _ in keys), tuple(keys)
+                    "SELECT * FROM device_resource_state WHERE resource_key IN (%s)" % ",".join("?" for _ in keys),
+                    tuple(keys),
                 ).fetchall()} if keys else {}
                 for key in keys:
                     row = rows.get(key) or {}
                     if float(row.get("manual_hold_until") or 0.0) > now:
                         return None
-                    if float(row.get("lease_until") or 0.0) > now and str(row.get("owner_intent_id") or "") != str(intent_id):
+                    if (float(row.get("lease_until") or 0.0) > now
+                            and str(row.get("owner_intent_id") or "") != str(intent_id)):
                         return None
                 for key in keys:
                     c.execute(
@@ -451,7 +469,8 @@ class DeviceAgentService:
                            updated_ts=excluded.updated_ts""",
                         (key, str(agent["id"]), str(intent_id), until, now),
                     )
-        return {"resource_keys": keys, "agent_id": str(agent["id"]), "intent_id": str(intent_id), "lease_until": until}
+        return {"resource_keys": keys, "agent_id": str(agent["id"]),
+                "intent_id": str(intent_id), "lease_until": until}
 
     def finish_dispatch(self, reservation, *, success, action=None, now=None):
         if not reservation:
@@ -462,14 +481,18 @@ class DeviceAgentService:
         with self.lock_resources(keys):
             with self.store.lock, self.store.conn() as c:
                 for key in keys:
-                    row = c.execute("SELECT owner_intent_id FROM device_resource_state WHERE resource_key=?", (key,)).fetchone()
+                    row = c.execute(
+                        "SELECT owner_intent_id FROM device_resource_state WHERE resource_key=?", (key,)
+                    ).fetchone()
                     if not row or str(row[0] or "") != str(reservation.get("intent_id") or ""):
                         continue
                     if success:
                         c.execute(
-                            """UPDATE device_resource_state SET last_dispatch_ts=?,last_action_json=?,updated_ts=?
+                            """UPDATE device_resource_state SET
+                               owner_agent_id=NULL,owner_intent_id=NULL,lease_until=0,
+                               last_dispatch_ts=?,last_dispatch_agent_id=?,last_action_json=?,updated_ts=?
                                WHERE resource_key=?""",
-                            (now, packed, now, key),
+                            (now, str(reservation.get("agent_id") or ""), packed, now, key),
                         )
                     else:
                         c.execute(
@@ -528,22 +551,18 @@ class DeviceAgentService:
         semantics = "single_property"
         if domain == "light" and agent["target_property"] == "brightness_pct":
             semantics = "compound_power_brightness" if float(value) > 0.5 else "compound_power_off"
-        return {
-            "domain": domain,
-            "service": service,
-            "data": data,
-            "semantics": semantics,
-            "double_dispatch_required": False,
-        }
+        return {"domain": domain, "service": service, "data": data, "semantics": semantics,
+                "double_dispatch_required": False}
 
     def contract(self):
         return {
             "version": CONTRACT_VERSION,
             "identity": "explicit mapping > HA registry device_id > exact entity_id; never friendly-name guessing",
             "agent_identity_migration": "agent.id/history/generations unchanged; logical_device_id + device_property are additive",
+            "property_mapping": "explicit property_name may define logical property; physical target_property is never rewritten",
             "shared_resources": ["device", "explicit group", "thermal/solar-shading zone", "sensor configuration"],
             "manual_priority": "hard guard independent of reward",
-            "action_mask": "legal_value + autonomy description + shared manual hold + durable lease/min dwell",
+            "action_mask": "legal_value + autonomy description + shared manual hold + in-flight lease + cross-agent min dwell",
             "perception_owner": PERCEPTION_OWNER,
             "power_brightness": "one resource owner; brightness command is a single compound light.turn_on/off action",
             "process_model": ProcessModelBackendContract().export(),
@@ -552,11 +571,14 @@ class DeviceAgentService:
 
 
 def install_runtime(engine):
-    """Diagnostics-only composition. Control integration lives directly in Executor."""
+    """Compose diagnostics and registry-triggered identity migration before workers start."""
     service = getattr(getattr(engine, "executor", None), "device_agents", None)
     if service is None or getattr(engine, "_device_agent_runtime_installed", False):
         return engine
+
     original_runtime_for = engine.runtime_for
+    original_entity_registry = engine.update_entity_registry
+    original_device_registry = engine.update_device_registry
 
     def runtime_for(agent):
         payload = dict(original_runtime_for(agent) or {})
@@ -567,13 +589,23 @@ def install_runtime(engine):
         payload["device_action_mask"] = service.legal_action_mask(
             agent, state, [agent.get("min_value"), agent.get("max_value")],
             runtime_by_agent=engine.runtime,
-        ) if state is not None else {
-            "actions": [], "fallback": "abstain", "reason": "target unavailable"
-        }
+        ) if state is not None else {"actions": [], "fallback": "abstain", "reason": "target unavailable"}
         payload["device_agent_contract"] = service.contract()
         return payload
 
+    def update_entity_registry(entries):
+        result = original_entity_registry(entries)
+        service.migrate_agent_identities()
+        return result
+
+    def update_device_registry(entries):
+        result = original_device_registry(entries)
+        service.migrate_agent_identities()
+        return result
+
     engine.runtime_for = runtime_for
+    engine.update_entity_registry = update_entity_registry
+    engine.update_device_registry = update_device_registry
     engine.device_agents = service
     engine._device_agent_runtime_installed = True
     return engine
