@@ -11,11 +11,13 @@ but before ``core.main()`` starts the HTTP/runtime lifecycle.
 import preference_queue_main as runtime
 from runtime_composition import bind_final_composition
 from startup_train_guard import install as install_startup_train_guard
+from release_016_guard import install as install_release_016_guard
 
 
 core = runtime.core
 RUNTIME_COMPOSITION_ROOT = bind_final_composition(runtime)
 install_startup_train_guard(runtime)
+install_release_016_guard(runtime)
 
 
 if __name__ == "__main__":

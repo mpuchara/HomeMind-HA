@@ -15,7 +15,7 @@ try:
 except Exception:
     ws_connect = None
 
-APP_VERSION = "0.14.15"
+APP_VERSION = "0.14.16"
 HISTORY_BOOTSTRAP_REVISION = "target-attrs-v2"
 TRAINING_REVISION = "shared-home-intents-v18"
 DATA_DIR = Path(os.environ.get("ADAPTIVE_AI_DATA", "/data"))
@@ -90,7 +90,8 @@ DEFAULT_OPTIONS = {
     "history_parallel_requests": 1,
     "history_context_import_interval_seconds": 60,
     "history_background_pause_ms": 1500,
-    "history_background_start_delay_seconds": 10,
+    "history_background_start_delay_seconds": 60,
+    "background_cpu_duty_cycle": 0.20,
     "process_nice": 10,
     "training_cpu_duty_cycle": 0.55,
     "manual_agent_training": True,
@@ -270,6 +271,10 @@ def load_options():
                 options["agent_training_chunk_hours"] = 6
             if data.get("history_background_pause_ms") == 500:
                 options["history_background_pause_ms"] = 1500
+            # 0.14.16: the old 10 s startup delay still overlapped first Ingress and
+            # HA realtime requests on Raspberry Pi. Preserve explicit custom values.
+            if data.get("history_background_start_delay_seconds") == 10:
+                options["history_background_start_delay_seconds"] = 60
     except Exception as exc:
         print(f"[options] Failed to read options: {exc}", flush=True)
     # 0.9 never starts heavy replay implicitly, including installations with the

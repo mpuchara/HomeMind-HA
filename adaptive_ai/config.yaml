@@ -1,5 +1,5 @@
 name: "Adaptive AI"
-version: "0.14.15"
+version: "0.14.16"
 slug: "adaptive_ai"
 description: >-
   History-first local reinforcement-learning policies for Home Assistant. Imports
@@ -85,7 +85,8 @@ options:
   history_parallel_requests: 1
   history_context_import_interval_seconds: 60
   history_background_pause_ms: 1500
-  history_background_start_delay_seconds: 10
+  history_background_start_delay_seconds: 60
+  background_cpu_duty_cycle: 0.20
   process_nice: 10
   training_cpu_duty_cycle: 0.55
   manual_agent_training: true
@@ -171,7 +172,8 @@ schema:
   history_parallel_requests: "int(1,3)"
   history_context_import_interval_seconds: "int(5,300)"
   history_background_pause_ms: "int(0,3000)"
-  history_background_start_delay_seconds: "int(0,120)"
+  history_background_start_delay_seconds: "int(0,300)"
+  background_cpu_duty_cycle: "float(0.10,0.60)"
   process_nice: "int(0,19)"
   training_cpu_duty_cycle: "float(0.20,0.90)"
   manual_agent_training: "bool"
