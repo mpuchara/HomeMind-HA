@@ -724,14 +724,25 @@ class ObservationSQLiteTemporalTracker(replay_module.SQLiteTemporalTracker):
             sql = f"""
                 SELECT event_key,entity_id,event_time,received_time,state,attributes_json,
                        last_changed,last_updated,source,quality
-                FROM feature_observation_events
-                WHERE entity_id IN ({marks})
-                  AND event_time<=? AND received_time<=?
-                  AND (event_time>? OR received_time>?)
+                FROM (
+                    SELECT f.*,
+                           ROW_NUMBER() OVER (
+                               PARTITION BY entity_id
+                               ORDER BY event_time DESC,received_time DESC,event_key DESC
+                           ) AS _hm_rank
+                    FROM feature_observation_events f
+                    WHERE entity_id IN ({marks})
+                      AND event_time<=? AND received_time<=?
+                      AND (event_time>? OR received_time>?)
+                )
+                WHERE _hm_rank<=?
                 ORDER BY event_time,received_time,event_key
             """
             raw = self._fetch_rows(
-                sql, [*ids, float(hi), float(hi), float(lo), float(lo)]
+                sql, [
+                    *ids, float(hi), float(hi), float(lo), float(lo),
+                    self.HISTORY_SAMPLES,
+                ]
             )
             TRAINING_BUDGET.checkpoint("temporal_feature_forward_query")
             result.extend(FeatureJournal.normalized_row(row) for row in raw)
