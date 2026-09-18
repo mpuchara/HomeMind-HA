@@ -513,7 +513,9 @@ class CurrentConfidenceCostTests(unittest.TestCase):
             selection_target=12,final_target=12,min_per_action=4,
         )
         for i in range(20, 32):
-            self._insert_pair(i, eligible=True)
+            # Keep one parent/child disagreement so a later independent label can
+            # legitimately reverse which model was correct without rewriting predictions.
+            self._insert_pair(i, eligible=True, child_ok=(i != 20))
         initial = self.epochs.final_report_from_store(epoch,'g0','g1',scope_id='root')
         locked = self.epochs.get('g0','g1','rev-retro','diagonal_linucb:v11')
         self.assertIsNotNone(locked['final_end_ts'])
@@ -533,8 +535,8 @@ class CurrentConfidenceCostTests(unittest.TestCase):
                    evidence_kind='episode_evaluator_independent',
                    calibration_eligible=1,
                    calibration_outcome=1-calibration_outcome,
-                   calibration_parent_correct=1,
-                   calibration_child_correct=0,
+                   calibration_parent_correct=0,
+                   calibration_child_correct=1,
                    calibration_source_id='retroactive-label'
                    WHERE parent_generation_id='g0' AND child_generation_id='g1'
                      AND prediction_event_id=?""",
