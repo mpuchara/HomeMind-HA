@@ -1191,6 +1191,7 @@ def install(manager):
     service = AdaptationService(manager)
     original_after = manager.after_live_process
     original_promote = manager.promote
+    original_summary = getattr(manager, "_comparison_summary", None)
     original_status = manager.status
     original_list_status = manager.list_status
     original_runtime_for = getattr(manager.engine, "runtime_for", None)
@@ -1206,6 +1207,40 @@ def install(manager):
                 {"error": f"{type(exc).__name__}: {exc}"},
             )
         return result
+
+    def comparison_summary(row, parent=None, candidate=None):
+        out = dict(original_summary(row, parent, candidate) or {})
+        root_id = str((parent or {}).get("id") or row.get("parent_agent_id") or "")
+        candidate_id = str((candidate or {}).get("id") or row.get("candidate_id") or "")
+        if not root_id or not candidate_id:
+            return out
+        state = service._state(root_id)
+        if (
+            state.get("status") == "candidate_active"
+            and str(state.get("candidate_agent_id") or "") == candidate_id
+            and state.get("candidate_generation_id")
+        ):
+            report = service.regression_anchor_report(
+                root_id, candidate_id, state.get("candidate_generation_id")
+            )
+            out["drift_regression_anchor_report"] = report
+            if report.get("gate_applicable"):
+                passed = bool(report.get("passed"))
+                gates = dict(out.get("promotion_gates") or {})
+                gates["drift_regression_anchors"] = {
+                    "passed": passed,
+                    "reason": (
+                        "Candidate preserved retained zero-weight regression anchors"
+                        if passed else
+                        "Candidate regressed on retained zero-weight regression anchors"
+                    ),
+                    "custom_override": "never",
+                    "metric_semantics": "offline_regression_replay_not_future_calibration",
+                    "observed": report,
+                }
+                out["promotion_gates"] = gates
+                out["promotable"] = bool(out.get("promotable")) and passed
+        return out
 
     def promote(parent_id, target_mode=None):
         result = original_promote(parent_id, target_mode)
@@ -1227,6 +1262,8 @@ def install(manager):
         return out
 
     manager.after_live_process = after_live_process
+    if callable(original_summary):
+        manager._comparison_summary = comparison_summary
     manager.promote = promote
     manager.status = lambda parent_id: decorate(original_status(parent_id))
     manager.list_status = lambda: [decorate(item) for item in (original_list_status() or []) if item]
