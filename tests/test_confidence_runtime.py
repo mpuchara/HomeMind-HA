@@ -3,7 +3,7 @@ import unittest
 from pathlib import Path
 
 from support import ROOT  # noqa: F401 - installs adaptive_ai/src on sys.path
-from confidence_contract import ProbabilityCalibrationJournal
+from confidence_contract import CONTRACT_VERSION, ProbabilityCalibrationJournal
 from confidence_runtime import ConfidenceCalibrationService, install_runtime_semantics
 from storage import Store
 
@@ -56,7 +56,8 @@ class ConfidenceRuntimeTests(unittest.TestCase):
         self.assertEqual(runtime['data_coverage'], .64)
         self.assertEqual(runtime['presence_probability'], .70)
         self.assertEqual(runtime['forecast_uncertainty'], .18)
-        self.assertEqual(runtime['confidence_contract']['version'], 1)
+        self.assertEqual(runtime['confidence_contract']['version'], CONTRACT_VERSION)
+        self.assertIn('manual_user_target_change', runtime['confidence_contract']['final_calibration_evidence_kinds'])
         status = engine.status()
         self.assertEqual(status['average_decision_strength'], .72)
         self.assertIn('not_probability', status['average_confidence_semantics'])
