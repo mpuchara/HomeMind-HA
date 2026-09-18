@@ -20,7 +20,7 @@
 
   window.applyLiveValues=()=>{for(const a of lastAgents){const live=liveValues.get(String(a.id));if(live)a.runtime={...a.runtime,...live};}};
   async function refreshLive(){
-    if(liveBusy||document.hidden)return;
+    if(liveBusy||document.hidden||window.__adaptiveAiRuntimeReady===false)return;
     liveBusy=true;const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),2500);
     try{
       const data=await api('api/live'+(!lastAgents.length?'?bootstrap=1':''),{signal:controller.signal});
