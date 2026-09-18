@@ -421,7 +421,9 @@ class TrainingQueue(threading.Thread):
                 self.store.event(job["agent_id"], "error", "teach_rl_finalize_failed",
                                  str(exc), {"error": f"{type(exc).__name__}: {exc}"})
 
-        agent = self.store.get_agent(job["agent_id"])
+        # Slot completion only needs lifecycle fields; avoid aggregate history scans
+        # immediately after the heavy worker releases CPU.
+        agent = self.store.get_agent_config(job["agent_id"])
         with self.cv:
             if self.active and self.active["agent_id"] == job["agent_id"]:
                 self.active = None
