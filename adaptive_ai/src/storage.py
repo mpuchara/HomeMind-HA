@@ -353,15 +353,20 @@ class Store:
         self.event(agent_id, "warning", "learning_reset",
                    "Full rebuild reset: policy/benchmark/cursor cleared; local raw history retained", None)
 
-    def set_training_state(self, agent_id, state, score=None, samples=0, source=None, detail=None, demote_control=False):
+    def set_training_state(self, agent_id, state, score=None, samples=0, source=None, detail=None,
+                           demote_control=False, shadow_after_completion=False):
         state = str(state or "training")
         if state not in ("training", "qualified", "paused", "needs_retrain", "waiting"):
             raise ValueError("invalid training state")
         raw = json.dumps(detail or {}, separators=(",", ":"), ensure_ascii=False)
-        # Training is offline-only. A finished pass becomes SHADOW only when it clears
-        # the >78% benchmark; otherwise the whole agent is PAUSED to save CPU.
-        mode = "shadow" if state == "qualified" else "paused"
+        # Training is offline-only. Control qualification and Shadow inference are
+        # intentionally separate. A completed pass with a persisted model may remain in
+        # Shadow even when it did not clear the Control benchmark; interrupted/error
+        # PAUSED states stay fully paused unless the caller explicitly marks completion.
         with self.lock, self.conn() as c:
+            has_model = c.execute("SELECT 1 FROM rl_models WHERE agent_id=? LIMIT 1", (agent_id,)).fetchone() is not None
+            completed_shadow = bool(shadow_after_completion and has_model and state in ("qualified", "paused"))
+            mode = "shadow" if state == "qualified" or completed_shadow else "paused"
             c.execute("""UPDATE agents SET training_state=?, benchmark_score=?, benchmark_samples=?, benchmark_source=?,
                        benchmark_detail_json=?, benchmark_updated_at=?, mode=?, training_updated_at=? WHERE id=?""",
                       (state, score, int(samples), source, raw, iso_now(), mode, iso_now(), agent_id))
