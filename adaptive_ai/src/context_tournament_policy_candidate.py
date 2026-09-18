@@ -27,7 +27,7 @@ from policy import MultiHorizonPolicy
 from settings import OPTIONS
 
 
-CONTRACT_VERSION = 1
+CONTRACT_VERSION = 2
 POOL_VERSION = 1
 MAX_HISTORY = 32
 MAX_SCREENING_SAMPLES = 96
@@ -529,11 +529,26 @@ def install_policy_candidates(service):
         if not target_schema or str(challenger) not in set(target_schema):
             model["candidate_blocked_reason"] = "no_target_schema"
             return None
-        expected_revision = str(model.get("evaluation_champion_revision") or getattr(policy, "model_revision", "") or "")
+        current_revision = str(getattr(policy, "model_revision", "") or "")
+        expected_revision = str(model.get("evaluation_champion_revision") or current_revision)
+        current_policy_version = int(getattr(policy, "VERSION", 0) or 0)
+        current_schema_version = int(getattr(policy.schema, "VERSION", 0) or 0)
+        data_version = dict(model.get("candidate_data_version") or {})
         raw = model.get("candidate_policy") if isinstance(model.get("candidate_policy"), dict) else None
-        valid = bool(raw and list((raw.get("schema") or {}).get("entities") or []) == target_schema
-                     and str(model.get("candidate_source_model_revision") or "") == expected_revision
-                     and int(model.get("candidate_contract_version") or 0) == CONTRACT_VERSION)
+        valid = bool(
+            raw
+            and current_revision == expected_revision
+            and list((raw.get("schema") or {}).get("entities") or []) == target_schema
+            and int(raw.get("version") or 0) == current_policy_version
+            and int((raw.get("schema") or {}).get("version") or 0) == current_schema_version
+            and str(model.get("candidate_source_model_revision") or "") == expected_revision
+            and int(model.get("candidate_contract_version") or 0) == CONTRACT_VERSION
+            and str(data_version.get("contract") or "") == "paired_future_policy_v2"
+            and int(data_version.get("schema_revision") or -1) == int(tournament.get("schema_revision") or 0)
+            and str(data_version.get("champion_revision") or "") == expected_revision
+            and int(data_version.get("policy_version") or 0) == current_policy_version
+            and int(data_version.get("feature_schema_version") or 0) == current_schema_version
+        )
         key = (aid, str(challenger))
         with getattr(service.engine, "lock", threading.RLock()):
             states = dict(getattr(service.engine, "state_map", {}) or {})
@@ -562,7 +577,7 @@ def install_policy_candidates(service):
             "candidate_training_samples": 0,
             "candidate_migration": migration,
             "candidate_data_version": {
-                "contract": "paired_future_policy_v1",
+                "contract": "paired_future_policy_v2",
                 "schema_revision": int(tournament.get("schema_revision") or 0),
                 "champion_revision": expected_revision,
                 "policy_version": int(getattr(candidate, "VERSION", 0)),
@@ -609,6 +624,9 @@ def install_policy_candidates(service):
                 "state_revision": int(getattr(service.engine, "state_revision", 0)),
                 "candidate_schema": list(candidate.schema.entities), "confidence": float(confidence),
                 "support": float(support), "novelty": float(novelty),
+                "candidate_model_revision": str(candidate.model_revision),
+                "champion_revision": str((model.get("candidate_data_version") or {}).get("champion_revision") or ""),
+                "candidate_data_version": json.loads(json.dumps(model.get("candidate_data_version") or {})),
             }
             return int(idx)
         except Exception as exc:
@@ -627,7 +645,27 @@ def install_policy_candidates(service):
         model = original_load(agent_id, challenger, action_count)
         candidate = candidate_from_model(agent, challenger, model, tournament=original_state(agent_id))
         try:
-            if candidate is None or list(candidate.schema.entities) != list(train.get("candidate_schema") or []):
+            live_policy = (getattr(service.engine, "models", {}) or {}).get(str(agent_id))
+            live_revision = str(getattr(live_policy, "model_revision", "") or "")
+            model_version = dict(model.get("candidate_data_version") or {})
+            train_version = dict(train.get("candidate_data_version") or {})
+            version_match = bool(
+                model_version
+                and model_version == train_version
+                and str(model_version.get("champion_revision") or "") == str(train.get("champion_revision") or "")
+                and str(model.get("evaluation_champion_revision") or "") == str(train.get("champion_revision") or "")
+                and live_revision == str(train.get("champion_revision") or "")
+                and int(model_version.get("schema_revision") or -1)
+                    == int((original_state(agent_id) or {}).get("schema_revision") or 0)
+                and int(model_version.get("policy_version") or 0) == int(getattr(candidate, "VERSION", 0) or 0)
+                and int(model_version.get("feature_schema_version") or 0)
+                    == int(getattr(candidate.schema, "VERSION", 0) or 0)
+            )
+            if (candidate is None
+                    or list(candidate.schema.entities) != list(train.get("candidate_schema") or [])
+                    or not version_match):
+                model["candidate_blocked_reason"] = "paired_data_version_changed"
+                service._save_shadow_model(agent_id, challenger, model)
                 return result
             horizon, features = int(train.get("horizon") or min(candidate.horizons)), dict(train.get("features") or {})
             if horizon not in candidate.heads or not features:
