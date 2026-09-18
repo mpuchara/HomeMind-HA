@@ -1,3 +1,12 @@
+# 0.14.23 — 2026-09-18
+
+- Make **Apply Correct** a durable, idempotent two-phase operation: the HTTP path stores a client request ID and returns `202 Accepted` before Candidate orchestration.
+- Add a tiny restart-safe workflow-request worker. Requests left in `processing` are re-admitted after restart; repeated delivery of the same request ID never creates a duplicate correction edge.
+- Keep the Correct dialog visible while the backend is busy. It now opens from the already-rendered card, retries metadata/history independently, and tracks the durable request after an HTTP timeout instead of blindly submitting the correction again.
+- Add priority admission to historical training: `Teach/Correct Candidate` work runs before explicit user Train/Rebuild, which runs before automatic initial training; FIFO order is preserved inside each priority class.
+- Do not preempt an already active heavy replay in this release. Interactive work becomes the next admitted heavy job, preserving the single-heavy-job safety boundary.
+- Keep models, raw history, Correct/Teach labels, Candidate lineage, settings, generations and rollback state unchanged. No retraining or data migration is required.
+
 # 0.14.22 — 2026-09-18
 
 - Fix a restart regression that marked freshly trained policy-v11/schema-v12 models as NEEDS_RETRAIN before the observation contract was installed.

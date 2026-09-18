@@ -61,6 +61,7 @@ class RuntimeCompositionRoot:
             "candidates": {"owner": "engine.agent_candidates", "contract": "isolated_shadow_generation_manager"},
             "workflow_actions": {
                 "contract": getattr(manager, "agent_workflow_contract", None),
+                "durable_requests": getattr(manager, "workflow_request_contract", None),
                 "explore": getattr(manager, "agent_explore_contract", None),
             },
             "promotion_gates": {
@@ -108,6 +109,7 @@ class RuntimeCompositionRoot:
         from performance_f22_order_guard import install as install_performance_f22_order_guard
         from promotion_validation import install as install_promotion_validation
         from rpi_low_power_runtime import install as install_rpi_low_power_runtime
+        from workflow_request_queue import install as install_workflow_request_queue
         from runtime_http import install_dispatch, register_feedback_routes, register_promotion_routes
         from trial_knowledge import install as install_trial_knowledge
 
@@ -121,6 +123,7 @@ class RuntimeCompositionRoot:
         # shipped root rather than depending on a legacy overlay side effect. Both
         # installers are idempotent, so upgrades never stack duplicate HTTP handlers.
         manager = install_agent_workflow_actions(manager)
+        manager = install_workflow_request_queue(manager)
         manager = install_agent_explore(manager)
 
         # RPi resource control changes scheduling only, never learning semantics.

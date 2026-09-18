@@ -1,4 +1,4 @@
-"""FIFO admission queue for expensive per-agent historical training jobs.
+"""Priority admission queue for expensive per-agent historical training jobs.
 
 The HistoryManager intentionally permits only one heavy replay at a time so Home
 Assistant keeps CPU/RAM priority. This queue turns that resource limit into normal
@@ -19,6 +19,37 @@ import time
 from telemetry import HEAVY_JOBS
 
 
+PRIORITY_INTERACTIVE = 0
+PRIORITY_USER = 10
+PRIORITY_AUTOMATIC = 20
+PRIORITY_MAINTENANCE = 30
+
+
+def training_priority_for_reason(reason):
+    """Lower number means earlier admission; FIFO is preserved inside each class."""
+    reason = str(reason or "training")
+    if reason == "teach_rl":
+        return PRIORITY_INTERACTIVE
+    if reason in ("training", "resume_training", "full_rebuild", "autonomous_continuation"):
+        return PRIORITY_USER
+    if reason == "initial_training":
+        return PRIORITY_AUTOMATIC
+    if reason in ("maintenance", "background", "discovery"):
+        return PRIORITY_MAINTENANCE
+    return PRIORITY_USER
+
+
+def training_priority_class(priority):
+    priority = int(priority)
+    if priority <= PRIORITY_INTERACTIVE:
+        return "interactive"
+    if priority <= PRIORITY_USER:
+        return "user"
+    if priority <= PRIORITY_AUTOMATIC:
+        return "automatic"
+    return "maintenance"
+
+
 class _YieldDiscovery(Exception):
     """Private cooperative signal used only to leave automatic discovery promptly."""
 
@@ -37,6 +68,7 @@ class TrainingQueue(threading.Thread):
         self.jobs = deque()
         self.pending = {}
         self.active = None
+        self._queue_sequence = 0
         self._training_priority = threading.Event()
         self._discovery_preempted = False
         self._install_discovery_priority_bridge()
@@ -194,10 +226,45 @@ class TrainingQueue(threading.Thread):
             # The caller records a dedicated cleanup failure event.
             raise
 
+    def _resort_jobs_locked(self):
+        self.jobs = deque(sorted(
+            self.jobs,
+            key=lambda job: (
+                int(job.get("priority", PRIORITY_USER)),
+                int(job.get("sequence", 0)),
+            ),
+        ))
+
+    def _upgrade_pending_job_locked(self, existing, *, rebuild, reason, requested_priority):
+        old_priority = int(existing.get("priority", training_priority_for_reason(existing.get("reason"))))
+        changed = False
+        if str(reason) == "teach_rl":
+            if existing.get("reason") != "teach_rl" or not existing.get("rebuild"):
+                changed = True
+            existing["rebuild"] = True
+            existing["reason"] = "teach_rl"
+        elif rebuild and not existing.get("rebuild"):
+            existing["rebuild"] = True
+            if existing.get("reason") != "teach_rl":
+                existing["reason"] = "full_rebuild"
+            changed = True
+
+        if int(requested_priority) < old_priority:
+            existing["priority"] = int(requested_priority)
+            if existing.get("reason") != "teach_rl":
+                existing["reason"] = str(reason)
+            changed = True
+        else:
+            existing.setdefault("priority", old_priority)
+        existing["priority_class"] = training_priority_class(existing["priority"])
+        self._resort_jobs_locked()
+        return changed, old_priority
+
     def enqueue(self, agent_id, rebuild=False, reason="training"):
         agent = self.store.get_agent(agent_id)
         if not agent:
             raise ValueError("agent not found")
+        requested_priority = training_priority_for_reason(reason)
 
         with self.cv:
             if self.active and self.active["agent_id"] == agent_id:
@@ -209,17 +276,22 @@ class TrainingQueue(threading.Thread):
                         "rebuild": bool(rebuild), "agent_id": agent_id}
             existing = self.pending.get(agent_id)
             if existing:
-                if str(reason) == "teach_rl":
-                    existing["rebuild"] = True
-                    existing["reason"] = "teach_rl"
-                    self.store.event(agent_id, "info", "training_queue_upgraded",
-                                     "Queued training upgraded to Teach RL rebuild", None)
-                elif rebuild and not existing["rebuild"]:
-                    existing["rebuild"] = True
-                    if existing.get("reason") != "teach_rl":
-                        existing["reason"] = "full_rebuild"
-                    self.store.event(agent_id, "info", "training_queue_upgraded",
-                                     "Queued training upgraded to a full rebuild", None)
+                changed, old_priority = self._upgrade_pending_job_locked(
+                    existing, rebuild=rebuild, reason=reason,
+                    requested_priority=requested_priority,
+                )
+                if changed:
+                    self.store.event(
+                        agent_id, "info", "training_queue_upgraded",
+                        "Queued training request was upgraded or reprioritized",
+                        {
+                            "reason": existing.get("reason"),
+                            "rebuild": bool(existing.get("rebuild")),
+                            "priority": int(existing.get("priority", requested_priority)),
+                            "priority_class": existing.get("priority_class"),
+                            "previous_priority": old_priority,
+                        },
+                    )
                 self._request_training_priority()
                 return self.status_for(agent_id)
 
@@ -227,32 +299,61 @@ class TrainingQueue(threading.Thread):
         self._release_control_before_queue(agent, reason)
         self._preserve_waiting_state(agent)
 
+        with self.cv:
+            self._queue_sequence += 1
+            sequence = self._queue_sequence
         job = {
             "agent_id": agent_id,
             "rebuild": bool(rebuild),
             "reason": str(reason),
             "queued_at": time.time(),
+            "priority": int(requested_priority),
+            "priority_class": training_priority_class(requested_priority),
+            "sequence": int(sequence),
         }
         with self.cv:
             # A second HTTP request may have queued the same agent while Control was
-            # being released. Keep exactly one pending entry.
+            # being released. Keep exactly one pending entry and preserve the strongest
+            # priority requested by either caller.
             existing = self.pending.get(agent_id)
             if existing:
-                if str(reason) == "teach_rl":
-                    existing["rebuild"] = True
-                    existing["reason"] = "teach_rl"
-                elif rebuild:
-                    existing["rebuild"] = True
-                    if existing.get("reason") != "teach_rl":
-                        existing["reason"] = "full_rebuild"
+                changed, old_priority = self._upgrade_pending_job_locked(
+                    existing, rebuild=rebuild, reason=reason,
+                    requested_priority=requested_priority,
+                )
+                if changed:
+                    self.store.event(
+                        agent_id, "info", "training_queue_upgraded",
+                        "Queued training request was upgraded or reprioritized",
+                        {
+                            "reason": existing.get("reason"),
+                            "rebuild": bool(existing.get("rebuild")),
+                            "priority": int(existing.get("priority", requested_priority)),
+                            "priority_class": existing.get("priority_class"),
+                            "previous_priority": old_priority,
+                        },
+                    )
                 self._request_training_priority()
                 return self.status_for(agent_id)
             self.jobs.append(job)
             self.pending[agent_id] = job
-            position = len(self.jobs)
-            self.store.event(agent_id, "info", "training_queued",
-                             f"Training queued at position {position}",
-                             {"position": position, "rebuild": bool(rebuild), "reason": str(reason)})
+            self._resort_jobs_locked()
+            position = next(
+                (index + 1 for index, queued in enumerate(self.jobs)
+                 if queued["agent_id"] == agent_id),
+                len(self.jobs),
+            )
+            self.store.event(
+                agent_id, "info", "training_queued",
+                f"Training queued at position {position}",
+                {
+                    "position": position,
+                    "rebuild": bool(rebuild),
+                    "reason": str(reason),
+                    "priority": int(requested_priority),
+                    "priority_class": training_priority_class(requested_priority),
+                },
+            )
             self._request_training_priority()
             self.cv.notify_all()
             return self.status_for(agent_id)
@@ -284,6 +385,8 @@ class TrainingQueue(threading.Thread):
                     "state": "active", "position": 0, "ahead": 0,
                     "rebuild": bool(self.active.get("rebuild")),
                     "reason": self.active.get("reason"),
+                    "priority": self.active.get("priority"),
+                    "priority_class": self.active.get("priority_class"),
                     "queued_at": self.active.get("queued_at"),
                     "started_at": self.active.get("started_at"),
                     "agent_id": agent_id,
@@ -300,6 +403,8 @@ class TrainingQueue(threading.Thread):
                         "ahead": index + (1 if self.active or active_ids else 0),
                         "rebuild": bool(job.get("rebuild")),
                         "reason": job.get("reason"),
+                        "priority": job.get("priority"),
+                        "priority_class": job.get("priority_class"),
                         "queued_at": job.get("queued_at"),
                         "blocked_by": HEAVY_JOBS.owner,
                         "agent_id": agent_id,

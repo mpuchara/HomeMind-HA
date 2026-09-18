@@ -6,7 +6,7 @@ the fixes narrow:
 
 * status stays lightweight until the runtime reports ready, so a half-built Engine can
   never make the first UI status poll block;
-* the FIFO training queue is created before HistoryManager starts background discovery;
+* the priority training queue is created before HistoryManager starts background discovery;
 * an explicit normal Train gets an immediate admission attempt when the heavy slot is
   idle, instead of depending solely on thread scheduling;
 * the queue worker survives an unexpected iteration error and reports it to events.
@@ -30,7 +30,7 @@ def _install_initial_training_bridge(history, queue, store):
 
     Candidate generations are meaningful only after a persisted Live/base policy exists.
     Discovery may therefore create many WAITING agents, but their first historical build
-    is admitted through the existing single-heavy-job FIFO.  This keeps Raspberry Pi
+    is admitted through the existing single-heavy-job priority queue.  This keeps Raspberry Pi
     resource bounds intact while removing the cold-start dead end where only Candidate
     cards could appear.
 
@@ -74,7 +74,7 @@ def _install_initial_training_bridge(history, queue, store):
             store.event(
                 None, "info", "initial_training_queued",
                 f"Queued initial historical training for {len(enqueued)} auto-discovered agent(s)",
-                {"agents": enqueued, "resource_policy": "single_heavy_job_fifo"},
+                {"agents": enqueued, "resource_policy": "single_heavy_job_priority_queue"},
             )
         return created
 
@@ -145,7 +145,7 @@ def install(runtime):
         # Teach-RL owns a context-selection preflight and remains worker-driven. Plain
         # Train/Rebuild/Resume can safely claim an idle slot immediately because the
         # HistoryManager itself performs the expensive replay in its own worker thread.
-        if str(reason) != "teach_rl" and isinstance(result, dict) and result.get("state") == "queued":
+        if str(reason) not in ("teach_rl", "initial_training") and isinstance(result, dict) and result.get("state") == "queued":
             try:
                 if HEAVY_JOBS.owner is None and not self._history_active_ids():
                     self._try_start_head()
@@ -220,7 +220,7 @@ def install(runtime):
                 queue.start()
                 core.STORE.event(
                     None, "info", "training_queue_ready",
-                    "FIFO training queue ready before background discovery", None,
+                    "Priority training queue ready before background discovery", None,
                 )
             else:
                 queue = queued_runtime.TRAINING_QUEUE
@@ -235,9 +235,13 @@ def install(runtime):
 
     core.initialize_runtime = initialize_runtime
     core._startup_train_guard_installed = True
+    # Keep the historical readiness contract key stable: it describes construction order,
+    # not the new per-job scheduling policy.  Older diagnostics/tests look for the phrase
+    # "FIFO training queue ready before background discovery" as the 0.14.14 marker.
     core.startup_train_guard_contract = {
         "status_until_ready": "lightweight_only",
         "training_queue_order": "before_history_discovery",
+        "training_queue_priority_order": "interactive_then_user_then_initial_fifo_within_priority",
         "explicit_train_idle_slot": "immediate_admission_attempt",
         "initial_auto_agent_training": "first_model_in_place_via_single_heavy_job_fifo",
         "candidate_before_base_model": "forbidden_by_candidate_manager",

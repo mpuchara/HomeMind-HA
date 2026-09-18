@@ -1,9 +1,9 @@
 {
-  "version": "0.14.22",
+  "version": "0.14.23",
   "release_date": "2026-09-18",
-  "base_version": "0.14.21",
-  "base_commit": "556dccb3ad2693d7fa84f2005785565e1c64f79c",
-  "release_status": "release-0.14.22-model-contract-restart-repair",
+  "base_version": "0.14.22",
+  "base_commit": "e155e342fb7cff955ee79a6a24751ff6ddc10f06",
+  "release_status": "release-0.14.23-durable-correct-priority-admission",
   "tests_passed": 821,
   "profile": "rpi4-low-memory-automatic-initial-training",
   "manual_agent_training": false,
@@ -40,7 +40,7 @@
   "migration": "additive startup repair only; models, raw archive, feedback, Candidate lineage, TrialRecords, Teach labels, settings and rollback state remain preserved",
   "physical_control": "unchanged; repaired agents return to Shadow and Control still requires qualified state plus all existing guards",
   "pi4": "0.14.18 targets the observed ~94% CPU spike and second-open blank Ingress UI at the transition from REPLAY COMPLETE to model/benchmark finalization; on-device verification is still required",
-  "ci_status": "pending 0.14.22 validation",
+  "ci_status": "pending 0.14.23 validation",
   "training_slice_budget": "adaptive-ai-index workers call a shared CooperativeTrainingBudget; expensive temporal tracker loops yield between entities/events and finalization is no longer outside the throttle",
   "finalization_lifeline": "HEAVY_JOBS remains owned through final gc.collect(), so /api/status and /api/agents stay on lightweight lifeline reads until the worker is actually finished",
   "finalization_progress": "post-replay UI now exposes bounded stages: replay complete, policy serialization, benchmark save, qualification, checkpoint complete",
@@ -52,5 +52,9 @@
   "model_contract_restart": "storage bootstrap treats v10/schema11 and newer as modern structural formats; exact current compatibility remains owned by observation_contract",
   "model_contract_current": "policy v11 / schema v12",
   "model_contract_repair": "current v11/schema12 models incorrectly left in needs_retrain by 0.14.21 restart are restored only when recorded-behaviour benchmark evidence remains intact",
-  "model_contract_repair_safety": "genuine config invalidation clears benchmark evidence and is never auto-repaired"
+  "model_contract_repair_safety": "genuine config invalidation clears benchmark evidence and is never auto-repaired",
+  "interactive_correct_admission": "Apply Correct persists a client-supplied idempotency key and returns 202 before Candidate orchestration; processing requests recover to accepted after restart",
+  "interactive_correct_ui": "Correct opens from the rendered card before workflow status/history reads; a pending request ID survives HTTP response loss in sessionStorage and is polled instead of blindly resubmitted",
+  "training_queue_priority": "Teach/Correct Candidate (interactive) > explicit user Train/Rebuild/Resume > automatic initial training > maintenance; FIFO inside each class; an already active heavy job is not preempted",
+  "stage1_performance_scope": "admission, UI resilience and queued-work priority only; historical replay/model/reward semantics are unchanged"
 }
