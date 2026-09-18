@@ -26,6 +26,7 @@ from context import (
 from home_state import FEATURE_NAMES as LEGACY_HOME_FEATURE_NAMES
 from provenance import stable_event_id
 from settings import OPTIONS, clamp, iso_now, now_ts, parse_ts
+from training_budget import TRAINING_BUDGET
 
 SCHEMA_VERSION = 12
 POLICY_VERSION = 11
