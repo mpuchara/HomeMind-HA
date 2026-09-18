@@ -65,12 +65,14 @@ class FinalRuntimeShadow:
         confidence = float(rt.get("last_confidence") or 0.0)
         support = float(rt.get("historical_support") or 0.0)
         novelty = float(rt.get("context_novelty") or 1.0)
+        executor_shadow = str(intent.get("status") or "").upper() == "SHADOW"
         manual_action = core._manual_hold_action(states, rt, ts)
         if manual_action is not None:
             self.action = manual_action
             return self.action, {
                 "abstained": True, "reason": "explicit_user_manual_hold",
                 "shadow_proxy": True, "manual_override_active": True,
+                "executor_shadow": executor_shadow,
                 "confidence": confidence, "support": support, "novelty": novelty,
                 "decision_state": decision_state,
                 "sensor_area": (self.runtime.registry.get(core.SENSORS[1]) or {}).get("area_id"),
@@ -79,7 +81,8 @@ class FinalRuntimeShadow:
         if allowed and prediction is not None:
             self.action = int(float(prediction) >= 0.5)
             return self.action, {
-                "abstained": False, "shadow_proxy": True, "confidence": confidence,
+                "abstained": False, "shadow_proxy": True, "executor_shadow": executor_shadow,
+                "confidence": confidence,
                 "support": support, "novelty": novelty, "decision_state": decision_state,
                 "sensor_area": (self.runtime.registry.get(core.SENSORS[1]) or {}).get("area_id"),
             }
@@ -87,6 +90,7 @@ class FinalRuntimeShadow:
         self.action = value
         return value, {
             **meta, "shadow_proxy": True, "fallback_used": True,
+            "executor_shadow": executor_shadow,
             "decision_state": decision_state, "confidence": confidence,
             "support": support, "novelty": novelty,
             "sensor_area": (self.runtime.registry.get(core.SENSORS[1]) or {}).get("area_id"),
