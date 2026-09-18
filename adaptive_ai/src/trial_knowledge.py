@@ -915,8 +915,8 @@ def install(manager):
     manager.workflow_explore = workflow_explore
     manager._start_build = start_build
     manager._trial_knowledge_installed = True
-    manager.trial_knowledge_contract = "trial_record_v1_explicit_child_training_exactly_once"
+    manager.trial_knowledge_contract = "trial_record_v2_parent_snapshot_plus_complete_compatible_trial_journal"
     manager.trial_hypothesis_catalog = sorted(SAFE_HYPOTHESES)
     manager.trial_off_policy_contract = "refuse_without_positive_logged_propensity_coverage"
-    manager.trial_rollback_contract = "exact_parent_snapshot_plus_trial_updates_child_only"
+    manager.trial_rollback_contract = "exact_parent_snapshot_plus_replayable_trial_journal_child_only"
     return manager
