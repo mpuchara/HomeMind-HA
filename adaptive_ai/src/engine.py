@@ -17,6 +17,7 @@ from executor import Executor
 from intent import ActionIntent
 from experiments import Experiments
 from telemetry import TELEMETRY, HEAVY_JOBS
+from fast_runtime import stabilize_fast_light_power_decision
 from training_budget import TRAINING_BUDGET
 
 class HAEventStream(threading.Thread):
@@ -713,6 +714,24 @@ class Engine(threading.Thread):
                 chosen = dict(chosen, value=trial['value'], index=trial['index'])
                 support, novelty = trial['support'], trial['novelty']
                 decision_source = "experiment"
+        raw_prediction = float(chosen["value"])
+        stabilized_value, off_confirmation = stabilize_fast_light_power_decision(
+            agent, rt, current, raw_prediction, decision_source, now_ts()
+        )
+        rt["raw_policy_prediction"] = raw_prediction
+        if off_confirmation:
+            current_idx = min(
+                range(len(policy.actions)),
+                key=lambda i: abs(float(policy.actions[i]) - float(stabilized_value)),
+            )
+            selected_arm = next(
+                (arm for arm in arms if int(arm.get("index", -1)) == int(current_idx)),
+                None,
+            )
+            if selected_arm is not None:
+                chosen = {**chosen, **selected_arm}
+            chosen = dict(chosen, value=float(stabilized_value), index=int(current_idx))
+
         rt['teaching_id'] = teaching['id'] if teaching else None
         rt['decision_source'] = decision_source
         rt['preference_model'] = preference
@@ -806,6 +825,10 @@ class Engine(threading.Thread):
             "experiments": experiment_status,
             "baseline_prediction": rt.get('baseline_prediction'),
             "last_prediction": rt.get("last_prediction"),
+            "raw_policy_prediction": rt.get("raw_policy_prediction"),
+            "fast_off_confirmation_active": bool(rt.get("fast_off_confirmation_active")),
+            "fast_off_confirmation_elapsed": float(rt.get("fast_off_confirmation_elapsed") or 0.0),
+            "fast_off_confirmation_required": float(rt.get("fast_off_confirmation_required") or 0.0),
             "teaching_id": rt.get("teaching_id"),
             "decision_source": rt.get("decision_source") or "historical_policy_bootstrap",
             "preference_model": rt.get("preference_model"),
