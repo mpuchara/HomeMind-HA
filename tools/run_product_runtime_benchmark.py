@@ -50,8 +50,8 @@ class FinalRuntimeShadow:
         self.engine.temporal_history = feature_runtime.temporal
         self.engine.models[self.agent["id"]] = policy
 
-    def decide(self, states, tick, ts):
-        self.runtime.ingest(states, ts, registry=core.registry_for("future"))
+    def decide(self, states, tick, ts, *, scenario=None, phase="future"):
+        self.runtime.ingest(states, ts, registry=core.registry_for(phase, scenario))
         self.engine.context = self.runtime.context
         self.engine.temporal_history = self.runtime.temporal
         self.engine.state_map = dict(self.runtime.states)
@@ -65,12 +65,23 @@ class FinalRuntimeShadow:
         confidence = float(rt.get("last_confidence") or 0.0)
         support = float(rt.get("historical_support") or 0.0)
         novelty = float(rt.get("context_novelty") or 1.0)
+        manual_action = core._manual_hold_action(states, rt, ts)
+        if manual_action is not None:
+            self.action = manual_action
+            return self.action, {
+                "abstained": True, "reason": "explicit_user_manual_hold",
+                "shadow_proxy": True, "manual_override_active": True,
+                "confidence": confidence, "support": support, "novelty": novelty,
+                "decision_state": decision_state,
+                "sensor_area": (self.runtime.registry.get(core.SENSORS[1]) or {}).get("area_id"),
+            }
         allowed = decision_state == "shadow" or str(intent.get("status") or "").upper() == "SHADOW"
         if allowed and prediction is not None:
             self.action = int(float(prediction) >= 0.5)
             return self.action, {
                 "abstained": False, "shadow_proxy": True, "confidence": confidence,
                 "support": support, "novelty": novelty, "decision_state": decision_state,
+                "sensor_area": (self.runtime.registry.get(core.SENSORS[1]) or {}).get("area_id"),
             }
         value, meta = self.fallback.decide(states, tick, ts)
         self.action = value
@@ -78,6 +89,7 @@ class FinalRuntimeShadow:
             **meta, "shadow_proxy": True, "fallback_used": True,
             "decision_state": decision_state, "confidence": confidence,
             "support": support, "novelty": novelty,
+            "sensor_area": (self.runtime.registry.get(core.SENSORS[1]) or {}).get("area_id"),
         }
 
 
@@ -254,20 +266,20 @@ def run(seeds=DEFAULT_SEEDS, replicas=1):
     descriptors = [r.get("runtime_composition") or {} for r in runs]
     chains = [d.get("entrypoint_chain") for d in descriptors]
     return {
-        "benchmark": "HomeMind product runtime benchmark F24 v1",
-        "deterministic_quality_contract": 1,
+        "benchmark": "HomeMind product runtime benchmark F24 v2",
+        "deterministic_quality_contract": 2,
         "seeds": list(seeds),
         "replicas_per_scenario_per_split": replicas,
         "scenarios": list(core.SCENARIOS),
         "ticks_per_episode": core.TICKS,
         "splits": "chronological train demonstrations -> validation demonstrations -> untouched future hidden-truth evaluation",
         "ground_truth": "hidden occupancy and hidden light_need are separate from observations; future truth is evaluation-only",
-        "observation_model": "binary/numeric/tracker sensors with delay, noise, missing values; synthetic light changes measured lux",
+        "observation_model": "binary/numeric/tracker sensors with delay, noise, missing values; synthetic light changes measured lux; future sensor_moved changes the Entity Registry area mapping",
         "evidence_semantics": {
             "historical_demonstration": "teacher action used to fit policy; not physical outcome and not preference probability",
             "bandit_reward": "backend update for logged demonstrated action only; unchosen action reward remains unknown",
             "presence_model": "production ContextEngine forecast derived causally from observed sensors, never direct hidden truth",
-            "correction": "manual_change scenario changes hidden desired light state; no synthetic correction is relabeled as generic reward",
+            "correction": "manual_change includes explicit user-origin target provenance plus a hidden desired-state change; it is not relabeled as generic reward",
             "experiment": "not fabricated by this benchmark; production TrialRecord/Experiments tests remain authoritative",
             "shadow_proxy": "production_current and full_ridge_shadow are counterfactual synthetic actions; Candidate/Shadow never dispatch HA",
             "physical_outcome": "only simulated lamp/lux coupling; not evidence of real Home Assistant hardware performance",
@@ -290,6 +302,7 @@ def run(seeds=DEFAULT_SEEDS, replicas=1):
             "composition_contract_versions": [d.get("version") for d in descriptors],
             "transport": "deterministic synthetic HA observations; source/image entrypoint boot is verified separately in CI",
             "ha_service_dispatch": "forbidden/asserted in Shadow benchmark",
+            "manual_priority": "explicit user target provenance drives the production manual-hold path; benchmark effective action cannot override that hold",
             "seed_isolation": "fresh process per seed prevents module-level compatibility installers leaking between synthetic homes",
         },
         "host_cost_notice": "wall-clock timings are host-specific and are not Raspberry Pi measurements",
