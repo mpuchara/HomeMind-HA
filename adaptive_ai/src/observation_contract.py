@@ -31,6 +31,12 @@ from training_budget import TRAINING_BUDGET
 SCHEMA_VERSION = 12
 POLICY_VERSION = 11
 CONTRACT_VERSION = 1
+# Feature semantics are versioned per persisted schema. Contract 1 is the exact v12
+# representation already stored in released models. Fresh/rebuilt models use contract 2,
+# which removes fast-light photometric own-action leakage without reinterpreting old
+# vectors or forcing a global model migration.
+LEGACY_FEATURE_CONTRACT_VERSION = 1
+FEATURE_CONTRACT_VERSION = 2
 HOME_FEATURE_NAMES = tuple(LEGACY_HOME_FEATURE_NAMES) + ("known",)
 HOME_TAIL = len(HOME_FEATURE_NAMES)
 
@@ -302,14 +308,20 @@ def _source_quality(state, obs, fast_profile):
 class FeatureSchemaV12:
     VERSION = SCHEMA_VERSION
 
-    def __init__(self, dims, entities):
+    def __init__(self, dims, entities, feature_contract_version=FEATURE_CONTRACT_VERSION):
         self.dims = int(dims)
+        self.feature_contract_version = int(feature_contract_version)
+        if self.feature_contract_version not in (
+            LEGACY_FEATURE_CONTRACT_VERSION, FEATURE_CONTRACT_VERSION
+        ):
+            raise ValueError("unsupported feature contract version")
         max_entities = max(1, (self.dims - 5 - HOME_TAIL) // ENTITY_WIDTH)
         self.entities = list(entities)[:max_entities]
 
     def export(self):
         return {"version": self.VERSION, "dims": self.dims, "entities": list(self.entities),
-                "entity_features": list(ENTITY_FEATURES), "home_features": list(HOME_FEATURE_NAMES)}
+                "entity_features": list(ENTITY_FEATURES), "home_features": list(HOME_FEATURE_NAMES),
+                "feature_contract_version": self.feature_contract_version}
 
     @classmethod
     def from_export(cls, raw, dims):
@@ -320,7 +332,17 @@ class FeatureSchemaV12:
             return None
         if list(raw.get("home_features") or []) != list(HOME_FEATURE_NAMES):
             return None
-        return cls(dims, raw.get("entities") or [])
+        # Released v12 schemas predate this field. They stay contract 1 forever unless a
+        # new model generation is explicitly rebuilt; saving/loading them never changes
+        # the meaning of their existing weight columns.
+        feature_contract = int(raw.get(
+            "feature_contract_version", LEGACY_FEATURE_CONTRACT_VERSION
+        ))
+        if feature_contract not in (
+            LEGACY_FEATURE_CONTRACT_VERSION, FEATURE_CONTRACT_VERSION
+        ):
+            return None
+        return cls(dims, raw.get("entities") or [], feature_contract_version=feature_contract)
 
     def labels(self):
         labels = {0: ["bias"], 1: ["time:hour_sin"], 2: ["time:hour_cos"],
@@ -360,6 +382,132 @@ def _lag_state(entity_id, current, temporal, query_ts, at_ts):
     return None, None
 
 
+def _is_illuminance_state(state):
+    attrs = _attrs(state)
+    unit = _normalized_unit(state)
+    dc = str(attrs.get("device_class") or "").strip().lower()
+    eid = str((state or {}).get("entity_id") or "").lower()
+    return unit in ("lx", "lux") or dc == "illuminance" or "illuminance" in eid or "lux" in eid
+
+
+def _target_power_at(agent, state_map, temporal, query_ts, knowledge_ts):
+    if not agent:
+        return None
+    target = str(agent.get("target_entity") or "")
+    if not target:
+        return None
+    _, target_state = _sample_before(temporal, target, query_ts, knowledge_ts)
+    if target_state is None and abs(float(query_ts) - float(knowledge_ts)) <= 1e-9:
+        target_state = (state_map or {}).get(target)
+    try:
+        value = context_module.target_value(target_state, "power")
+    except Exception:
+        return None
+    if value is None or not math.isfinite(float(value)):
+        return None
+    return 1.0 if float(value) >= .5 else 0.0
+
+
+def _current_on_run_start(agent, temporal, query_ts, knowledge_ts):
+    """First ON sample of the current causal ON run, or None when it cannot be proven."""
+    target = str((agent or {}).get("target_entity") or "")
+    rows = []
+    for ts, state in _samples(temporal, target):
+        ts = float(ts)
+        if not _eligible_sample(state, ts, query_ts, knowledge_ts):
+            continue
+        try:
+            value = context_module.target_value(state, "power")
+        except Exception:
+            value = None
+        if value is None:
+            continue
+        rows.append((ts, 1.0 if float(value) >= .5 else 0.0))
+    if not rows or rows[-1][1] < .5:
+        return None
+    start = rows[-1][0]
+    saw_off = False
+    for ts, value in reversed(rows[:-1]):
+        if value < .5:
+            saw_off = True
+            break
+        start = ts
+    # If history starts with the lamp already ON there is no causal pre-action baseline.
+    return start if saw_off else None
+
+
+def _last_valid_illuminance_before(entity_id, temporal, query_ts, knowledge_ts):
+    for ts, state in reversed(_samples(temporal, entity_id)):
+        ts = float(ts)
+        if not _eligible_sample(state, ts, query_ts, knowledge_ts):
+            continue
+        obs = observation_value(state)
+        if (obs.get("valid") and obs.get("canonical_unit") == "lx"
+                and obs.get("physical_value") is not None):
+            return ts, state
+    return None, None
+
+
+def _darkness_observation(state):
+    obs = observation_value(state)
+    if not (obs.get("valid") and obs.get("canonical_unit") == "lx"
+            and obs.get("physical_value") is not None):
+        return {"valid": 0.0, "value": 0.0, "physical_value": None,
+                "category": (0.0, 0.0, 0.0), "kind": "missing",
+                "canonical_unit": "lx"}
+    ambient_lux = max(0.0, float(obs["physical_value"]))
+    # Center the fast-light photometric feature around the product's dark/bright
+    # boundary. Legacy raw-lux normalization made both 12 lx and 220 lx small positive
+    # numbers and allowed emitted lamp light to dominate the label. This value is
+    # action-independent and deliberately signed: positive means dark, negative bright.
+    return {**obs, "value": math.tanh((80.0 - ambient_lux) / 80.0),
+            "physical_value": ambient_lux, "photometric_mode": "ambient_pre_action_v2"}
+
+
+def _feature_observation(schema, entity_id, state, agent, state_map, temporal,
+                         query_ts, knowledge_ts):
+    """Return one feature observation under the persisted model's semantic contract."""
+    legacy = observation_value(state)
+    feature_contract = int(getattr(
+        schema, "feature_contract_version", LEGACY_FEATURE_CONTRACT_VERSION
+    ))
+    fast_light = bool(
+        agent and is_fast_reactive_agent(agent)
+        and str(agent.get("target_entity") or "").split(".", 1)[0] == "light"
+        and str(agent.get("target_property") or "") == "power"
+    )
+    if feature_contract < FEATURE_CONTRACT_VERSION or not fast_light or not _is_illuminance_state(state):
+        return legacy, None
+
+    target_power = _target_power_at(agent, state_map, temporal, query_ts, knowledge_ts)
+    if target_power is None:
+        return _darkness_observation(None), {
+            "mode": "ambient_pre_action_v2", "source": "target_power_unknown"
+        }
+    if target_power < .5:
+        return _darkness_observation(state), {
+            "mode": "ambient_pre_action_v2", "source": "current_light_off"
+        }
+
+    on_start = _current_on_run_start(agent, temporal, query_ts, knowledge_ts)
+    if on_start is None:
+        return _darkness_observation(None), {
+            "mode": "ambient_pre_action_v2", "source": "unresolved_light_on"
+        }
+    _, baseline = _last_valid_illuminance_before(
+        entity_id, temporal, float(on_start) - 1e-6, knowledge_ts
+    )
+    if baseline is None:
+        return _darkness_observation(None), {
+            "mode": "ambient_pre_action_v2", "source": "pre_action_baseline_missing",
+            "on_start": float(on_start),
+        }
+    return _darkness_observation(baseline), {
+        "mode": "ambient_pre_action_v2", "source": "pre_action_baseline",
+        "on_start": float(on_start),
+    }
+
+
 def build_observation_features(schema, state_map, temporal, at_ts=None, agent=None, excluded_entities=None):
     from datetime import datetime
     at_ts = float(at_ts if at_ts is not None else now_ts())
@@ -367,6 +515,9 @@ def build_observation_features(schema, state_map, temporal, at_ts=None, agent=No
     hour = dt.hour + dt.minute / 60.0 + dt.second / 3600.0 + dt.microsecond / 3_600_000_000.0
     dow = dt.weekday()
     fast_profile = bool(agent and is_fast_reactive_agent(agent))
+    feature_contract = int(getattr(
+        schema, "feature_contract_version", LEGACY_FEATURE_CONTRACT_VERSION
+    ))
     clock_weight = clamp(float(OPTIONS.get("fast_clock_context_weight", 0.15)), 0.0, 1.0) if fast_profile else 1.0
     vec = {0: 1.0, 1: clock_weight * math.sin(2 * math.pi * hour / 24),
            2: clock_weight * math.cos(2 * math.pi * hour / 24),
@@ -391,21 +542,30 @@ def build_observation_features(schema, state_map, temporal, at_ts=None, agent=No
         if idx >= limit:
             break
         current_ts, current = (None, None) if eid in excluded else _resolve_current_state(eid, state_map, temporal, at_ts)
-        obs = observation_value(current)
+        obs, photometric = _feature_observation(
+            schema, eid, current, agent, state_map, temporal, at_ts, at_ts
+        )
         if obs["valid"]:
             usable += 1
         received = _latest_communication(temporal, eid, at_ts, current=current)
         event_ts = _sample_event_time(current, fallback=current_ts) if current is not None else None
         event_age = None if event_ts is None else max(0.0, at_ts - event_ts)
         communication_age = None if received is None else max(0.0, at_ts - received)
-        edge_ts = _last_edge_time(temporal, eid, at_ts, current) if current is not None else None
+        # Lux edges produced by the controlled lamp are downstream effects, not causal
+        # context. Contract 2 therefore neutralizes this one timing slot; contract 1
+        # retains the exact historical representation for persisted old models.
+        edge_ts = (None if photometric is not None else
+                   (_last_edge_time(temporal, eid, at_ts, current) if current is not None else None))
         edge_age = None if edge_ts is None else max(0.0, at_ts - edge_ts)
         quality, reporting_mode = _source_quality(current, obs, fast_profile)
         lag_values = []
         lag_coverage = []
         for lag in lags:
-            _, previous = _lag_state(eid, current, temporal, at_ts - lag, at_ts)
-            pobs = observation_value(previous)
+            query_ts = at_ts - lag
+            _, previous = _lag_state(eid, current, temporal, query_ts, at_ts)
+            pobs, _ = _feature_observation(
+                schema, eid, previous, agent, state_map, temporal, query_ts, at_ts
+            )
             covered = bool(previous is not None and pobs["valid"])
             lag_coverage.append(covered)
             if obs["valid"] and pobs["valid"] and obs["kind"] != "category" and pobs["kind"] != "category":
@@ -439,8 +599,9 @@ def build_observation_features(schema, state_map, temporal, at_ts=None, agent=No
                             "received_time": received, "communication_age_seconds": communication_age,
                             "event_age_seconds": event_age, "time_since_edge_seconds": edge_age,
                             "quality": quality, "reporting_mode": reporting_mode,
-                            "lag_seconds": list(lags), "lag_coverage": lag_coverage}
-    return vec, labels, {"feature_contract_version": CONTRACT_VERSION,
+                            "lag_seconds": list(lags), "lag_coverage": lag_coverage,
+                            "photometric": photometric}
+    return vec, labels, {"feature_contract_version": feature_contract,
                          "schema_version": SCHEMA_VERSION,
                          "usable_entities": usable, "selected_entities": len(schema.entities),
                          "dimensions": schema.dims,
