@@ -6,6 +6,8 @@
 - Make feature screening schema-aware: only agents without a persisted model and still using wildcard inputs run the broad precursor scan.
 - Reuse the persisted schema for later training chunks and Resume. Explicit Teach/Correct feature selections also bypass the broad whole-home scan.
 - Do not even open the screening archive cursor when no agent in the batch needs feature discovery.
+- Move broad-screening duplicate suppression into a SQLite change-only stream; raw bounded rows are still retained for fast occupancy/activity driver scoring.
+- Preserve the provenance boundary in the batch path: own-command acknowledgements remain excluded before any policy update, and accepted/excluded replay provenance is journaled in bounded batches.
 - Add a cooperative checkpoint after expensive target-edge precursor fan-out so one transition cannot monopolize the training worker between archive checkpoints.
 - Preserve policy/reward math, qualification thresholds, raw history, Candidate lineage, Correct/Teach labels and the one-heavy-job safety boundary.
 
