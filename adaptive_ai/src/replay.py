@@ -156,11 +156,24 @@ class SQLiteTemporalTracker:
 
     @staticmethod
     def _row_order(row):
-        return (
-            float(row.get("ts") or 0.0),
-            float(row.get("_feature_received_time") or 0.0),
-            str(row.get("id") or ""),
-        )
+        # entity_history ordering is (ts,id) with an integer primary key. Keep that exact
+        # tie-breaker in the base tracker; observation-contract v12 overrides this with
+        # its historical string-id merge ordering for archive + fast-journal rows.
+        raw_id = row.get("id")
+        try:
+            return (
+                float(row.get("ts") or 0.0),
+                float(row.get("_feature_received_time") or 0.0),
+                0,
+                int(raw_id),
+            )
+        except (TypeError, ValueError):
+            return (
+                float(row.get("ts") or 0.0),
+                float(row.get("_feature_received_time") or 0.0),
+                1,
+                str(raw_id or ""),
+            )
 
     def _fetch_rows(self, sql, params):
         rows = [dict(row) for row in self.conn.execute(sql, params).fetchall()]
