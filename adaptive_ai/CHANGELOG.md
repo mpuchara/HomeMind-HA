@@ -1,3 +1,12 @@
+# 0.14.26 — 2026-09-18
+
+- Fix the post-upgrade cold-start window where the HTTP API exposed a half-built Engine before runtime composition and realtime inference had actually started. Status remains available, but agent/live endpoints now stay in explicit startup state until the runtime is ready.
+- Avoid creating a redundant `entity_history(entity_id,ts,id)` F22 index during runtime composition. The existing `entity_history(entity_id,ts)` secondary index already carries the INTEGER PRIMARY KEY/rowid tie-breaker; rebuilding a second index over hundreds of thousands of rows could consume minutes of CPU/I/O on Raspberry Pi before Shadow predictions appeared.
+- Reduce incremental replay SQL batches from 150 to 32 entities so one SQLite statement cannot monopolize the process for long stretches even when total query count is already low.
+- Remove redundant outer SQLite sorting from bounded UNION replay queries; the causal merge already performs the authoritative Python ordering.
+- Lower the shipped explicit-training target from 25% to 20% cooperative duty cycle and the maximum continuous work slice from 75 ms to 50 ms. Values equal to the previous shipped defaults migrate automatically; other explicit user tuning remains unchanged.
+- Preserve model, reward, qualification, Candidate, Correct/Teach, provenance, rollback and physical-control semantics. No retraining or history deletion is required.
+
 # 0.14.25 — 2026-09-18
 
 - Replace repeated per-entity temporal as-of reconstruction with bounded incremental replay cursors for selected policy inputs.

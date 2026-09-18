@@ -255,9 +255,14 @@ class Handler(BaseHTTPRequestHandler):
         return False
 
     def require_runtime(self):
-        if runtime_available():
+        startup = startup_snapshot()
+        # ENGINE exists before prepare_engine_extensions() completes. Internal installers
+        # deliberately use runtime_available() during that construction window, but HTTP
+        # clients must not see the half-built runtime: there is no engine loop/inference
+        # yet, so Shadow cards would misleadingly show Desired=— for minutes on a slow Pi.
+        if runtime_available() and startup.get("ready"):
             return True
-        self.send_json(503, {"error": "runtime_starting", "startup": startup_snapshot()})
+        self.send_json(503, {"error": "runtime_starting", "startup": startup})
         return False
 
     def status_payload(self):
