@@ -659,7 +659,7 @@ def install_policy_candidates(service):
                     == int((original_state(agent_id) or {}).get("schema_revision") or 0)
                 and int(model_version.get("policy_version") or 0) == int(getattr(candidate, "VERSION", 0) or 0)
                 and int(model_version.get("feature_schema_version") or 0)
-                    == int(getattr(candidate.schema, "VERSION", 0) or 0)
+                    == int(getattr(getattr(candidate, "schema", None), "VERSION", 0) or 0)
             )
             if (candidate is None
                     or list(candidate.schema.entities) != list(train.get("candidate_schema") or [])
