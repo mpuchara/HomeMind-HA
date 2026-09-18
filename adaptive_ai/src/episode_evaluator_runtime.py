@@ -140,6 +140,34 @@ def _experiment_episode(engine, evaluator, aid, trial, reason):
     return result
 
 
+def resolve_experiment_outcome(engine, evaluator, aid, trial, reward, reason):
+    """Resolve one physical/reference trial once and reuse it through wrapper layers."""
+    trial = trial if isinstance(trial, dict) else {}
+    cached = trial.get('_episode_resolution') if isinstance(trial.get('_episode_resolution'), dict) else None
+    if cached and str(cached.get('trial_id') or '') == str(trial.get('trial_id') or ''):
+        return cached.get('episode'), cached.get('reward'), str(cached.get('reason') or reason)
+
+    evaluated = None
+    resolved_reward, resolved_reason = reward, str(reason)
+    if trial and str(trial.get('property')) == 'power':
+        evaluated = _experiment_episode(engine, evaluator, aid, trial, resolved_reason)
+        metrics = (evaluated.get('policies') or [{}])[0].get('metrics') or {}
+        if trial.get('kind') == 'probe' and metrics.get('false_arrival_prediction') == 1:
+            resolved_reward = engine.executor.reward_engine.evaluate(
+                anticipated=True, observation_complete=True, observation_known=True
+            ).value
+            resolved_reason = 'presence prediction not confirmed in observable episode'
+    resolution = {
+        'trial_id': trial.get('trial_id'),
+        'episode': evaluated,
+        'reward': resolved_reward,
+        'reason': resolved_reason,
+    }
+    # This is runtime-only coordination between composed wrappers. Durable state remains
+    # EpisodeEvaluator + TrialRecord; no extra learner or dispatch path is introduced.
+    trial['_episode_resolution'] = resolution
+    return evaluated, resolved_reward, resolved_reason
+
 def install_core(core, evaluator: EpisodeEvaluator):
     """Attach episode evaluation before any runtime extension workers start."""
     engine = core.ENGINE
@@ -168,16 +196,12 @@ def install_core(core, evaluator: EpisodeEvaluator):
     original_finish = experiments._finish
 
     def finish(aid, reward, reason):
-        trial = (experiments._get(aid).get("active") or {}).copy()
+        trial = experiments._get(aid).get("active") or {}
         if trial and str(trial.get("property")) == "power":
             try:
-                evaluated = _experiment_episode(engine, evaluator, aid, trial, reason)
-                metrics = (evaluated.get("policies") or [{}])[0].get("metrics") or {}
-                if trial.get("kind") == "probe" and metrics.get("false_arrival_prediction") == 1:
-                    reward = engine.executor.reward_engine.evaluate(
-                        anticipated=True, observation_complete=True, observation_known=True
-                    ).value
-                    reason = "presence prediction not confirmed in observable episode"
+                _evaluated, reward, reason = resolve_experiment_outcome(
+                    engine, evaluator, aid, trial, reward, reason
+                )
             except Exception as exc:
                 _safe_event(core.STORE, aid, "episode_evaluator_experiment_gap",
                             "Experiment outcome could not be persisted as an episode",
