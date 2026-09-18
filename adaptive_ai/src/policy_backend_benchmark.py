@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import math
+import sys
 import time
 import uuid
 
@@ -15,7 +16,7 @@ from policy import DiagonalLinUCB
 from policy_full_ridge import FullRidgeLinUCBBackend
 
 
-BENCHMARK_VERSION = 1
+BENCHMARK_VERSION = 2
 DEMONSTRATION_SOURCES = {"manual", "explicit_correction", "synthetic_label"}
 
 
@@ -46,29 +47,92 @@ def _features(raw):
     return out
 
 
+def _feature_labels(episode):
+    out = {}
+    for key, raw in dict(episode.get("feature_labels") or {}).items():
+        try:
+            idx = int(key)
+        except (TypeError, ValueError):
+            continue
+        values = raw if isinstance(raw, (list, tuple)) else [raw]
+        out[idx] = [str(x) for x in values if x is not None]
+    return out
+
+
+_V12_ENTITY_SUFFIXES = {
+    "value", "valid", "communication_age", "event_age", "quality",
+    "trend_1", "trend_2", "trend_3", "time_since_edge",
+    "category_bit_0", "category_bit_1", "category_bit_2",
+}
+
+
+def _semantic_group(idx, labels):
+    names = labels.get(int(idx)) or []
+    if not names:
+        return ("legacy_index", int(idx))
+    name = str(names[0])
+    if name == "bias":
+        return ("bias",)
+    if name.startswith("time:"):
+        return ("time",)
+    if name.startswith("home:"):
+        return ("home",)
+    if "interaction" in name or "*" in name:
+        return ("interaction", name)
+    if ":" in name:
+        prefix, suffix = name.rsplit(":", 1)
+        if suffix in _V12_ENTITY_SUFFIXES:
+            # Observation v12 missingness is represented by sibling channels. Selecting
+            # only :value would collapse a genuine zero with unknown/unavailable again.
+            return ("entity_v12", prefix)
+    return ("semantic", name)
+
+
 def semantic_feature_indices(training_episodes, max_features=24):
-    """Choose a bounded explicit vector from training data only, without reward leakage."""
-    stats = {}
+    """Select bounded semantic groups from training only, preserving v12 missingness."""
+    stats, labels = {}, {}
     for episode in training_episodes:
+        labels.update(_feature_labels(episode))
         for idx, value in _features(episode.get("features")).items():
             row = stats.setdefault(idx, [0, 0.0, 0.0])
             row[0] += 1
             row[1] += value
             row[2] += value * value
-    scored = []
     total = max(1, len(training_episodes))
+    score_by_idx = {}
     for idx, (count, total_value, total_sq) in stats.items():
         mean = total_value / max(1, count)
         variance = max(0.0, total_sq / max(1, count) - mean * mean)
         availability = count / total
-        score = float("inf") if idx == 0 else availability * (0.05 + math.sqrt(variance))
-        scored.append((score, idx))
-    scored.sort(key=lambda row: (-row[0], row[1]))
-    selected = [idx for _, idx in scored[:max(1, int(max_features))]]
-    if 0 in stats and 0 not in selected:
-        selected[-1] = 0
-    return sorted(set(selected))
+        score_by_idx[idx] = float("inf") if idx == 0 else availability * (0.05 + math.sqrt(variance))
 
+    groups = {}
+    for idx in stats:
+        groups.setdefault(_semantic_group(idx, labels), []).append(idx)
+    ranked = sorted(
+        groups.items(),
+        key=lambda item: (-max(score_by_idx[i] for i in item[1]), str(item[0])),
+    )
+    limit = max(1, int(max_features))
+    selected = []
+    if 0 in stats:
+        selected.append(0)
+    for group, indices in ranked:
+        members = sorted(set(indices) - set(selected))
+        if not members:
+            continue
+        # Named v12 groups are atomic: do not pick :value without :valid/:quality/etc.
+        if group[0] == "entity_v12" and len(selected) + len(members) > limit:
+            continue
+        for idx in members:
+            if len(selected) >= limit:
+                break
+            selected.append(idx)
+        if len(selected) >= limit:
+            break
+    if not selected and stats:
+        selected = [min(stats)]
+    return sorted(set(selected))
 
 def split_future(episodes, train_fraction=0.60, validation_fraction=0.20):
     ordered = sorted((dict(row) for row in episodes), key=lambda row: (float(row.get("timestamp") or 0.0), str(row.get("id") or "")))
@@ -113,6 +177,7 @@ def trial_records_to_episodes(store, owner_agent_id=None):
         episodes.append({
             "id": str(row["trial_id"]), "timestamp": float(row.get("created_ts") or 0.0),
             "features": _features(context.get("policy_features")),
+            "feature_labels": dict(context.get("policy_feature_labels") or {}),
             "allowed_actions": sorted(set(allowed or [executed])),
             "executed_action": executed, "reward": float(row["reward"]),
             "logged_propensity": _finite(row.get("propensity")),
@@ -127,21 +192,37 @@ class _DiagonalBenchmarkBackend:
     name = "diagonal_linucb"
     version = 5
 
-    def __init__(self, dims, actions, alpha=0.65):
+    def __init__(self, dims, actions, alpha=0.65, feature_indices=None):
         self.actions = [float(x) for x in actions]
-        self.head = DiagonalLinUCB(int(dims), self.actions, float(alpha))
+        self.feature_indices = None if feature_indices is None else sorted(set(int(x) for x in feature_indices))
+        if self.feature_indices is None:
+            self.index_map = None
+            backend_dims = int(dims)
+        else:
+            self.index_map = {idx: slot for slot, idx in enumerate(self.feature_indices)}
+            backend_dims = max(1, len(self.feature_indices))
+        self.head = DiagonalLinUCB(backend_dims, self.actions, float(alpha))
+
+    def _project(self, features):
+        raw = _features(features)
+        if self.index_map is None:
+            return raw
+        return {self.index_map[idx]: value for idx, value in raw.items() if idx in self.index_map}
 
     def predict(self, features, allowed_indices=None):
-        return self.head.choose(_features(features), explore=False, allowed_indices=allowed_indices)
+        return self.head.choose(self._project(features), explore=False, allowed_indices=allowed_indices)
 
     def update(self, action_idx, features, reward, sample_ts=None):
-        self.head.update(int(action_idx), _features(features), float(reward), sample_ts)
+        self.head.update(int(action_idx), self._project(features), float(reward), sample_ts)
 
     def validate(self, action_idx, features, reward, sample_ts=None):
-        self.head.validate(int(action_idx), _features(features), float(reward), sample_ts)
+        self.head.validate(int(action_idx), self._project(features), float(reward), sample_ts)
 
     def serialize(self):
-        return self.head.export()
+        return {
+            "backend": self.name, "backend_version": self.version,
+            "feature_indices": self.feature_indices, "head": self.head.export(),
+        }
 
 
 class _FullRidgeBenchmarkBackend:
@@ -305,6 +386,22 @@ def persist_result(store, result, agent_id=None):
     return run_id
 
 
+def _deep_size(value, seen=None):
+    """Approximate live Python state RAM without claiming platform-independent RSS."""
+    seen = set() if seen is None else seen
+    oid = id(value)
+    if oid in seen:
+        return 0
+    seen.add(oid)
+    size = sys.getsizeof(value)
+    if isinstance(value, dict):
+        size += sum(_deep_size(k, seen) + _deep_size(v, seen) for k, v in value.items())
+    elif isinstance(value, (list, tuple, set, frozenset)):
+        size += sum(_deep_size(v, seen) for v in value)
+    return int(size)
+
+
+
 def run_benchmark(episodes, actions, *, max_features=24, alpha=0.65,
                   ridge_grid=(0.5, 1.0, 2.0), store=None, agent_id=None):
     train, validation, test = split_future(episodes)
@@ -312,77 +409,143 @@ def run_benchmark(episodes, actions, *, max_features=24, alpha=0.65,
     max_index = max([0] + [idx for row in train for idx in _features(row.get("features"))])
     dims = max(1, max_index + 1)
 
-    def new_baseline():
+    def new_production_baseline():
         return _DiagonalBenchmarkBackend(dims=dims, actions=actions, alpha=alpha)
 
-    baseline = new_baseline()
-    baseline_train_ns = 0
-    for episode in train:
-        started = time.perf_counter_ns(); _learn_episode(baseline, episode); baseline_train_ns += time.perf_counter_ns() - started
-    for episode in validation:
-        _validate_episode(baseline, episode)
-    baseline_validation = _metrics(baseline, validation)
+    def new_matched_baseline():
+        return _DiagonalBenchmarkBackend(
+            dims=len(feature_indices), actions=actions, alpha=alpha,
+            feature_indices=feature_indices,
+        )
+
+    def train_backend(factory):
+        backend = factory()
+        elapsed = 0
+        for episode in train:
+            started = time.perf_counter_ns()
+            _learn_episode(backend, episode)
+            elapsed += time.perf_counter_ns() - started
+        for episode in validation:
+            _validate_episode(backend, episode)
+        return backend, elapsed, _metrics(backend, validation)
+
+    production, production_train_ns, production_validation = train_backend(new_production_baseline)
+    matched, matched_train_ns, matched_validation = train_backend(new_matched_baseline)
 
     candidates = []
     for ridge in ridge_grid:
-        candidate = _FullRidgeBenchmarkBackend(actions=actions, feature_indices=feature_indices, alpha=alpha, ridge=ridge)
-        train_ns = 0
-        for episode in train:
-            started = time.perf_counter_ns(); _learn_episode(candidate, episode); train_ns += time.perf_counter_ns() - started
-        for episode in validation:
-            _validate_episode(candidate, episode)
-        metrics = _metrics(candidate, validation)
+        factory = lambda ridge=ridge: _FullRidgeBenchmarkBackend(
+            actions=actions, feature_indices=feature_indices, alpha=alpha, ridge=ridge
+        )
+        candidate, train_ns, metrics = train_backend(factory)
         candidates.append((_validation_score(metrics), float(ridge), candidate, train_ns, metrics))
     candidates.sort(key=lambda row: (-row[0], row[1]))
     _score, selected_ridge, candidate, candidate_train_ns, candidate_validation = candidates[0]
 
-    baseline_test = _metrics(baseline, test)
+    production_test = _metrics(production, test)
+    matched_test = _metrics(matched, test)
     candidate_test = _metrics(candidate, test)
 
-    def size_bytes(backend):
-        return len(json.dumps(backend.serialize(), separators=(",", ":"), allow_nan=False))
+    def state_cost(backend):
+        raw = backend.serialize()
+        return {
+            "serialized_bytes": len(json.dumps(raw, separators=(",", ":"), allow_nan=False)),
+            "python_state_bytes": _deep_size(raw),
+            "python_state_bytes_scope": "serialized_numeric_state_approximation_not_process_rss",
+        }
 
-    baseline_acc = baseline_test.get("demonstration_accuracy")
-    candidate_acc = candidate_test.get("demonstration_accuracy")
-    accuracy_gain = None if baseline_acc is None or candidate_acc is None else candidate_acc - baseline_acc
-    ips_gain = None
-    if baseline_test.get("bandit_ips_reward") is not None and candidate_test.get("bandit_ips_reward") is not None:
-        ips_gain = candidate_test["bandit_ips_reward"] - baseline_test["bandit_ips_reward"]
-    candidate_wins = bool(accuracy_gain is not None and accuracy_gain > 0.0 and
-                          candidate_test.get("bandit_supported", True) and
-                          (ips_gain is None or ips_gain >= 0.0))
+    def gain(candidate_metrics, baseline_metrics, key):
+        a, b = candidate_metrics.get(key), baseline_metrics.get(key)
+        return None if a is None or b is None else float(a) - float(b)
+
+    matched_acc_gain = gain(candidate_test, matched_test, "demonstration_accuracy")
+    production_acc_gain = gain(candidate_test, production_test, "demonstration_accuracy")
+    matched_ips_gain = gain(candidate_test, matched_test, "bandit_ips_reward")
+    production_ips_gain = gain(candidate_test, production_test, "bandit_ips_reward")
+
+    known_matched = [x for x in (matched_acc_gain, matched_ips_gain) if x is not None]
+    known_production = [x for x in (production_acc_gain, production_ips_gain) if x is not None]
+    positive_backend_gain = any(x > 0.0 for x in known_matched)
+    no_matched_regression = bool(known_matched) and all(x >= 0.0 for x in known_matched)
+    no_production_regression = (not known_production) or all(x >= 0.0 for x in known_production)
+    bandit_coverage_ok = bool(candidate_test.get("bandit_supported", True))
+    candidate_wins = bool(
+        positive_backend_gain and no_matched_regression and no_production_regression and bandit_coverage_ok
+    )
+
+    production_cost = state_cost(production)
+    matched_cost = state_cost(matched)
+    candidate_cost = state_cost(candidate)
     result = {
         "run_id": str(uuid.uuid4()), "benchmark_version": BENCHMARK_VERSION,
         "comparison": "identical_future_episodes_identical_allowed_actions",
+        "backend_effect_comparison": "full_ridge_vs_diagonal_on_identical_semantic_projection",
+        "production_reference": "current_full_vector_diagonal_linucb",
         "default_backend": "diagonal_linucb", "automatic_backend_switch": False,
         "candidate_status": "shadow_candidate_supported" if candidate_wins else "keep_diagonal_default",
         "nonlinear_backend_added": False,
-        "feature_selection": {"source": "training_only", "indices": feature_indices,
-                              "max_features": int(max_features)},
-        "hyperparameter_selection": {"source": "validation_only", "ridge": selected_ridge,
-                                     "grid": [float(x) for x in ridge_grid], "alpha": float(alpha)},
-        "splits": {"train": len(train), "validation": len(validation), "future_test": len(test),
-                   "train_end_ts": train[-1].get("timestamp"),
-                   "validation_end_ts": validation[-1].get("timestamp"),
-                   "test_start_ts": test[0].get("timestamp")},
-        "baseline": {"backend": "diagonal_linucb", "backend_version": 5,
-                     "validation": baseline_validation, "future_test": baseline_test,
-                     "train_us": baseline_train_ns / 1000.0, "serialized_bytes": size_bytes(baseline)},
-        "candidate": {"backend": FullRidgeLinUCBBackend.BACKEND,
-                      "backend_version": FullRidgeLinUCBBackend.VERSION,
-                      "validation": candidate_validation, "future_test": candidate_test,
-                      "train_us": candidate_train_ns / 1000.0, "serialized_bytes": size_bytes(candidate)},
-        "future_test_gain": {"demonstration_accuracy": accuracy_gain, "bandit_ips_reward": ips_gain},
+        "feature_selection": {
+            "source": "training_only", "indices": feature_indices,
+            "max_features": int(max_features),
+            "semantic_group_atomicity": "observation_v12_entity_groups_when_labels_available",
+            "legacy_unlabelled_records": "individual_index_fallback",
+        },
+        "hyperparameter_selection": {
+            "source": "validation_only", "ridge": selected_ridge,
+            "grid": [float(x) for x in ridge_grid], "alpha": float(alpha),
+        },
+        "splits": {
+            "train": len(train), "validation": len(validation), "future_test": len(test),
+            "train_end_ts": train[-1].get("timestamp"),
+            "validation_end_ts": validation[-1].get("timestamp"),
+            "test_start_ts": test[0].get("timestamp"),
+        },
+        "baseline": {
+            "backend": "diagonal_linucb", "role": "production_reference_full_vector",
+            "backend_version": 5, "validation": production_validation, "future_test": production_test,
+            "train_us": production_train_ns / 1000.0, **production_cost,
+        },
+        "matched_baseline": {
+            "backend": "diagonal_linucb", "role": "backend_effect_control_same_semantic_vector",
+            "backend_version": 5, "feature_indices": feature_indices,
+            "validation": matched_validation, "future_test": matched_test,
+            "train_us": matched_train_ns / 1000.0, **matched_cost,
+        },
+        "candidate": {
+            "backend": FullRidgeLinUCBBackend.BACKEND,
+            "backend_version": FullRidgeLinUCBBackend.VERSION,
+            "validation": candidate_validation, "future_test": candidate_test,
+            "train_us": candidate_train_ns / 1000.0, **candidate_cost,
+        },
+        "future_test_gain": {
+            "vs_matched_diagonal": {
+                "demonstration_accuracy": matched_acc_gain, "bandit_ips_reward": matched_ips_gain,
+            },
+            "vs_production_diagonal": {
+                "demonstration_accuracy": production_acc_gain, "bandit_ips_reward": production_ips_gain,
+            },
+        },
         "calibration_separate_from_choice": True,
         "bandit_contract": "reward_only_for_executed_action_refuse_off_policy_without_propensity_coverage",
         "automation_replay_is_policy_quality_evidence": False,
         "small_correction_curve": {
-            "baseline": _small_correction_curve(new_baseline, train, validation),
+            "production_baseline": _small_correction_curve(new_production_baseline, train, validation),
+            "matched_baseline": _small_correction_curve(new_matched_baseline, train, validation),
             "candidate": _small_correction_curve(
-                lambda: _FullRidgeBenchmarkBackend(actions=actions, feature_indices=feature_indices,
-                                                    alpha=alpha, ridge=selected_ridge), train, validation),
+                lambda: _FullRidgeBenchmarkBackend(
+                    actions=actions, feature_indices=feature_indices,
+                    alpha=alpha, ridge=selected_ridge,
+                ), train, validation,
+            ),
+        },
+        "candidate_support_rule": {
+            "positive_gain_vs_matched_representation": positive_backend_gain,
+            "no_regression_vs_matched_representation": no_matched_regression,
+            "no_regression_vs_production_reference": no_production_regression,
+            "bandit_propensity_coverage": bandit_coverage_ok,
         },
     }
     if store is not None:
         persist_result(store, result, agent_id=agent_id)
     return result
+
