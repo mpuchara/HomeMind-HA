@@ -584,9 +584,40 @@ def build_observation_features(schema, state_map, temporal, at_ts=None, agent=No
             reasons.append(f"{eid}:value_unavailable")
         if received is None:
             reasons.append(f"{eid}:communication_time_unknown")
-        values = (float(obs["value"]), float(obs["valid"]), _age_feature(communication_age),
-                  _age_feature(event_age), float(quality), float(lag_values[0]),
-                  float(lag_values[1]), float(lag_values[2]), _age_feature(edge_age),
+        fast_light_v2 = bool(
+            feature_contract >= FEATURE_CONTRACT_VERSION and fast_profile and agent
+            and str(agent.get("target_entity") or "").split(".", 1)[0] == "light"
+            and str(agent.get("target_property") or "") == "power"
+        )
+        if fast_light_v2:
+            # Contract 1 encoded nominal transport metadata as repeated positive
+            # predictors for every entity. In a diagonal per-action model those nearly
+            # constant columns accumulate a class-frequency bias (normally toward OFF).
+            # Contract 2 centers nominal health at zero; only actual degradation/missing
+            # evidence occupies these slots. Unknown transport timestamps are neutral,
+            # not equivalent to "maximally stale".
+            valid_feature = 0.0 if obs["valid"] else -1.0
+            communication_feature = (
+                0.0 if received is None else _age_feature(communication_age)
+            )
+            event_feature = 0.0 if not obs["valid"] else _age_feature(event_age)
+            if not obs["valid"]:
+                quality_feature = -1.0
+            elif received is None and reporting_mode in ("stateful_sparse", "sparse_numeric"):
+                quality_feature = 0.0
+            else:
+                quality_feature = float(quality) - 1.0
+            edge_feature = 0.0 if edge_ts is None else _age_feature(edge_age)
+        else:
+            valid_feature = float(obs["valid"])
+            communication_feature = _age_feature(communication_age)
+            event_feature = _age_feature(event_age)
+            quality_feature = float(quality)
+            edge_feature = _age_feature(edge_age)
+
+        values = (float(obs["value"]), valid_feature, communication_feature,
+                  event_feature, quality_feature, float(lag_values[0]),
+                  float(lag_values[1]), float(lag_values[2]), edge_feature,
                   float(obs["category"][0]), float(obs["category"][1]), float(obs["category"][2]))
         for value in values:
             if idx >= limit:
