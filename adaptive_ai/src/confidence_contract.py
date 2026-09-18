@@ -549,6 +549,17 @@ def _ensure_pair_revision_tracking(store):
     with store.lock, store.conn() as c:
         if not _table_exists(c, "candidate_generation_pairs"):
             return False
+        columns = {str(row["name"]) for row in c.execute(
+            "PRAGMA table_info(candidate_generation_pairs)"
+        ).fetchall()}
+        required = {
+            "parent_generation_id", "child_generation_id",
+            "calibration_eligible",
+        }
+        if not required.issubset(columns):
+            # Stage-13 pair-schema migration owns these columns. Do not make a
+            # performance accelerator mutate/reinterpret an older evidence table.
+            return False
         c.executescript(
             """
             CREATE TABLE IF NOT EXISTS confidence_pair_revisions (
@@ -697,6 +708,12 @@ def ensure_tables(store):
             );
             CREATE INDEX IF NOT EXISTS idx_confidence_epoch_child
                 ON confidence_evaluation_epochs(child_generation_id,created_ts DESC);
+
+            CREATE INDEX IF NOT EXISTS idx_confidence_pairs_final_window
+                ON candidate_generation_pairs(
+                    parent_generation_id,child_generation_id,
+                    calibration_eligible,outcome_ts
+                );
 
             CREATE TABLE IF NOT EXISTS confidence_selection_scan_cache (
                 parent_generation_id TEXT NOT NULL,
@@ -989,14 +1006,26 @@ class EvaluationEpochJournal:
             "contract_version": CONTRACT_VERSION,
         })
         with self.store.conn() as c:
-            cached = c.execute(
-                """SELECT report_json FROM confidence_final_report_cache
-                   WHERE parent_generation_id=? AND child_generation_id=?
-                     AND evaluation_revision=? AND contract_version=?
-                     AND calibration_revision=? AND params_fingerprint=?""",
-                (str(parent_gid), str(child_gid), str(epoch["model_revision"]),
-                 CONTRACT_VERSION, revision, params),
-            ).fetchone()
+            if _finite(epoch.get("final_end_ts")) is not None:
+                # A locked fixed-future test is immutable. Later independent labels are
+                # outside its declared window and must not invalidate or rescan it.
+                cached = c.execute(
+                    """SELECT report_json FROM confidence_final_report_cache
+                       WHERE parent_generation_id=? AND child_generation_id=?
+                         AND evaluation_revision=? AND contract_version=?
+                         AND params_fingerprint=?""",
+                    (str(parent_gid), str(child_gid), str(epoch["model_revision"]),
+                     CONTRACT_VERSION, params),
+                ).fetchone()
+            else:
+                cached = c.execute(
+                    """SELECT report_json FROM confidence_final_report_cache
+                       WHERE parent_generation_id=? AND child_generation_id=?
+                         AND evaluation_revision=? AND contract_version=?
+                         AND calibration_revision=? AND params_fingerprint=?""",
+                    (str(parent_gid), str(child_gid), str(epoch["model_revision"]),
+                     CONTRACT_VERSION, revision, params),
+                ).fetchone()
         diagnostics = getattr(self, "_performance_diagnostics", None)
         if cached:
             if diagnostics is not None:
