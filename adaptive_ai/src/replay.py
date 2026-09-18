@@ -4,6 +4,7 @@ import sqlite3
 from adaptive_presence import AdaptivePresenceModel
 from context import archived_state, TemporalHistory, state_scalar
 from home_state import RoomBeliefModel
+from training_budget import TRAINING_BUDGET
 
 
 class BoundedUsage:
@@ -118,10 +119,15 @@ class SQLiteTemporalTracker:
             'SELECT * FROM entity_history WHERE entity_id=? AND ts<=? ORDER BY ts DESC,id DESC LIMIT ?',
             (eid, ts, count),
         )
-        return list(reversed([dict(r) for r in cursor]))
+        rows = list(reversed([dict(r) for r in cursor]))
+        # One indexed query can be cheap or unexpectedly expensive depending on the
+        # Recorder/archive shape. Account for its actual wall time before continuing.
+        TRAINING_BUDGET.checkpoint("temporal_before_query")
+        return rows
 
     def advance(self, ts):
         ts = min(float(ts), self.end)
+        TRAINING_BUDGET.checkpoint("temporal_advance_start")
         self.state_map = {}
         self.history = TemporalHistory(maxlen=64)
         for eid in self.watched:
@@ -130,6 +136,10 @@ class SQLiteTemporalTracker:
                 state = archived_state(row)
                 self.state_map[eid] = state
                 self.history.add(eid, row['ts'], state)
+            # This is the critical 0.14.18 boundary: a single replay event may query
+            # dozens of context entities. Yield between entities instead of waiting for
+            # the outer archive-row batch to finish.
+            TRAINING_BUDGET.checkpoint("temporal_watched_entity")
         view = self.home_view
         view.reset()
         ids = self.context.relevant_entities()
@@ -147,6 +157,7 @@ class SQLiteTemporalTracker:
                 )
                 if area:
                     seeded_areas.add(area)
+            TRAINING_BUDGET.checkpoint("temporal_home_seed")
         view.home.reset_movement_state()
         for area in sorted(seeded_areas):
             view.observe_adaptive(area, ts - 30)
@@ -163,7 +174,9 @@ class SQLiteTemporalTracker:
                     learn=False, evidence=self.context.evidence_metadata(eid),
                 )
                 view.observe_adaptive(area, row['ts'])
+                TRAINING_BUDGET.checkpoint("temporal_home_event")
         self.history.home_context = view
+        TRAINING_BUDGET.checkpoint("temporal_advance_done")
 
     def _edges(self, eid, lo, hi):
         previous = self._before(eid, lo, 1)
@@ -179,6 +192,7 @@ class SQLiteTemporalTracker:
                 elif cur < -.25 and prev >= -.25:
                     yield row['ts'], False
             prev = cur
+            TRAINING_BUDGET.checkpoint("temporal_edge_scan")
 
     def directional_transition_before(self, eid, at_ts, positive, window):
         latest = None
