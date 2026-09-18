@@ -68,6 +68,29 @@ class FinalCompositionManualHoldTests(unittest.TestCase):
                 runtime.policy.agent = agent
                 controller = runner.FinalRuntimeShadow(engine, agent, current_policy, runtime)
 
+                hold_calls = []
+                original_set_manual_hold = engine.set_manual_hold
+
+                def traced_set_manual_hold(subject, rt, timestamp):
+                    result = original_set_manual_hold(subject, rt, timestamp)
+                    hold_calls.append({
+                        "timestamp": timestamp,
+                        "same_runtime_object": rt is engine.runtime.get(subject["id"]),
+                        "runtime_until": rt.get("manual_override_until"),
+                        "engine_runtime_until": (
+                            engine.runtime.get(subject["id"], {}).get("manual_override_until")
+                        ),
+                        "hold_source": store.meta_get(
+                            "manual_hold_source:" + subject["id"], ""
+                        ),
+                        "hold_meta": store.meta_get(
+                            "manual_hold:" + subject["id"], "0"
+                        ),
+                    })
+                    return result
+
+                engine.set_manual_hold = traced_set_manual_hold
+
                 base = 1_750_000_000.0
                 episode = 991
                 action = 0
@@ -100,8 +123,12 @@ class FinalCompositionManualHoldTests(unittest.TestCase):
                         "after_previous_target": after.get("previous_target"),
                         "after_manual_override_until": after.get("manual_override_until"),
                         "after_last_change_origin": after.get("last_change_origin"),
-                        "hold_source": store.meta_get("manual_hold_source:" + agent["id"], ""),
-                        "hold_meta": store.meta_get("manual_hold:" + agent["id"], "0"),
+                        "hold_source": store.meta_get(
+                            "manual_hold_source:" + agent["id"], ""
+                        ),
+                        "hold_meta": store.meta_get(
+                            "manual_hold:" + agent["id"], "0"
+                        ),
                     }
                     action = controller.action
 
@@ -109,7 +136,11 @@ class FinalCompositionManualHoldTests(unittest.TestCase):
                 self.assertGreater(
                     float(rt.get("manual_override_until") or 0.0),
                     base + 25,
-                    msg=f"manual hold missing; diagnostics={diagnostics[24:26] if False else {k: diagnostics[k] for k in (24, 25)}}",
+                    msg=(
+                        "manual hold missing; "
+                        f"diagnostics={{24: {diagnostics[24]}, 25: {diagnostics[25]}}}; "
+                        f"set_manual_hold_calls={hold_calls}"
+                    ),
                 )
                 self.assertEqual(
                     store.meta_get("manual_hold_source:" + agent["id"], ""),
