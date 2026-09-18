@@ -603,14 +603,56 @@ class AdaptationService:
             "latest_preference_ts": _finite(recent[-1].get("preference_latest_ts")),
         }
 
+    def _regression_anchor_label(self, episode_id):
+        """Resolve only durable independent labels; never treat automation replay as truth."""
+        with self.store.conn() as c:
+            if _table_exists(c, "manual_feedback_journal"):
+                row = c.execute(
+                    """SELECT selected_ts,correct_action,feedback_id FROM manual_feedback_journal
+                       WHERE episode_id=? AND undone_ts IS NULL AND correct_action IS NOT NULL
+                       ORDER BY created_ts DESC LIMIT 1""",
+                    (str(episode_id),),
+                ).fetchone()
+                if row:
+                    return {
+                        "anchor_ts": _finite(row["selected_ts"]),
+                        "desired_action": _finite(row["correct_action"]),
+                        "label_source": "manual_feedback:" + str(row["feedback_id"]),
+                    }
+            if _table_exists(c, "episode_evaluator_episodes"):
+                row = c.execute(
+                    "SELECT end_ts,labels_json FROM episode_evaluator_episodes WHERE episode_id=?",
+                    (str(episode_id),),
+                ).fetchone()
+                if row:
+                    labels = _json(row["labels_json"], {})
+                    light_need = str(labels.get("light_need") or "")
+                    if light_need in ("true", "false"):
+                        return {
+                            "anchor_ts": float(row["end_ts"]),
+                            "desired_action": 1.0 if light_need == "true" else 0.0,
+                            "label_source": "episode_evaluator:light_need",
+                        }
+        return {"anchor_ts": None, "desired_action": None, "label_source": None}
+
     def retain_regression_anchors(self, agent_id, episode_ids, reason="pre_drift_baseline"):
         now = time.time()
         with self.store.lock, self.store.conn() as c:
-            for episode_id in list(episode_ids or [])[:8]:
+            for episode_id in list(episode_ids or [])[:MAX_REGRESSION_ANCHORS]:
+                label = self._regression_anchor_label(episode_id)
                 c.execute(
-                    """INSERT OR IGNORE INTO adaptation_regression_anchors
-                       (agent_id,episode_id,reason,retained_ts,training_weight) VALUES(?,?,?,?,0)""",
-                    (str(agent_id), str(episode_id), str(reason), now),
+                    """INSERT INTO adaptation_regression_anchors
+                       (agent_id,episode_id,reason,retained_ts,training_weight,
+                        anchor_ts,desired_action,label_source)
+                       VALUES(?,?,?,?,0,?,?,?)
+                       ON CONFLICT(agent_id,episode_id) DO UPDATE SET
+                         anchor_ts=COALESCE(adaptation_regression_anchors.anchor_ts,excluded.anchor_ts),
+                         desired_action=COALESCE(adaptation_regression_anchors.desired_action,excluded.desired_action),
+                         label_source=COALESCE(adaptation_regression_anchors.label_source,excluded.label_source)""",
+                    (
+                        str(agent_id), str(episode_id), str(reason), now,
+                        label.get("anchor_ts"), label.get("desired_action"), label.get("label_source"),
+                    ),
                 )
 
     def regression_anchors(self, agent_id):
@@ -619,6 +661,138 @@ class AdaptationService:
                 "SELECT * FROM adaptation_regression_anchors WHERE agent_id=? ORDER BY retained_ts,episode_id",
                 (str(agent_id),),
             ).fetchall()]
+
+    @staticmethod
+    def _model_revision(model):
+        model = dict(model or {})
+        return str(model.get("model_revision") or _hash(model) if model else "missing")
+
+    def _replay_prediction(self, agent_id, timestamp):
+        agent = self.store.get_agent_config(str(agent_id))
+        if not agent or self.store.get_model(str(agent_id)) is None:
+            return {"complete": False, "reason": "model_or_agent_missing"}
+        teaching = getattr(self.engine, "teaching", None)
+        if teaching is None or not callable(getattr(teaching, "point_context", None)):
+            return {"complete": False, "reason": "historical_replay_unavailable"}
+        try:
+            policy = self.engine.policy(agent)
+            states, temporal, _ = teaching.point_context(
+                self.engine, agent, float(timestamp), policy=policy
+            )
+            features, _labels, meta = policy.features(states, temporal, at_ts=float(timestamp))
+            if not bool((meta or {}).get("reconstruction_complete", False)):
+                return {
+                    "complete": False,
+                    "reason": "historical_context_incomplete",
+                    "details": dict(meta or {}),
+                }
+            prediction = policy.predict(features)[0]["value"]
+            prediction = _finite(prediction)
+            if prediction is None:
+                return {"complete": False, "reason": "prediction_unavailable"}
+            return {"complete": True, "prediction": prediction}
+        except Exception as exc:
+            return {"complete": False, "reason": f"{type(exc).__name__}: {exc}"}
+
+    def regression_anchor_report(self, agent_id, candidate_agent_id, candidate_generation_id):
+        aid = str(agent_id)
+        candidate_id = str(candidate_agent_id or "")
+        generation_id = str(candidate_generation_id or "")
+        anchors = [
+            row for row in self.regression_anchors(aid)
+            if _finite(row.get("anchor_ts")) is not None
+            and _finite(row.get("desired_action")) is not None
+        ]
+        parent_model = self.store.get_model(aid) or {}
+        child_model = self.store.get_model(candidate_id) or {}
+        fingerprint = _hash({
+            "contract_version": CONTRACT_VERSION,
+            "confidence_contract_version": CONFIDENCE_CONTRACT_VERSION,
+            "parent_model": self._model_revision(parent_model),
+            "child_model": self._model_revision(child_model),
+            "anchors": [
+                (row["episode_id"], row.get("anchor_ts"), row.get("desired_action"), row.get("label_source"))
+                for row in anchors
+            ],
+        })
+        with self.store.conn() as c:
+            cached = c.execute(
+                """SELECT report_json FROM adaptation_regression_reports
+                   WHERE agent_id=? AND candidate_generation_id=? AND fingerprint=?""",
+                (aid, generation_id, fingerprint),
+            ).fetchone()
+        if cached:
+            return _json(cached["report_json"], {})
+
+        evaluated = []
+        for row in anchors:
+            ts = float(row["anchor_ts"])
+            desired = 1.0 if float(row["desired_action"]) >= .5 else 0.0
+            parent = self._replay_prediction(aid, ts)
+            child = self._replay_prediction(candidate_id, ts)
+            item = {
+                "episode_id": row["episode_id"],
+                "anchor_ts": ts,
+                "desired_action": desired,
+                "label_source": row.get("label_source"),
+                "parent": parent,
+                "candidate": child,
+            }
+            if parent.get("complete") and child.get("complete"):
+                p_action = 1.0 if float(parent["prediction"]) >= .5 else 0.0
+                c_action = 1.0 if float(child["prediction"]) >= .5 else 0.0
+                item["parent_correct"] = bool(p_action == desired)
+                item["candidate_correct"] = bool(c_action == desired)
+                evaluated.append(item)
+            else:
+                item["parent_correct"] = None
+                item["candidate_correct"] = None
+
+        parent_correct = sum(int(row["parent_correct"]) for row in evaluated)
+        candidate_correct = sum(int(row["candidate_correct"]) for row in evaluated)
+        child_wins = sum(
+            int(row["candidate_correct"] and not row["parent_correct"]) for row in evaluated
+        )
+        parent_wins = sum(
+            int(row["parent_correct"] and not row["candidate_correct"]) for row in evaluated
+        )
+        applicable = len(evaluated) >= MIN_REGRESSION_ANCHORS
+        passed = bool(applicable and (parent_wins - child_wins) <= MAX_ANCHOR_NET_LOSSES)
+        report = {
+            "contract_version": CONTRACT_VERSION,
+            "evidence_semantics": "offline_regression_replay_only_not_stage13_future_calibration",
+            "training_weight": 0.0,
+            "retained_anchors": len(anchors),
+            "evaluated_anchors": len(evaluated),
+            "minimum_evaluable_anchors": MIN_REGRESSION_ANCHORS,
+            "gate_applicable": applicable,
+            "passed": passed if applicable else None,
+            "parent_correct": parent_correct,
+            "candidate_correct": candidate_correct,
+            "parent_wins": parent_wins,
+            "candidate_wins": child_wins,
+            "max_net_losses": MAX_ANCHOR_NET_LOSSES,
+            "rows": evaluated,
+            "recommendation": (
+                "pass_regression_anchor_replay"
+                if passed else
+                "fail_regression_anchor_replay"
+                if applicable else
+                "insufficient_replayable_anchors_stage13_still_required"
+            ),
+        }
+        with self.store.lock, self.store.conn() as c:
+            c.execute(
+                """INSERT INTO adaptation_regression_reports
+                   (agent_id,candidate_generation_id,fingerprint,report_json,created_ts)
+                   VALUES(?,?,?,?,?)
+                   ON CONFLICT(agent_id,candidate_generation_id) DO UPDATE SET
+                     fingerprint=excluded.fingerprint,report_json=excluded.report_json,
+                     created_ts=excluded.created_ts""",
+                (aid, generation_id, fingerprint,
+                 json.dumps(report, separators=(",", ":"), default=str), time.time()),
+            )
+        return report
 
     def detect(self, agent_id):
         aid = str(agent_id)
