@@ -145,7 +145,7 @@
   "history_cost_candidate_summary": "durable incremental cursor; raw Candidate pairs retained",
   "history_cost_fast_metrics": "bounded pair batches + batched decision history; warm status consumes only rows after cursor",
   "history_cost_confidence_selection": "durable edge revision cache; unchanged insufficient selection does not rescan Candidate pairs",
-  "history_cost_confidence_final": "calibration-only future query + durable revision cache; locked fixed holdout is immutable and later history does not rescan it",
+  "history_cost_confidence_final": "calibration-only fixed-future query + durable revision cache; ordinary screening history never invalidates it, while new independent evidence triggers only a bounded fixed-window recomputation",
   "history_cost_probability_calibration": "durable per-scope revision cache; unchanged reports do not rescan probability episodes",
   "history_cost_teach_scoring": "batched as-of lookup, <=24 sensors x <=256 active labels per batch",
   "history_cost_regression_anchors": "latest 64 active references; older rows retained for audit with zero training weight",
