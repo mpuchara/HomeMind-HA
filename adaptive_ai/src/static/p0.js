@@ -31,7 +31,7 @@
     startup(status);
     const control=lastAgents.filter(a=>a.mode==='control').length, shadow=lastAgents.filter(a=>a.mode==='shadow').length;
     const latency=status.telemetry?.metrics?.event_to_intent||{};
-    const p95=latency.recent_p95_ms??latency.p95_ms;
+    const p95=latency.recent_p95_ms;
     $('#overview').innerHTML=`<div class="metric"><b>${lastAgents.length||status.agent_count||0}</b><span>agents</span></div><div class="metric"><b>${control}</b><span>Control · ${shadow} Shadow</span></div><div class="metric"><b>${status.state_count||0}</b><span>HA entities</span></div><div class="metric"><b>${p95==null?'—':ms(p95)}</b><span>event → intent p95</span></div>`;
     const c=$('#connection'), s=status.startup||{}, rt=status.realtime||{};
     if (!s.ready) { c.textContent=s.error?'Startup error':`Starting · ${s.step||0}/${s.steps||7}`; c.className='pill'; return; }
