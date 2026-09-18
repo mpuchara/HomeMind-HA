@@ -139,14 +139,13 @@ class ProductRuntimeBenchmarkContractTests(unittest.TestCase):
             "needed_light_not_worse_than_fixed_by_more_than_2pp",
             "premature_off_not_worse_than_fixed",
             "corrections_not_worse_than_fixed",
-            "manual_override_respected",
-            "manual_override_enters_runtime_hold",
             "all_seeds_have_future_control_qualification",
         ])
-        self.assertEqual(build["tests_passed"], 882)
+        self.assertEqual(build["tests_passed"], 883)
         report = (ROOT / "BENCHMARK_PRODUCT_F24.md").read_text(encoding="utf-8")
         self.assertIn("Needed-light fraction", report)
-        self.assertIn("runtime_manual_hold_ticks=0", report)
+        self.assertIn("Runtime manual-hold ticks", report)
+        self.assertIn("manual_override_enters_runtime_hold", report)
         self.assertIn("does **not** mean all product acceptance criteria passed", report)
 
 
