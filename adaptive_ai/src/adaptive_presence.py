@@ -175,8 +175,10 @@ class AdaptivePresenceModel:
         coverage = min(1.0, labels / 30.0)
         return 0.50 + 0.50 * reliability * coverage
 
-    def _select_raw_source(self, raw_sources):
-        rows = []
+    def _select_raw_source(self, raw_sources, prior_source_ids=None, prior_device_ids=None):
+        rows, excluded = [], []
+        prior_sources = {str(x) for x in (prior_source_ids or []) if x}
+        prior_devices = {str(x) for x in (prior_device_ids or []) if x}
         for raw in raw_sources or []:
             raw = dict(raw or {})
             value = _finite(raw.get('value'))
@@ -187,7 +189,11 @@ class AdaptivePresenceModel:
             if not raw.get('available', True):
                 continue
             source_id = str(raw.get('entity_id') or '')
+            device_id = str(raw.get('device_id') or '')
             if not source_id:
+                continue
+            if source_id in prior_sources or (device_id and device_id in prior_devices):
+                excluded.append({**raw, 'exclusion_reason': 'overlaps_arrival_prior'})
                 continue
             summary = self.calibration_summary(source_id)
             rows.append((
@@ -195,25 +201,34 @@ class AdaptivePresenceModel:
                 {**raw, 'value': _clamp(value), 'quality': _clamp(quality)},
             ))
         if not rows:
-            return None, []
-        # One raw channel is authoritative for MVP.  Multiplying sibling radar-energy
-        # channels would falsely treat correlated evidence as independent.
+            return None, [], excluded
         rows.sort(key=lambda item: (-item[0], -item[1], item[2]))
-        return rows[0][3], [item[3] for item in rows[1:]]
+        return rows[0][3], [item[3] for item in rows[1:]], excluded
 
-    def capability(self, area, sources):
-        raw, binary = [], []
+    def capability(self, area, sources, prior_source_ids=None, prior_device_ids=None):
+        raw, binary, excluded_raw = [], [], []
+        prior_sources = {str(x) for x in (prior_source_ids or []) if x}
+        prior_devices = {str(x) for x in (prior_device_ids or []) if x}
         for row in sources or []:
             row = dict(row or {})
             if not row.get('available', True):
                 continue
             role = str(row.get('role') or '')
             if role in RAW_ROLES:
-                raw.append(str(row.get('entity_id')))
+                source_id = str(row.get('entity_id') or '')
+                device_id = str(row.get('device_id') or '')
+                if source_id in prior_sources or (device_id and device_id in prior_devices):
+                    excluded_raw.append(source_id)
+                else:
+                    raw.append(source_id)
             elif role in DIRECT_BINARY_ROLES:
                 binary.append(str(row.get('entity_id')))
         raw = sorted(x for x in raw if x and x != 'None')
         binary = sorted(x for x in binary if x and x != 'None')
+        excluded_raw = sorted(x for x in excluded_raw if x and x != 'None')
+        reason = ('independent_local_raw_signal_available' if raw else
+                  'raw_signal_not_independent_of_arrival_prior' if excluded_raw else
+                  'no_local_raw_signal')
         return {
             'version': self.VERSION,
             'area_id': area,
@@ -222,8 +237,9 @@ class AdaptivePresenceModel:
             'arrival_anticipation_available': True,
             'local_threshold_distance_available': bool(raw),
             'raw_sources': raw,
+            'excluded_raw_sources': excluded_raw,
             'binary_sources': binary,
-            'reason': 'independent_local_raw_signal_available' if raw else 'no_local_raw_signal',
+            'reason': reason,
             'binary_only_limitation': None if raw else (
                 'Binary presence has no distance-to-threshold information; use arrival anticipation from other observations.'
             ),
