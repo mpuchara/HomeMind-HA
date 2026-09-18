@@ -571,6 +571,22 @@ def _record_features(row):
     return out
 
 
+def _record_contract_compatible(record, parent_model):
+    """Validate only versioned interpretation, never require an identical weight revision."""
+    versions = _json(record.get("model_versions_json"), {})
+    record_version = int(record.get("record_version") or versions.get("trial_record_version") or 1)
+    if record_version < 1 or record_version > TRIAL_RECORD_VERSION:
+        return False, "unsupported_trial_record_version"
+    expected_policy = int((parent_model or {}).get("version") or 0)
+    expected_schema = int(((parent_model or {}).get("schema") or {}).get("version") or 0)
+    recorded_policy = int(versions.get("policy_version") or 0)
+    recorded_schema = int(versions.get("schema_version") or 0)
+    if expected_policy and recorded_policy and recorded_policy != expected_policy:
+        return False, "policy_version_mismatch"
+    if expected_schema and recorded_schema and recorded_schema != expected_schema:
+        return False, "schema_version_mismatch"
+    return True, None
+
 def _train_child_from_trials(manager, journal, candidate_row):
     generation = lineage_row(manager.store, agent_id=candidate_row.get("candidate_id"))
     session = _session_for_child(manager.store, (generation or {}).get("generation_id"))
@@ -585,42 +601,75 @@ def _train_child_from_trials(manager, journal, candidate_row):
         raise RuntimeError("Free Explore parent or child disappeared")
 
     records = journal.records_for_session(session["session_id"])
-    already = [r for r in records if r.get("learning_applied_generation_id") == child_generation["generation_id"]]
-    pending = [r for r in records if r.get("reward") is not None and not r.get("learning_applied_generation_id")]
+    labelled = [r for r in records if r.get("reward") is not None]
+    pending = [
+        r for r in labelled
+        if r.get("learning_applied_generation_id") != child_generation["generation_id"]
+        or str(r.get("learning_status") or "") != "applied"
+    ]
     if not pending:
-        if already:
-            return True  # restart/idempotent worker retry: exact same knowledge already applied.
+        if labelled:
+            return True  # restart/idempotent retry: current child already represents all durable facts.
         return False
 
-    # A child is always rebuilt from the exact parent snapshot before applying trial facts.
+    parent_model = manager.store.get_model(parent["id"]) or {}
+    compatible = []
+    incompatible = {}
+    for record in labelled:
+        ok, why = _record_contract_compatible(record, parent_model)
+        if ok:
+            compatible.append(record)
+        else:
+            incompatible[str(record["trial_id"])] = why
+
+    # Rebuild from the immutable parent and replay the complete compatible TrialRecord
+    # journal. Applying only newly-arrived records would erase older trial influence.
     child = _copy_parent_snapshot(manager, parent["id"], child["id"])
     manager.engine.models.pop(child["id"], None)
     policy = manager.engine.policy(child)
     applied = []
     positive = negative = 0
-    for record in pending:
+    ineligible = dict(incompatible)
+    for record in compatible:
         hypothesis = _json(record.get("hypothesis_json"), {})
+        trial_id = str(record["trial_id"])
         if str(hypothesis.get("id") or "") not in SAFE_HYPOTHESES:
+            ineligible[trial_id] = "unsupported_hypothesis"
             continue
         features = _record_features(record)
         assigned = _json(record.get("assigned_action_json"), {})
         context = _json(record.get("context_json"), {})
         if not features or assigned.get("index") is None:
+            ineligible[trial_id] = "missing_policy_context_or_action"
             continue
         horizon = _finite(context.get("horizon"))
         if horizon is None or int(horizon) not in {int(x) for x in policy.horizons}:
+            ineligible[trial_id] = "horizon_contract_mismatch"
             continue
         reward = float(record["reward"])
         action_idx = int(assigned["index"])
         if action_idx < 0 or action_idx >= len(policy.actions):
+            ineligible[trial_id] = "action_set_mismatch"
             continue
-        finished = _finite(_json(record.get("episode_result_json"), {}).get("finished_at"))
+        episode = _json(record.get("episode_result_json"), {})
+        finished = _finite(episode.get("finished_at"))
         policy.update(int(horizon), action_idx, features, reward, sample_ts=finished)
-        applied.append(str(record["trial_id"]))
+        applied.append(trial_id)
         positive += int(reward > 0)
         negative += int(reward < 0)
     if not applied:
-        return False
+        with manager.store.lock, manager.store.conn() as c:
+            for trial_id, why in ineligible.items():
+                c.execute(
+                    "UPDATE experiment_trial_records SET learning_status=?,updated_ts=? WHERE trial_id=?",
+                    ("ineligible:" + str(why), time.time(), trial_id),
+                )
+        _merge_result(
+            manager.store, session["session_id"], status="blocked",
+            patch={"message": "Labelled TrialRecords are incompatible with the selected parent contract",
+                   "trial_training": {"records_applied": 0, "ineligible": ineligible}},
+        )
+        return True
 
     model = policy.serialize()
     revision = str(getattr(policy, "model_revision", "") or "")
@@ -636,17 +685,25 @@ def _train_child_from_trials(manager, journal, candidate_row):
         for trial_id in applied:
             c.execute(
                 """UPDATE experiment_trial_records SET learning_applied_generation_id=?,
-                   learning_applied_model_revision=?,learning_applied_ts=?,updated_ts=?
-                   WHERE trial_id=? AND learning_applied_generation_id IS NULL""",
+                   learning_applied_model_revision=?,learning_applied_ts=?,learning_status='applied',updated_ts=?
+                   WHERE trial_id=?""",
                 (str(child_generation["generation_id"]), revision, now, now, trial_id),
+            )
+        for trial_id, why in ineligible.items():
+            c.execute(
+                "UPDATE experiment_trial_records SET learning_status=?,updated_ts=? WHERE trial_id=?",
+                ("ineligible:" + str(why), now, trial_id),
             )
     manager.engine.models[child["id"]] = policy
 
     report = {
         "mode": "trial_record_finetune", "trial_record_version": TRIAL_RECORD_VERSION,
         "records_applied": len(applied), "positive_records": positive, "negative_records": negative,
+        "new_records_triggering_rebuild": len(pending),
+        "ineligible_records": len(ineligible), "ineligible_reasons": ineligible,
         "unlabelled_records": sum(1 for r in records if r.get("reward") is None),
         "ordinary_history_replayed": False, "base_snapshot": str(parent.get("id")),
+        "rebuild_semantics": "parent_snapshot_plus_complete_compatible_trial_journal",
         "candidate_model_revision": revision,
     }
     fresh = manager._candidate_row(parent["id"]) or candidate_row
@@ -662,7 +719,7 @@ def _train_child_from_trials(manager, journal, candidate_row):
     )
     manager.store.event(
         parent["id"], "info", "explore_trial_knowledge_applied",
-        "Free Explore labelled trials were applied exactly once to the direct child Candidate",
+        "Free Explore durable trial journal was replayed deterministically into the direct child Candidate",
         {"session_id": session["session_id"], "child_generation_id": child_generation["generation_id"],
          "trial_ids": applied, "positive": positive, "negative": negative,
          "ordinary_history_replayed": False},
