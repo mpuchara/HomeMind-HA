@@ -562,6 +562,12 @@ def _ensure_pair_revision_tracking(store):
             return False
         c.executescript(
             """
+            CREATE INDEX IF NOT EXISTS idx_confidence_pairs_final_window
+                ON candidate_generation_pairs(
+                    parent_generation_id,child_generation_id,
+                    calibration_eligible,outcome_ts
+                );
+
             CREATE TABLE IF NOT EXISTS confidence_pair_revisions (
                 parent_generation_id TEXT NOT NULL,
                 child_generation_id TEXT NOT NULL,
@@ -708,12 +714,6 @@ def ensure_tables(store):
             );
             CREATE INDEX IF NOT EXISTS idx_confidence_epoch_child
                 ON confidence_evaluation_epochs(child_generation_id,created_ts DESC);
-
-            CREATE INDEX IF NOT EXISTS idx_confidence_pairs_final_window
-                ON candidate_generation_pairs(
-                    parent_generation_id,child_generation_id,
-                    calibration_eligible,outcome_ts
-                );
 
             CREATE TABLE IF NOT EXISTS confidence_selection_scan_cache (
                 parent_generation_id TEXT NOT NULL,
