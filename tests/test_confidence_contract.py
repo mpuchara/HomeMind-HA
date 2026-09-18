@@ -2,6 +2,7 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 
 from support import ROOT
 from storage import Store
@@ -18,6 +19,7 @@ from confidence_contract import (
     paired_future_quality_report,
     probability_calibration,
     record_independent_candidate_label,
+    _decorate_summary,
 )
 
 
@@ -308,6 +310,124 @@ class IndependentCandidateLabelTests(unittest.TestCase):
             prediction_event_id='event-1', desired_action=0,
             source_kind='episode_evaluator_independent', source_id='episode-light-2',
         ))
+
+
+class PromotionGateIntegrationTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory(prefix='confidence-gate-')
+        self.store = Store(Path(self.tmp.name) / 'test.db')
+        self.epochs = EvaluationEpochJournal(self.store)
+        with self.store.lock, self.store.conn() as db:
+            db.execute(
+                """CREATE TABLE agent_candidate_generations (
+                   generation_id TEXT PRIMARY KEY,
+                   agent_id TEXT,
+                   parent_generation_id TEXT,
+                   root_agent_id TEXT,
+                   model_revision TEXT
+                )"""
+            )
+            db.execute(
+                """CREATE TABLE candidate_generation_pairs (
+                   root_agent_id TEXT NOT NULL,
+                   parent_generation_id TEXT NOT NULL,
+                   child_generation_id TEXT NOT NULL,
+                   prediction_event_id TEXT NOT NULL,
+                   prediction_ts REAL NOT NULL,
+                   outcome_ts REAL NOT NULL,
+                   outcome REAL NOT NULL,
+                   parent_prediction REAL NOT NULL,
+                   child_prediction REAL NOT NULL,
+                   parent_confidence REAL,
+                   child_confidence REAL,
+                   parent_correct INTEGER NOT NULL,
+                   child_correct INTEGER NOT NULL,
+                   paired_result TEXT NOT NULL,
+                   evidence_kind TEXT NOT NULL DEFAULT 'legacy_unclassified',
+                   calibration_eligible INTEGER NOT NULL DEFAULT 0,
+                   dependency_cluster TEXT,
+                   calibration_outcome REAL,
+                   calibration_parent_correct INTEGER,
+                   calibration_child_correct INTEGER,
+                   calibration_source_id TEXT,
+                   PRIMARY KEY(parent_generation_id,child_generation_id,outcome_ts)
+                )"""
+            )
+            db.execute(
+                """INSERT INTO agent_candidate_generations
+                   (generation_id,agent_id,parent_generation_id,root_agent_id,model_revision)
+                   VALUES(?,?,?,?,?)""",
+                ('g1','child-agent','g0','room-a','rev-a'),
+            )
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def _insert_pairs(self, rows):
+        with self.store.lock, self.store.conn() as db:
+            for row in rows:
+                db.execute(
+                    """INSERT INTO candidate_generation_pairs
+                       (root_agent_id,parent_generation_id,child_generation_id,prediction_event_id,
+                        prediction_ts,outcome_ts,outcome,parent_prediction,child_prediction,
+                        parent_confidence,child_confidence,parent_correct,child_correct,paired_result,
+                        evidence_kind,calibration_eligible,dependency_cluster,calibration_outcome,
+                        calibration_parent_correct,calibration_child_correct,calibration_source_id)
+                       VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                    (
+                        row['root_agent_id'],'g0','g1',row['prediction_event_id'],
+                        row['outcome_ts']-1,row['outcome_ts'],row['outcome'],
+                        float(row['parent_correct']),float(row['child_correct']),
+                        row['parent_confidence'],row['child_confidence'],
+                        row['parent_correct'],row['child_correct'],
+                        'both_correct' if row['parent_correct'] and row['child_correct'] else
+                        'child_win' if row['child_correct'] else
+                        'parent_win' if row['parent_correct'] else 'both_wrong',
+                        row['evidence_kind'],row['calibration_eligible'],row['dependency_cluster'],
+                        row['calibration_outcome'],row['calibration_parent_correct'],
+                        row['calibration_child_correct'],row['calibration_source_id'],
+                    ),
+                )
+
+    def test_authoritative_promotion_gate_fails_complete_but_bad_holdout(self):
+        selection = [pair(i, i % 2, True, parent_correct=True) for i in range(12)]
+        self._insert_pairs(selection)
+        epoch = self.epochs.ensure(
+            'g0','g1','rev-a','diagonal_linucb:vunknown',selection,
+            selection_target=12,final_target=12,min_per_action=4,
+        )
+        self.assertIsNotNone(epoch)
+
+        future = [
+            pair(20+i, i % 2, i not in {1,4,7,10}, parent_correct=True)
+            for i in range(12)
+        ]
+        self._insert_pairs(future)
+        manager = SimpleNamespace(store=self.store)
+        summary = {
+            'promotable': True,
+            'promotion_gates': {},
+            'promotion_vetoes': [],
+            'required_future_samples': 12,
+            'required_future_samples_per_action': 4,
+            'preference_confidence': .9,
+            'comparison_metric': 'test',
+        }
+        parent = {'id':'parent-agent','target_entity':'light.room','target_property':'power'}
+        candidate = {'id':'child-agent'}
+        decorated = _decorate_summary(
+            manager, self.epochs, {'candidate_id':'child-agent'}, summary, parent, candidate
+        )
+        final = decorated['empirical_policy_quality']
+        self.assertTrue(final['sufficient_evidence'])
+        self.assertFalse(final['promotion_quality_passed'])
+        self.assertEqual(final['status'], 'complete_failed_quality')
+        self.assertFalse(decorated['promotion_gates']['independent_final_evaluation']['passed'])
+        self.assertFalse(decorated['promotable'])
+        self.assertIn(
+            'failed paired quality',
+            decorated['promotion_gates']['independent_final_evaluation']['reason'],
+        )
 
 
 class ContractParityTests(unittest.TestCase):
