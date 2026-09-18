@@ -1,4 +1,4 @@
-"""FIFO admission queue for expensive per-agent historical training jobs.
+"""Priority admission queue for expensive per-agent historical training jobs.
 
 The HistoryManager intentionally permits only one heavy replay at a time so Home
 Assistant keeps CPU/RAM priority. This queue turns that resource limit into normal
