@@ -17,6 +17,7 @@ from observation_contract import (
     POLICY_VERSION,
     build_observation_features,
     observation_value,
+    teaching_signature,
     policy_features,
     register_live_sample,
     _migrate_models,
@@ -228,6 +229,61 @@ class ObservationReplayParityTests(unittest.TestCase):
             tracker.close()
         self.assertAlmostEqual(value["physical_value"], 30.0)
 
+    def test_teach_signature_matches_live_and_replay_and_carries_versions(self):
+        live = TemporalHistory(maxlen=96)
+        current = None
+        for value, event_time, received_time in (
+            (0, 990.001, 990.011),
+            (10, 998.251, 998.261),
+            (20, 1000.251, 1000.261),
+            (30, 1001.125, 1001.135),
+        ):
+            current = self._record_both(live, value, event_time, received_time)
+
+        at = 1001.500
+
+        class Policy:
+            VERSION = POLICY_VERSION
+
+            def __init__(self, schema, agent_config):
+                self.schema = schema
+                self.agent = agent_config
+                self.dims = schema.dims
+
+            def features(self, states, temporal, at_ts=None):
+                vector, labels, meta = build_observation_features(
+                    self.schema, states, temporal, at_ts, self.agent
+                )
+                meta = dict(meta)
+                meta["home_known"] = False
+                return vector, labels, meta
+
+        policy = Policy(self.schema, self.a)
+        live_signature = teaching_signature(
+            policy, {"sensor.fast": current}, live, at
+        )
+        self.assertIsNotNone(live_signature)
+        self.assertEqual(
+            live_signature["meta:feature_schema_version"], float(SCHEMA_VERSION)
+        )
+        self.assertEqual(
+            live_signature["meta:policy_version"], float(POLICY_VERSION)
+        )
+        self.assertEqual(live_signature["meta:signature_contract"], 3.0)
+        self.assertEqual(live_signature["meta:home_known"], 0.0)
+
+        tracker = ObservationSQLiteTemporalTracker(
+            self.store, {"sensor.fast"}, self.context, 980.0, at
+        )
+        try:
+            tracker.advance(at)
+            replay_signature = teaching_signature(
+                policy, tracker.state_map, tracker.history, at
+            )
+        finally:
+            tracker.close()
+
+        self.assertEqual(replay_signature, live_signature)
     def test_buffer_is_bounded_per_entity(self):
         tiny = FeatureJournal(
             self.store, clock=lambda: 1000.0, retention_hours=24,
