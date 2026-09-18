@@ -626,11 +626,13 @@ class EvaluationEpochJournal:
             )
         return self.get(parent_gid, child_gid, evaluation_revision)
 
-    def final_report(self, epoch, pairs, *, scope_id=None):
+    def final_report(self, epoch, pairs, *, scope_id=None,
+                     max_regression=DEFAULT_FINAL_MAX_REGRESSION):
         if not epoch:
             return {
                 "status": "selection_evidence_insufficient",
                 "sufficient_evidence": False,
+                "promotion_quality_passed": False,
                 "recommendation": "abstain_selection_not_frozen",
                 "contract_version": CONTRACT_VERSION,
             }
@@ -640,21 +642,27 @@ class EvaluationEpochJournal:
             if float(row.get("outcome_ts") or 0.0) > cutoff
         ]
         end_ts = _finite(epoch.get("final_end_ts"))
-        report = action_quality_report(
+        report = paired_future_quality_report(
             rows,
             scope_id=scope_id,
             end_ts=end_ts,
             min_total=int(epoch["final_target"]),
             min_per_action=int(epoch["min_per_action"]),
+            max_regression=max_regression,
         )
+
+        # Freeze the declared test at the first point where independent evidence is
+        # sufficient, regardless of whether quality passes. A failed holdout cannot be
+        # healed by peeking at later observations.
         if end_ts is None and report["sufficient_evidence"]:
             locked_end = None
             for idx in range(1, len(rows) + 1):
-                prefix = action_quality_report(
+                prefix = paired_future_quality_report(
                     rows[:idx],
                     scope_id=scope_id,
                     min_total=int(epoch["final_target"]),
                     min_per_action=int(epoch["min_per_action"]),
+                    max_regression=max_regression,
                 )
                 if prefix["sufficient_evidence"]:
                     locked_end = float(rows[idx - 1].get("outcome_ts") or 0.0)
@@ -675,25 +683,34 @@ class EvaluationEpochJournal:
                     epoch["child_generation_id"],
                     epoch["model_revision"],
                 )
-                report = action_quality_report(
+                report = paired_future_quality_report(
                     rows,
                     scope_id=scope_id,
                     end_ts=epoch.get("final_end_ts"),
                     min_total=int(epoch["final_target"]),
                     min_per_action=int(epoch["min_per_action"]),
+                    max_regression=max_regression,
                 )
+
+        complete = bool(report.get("sufficient_evidence"))
+        passed = bool(report.get("promotion_quality_passed"))
         report.update({
-            "status": "complete" if report.get("sufficient_evidence") else "collecting_fixed_future_test",
+            "status": (
+                "complete_passed" if complete and passed else
+                "complete_failed_quality" if complete else
+                "collecting_fixed_future_test"
+            ),
             "contract_version": CONTRACT_VERSION,
             "selection_cutoff_ts": cutoff,
             "final_target": int(epoch["final_target"]),
             "min_per_action": int(epoch["min_per_action"]),
+            "max_allowed_regression": float(max_regression),
             "final_end_ts": epoch.get("final_end_ts"),
             "backend_key": epoch.get("backend_key"),
             "model_revision": _source_model_revision(epoch.get("model_revision")),
             "evaluation_revision": epoch.get("model_revision"),
             "peek_safe": True,
-            "optional_stopping_protection": "fixed_target_and_locked_final_end",
+            "optional_stopping_protection": "lock_on_evidence_completion_not_on_quality_success",
         })
         return report
 
@@ -705,19 +722,24 @@ def contract_descriptor():
         "selection_min_independent_episodes": DEFAULT_SELECTION_EPISODES,
         "final_min_independent_episodes": DEFAULT_FINAL_EPISODES,
         "final_min_per_action": DEFAULT_MIN_PER_ACTION,
+        "final_max_allowed_regression": DEFAULT_FINAL_MAX_REGRESSION,
+        "final_calibration_evidence_kinds": sorted(FINAL_CALIBRATION_EVIDENCE_KINDS),
         "dependency_window_seconds": DEFAULT_DEPENDENCY_WINDOW_SECONDS,
         "probability_metrics": ["brier_score", "reliability_bins"],
         "action_metrics": [
             "episode_error_rate", "mean_binary_cost",
             "quality_lower_bound", "quality_upper_bound",
+            "paired_delta", "per_action_delta",
         ],
         "promotion_rule": (
             "selection evidence freezes first; promotion needs a later fixed future test "
-            "with separate ON/OFF evidence"
+            "from independent preference labels, separate ON/OFF effective evidence and "
+            "paired child-vs-parent non-regression"
         ),
         "legacy_confidence": "compatibility_only_decision_strength_not_probability",
         "backend_recalibration": "evaluation revision includes backend identity",
-        "abstain": "insufficient independent evidence keeps Shadow/fallback",
+        "automation_replay": "screening_only_not_final_calibration_evidence",
+        "abstain": "insufficient independent evidence or failed fixed holdout keeps Shadow/fallback",
     }
 
 
@@ -781,10 +803,20 @@ def _decorate_summary(manager, epochs, row, summary, parent, candidate):
         final_target=DEFAULT_FINAL_EPISODES,
         min_per_action=min_per_action,
     )
+    max_regression = DEFAULT_FINAL_MAX_REGRESSION
+    try:
+        from settings import OPTIONS
+        max_regression = max(
+            0.0,
+            float(OPTIONS.get("agent_candidate_max_accuracy_regression", DEFAULT_FINAL_MAX_REGRESSION)),
+        )
+    except Exception:
+        pass
     final = epochs.final_report(
         epoch,
         pairs,
         scope_id=str(generation.get("root_agent_id") or ""),
+        max_regression=max_regression,
     )
 
     legacy_preference = summary.get("preference_confidence")
@@ -815,13 +847,15 @@ def _decorate_summary(manager, epochs, row, summary, parent, candidate):
         old_pref["observed"] = observed
         gates["preference_evidence"] = old_pref
 
-    final_passed = bool(final.get("sufficient_evidence"))
+    final_passed = bool(final.get("promotion_quality_passed"))
     gates["independent_final_evaluation"] = {
         "passed": final_passed,
         "reason": (
-            "fixed future evaluation complete with separate ON/OFF evidence"
-            if final_passed
-            else "fixed future evaluation is incomplete; remain Shadow/fallback"
+            "fixed future independent preference evaluation passed paired child-vs-parent non-regression"
+            if final_passed else
+            "fixed future evidence is complete but Candidate failed paired quality/non-regression"
+            if final.get("sufficient_evidence") else
+            "fixed future independent preference evidence is incomplete; remain Shadow/fallback"
         ),
         "custom_override": "never",
         "metric_semantics": METRIC_SEMANTICS["empirical_policy_quality"],
