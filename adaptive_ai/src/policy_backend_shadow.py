@@ -13,7 +13,6 @@ import os
 import time
 
 from policy_full_ridge import FullRidgeLinUCBBackend
-from policy_backend_benchmark import semantic_feature_indices
 from settings import OPTIONS
 
 
