@@ -54,8 +54,14 @@ class CooperativeTrainingBudget:
         max_slice_seconds=0.075,
         max_sleep_seconds=2.0,
         thread_prefixes=("adaptive-ai-index-",),
+        clock=None,
+        sleeper=None,
     ):
         with self._lock:
+            if clock is not None:
+                self._clock = clock
+            if sleeper is not None:
+                self._sleep = sleeper
             self._duty_cycle = self._clamp(float(duty_cycle), 0.10, 0.70)
             self._max_slice_seconds = self._clamp(
                 float(max_slice_seconds), 0.025, 0.500
