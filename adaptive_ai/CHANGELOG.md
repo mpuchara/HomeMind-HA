@@ -1,3 +1,11 @@
+# 0.14.20 — 2026-09-18
+
+- Restore a complete cold-start lifecycle: auto-discovered agents now queue their first historical base-policy training automatically instead of remaining indefinitely in WAITING.
+- Keep the first build on the real Live/base agent. Candidate generations are not created until the parent has a persisted model.
+- Repair existing auto-created WAITING/PAUSED agents without a model on the next discovery/rescan by admitting them to the existing FIFO.
+- Preserve Raspberry Pi resource bounds: exactly one heavy training job at a time, existing training duty-cycle throttling, no bypass of benchmark/qualification or Control safety gates.
+- Update status/rescan/UI copy so automatic initial training is visible as active/queued instead of misleading users to press Train for every discovered agent.
+
 # 0.14.19 — 2026-09-18
 
 - Fix a Chromium/Ingress UI freeze during training caused by the confidence diagnostics observing the entire document subtree while also mutating that subtree.
