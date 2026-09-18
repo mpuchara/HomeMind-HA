@@ -16,8 +16,12 @@ from agent_explore import FREE_TRAIN_REASON, install as install_explore
 from agent_workflow_actions import install as install_workflow
 from context_tournament import ContextTournament
 from experiments import Experiments
+from episode_evaluator import EpisodeEvaluator
 from test_agent_explore import FakeExecutor, FakeHandler, FakeQueue, FakeRLTeaching, FakeTeaching, DummyPolicy
-from trial_knowledge import install as install_trial_knowledge
+from trial_knowledge import (
+    TRIAL_RECORD_VERSION, _decorate_trial, _train_child_from_trials,
+    install as install_trial_knowledge,
+)
 
 
 class TrialPolicy(DummyPolicy):
@@ -137,7 +141,7 @@ class TrialKnowledgeTests(unittest.TestCase):
                 "hypothesis": {"id": "earlier_on", "catalog_version": 1,
                                "information_exploration": False},
                 "policy_features": {"0": 1.0, "1": .75}, "horizon": 1.0,
-                "model_versions": {"trial_record_version": 1, "policy_version": 10,
+                "model_versions": {"trial_record_version": TRIAL_RECORD_VERSION, "policy_version": 10,
                                    "model_revision": "root-r1", "schema_version": 11},
                 "action_set": [
                     {"role": "reference", "index": 0, "value": 0.0, "propensity": .25},
@@ -196,6 +200,97 @@ class TrialKnowledgeTests(unittest.TestCase):
         second = self.model(child["agent_id"])
         self.assertEqual(second, first)
         self.assertEqual(len(second.get("trial_updates") or []), 1)
+
+    def test_second_trial_rebuild_replays_first_trial_instead_of_erasing_it(self):
+        child_gid, child, first = self.finish_and_train(.6)
+        first_model = copy.deepcopy(self.model(child["agent_id"]))
+        self.assertEqual(len(first_model.get("trial_updates") or []), 1)
+
+        first_record = self.manager.trial_journal.get(first["trial_id"])
+        session = {
+            "session_id": first_record["session_id"],
+            "root_agent_id": self.root["id"],
+            "child_generation_id": child_gid,
+        }
+        second = self.trial()
+        self.manager.trial_journal.start(self.root["id"], second, session)
+        self.manager.trial_journal.finish(second, -.4, "second labelled outcome", time.time())
+
+        row = self.manager._candidate_row(self.root["id"])
+        self.assertTrue(_train_child_from_trials(self.manager, self.manager.trial_journal, row))
+        rebuilt = self.model(child["agent_id"])
+        self.assertEqual(len(rebuilt.get("trial_updates") or []), 2)
+        self.assertAlmostEqual(rebuilt["trial_reward_sum"], .2)
+        self.assertAlmostEqual(rebuilt["trial_reward_by_action"]["1"], .2)
+        self.assertEqual(
+            self.manager.trial_journal.get(first["trial_id"])["learning_applied_generation_id"],
+            child_gid,
+        )
+        self.assertEqual(
+            self.manager.trial_journal.get(second["trial_id"])["learning_applied_generation_id"],
+            child_gid,
+        )
+
+    def test_shared_episode_outcome_is_persisted_and_drives_child_reward(self):
+        class RewardEngine:
+            def evaluate(self, **kwargs):
+                return SimpleNamespace(value=-.75)
+
+        self.executor.reward_engine = RewardEngine()
+        self.engine.episode_evaluator = EpisodeEvaluator(self.store, clock=lambda: time.time())
+        started = self.start_free()
+        child = self.manager.lineage_status(started["child_generation_id"])
+        trial = self.trial()
+        self.engine.experiments._start(self.root["id"], trial)
+        # Observable no-arrival turns the optimistic incoming reward into the shared
+        # Stage-05 false-arrival penalty before Agent Explore queues child learning.
+        self.engine.experiments._finish(self.root["id"], .6, "observed without correction")
+        row = self.manager._candidate_row(self.root["id"])
+        self.assertTrue(self.manager._start_build(row))
+
+        record = self.manager.trial_journal.get(trial["trial_id"])
+        episode = json.loads(record["episode_result_json"])
+        self.assertEqual(record["episode_id"], "experiment:" + trial["trial_id"])
+        self.assertEqual(episode["episode_evaluator"]["episode_id"], record["episode_id"])
+        self.assertAlmostEqual(record["reward"], -.75)
+        self.assertEqual(record["termination_reason"],
+                         "presence prediction not confirmed in observable episode")
+        child_model = self.model(child["agent_id"])
+        self.assertAlmostEqual(child_model["trial_reward_sum"], -.75)
+
+    def test_decorated_trial_uses_versioned_schema_constant(self):
+        policy = TrialPolicy(self.store, self.root)
+        policy.schema = SimpleNamespace(VERSION=12, entities=["binary_sensor.presence"])
+        chosen = {"index": 0, "value": 0.0, "mean": .5, "support": .9, "novelty": .1}
+        arm = {"index": 1, "value": 1.0, "mean": .4, "support": .9, "novelty": .1}
+        trial = self.trial()
+        trial.pop("trial_record", None)
+        ctx = {
+            "agent": self.root, "policy": policy, "states": self.engine.state_map,
+            "registry": {}, "features": {0: 1.0}, "labels": {0: ["bias"]},
+            "chosen": chosen, "arms": [chosen, arm], "horizon": 1.0,
+            "confidence": .95, "rt": {},
+        }
+        _decorate_trial(
+            trial, ctx, self.engine.experiments, None,
+            reference_propensity=.25, probe_propensity=.75,
+        )
+        self.assertEqual(trial["trial_record"]["model_versions"]["schema_version"], 12)
+
+    def test_incompatible_schema_trial_is_audited_but_not_trained(self):
+        started = self.start_free()
+        child = self.manager.lineage_status(started["child_generation_id"])
+        trial = self.trial()
+        trial["trial_record"]["model_versions"]["schema_version"] = 999
+        self.engine.experiments._start(self.root["id"], trial)
+        self.engine.experiments._finish(self.root["id"], .6, "labelled incompatible outcome")
+        row = self.manager._candidate_row(self.root["id"])
+        before = copy.deepcopy(self.model(child["agent_id"]))
+        self.assertTrue(self.manager._start_build(row))
+        self.assertEqual(self.model(child["agent_id"]), before)
+        record = self.manager.trial_journal.get(trial["trial_id"])
+        self.assertEqual(record["learning_status"], "ineligible:schema_version_mismatch")
+        self.assertIsNone(record["learning_applied_generation_id"])
 
     def test_unlabelled_trial_does_not_update_policy(self):
         started = self.start_free()
@@ -281,7 +376,7 @@ class TrialKnowledgeTests(unittest.TestCase):
         self.manager.trial_journal.ack(trial["trial_id"], time.time(), 1.0)
         self.engine.experiments._finish(self.root["id"], .6, "confirmed")
         record = self.manager.trial_journal.get(trial["trial_id"])
-        self.assertEqual(record["record_version"], 1)
+        self.assertEqual(record["record_version"], TRIAL_RECORD_VERSION)
         self.assertEqual(json.loads(record["hypothesis_json"])["id"], "earlier_on")
         self.assertTrue(json.loads(record["context_json"])["policy_features"])
         self.assertEqual(json.loads(record["model_versions_json"])["policy_version"], 10)
