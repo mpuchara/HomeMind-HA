@@ -86,7 +86,7 @@
   "telemetry_recent_p95": "telemetry exposes recent_p95_ms over the last 60 s; overview displays only the recent window and shows no value when no recent samples exist",
   "stage5_performance_scope": "Correct read path, Room Belief replay caching, realtime priority and latency observability; learning/control semantics unchanged",
   "product_benchmark_topology_contract": "sensor_moved changes the future Entity Registry area mapping for the same entity_id and the changed mapping is passed into every evaluated runtime",
-  "product_benchmark_manual_override_contract": "manual_change emits explicit target provenance with context.user_id; the shipped Shadow comparator records the real manual-hold runtime state and the effective synthetic target cannot override an active user hold",
+  "product_benchmark_manual_override_contract": "manual_change emits explicit target provenance with context.user_id and measures whether the shipped composed runtime enters its existing manual-hold path; F24 v2 currently reports runtime_manual_hold_ticks_mean=0 and retains this as an unmet criterion",
   "product_benchmark_report_artifact": "GitHub Actions uploads product-benchmark-f24-py311/product-benchmark-f24.json for the final 3-seed composed-runtime run",
   "product_benchmark_unmet_criteria_status": "measured by GitHub Actions run 35394907836; unmet criteria are retained as findings and do not fail benchmark execution",
   "product_benchmark_summary": {
