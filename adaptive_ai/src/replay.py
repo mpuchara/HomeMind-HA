@@ -191,18 +191,36 @@ class SQLiteTemporalTracker:
         result.sort(key=self._row_order)
         return result
 
-    def _base_interval_rows(self, entity_ids, lo, hi):
+    def _base_interval_rows(self, entity_ids, lo, hi, per_entity_limit=None):
         if float(hi) <= float(lo):
             return []
         result = []
         for ids in self._chunks(entity_ids):
             marks = ",".join("?" for _ in ids)
-            sql = (
-                "SELECT id,entity_id,ts,state,attributes_json,context_user_id,source "
-                f"FROM entity_history WHERE entity_id IN ({marks}) "
-                "AND ts>? AND ts<=? ORDER BY ts,id"
-            )
-            result.extend(self._fetch_rows(sql, [*ids, float(lo), float(hi)]))
+            if per_entity_limit is None:
+                sql = (
+                    "SELECT id,entity_id,ts,state,attributes_json,context_user_id,source "
+                    f"FROM entity_history WHERE entity_id IN ({marks}) "
+                    "AND ts>? AND ts<=? ORDER BY ts,id"
+                )
+                params = [*ids, float(lo), float(hi)]
+            else:
+                limit = max(1, int(per_entity_limit))
+                sql = f"""
+                    SELECT id,entity_id,ts,state,attributes_json,context_user_id,source
+                    FROM (
+                        SELECT h.*,
+                               ROW_NUMBER() OVER (
+                                   PARTITION BY entity_id ORDER BY ts DESC,id DESC
+                               ) AS _hm_rank
+                        FROM entity_history h
+                        WHERE entity_id IN ({marks}) AND ts>? AND ts<=?
+                    )
+                    WHERE _hm_rank<=?
+                    ORDER BY ts,id
+                """
+                params = [*ids, float(lo), float(hi), limit]
+            result.extend(self._fetch_rows(sql, params))
             TRAINING_BUDGET.checkpoint("temporal_forward_query")
         result.sort(key=self._row_order)
         return result
@@ -219,13 +237,16 @@ class SQLiteTemporalTracker:
         return self._base_bulk_before(entity_ids, ts, count)
 
     def _interval_rows(self, entity_ids, lo, hi):
-        return self._base_interval_rows(entity_ids, lo, hi)
+        # Only the final bounded history per selected input can affect features at hi.
+        return self._base_interval_rows(
+            entity_ids, lo, hi, per_entity_limit=self.HISTORY_SAMPLES
+        )
 
     def _home_interval_rows(self, entity_ids, lo, hi):
         # Deliberately raw archive only. Observation-contract v12 historically augmented
         # the as-of seed with its fast journal but replayed the recent home window from
         # entity_history. Keep that semantic boundary unchanged.
-        return self._base_interval_rows(entity_ids, lo, hi)
+        return self._base_interval_rows(entity_ids, lo, hi, per_entity_limit=None)
 
     def _before(self, eid, ts, count=HISTORY_SAMPLES):
         # Compatibility surface for transition queries and Teach. The implementation is
@@ -352,7 +373,7 @@ class SQLiteTemporalTracker:
     def _edges(self, eid, lo, hi):
         previous = self._before(eid, lo, 1)
         prev = state_scalar(archived_state(previous[-1])) if previous else None
-        for row in self._base_interval_rows([eid], lo, hi):
+        for row in self._base_interval_rows([eid], lo, hi, per_entity_limit=None):
             cur = state_scalar(archived_state(row))
             if prev is not None and cur is not None:
                 if cur > .25 and prev <= .25:
