@@ -837,9 +837,9 @@ def install(manager, *, core=None):
         "fast_metrics": "bounded_pair_batches_batched_decision_history_durable_sufficient_statistics",
         "teach_scores": "batched_asof_cte_max_24_candidates_x_256_labels",
         "regression_anchors": f"{ANCHOR_ACTIVE_LIMIT}_active_references_full_audit_rows_retained",
-        "confidence_selection": "change_revision_cache_no_repeat_full_pair_scan",
+        "confidence_selection": "sqlite_streamed_exact_readiness_one_python_row_plus_revision_cache",
         "confidence_final": "calibration_only_future_rows_change_revision_cache_fixed_end_reuse",
-        "probability_calibration": "scope_revision_cache_no_repeat_history_scan",
+        "probability_calibration": "sqlite_streamed_exact_bins_plus_scope_revision_cache",
         "training_queue": "bounded_deduplicated_backpressure",
         "status": "cached_or_incremental_no_full_history_scan_after_bootstrap",
     }
