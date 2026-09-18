@@ -53,7 +53,7 @@ Before Stage 17, `RLTeaching.supervised_scores()` executed two history queries p
 
 Stage 17 uses a batched SQLite as-of query. A batch contains at most 24 candidate sensors and at most the existing 256 active Teach labels. For every `(sensor, label)` SQLite selects the indexed last `entity_history` row at or before the label timestamp. The returned working set is therefore bounded to `24 * 256 = 6144` rows per batch, independent of archive length. The calculation after state selection is unchanged: same `context_scalar`, label weights, feature evidence gate, correlation, coverage, recency and evidence factor.
 
-The existing `entity_history(entity_id, ts)` index is retained and Stage 17 adds an explicit `(entity_id, ts, id)` index for deterministic as-of tie ordering.
+The existing `entity_history(entity_id, ts)` index is retained. No redundant `(entity_id, ts, id)` index is built: `id` is the INTEGER PRIMARY KEY/rowid tie key already carried by SQLite's secondary index, and rebuilding a duplicate index on a large Pi archive would itself be an expensive upgrade operation.
 
 ### Regression anchors
 
@@ -83,7 +83,6 @@ Stage 17 adds only accelerators/metadata:
 - `candidate_fast_order_guard`
 - index `idx_candidate_pairs_edge_outcome_f22`
 - index `idx_candidate_decisions_generation_ts_f22`
-- index `idx_entity_history_entity_ts_id_f22`
 - `adaptation_regression_anchors.active`
 - `adaptation_regression_anchors.retired_ts`
 - index `idx_adaptation_anchor_active_f22`
@@ -250,12 +249,15 @@ Stage-17 contract v2 closes that gap without changing evidence semantics.
 
 ### Selection evidence
 
-Before a fixed evaluation epoch exists, Stage 13 still computes the exact existing selection report. A durable per-edge revision and `confidence_selection_scan_cache` now make the computation change-driven:
+Before a fixed evaluation epoch exists, Stage 13 needs only the exact **evidence-readiness** result from the selection report. A durable per-edge revision and `confidence_selection_scan_cache` make this change-driven:
 
 - unchanged insufficient evidence returns the cached result without reading Candidate pairs;
 - a new pair increments the edge revision through an SQLite trigger;
-- only then is the exact selection report recomputed;
+- only then SQLite evaluates the same episode deduplication, opportunity decay, dependency-cluster cap and separate ON/OFF effective-N rules with window functions/aggregation;
+- Python receives one aggregate row instead of materializing the entire Candidate edge;
 - once the epoch is frozen, selection history is never scanned again for that evaluation revision.
+
+The SQL work of a changed, not-yet-frozen edge can still scale with rows on disk, but it no longer creates an unbounded Python working set and it never repeats on unchanged UI/status polls.
 
 The first status after upgrading an old edge may perform one exact source scan at revision 0. No startup migration scans all edges.
 
@@ -277,7 +279,7 @@ The legacy prefix search for the first sufficient final window now starts at `fi
 
 ### Probability calibration
 
-`ProbabilityCalibrationJournal.report()` previously reloaded every probability episode in a scope. It now has a durable scope revision and report cache. The supported `record()` path increments the revision exactly once for a new stable episode id; duplicate records remain idempotent. Unchanged UI/report reads do not scan calibration history.
+`ProbabilityCalibrationJournal.report()` previously reloaded every probability episode in a scope. It now has a durable scope revision and report cache. On a cache miss, SQLite computes the same decay weights, dependency-cluster cap, Brier score and reliability bins and returns at most the configured bin count (10 by default) to Python. The supported `record()` path increments the revision exactly once for a new stable episode id; duplicate records remain idempotent. Unchanged UI/report reads do not scan calibration history. Raw episodes remain retained for audit.
 
 ### Additive persistence in v2
 
@@ -299,13 +301,14 @@ The pair index/triggers are installed lazily only after the Candidate pair schem
 
 New tests require that:
 
+- streamed selection readiness matches the legacy dependency-adjusted result and materializes one aggregate row in Python;
 - an unchanged insufficient selection result does not rescan Candidate pairs;
 - optimized fixed-future output exactly matches the legacy report on the same rows;
 - twenty warm final-status polls perform zero Candidate-pair full scans;
 - growth of unrelated automation-transition history does not invalidate the final report;
 - a locked final holdout ignores unrelated history growth, while a later independent label causes at most one bounded fixed-window recomputation before warm reads are cached again;
 - the durable cache survives a new journal/runtime instance;
-- unchanged probability calibration reports do not rescan source episodes.
+- streamed probability calibration is numerically equivalent to the legacy calculation, materializes at most the reliability-bin count, and unchanged reports do not rescan source episodes.
 
 The original Stage-17 equivalence tests for fast metrics, batched Teach scoring, summary cursors, active-anchor retention and queue backpressure remain unchanged.
 
@@ -316,6 +319,8 @@ The original Stage-17 equivalence tests for fast metrics, batched Teach scoring,
 - legacy rows materialized by full `_pair_rows`;
 - optimized cold query count and maximum materialized final batch;
 - twenty warm status polls and the number of Candidate-pair full scans;
-- exact same-data report equality.
+- exact/small-floating-noise same-data metric equality;
+- streamed selection effective-N/readiness;
+- probability-calibration legacy-vs-SQL aggregation plus warm-cache scans.
 
 The benchmark still reports its actual platform and only labels results as Raspberry Pi if `/proc/device-tree/model` identifies Pi hardware. Hosted CI/desktop timings are scaling evidence, not Raspberry Pi measurements.
