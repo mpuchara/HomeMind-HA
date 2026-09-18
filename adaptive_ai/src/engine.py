@@ -138,6 +138,8 @@ class Engine(threading.Thread):
         # contract; runtimes that do not install Stage 07 retain legacy behaviour exactly.
         self.preference_model = None
         self.decision_composer = None
+        # Optional Stage-12 observer. It is never consulted for live action selection.
+        self.policy_backend_shadow = None
 
     def prime_temporal_from_archive(self, start_ts, end_ts):
         # Startup must not scan/replay the archive; live states warm temporal context.
@@ -493,6 +495,14 @@ class Engine(threading.Thread):
             agent["id"], pending["action_index"], pending["action_value"], reward, reason,
             pending["features"], user_id,
         )
+        shadow = getattr(self, "policy_backend_shadow", None)
+        if shadow is not None:
+            try:
+                shadow.observe_reward(agent, pending, reward, reason)
+            except Exception as exc:
+                STORE.event(agent["id"], "warning", "policy_backend_shadow_reward_gap",
+                            "Shadow backend could not observe an executed reward",
+                            {"error": f"{type(exc).__name__}: {exc}"})
         rt["last_reward_components"] = rt.pop("reward_components_pending", {})
         rt["last_reward"] = reward
         rt["last_reward_reason"] = reason
@@ -691,6 +701,18 @@ class Engine(threading.Thread):
 
         teaching_revision = self.teaching.revision(aid)
         chosen, confidence, arms, horizon, support, novelty = policy.predict(features)
+        shadow = getattr(self, "policy_backend_shadow", None)
+        if shadow is not None:
+            try:
+                rt["policy_backend_shadow"] = shadow.observe_decision(
+                    agent, policy, features, labels, allowed_indices=list(range(len(policy.actions))),
+                    timestamp=now_ts(),
+                )
+            except Exception as exc:
+                rt["policy_backend_shadow"] = {"error": f"{type(exc).__name__}: {exc}"}
+                STORE.event(agent["id"], "warning", "policy_backend_shadow_decision_gap",
+                            "Shadow backend could not observe the live policy decision",
+                            {"error": f"{type(exc).__name__}: {exc}"})
         composer = self.decision_composer
         preference = None
         instruction = None
@@ -824,6 +846,7 @@ class Engine(threading.Thread):
             "teaching_id": rt.get("teaching_id"),
             "decision_source": rt.get("decision_source") or "historical_policy_bootstrap",
             "preference_model": rt.get("preference_model"),
+            "policy_backend_shadow": rt.get("policy_backend_shadow"),
             "instruction_scope": rt.get("instruction_scope"),
             "current_value": target_value(target_state, agent["target_property"]) if target_state else None,
             "last_prediction_label": prediction_label,
