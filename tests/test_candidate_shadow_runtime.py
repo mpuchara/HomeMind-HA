@@ -140,9 +140,14 @@ class CandidateShadowRuntimeTests(unittest.TestCase):
         self.temp.cleanup()
 
     @staticmethod
-    def _states(light="off", presence="on"):
+    def _states(light="off", presence="on", user_id=None, parent_id=None):
+        context = {}
+        if user_id is not None:
+            context["user_id"] = user_id
+        if parent_id is not None:
+            context["parent_id"] = parent_id
         return {
-            "light.shadow": {"entity_id": "light.shadow", "state": light, "attributes": {}, "context": {}},
+            "light.shadow": {"entity_id": "light.shadow", "state": light, "attributes": {}, "context": context},
             "binary_sensor.presence": {"entity_id": "binary_sensor.presence", "state": presence, "attributes": {}},
         }
 
@@ -272,7 +277,41 @@ class CandidateShadowRuntimeTests(unittest.TestCase):
         self.assertEqual(pair["parent_correct"], 0)
         self.assertEqual(pair["child_correct"], 1)
         self.assertEqual(pair["paired_result"], "child_win")
+        self.assertEqual(pair["evidence_kind"], "external_target_transition")
+        self.assertEqual(pair["calibration_eligible"], 0)
+        self.assertIsNone(pair["dependency_cluster"])
         self.assertIsNotNone(pair["child_lead_seconds"])
+
+    def test_direct_user_transition_is_independent_calibration_evidence(self):
+        _, g1 = self._g1(prediction=1.0, confidence=.94)
+        self._run_shadow(self._states(light="off"))
+        self.manager.before_live_process(
+            self.root, self._states(light="on", user_id="user-123")
+        )
+        with self.store.conn() as db:
+            row = dict(db.execute(
+                "SELECT * FROM candidate_generation_pairs ORDER BY outcome_ts DESC LIMIT 1"
+            ).fetchone())
+        self.assertEqual(row["evidence_kind"], "manual_user_target_change")
+        self.assertEqual(row["calibration_eligible"], 1)
+        self.assertIn("manual:user-123:light.shadow:", row["dependency_cluster"])
+        self.assertEqual(
+            self.manager.generation_comparison(g1["generation_id"])["pairs"], 1
+        )
+
+    def test_user_context_with_parent_is_not_independent_calibration(self):
+        self._g1(prediction=1.0, confidence=.94)
+        self._run_shadow(self._states(light="off"))
+        self.manager.before_live_process(
+            self.root,
+            self._states(light="on", user_id="user-123", parent_id="automation-parent"),
+        )
+        with self.store.conn() as db:
+            row = dict(db.execute(
+                "SELECT * FROM candidate_generation_pairs ORDER BY outcome_ts DESC LIMIT 1"
+            ).fetchone())
+        self.assertEqual(row["evidence_kind"], "external_target_transition")
+        self.assertEqual(row["calibration_eligible"], 0)
 
     def test_restart_preserves_generation_history_and_paired_comparison(self):
         _, g1 = self._g1(prediction=1.0)
