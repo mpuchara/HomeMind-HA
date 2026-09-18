@@ -779,6 +779,16 @@ class ProbabilityCalibrationJournal:
                  1 if independent else 0, now),
             )
             inserted = c.execute("SELECT changes()").fetchone()[0] > 0
+            if inserted:
+                c.execute(
+                    """INSERT INTO confidence_probability_revisions
+                       (metric_id,model_key,scope_id,revision,updated_ts)
+                       VALUES(?,?,?,?,?)
+                       ON CONFLICT(metric_id,model_key,scope_id) DO UPDATE SET
+                         revision=confidence_probability_revisions.revision+1,
+                         updated_ts=excluded.updated_ts""",
+                    (str(metric_id), str(model_key), str(scope_id), 1, now),
+                )
         return inserted
 
     def rows(self, metric_id, model_key, scope_id):
@@ -790,11 +800,51 @@ class ProbabilityCalibrationJournal:
             ).fetchall()]
 
     def report(self, metric_id, model_key, scope_id):
-        return probability_calibration(
-            self.rows(metric_id, model_key, scope_id),
-            scope_id=str(scope_id),
-            model_key=str(model_key),
+        metric_id = str(metric_id)
+        model_key = str(model_key)
+        scope_id = str(scope_id)
+        with self.store.conn() as c:
+            rev = c.execute(
+                """SELECT revision FROM confidence_probability_revisions
+                   WHERE metric_id=? AND model_key=? AND scope_id=?""",
+                (metric_id, model_key, scope_id),
+            ).fetchone()
+            revision = int(rev[0]) if rev else 0
+            cached = c.execute(
+                """SELECT report_json FROM confidence_probability_report_cache
+                   WHERE metric_id=? AND model_key=? AND scope_id=?
+                     AND contract_version=? AND revision=?""",
+                (metric_id, model_key, scope_id, CONTRACT_VERSION, revision),
+            ).fetchone()
+        diagnostics = getattr(self, "_performance_diagnostics", None)
+        if cached:
+            if diagnostics is not None:
+                diagnostics.confidence_probability_cache_hits += 1
+            return json.loads(cached[0])
+
+        rows = self.rows(metric_id, model_key, scope_id)
+        report = probability_calibration(
+            rows,
+            scope_id=scope_id,
+            model_key=model_key,
         )
+        with self.store.lock, self.store.conn() as c:
+            c.execute(
+                """INSERT INTO confidence_probability_report_cache
+                   (metric_id,model_key,scope_id,contract_version,revision,
+                    report_json,scanned_rows,updated_ts)
+                   VALUES(?,?,?,?,?,?,?,?)
+                   ON CONFLICT(metric_id,model_key,scope_id,contract_version) DO UPDATE SET
+                     revision=excluded.revision,report_json=excluded.report_json,
+                     scanned_rows=excluded.scanned_rows,updated_ts=excluded.updated_ts""",
+                (metric_id, model_key, scope_id, CONTRACT_VERSION, revision,
+                 json.dumps(report, separators=(",", ":"), sort_keys=True),
+                 len(rows), time.time()),
+            )
+        if diagnostics is not None:
+            diagnostics.confidence_probability_scans += 1
+            diagnostics.record_batch(len(rows))
+        return report
 
 
 class EvaluationEpochJournal:
