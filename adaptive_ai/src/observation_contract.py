@@ -456,11 +456,11 @@ def _darkness_observation(state):
                 "category": (0.0, 0.0, 0.0), "kind": "missing",
                 "canonical_unit": "lx"}
     ambient_lux = max(0.0, float(obs["physical_value"]))
-    # Center the fast-light photometric feature around the product's dark/bright
-    # boundary. Legacy raw-lux normalization made both 12 lx and 220 lx small positive
-    # numbers and allowed emitted lamp light to dominate the label. This value is
-    # action-independent and deliberately signed: positive means dark, negative bright.
-    return {**obs, "value": math.tanh((80.0 - ambient_lux) / 80.0),
+    # Log-scale physical illuminance without embedding a policy/benchmark darkness
+    # threshold. The important contract change is causal: emitted lamp light is removed.
+    # Log compression simply gives indoor low-light ranges useful numeric resolution.
+    normalized = clamp(math.log1p(ambient_lux) / math.log1p(1000.0), 0.0, 1.0)
+    return {**obs, "value": normalized,
             "physical_value": ambient_lux, "photometric_mode": "ambient_pre_action_v2"}
 
 
