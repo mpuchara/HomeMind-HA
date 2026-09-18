@@ -11,6 +11,7 @@ from cold_start_drift import (
     AdaptationService,
     CONTRACT_VERSION,
     POST_PROMOTION_EPISODES,
+    contract_descriptor,
     decay_contract,
     ensure_tables as ensure_adaptation_tables,
     install as install_adaptation,
@@ -386,6 +387,36 @@ class AdaptationMigrationTests(unittest.TestCase):
             self.assertIsNone(anchor['desired_action'])
         finally:
             tmp.cleanup()
+
+
+class AdaptationContractParityTests(unittest.TestCase):
+    def test_runtime_build_info_and_contract_share_stage14_v2_semantics(self):
+        contract = contract_descriptor()
+        self.assertEqual(contract['version'], CONTRACT_VERSION)
+        self.assertEqual(
+            contract['recovery_metrics'],
+            ['episodes_to_recover', 'seconds_to_recover'],
+        )
+        self.assertEqual(contract['regression_anchors']['training_weight'], 0.0)
+        self.assertTrue(contract['regression_anchors']['not_final_calibration'])
+
+        build = json.loads(
+            (ROOT / 'adaptive_ai' / 'BUILD_INFO.json').read_text(encoding='utf-8')
+        )
+        self.assertEqual(build['controlled_adaptation_contract_version'], CONTRACT_VERSION)
+        self.assertEqual(
+            build['drift_recovery_metrics'],
+            ['episodes_to_recover', 'seconds_to_recover'],
+        )
+        self.assertIn('zero-training-weight', build['drift_regression_anchors'])
+        self.assertIn('Stage-13 v2', build['drift_promotion'])
+
+        composition = (
+            ROOT / 'adaptive_ai' / 'src' / 'runtime_composition.py'
+        ).read_text(encoding='utf-8')
+        self.assertIn('"controlled_adaptation"', composition)
+        self.assertIn('zero_weight_cached_offline_replay_guard', composition)
+        self.assertIn('Stage13_v2_future_holdout_remains_authoritative', composition)
 
 
 class RecoveryTests(unittest.TestCase):
