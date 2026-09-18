@@ -1,3 +1,12 @@
+# 0.14.22 — 2026-09-18
+
+- Fix a restart regression that marked freshly trained policy-v11/schema-v12 models as NEEDS_RETRAIN before the observation contract was installed.
+- Make storage migration version-monotonic: it quarantines only truly legacy pre-v10/schema11 models and leaves exact compatibility decisions to the active observation feature contract.
+- Repair agents already affected by 0.14.21 when the persisted model is current and the historical benchmark evidence is still intact: passed benchmarks return to qualified + Shadow; non-passing completed benchmarks return to paused + Shadow.
+- Do not auto-repair genuine configuration invalidations: changing input entities or action bounds still clears benchmark evidence and remains NEEDS_RETRAIN until retrained.
+- Restore the saved training cursor/progress for repaired current-contract models; raw history, models, feedback, Candidate lineage, TrialRecords, Teach labels and rollback state are preserved.
+- No threshold change and no Control bypass; Control still requires qualified state and the existing promotion/control guards.
+
 # 0.14.21 — 2026-09-18
 
 - Complete the post-training lifecycle: every completed policy with a persisted model returns to Shadow, even when its historical benchmark is insufficient for Control.

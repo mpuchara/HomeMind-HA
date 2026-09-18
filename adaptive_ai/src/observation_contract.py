@@ -756,16 +756,68 @@ def _patch_teaching_point_context():
     teaching_module.Teaching.point_context = point_context
 
 
+def _repair_current_contract_state(store, agent):
+    """Repair only the 0.14.21 startup false-positive without reviving stale config.
+
+    The old storage bootstrap invalidated every model that wasn't exactly v10/schema11
+    before this observation contract was installed. A genuine config change uses
+    Store.set_training_state(), which clears benchmark_score/samples; therefore a
+    current-contract model with preserved recorded-behaviour benchmark evidence can be
+    distinguished from a real needs_retrain state without guessing.
+    """
+    if str(agent.get("training_state") or "") != "needs_retrain":
+        return None
+    if agent.get("benchmark_score") is None or int(agent.get("benchmark_samples") or 0) <= 0:
+        return None
+    if str(agent.get("benchmark_source") or "") != "recorded-behaviour":
+        return None
+
+    detail = dict(agent.get("benchmark_detail") or {})
+    score = float(agent.get("benchmark_score") or 0.0)
+    samples = int(agent.get("benchmark_samples") or 0)
+    threshold = float(detail.get("threshold", OPTIONS.get("candidate_benchmark_threshold", 0.78)))
+    minimum = int(detail.get("minimum_samples", OPTIONS.get("candidate_benchmark_min_samples", 12)))
+    class_coverage = bool(detail.get("class_coverage", False))
+    state = "qualified" if samples >= minimum and class_coverage and score > threshold else "paused"
+
+    with store.lock, store.conn() as c:
+        c.execute(
+            """UPDATE agents SET training_state=?, mode='shadow',
+               training_cursor_ts=COALESCE(training_window_end_ts,training_cursor_ts),
+               training_progress=CASE WHEN training_window_end_ts IS NOT NULL THEN 1.0 ELSE training_progress END,
+               training_updated_at=? WHERE id=?""",
+            (state, iso_now(), agent["id"]),
+        )
+    store.event(
+        agent["id"], "info", "current_model_state_repaired",
+        "Restored completed current-contract model after legacy startup invalidation",
+        {
+            "policy_version": POLICY_VERSION,
+            "schema_version": SCHEMA_VERSION,
+            "training_state": state,
+            "mode": "shadow",
+            "benchmark_score": score,
+            "benchmark_samples": samples,
+        },
+    )
+    return state
+
+
 def _migrate_models(core):
     store, engine = core.STORE, core.ENGINE
     marker = f"observation_feature_schema:{SCHEMA_VERSION}:policy:{POLICY_VERSION}"
     changed = []
+    repaired = []
     for agent in store.list_agent_configs():
         raw = store.get_model(agent["id"]) or {}
         if not raw:
             continue
         schema = raw.get("schema") or {}
-        if int(raw.get("version") or 0) == POLICY_VERSION and int(schema.get("version") or 0) == SCHEMA_VERSION:
+        current = int(raw.get("version") or 0) == POLICY_VERSION and int(schema.get("version") or 0) == SCHEMA_VERSION
+        if current:
+            state = _repair_current_contract_state(store, agent)
+            if state is not None:
+                repaired.append({"agent_id": agent["id"], "training_state": state})
             continue
         with store.lock, store.conn() as c:
             c.execute("""UPDATE agents SET training_state='needs_retrain',mode='paused',
@@ -774,6 +826,8 @@ def _migrate_models(core):
         changed.append(agent["id"])
     if engine is not None:
         engine.models.clear()
+        if repaired:
+            engine.wake_event.set()
     store.meta_set("observation_feature_contract", marker)
     if changed:
         store.event(None, "warning", "observation_schema_migration",
@@ -781,6 +835,11 @@ def _migrate_models(core):
                     {"agents": changed, "schema_version": SCHEMA_VERSION,
                      "policy_version": POLICY_VERSION,
                      "migration": "versioned_no_vector_reinterpretation"})
+    if repaired:
+        store.event(None, "info", "observation_schema_repair",
+                    f"Restored {len(repaired)} current-contract agent(s) incorrectly invalidated by legacy startup migration",
+                    {"agents": repaired, "schema_version": SCHEMA_VERSION,
+                     "policy_version": POLICY_VERSION})
     return changed
 
 

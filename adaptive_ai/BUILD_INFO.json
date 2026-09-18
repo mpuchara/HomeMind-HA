@@ -1,9 +1,9 @@
 {
-  "version": "0.14.21",
+  "version": "0.14.22",
   "release_date": "2026-09-18",
-  "base_version": "0.14.20",
-  "base_commit": "19cb6910ff468d068c1ffd8f3cb3b1c297fa2efe",
-  "release_status": "release-0.14.21-post-training-shadow-lifecycle",
+  "base_version": "0.14.21",
+  "base_commit": "556dccb3ad2693d7fa84f2005785565e1c64f79c",
+  "release_status": "release-0.14.22-model-contract-restart-repair",
   "tests_passed": 821,
   "profile": "rpi4-low-memory-automatic-initial-training",
   "manual_agent_training": false,
@@ -37,10 +37,10 @@
   "automation_scan": "the first background pass suppresses config scan; later automation config reads are serialized and last successful scan time is persisted",
   "release_016_guard": "installed after startup_train_guard; quiet startup/background scheduling only",
   "release_017_lifeline": "installed after release_016_guard and before core.main; read-side availability and training scheduling only, no model/label/history/generation mutation",
-  "migration": "no migration; existing agents, models, archive, feedback, Candidate lineage, TrialRecords, Teach labels and rollback state are preserved",
-  "physical_control": "unchanged; only qualified agents may request Control and only Executor dispatches Home Assistant services",
+  "migration": "additive startup repair only; models, raw archive, feedback, Candidate lineage, TrialRecords, Teach labels, settings and rollback state remain preserved",
+  "physical_control": "unchanged; repaired agents return to Shadow and Control still requires qualified state plus all existing guards",
   "pi4": "0.14.18 targets the observed ~94% CPU spike and second-open blank Ingress UI at the transition from REPLAY COMPLETE to model/benchmark finalization; on-device verification is still required",
-  "ci_status": "pending 0.14.21 validation",
+  "ci_status": "pending 0.14.22 validation",
   "training_slice_budget": "adaptive-ai-index workers call a shared CooperativeTrainingBudget; expensive temporal tracker loops yield between entities/events and finalization is no longer outside the throttle",
   "finalization_lifeline": "HEAVY_JOBS remains owned through final gc.collect(), so /api/status and /api/agents stay on lightweight lifeline reads until the worker is actually finished",
   "finalization_progress": "post-replay UI now exposes bounded stages: replay complete, policy serialization, benchmark save, qualification, checkpoint complete",
@@ -48,5 +48,9 @@
   "ui_mutation_stability": "confidence diagnostics use idempotent DOM writes and observe only direct #agents child replacement; the body-wide subtree MutationObserver self-loop from 0.14.18 is removed",
   "browser_reproduction": "source-level regression: the body-wide subtree observer could observe confidence textContent writes performed by its own callback; 0.14.19 removes that self-triggering feedback path",
   "post_training_lifecycle": "completed persisted policies enter Shadow whether or not Control qualification passed; non-qualified policies remain training_state=paused and cannot enter Control",
-  "settings_lifecycle_controls": "agent Settings exposes explicit Shadow and Pause actions; Shadow requires an existing learned model and an inactive rebuild/training state"
+  "settings_lifecycle_controls": "agent Settings exposes explicit Shadow and Pause actions; Shadow requires an existing learned model and an inactive rebuild/training state",
+  "model_contract_restart": "storage bootstrap treats v10/schema11 and newer as modern structural formats; exact current compatibility remains owned by observation_contract",
+  "model_contract_current": "policy v11 / schema v12",
+  "model_contract_repair": "current v11/schema12 models incorrectly left in needs_retrain by 0.14.21 restart are restored only when recorded-behaviour benchmark evidence remains intact",
+  "model_contract_repair_safety": "genuine config invalidation clears benchmark evidence and is never auto-repaired"
 }
