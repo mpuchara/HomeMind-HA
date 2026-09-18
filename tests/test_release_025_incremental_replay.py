@@ -94,6 +94,25 @@ class IncrementalTemporalReplayTests(unittest.TestCase):
         finally:
             tracker.close()
 
+    def test_same_timestamp_base_rows_keep_numeric_history_id_order(self):
+        eid = "sensor.tie"
+        self.store.archive_batch([
+            (eid, self.base, str(i), {}, None, "test")
+            for i in range(10)
+        ])
+        tracker = SQLiteTemporalTracker(
+            self.store, [eid], self.context({eid: state(eid, "0")}),
+            self.base - 1, self.base + 10,
+        )
+        try:
+            tracker.advance(self.base)
+            # Legacy SQL was ORDER BY ts DESC,id DESC LIMIT ... then reversed before
+            # TemporalHistory.add(), so the highest integer id wins a timestamp tie.
+            self.assertEqual(tracker.state_map[eid]["state"], "9")
+            self.assertEqual(len(tracker.history.samples[eid]), 1)
+        finally:
+            tracker.close()
+
     def test_history_stays_last_64_samples_after_large_forward_jump(self):
         eid = "sensor.fast"
         rows = [
