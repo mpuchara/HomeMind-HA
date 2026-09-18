@@ -19,7 +19,8 @@ from experiments import Experiments
 from episode_evaluator import EpisodeEvaluator
 from test_agent_explore import FakeExecutor, FakeHandler, FakeQueue, FakeRLTeaching, FakeTeaching, DummyPolicy
 from trial_knowledge import (
-    _decorate_trial, _train_child_from_trials, install as install_trial_knowledge,
+    TRIAL_RECORD_VERSION, _decorate_trial, _train_child_from_trials,
+    install as install_trial_knowledge,
 )
 
 
@@ -140,7 +141,7 @@ class TrialKnowledgeTests(unittest.TestCase):
                 "hypothesis": {"id": "earlier_on", "catalog_version": 1,
                                "information_exploration": False},
                 "policy_features": {"0": 1.0, "1": .75}, "horizon": 1.0,
-                "model_versions": {"trial_record_version": 1, "policy_version": 10,
+                "model_versions": {"trial_record_version": TRIAL_RECORD_VERSION, "policy_version": 10,
                                    "model_revision": "root-r1", "schema_version": 11},
                 "action_set": [
                     {"role": "reference", "index": 0, "value": 0.0, "propensity": .25},
@@ -375,7 +376,7 @@ class TrialKnowledgeTests(unittest.TestCase):
         self.manager.trial_journal.ack(trial["trial_id"], time.time(), 1.0)
         self.engine.experiments._finish(self.root["id"], .6, "confirmed")
         record = self.manager.trial_journal.get(trial["trial_id"])
-        self.assertEqual(record["record_version"], 1)
+        self.assertEqual(record["record_version"], TRIAL_RECORD_VERSION)
         self.assertEqual(json.loads(record["hypothesis_json"])["id"], "earlier_on")
         self.assertTrue(json.loads(record["context_json"])["policy_features"])
         self.assertEqual(json.loads(record["model_versions_json"])["policy_version"], 10)
