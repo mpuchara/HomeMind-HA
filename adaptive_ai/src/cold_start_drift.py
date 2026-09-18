@@ -97,27 +97,59 @@ def _tv_distance(left, right):
 
 
 def decay_contract():
-    """Report the meaning of decay instead of conflating instructions with statistics."""
+    """One semantic contract for statistical evidence, instructions and regression memory."""
     return {
         "version": CONTRACT_VERSION,
+        "rule": (
+            "statistical evidence may decay according to its declared clock; explicit "
+            "persistent instructions do not decay; retained regression anchors never train"
+        ),
         "policy_learning": {
+            "kind": "statistical_training_evidence",
             "basis": "wall_clock",
             "half_life_days": float(OPTIONS.get("policy_half_life_days", 30)),
             "meaning": "old statistical policy evidence gradually loses training influence",
         },
+        "context_statistics": {
+            "kind": "statistical_context_model",
+            "basis": "wall_clock",
+            "meaning": (
+                "context/topology models use their own declared wall-clock half-life; "
+                "their decay is diagnostic/statistical and never weakens explicit instructions"
+            ),
+        },
         "future_evaluation": {
+            "kind": "independent_evaluation_evidence",
             "basis": "episode_order",
             "half_life_episodes": float(DEFAULT_HALF_LIFE_EPISODES),
-            "meaning": "old evaluation evidence decays outside the locked Stage-13 future test",
+            "confidence_contract_version": CONFIDENCE_CONTRACT_VERSION,
+            "meaning": (
+                "Stage-13 weighting applies outside the locked fixed future test; the "
+                "locked holdout is not enlarged or healed by later evidence"
+            ),
+        },
+        "probability_calibration": {
+            "kind": "independent_probability_evidence",
+            "basis": "episode_order_plus_dependency_effective_n",
+            "half_life_episodes": float(DEFAULT_HALF_LIFE_EPISODES),
+            "meaning": (
+                "canonical probability claims use Stage-13 deduplicated/dependency-adjusted "
+                "calibration, not a model's own training labels"
+            ),
         },
         "persistent_instruction": {
+            "kind": "instruction",
             "decays": False,
             "meaning": "explicit persistent preference is an instruction, not historical statistics",
         },
         "regression_anchor": {
+            "kind": "evaluation_memory",
             "decays_for_retention": False,
             "training_weight": 0.0,
-            "meaning": "durable regression reference only; never multiplied into training weight",
+            "meaning": (
+                "durable regression reference only; can veto a replay regression but is "
+                "never multiplied into training weight or Stage-13 final calibration"
+            ),
         },
     }
 
