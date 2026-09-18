@@ -136,6 +136,7 @@ class TrialJournal:
         context = {
             "x": dict(trial.get("x") or {}),
             "policy_features": dict(meta.get("policy_features") or {}),
+            "policy_feature_labels": dict(meta.get("policy_feature_labels") or {}),
             "prediction_inputs": dict(trial.get("prediction_inputs") or {}),
             "background_dependencies": dict(trial.get("background_dependencies") or {}),
             "focus": trial.get("focus"),
@@ -472,6 +473,10 @@ def _decorate_trial(trial, ctx, experiments, session, *, information=False,
                        "information_exploration": bool(information)},
         "policy_features": {str(k): float(v) for k, v in ctx["features"].items()
                             if _finite(v) is not None},
+        "policy_feature_labels": {
+            str(k): [str(x) for x in (v if isinstance(v, (list, tuple)) else [v])]
+            for k, v in dict(ctx.get("labels") or {}).items() if v is not None
+        },
         "horizon": float(ctx["horizon"]),
         "model_versions": versions,
         "action_set": action_set,
@@ -845,7 +850,21 @@ def install(manager):
         # Persist the durable outcome before the Explore wrapper can wake Candidate
         # training. This removes the old race where the worker could see a queued child
         # before the TrialRecord reward/status was committed.
-        journal.finish(trial, reward, reason, experiments.clock())
+        durable_record = journal.finish(trial, reward, reason, experiments.clock())
+        shadow = getattr(manager.engine, "policy_backend_shadow", None)
+        if shadow is not None and durable_record is not None:
+            try:
+                policy = manager.engine.models.get(aid) or manager.engine.policy(
+                    manager.store.get_agent_config(aid)
+                )
+                shadow.observe_trial_record(durable_record, policy=policy)
+            except Exception as exc:
+                manager.store.event(
+                    aid, "warning", "policy_backend_shadow_trial_gap",
+                    "Shadow backend could not consume the durable TrialRecord",
+                    {"trial_id": trial.get("trial_id"),
+                     "error": f"{type(exc).__name__}: {exc}"},
+                )
         result = previous_finish(aid, reward, reason)
         if session is not None:
             # F19: Free Explore cannot train the Live residual owner. Restore exactly the

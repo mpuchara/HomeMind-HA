@@ -70,6 +70,10 @@ class RuntimeCompositionRoot:
                 "source_of_truth": "promotion_validations[]",
             },
             "execution": {"owner": "engine.executor", "contract": "ActionIntent_to_Executor_only_physical_dispatch"},
+            "policy_backend_shadow": {
+                "owner": "engine.policy_backend_shadow",
+                "contract": "opt_in_observer_only_full_ridge_no_dispatch",
+            },
             "performance": {
                 "owner": "manager.performance_f22",
                 "contract": getattr(manager, "performance_f22_contract", None),
@@ -108,6 +112,7 @@ class RuntimeCompositionRoot:
         from performance_f22 import install as install_performance_f22
         from performance_f22_order_guard import install as install_performance_f22_order_guard
         from promotion_validation import install as install_promotion_validation
+        from policy_backend_shadow import install_policy_backend_shadow
         from rpi_low_power_runtime import install as install_rpi_low_power_runtime
         from workflow_request_queue import install as install_workflow_request_queue
         from runtime_http import install_dispatch, register_feedback_routes, register_promotion_routes
@@ -115,6 +120,9 @@ class RuntimeCompositionRoot:
 
         # Existing fast + preference + episode composition is the characterized base.
         self.base_prepare_engine_extensions()
+        # Stage 12 remains opt-in and observer-only. Installing the service does not
+        # change the production backend; disabled mode performs no inference or learning.
+        policy_shadow = install_policy_backend_shadow(engine, self.core.STORE)
         manager = getattr(engine, "agent_candidates", None)
         if manager is None:
             return
@@ -152,6 +160,20 @@ class RuntimeCompositionRoot:
         self.core.RUNTIME_COMPOSITION_CONTRACT = self.contracts
 
         device_service = getattr(getattr(engine, "executor", None), "device_agents", None)
+        self.core.STORE.event(
+            None, "info", "policy_backend_shadow_ready",
+            "Full-ridge policy challenger is available as a non-controlling opt-in Shadow",
+            {
+                "enabled": bool(getattr(policy_shadow, "enabled", False)),
+                "mode": "shadow",
+                "dispatch_capability": False,
+                "default_backend_changed": False,
+                "backend": "full_ridge_linucb",
+                "decision_observation": "same_live_features_same_allowed_action_set",
+                "reward_observation": "executed_action_only",
+                "trial_records": "logged_propensity_preserved_exactly_once",
+            },
+        )
         self.core.STORE.event(
             None, "info", "trial_knowledge_ready",
             "Versioned TrialRecord knowledge is bound to generation-aware Free Explore",
