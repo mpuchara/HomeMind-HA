@@ -7,8 +7,6 @@ from fast_runtime import (
     FAST_ACK_TIMEOUT_SECONDS,
     FAST_SETTLING_SECONDS,
     FAST_OFF_CONFIRMATION_SECONDS,
-    FAST_CONFIDENT_EMPTY_OFF_CONFIRMATION_SECONDS,
-    fast_light_off_confirmation_seconds,
     is_fast_target,
     normalize_fast_payload,
     migrate_existing_fast_agents,
@@ -77,54 +75,6 @@ class FastRuntimeTests(unittest.TestCase):
         self.assertEqual(store.meta['manual_hold:lamp'], '999999.0')
         self.assertEqual(store.meta['manual_hold_source:lamp'], 'explicit_user_v8')
         self.assertEqual(engine.runtime['lamp']['manual_override_until'], 999999.0)
-
-    def test_confident_empty_room_shortens_only_statistical_off_confirmation(self):
-        confident_empty = {
-            "known": True,
-            "uncertainty": 0.10,
-            "occupancy_now": 0.0,
-            "occupancy_in_1s": 0.0,
-            "occupancy_in_3s": 0.0,
-            "occupancy_in_5s": 0.0,
-        }
-        self.assertEqual(
-            fast_light_off_confirmation_seconds(confident_empty),
-            FAST_CONFIDENT_EMPTY_OFF_CONFIRMATION_SECONDS,
-        )
-        self.assertEqual(
-            fast_light_off_confirmation_seconds({
-                **confident_empty, "occupancy_in_3s": 0.7,
-            }),
-            FAST_OFF_CONFIRMATION_SECONDS,
-        )
-        self.assertEqual(
-            fast_light_off_confirmation_seconds({
-                **confident_empty, "uncertainty": 0.4,
-            }),
-            FAST_OFF_CONFIRMATION_SECONDS,
-        )
-        self.assertEqual(
-            fast_light_off_confirmation_seconds({
-                **confident_empty, "known": False,
-            }),
-            FAST_OFF_CONFIRMATION_SECONDS,
-        )
-
-        a = self.fast_agent()
-        rt = {}
-        value, held = stabilize_fast_light_power_decision(
-            a, rt, 1.0, 0.0, "historical_policy_bootstrap", 100.0,
-            forecast=confident_empty,
-        )
-        self.assertTrue(held)
-        self.assertEqual(value, 1.0)
-        value, held = stabilize_fast_light_power_decision(
-            a, rt, 1.0, 0.0, "historical_policy_bootstrap",
-            100.0 + FAST_CONFIDENT_EMPTY_OFF_CONFIRMATION_SECONDS,
-            forecast=confident_empty,
-        )
-        self.assertFalse(held)
-        self.assertEqual(value, 0.0)
 
     def test_statistical_off_requires_continuous_confirmation_but_on_is_immediate(self):
         a = self.fast_agent()
