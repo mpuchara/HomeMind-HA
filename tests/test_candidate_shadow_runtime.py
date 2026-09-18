@@ -213,10 +213,16 @@ class CandidateShadowRuntimeTests(unittest.TestCase):
         self.assertIn('evidence_kind', columns)
         self.assertIn('calibration_eligible', columns)
         self.assertIn('dependency_cluster', columns)
+        self.assertIn('calibration_outcome', columns)
+        self.assertIn('calibration_parent_correct', columns)
+        self.assertIn('calibration_child_correct', columns)
+        self.assertIn('calibration_source_id', columns)
         self.assertEqual(row['paired_result'], 'child_win')
         self.assertEqual(row['evidence_kind'], 'legacy_unclassified')
         self.assertEqual(row['calibration_eligible'], 0)
         self.assertIsNone(row['dependency_cluster'])
+        self.assertIsNone(row['calibration_outcome'])
+        self.assertIsNone(row['calibration_source_id'])
 
     def test_candidate_shadow_inference_runs_after_training_and_exposes_card_values(self):
         status, generation = self._g1(prediction=1.0, confidence=.93)
@@ -316,6 +322,8 @@ class CandidateShadowRuntimeTests(unittest.TestCase):
         self.assertEqual(pair["evidence_kind"], "external_target_transition")
         self.assertEqual(pair["calibration_eligible"], 0)
         self.assertIsNone(pair["dependency_cluster"])
+        self.assertIsNone(pair["calibration_outcome"])
+        self.assertIsNone(pair["calibration_source_id"])
         self.assertIsNotNone(pair["child_lead_seconds"])
 
     def test_direct_user_transition_is_independent_calibration_evidence(self):
@@ -330,6 +338,10 @@ class CandidateShadowRuntimeTests(unittest.TestCase):
             ).fetchone())
         self.assertEqual(row["evidence_kind"], "manual_user_target_change")
         self.assertEqual(row["calibration_eligible"], 1)
+        self.assertEqual(row["calibration_outcome"], 1.0)
+        self.assertEqual(row["calibration_parent_correct"], row["parent_correct"])
+        self.assertEqual(row["calibration_child_correct"], row["child_correct"])
+        self.assertEqual(row["calibration_source_id"], row["prediction_event_id"])
         self.assertIn("manual:user-123:light.shadow:", row["dependency_cluster"])
         self.assertEqual(
             self.manager.generation_comparison(g1["generation_id"])["pairs"], 1
