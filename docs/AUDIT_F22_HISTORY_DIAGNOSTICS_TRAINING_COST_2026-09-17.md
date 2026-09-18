@@ -324,3 +324,74 @@ The original Stage-17 equivalence tests for fast metrics, batched Teach scoring,
 - probability-calibration legacy-vs-SQL aggregation plus warm-cache scans.
 
 The benchmark still reports its actual platform and only labels results as Raspberry Pi if `/proc/device-tree/model` identifies Pi hardware. Hosted CI/desktop timings are scaling evidence, not Raspberry Pi measurements.
+
+
+### Current-stack v2 CI measurement
+
+Measured code head before this documentation-only update: `5dae6bc03a5fcb466cb13879bb42783c4573dbf7`.
+
+Workflow: `Validate HomeMind`, run `35391737737`, Python 3.11 benchmark job.
+
+Environment reported by the benchmark:
+
+- GitHub-hosted Ubuntu 24.04 / Azure x86_64;
+- Linux `6.17.0-1022-azure`;
+- Python `3.11.16`;
+- 4 logical CPUs;
+- `raspberry_pi=false`;
+- measurement scope: **non-Pi host; do not quote as Raspberry Pi performance**.
+
+Synthetic dataset:
+
+- 500 Candidate pairs;
+- 4 decision rows per pair;
+- 48 Teach sensors;
+- 12 active Teach labels;
+- 500 independent probability-calibration episodes.
+
+Current Stage-13 fixed-future path, same-data comparison:
+
+- legacy full-pair load: 512 Python rows, 2.733 ms;
+- legacy report calculation: 1.640 ms;
+- optimized cold final report: 12 Python rows max, 4 SELECTs, 0.591 ms;
+- optimized warm 20 polls: **0 Candidate-pair full scans**, 0.709 ms total, 0.0446 ms p95;
+- streamed selection: 1 Python aggregate row, 1 SELECT, 3.635 ms;
+- selection effective-N: legacy = optimized = 118.6476199418696;
+- fixed-future reports equal: true;
+- warm report equal: true.
+
+Probability calibration, same-data comparison:
+
+- legacy: 500 Python rows, 1 source SELECT, 1.108 ms load + 2.015 ms report;
+- optimized cold: at most 9 aggregate/bin rows materialized, 3 SELECTs, 4.474 ms;
+- optimized warm 20 polls: **0 source-history scans**, 0.470 ms total, 0.0344 ms p95;
+- maximum numerical difference: `1.4210854715202004e-14`;
+- report structure equal: true.
+
+Existing fast metric comparison on the same run:
+
+- legacy: 1004 SELECTs, 10.687 ms;
+- optimized cold: 8 SELECTs, 7.650 ms;
+- optimized warm 20 polls: 100 SELECTs total, 1.972 ms total, 0.119 ms p95;
+- maximum numerical difference: `5.3290705182007514e-14`.
+
+Teach scoring:
+
+- legacy: 96 SELECTs, 7.782 ms;
+- optimized: 2 SELECTs, 8.250 ms;
+- maximum score difference: 0.0;
+- maximum materialized rows in this smoke: 288.
+
+Concurrent synthetic load:
+
+- inference calls: 2800;
+- inference p50: 0.0482 ms;
+- inference p95: 0.0584 ms;
+- inference max: 0.109 ms;
+- status polls: 112;
+- status p95: 3.777 ms;
+- status max: 6.840 ms;
+- peak process RSS: 28.82 MB;
+- RSS increase from benchmark start: 5.58 MB.
+
+These values demonstrate query/memory scaling and same-data equivalence on the CI host only. The proposed Pi budgets remain acceptance targets until the benchmark is executed on the target Home Assistant Raspberry Pi hardware.
