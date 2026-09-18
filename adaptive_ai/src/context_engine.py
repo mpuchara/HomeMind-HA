@@ -12,6 +12,9 @@ from home_state import RoomBeliefModel
 class ContextEngine:
     ROOM_MODEL_KEY = 'room_belief_model_v2'
     LEGACY_ROOM_MODEL_KEY = 'shared_home_model_v1'
+    ADAPTIVE_MODEL_KEY = 'adaptive_presence_model_v2'
+    LEGACY_ADAPTIVE_MODEL_KEY = 'adaptive_presence_model_v1'
+    ADAPTIVE_CHECKPOINT_RETENTION_SECONDS = 30 * 86400.0
 
     def __init__(self, options, store=None):
         self.options, self.store = options, store
@@ -28,7 +31,22 @@ class ContextEngine:
         self.bootstrap_started = 0
         self.source_details = {}
         self.room_checkpoint_source = None
-        self.adaptive_presence = AdaptivePresenceModel()
+        adaptive_raw = None
+        if store:
+            for key in (self.ADAPTIVE_MODEL_KEY, self.LEGACY_ADAPTIVE_MODEL_KEY):
+                try:
+                    value = json.loads(store.meta_get(key, 'null'))
+                except (ValueError, TypeError):
+                    value = None
+                if isinstance(value, dict):
+                    adaptive_raw = value
+                    break
+            with store.lock, store.conn() as c:
+                c.execute(
+                    "CREATE TABLE IF NOT EXISTS adaptive_presence_checkpoints ("
+                    "ts REAL PRIMARY KEY, model_json TEXT NOT NULL)"
+                )
+        self.adaptive_presence = AdaptivePresenceModel(adaptive_raw)
         # Future physical threshold adapter contract only. It performs no I/O and remains
         # disabled unless a later, explicit product stage supplies a whitelist/driver.
         self.hardware_threshold_adapter = HardwareThresholdAdapterContract(enabled=False)
@@ -160,10 +178,14 @@ class ContextEngine:
                     learn=learn, evidence=evidence,
                     event_ts=event_ts, received_ts=received_ts,
                 )
+            area = self.area_for(eid)
             changed = self.home.observe(
-                eid, self.area_for(eid), value, processing_ts,
+                eid, area, value, processing_ts,
                 learn=learn and processing_ts > self.bootstrap_cutoff,
                 evidence=evidence, event_ts=event_ts, received_ts=received_ts,
+            )
+            self.calibrate_adaptive_from_home_event(
+                self.home, self.adaptive_presence, eid, area, value, event_ts, received_ts
             )
             self._adaptive_cache.clear()
             return changed
@@ -173,8 +195,7 @@ class ContextEngine:
         st['attributes'] = {**self.source_metadata.get(eid, {}), **(st.get('attributes') or {})}
         return self.probability(eid, st)
 
-    @staticmethod
-    def _adaptive_sources(home, area, ts):
+    def _adaptive_sources(self, home, area, ts):
         rows = []
         for eid in sorted(getattr(home, 'area_sources', {}).get(area, ())):
             source = dict(getattr(home, 'sources', {}).get(eid) or {})
@@ -185,16 +206,57 @@ class ContextEngine:
             except Exception:
                 freshness = 0.0
             communication = max(0.0, min(1.0, float(source.get('communication_reliability') or 0.0)))
+            metadata = dict(self.source_details.get(eid) or {})
             rows.append({
                 'entity_id': eid,
+                'device_id': source.get('device_id') or metadata.get('device_id'),
                 'role': str(source.get('role') or ''),
                 'value': source.get('value'),
                 'available': bool(source.get('available')),
                 'quality': communication * freshness,
                 'communication_reliability': communication,
                 'freshness': freshness,
+                'event_ts': source.get('event_ts'),
+                'received_ts': source.get('received_ts'),
+                'occupancy_authority': bool(metadata.get('occupancy_authority')),
             })
         return rows
+
+    def calibrate_adaptive_from_home_event(self, home, model, eid, area, probability,
+                                           event_ts, received_ts):
+        """Update raw calibration from one independent direct-presence label event."""
+        if not area or probability is None:
+            return []
+        metadata = dict(self.source_details.get(eid) or {})
+        role = str(metadata.get('role') or (getattr(home, 'sources', {}).get(eid) or {}).get('role') or '')
+        observed = float(probability) >= .5
+        if role not in {'pir', 'radar_occupancy', 'occupancy_binary'}:
+            return []
+        # PIR OFF means only 'no recent motion', not reliable absence.
+        if role == 'pir' and not observed:
+            return []
+        label_device = str(metadata.get('device_id') or '')
+        if not label_device:
+            return []
+        applied = []
+        for raw in self._adaptive_sources(home, area, received_ts):
+            if str(raw.get('role') or '') not in {'radar_activity', 'auxiliary'}:
+                continue
+            if not raw.get('available') or float(raw.get('quality') or 0.0) < .50:
+                continue
+            raw_device = str(raw.get('device_id') or '')
+            if not raw_device or raw_device == label_device:
+                continue
+            try:
+                result = model.record_independent_label(
+                    raw.get('entity_id'), raw.get('value'), observed, eid,
+                    ts=received_ts, label_event_ts=event_ts,
+                )
+            except ValueError:
+                continue
+            if result.get('applied'):
+                applied.append(str(raw.get('entity_id')))
+        return applied
 
     def augment_home_forecast(self, home, area, base_forecast, ts, presence_model=None, cache=None):
         """Add Stage-10 virtual presence without changing physical occupancy_now semantics."""
@@ -215,7 +277,11 @@ class ContextEngine:
             adaptive = dict(cache[key])
         else:
             sources = self._adaptive_sources(home, area, ts)
-            capability = model.capability(area, sources)
+            prior_sources = list(result.get('arrival_prior_sources') or [])
+            prior_devices = list(result.get('arrival_prior_devices') or [])
+            capability = model.capability(
+                area, sources, prior_source_ids=prior_sources, prior_device_ids=prior_devices
+            )
             arrivals = dict(result.get('arrival_probability_by_horizon') or {})
             arrival_prior = float(arrivals.get('3s', result.get('arrival_probability', 0.0)) or 0.0)
             adaptive = model.evaluate(
@@ -226,6 +292,8 @@ class ContextEngine:
                 raw_sources=sources,
                 room_calibration=(home.calibration_metrics() if hasattr(home, 'calibration_metrics') else None),
                 capability=capability,
+                prior_source_ids=prior_sources,
+                prior_device_ids=prior_devices,
             )
             if cache is not None:
                 cache.clear()
@@ -262,6 +330,17 @@ class ContextEngine:
             if self.store and (force or now - self.last_save >= 60):
                 self.store.meta_set(self.ROOM_MODEL_KEY,
                                     json.dumps(self.home.export(), separators=(',', ':')))
+                adaptive_raw = json.dumps(self.adaptive_presence.export(), separators=(',', ':'))
+                self.store.meta_set(self.ADAPTIVE_MODEL_KEY, adaptive_raw)
+                with self.store.lock, self.store.conn() as c:
+                    c.execute(
+                        "INSERT OR REPLACE INTO adaptive_presence_checkpoints(ts,model_json) VALUES(?,?)",
+                        (float(now), adaptive_raw),
+                    )
+                    c.execute(
+                        "DELETE FROM adaptive_presence_checkpoints WHERE ts<?",
+                        (float(now) - self.ADAPTIVE_CHECKPOINT_RETENTION_SECONDS,),
+                    )
                 self.room_checkpoint_source = self.ROOM_MODEL_KEY
                 self.last_save = now
 
