@@ -215,6 +215,7 @@ class Engine(threading.Thread):
         new_state = data.get("new_state")
         if not entity_id:
             return
+        received_ts = now_ts()
         with self.lock:
             old_state = self.state_map.get(entity_id)
             if old_state == new_state:
@@ -240,7 +241,6 @@ class Engine(threading.Thread):
             TRAINING_BUDGET.request_interactive_window(
                 0.75, reason="ha_state_changed"
             )
-            received_ts = now_ts()
             event_ts = parse_ts((new_state or {}).get("last_updated") or
                                 (new_state or {}).get("last_changed")) or received_ts
             self.context.observe(
@@ -249,7 +249,6 @@ class Engine(threading.Thread):
             )
         HA.last_ok = now_ts(); HA.last_error = None
         if new_state is not None:
-            received_ts = now_ts()
             ts = parse_ts(new_state.get("last_updated") or new_state.get("last_changed")) or received_ts
             self.temporal_history.add(entity_id, ts, self._temporal_state(new_state))
             self._queue_archive_state(new_state, received_ts=received_ts)
@@ -346,7 +345,6 @@ class Engine(threading.Thread):
             self.last_poll = now_ts()
             self.last_full_poll = self.last_poll
             self.error = None
-        poll_received_ts = now_ts()
         for st in state_map.values():
             ts = parse_ts(st.get("last_updated") or st.get("last_changed")) or poll_received_ts
             self.temporal_history.add(st.get("entity_id"), ts, self._temporal_state(st))
