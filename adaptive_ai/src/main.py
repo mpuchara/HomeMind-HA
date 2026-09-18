@@ -428,7 +428,18 @@ class Handler(BaseHTTPRequestHandler):
                 AUTOMATION_KNOWLEDGE.scan(current, registry)
                 start_ts = now_ts() - float(OPTIONS["history_bootstrap_days"]) * 86400.0
                 created = HISTORY.auto_discover_agents(current, start_ts, threshold_override=1)
-                return self.send_json(200, {"ok": True, "created": created, "training_started": 0, "manual_training": True, "history": HISTORY.status(), "automation_knowledge": AUTOMATION_KNOWLEDGE.status()})
+                initial_training = list(getattr(HISTORY, "initial_training_enqueued", []) or [])
+                training_started = sum(1 for row in initial_training if row.get("state") == "active")
+                return self.send_json(200, {
+                    "ok": True,
+                    "created": created,
+                    "training_started": training_started,
+                    "training_queued": len(initial_training),
+                    "manual_training": False,
+                    "training_mode": "automatic_initial_fifo",
+                    "history": HISTORY.status(),
+                    "automation_knowledge": AUTOMATION_KNOWLEDGE.status(),
+                })
             if path.startswith("/api/agents/") and path.endswith("/train"):
                 agent_id = path.split("/")[3]
                 agent = STORE.get_agent(agent_id)
