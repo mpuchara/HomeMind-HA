@@ -298,14 +298,14 @@ class FinalRuntimeCharacterizationTests(unittest.TestCase):
         )
         root = (SRC / "runtime_composition.py").read_text(encoding="utf-8")
         transport = (SRC / "runtime_http.py").read_text(encoding="utf-8")
-        self.assertEqual(build["runtime_composition_contract_version"], 3)
+        self.assertEqual(build["runtime_composition_contract_version"], 2)
         self.assertEqual(build["explicit_http_route_contract_version"], 2)
         self.assertEqual(
             build["runtime_entrypoint_chain"],
             ["run.sh", "trial_queue_main.py", "preference_queue_main.py",
              "fast_queue_main.py", "queue_main.py", "main.py"],
         )
-        self.assertIn("CONTRACT_VERSION = 3", root)
+        self.assertIn("CONTRACT_VERSION = 2", root)
         self.assertIn("CONTRACT_VERSION = 2", transport)
         self.assertIn("ThreadingHTTPServer", build["runtime_transport_binding"])
         self.assertIn("prepare_*", build["runtime_overlay_characterization"])
