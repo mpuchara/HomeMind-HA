@@ -134,9 +134,12 @@
           const elapsed=active.started_at?Math.max(0,Date.now()/1000-Number(active.started_at)):0;
           const lp=status.low_power_runtime||{};
           const duty=Math.round(Number(lp.training_cpu_duty_cycle||0)*100);
-          const batch=Number(lp.archive_batch_rows||0);
-          const budget=duty?`CPU budget ${duty}%${batch?` · batch ${batch}`:''}`:'Pi-safe CPU budget';
-          panel.innerHTML=`<div class="history-head"><div><b>${esc(title)}</b><span>${esc(active.name||active.agent_id||'agent')} · ${esc(reason)}</span></div><div class="history-percent"><strong>ACTIVE</strong><small>${Math.round(elapsed)} s</small></div></div><div class="history-timing"><b>${esc(budget)}</b><span>Only one heavy job runs at a time. UI/status use lightweight reads while training.</span></div>`;
+          const slice=Math.round(Number(lp.max_continuous_work_ms||0));
+          const observed=Math.round(Number(lp.max_observed_slice_ms||0));
+          const overruns=Number(lp.slice_overruns||0);
+          const budget=duty?`CPU budget ${duty}%${slice?` · max slice ${slice} ms`:''}`:'Pi-safe CPU budget';
+          const observedText=observed?` Longest measured slice ${observed} ms${overruns?` · ${overruns} overrun${overruns===1?'':'s'}`:''}.`:'';
+          panel.innerHTML=`<div class="history-head"><div><b>${esc(title)}</b><span>${esc(active.name||active.agent_id||'agent')} · ${esc(reason)}</span></div><div class="history-percent"><strong>ACTIVE</strong><small>${Math.round(elapsed)} s</small></div></div><div class="history-timing"><b>${esc(budget)}</b><span>Training yields between bounded work slices so Ingress and realtime control keep CPU priority.${esc(observedText)}</span></div>`;
         }
       }
       return result;
