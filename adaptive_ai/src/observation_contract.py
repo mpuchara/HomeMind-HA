@@ -686,6 +686,16 @@ class ObservationSQLiteTemporalTracker(replay_module.SQLiteTemporalTracker):
     per-entity history without rewinding the whole tracker.
     """
 
+    @staticmethod
+    def _row_order(row):
+        # v12 merged archive/fast-journal rows by event time, received time and string id.
+        # Keep that stable even though the base archive-only tracker uses numeric DB ids.
+        return (
+            float(row.get("ts") or 0.0),
+            float(row.get("_feature_received_time") or 0.0),
+            str(row.get("id") or ""),
+        )
+
     def _feature_bulk_before(self, entity_ids, ts, count):
         result = []
         count = max(1, int(count))
