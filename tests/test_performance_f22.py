@@ -415,15 +415,15 @@ class CurrentConfidenceCostTests(unittest.TestCase):
         self.assertEqual(after_unrelated, optimized)
         self.assertNotIn("from candidate_generation_pairs", "\n".join(self.store.selects()).lower())
 
-        # A new independent label invalidates the final cache, but the locked query is
-        # constrained to the original fixed end and therefore materializes only that holdout.
+        # A later independent label is outside the locked fixed-future window and
+        # cannot invalidate or rescan the immutable completed holdout.
         self._insert_pair(1200, eligible=True)
         self.store.reset_trace()
         after_label = self.epochs.final_report_from_store(
             locked,'g0','g1',scope_id='root'
         )
         self.assertEqual(after_label, optimized)
-        self.assertIn("from candidate_generation_pairs", "\n".join(self.store.selects()).lower())
+        self.assertNotIn("from candidate_generation_pairs", "\n".join(self.store.selects()).lower())
         self.assertLessEqual(self.diag.snapshot()['max_rows_materialized_per_batch'], 12)
 
         # Durable cache survives a new journal/runtime instance.
