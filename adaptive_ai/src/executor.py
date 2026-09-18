@@ -81,7 +81,18 @@ class Executor:
                 ]
                 if conflicts:
                     raise ValueError('Another Control agent owns this shared device/resource')
-                disabled = self.handoff.acquire(current, refresh_scan=refresh)
+                claim = self.device_agents.claim_control_resources(current)
+                if not claim:
+                    raise ValueError('Another Control transition owns this shared device/resource')
+                try:
+                    disabled = self.handoff.acquire(current, refresh_scan=refresh)
+                except Exception:
+                    # Roll back only resources newly claimed by this transition. Existing
+                    # incumbent claims must survive a transient handoff failure.
+                    self.device_agents.release_control_resources(
+                        current, resource_keys=claim.get('newly_claimed_keys') or []
+                    )
+                    raise
                 warning = AUTOMATION_KNOWLEDGE.error
                 self.engine.runtime.setdefault(agent['id'], {})['automation_scan_warning'] = warning
                 if refresh and warning:
@@ -96,7 +107,11 @@ class Executor:
             with self.device_agents.lock_resources(
                     self.device_agents.descriptor(current)['resource_keys']):
                 self.engine.experiments.cancel(agent['id'], reason)
-                return self.handoff.release(current, reason)
+                result = self.handoff.release(current, reason)
+                # Release durable shared ownership only after HA automation restoration
+                # succeeds. If release raises, keeping the claim is the fail-safe choice.
+                self.device_agents.release_control_resources(current)
+                return result
 
     def reconcile_control(self):
         # Existing entity-level handoff journals remain authoritative for restoring HA
