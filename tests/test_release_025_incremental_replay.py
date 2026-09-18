@@ -284,7 +284,9 @@ class Release025SourceContractTests(unittest.TestCase):
 
     def test_tracker_has_bulk_bootstrap_forward_cursor_and_rewind_path(self):
         source = self.source("replay.py")
-        self.assertIn("ROW_NUMBER() OVER", source)
+        self.assertIn("UNION ALL", source)
+        self.assertIn("ORDER BY ts DESC,id DESC LIMIT ?", source)
+        self.assertNotIn("ROW_NUMBER() OVER", source)
         self.assertIn("def _forward_watched", source)
         self.assertIn('"forward_advances"', source)
         self.assertIn('"bulk_rebuilds"', source)
@@ -308,6 +310,14 @@ class Release025SourceContractTests(unittest.TestCase):
         self.assertIn("(event_time>? OR received_time>?)", source)
         self.assertIn("temporal_feature_forward_query", source)
         self.assertIn("late packets are merged back", source)
+        self.assertIn("UNION ALL", source)
+        self.assertNotIn("ROW_NUMBER() OVER", source)
+
+    def test_ui_surfaces_temporal_query_reduction(self):
+        source = self.source("static/app.js")
+        self.assertIn("h.temporal_replay?.totals", source)
+        self.assertIn("query_reduction_ratio", source)
+        self.assertIn("Temporal replay:", source)
 
 
 if __name__ == "__main__":
