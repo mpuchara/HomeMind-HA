@@ -530,6 +530,136 @@ def record_independent_candidate_label(store, *, parent_generation_id, child_gen
         return c.execute("SELECT changes()").fetchone()[0] > 0
 
 
+def _table_exists(connection, name):
+    return bool(connection.execute(
+        "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?",
+        (str(name),),
+    ).fetchone())
+
+
+def _ensure_pair_revision_tracking(store):
+    """Install O(1) edge revision tracking once candidate pair storage exists.
+
+    Existing historical rows intentionally do not need a bootstrap scan. The first
+    report on an old edge computes from source evidence and caches revision 0; every
+    subsequent insert/update advances the durable revision through SQLite triggers.
+    """
+    if getattr(store, "_confidence_pair_revision_tracking_ready", False):
+        return True
+    with store.lock, store.conn() as c:
+        if not _table_exists(c, "candidate_generation_pairs"):
+            return False
+        c.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS confidence_pair_revisions (
+                parent_generation_id TEXT NOT NULL,
+                child_generation_id TEXT NOT NULL,
+                selection_revision INTEGER NOT NULL DEFAULT 0,
+                calibration_revision INTEGER NOT NULL DEFAULT 0,
+                updated_ts REAL NOT NULL,
+                PRIMARY KEY(parent_generation_id,child_generation_id)
+            );
+
+            CREATE TRIGGER IF NOT EXISTS trg_confidence_pair_insert_revision
+            AFTER INSERT ON candidate_generation_pairs
+            BEGIN
+                INSERT INTO confidence_pair_revisions
+                    (parent_generation_id,child_generation_id,selection_revision,
+                     calibration_revision,updated_ts)
+                VALUES(
+                    NEW.parent_generation_id,NEW.child_generation_id,1,
+                    CASE WHEN COALESCE(NEW.calibration_eligible,0)=1 THEN 1 ELSE 0 END,
+                    CAST(strftime('%s','now') AS REAL)
+                )
+                ON CONFLICT(parent_generation_id,child_generation_id) DO UPDATE SET
+                    selection_revision=confidence_pair_revisions.selection_revision+1,
+                    calibration_revision=confidence_pair_revisions.calibration_revision+
+                        CASE WHEN COALESCE(NEW.calibration_eligible,0)=1 THEN 1 ELSE 0 END,
+                    updated_ts=excluded.updated_ts;
+            END;
+
+            CREATE TRIGGER IF NOT EXISTS trg_confidence_pair_update_revision
+            AFTER UPDATE ON candidate_generation_pairs
+            BEGIN
+                INSERT INTO confidence_pair_revisions
+                    (parent_generation_id,child_generation_id,selection_revision,
+                     calibration_revision,updated_ts)
+                VALUES(
+                    NEW.parent_generation_id,NEW.child_generation_id,1,1,
+                    CAST(strftime('%s','now') AS REAL)
+                )
+                ON CONFLICT(parent_generation_id,child_generation_id) DO UPDATE SET
+                    selection_revision=confidence_pair_revisions.selection_revision+1,
+                    calibration_revision=confidence_pair_revisions.calibration_revision+1,
+                    updated_ts=excluded.updated_ts;
+            END;
+            """
+        )
+    store._confidence_pair_revision_tracking_ready = True
+    return True
+
+
+def _pair_revisions(store, parent_gid, child_gid):
+    if not _ensure_pair_revision_tracking(store):
+        return {"selection_revision": 0, "calibration_revision": 0}
+    with store.conn() as c:
+        row = c.execute(
+            """SELECT selection_revision,calibration_revision
+               FROM confidence_pair_revisions
+               WHERE parent_generation_id=? AND child_generation_id=?""",
+            (str(parent_gid), str(child_gid)),
+        ).fetchone()
+    return dict(row) if row else {"selection_revision": 0, "calibration_revision": 0}
+
+
+def _selection_pair_rows(store, parent_gid, child_gid):
+    """Minimal source rows required by the selection-quality contract."""
+    with store.conn() as c:
+        return [dict(row) for row in c.execute(
+            """SELECT root_agent_id,prediction_event_id,outcome_ts,outcome,
+                      parent_confidence,child_confidence,parent_correct,child_correct,
+                      dependency_cluster,evidence_kind,calibration_eligible,
+                      calibration_outcome,calibration_parent_correct,
+                      calibration_child_correct,calibration_source_id
+               FROM candidate_generation_pairs
+               WHERE parent_generation_id=? AND child_generation_id=?
+               ORDER BY outcome_ts""",
+            (str(parent_gid), str(child_gid)),
+        ).fetchall()]
+
+
+def _final_pair_rows(store, parent_gid, child_gid, cutoff, end_ts=None):
+    """Read only independent-final-evaluation candidates, never screening history."""
+    kinds = sorted(FINAL_CALIBRATION_EVIDENCE_KINDS)
+    placeholders = ",".join("?" for _ in kinds)
+    sql = f"""
+        SELECT root_agent_id,prediction_event_id,outcome_ts,outcome,
+               parent_confidence,child_confidence,parent_correct,child_correct,
+               dependency_cluster,evidence_kind,calibration_eligible,
+               calibration_outcome,calibration_parent_correct,
+               calibration_child_correct,calibration_source_id
+        FROM candidate_generation_pairs
+        WHERE parent_generation_id=? AND child_generation_id=?
+          AND outcome_ts>?
+          AND calibration_eligible=1
+          AND evidence_kind IN ({placeholders})
+          AND calibration_outcome IS NOT NULL
+          AND calibration_parent_correct IS NOT NULL
+          AND calibration_child_correct IS NOT NULL
+    """
+    params = [str(parent_gid), str(child_gid), float(cutoff)] + kinds
+    if end_ts is not None:
+        sql += " AND outcome_ts<=?"
+        params.append(float(end_ts))
+    sql += " ORDER BY outcome_ts"
+    with store.conn() as c:
+        return [dict(row) for row in c.execute(sql, params).fetchall()]
+
+
+def _cache_fingerprint(payload):
+    return json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str)
+
+
 def ensure_tables(store):
     with store.lock, store.conn() as c:
         c.executescript(
@@ -567,8 +697,56 @@ def ensure_tables(store):
             );
             CREATE INDEX IF NOT EXISTS idx_confidence_epoch_child
                 ON confidence_evaluation_epochs(child_generation_id,created_ts DESC);
+
+            CREATE TABLE IF NOT EXISTS confidence_selection_scan_cache (
+                parent_generation_id TEXT NOT NULL,
+                child_generation_id TEXT NOT NULL,
+                evaluation_revision TEXT NOT NULL,
+                contract_version INTEGER NOT NULL,
+                selection_revision INTEGER NOT NULL,
+                params_fingerprint TEXT NOT NULL,
+                sufficient INTEGER NOT NULL,
+                scanned_rows INTEGER NOT NULL,
+                updated_ts REAL NOT NULL,
+                PRIMARY KEY(parent_generation_id,child_generation_id,evaluation_revision,contract_version)
+            );
+
+            CREATE TABLE IF NOT EXISTS confidence_final_report_cache (
+                parent_generation_id TEXT NOT NULL,
+                child_generation_id TEXT NOT NULL,
+                evaluation_revision TEXT NOT NULL,
+                contract_version INTEGER NOT NULL,
+                calibration_revision INTEGER NOT NULL,
+                params_fingerprint TEXT NOT NULL,
+                report_json TEXT NOT NULL,
+                scanned_rows INTEGER NOT NULL,
+                updated_ts REAL NOT NULL,
+                PRIMARY KEY(parent_generation_id,child_generation_id,evaluation_revision,contract_version)
+            );
+
+            CREATE TABLE IF NOT EXISTS confidence_probability_revisions (
+                metric_id TEXT NOT NULL,
+                model_key TEXT NOT NULL,
+                scope_id TEXT NOT NULL,
+                revision INTEGER NOT NULL DEFAULT 0,
+                updated_ts REAL NOT NULL,
+                PRIMARY KEY(metric_id,model_key,scope_id)
+            );
+
+            CREATE TABLE IF NOT EXISTS confidence_probability_report_cache (
+                metric_id TEXT NOT NULL,
+                model_key TEXT NOT NULL,
+                scope_id TEXT NOT NULL,
+                contract_version INTEGER NOT NULL,
+                revision INTEGER NOT NULL,
+                report_json TEXT NOT NULL,
+                scanned_rows INTEGER NOT NULL,
+                updated_ts REAL NOT NULL,
+                PRIMARY KEY(metric_id,model_key,scope_id,contract_version)
+            );
             """
         )
+    _ensure_pair_revision_tracking(store)
 
 
 class ProbabilityCalibrationJournal:
