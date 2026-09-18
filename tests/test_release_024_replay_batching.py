@@ -104,6 +104,16 @@ class Release024SourceContractTests(unittest.TestCase):
         self.assertIn('TRAINING_BUDGET.checkpoint("historical_experience_batch_flush", force=True)', body)
         self.assertNotIn("STORE.add_historical_experience(", body)
 
+    def test_replay_preserves_own_command_provenance_gate_before_policy_learning(self):
+        source = self.source("history.py")
+        start = source.index("        def replay_completed_dwell")
+        end = source.index("        replay_started =", start)
+        body = source[start:end]
+        gate = body.index('if origin == "own_command":')
+        benchmark = body.index("record_behavior_benchmark", gate)
+        self.assertLess(gate, benchmark)
+        self.assertIn("historical_replay_provenance", source)
+
     def test_feature_screening_is_schema_aware_and_does_not_reopen_archive_when_skipped(self):
         source = self.source("history.py")
         self.assertIn("saved_models =", source)
