@@ -10,9 +10,9 @@ Przewidywane przyjście do pokoju (`arrival_probability` z anonimowego `RoomBeli
 
 Ścieżka procesu pozostaje:
 
-`run.sh -> preference_queue_main.py -> fast_queue_main.py -> queue_main.py`
+`run.sh -> trial_queue_main.py -> preference_queue_main.py -> fast_queue_main.py -> queue_main.py -> main.py`
 
-`MultiHorizonPolicy` nadal pobiera siedem istniejących `home:*` slotów. Stage 10 celowo **nie zmienia wersji ani pozycji tych slotów**:
+`MultiHorizonPolicy` korzysta z wersjonowanego kontraktu Observation v12: siedem dotychczasowych `home:*` wielkości oraz addytywne `home:known`. Stage 10 nie dodaje kolejnego slotu ani nie zmienia znaczenia istniejących pól:
 
 - `occupancy_now` pozostaje bazowym/fizycznym przekonaniem z RoomBelief;
 - po aktywacji wirtualnej obecności można podnieść tylko `occupancy_in_1s`, `occupancy_in_3s`, `occupancy_in_5s`;
@@ -80,9 +80,35 @@ Dodatkowo:
 - source nie może etykietować sam siebie;
 - output sensora oznaczonego jako zmodyfikowany przez przyszły adapter progu nie może być niezależną etykietą skuteczności.
 
+## Hardening po RoomBelief v2 / Observation v12
+
+`AdaptivePresenceModel` ma obecnie kontrakt v2. `RoomBeliefModel` dopisuje do anonimowych
+hipotez ruchu provenance źródeł i urządzeń (`arrival_prior_sources`,
+`arrival_prior_devices`). Local raw evidence jest odrzucane, jeżeli pochodzi z tego samego
+entity lub fizycznego `device_id`, który uczestniczy w priorze przyjścia. Capability pokazuje
+wtedy `excluded_raw_sources` i pozostaje w trybie `anticipation_only`.
+
+Kalibracja raw-score -> likelihood jest teraz rzeczywiście zasilana przez runtime, a nie tylko
+udostępniona jako API. Etykieta może pochodzić z lokalnego direct-presence źródła
+(`radar_occupancy` / `occupancy_binary`, a dla PIR tylko zdarzenie dodatnie), ale wyłącznie
+z innego znanego urządzenia. PIR OFF nie jest traktowany jako dowód pustego pokoju.
+
+Każda para raw-source / label-source ma watermark czasu fizycznego eventu. Poll confirmation,
+restart lub ponowne odtworzenie tego samego zdarzenia nie zwiększa liczby niezależnych etykiet.
+Źródło oznaczone jako zmodyfikowane przez przyszły hardware threshold adapter również nie może
+uczestniczyć w kalibracji.
+
+Kalibracja i jej watermarki są addytywnie zapisywane jako `adaptive_presence_model_v2` oraz
+okresowe rekordy `adaptive_presence_checkpoints`. Runtime-only virtual ON, pending confirmation
+i lease/taint nadal nie są przywracane po restarcie.
+
 ## Replay
 
 `HistoricalHomeView` używa tego samego `AdaptivePresenceModel` i tego samego `ContextEngine.augment_home_forecast()` co live. Histereza jest odbudowywana causal as-of z replayowanych zdarzeń; pakiet po czasie zapytania nie bierze udziału w wyniku.
+
+Replay ładuje ostatni `adaptive_presence_checkpoints` sprzed badanego okna, a następnie
+aktualizuje kalibrację tylko kolejnymi causalnie dostępnymi direct-label events. Dzięki temu
+historyczny trening nie korzysta z kalibracji nauczonej dopiero w przyszłości.
 
 Stage 10 nie dodaje nowego policy-vector slotu, więc nie ma migracji wektorów ani wymuszonego retrainingu istniejących polityk.
 
@@ -136,7 +162,7 @@ Dopiero osobny przyszły adapter sprzętowy może wykonać zatwierdzony plan; St
 
 - Nie zmieniamy fizycznego progu sensora.
 - Nie śledzimy tożsamości osoby.
-- Raw-score calibration ma konserwatywny start; osobny kanał niezależnych etykiet może ją później doprecyzować.
+- Raw-score calibration ma konserwatywny start i jest doprecyzowywana tylko przez niezależne, device-separated etykiety; brak takiej etykiety pozostawia model przy priorze kalibracyjnym.
 - Nie próbujemy mnożyć wielu skorelowanych kanałów z jednego urządzenia.
 - Nie deklarujemy causal influence; mierzymy predictive timing gain i false-ON cost.
 - Stage 10 nie wysyła żadnych usług Home Assistant i nie zmienia granicy `ActionIntent -> Executor`.

@@ -344,7 +344,21 @@ class RoomBeliefModel:
         self.hypotheses = alive[:self.MAX_HYPOTHESES]
         self._refresh_pending_compat()
 
-    def _movement_enter(self, area, ts, movement_weight=1.0, learn=True):
+    def _movement_enter(self, area, ts, movement_weight=1.0, learn=True,
+                        source_id=None, source_device_id=None):
+        source_id = str(source_id or '')
+        source_device_id = str(source_device_id or '')
+
+        def provenance(hypothesis=None):
+            hypothesis = dict(hypothesis or {})
+            sources = [str(x) for x in (hypothesis.get('evidence_sources') or []) if x]
+            devices = [str(x) for x in (hypothesis.get('evidence_devices') or []) if x]
+            if source_id and source_id not in sources:
+                sources.append(source_id)
+            if source_device_id and source_device_id not in devices:
+                devices.append(source_device_id)
+            return sorted(sources)[-4:], sorted(devices)[-4:]
+
         candidates = []
         for hypothesis in self.hypotheses:
             age = float(ts) - float(hypothesis['ts'])
@@ -355,7 +369,9 @@ class RoomBeliefModel:
 
         created = []
         if not candidates:
-            created.append({'path': (area,), 'area': area, 'ts': float(ts), 'mass': 1.0})
+            sources, devices = provenance()
+            created.append({'path': (area,), 'area': area, 'ts': float(ts), 'mass': 1.0,
+                            'evidence_sources': sources, 'evidence_devices': devices})
         else:
             candidates.sort(key=lambda item: (-item[0], tuple(item[1]['path'])))
             total_score = sum(score for score, _ in candidates) or 1.0
@@ -378,11 +394,15 @@ class RoomBeliefModel:
                                  max(0.0, float(ts) - float(hypothesis['ts'])), ts, assignment)
                 hypothesis['mass'] = max(0.0, float(hypothesis['mass']) - assignment)
                 path = tuple((tuple(hypothesis['path']) + (area,))[-2:])
-                created.append({'path': path, 'area': area, 'ts': float(ts), 'mass': assignment})
+                sources, devices = provenance(hypothesis)
+                created.append({'path': path, 'area': area, 'ts': float(ts), 'mass': assignment,
+                                'evidence_sources': sources, 'evidence_devices': devices})
                 used += assignment
             unexplained = max(0.0, 1.0 - used)
             if unexplained >= self.MIN_HYPOTHESIS_MASS:
-                created.append({'path': (area,), 'area': area, 'ts': float(ts), 'mass': unexplained})
+                sources, devices = provenance()
+                created.append({'path': (area,), 'area': area, 'ts': float(ts), 'mass': unexplained,
+                                'evidence_sources': sources, 'evidence_devices': devices})
         self.hypotheses.extend(created)
         self.arrivals.append((area, float(ts)))
         self._prune_hypotheses(ts)
@@ -511,6 +531,7 @@ class RoomBeliefModel:
                 'available': available,
                 'communication_reliability': communication,
                 'role': role,
+                'device_id': evidence.get('device_id'),
                 'value_semantics': evidence.get('value_semantics') or params['semantics'],
             }
             if old_area and old_area != area:
@@ -538,7 +559,8 @@ class RoomBeliefModel:
             departed = bool(new_p < .5 and old_p >= .5 and available)
             if entered:
                 self._movement_enter(
-                    area, processing_ts, float(params.get('movement') or 0.0), learn=learn
+                    area, processing_ts, float(params.get('movement') or 0.0), learn=learn,
+                    source_id=entity_id, source_device_id=evidence.get('device_id'),
                 )
                 slot['arrival'] = processing_ts
             elif departed:
@@ -572,7 +594,8 @@ class RoomBeliefModel:
                   if 0 <= float(ts) - float(stamp) <= self.GAP]
         if recent:
             path = tuple(area for area, _ in recent[-2:])
-            return [{'path': path, 'area': path[-1], 'ts': float(recent[-1][1]), 'mass': 1.0}]
+            return [{'path': path, 'area': path[-1], 'ts': float(recent[-1][1]), 'mass': 1.0,
+                     'evidence_sources': [], 'evidence_devices': []}]
         return []
 
     def _arrival_forecast(self, area, ts):
@@ -643,9 +666,17 @@ class RoomBeliefModel:
                 },
                 'movement_hypotheses': [
                     {'path': list(h['path']), 'mass': float(h['mass']),
-                     'age_seconds': max(0.0, ts - float(h['ts']))}
+                     'age_seconds': max(0.0, ts - float(h['ts'])),
+                     'evidence_sources': list(h.get('evidence_sources') or []),
+                     'evidence_devices': list(h.get('evidence_devices') or [])}
                     for h in sorted(hypotheses, key=lambda row: -float(row['mass']))[:self.MAX_HYPOTHESES]
                 ],
+                'arrival_prior_sources': sorted({
+                    str(source) for h in hypotheses for source in (h.get('evidence_sources') or []) if source
+                }),
+                'arrival_prior_devices': sorted({
+                    str(device) for h in hypotheses for device in (h.get('evidence_devices') or []) if device
+                }),
                 'model_version': self.VERSION,
             }
 

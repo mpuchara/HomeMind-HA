@@ -37,7 +37,7 @@ def _finite(value):
 class AdaptivePresenceModel:
     """Small calibrated Bayesian fusion model with hysteresis and false-ON budget."""
 
-    VERSION = 1
+    VERSION = 2
     FIXED_BOUNDARY = 0.60
     ENTER_THRESHOLD = 0.58
     EXIT_THRESHOLD = 0.34
@@ -60,6 +60,11 @@ class AdaptivePresenceModel:
             while len(bins) < self.CALIBRATION_BINS:
                 bins.append({'count': 0, 'positive': 0})
             self.calibration[str(entity_id)] = {'bins': bins}
+        self.calibration_watermarks = {
+            str(key): float(value)
+            for key, value in (raw.get('calibration_watermarks') or {}).items()
+            if _finite(value) is not None
+        }
         stored = dict(raw.get('metrics') or {})
         self.metrics = {
             'evaluations': max(0, int(stored.get('evaluations') or 0)),
@@ -88,24 +93,40 @@ class AdaptivePresenceModel:
     def evidence_is_independent(self, entity_id, ts):
         return float(self.threshold_tainted_until.get(str(entity_id), 0.0)) < float(ts)
 
-    def record_independent_label(self, source_id, raw_value, observed, label_source, ts=0.0):
-        """Calibrate one raw channel from an explicitly independent label source."""
+    def record_independent_label(self, source_id, raw_value, observed, label_source,
+                                 ts=0.0, label_event_ts=None):
+        """Calibrate once per independent physical label event."""
         source_id = str(source_id or '').strip()
         label_source = str(label_source or '').strip()
         if not source_id or not label_source:
             raise ValueError('Adaptive presence calibration requires source and label_source')
         if label_source == source_id or label_source.startswith('model:'):
             raise ValueError('Adaptive presence calibration requires independent evidence')
-        if not self.evidence_is_independent(label_source, ts):
+        if (not self.evidence_is_independent(label_source, ts)
+                or not self.evidence_is_independent(source_id, ts)):
             raise ValueError('Threshold-modified sensor output is not independent evidence')
         value = _finite(raw_value)
         if value is None or not 0.0 <= value <= 1.0:
             raise ValueError('Raw presence signal must be within [0,1]')
+        watermark_key = source_id + '|' + label_source
+        event_ts = _finite(label_event_ts)
+        if event_ts is not None:
+            previous = _finite(self.calibration_watermarks.get(watermark_key))
+            if previous is not None and event_ts <= previous + 1e-9:
+                result = self.calibration_summary(source_id)
+                result['applied'] = False
+                result['duplicate_label_event'] = True
+                return result
         row = self.calibration.setdefault(source_id, {'bins': self._blank_bins()})
         idx = min(self.CALIBRATION_BINS - 1, int(value * self.CALIBRATION_BINS))
         row['bins'][idx]['count'] += 1
         row['bins'][idx]['positive'] += 1 if bool(observed) else 0
-        return self.calibration_summary(source_id)
+        if event_ts is not None:
+            self.calibration_watermarks[watermark_key] = event_ts
+        result = self.calibration_summary(source_id)
+        result['applied'] = True
+        result['duplicate_label_event'] = False
+        return result
 
     def calibration_summary(self, source_id):
         bins = (self.calibration.get(str(source_id)) or {}).get('bins') or self._blank_bins()
@@ -154,8 +175,10 @@ class AdaptivePresenceModel:
         coverage = min(1.0, labels / 30.0)
         return 0.50 + 0.50 * reliability * coverage
 
-    def _select_raw_source(self, raw_sources):
-        rows = []
+    def _select_raw_source(self, raw_sources, prior_source_ids=None, prior_device_ids=None):
+        rows, excluded = [], []
+        prior_sources = {str(x) for x in (prior_source_ids or []) if x}
+        prior_devices = {str(x) for x in (prior_device_ids or []) if x}
         for raw in raw_sources or []:
             raw = dict(raw or {})
             value = _finite(raw.get('value'))
@@ -166,7 +189,11 @@ class AdaptivePresenceModel:
             if not raw.get('available', True):
                 continue
             source_id = str(raw.get('entity_id') or '')
+            device_id = str(raw.get('device_id') or '')
             if not source_id:
+                continue
+            if source_id in prior_sources or (device_id and device_id in prior_devices):
+                excluded.append({**raw, 'exclusion_reason': 'overlaps_arrival_prior'})
                 continue
             summary = self.calibration_summary(source_id)
             rows.append((
@@ -174,25 +201,34 @@ class AdaptivePresenceModel:
                 {**raw, 'value': _clamp(value), 'quality': _clamp(quality)},
             ))
         if not rows:
-            return None, []
-        # One raw channel is authoritative for MVP.  Multiplying sibling radar-energy
-        # channels would falsely treat correlated evidence as independent.
+            return None, [], excluded
         rows.sort(key=lambda item: (-item[0], -item[1], item[2]))
-        return rows[0][3], [item[3] for item in rows[1:]]
+        return rows[0][3], [item[3] for item in rows[1:]], excluded
 
-    def capability(self, area, sources):
-        raw, binary = [], []
+    def capability(self, area, sources, prior_source_ids=None, prior_device_ids=None):
+        raw, binary, excluded_raw = [], [], []
+        prior_sources = {str(x) for x in (prior_source_ids or []) if x}
+        prior_devices = {str(x) for x in (prior_device_ids or []) if x}
         for row in sources or []:
             row = dict(row or {})
             if not row.get('available', True):
                 continue
             role = str(row.get('role') or '')
             if role in RAW_ROLES:
-                raw.append(str(row.get('entity_id')))
+                source_id = str(row.get('entity_id') or '')
+                device_id = str(row.get('device_id') or '')
+                if source_id in prior_sources or (device_id and device_id in prior_devices):
+                    excluded_raw.append(source_id)
+                else:
+                    raw.append(source_id)
             elif role in DIRECT_BINARY_ROLES:
                 binary.append(str(row.get('entity_id')))
         raw = sorted(x for x in raw if x and x != 'None')
         binary = sorted(x for x in binary if x and x != 'None')
+        excluded_raw = sorted(x for x in excluded_raw if x and x != 'None')
+        reason = ('independent_local_raw_signal_available' if raw else
+                  'raw_signal_not_independent_of_arrival_prior' if excluded_raw else
+                  'no_local_raw_signal')
         return {
             'version': self.VERSION,
             'area_id': area,
@@ -201,8 +237,9 @@ class AdaptivePresenceModel:
             'arrival_anticipation_available': True,
             'local_threshold_distance_available': bool(raw),
             'raw_sources': raw,
+            'excluded_raw_sources': excluded_raw,
             'binary_sources': binary,
-            'reason': 'independent_local_raw_signal_available' if raw else 'no_local_raw_signal',
+            'reason': reason,
             'binary_only_limitation': None if raw else (
                 'Binary presence has no distance-to-threshold information; use arrival anticipation from other observations.'
             ),
@@ -240,7 +277,8 @@ class AdaptivePresenceModel:
         }
 
     def evaluate(self, area, ts, arrival_prior, trajectory_confidence, raw_sources,
-                 room_calibration=None, capability=None):
+                 room_calibration=None, capability=None, prior_source_ids=None,
+                 prior_device_ids=None):
         """Fuse one arrival prior with one independent raw channel, then apply hysteresis."""
         ts = float(ts)
         prior_raw = _clamp(arrival_prior)
@@ -249,9 +287,14 @@ class AdaptivePresenceModel:
         # Arrival prior remains a prior, not proof. Weak topology/calibration shrinks it
         # toward zero rather than toward 0.5, avoiding fabricated occupancy.
         prior = _clamp(prior_raw * (0.55 + 0.45 * trajectory) * (0.75 + 0.25 * room_quality), 0.001, 0.95)
-        chosen, alternatives = self._select_raw_source(raw_sources)
+        chosen, alternatives, excluded = self._select_raw_source(
+            raw_sources, prior_source_ids=prior_source_ids, prior_device_ids=prior_device_ids
+        )
         all_sources = [dict(x) for x in (raw_sources or []) if isinstance(x, dict)]
-        cap = dict(capability or self.capability(area, all_sources))
+        cap = dict(capability or self.capability(
+            area, all_sources,
+            prior_source_ids=prior_source_ids, prior_device_ids=prior_device_ids,
+        ))
         state = self._runtime(area)
         self._prune_false_budget(state, ts)
         self.metrics['evaluations'] += 1
@@ -269,6 +312,9 @@ class AdaptivePresenceModel:
                 'effective_arrival_prior': prior,
                 'trajectory_confidence': trajectory,
                 'selected_raw_source': None,
+                'excluded_raw_sources': [str(x.get('entity_id')) for x in excluded],
+                'prior_source_ids': sorted(str(x) for x in (prior_source_ids or []) if x),
+                'prior_device_ids': sorted(str(x) for x in (prior_device_ids or []) if x),
                 'fixed_boundary': self.FIXED_BOUNDARY,
                 'fixed_boundary_active': False,
                 'enter_threshold': self.ENTER_THRESHOLD,
@@ -335,6 +381,9 @@ class AdaptivePresenceModel:
             'raw_independent_labels': calibration_labels,
             'likelihood_ratio': likelihood_ratio,
             'alternative_raw_sources_not_multiplied': [str(x.get('entity_id')) for x in alternatives],
+            'excluded_raw_sources': [str(x.get('entity_id')) for x in excluded],
+            'prior_source_ids': sorted(str(x) for x in (prior_source_ids or []) if x),
+            'prior_device_ids': sorted(str(x) for x in (prior_device_ids or []) if x),
             'fixed_boundary': self.FIXED_BOUNDARY,
             'fixed_boundary_active': bool(fixed_active),
             'enter_threshold': self.ENTER_THRESHOLD,
@@ -357,6 +406,7 @@ class AdaptivePresenceModel:
         return {
             'version': self.VERSION,
             'calibration': copy.deepcopy(self.calibration),
+            'calibration_watermarks': copy.deepcopy(self.calibration_watermarks),
             'metrics': copy.deepcopy(self.metrics),
             # live hysteresis, pending early proof, false-event timestamps and taint leases
             # are intentionally omitted so restart cannot resurrect virtual presence.
@@ -372,6 +422,10 @@ class AdaptivePresenceModel:
                 target['bins'][idx]['positive'] += int(row['bins'][idx].get('positive') or 0)
         for key in self.metrics:
             self.metrics[key] += other.metrics.get(key, 0)
+        for key, value in other.calibration_watermarks.items():
+            self.calibration_watermarks[key] = max(
+                float(self.calibration_watermarks.get(key) or 0.0), float(value)
+            )
 
 
 class HardwareThresholdAdapterContract:
