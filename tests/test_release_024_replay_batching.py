@@ -134,6 +134,11 @@ class Release024SourceContractTests(unittest.TestCase):
         self.assertIn("STORE.get_agent_config(agent_id)", start_job)
         self.assertNotIn("STORE.get_agent(agent_id)", start_job)
 
+    def test_runtime_activity_surfaces_replay_batch_size(self):
+        source = self.source("static/runtime_activity_ui.js")
+        self.assertIn("lp.experience_batch_rows", source)
+        self.assertIn("replay batch", source)
+
     def test_new_batch_size_is_bounded_and_configurable(self):
         config = (ROOT / "adaptive_ai" / "config.yaml").read_text(encoding="utf-8")
         settings = self.source("settings.py")
