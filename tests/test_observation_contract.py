@@ -130,7 +130,9 @@ class ObservationFeatureTests(unittest.TestCase):
     def test_fast_light_v2_nominal_transport_metadata_is_neutral(self):
         history = TemporalHistory()
         st = sensor_state("sensor.test", "on", 100.0, device_class="occupancy")
-        add_live(history, st, 100.0, received=None)
+        # Raw snapshot path deliberately has no received-time metadata, matching callers
+        # that have a valid HA state but not a transport timestamp.
+        history.add(st["entity_id"], 100.0, dict(st))
         vector, labels, _ = build_observation_features(
             self.schema, {"sensor.test": st}, history, 100.0, self.a
         )
