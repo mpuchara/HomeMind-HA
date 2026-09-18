@@ -147,6 +147,56 @@ class ExplicitRouteRegistryTests(unittest.TestCase):
         self.assertEqual([x["name"] for x in left.routes()], ["left"])
         self.assertEqual([x["name"] for x in right.routes()], ["right"])
 
+    def test_server_bound_dispatch_is_instance_owned_even_with_shared_base_handler(self):
+        class Handler:
+            def __init__(self, path, server):
+                self.path = path
+                self.server = server
+                self.calls = []
+            def require_trusted_client(self): return True
+            def require_runtime(self): return True
+            def do_GET(self): self.calls.append("get-fallback")
+            def do_POST(self): self.calls.append("post-fallback")
+            def do_PATCH(self): self.calls.append("patch-fallback")
+            def do_DELETE(self): self.calls.append("delete-fallback")
+
+        class Server:
+            def __init__(self):
+                self.RequestHandlerClass = Handler
+
+        class Core:
+            pass
+
+        left_core, right_core = Core(), Core()
+        left_core.Handler = right_core.Handler = Handler
+        left_core.HTTP_SERVER, right_core.HTTP_SERVER = Server(), Server()
+
+        left = install_dispatch(left_core)
+        left_handler = left_core.HTTP_SERVER.RequestHandlerClass
+        # Repeated installation for one runtime is idempotent and does not stack a new class.
+        self.assertIs(install_dispatch(left_core), left)
+        self.assertIs(left_core.HTTP_SERVER.RequestHandlerClass, left_handler)
+
+        right = install_dispatch(right_core)
+        right_handler = right_core.HTTP_SERVER.RequestHandlerClass
+        self.assertIsNot(left_handler, right_handler)
+        self.assertIs(left_handler.__bases__[0], Handler)
+        self.assertIs(right_handler.__bases__[0], Handler)
+        self.assertNotIn("_explicit_http_dispatch_installed", Handler.__dict__)
+        self.assertNotIn("_explicit_http_route_registry", Handler.__dict__)
+
+        left.register("POST", "left", r"^/same$", lambda http, params: http.calls.append("left"))
+        right.register("POST", "right", r"^/same$", lambda http, params: http.calls.append("right"))
+
+        a = left_handler("/same", left_core.HTTP_SERVER)
+        b = right_handler("/same", right_core.HTTP_SERVER)
+        a.do_POST()
+        b.do_POST()
+        self.assertEqual(a.calls, ["left"])
+        self.assertEqual(b.calls, ["right"])
+        self.assertEqual(left.descriptor()["binding"]["mode"], "server_instance_handler_subclass")
+        self.assertEqual(right.descriptor()["binding"]["mode"], "server_instance_handler_subclass")
+
     def test_single_dispatch_install_is_idempotent_and_falls_back_for_unmigrated_route(self):
         class Handler:
             def __init__(self, path):
@@ -184,8 +234,10 @@ class FinalRuntimeCharacterizationTests(unittest.TestCase):
         preference = (SRC / "preference_queue_main.py").read_text(encoding="utf-8")
         fast = (SRC / "fast_queue_main.py").read_text(encoding="utf-8")
         queue = (SRC / "queue_main.py").read_text(encoding="utf-8")
+        main = (SRC / "main.py").read_text(encoding="utf-8")
         docker = (ROOT / "adaptive_ai/Dockerfile").read_text(encoding="utf-8")
         root = (SRC / "runtime_composition.py").read_text(encoding="utf-8")
+        transport = (SRC / "runtime_http.py").read_text(encoding="utf-8")
 
         self.assertIn("exec python3 -u /app/trial_queue_main.py", run)
         self.assertIn('CMD ["/app/run.sh"]', docker)
@@ -195,8 +247,11 @@ class FinalRuntimeCharacterizationTests(unittest.TestCase):
         self.assertIn("import fast_queue_main as runtime", preference)
         self.assertIn("import queue_main as queued_runtime", fast)
         self.assertIn("import main as core", queue)
+        self.assertIn("HTTP_SERVER = server", main)
         self.assertIn("ENTRYPOINT_CHAIN", root)
         self.assertIn('"promotion_validations[]"', root)
+        self.assertIn("server.RequestHandlerClass = bound", transport)
+        self.assertIn("server_instance_handler_subclass", transport)
 
     def test_final_root_declares_all_requested_service_contracts(self):
         source = (SRC / "runtime_composition.py").read_text(encoding="utf-8")
