@@ -252,7 +252,7 @@ class ObservationFeatureTests(unittest.TestCase):
             history, 100.02, a,
         )
 
-        self.assertEqual(vector.get(label_index(labels, ":valid"), 0.0), 0.0)
+        self.assertEqual(vector.get(label_index(labels, ":valid"), 0.0), -1.0)
         self.assertEqual(
             meta["entity_observations"]["sensor.room_lux"]["photometric"]["source"],
             "unresolved_light_on",
