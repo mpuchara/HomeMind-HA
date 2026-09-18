@@ -713,10 +713,10 @@ class ObservationSQLiteTemporalTracker(replay_module.SQLiteTemporalTracker):
                 params.extend([eid, float(ts), float(ts), count])
             if not parts:
                 continue
-            sql = (
-                "SELECT * FROM (" + " UNION ALL ".join(parts) +
-                ") ORDER BY event_time,received_time,event_key"
-            )
+            # Each branch is already bounded newest-first. The caller performs the one
+            # authoritative causal merge/sort in Python, so an outer SQLite temp sort is
+            # pure overhead and can create long CPU bursts on a Raspberry Pi.
+            sql = " UNION ALL ".join(parts)
             raw = self._fetch_rows(sql, params)
             TRAINING_BUDGET.checkpoint("temporal_feature_before_query")
             result.extend(FeatureJournal.normalized_row(row) for row in raw)
@@ -746,10 +746,7 @@ class ObservationSQLiteTemporalTracker(replay_module.SQLiteTemporalTracker):
                 ])
             if not parts:
                 continue
-            sql = (
-                "SELECT * FROM (" + " UNION ALL ".join(parts) +
-                ") ORDER BY event_time,received_time,event_key"
-            )
+            sql = " UNION ALL ".join(parts)
             raw = self._fetch_rows(sql, params)
             TRAINING_BUDGET.checkpoint("temporal_feature_forward_query")
             result.extend(FeatureJournal.normalized_row(row) for row in raw)
