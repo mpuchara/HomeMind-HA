@@ -80,6 +80,8 @@ def ensure_tables(store):
                 last_dispatch_agent_id TEXT,
                 last_action_json TEXT,
                 manual_hold_until REAL NOT NULL DEFAULT 0,
+                control_owner_agent_id TEXT,
+                control_acquired_ts REAL,
                 updated_ts REAL NOT NULL
             );
             CREATE TABLE IF NOT EXISTS perception_resource_leases (
@@ -93,6 +95,8 @@ def ensure_tables(store):
             """
         )
         _ensure_column(c, "device_resource_state", "last_dispatch_agent_id", "TEXT")
+        _ensure_column(c, "device_resource_state", "control_owner_agent_id", "TEXT")
+        _ensure_column(c, "device_resource_state", "control_acquired_ts", "REAL")
 
 
 def _safe_json(value, fallback):
@@ -353,6 +357,91 @@ class DeviceAgentService:
             ).fetchall() if keys else []
         return {row["resource_key"]: dict(row) for row in rows}
 
+    def claim_control_resources(self, agent, *, now=None):
+        """Durably reserve every conflicting resource before the caller commits mode=control."""
+        now = time.time() if now is None else float(now)
+        keys = self.descriptor(agent)["resource_keys"]
+        with self.lock_resources(keys):
+            with self.store.lock, self.store.conn() as c:
+                rows = {row["resource_key"]: dict(row) for row in c.execute(
+                    "SELECT * FROM device_resource_state WHERE resource_key IN (%s)" % ",".join("?" for _ in keys),
+                    tuple(keys),
+                ).fetchall()} if keys else {}
+                for key in keys:
+                    owner = str((rows.get(key) or {}).get("control_owner_agent_id") or "")
+                    if owner and owner != str(agent["id"]):
+                        return None
+                for key in keys:
+                    c.execute(
+                        """INSERT INTO device_resource_state
+                           (resource_key,control_owner_agent_id,control_acquired_ts,updated_ts)
+                           VALUES(?,?,?,?) ON CONFLICT(resource_key) DO UPDATE SET
+                           control_owner_agent_id=excluded.control_owner_agent_id,
+                           control_acquired_ts=COALESCE(device_resource_state.control_acquired_ts,
+                                                       excluded.control_acquired_ts),
+                           updated_ts=excluded.updated_ts""",
+                        (key, str(agent["id"]), now, now),
+                    )
+        return {"resource_keys": keys, "agent_id": str(agent["id"]), "acquired_ts": now}
+
+    def release_control_resources(self, agent, *, now=None):
+        now = time.time() if now is None else float(now)
+        keys = self.descriptor(agent)["resource_keys"]
+        with self.lock_resources(keys):
+            with self.store.lock, self.store.conn() as c:
+                for key in keys:
+                    c.execute(
+                        """UPDATE device_resource_state
+                           SET control_owner_agent_id=NULL,control_acquired_ts=NULL,updated_ts=?
+                           WHERE resource_key=? AND control_owner_agent_id=?""",
+                        (now, key, str(agent["id"])),
+                    )
+        return True
+
+    def control_owner_conflict(self, agent):
+        keys = self.descriptor(agent)["resource_keys"]
+        rows = self._resource_rows(keys)
+        owners = sorted({
+            str(row.get("control_owner_agent_id"))
+            for row in rows.values()
+            if row.get("control_owner_agent_id")
+            and str(row.get("control_owner_agent_id")) != str(agent["id"])
+        })
+        return owners
+
+    def reconcile_control_resources(self):
+        """Repair stale claims conservatively; never choose between conflicting Control agents."""
+        agents = [a for a in self.store.list_agent_configs() if a.get("enabled")]
+        by_id = {str(a["id"]): a for a in agents}
+        control_ids = {str(a["id"]) for a in agents if a.get("mode") == "control"}
+        now = time.time()
+        with self.store.lock, self.store.conn() as c:
+            c.execute(
+                """UPDATE device_resource_state
+                   SET control_owner_agent_id=NULL,control_acquired_ts=NULL,updated_ts=?
+                   WHERE control_owner_agent_id IS NOT NULL
+                     AND control_owner_agent_id NOT IN (%s)""" %
+                (",".join("?" for _ in control_ids) if control_ids else "''"),
+                ([now] + sorted(control_ids)) if control_ids else [now],
+            )
+        conflicts = []
+        claimed = []
+        for agent in sorted((by_id[x] for x in control_ids), key=lambda a: str(a["id"])):
+            peers = [
+                other for other in agents
+                if other.get("mode") == "control" and str(other["id"]) != str(agent["id"])
+                and self.conflicts(agent, other)
+            ]
+            if peers:
+                conflicts.append({
+                    "agent_id": str(agent["id"]),
+                    "conflicts_with": sorted(str(x["id"]) for x in peers),
+                })
+                continue
+            if self.claim_control_resources(agent, now=now):
+                claimed.append(str(agent["id"]))
+        return {"claimed": claimed, "conflicts": conflicts}
+
     def _persist_runtime_manual_holds(self, agent, runtime_by_agent=None):
         now = time.time()
         desc = self.descriptor(agent)
@@ -403,6 +492,11 @@ class DeviceAgentService:
         hold_until = self.shared_manual_hold_until(agent, runtime_by_agent)
         leases = self.active_lease(agent, now)
         rows = self._resource_rows(desc["resource_keys"])
+        control_conflict = any(
+            row.get("control_owner_agent_id")
+            and str(row.get("control_owner_agent_id")) != str(agent["id"])
+            for row in rows.values()
+        )
         # Same-agent cooldown/pending is already enforced by Executor. Shared dwell exists
         # to keep a sibling property/entity from immediately fighting the last command.
         sibling_dwell = False
@@ -420,6 +514,8 @@ class DeviceAgentService:
                 legal, reason = False, eligibility["reason"]
             elif hold_until > now:
                 legal, reason = False, "manual override has priority for this shared resource"
+            elif control_conflict:
+                legal, reason = False, "shared resource Control ownership belongs to another agent"
             elif leases:
                 legal, reason = False, "shared resource in-flight lease is active"
             elif sibling_dwell:
@@ -459,6 +555,9 @@ class DeviceAgentService:
                 for key in keys:
                     row = rows.get(key) or {}
                     if float(row.get("manual_hold_until") or 0.0) > now:
+                        return None
+                    control_owner = str(row.get("control_owner_agent_id") or "")
+                    if control_owner and control_owner != str(agent["id"]):
                         return None
                     if (float(row.get("lease_until") or 0.0) > now
                             and str(row.get("owner_intent_id") or "") != str(intent_id)):
@@ -624,6 +723,7 @@ class DeviceAgentService:
             "agent_identity_migration": "agent.id/history/generations unchanged; logical_device_id + device_property are additive",
             "property_mapping": "explicit property_name may define logical property; physical target_property is never rewritten",
             "shared_resources": ["device", "explicit group", "thermal/solar-shading zone", "sensor configuration"],
+            "control_ownership": "durable pre-commit resource claim closes mode=control transition races and is reconciled on restart",
             "manual_priority": "hard guard independent of reward",
             "action_mask": "legal_value + autonomy description + shared manual hold + in-flight lease + cross-agent min dwell",
             "dispatch_reservation": "rechecks manual hold, lease and cross-agent dwell atomically under all shared-resource locks",
