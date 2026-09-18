@@ -6,10 +6,12 @@ from fast_runtime import (
     FAST_ACTION_INTERVAL_SECONDS,
     FAST_ACK_TIMEOUT_SECONDS,
     FAST_SETTLING_SECONDS,
+    FAST_OFF_CONFIRMATION_SECONDS,
     is_fast_target,
     normalize_fast_payload,
     migrate_existing_fast_agents,
     install,
+    stabilize_fast_light_power_decision,
 )
 
 
@@ -73,6 +75,66 @@ class FastRuntimeTests(unittest.TestCase):
         self.assertEqual(store.meta['manual_hold:lamp'], '999999.0')
         self.assertEqual(store.meta['manual_hold_source:lamp'], 'explicit_user_v8')
         self.assertEqual(engine.runtime['lamp']['manual_override_until'], 999999.0)
+
+    def test_statistical_off_requires_continuous_confirmation_but_on_is_immediate(self):
+        a = self.fast_agent()
+        rt = {}
+        value, held = stabilize_fast_light_power_decision(
+            a, rt, 1.0, 0.0, "historical_policy_bootstrap", 100.0
+        )
+        self.assertTrue(held)
+        self.assertEqual(value, 1.0)
+        self.assertTrue(rt["fast_off_confirmation_active"])
+
+        value, held = stabilize_fast_light_power_decision(
+            a, rt, 1.0, 0.0, "historical_policy_bootstrap",
+            100.0 + FAST_OFF_CONFIRMATION_SECONDS - .01,
+        )
+        self.assertTrue(held)
+        self.assertEqual(value, 1.0)
+
+        value, held = stabilize_fast_light_power_decision(
+            a, rt, 1.0, 0.0, "historical_policy_bootstrap",
+            100.0 + FAST_OFF_CONFIRMATION_SECONDS,
+        )
+        self.assertFalse(held)
+        self.assertEqual(value, 0.0)
+
+        # Any renewed ON prediction cancels the pending OFF run immediately.
+        rt["fast_off_candidate_since"] = 200.0
+        value, held = stabilize_fast_light_power_decision(
+            a, rt, 1.0, 1.0, "historical_policy_bootstrap", 200.1
+        )
+        self.assertFalse(held)
+        self.assertEqual(value, 1.0)
+        self.assertNotIn("fast_off_candidate_since", rt)
+
+    def test_explicit_and_non_light_off_bypass_confirmation(self):
+        a = self.fast_agent()
+        for source in ("scoped_instruction:one_time", "preference_model", "experiment"):
+            rt = {}
+            value, held = stabilize_fast_light_power_decision(
+                a, rt, 1.0, 0.0, source, 100.0
+            )
+            self.assertFalse(held, source)
+            self.assertEqual(value, 0.0, source)
+
+        switch = self.fast_agent(target_entity="switch.plug")
+        value, held = stabilize_fast_light_power_decision(
+            switch, {}, 1.0, 0.0, "historical_policy_bootstrap", 100.0
+        )
+        self.assertFalse(held)
+        self.assertEqual(value, 0.0)
+
+    def test_physical_manual_off_is_never_held_by_confirmation(self):
+        a = self.fast_agent()
+        rt = {"fast_off_candidate_since": 90.0}
+        value, held = stabilize_fast_light_power_decision(
+            a, rt, 0.0, 0.0, "historical_policy_bootstrap", 100.0
+        )
+        self.assertFalse(held)
+        self.assertEqual(value, 0.0)
+        self.assertNotIn("fast_off_candidate_since", rt)
 
     def test_install_preserves_manual_priority_for_fast_light(self):
         store = FakeStore([self.fast_agent(action_interval=.25, settling_seconds=.1, ack_timeout=2)])
