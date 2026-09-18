@@ -850,7 +850,21 @@ def install(manager):
         # Persist the durable outcome before the Explore wrapper can wake Candidate
         # training. This removes the old race where the worker could see a queued child
         # before the TrialRecord reward/status was committed.
-        journal.finish(trial, reward, reason, experiments.clock())
+        durable_record = journal.finish(trial, reward, reason, experiments.clock())
+        shadow = getattr(manager.engine, "policy_backend_shadow", None)
+        if shadow is not None and durable_record is not None:
+            try:
+                policy = manager.engine.models.get(aid) or manager.engine.policy(
+                    manager.store.get_agent_config(aid)
+                )
+                shadow.observe_trial_record(durable_record, policy=policy)
+            except Exception as exc:
+                manager.store.event(
+                    aid, "warning", "policy_backend_shadow_trial_gap",
+                    "Shadow backend could not consume the durable TrialRecord",
+                    {"trial_id": trial.get("trial_id"),
+                     "error": f"{type(exc).__name__}: {exc}"},
+                )
         result = previous_finish(aid, reward, reason)
         if session is not None:
             # F19: Free Explore cannot train the Live residual owner. Restore exactly the
