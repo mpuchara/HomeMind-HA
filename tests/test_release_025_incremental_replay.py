@@ -301,6 +301,11 @@ class Release025SourceContractTests(unittest.TestCase):
         root = Path(__file__).resolve().parents[1]
         return (root / "adaptive_ai" / "src" / name).read_text(encoding="utf-8")
 
+    def test_replay_sql_chunks_are_pi_interactive_sized(self):
+        self.assertLessEqual(SQLiteTemporalTracker.SQL_ENTITY_CHUNK, 32)
+        source = self.source("replay.py")
+        self.assertIn('sql = " UNION ALL ".join(parts)', source)
+
     def test_tracker_has_bulk_bootstrap_forward_cursor_and_rewind_path(self):
         source = self.source("replay.py")
         self.assertIn("UNION ALL", source)
