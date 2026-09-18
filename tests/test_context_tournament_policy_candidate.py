@@ -10,6 +10,7 @@ import context_tournament_promotion as promotion
 from context import ExplicitFeatureSchema
 from context_tournament_policy_candidate import (
     CONTRACT_VERSION,
+    exact_candidate_version_matches,
     install_policy_candidates,
     plan_target_schema,
     promotion_gate,
@@ -17,6 +18,7 @@ from context_tournament_policy_candidate import (
     semantic_predictive_score,
 )
 from manual_context_learning import _migrate_schema
+from observation_contract import FeatureSchemaV12, HOME_FEATURE_NAMES
 from policy import MultiHorizonPolicy
 from storage import Store
 
@@ -163,6 +165,81 @@ class SchemaPlanningTests(unittest.TestCase):
         self.assertEqual(gate['reason'], 'own_action_leakage')
 
 
+class VersionedSchemaMigrationTests(unittest.TestCase):
+    def test_v12_schema_migration_preserves_entire_home_tail_including_known(self):
+        a = agent(name='v12 home tail')
+        states = {
+            'light.kitchen': state('light.kitchen', 'off'),
+            'binary_sensor.primary': state('binary_sensor.primary', 'off', device_class='occupancy'),
+            'binary_sensor.new': state('binary_sensor.new', 'on', device_class='occupancy'),
+        }
+        policy = MultiHorizonPolicy(a, states, {}, set())
+        policy.schema = FeatureSchemaV12(policy.dims, ['binary_sensor.primary'])
+        horizon = min(policy.horizons)
+        known_idx = policy.dims - 1
+        first_home_idx = policy.dims - len(HOME_FEATURE_NAMES)
+        policy.heads[horizon].a[0][first_home_idx] = 4.0
+        policy.heads[horizon].b[0][first_home_idx] = 1.25
+        policy.heads[horizon].a[0][known_idx] = 7.0
+        policy.heads[horizon].b[0][known_idx] = 2.75
+
+        result = _migrate_schema(
+            policy,
+            ['binary_sensor.primary', 'binary_sensor.new'],
+            {'selection_reasons': {
+                'binary_sensor.primary': ['automation-primary'],
+                'binary_sensor.new': ['sensor-tournament'],
+            }},
+        )
+
+        self.assertTrue(result['changed'])
+        self.assertEqual(policy.schema.VERSION, FeatureSchemaV12.VERSION)
+        self.assertAlmostEqual(policy.heads[horizon].a[0][first_home_idx], 4.0)
+        self.assertAlmostEqual(policy.heads[horizon].b[0][first_home_idx], 1.25)
+        self.assertAlmostEqual(policy.heads[horizon].a[0][known_idx], 7.0)
+        self.assertAlmostEqual(policy.heads[horizon].b[0][known_idx], 2.75)
+
+    def test_persisted_candidate_from_previous_data_contract_is_not_reused(self):
+        a = agent(name='candidate data version')
+        states = {
+            'light.kitchen': state('light.kitchen', 'off'),
+            'binary_sensor.primary': state('binary_sensor.primary', 'off', device_class='occupancy'),
+            'binary_sensor.new': state('binary_sensor.new', 'on', device_class='occupancy'),
+        }
+        policy = MultiHorizonPolicy(a, states, {}, set())
+        policy.schema = FeatureSchemaV12(policy.dims, ['binary_sensor.primary'])
+        target_schema = ['binary_sensor.primary', 'binary_sensor.new']
+        candidate = MultiHorizonPolicy(a, states, {}, set(), model=policy.serialize())
+        candidate.schema = FeatureSchemaV12(candidate.dims, target_schema)
+        raw = candidate.serialize()
+        revision = str(policy.model_revision)
+        tournament = {'schema_revision': 5}
+        model = {
+            'evaluation_champion_revision': revision,
+            'candidate_source_model_revision': revision,
+            'candidate_contract_version': CONTRACT_VERSION,
+            'candidate_data_version': {
+                'contract': 'paired_future_policy_v1',
+                'schema_revision': 5,
+                'champion_revision': revision,
+                'policy_version': int(policy.VERSION),
+                'feature_schema_version': int(policy.schema.VERSION),
+            },
+        }
+
+        self.assertFalse(
+            exact_candidate_version_matches(model, raw, target_schema, policy, tournament)
+        )
+        model['candidate_data_version']['contract'] = 'paired_future_policy_v2'
+        self.assertTrue(
+            exact_candidate_version_matches(model, raw, target_schema, policy, tournament)
+        )
+        model['candidate_data_version']['schema_revision'] = 4
+        self.assertFalse(
+            exact_candidate_version_matches(model, raw, target_schema, policy, tournament)
+        )
+
+
 class ExactPolicyPromotionTests(unittest.TestCase):
     class FakeService:
         def __init__(self, store, engine, tournament, shadow_model):
@@ -243,11 +320,19 @@ class ExactPolicyPromotionTests(unittest.TestCase):
             }
             shadow_model = {
                 'candidate_contract_version': CONTRACT_VERSION,
+                'candidate_source_model_revision': live.model_revision,
                 'candidate_target_schema': list(target_schema),
                 'candidate_replaced_entity': None,
                 'candidate_policy': candidate.serialize(),
                 'candidate_training_samples': 50,
                 'evaluation_champion_revision': live.model_revision,
+                'candidate_data_version': {
+                    'contract': 'paired_future_policy_v2',
+                    'schema_revision': 1,
+                    'champion_revision': live.model_revision,
+                    'policy_version': int(live.VERSION),
+                    'feature_schema_version': int(live.schema.VERSION),
+                },
             }
             engine = SimpleNamespace(
                 models={a['id']: live}, state_map=states, entity_registry={}, context_relevance={},
