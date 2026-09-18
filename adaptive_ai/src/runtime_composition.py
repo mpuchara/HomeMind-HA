@@ -15,7 +15,7 @@ from dataclasses import dataclass
 import time
 
 
-CONTRACT_VERSION = 2
+CONTRACT_VERSION = 3
 ENTRYPOINT_CHAIN = (
     "run.sh",
     "trial_queue_main.py",
@@ -104,13 +104,18 @@ class RuntimeCompositionRoot:
             },
             "low_power": low_power() if callable(low_power) else None,
             "transport": router.descriptor(),
+            "transport_binding": {
+                "owner": "concrete_HTTP_SERVER_instance",
+                "handler_strategy": "per_server_subclass_no_shared_main_Handler_mutation",
+                "fallback": "legacy_class_binding_only_for_entrypoints_without_exposed_server",
+            },
             "dependencies": {
                 "clock": type(self.clock).__name__,
                 "repository": type(self.core.STORE).__name__ if self.core.STORE is not None else None,
                 "transport": type(router).__name__,
             },
             "remaining_legacy_overlays": [
-                "queue_main Handler compatibility chain",
+                "queue_main Handler compatibility chain for unmigrated routes",
                 "Candidate process_agent observation wrapper",
                 "unmigrated feature GET/static routes",
             ],
