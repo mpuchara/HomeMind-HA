@@ -42,7 +42,7 @@ from control import legal_value, same_value, timing_for
 from settings import OPTIONS, iso_now
 
 
-TRIAL_RECORD_VERSION = 1
+TRIAL_RECORD_VERSION = 2
 SAFE_HYPOTHESES = {"earlier_on", "small_brightness_adjustment"}
 BRIGHTNESS_PROPERTIES = {"brightness", "brightness_pct", "percentage", "level", "value"}
 
@@ -106,6 +106,13 @@ def ensure_trial_tables(store):
                 ON experiment_trial_records(child_generation_id,created_ts);
             """
         )
+        columns = {str(row[1]) for row in c.execute(
+            "PRAGMA table_info(experiment_trial_records)"
+        ).fetchall()}
+        if "episode_id" not in columns:
+            c.execute("ALTER TABLE experiment_trial_records ADD COLUMN episode_id TEXT")
+        if "learning_status" not in columns:
+            c.execute("ALTER TABLE experiment_trial_records ADD COLUMN learning_status TEXT")
 
 
 class TrialJournal:
