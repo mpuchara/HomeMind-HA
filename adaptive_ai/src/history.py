@@ -801,6 +801,7 @@ class HistoryManager(threading.Thread):
 
     def _train_from_archive(self, start_ts, end_ts, *, qualify=False, agent_ids=None, include_candidates=False, benchmark=None, accumulate_benchmark=False, progress_lo=None, progress_hi=None, progress_label=None):
         benchmark = bool(qualify) if benchmark is None else bool(benchmark)
+        self.temporal_replay_stats = {}
         agents = [a for a in STORE.list_agent_configs() if a["enabled"]]
         if agent_ids is not None:
             wanted = set(agent_ids)
@@ -1053,9 +1054,11 @@ class HistoryManager(threading.Thread):
             }
 
 
-        # One chronological replay cursor per prediction horizon. A 30 s head sees the
-        # house exactly as it looked 30 s before the historical action; a 5 min HVAC head
-        # sees the state 5 min earlier. All heads receive the same reward for the action.
+        # Historical features are reconstructed causally as-of each requested timestamp.
+        # 0.14.25 keeps two bounded incremental cursor roles (onset/anticipation and dwell
+        # persistence) so chronological work advances forward instead of repeatedly
+        # rebuilding selected-input history from SQLite. Prediction heads still receive
+        # the exact same feature timestamp/reward semantics as before.
         horizons = sorted({h for p in policies.values() for h in p.horizons})
         watched_entities = {eid for p in policies.values() for eid in p.schema.entities}
         replay_entities = set(watched_entities) | set(target_map.keys())
