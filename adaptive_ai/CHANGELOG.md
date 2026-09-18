@@ -1,3 +1,14 @@
+# 0.14.24 — 2026-09-18
+
+- Batch historical replay audit writes into bounded SQLite transactions instead of committing one transaction for every completed dwell. The default batch size is 64 rows and remains configurable.
+- Preserve crash safety: replay facts are flushed before model save, and the existing model history watermark still removes any facts committed by a failed pass.
+- Load existing historical experience keys once per agent so replay deduplication no longer needs a write transaction merely to discover that a dwell was already processed.
+- Make feature screening schema-aware: only agents without a persisted model and still using wildcard inputs run the broad precursor scan.
+- Reuse the persisted schema for later training chunks and Resume. Explicit Teach/Correct feature selections also bypass the broad whole-home scan.
+- Do not even open the screening archive cursor when no agent in the batch needs feature discovery.
+- Add a cooperative checkpoint after expensive target-edge precursor fan-out so one transition cannot monopolize the training worker between archive checkpoints.
+- Preserve policy/reward math, qualification thresholds, raw history, Candidate lineage, Correct/Teach labels and the one-heavy-job safety boundary.
+
 # 0.14.23 — 2026-09-18
 
 - Make **Apply Correct** a durable, idempotent two-phase operation: the HTTP path stores a client request ID and returns `202 Accepted` before Candidate orchestration.
