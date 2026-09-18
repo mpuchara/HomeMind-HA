@@ -452,6 +452,48 @@ class ProvenanceJournal:
             )
         return bool(cur.rowcount)
 
+    def record_experiences_batch(self, records):
+        """Persist a bounded group of provenance facts in one transaction.
+
+        This is the replay counterpart of record_experience().  It preserves the exact
+        idempotency-key contract while avoiding one WAL commit per historical dwell.
+        """
+        records = list(records or [])
+        if not records:
+            return 0
+        packed = []
+        default_created = float(self.clock())
+        for row in records:
+            packed.append((
+                str(row["experience_key"]),
+                CONTRACT_VERSION,
+                float(row.get("created_time") if row.get("created_time") is not None else default_created),
+                str(row["agent_id"]),
+                row.get("decision_id"),
+                row.get("source_event_id"),
+                row.get("experiment_id"),
+                row.get("episode_id"),
+                str(row["source"]),
+                str(row.get("origin") or UNKNOWN),
+                None if row.get("action_index") is None else int(row["action_index"]),
+                _finite(row.get("action_value")),
+                _finite(row.get("reward")),
+                (_json({str(k): v for k, v in (row.get("features") or {}).items()})
+                 if row.get("features") is not None else None),
+                (_json(row.get("metadata") or {}) if row.get("metadata") is not None else None),
+            ))
+        with self.store.lock, self.store.conn() as c:
+            before = int(c.total_changes)
+            c.executemany(
+                """INSERT OR IGNORE INTO provenance_experiences
+                   (experience_key,contract_version,created_time,agent_id,decision_id,source_event_id,
+                    experiment_id,episode_id,source,origin,action_index,action_value,reward,
+                    features_json,metadata_json)
+                   VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                packed,
+            )
+            return max(0, int(c.total_changes) - before)
+
     def commit_feedback_model(self, *, experience_key, agent_id, model, action_index,
                               action_value, reward, reason, features, user_id=None,
                               decision_id=None, source_event_id=None, episode_id=None,
