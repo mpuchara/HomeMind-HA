@@ -87,15 +87,16 @@ assert _budget_pause(2.0, 0.25, 2.0) == 2.0
         self.assertIn("training_cpu_duty_cycle: 0.25", config)
         self.assertIn("training_archive_batch_rows: 16", config)
         self.assertIn("training_throttle_max_sleep_seconds: 2.0", config)
+        self.assertIn("training_max_continuous_work_ms: 75", config)
         self.assertIn('training_cpu_duty_cycle: "float(0.15,0.70)"', config)
-        self.assertIn('APP_VERSION = "0.14.17"', settings)
+        self.assertIn('APP_VERSION = "0.14.18"', settings)
         self.assertIn('if data.get("training_cpu_duty_cycle") == 0.55:', settings)
 
     def test_ui_surfaces_active_training_budget_instead_of_system_ready(self):
         source = (ROOT / "adaptive_ai/src/static/runtime_activity_ui.js").read_text(encoding="utf-8")
         self.assertIn("const duty=Math.round(Number(lp.training_cpu_duty_cycle||0)*100);", source)
         self.assertIn("CPU budget ${duty}%", source)
-        self.assertIn("Only one heavy job runs at a time. UI/status use lightweight reads while training.", source)
+        self.assertIn("Training yields between bounded work slices so Ingress and realtime control keep CPU priority.", source)
         self.assertIn("Autonomous Candidate training", source)
 
 
