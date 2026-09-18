@@ -420,7 +420,9 @@ class SQLiteTemporalTracker:
         retained = []
         seeds = dict(self._home_seed_rows)
         for row in sorted(seed_advances, key=self._row_order):
-            seeds[row["entity_id"]] = row
+            previous = seeds.get(row["entity_id"])
+            if previous is None or self._row_order(row) >= self._row_order(previous):
+                seeds[row["entity_id"]] = row
             TRAINING_BUDGET.checkpoint("temporal_home_seed_advance")
         for row in combined:
             received_ts = self._availability_time(row)
