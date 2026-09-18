@@ -885,18 +885,33 @@ class HistoryManager(threading.Thread):
         edge_limit = max(8, min(2048, 32768 // max(1, len(behaviour_candidates | fast_targets))))
         fast_edge_rows = {eid: deque(maxlen=edge_limit) for eid in (behaviour_candidates | fast_targets)}
 
-        previous_context = {}
-        screening_rows = (STORE.archive_iter(start_ts=start_ts, end_ts=end_ts, chunk_size=2000) if screening_required else ())
+        # Fast behavioural scoring intentionally keeps the bounded raw sensor rows,
+        # while generic precursor screening only needs effective per-entity changes.
+        # Split the two streams so chatty unchanged Recorder rows never enter Python's
+        # broad whole-home screening loop.
+        if screening_required and fast_edge_rows:
+            for edge_row in STORE.archive_iter(
+                start_ts=start_ts,
+                end_ts=selection_end,
+                entity_ids=set(fast_edge_rows),
+                chunk_size=512,
+            ):
+                if float(edge_row["ts"]) >= selection_end:
+                    break
+                fast_edge_rows[edge_row["entity_id"]].append(edge_row)
+
+        screening_rows = (
+            STORE.archive_change_iter(start_ts=start_ts, end_ts=selection_end, chunk_size=2000)
+            if screening_required else ()
+        )
+        screening_checkpoint_rows = max(
+            8, min(128, int(OPTIONS.get("training_archive_batch_rows", 16)))
+        )
+        screening_rows_done = 0
         for row in screening_rows:
             ts = float(row["ts"]); eid = row["entity_id"]
             if ts >= selection_end:
                 break
-            if eid in fast_edge_rows:
-                fast_edge_rows[eid].append(row)
-            signature = (row.get("state"), row.get("attributes_json"))
-            if previous_context.get(eid) == signature:
-                continue
-            previous_context[eid] = signature
             activity_counts[eid] = activity_counts.get(eid, 0) + 1
             for agent in screen_target_map.get(eid, []):
                 st = archived_state(row)
@@ -928,6 +943,14 @@ class HistoryManager(threading.Thread):
                     TRAINING_BUDGET.checkpoint("context_screen_target_edge")
                     last_target_value[agent["id"]] = float(val)
             recent_change[eid] = ts
+            screening_rows_done += 1
+            if screening_rows_done % screening_checkpoint_rows == 0:
+                TRAINING_BUDGET.checkpoint("context_screen_change_batch", force=True)
+            else:
+                TRAINING_BUDGET.checkpoint("context_screen_change_row")
+
+        if screening_required:
+            TRAINING_BUDGET.checkpoint("context_screen_complete", force=True)
 
         occupancy_edge_index = {
             eid: transition_edges(fast_edge_rows.get(eid) or [], occupancy_state_bool)
