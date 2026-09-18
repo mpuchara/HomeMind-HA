@@ -56,12 +56,13 @@ assert _budget_pause(2.0, 0.25, 2.0) == 2.0
 
     def test_low_power_training_defaults_are_pi_safe_and_migrate_only_old_default(self):
         source = (ROOT / "adaptive_ai/src/rpi_low_power_runtime.py").read_text(encoding="utf-8")
+        budget_source = (ROOT / "adaptive_ai/src/training_budget.py").read_text(encoding="utf-8")
         self.assertIn("DEFAULT_ARCHIVE_BATCH_ROWS = 16", source)
         self.assertIn("DEFAULT_TRAINING_DUTY_CYCLE = 0.25", source)
         self.assertIn("DEFAULT_MAX_THROTTLE_SLEEP_SECONDS = 2.0", source)
         self.assertIn('== 0.55', source)
         self.assertIn('core.OPTIONS["training_cpu_duty_cycle"] = DEFAULT_TRAINING_DUTY_CYCLE', source)
-        self.assertIn('effective_training_duty_cycle', source)
+        self.assertIn('effective_training_duty_cycle', budget_source)
 
     def test_status_lifeline_never_calls_rich_engine_status_while_heavy(self):
         source = (ROOT / "adaptive_ai/src/release_017_ui_lifeline.py").read_text(encoding="utf-8")
@@ -83,19 +84,20 @@ assert _budget_pause(2.0, 0.25, 2.0) == 2.0
     def test_release_defaults_and_schema_expose_training_budget_controls(self):
         config = (ROOT / "adaptive_ai/config.yaml").read_text(encoding="utf-8")
         settings = (ROOT / "adaptive_ai/src/settings.py").read_text(encoding="utf-8")
-        self.assertIn('version: "0.14.17"', config)
+        self.assertIn('version: "0.14.18"', config)
         self.assertIn("training_cpu_duty_cycle: 0.25", config)
         self.assertIn("training_archive_batch_rows: 16", config)
         self.assertIn("training_throttle_max_sleep_seconds: 2.0", config)
+        self.assertIn("training_max_continuous_work_ms: 75", config)
         self.assertIn('training_cpu_duty_cycle: "float(0.15,0.70)"', config)
-        self.assertIn('APP_VERSION = "0.14.17"', settings)
+        self.assertIn('APP_VERSION = "0.14.18"', settings)
         self.assertIn('if data.get("training_cpu_duty_cycle") == 0.55:', settings)
 
     def test_ui_surfaces_active_training_budget_instead_of_system_ready(self):
         source = (ROOT / "adaptive_ai/src/static/runtime_activity_ui.js").read_text(encoding="utf-8")
         self.assertIn("const duty=Math.round(Number(lp.training_cpu_duty_cycle||0)*100);", source)
         self.assertIn("CPU budget ${duty}%", source)
-        self.assertIn("Only one heavy job runs at a time. UI/status use lightweight reads while training.", source)
+        self.assertIn("Training yields between bounded work slices so Ingress and realtime control keep CPU priority.", source)
         self.assertIn("Autonomous Candidate training", source)
 
 

@@ -12,6 +12,7 @@ from ha import HA, AUTOMATION_KNOWLEDGE
 from context import (archived_state, balanced_presence_driver_score, controllable_context_exclusions, default_action_interval, electrical_context_exclusions, entity_capability_tags, historical_reward, is_context_candidate_entity, is_esphome_sensor_entity, is_fast_reactive_agent, numeric_activity_driver_score, occupancy_state_bool, target_options_for_state, target_value, transition_edges)
 from telemetry import HEAVY_JOBS, rss_mb
 from replay import SQLiteTemporalTracker, DeferredUpdates, BoundedUsage
+from training_budget import TRAINING_BUDGET
 
 class HistoryManager(threading.Thread):
     """Bootstraps HA Recorder history, keeps a longer local archive, discovers active targets,
@@ -145,17 +146,25 @@ class HistoryManager(threading.Thread):
             raise
 
         def worker():
+            TRAINING_BUDGET.begin()
             try:
                 self._run_agent_indexing(agent_id, rebuild=rebuild)
             except Exception as exc:
                 STORE.event(agent_id, "error", "agent_index_failed", str(exc), {"trace": traceback.format_exc(limit=6)})
                 STORE.set_training_state(agent_id, "paused", detail={"reason": str(exc)})
             finally:
-                with self.agent_jobs_lock:
-                    self.agent_jobs.discard(agent_id)
-                HEAVY_JOBS.release("agent:" + agent_id)
-                # Explicitly collect the large temporary replay structures after each job.
-                gc.collect()
+                # Keep the heavy slot owned until final GC is complete. Otherwise the UI
+                # lifeline can switch back to rich aggregate reads while this worker still
+                # monopolizes the interpreter during collection.
+                try:
+                    TRAINING_BUDGET.checkpoint("pre_training_gc", force=True)
+                    gc.collect()
+                    TRAINING_BUDGET.checkpoint("post_training_gc", force=True)
+                finally:
+                    TRAINING_BUDGET.end()
+                    with self.agent_jobs_lock:
+                        self.agent_jobs.discard(agent_id)
+                    HEAVY_JOBS.release("agent:" + agent_id)
 
         threading.Thread(target=worker, name=f"adaptive-ai-index-{agent_id}", daemon=True).start()
         return True
@@ -1237,27 +1246,62 @@ class HistoryManager(threading.Thread):
                 pass
 
         if progress_enabled:
-            replay_end = float(progress_lo) + (float(progress_hi) - float(progress_lo)) * 0.90
-            self.set_status(progress=replay_end, message=f"{progress_label}: finalizing held-out benchmark and policy models",
+            progress_span = float(progress_hi) - float(progress_lo)
+            replay_end = float(progress_lo) + progress_span * 0.90
+            validation_end = float(progress_lo) + progress_span * 0.92
+            model_end = float(progress_lo) + progress_span * 0.96
+            benchmark_end = float(progress_lo) + progress_span * 0.98
+            self.set_status(progress=replay_end, message=f"{progress_label}: replay complete; yielding before finalization",
                             stage_eta_seconds=0, work_done=replay_total, work_total=replay_total,
-                            work_unit="history rows", eta_source="benchmark finalization",
+                            work_unit="history rows", eta_source="bounded finalization",
                             phase_detail=f"Replay complete · {new_count:,} new rewarded experiences")
+        else:
+            validation_end = model_end = benchmark_end = None
+
+        # 0.14.18: replay used to stop at exactly this point and the next expensive
+        # finalization work ran outside the archive-iterator throttle. Force a yield
+        # before any serialization/benchmark/qualification work begins.
+        TRAINING_BUDGET.checkpoint("replay_complete", force=True)
 
         # The newest slice was held out while confidence was calibrated. Once its
         # out-of-sample score is recorded, fold it into the final policy so no history is
         # wasted. Calibration remains a genuine chronological backtest.
         for policy, horizon, action_idx, features, reward, sample_ts in heldout_updates:
             policy.update(horizon, action_idx, features, reward, sample_ts)
+            TRAINING_BUDGET.checkpoint("heldout_update")
+
+        if progress_enabled:
+            self.set_status(progress=validation_end, message=f"{progress_label}: serializing policy model",
+                            stage_eta_seconds=0, work_done=replay_total, work_total=replay_total,
+                            work_unit="finalization", eta_source="bounded finalization",
+                            phase_detail="Replay complete · applying bounded model checkpoint")
 
         for agent in agents:
+            TRAINING_BUDGET.checkpoint("before_policy_serialize")
             policy = policies[agent["id"]]
             exported = policy.serialize()
+            TRAINING_BUDGET.checkpoint("after_policy_serialize")
             exported['_benchmark_counts'] = benchmark_stats.get(agent['id'], {})
             STORE.save_model(agent["id"], exported)
+            TRAINING_BUDGET.checkpoint("after_model_save")
+
+        if progress_enabled:
+            self.set_status(progress=model_end, message=f"{progress_label}: saving held-out benchmark",
+                            stage_eta_seconds=0, work_done=replay_total, work_total=replay_total,
+                            work_unit="finalization", eta_source="bounded finalization",
+                            phase_detail="Policy model saved · finalizing benchmark")
 
         if benchmark:
             for agent in agents:
+                TRAINING_BUDGET.checkpoint("before_partial_benchmark")
                 STORE.set_partial_benchmark(agent["id"], benchmark_stats.get(agent["id"]) or {})
+                TRAINING_BUDGET.checkpoint("after_partial_benchmark")
+
+        if progress_enabled:
+            self.set_status(progress=benchmark_end, message=f"{progress_label}: final qualification checks",
+                            stage_eta_seconds=0, work_done=replay_total, work_total=replay_total,
+                            work_unit="finalization", eta_source="bounded finalization",
+                            phase_detail="Benchmark saved · checking qualification")
 
         qualification_summary = None
         if qualify:
@@ -1266,6 +1310,7 @@ class HistoryManager(threading.Thread):
             qualified_count = 0
             paused_count = 0
             for agent in agents:
+                TRAINING_BUDGET.checkpoint("qualification_agent")
                 stat = benchmark_stats.get(agent["id"]) or {}
                 samples = int(stat.get("samples") or 0)
                 per_action = stat.get("per_action") or {}
@@ -1327,6 +1372,7 @@ class HistoryManager(threading.Thread):
             if agent_ids is None:
                 STORE.meta_set("candidate_qualification_complete", "1")
 
+        TRAINING_BUDGET.checkpoint("before_training_event")
         if new_count or qualification_summary:
             STORE.event(
                 None, "info", "offline_rl_training",
@@ -1338,4 +1384,10 @@ class HistoryManager(threading.Thread):
             )
         heldout_updates.close()
         timeline.close()
+        TRAINING_BUDGET.checkpoint("finalization_complete", force=True)
+        if progress_enabled:
+            self.set_status(progress=float(progress_hi), message=f"{progress_label}: training checkpoint complete",
+                            stage_eta_seconds=0, work_done=replay_total, work_total=replay_total,
+                            work_unit="finalization", eta_source="complete",
+                            phase_detail="Replay, model save, benchmark and qualification complete")
         return new_count

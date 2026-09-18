@@ -6,8 +6,9 @@ Runtime path remains:
 Stage 16 moves final Stage-11/13/14/15 composition into ``runtime_composition`` so this
 entrypoint no longer stacks another hand-written ``prepare_engine_extensions`` wrapper.
 The startup/train and quiet-start guards are installed after final composition is bound.
-0.14.17 then adds the read-side UI lifeline so heavy historical training cannot starve
-Ingress/status diagnostics. All guards are bound before ``core.main()`` starts lifecycle.
+0.14.17 adds the read-side UI lifeline so heavy historical training cannot starve
+Ingress/status diagnostics. 0.14.18 adds cooperative wall-clock training slices inside
+replay/finalization. All guards are bound before ``core.main()`` starts lifecycle.
 """
 import preference_queue_main as runtime
 from runtime_composition import bind_final_composition
