@@ -375,7 +375,9 @@ class Store:
                       (start_ts, cursor_ts, end_ts, progress, iso_now(), agent_id))
 
     def set_partial_benchmark(self, agent_id, stat):
-        agent = self.get_agent(agent_id)
+        # Finalization only needs the agent row. Avoid COUNT/AVG subqueries over the
+        # historical experience table exactly when replay has just finished.
+        agent = self.get_agent_config(agent_id)
         if not agent:
             return
         per_action = stat.get("per_action") or {}
