@@ -37,7 +37,7 @@ def _finite(value):
 class AdaptivePresenceModel:
     """Small calibrated Bayesian fusion model with hysteresis and false-ON budget."""
 
-    VERSION = 1
+    VERSION = 2
     FIXED_BOUNDARY = 0.60
     ENTER_THRESHOLD = 0.58
     EXIT_THRESHOLD = 0.34
@@ -60,6 +60,11 @@ class AdaptivePresenceModel:
             while len(bins) < self.CALIBRATION_BINS:
                 bins.append({'count': 0, 'positive': 0})
             self.calibration[str(entity_id)] = {'bins': bins}
+        self.calibration_watermarks = {
+            str(key): float(value)
+            for key, value in (raw.get('calibration_watermarks') or {}).items()
+            if _finite(value) is not None
+        }
         stored = dict(raw.get('metrics') or {})
         self.metrics = {
             'evaluations': max(0, int(stored.get('evaluations') or 0)),
@@ -357,6 +362,7 @@ class AdaptivePresenceModel:
         return {
             'version': self.VERSION,
             'calibration': copy.deepcopy(self.calibration),
+            'calibration_watermarks': copy.deepcopy(self.calibration_watermarks),
             'metrics': copy.deepcopy(self.metrics),
             # live hysteresis, pending early proof, false-event timestamps and taint leases
             # are intentionally omitted so restart cannot resurrect virtual presence.
