@@ -677,30 +677,117 @@ class FeatureJournal:
 
 
 class ObservationSQLiteTemporalTracker(replay_module.SQLiteTemporalTracker):
-    """Replay view merging sparse long-term history with the bounded fast buffer."""
-    def _feature_before(self, eid, ts, count=64):
-        rows = self.conn.execute("""SELECT * FROM feature_observation_events
-            WHERE entity_id=? AND event_time<=? AND received_time<=?
-            ORDER BY event_time DESC,received_time DESC LIMIT ?""",
-            (str(eid), float(ts), float(ts), int(count))).fetchall()
-        return [FeatureJournal.normalized_row(dict(r)) for r in reversed(rows)]
+    """Incremental replay view merging long-term archive with the bounded fast journal.
 
-    def _before(self, eid, ts, count=64):
-        base = super()._before(eid, ts, count)
-        fast = self._feature_before(eid, ts, count)
+    A fast observation becomes visible only when both its event_time and received_time are
+    <= the replay query time. Forward advancement therefore consumes rows that became
+    newly eligible by either time axis; late packets are merged back into the bounded
+    per-entity history without rewinding the whole tracker.
+    """
+
+    def _feature_bulk_before(self, entity_ids, ts, count):
+        result = []
+        count = max(1, int(count))
+        for ids in self._chunks(entity_ids):
+            marks = ",".join("?" for _ in ids)
+            sql = f"""
+                SELECT event_key,entity_id,event_time,received_time,state,attributes_json,
+                       last_changed,last_updated,source,quality
+                FROM (
+                    SELECT f.*,
+                           ROW_NUMBER() OVER (
+                               PARTITION BY entity_id
+                               ORDER BY event_time DESC,received_time DESC,event_key DESC
+                           ) AS _hm_rank
+                    FROM feature_observation_events f
+                    WHERE entity_id IN ({marks})
+                      AND event_time<=? AND received_time<=?
+                )
+                WHERE _hm_rank<=?
+                ORDER BY event_time,received_time,event_key
+            """
+            raw = self._fetch_rows(
+                sql, [*ids, float(ts), float(ts), count],
+                "temporal_feature_before_query",
+            )
+            result.extend(FeatureJournal.normalized_row(row) for row in raw)
+        result.sort(key=self._row_order)
+        return result
+
+    def _feature_interval_rows(self, entity_ids, lo, hi):
+        """Rows that became causally visible since the previous replay timestamp."""
+        if float(hi) <= float(lo):
+            return []
+        result = []
+        for ids in self._chunks(entity_ids):
+            marks = ",".join("?" for _ in ids)
+            sql = f"""
+                SELECT event_key,entity_id,event_time,received_time,state,attributes_json,
+                       last_changed,last_updated,source,quality
+                FROM feature_observation_events
+                WHERE entity_id IN ({marks})
+                  AND event_time<=? AND received_time<=?
+                  AND (event_time>? OR received_time>?)
+                ORDER BY event_time,received_time,event_key
+            """
+            raw = self._fetch_rows(
+                sql, [*ids, float(hi), float(hi), float(lo), float(lo)],
+                "temporal_feature_forward_query",
+            )
+            result.extend(FeatureJournal.normalized_row(row) for row in raw)
+        result.sort(key=self._row_order)
+        return result
+
+    def _compact_rows(self, rows, count):
+        # Preserve the v12 merge contract: same event-time/state prefers the fast sample
+        # with the latest received-time metadata. Different states at the same timestamp
+        # remain ordered, and TemporalHistory will expose the final causal row.
         merged = {}
-        for row in base:
-            merged[(round(float(row["ts"]), 9), str(row.get("state")))] = row
-        for row in fast:
+        for row in rows:
             key = (round(float(row["ts"]), 9), str(row.get("state")))
             previous = merged.get(key)
-            if previous is None or float(row.get("_feature_received_time") or 0.0) >= float(previous.get("_feature_received_time") or 0.0):
+            if previous is None:
                 merged[key] = row
-        rows = sorted(merged.values(), key=lambda r: (float(r["ts"]),
-                      float(r.get("_feature_received_time") or 0.0), str(r.get("id"))))
-        return rows[-int(count):]
+                continue
+            previous_received = float(previous.get("_feature_received_time") or 0.0)
+            current_received = float(row.get("_feature_received_time") or 0.0)
+            if current_received > previous_received:
+                merged[key] = row
+            elif current_received == previous_received and str(row.get("id")) > str(previous.get("id")):
+                merged[key] = row
+        ordered = sorted(merged.values(), key=self._row_order)
+        return ordered[-max(1, int(count)):]
+
+    def _bulk_before(self, entity_ids, ts, count=replay_module.SQLiteTemporalTracker.HISTORY_SAMPLES):
+        base = super()._bulk_before(entity_ids, ts, count)
+        fast = self._feature_bulk_before(entity_ids, ts, count)
+        grouped = {}
+        for row in [*base, *fast]:
+            grouped.setdefault(row["entity_id"], []).append(row)
+        result = []
+        for eid in sorted(grouped):
+            result.extend(self._compact_rows(grouped[eid], count))
+        result.sort(key=self._row_order)
+        return result
+
+    def _interval_rows(self, entity_ids, lo, hi):
+        base = super()._interval_rows(entity_ids, lo, hi)
+        fast = self._feature_interval_rows(entity_ids, lo, hi)
+        # Do not truncate here. _set_entity_rows merges this delta with the previous
+        # bounded cache and then applies the exact 64-sample cap.
+        grouped = {}
+        for row in [*base, *fast]:
+            grouped.setdefault(row["entity_id"], []).append(row)
+        result = []
+        for eid in sorted(grouped):
+            rows = grouped[eid]
+            result.extend(self._compact_rows(rows, max(1, len(rows))))
+        result.sort(key=self._row_order)
+        return result
 
     def _edges(self, eid, lo, hi):
+        # Keep the established v12 edge semantics while routing the as-of reconstruction
+        # through the new bulk path. The 512-row cap is unchanged.
         rows = self._before(eid, hi, 512)
         previous = None
         for row in rows:
@@ -720,7 +807,7 @@ class ObservationSQLiteTemporalTracker(replay_module.SQLiteTemporalTracker):
                         yield float(row["ts"]), False
             if cur["valid"]:
                 previous = row
-
+            TRAINING_BUDGET.checkpoint("temporal_edge_scan")
 
 def _watched_fast_entities(engine, store):
     entities = set()
