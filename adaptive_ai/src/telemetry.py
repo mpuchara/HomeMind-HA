@@ -18,6 +18,7 @@ class Telemetry:
     def __init__(self):
         self.lock = threading.RLock()
         self.samples = {}
+        self.recent_samples = {}
         self.counts = Counter()
         self.sums = Counter()
         self.reasons = Counter()
@@ -29,6 +30,9 @@ class Telemetry:
     def observe(self, name, milliseconds):
         with self.lock:
             self.samples.setdefault(name, deque(maxlen=512)).append(milliseconds)
+            self.recent_samples.setdefault(name, deque(maxlen=512)).append(
+                (time.monotonic(), milliseconds)
+            )
             self.counts[name] += 1
             self.sums[name] += milliseconds
 
@@ -44,10 +48,24 @@ class Telemetry:
     def snapshot(self):
         with self.lock:
             metrics = {}
+            now_mono = time.monotonic()
             for name, values in self.samples.items():
                 ordered = sorted(values)
-                metrics[name] = {'count': self.counts[name], 'avg_ms': self.sums[name]/self.counts[name],
-                                 'p95_ms': ordered[min(len(ordered)-1, int(len(ordered)*.95))]}
+                recent = [
+                    value for stamp, value in self.recent_samples.get(name, ())
+                    if now_mono - float(stamp) <= 60.0
+                ]
+                recent_ordered = sorted(recent)
+                metrics[name] = {
+                    'count': self.counts[name],
+                    'avg_ms': self.sums[name]/self.counts[name],
+                    'p95_ms': ordered[min(len(ordered)-1, int(len(ordered)*.95))],
+                    'recent_count': len(recent_ordered),
+                    'recent_p95_ms': (
+                        recent_ordered[min(len(recent_ordered)-1, int(len(recent_ordered)*.95))]
+                        if recent_ordered else None
+                    ),
+                }
             wall,cpu = time.monotonic(),time.process_time()
             recent = 100*(cpu-self.last_cpu)/max(.001,wall-self.last_wall)
             self.last_cpu,self.last_wall = cpu,wall
