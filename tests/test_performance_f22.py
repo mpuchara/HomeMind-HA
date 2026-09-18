@@ -533,7 +533,7 @@ class CurrentConfidenceCostTests(unittest.TestCase):
                    evidence_kind='episode_evaluator_independent',
                    calibration_eligible=1,
                    calibration_outcome=1-calibration_outcome,
-                   calibration_parent_correct=0,
+                   calibration_parent_correct=1,
                    calibration_child_correct=0,
                    calibration_source_id='retroactive-label'
                    WHERE parent_generation_id='g0' AND child_generation_id='g1'
