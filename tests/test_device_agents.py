@@ -251,6 +251,26 @@ class SharedResourceTests(unittest.TestCase):
         self.assertEqual(errors, [])
         self.assertEqual(sum(item is not None for item in results), 1)
 
+    def test_atomic_reservation_rechecks_cross_device_group_dwell(self):
+        states = {
+            'light.a': _light_state('light.a'),
+            'light.b': _light_state('light.b'),
+        }
+        service = DeviceAgentService(_Engine({}, {}, states), self.store)
+        service.set_explicit_mapping('light.a', 'lamp-a', resource_group='shared-feed')
+        service.set_explicit_mapping('light.b', 'lamp-b', resource_group='shared-feed')
+        first = _agent(self.store, 'light.a', 'power', action_interval=2)
+        second = _agent(self.store, 'light.b', 'power', action_interval=2)
+
+        reservation = service.reserve_dispatch(first, 'intent-a', now=100.0, ttl=1.0)
+        self.assertIsNotNone(reservation)
+        service.finish_dispatch(reservation, success=True, action={'value': 1}, now=100.1)
+
+        # Direct reservation is the final TOCTOU guard; it must reject the sibling even
+        # if an earlier advisory action mask was computed before the first dispatch.
+        self.assertIsNone(service.reserve_dispatch(second, 'intent-b', now=100.2, ttl=1.0))
+        self.assertIsNotNone(service.reserve_dispatch(second, 'intent-b', now=102.2, ttl=1.0))
+
     def test_two_radar_consumers_share_one_perception_owned_configuration_lease(self):
         sensor_states = {'number.radar_threshold': {'entity_id': 'number.radar_threshold', 'state': '45', 'attributes': {'min': 0, 'max': 100, 'step': 1}}}
         entities = {'number.radar_threshold': {
@@ -266,6 +286,209 @@ class SharedResourceTests(unittest.TestCase):
         self.assertEqual(set(second['consumers']), {'presence-model', 'lighting-consumer'})
         with self.assertRaises(ValueError):
             service.acquire_perception_lease('number.radar_threshold', 'rogue', owner_service='lighting-agent')
+
+    def test_perception_snapshot_is_immutable_during_active_lease_and_resets_after_expiry(self):
+        sensor_states = {'number.radar_threshold': {
+            'entity_id': 'number.radar_threshold', 'state': '45',
+            'attributes': {'min': 0, 'max': 100, 'step': 1},
+        }}
+        entities = {'number.radar_threshold': {
+            'entity_id': 'number.radar_threshold', 'device_id': 'radar-1',
+            'entity_category': 'config', 'area_id': 'kitchen',
+        }}
+        service = DeviceAgentService(
+            _Engine(entities, {'radar-1': {'id': 'radar-1'}}, sensor_states), self.store
+        )
+        service.acquire_perception_lease(
+            'number.radar_threshold', 'presence-model', now=10, ttl_seconds=10,
+            config_snapshot={'threshold': 45},
+        )
+        with self.assertRaisesRegex(ValueError, 'snapshot is immutable'):
+            service.acquire_perception_lease(
+                'number.radar_threshold', 'lighting', now=11, ttl_seconds=10,
+                config_snapshot={'threshold': 60},
+            )
+
+        reacquired = service.acquire_perception_lease(
+            'number.radar_threshold', 'new-session', now=21, ttl_seconds=10,
+            config_snapshot={'threshold': 60},
+        )
+        self.assertEqual(reacquired['consumers'], ['new-session'])
+        self.assertEqual(reacquired['config_snapshot'], {'threshold': 60})
+        self.assertTrue(reacquired['active'])
+
+    def test_last_perception_consumer_release_requires_restore_and_survives_restart(self):
+        sensor_states = {'number.radar_threshold': {
+            'entity_id': 'number.radar_threshold', 'state': '45',
+            'attributes': {'min': 0, 'max': 100, 'step': 1},
+        }}
+        entities = {'number.radar_threshold': {
+            'entity_id': 'number.radar_threshold', 'device_id': 'radar-1',
+            'entity_category': 'config',
+        }}
+        engine = _Engine(entities, {'radar-1': {'id': 'radar-1'}}, sensor_states)
+        service = DeviceAgentService(engine, self.store)
+        service.acquire_perception_lease(
+            'number.radar_threshold', 'presence-model', now=10, ttl_seconds=300,
+            config_snapshot={'threshold': 45},
+        )
+        restarted = DeviceAgentService(engine, self.store)
+        active = restarted.perception_lease('number.radar_threshold', now=11)
+        self.assertTrue(active['active'])
+        self.assertEqual(active['config_snapshot'], {'threshold': 45})
+
+        released = restarted.release_perception_consumer(
+            'number.radar_threshold', 'presence-model', now=12
+        )
+        self.assertFalse(released['active'])
+        self.assertTrue(released['restore_required'])
+        self.assertEqual(released['config_snapshot'], {'threshold': 45})
+
+    def test_future_threshold_adapter_uses_device_agent_lease_as_authority(self):
+        sensor_states = {'number.radar_threshold': {
+            'entity_id': 'number.radar_threshold', 'state': '45',
+            'attributes': {'min': 0, 'max': 100, 'step': 1},
+        }}
+        service = DeviceAgentService(_Engine({}, {}, sensor_states), self.store)
+        contract = service.perception_adapter_contract('number.radar_threshold')
+        self.assertEqual(contract['owner_service'], PERCEPTION_OWNER)
+        self.assertIn('perception_resource_leases', contract['durable_lease_authority'])
+        self.assertEqual(contract['local_adapter_lease_role'], 'planning_token_only_not_resource_ownership')
+        adaptive = (ROOT / 'adaptive_ai' / 'src' / 'adaptive_presence.py').read_text(encoding='utf-8')
+        self.assertIn("'requires_authoritative_perception_lease': True", adaptive)
+
+
+class DurableControlOwnershipTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory(prefix='device-control-owner-')
+        self.store = Store(Path(self.tmp.name) / 'test.db')
+        states = {
+            'light.a': _light_state('light.a'),
+            'light.b': _light_state('light.b'),
+        }
+        self.engine = _Engine({}, {}, states)
+        self.service = DeviceAgentService(self.engine, self.store)
+        self.service.set_explicit_mapping('light.a', 'lamp-a', resource_group='shared-room')
+        self.service.set_explicit_mapping('light.b', 'lamp-b', resource_group='shared-room')
+        self.a = _agent(self.store, 'light.a', 'power')
+        self.b = _agent(self.store, 'light.b', 'power')
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_precommit_control_claim_blocks_second_owner_before_mode_commit(self):
+        first = self.service.claim_control_resources(self.a, now=100)
+        self.assertIsNotNone(first)
+        self.assertIsNone(self.service.claim_control_resources(self.b, now=100.1))
+        self.assertEqual(self.service.control_owner_conflict(self.b), [self.a['id']])
+        self.service.release_control_resources(self.a, now=101)
+        self.assertIsNotNone(self.service.claim_control_resources(self.b, now=101.1))
+
+    def test_explicit_remap_reconciles_old_control_claim_to_new_resource(self):
+        solo_store = Store(Path(self.tmp.name) / 'remap.db')
+        engine = _Engine({}, {}, {'light.solo': _light_state('light.solo')})
+        service = DeviceAgentService(engine, solo_store)
+        agent = _agent(solo_store, 'light.solo', 'power')
+        solo_store.update_agent(agent['id'], {'mode': 'control'})
+        agent = solo_store.get_agent_config(agent['id'])
+        old_key = service.descriptor(agent)['resource_keys'][0]
+        self.assertIsNotNone(service.claim_control_resources(agent, now=10))
+
+        service.set_explicit_mapping('light.solo', 'stable-device-id')
+        migrated = solo_store.get_agent_config(agent['id'])
+        new_key = service.descriptor(migrated)['resource_keys'][0]
+        self.assertNotEqual(old_key, new_key)
+        with solo_store.conn() as db:
+            old = db.execute(
+                'SELECT control_owner_agent_id FROM device_resource_state WHERE resource_key=?',
+                (old_key,),
+            ).fetchone()
+            new = db.execute(
+                'SELECT control_owner_agent_id FROM device_resource_state WHERE resource_key=?',
+                (new_key,),
+            ).fetchone()
+        self.assertIsNone(old[0])
+        self.assertEqual(new[0], agent['id'])
+
+    def test_restart_reconciliation_preserves_valid_owner_and_clears_stale_shadow_claim(self):
+        self.store.update_agent(self.a['id'], {'mode': 'control'})
+        self.store.update_agent(self.b['id'], {'mode': 'shadow'})
+        self.assertIsNotNone(self.service.claim_control_resources(self.a, now=100))
+        # Simulate an interrupted pre-commit transition for B on its device-only row.
+        with self.store.lock, self.store.conn() as db:
+            db.execute(
+                """INSERT INTO device_resource_state
+                   (resource_key,control_owner_agent_id,control_acquired_ts,updated_ts)
+                   VALUES(?,?,?,?) ON CONFLICT(resource_key) DO UPDATE SET
+                   control_owner_agent_id=excluded.control_owner_agent_id,
+                   control_acquired_ts=excluded.control_acquired_ts,
+                   updated_ts=excluded.updated_ts""",
+                ('device:lamp-b', self.b['id'], 100, 100),
+            )
+        restarted = DeviceAgentService(self.engine, self.store)
+        result = restarted.reconcile_control_resources()
+        self.assertEqual(result['conflicts'], [])
+        self.assertIn(self.a['id'], result['claimed'])
+        with self.store.conn() as db:
+            stale = db.execute(
+                "SELECT control_owner_agent_id FROM device_resource_state WHERE resource_key='device:lamp-b'"
+            ).fetchone()
+        self.assertIsNone(stale[0])
+
+
+class DeviceAgentMigrationAndParityTests(unittest.TestCase):
+    def test_v1_resource_table_migrates_control_ownership_columns_additively(self):
+        tmp = tempfile.TemporaryDirectory(prefix='device-agent-migration-')
+        try:
+            store = Store(Path(tmp.name) / 'legacy.db')
+            with store.lock, store.conn() as db:
+                db.execute(
+                    """CREATE TABLE device_resource_state (
+                       resource_key TEXT PRIMARY KEY,
+                       owner_agent_id TEXT,
+                       owner_intent_id TEXT,
+                       lease_until REAL NOT NULL DEFAULT 0,
+                       last_dispatch_ts REAL,
+                       last_dispatch_agent_id TEXT,
+                       last_action_json TEXT,
+                       manual_hold_until REAL NOT NULL DEFAULT 0,
+                       updated_ts REAL NOT NULL
+                    )"""
+                )
+                db.execute(
+                    """INSERT INTO device_resource_state
+                       (resource_key,lease_until,manual_hold_until,updated_ts)
+                       VALUES('device:legacy',0,0,1)"""
+                )
+            service = DeviceAgentService(_Engine({}, {}, {}), store)
+            with store.conn() as db:
+                cols = {row['name'] for row in db.execute(
+                    'PRAGMA table_info(device_resource_state)'
+                ).fetchall()}
+                row = dict(db.execute(
+                    "SELECT * FROM device_resource_state WHERE resource_key='device:legacy'"
+                ).fetchone())
+            self.assertIn('control_owner_agent_id', cols)
+            self.assertIn('control_acquired_ts', cols)
+            self.assertIsNone(row['control_owner_agent_id'])
+            self.assertIsNone(row['control_acquired_ts'])
+            self.assertEqual(service.contract()['version'], CONTRACT_VERSION)
+        finally:
+            tmp.cleanup()
+
+    def test_build_info_and_final_runtime_publish_same_device_contract_v2(self):
+        build = __import__('json').loads(
+            (ROOT / 'adaptive_ai' / 'BUILD_INFO.json').read_text(encoding='utf-8')
+        )
+        self.assertEqual(build['device_agent_contract_version'], CONTRACT_VERSION)
+        self.assertIn('pre-commit', build['device_control_ownership'])
+        self.assertIn('perception_resource_leases', build['perception_lease_authority'])
+        composition = (
+            ROOT / 'adaptive_ai' / 'src' / 'runtime_composition.py'
+        ).read_text(encoding='utf-8')
+        self.assertIn('"device_resources"', composition)
+        self.assertIn('durable_precommit_shared_resource_claim', composition)
+        self.assertIn('atomic_lease_manual_hold_and_cross_agent_dwell_recheck', composition)
 
 
 class CapabilityAndDynamicsTests(unittest.TestCase):

@@ -113,5 +113,14 @@
     "seconds_to_recover"
   ],
   "drift_rollback": "post-promotion degradation restores exact unexpired pre-promotion backup under Executor target lock",
-  "decay_semantics": "statistical evidence decays by declared clock; persistent instructions do not decay; regression anchors never train"
+  "decay_semantics": "statistical evidence decays by declared clock; persistent instructions do not decay; regression anchors never train",
+  "device_agent_contract_version": 2,
+  "device_identity": "explicit mapping > HA registry device_id > exact entity_id; friendly names never define physical identity",
+  "device_control_ownership": "durable pre-commit shared-resource claim, reconciled on restart",
+  "device_dispatch_guard": "final reservation atomically rechecks manual hold, control owner, in-flight lease and cross-agent dwell across all shared resources",
+  "device_compound_light_action": "brightness_pct is one complete light command; >0 turn_on(brightness_pct), 0 turn_off; no double dispatch",
+  "perception_configuration_owner": "perception_service",
+  "perception_lease_authority": "DeviceAgentService.perception_resource_leases; adapter-local lease is planning-only",
+  "process_model_contract": "HVAC/cover/water-heater/humidifier expose process-model-required semantics; lighting bandit is not declared sufficient",
+  "generic_autonomy": "auto-created switch/number/select remains non-autonomous without explicit device description"
 }

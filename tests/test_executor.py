@@ -164,6 +164,37 @@ class ExecutorTests(unittest.TestCase):
         self.e.state_map['light.kitchen']['state']='unavailable'
         self.assertTrue(self.submit()['reason'].startswith('unavailable:'))
 
+    def test_shared_group_precommit_control_claim_blocks_second_transition(self):
+        # Mirrors the HTTP order: take_control() happens before mode=control is committed.
+        self.store.update_agent(self.a['id'], {'mode': 'shadow'})
+        self.a = self.store.get_agent(self.a['id'])
+        other = self.store.create_agent(agent(
+            name='Other resource',
+            target_entity='light.other',
+            mode='shadow',
+        ))
+        detail={'balanced':True,'counts':{'samples':80,'correct':80,'per_action':{
+            '0':{'samples':40,'correct':40},'1':{'samples':40,'correct':40}}}}
+        self.store.set_training_state(other['id'],'qualified',score=1.0,samples=80,detail=detail)
+        other = self.store.get_agent(other['id'])
+        self.e.state_map['light.other'] = state('light.other')
+        self.e.context.configure(self.e.state_map)
+        self.e.executor.device_agents.set_explicit_mapping(
+            self.a['target_entity'], 'lamp-a', resource_group='shared-room'
+        )
+        self.e.executor.device_agents.set_explicit_mapping(
+            other['target_entity'], 'lamp-b', resource_group='shared-room'
+        )
+
+        # First transition owns the resource while its persisted agent is still Shadow.
+        self.e.executor.take_control(self.a)
+        self.assertEqual(self.store.get_agent(self.a['id'])['mode'], 'shadow')
+        with self.assertRaisesRegex(ValueError, 'Control transition owns'):
+            self.e.executor.take_control(other)
+
+        owners = self.e.executor.device_agents.control_owner_conflict(other)
+        self.assertEqual(owners, [self.a['id']])
+
     def test_ownership_conflict(self):
         other=self.store.create_agent(agent(name='Other'))
         self.store.set_training_state(other['id'],'qualified');self.store.update_agent(other['id'],{'mode':'control'})

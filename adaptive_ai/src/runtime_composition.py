@@ -84,6 +84,14 @@ class RuntimeCompositionRoot:
                 "recovery_metrics": ["episodes_to_recover", "seconds_to_recover"],
                 "promotion": "Stage13_v2_future_holdout_remains_authoritative",
             },
+            "device_resources": {
+                "owner": "engine.executor.device_agents",
+                "contract": engine.executor.device_agents.contract(),
+                "identity": "explicit_mapping_then_HA_device_id_then_exact_entity",
+                "control_ownership": "durable_precommit_shared_resource_claim",
+                "dispatch_guard": "atomic_lease_manual_hold_and_cross_agent_dwell_recheck",
+                "perception_configuration": "single_durable_perception_service_owner",
+            },
             "execution": {"owner": "engine.executor", "contract": "ActionIntent_to_Executor_only_physical_dispatch"},
             "policy_backend_shadow": {
                 "owner": "engine.policy_backend_shadow",
