@@ -1072,6 +1072,11 @@ class HistoryManager(threading.Thread):
             a["id"]: STORE.historical_experience_target_ids(a["id"])
             for a in agents
         }
+        provenance_loader = getattr(STORE, "historical_replay_provenance", None)
+        replay_provenance = (
+            provenance_loader(start_ts, end_ts, target_map.keys())
+            if callable(provenance_loader) else {}
+        )
         experience_batch = []
         experience_batch_rows = max(
             8, min(512, int(OPTIONS.get("training_experience_batch_rows", 64)))
@@ -1083,13 +1088,17 @@ class HistoryManager(threading.Thread):
             if not force and len(experience_batch) < experience_batch_rows:
                 return 0
             batch = list(experience_batch)
+            expected_inserted = sum(
+                1 for row in batch
+                if str((row.get("_provenance") or {}).get("origin") or "unknown") != "own_command"
+            )
             inserted = STORE.add_historical_experiences_batch(batch)
-            if inserted != len(batch):
+            if inserted != expected_inserted:
                 # A concurrent duplicate would make the in-memory policy diverge from the
                 # durable audit log. Abort rather than silently checkpoint inconsistent
                 # learning. The single-heavy-job contract should make this unreachable.
                 raise RuntimeError(
-                    f"Historical experience batch mismatch: inserted {inserted}/{len(batch)}"
+                    f"Historical experience batch mismatch: inserted {inserted}/{expected_inserted}"
                 )
             experience_batch.clear()
             TRAINING_BUDGET.checkpoint("historical_experience_batch_flush", force=True)
@@ -1204,7 +1213,11 @@ class HistoryManager(threading.Thread):
             seen = existing_experience_ids.setdefault(agent["id"], set())
             if target_history_id in seen:
                 return False
-            seen.add(target_history_id)
+
+            provenance = dict(replay_provenance.get(target_history_id) or {
+                "origin": "unknown", "source": "unknown", "event_id": None,
+            })
+            origin = str(provenance.get("origin") or "unknown")
             experience_batch.append({
                 "agent_id": agent["id"],
                 "target_history_id": target_history_id,
@@ -1214,8 +1227,17 @@ class HistoryManager(threading.Thread):
                 "dwell_seconds": dwell,
                 "features": old["features_by_horizon"][primary_h],
                 "user_id": old.get("user_id"),
+                "_provenance": provenance,
             })
+            seen.add(target_history_id)
             flush_experience_batch()
+
+            # Preserve the Stage-06 provenance boundary before any policy mutation:
+            # our own command acknowledgements are chronology, never independent
+            # demonstrations. They are still written to the excluded audit journal by
+            # the batched persistence adapter.
+            if origin == "own_command":
+                return False
 
             # Score the held-out transition before it is folded into training. This is
             # the behavioural benchmark against the legacy HA automations.
