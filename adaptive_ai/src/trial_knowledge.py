@@ -195,6 +195,14 @@ class TrialJournal:
                     _dumps(trial.get("outcome_sources") or {}), _dumps({}), now, time.time(),
                 ),
             )
+            episode_id = str(meta.get("episode_id") or (
+                "experiment:" + trial_id if str(trial.get("property") or "") == "power" else ""
+            )) or None
+            c.execute(
+                """UPDATE experiment_trial_records SET record_version=?,episode_id=COALESCE(episode_id,?),
+                   learning_status=COALESCE(learning_status,'pending'),updated_ts=? WHERE trial_id=?""",
+                (self.VERSION, episode_id, time.time(), trial_id),
+            )
         return self.get(trial_id)
 
     def get(self, trial_id):
@@ -240,6 +248,9 @@ class TrialJournal:
         if self.get(trial_id) is None:
             self.start(str(trial.get("owner_agent_id") or "unknown"), trial, None)
         at = time.time() if at is None else float(at)
+        resolution = trial.get("_episode_resolution") if isinstance(trial.get("_episode_resolution"), dict) else {}
+        evaluated = resolution.get("episode") if isinstance(resolution.get("episode"), dict) else None
+        episode_id = (evaluated or {}).get("episode_id") or ("experiment:" + trial_id if str(trial.get("property") or "") == "power" else None)
         result = {
             "reward": None if reward is None else float(reward),
             "reason": str(reason),
@@ -251,14 +262,19 @@ class TrialJournal:
             "finished_at": at,
             "kind": trial.get("kind"),
             "focus": trial.get("focus"),
+            "episode_id": episode_id,
+            "episode_evaluator": evaluated,
         }
         status = "labelled" if reward is not None else "unlabelled"
+        learning_status = "eligible" if reward is not None else "no_outcome"
         with self.store.lock, self.store.conn() as c:
             c.execute(
-                """UPDATE experiment_trial_records SET reward=?,termination_reason=?,status=?,
-                   episode_result_json=?,outcome_sources_json=?,updated_ts=? WHERE trial_id=?""",
-                (None if reward is None else float(reward), str(reason), status, _dumps(result),
-                 _dumps(trial.get("outcome_sources") or {}), at, trial_id),
+                """UPDATE experiment_trial_records SET record_version=?,reward=?,termination_reason=?,status=?,
+                   episode_id=COALESCE(?,episode_id),episode_result_json=?,outcome_sources_json=?,
+                   learning_status=?,updated_ts=? WHERE trial_id=?""",
+                (self.VERSION, None if reward is None else float(reward), str(reason), status,
+                 episode_id, _dumps(result), _dumps(trial.get("outcome_sources") or {}),
+                 learning_status, at, trial_id),
             )
         return self.get(trial_id)
 
@@ -447,7 +463,8 @@ def _decorate_trial(trial, ctx, experiments, session, *, information=False,
         "trial_record_version": TRIAL_RECORD_VERSION,
         "policy_version": int(getattr(policy, "VERSION", trial.get("policy_version") or 0)),
         "model_revision": str(getattr(policy, "model_revision", trial.get("model_revision") or "")),
-        "schema_version": int(getattr(getattr(policy, "schema", None), "version", 0) or 0),
+        "schema_version": int(getattr(getattr(policy, "schema", None), "VERSION",
+                                      getattr(getattr(policy, "schema", None), "version", 0)) or 0),
         "experiment_revision": int(experiments._get(agent["id"]).get("revision") or 0),
     }
     trial["trial_record"] = {
