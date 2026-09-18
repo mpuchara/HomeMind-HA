@@ -264,7 +264,8 @@ class ExperimentIntegrationTests(unittest.TestCase):
         handler.read_json = lambda: dict(enabled=True, focus='environment')
         handler.send_json = Mock()
         with patch.object(main, 'STORE', self.store), patch.object(main, 'ENGINE', self.e), \
-             patch.object(main, 'runtime_available', return_value=True):
+             patch.object(main, 'runtime_available', return_value=True), \
+             patch.object(main, 'startup_snapshot', return_value={'ready':True}):
             handler.do_POST()
         self.assertEqual(handler.send_json.call_args.args[0], 200)
         self.assertTrue(self.e.experiments.status(self.a['id'])['config']['enabled'])
