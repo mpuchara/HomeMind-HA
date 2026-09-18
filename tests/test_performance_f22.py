@@ -136,6 +136,23 @@ class FastMetricFixture:
                     )
 
 
+class F22ContractParityTests(unittest.TestCase):
+    def test_build_info_and_runtime_source_publish_current_bounded_cost_contract(self):
+        root = Path(__file__).resolve().parents[1]
+        build = json.loads((root / "adaptive_ai" / "BUILD_INFO.json").read_text(encoding="utf-8"))
+        self.assertEqual(build["history_cost_contract_version"], f22.CONTRACT_VERSION)
+        self.assertIn("revision cache", build["history_cost_confidence_selection"])
+        self.assertIn("locked fixed holdout", build["history_cost_confidence_final"])
+        self.assertEqual(
+            build["history_cost_pi_budgets_not_measurements"]["training_queue_pending_max"],
+            16,
+        )
+        self.assertIn("--pairs 3000", build["history_cost_pi_benchmark_command"])
+        runtime = (root / "adaptive_ai" / "src" / "runtime_composition.py").read_text(encoding="utf-8")
+        self.assertIn('"performance"', runtime)
+        self.assertIn("manager.performance_f22", runtime)
+
+
 class StartupIndexTests(unittest.TestCase):
     def test_f22_does_not_build_redundant_entity_history_index(self):
         source = Path(__file__).resolve().parents[1].joinpath(
