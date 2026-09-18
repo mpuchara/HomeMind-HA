@@ -807,6 +807,173 @@ def _cache_fingerprint(payload):
     return json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str)
 
 
+def _probability_calibration_from_store(store, metric_id, model_key, scope_id,
+                                        *, bins=PROBABILITY_BINS,
+                                        half_life=DEFAULT_HALF_LIFE_EPISODES):
+    """Exact probability calibration aggregate with bounded Python materialization."""
+    metric_id = str(metric_id)
+    model_key = str(model_key)
+    scope_id = str(scope_id)
+    bins = max(1, int(bins))
+    recent = int(DEFAULT_FINAL_EPISODES)
+    with store.conn() as db:
+        db.create_function(
+            "_hm_f22_probability_weight", 2,
+            lambda idx, total: float(_episode_weight(
+                int(idx), int(total), float(half_life), recent,
+            )),
+        )
+        rows = [dict(row) for row in db.execute(
+            """
+            WITH filtered AS (
+                SELECT rowid AS _rid,ts,prediction,observed,dependency_cluster
+                FROM confidence_probability_episodes
+                WHERE metric_id=? AND model_key=? AND scope_id=?
+                  AND independent=1
+                  AND substr(source_kind,1,8)<>'training'
+                  AND substr(source_kind,1,6)<>'model:'
+                  AND prediction>=0.0 AND prediction<=1.0
+                  AND observed>=-1.0e308 AND observed<=1.0e308
+            ),
+            ranked AS (
+                SELECT *,
+                       ROW_NUMBER() OVER (ORDER BY ts,_rid)-1 AS evidence_index,
+                       COUNT(*) OVER () AS evidence_total
+                FROM filtered
+            ),
+            weighted AS (
+                SELECT *,
+                       _hm_f22_probability_weight(evidence_index,evidence_total) AS raw_weight,
+                       CASE
+                         WHEN prediction>=1.0 THEN ?-1
+                         WHEN prediction<=0.0 THEN 0
+                         ELSE CAST(prediction*? AS INTEGER)
+                       END AS bin_idx,
+                       CASE
+                         WHEN dependency_cluster IS NOT NULL AND dependency_cluster<>''
+                           THEN dependency_cluster
+                         ELSE ? || ':' || CAST(ts / ? AS INTEGER)
+                       END AS cluster_key
+                FROM ranked
+            ),
+            cluster_totals AS (
+                SELECT cluster_key,SUM(raw_weight) AS cluster_raw
+                FROM weighted GROUP BY cluster_key
+            ),
+            cluster_bins AS (
+                SELECT cluster_key,bin_idx,
+                       SUM(raw_weight) AS bin_raw,
+                       SUM(raw_weight*prediction) AS prediction_raw,
+                       SUM(raw_weight*CASE WHEN observed>=0.5 THEN 1.0 ELSE 0.0 END) AS observed_raw,
+                       SUM(raw_weight*(prediction-(CASE WHEN observed>=0.5 THEN 1.0 ELSE 0.0 END))*
+                                      (prediction-(CASE WHEN observed>=0.5 THEN 1.0 ELSE 0.0 END))) AS brier_raw,
+                       COUNT(*) AS episodes
+                FROM weighted
+                GROUP BY cluster_key,bin_idx
+            ),
+            scaled AS (
+                SELECT b.*,
+                       CASE WHEN t.cluster_raw>1.0 THEN 1.0/t.cluster_raw ELSE 1.0 END AS scale
+                FROM cluster_bins b
+                JOIN cluster_totals t USING(cluster_key)
+            )
+            SELECT bin_idx,
+                   SUM(bin_raw*scale) AS weight,
+                   SUM(prediction_raw*scale) AS prediction_sum,
+                   SUM(observed_raw*scale) AS observed_sum,
+                   SUM(brier_raw*scale) AS brier_sum,
+                   SUM(episodes) AS episodes,
+                   (SELECT COUNT(*) FROM ranked) AS total_episodes,
+                   (SELECT COALESCE(SUM(
+                       CASE WHEN cluster_raw>1.0 THEN 1.0 ELSE cluster_raw END
+                   ),0.0) FROM cluster_totals) AS cluster_weight_sum,
+                   (SELECT COALESCE(SUM(
+                       (CASE WHEN cluster_raw>1.0 THEN 1.0 ELSE cluster_raw END)*
+                       (CASE WHEN cluster_raw>1.0 THEN 1.0 ELSE cluster_raw END)
+                   ),0.0) FROM cluster_totals) AS cluster_weight_sq
+            FROM scaled
+            GROUP BY bin_idx
+            ORDER BY bin_idx
+            """,
+            (
+                metric_id, model_key, scope_id,
+                bins, bins, scope_id, float(DEFAULT_DEPENDENCY_WINDOW_SECONDS),
+            ),
+        ).fetchall()]
+    reliability = [
+        {
+            "lo": idx / float(bins),
+            "hi": (idx + 1) / float(bins),
+            "episodes": 0,
+            "weight": 0.0,
+            "mean_prediction": None,
+            "observed_frequency": None,
+        }
+        for idx in range(bins)
+    ]
+    total_w = 0.0
+    pred_sum = 0.0
+    observed_sum = 0.0
+    brier_sum = 0.0
+    episodes = 0
+    cluster_weight = 0.0
+    cluster_sq = 0.0
+    for row in rows:
+        idx = max(0, min(bins - 1, int(row.get("bin_idx") or 0)))
+        weight = max(0.0, float(row.get("weight") or 0.0))
+        cell = reliability[idx]
+        cell["episodes"] = int(row.get("episodes") or 0)
+        cell["weight"] = weight
+        cell["mean_prediction"] = (
+            float(row.get("prediction_sum") or 0.0) / weight if weight else None
+        )
+        cell["observed_frequency"] = (
+            float(row.get("observed_sum") or 0.0) / weight if weight else None
+        )
+        total_w += weight
+        pred_sum += float(row.get("prediction_sum") or 0.0)
+        observed_sum += float(row.get("observed_sum") or 0.0)
+        brier_sum += float(row.get("brier_sum") or 0.0)
+        episodes = int(row.get("total_episodes") or episodes)
+        cluster_weight = float(row.get("cluster_weight_sum") or cluster_weight)
+        cluster_sq = float(row.get("cluster_weight_sq") or cluster_sq)
+    n_eff = (
+        cluster_weight * cluster_weight / cluster_sq
+        if cluster_sq > 1e-12 else 0.0
+    )
+    mean_prediction = pred_sum / total_w if total_w else None
+    observed_rate = observed_sum / total_w if total_w else None
+    gap = (
+        None if mean_prediction is None or observed_rate is None
+        else mean_prediction - observed_rate
+    )
+    report = {
+        "metric": "probability_calibration",
+        "probability_claim": True,
+        "scope_id": scope_id,
+        "model_key": model_key,
+        "episodes": episodes,
+        "effective_n": n_eff,
+        "brier_score": brier_sum / total_w if total_w else None,
+        "reliability_bins": reliability,
+        "mean_prediction": mean_prediction,
+        "observed_frequency": observed_rate,
+        "calibration_gap": gap,
+        "overconfident": bool(
+            n_eff >= 8 and gap is not None and gap > DEFAULT_OVERCONFIDENCE_GAP
+        ),
+        "sufficient_evidence": bool(
+            episodes >= DEFAULT_FINAL_EPISODES
+            and n_eff >= DEFAULT_FINAL_EPISODES
+        ),
+    }
+    return report, {
+        "source_rows": episodes,
+        "python_rows_materialized": len(rows),
+        "query_mode": "sqlite_streamed_probability_cluster_bins",
+    }
+
+
 def ensure_tables(store):
     with store.lock, store.conn() as c:
         c.executescript(
@@ -969,11 +1136,8 @@ class ProbabilityCalibrationJournal:
                 diagnostics.confidence_probability_cache_hits += 1
             return json.loads(cached[0])
 
-        rows = self.rows(metric_id, model_key, scope_id)
-        report = probability_calibration(
-            rows,
-            scope_id=scope_id,
-            model_key=model_key,
+        report, aggregate_meta = _probability_calibration_from_store(
+            self.store, metric_id, model_key, scope_id,
         )
         with self.store.lock, self.store.conn() as c:
             c.execute(
@@ -986,11 +1150,11 @@ class ProbabilityCalibrationJournal:
                      scanned_rows=excluded.scanned_rows,updated_ts=excluded.updated_ts""",
                 (metric_id, model_key, scope_id, CONTRACT_VERSION, revision,
                  json.dumps(report, separators=(",", ":"), sort_keys=True),
-                 len(rows), time.time()),
+                 int(aggregate_meta.get("source_rows") or 0), time.time()),
             )
         if diagnostics is not None:
             diagnostics.confidence_probability_scans += 1
-            diagnostics.record_batch(len(rows))
+            diagnostics.record_batch(aggregate_meta.get("python_rows_materialized") or 0)
         return report
 
 
