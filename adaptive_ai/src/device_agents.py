@@ -25,7 +25,7 @@ from context import target_call, target_options_for_state
 from control import legal_value, timing_for
 
 
-CONTRACT_VERSION = 1
+CONTRACT_VERSION = 2
 PROCESS_MODEL_CONTRACT_VERSION = 1
 PERCEPTION_OWNER = "perception_service"
 CONFIG_CATEGORIES = {"config", "diagnostic"}
@@ -440,10 +440,15 @@ class DeviceAgentService:
 
     def reserve_dispatch(self, agent, intent_id, *, now=None, ttl=None):
         now = time.time() if now is None else float(now)
-        keys = self.descriptor(agent)["resource_keys"]
-        # This is an in-flight/restart lease, not the completed-action dwell. The latter
-        # is recorded separately as last_dispatch_ts + last_dispatch_agent_id.
-        ttl = max(0.1, float(ttl or self.min_dwell_seconds(agent)))
+        desc = self.descriptor(agent)
+        keys = desc["resource_keys"]
+        # This is the authoritative atomic resource check immediately before dispatch.
+        # legal_action_mask() is advisory for policy/UI; every hard guard that can race
+        # across sibling devices must be repeated while holding the canonical resource locks.
+        if not self.control_eligibility(agent)["allowed"]:
+            return None
+        dwell = self.min_dwell_seconds(agent)
+        ttl = max(0.1, float(ttl or dwell))
         until = now + ttl
         with self.lock_resources(keys):
             with self.store.lock, self.store.conn() as c:
@@ -458,6 +463,10 @@ class DeviceAgentService:
                     if (float(row.get("lease_until") or 0.0) > now
                             and str(row.get("owner_intent_id") or "") != str(intent_id)):
                         return None
+                    last = float(row.get("last_dispatch_ts") or 0.0)
+                    last_agent = str(row.get("last_dispatch_agent_id") or "")
+                    if last and last_agent and last_agent != str(agent["id"]) and now - last < dwell:
+                        return None
                 for key in keys:
                     c.execute(
                         """INSERT INTO device_resource_state
@@ -470,7 +479,8 @@ class DeviceAgentService:
                         (key, str(agent["id"]), str(intent_id), until, now),
                     )
         return {"resource_keys": keys, "agent_id": str(agent["id"]),
-                "intent_id": str(intent_id), "lease_until": until}
+                "intent_id": str(intent_id), "lease_until": until,
+                "min_dwell_seconds": dwell}
 
     def finish_dispatch(self, reservation, *, success, action=None, now=None):
         if not reservation:
@@ -509,30 +519,69 @@ class DeviceAgentService:
         if str(owner_service) != PERCEPTION_OWNER:
             raise ValueError("sensor configuration may only be owned by the perception service")
         now = time.time() if now is None else float(now)
+        ttl = max(1.0, float(ttl_seconds))
         resource = "sensor-config:" + self.identity_for_entity(sensor_entity_id)["logical_device_id"]
-        with self.store.lock, self.store.conn() as c:
-            row = c.execute("SELECT * FROM perception_resource_leases WHERE resource_key=?", (resource,)).fetchone()
-            existing = dict(row) if row else None
-            if existing and float(existing.get("lease_until") or 0.0) > now and existing.get("owner_service") != PERCEPTION_OWNER:
-                raise RuntimeError("sensor configuration lease is owned by another service")
-            consumers = set(_safe_json((existing or {}).get("consumers_json"), []))
-            consumers.add(str(consumer_id))
-            snapshot = config_snapshot if config_snapshot is not None else _safe_json((existing or {}).get("config_snapshot_json"), {})
-            c.execute(
-                """INSERT INTO perception_resource_leases
-                   (resource_key,owner_service,consumers_json,lease_until,config_snapshot_json,updated_ts)
-                   VALUES(?,?,?,?,?,?) ON CONFLICT(resource_key) DO UPDATE SET
-                   owner_service=excluded.owner_service,
-                   consumers_json=excluded.consumers_json,
-                   lease_until=excluded.lease_until,
-                   config_snapshot_json=excluded.config_snapshot_json,
-                   updated_ts=excluded.updated_ts""",
-                (resource, PERCEPTION_OWNER, json.dumps(sorted(consumers)), now + float(ttl_seconds),
-                 json.dumps(snapshot or {}, separators=(",", ":"), default=str), now),
-            )
-        return self.perception_lease(sensor_entity_id)
+        with self.lock_resources([resource]):
+            with self.store.lock, self.store.conn() as c:
+                row = c.execute(
+                    "SELECT * FROM perception_resource_leases WHERE resource_key=?", (resource,)
+                ).fetchone()
+                existing = dict(row) if row else None
+                active = bool(existing and float(existing.get("lease_until") or 0.0) > now)
+                if active and existing.get("owner_service") != PERCEPTION_OWNER:
+                    raise RuntimeError("sensor configuration lease is owned by another service")
+                existing_snapshot = _safe_json((existing or {}).get("config_snapshot_json"), {})
+                if active:
+                    consumers = set(_safe_json(existing.get("consumers_json"), []))
+                    # The snapshot is the pre-change restore point. It is immutable for one
+                    # active lease generation; later consumers may not silently replace it.
+                    if config_snapshot is not None and existing_snapshot and dict(config_snapshot) != existing_snapshot:
+                        raise ValueError("active sensor configuration snapshot is immutable")
+                    snapshot = existing_snapshot or dict(config_snapshot or {})
+                else:
+                    # Expired leases are a new generation: stale consumers/snapshots cannot
+                    # leak across restart/reacquisition.
+                    consumers = set()
+                    snapshot = dict(config_snapshot or {})
+                consumers.add(str(consumer_id))
+                c.execute(
+                    """INSERT INTO perception_resource_leases
+                       (resource_key,owner_service,consumers_json,lease_until,config_snapshot_json,updated_ts)
+                       VALUES(?,?,?,?,?,?) ON CONFLICT(resource_key) DO UPDATE SET
+                       owner_service=excluded.owner_service,
+                       consumers_json=excluded.consumers_json,
+                       lease_until=excluded.lease_until,
+                       config_snapshot_json=excluded.config_snapshot_json,
+                       updated_ts=excluded.updated_ts""",
+                    (resource, PERCEPTION_OWNER, json.dumps(sorted(consumers)), now + ttl,
+                     json.dumps(snapshot, separators=(",", ":"), default=str), now),
+                )
+        return self.perception_lease(sensor_entity_id, now=now)
 
-    def perception_lease(self, sensor_entity_id):
+    def release_perception_consumer(self, sensor_entity_id, consumer_id, *, now=None):
+        """Detach one consumer; the last detach makes the durable restore snapshot actionable."""
+        now = time.time() if now is None else float(now)
+        resource = "sensor-config:" + self.identity_for_entity(sensor_entity_id)["logical_device_id"]
+        with self.lock_resources([resource]):
+            with self.store.lock, self.store.conn() as c:
+                row = c.execute(
+                    "SELECT * FROM perception_resource_leases WHERE resource_key=?", (resource,)
+                ).fetchone()
+                if not row:
+                    return None
+                row = dict(row)
+                consumers = set(_safe_json(row.get("consumers_json"), []))
+                consumers.discard(str(consumer_id))
+                lease_until = float(row.get("lease_until") or 0.0) if consumers else 0.0
+                c.execute(
+                    """UPDATE perception_resource_leases SET consumers_json=?,lease_until=?,updated_ts=?
+                       WHERE resource_key=?""",
+                    (json.dumps(sorted(consumers)), lease_until, now, resource),
+                )
+        return self.perception_lease(sensor_entity_id, now=now)
+
+    def perception_lease(self, sensor_entity_id, *, now=None):
+        now = time.time() if now is None else float(now)
         resource = "sensor-config:" + self.identity_for_entity(sensor_entity_id)["logical_device_id"]
         with self.store.conn() as c:
             row = c.execute("SELECT * FROM perception_resource_leases WHERE resource_key=?", (resource,)).fetchone()
@@ -541,7 +590,21 @@ class DeviceAgentService:
         out = dict(row)
         out["consumers"] = _safe_json(out.pop("consumers_json", "[]"), [])
         out["config_snapshot"] = _safe_json(out.pop("config_snapshot_json", "{}"), {})
+        out["active"] = bool(float(out.get("lease_until") or 0.0) > now and out["consumers"])
+        out["restore_required"] = bool(out["config_snapshot"] and not out["active"])
+        out["authoritative_owner"] = PERCEPTION_OWNER
         return out
+
+    def perception_adapter_contract(self, sensor_entity_id):
+        return {
+            "resource_key": "sensor-config:" + self.identity_for_entity(sensor_entity_id)["logical_device_id"],
+            "owner_service": PERCEPTION_OWNER,
+            "durable_lease_authority": "DeviceAgentService.perception_resource_leases",
+            "local_adapter_lease_role": "planning_token_only_not_resource_ownership",
+            "requires_snapshot": True,
+            "restore_required_on_last_release_or_expiry": True,
+            "physical_io": False,
+        }
 
     # ------------------------------------------------------------------
     # Dispatch plan semantics
@@ -563,7 +626,9 @@ class DeviceAgentService:
             "shared_resources": ["device", "explicit group", "thermal/solar-shading zone", "sensor configuration"],
             "manual_priority": "hard guard independent of reward",
             "action_mask": "legal_value + autonomy description + shared manual hold + in-flight lease + cross-agent min dwell",
+            "dispatch_reservation": "rechecks manual hold, lease and cross-agent dwell atomically under all shared-resource locks",
             "perception_owner": PERCEPTION_OWNER,
+            "perception_lease": "durable authority; active snapshot immutable; expired generation drops stale consumers; last release requires restore",
             "power_brightness": "one resource owner; brightness command is a single compound light.turn_on/off action",
             "process_model": ProcessModelBackendContract().export(),
             "executor_boundary": "arbiter never sends HA services; Executor remains sole dispatcher",
