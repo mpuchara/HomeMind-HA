@@ -120,7 +120,7 @@ ACK potwierdza wykonanie transportowe, a nie komfort. Replay automatyzacji nie j
 
 ## Benchmark produktu F24
 
-Repo zawiera deterministyczny benchmark produktu z ukrytą obecnością i ukrytą potrzebą światła. Obserwacje mają delay, noise, missingness, różne formaty oraz sprzężenie `light -> lux`. Scenariusze obejmują m.in. jednego/dwóch domowników, rozwidlenie, bezruch, brak przyjścia, quick return, dzień/noc, ręczną zmianę, fałszywy/przeniesiony sensor i zmianę zwyczaju. Przeniesiony sensor naprawdę zmienia w future test swoje przypisanie obszaru w Entity Registry. Ręczna zmiana jest zdarzeniem targetu z pochodzeniem użytkownika (`context.user_id`), dzięki czemu benchmark może odróżnić manual hold od zwykłej zmiany hidden truth.
+Repo zawiera deterministyczny benchmark produktu z ukrytą obecnością i ukrytą potrzebą światła. Obserwacje mają delay, noise, missingness, różne formaty oraz sprzężenie `light -> lux`. Scenariusze obejmują m.in. jednego/dwóch domowników, rozwidlenie, bezruch, brak przyjścia, quick return, dzień/noc, ręczną zmianę, fałszywy/przeniesiony sensor i zmianę zwyczaju. Przeniesiony sensor naprawdę zmienia w future test swoje przypisanie obszaru w Entity Registry. Ręczna zmiana jest zdarzeniem targetu z pochodzeniem użytkownika (`context.user_id`), dzięki czemu benchmark może odróżnić manual hold od zwykłej zmiany hidden truth. Szybkie targety (np. światła) zachowują krótki timing akcji, ale korzystają z tego samego manual hold co pozostałe urządzenia.
 
 Oficjalne uruchomienie:
 
