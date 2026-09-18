@@ -29,6 +29,7 @@ sys.path.insert(0, str(ROOT / "tests"))
 
 import agent_candidate_preference_metrics as pref
 import performance_f22 as f22
+import confidence_contract as confidence
 import teaching_rl
 from policy import DiagonalLinUCB
 from test_performance_f22 import MemoryStore, FastMetricFixture
@@ -126,6 +127,111 @@ def fast_metric_benchmark(pair_count):
         "diagnostics": diag.snapshot(),
         "warm_result_samples": warm.get("meaningful_opportunities"),
     }, (store, manager, row, parent, child, status, diag)
+
+
+def confidence_fixed_future_benchmark(pair_count):
+    store = MemoryStore()
+    FastMetricFixture.schema(store)
+    with store.conn() as db:
+        for ddl in (
+            "ALTER TABLE candidate_generation_pairs ADD COLUMN evidence_kind TEXT NOT NULL DEFAULT 'legacy_unclassified'",
+            "ALTER TABLE candidate_generation_pairs ADD COLUMN calibration_eligible INTEGER NOT NULL DEFAULT 0",
+            "ALTER TABLE candidate_generation_pairs ADD COLUMN dependency_cluster TEXT",
+            "ALTER TABLE candidate_generation_pairs ADD COLUMN calibration_outcome REAL",
+            "ALTER TABLE candidate_generation_pairs ADD COLUMN calibration_parent_correct INTEGER",
+            "ALTER TABLE candidate_generation_pairs ADD COLUMN calibration_child_correct INTEGER",
+            "ALTER TABLE candidate_generation_pairs ADD COLUMN calibration_source_id TEXT",
+        ):
+            db.execute(ddl)
+    confidence.ensure_tables(store)
+    epochs = confidence.EvaluationEpochJournal(store)
+    diag = f22.PerformanceDiagnostics()
+    epochs._performance_diagnostics = diag
+
+    def insert(i, eligible=False):
+        outcome = float(i % 2)
+        ts = 1000.0 + i * 10.0
+        kind = "manual_user_target_change" if eligible else "external_target_transition"
+        with store.conn() as db:
+            db.execute(
+                """INSERT INTO candidate_generation_pairs
+                   (root_agent_id,parent_generation_id,child_generation_id,prediction_event_id,
+                    prediction_ts,outcome_ts,outcome,parent_prediction,child_prediction,
+                    parent_confidence,child_confidence,parent_correct,child_correct,paired_result,
+                    parent_lead_seconds,child_lead_seconds,lead_gain_seconds,
+                    evidence_kind,calibration_eligible,dependency_cluster,calibration_outcome,
+                    calibration_parent_correct,calibration_child_correct,calibration_source_id)
+                   VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                (
+                    "root","g0","g1",f"cb-{i}",ts-1.0,ts,outcome,outcome,outcome,
+                    .8,.8,1,1,"both_correct",1.0,1.0,0.0,kind,1 if eligible else 0,
+                    f"cluster-{i}",outcome if eligible else None,1 if eligible else None,
+                    1 if eligible else None,f"label-{i}" if eligible else None,
+                ),
+            )
+
+    for i in range(max(12, int(pair_count))):
+        insert(i, eligible=False)
+    screening = confidence._pair_rows(store, "g0", "g1")
+    epoch = epochs.ensure(
+        "g0","g1","rev-bench","diagonal_linucb:v11",screening,
+        selection_target=12,final_target=12,min_per_action=4,
+    )
+    start_future = max(12, int(pair_count)) + 10
+    for i in range(start_future, start_future + 12):
+        insert(i, eligible=True)
+
+    store.reset_trace()
+    legacy_pairs, legacy_load_ms = timed(lambda: confidence._pair_rows(store, "g0", "g1"))
+    legacy_report, legacy_report_ms = timed(
+        lambda: epochs.final_report(epoch, legacy_pairs, scope_id="root")
+    )
+    locked = epochs.get("g0","g1","rev-bench","diagonal_linucb:v11")
+
+    store.reset_trace()
+    optimized, optimized_ms = timed(
+        lambda: epochs.final_report_from_store(
+            locked,"g0","g1",scope_id="root"
+        )
+    )
+    cold_queries = len(store.selects())
+    store.reset_trace()
+    warm, warm_ms = timed(
+        lambda: epochs.final_report_from_store(
+            locked,"g0","g1",scope_id="root"
+        ),
+        repeats=20,
+    )
+    warm_sql = [x.lower() for x in store.selects()]
+    pair_scans = sum("from candidate_generation_pairs" in x for x in warm_sql)
+
+    equality_keys = (
+        "episodes","effective_n","promotion_quality_passed","status","final_end_ts",
+        "paired_delta","per_action_delta",
+    )
+    same = all(legacy_report.get(k) == optimized.get(k) for k in equality_keys)
+    return {
+        "screening_pairs": max(12, int(pair_count)),
+        "fixed_future_rows": 12,
+        "legacy": {
+            "rows_materialized": len(legacy_pairs),
+            "load_time_ms": legacy_load_ms[0],
+            "report_time_ms": legacy_report_ms[0],
+        },
+        "optimized_cold": {
+            "time_ms": optimized_ms[0],
+            "select_statements": cold_queries,
+            "max_rows_materialized_per_batch": diag.snapshot()["max_rows_materialized_per_batch"],
+        },
+        "optimized_warm_20_polls": {
+            "total_time_ms": sum(warm_ms),
+            "p95_time_ms": percentile(warm_ms, .95),
+            "candidate_pair_full_scans": pair_scans,
+        },
+        "reports_equal": same,
+        "warm_report_equal": warm == optimized,
+        "cache_diagnostics": diag.snapshot(),
+    }
 
 
 def teach_fixture(sensor_count, label_count):
@@ -250,6 +356,7 @@ def main():
     model = pi_model()
     before_rss = rss_mb()
     fast, context = fast_metric_benchmark(max(20, args.pairs))
+    confidence_future = confidence_fixed_future_benchmark(max(20, args.pairs))
     teach = teach_benchmark(max(12, args.teach_sensors), max(12, min(256, args.teach_labels)))
     under_load = inference_under_load(context, max(24, args.teach_sensors), max(12, min(256, args.teach_labels)))
     after_rss = rss_mb()
@@ -272,6 +379,7 @@ def main():
             "decision_rows_per_pair": 4,
         },
         "fast_metrics": fast,
+        "confidence_fixed_future": confidence_future,
         "teach_supervised_scores": teach,
         "concurrent_load": under_load,
         "peak_rss_mb": after_rss,
@@ -287,7 +395,11 @@ def main():
         "pi_command": "python tools/benchmark_history_costs.py --pairs 3000 --teach-sensors 96 --teach-labels 24",
     }
     print(json.dumps(result, indent=2, sort_keys=True))
-    if fast["max_absolute_metric_difference"] > 1e-9 or not teach["scores_equal"]:
+    if (fast["max_absolute_metric_difference"] > 1e-9
+            or not confidence_future["reports_equal"]
+            or not confidence_future["warm_report_equal"]
+            or confidence_future["optimized_warm_20_polls"]["candidate_pair_full_scans"] != 0
+            or not teach["scores_equal"]):
         return 2
     return 0
 
