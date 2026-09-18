@@ -165,6 +165,21 @@ class RoomBeliefModel:
             value = fallback
         return float(value)
 
+    @classmethod
+    def _event_time(cls, source, fallback):
+        return cls._source_timestamp(source, 'event_ts', fallback)
+
+    @classmethod
+    def _received_time(cls, source, fallback):
+        value = source.get('received_ts')
+        if value is None:
+            value = source.get('event_ts')
+        if value is None:
+            value = source.get('ts')
+        if value is None:
+            value = fallback
+        return float(value)
+
     def source_area(self, entity_id):
         row = self.sources.get(entity_id)
         return row.get('area') if isinstance(row, dict) else None
@@ -174,11 +189,14 @@ class RoomBeliefModel:
         return row.get('role') if isinstance(row, dict) else None
 
     def _freshness(self, source, ts):
-        sample_ts = self._source_timestamp(source, 'ts', ts)
-        if not source.get('available') or sample_ts > float(ts):
+        event_ts = self._event_time(source, ts)
+        received_ts = self._received_time(source, event_ts)
+        if (not source.get('available')
+                or event_ts > float(ts)
+                or received_ts > float(ts)):
             return 0.0
         params = self._params(source.get('role'))
-        state_since = self._source_timestamp(source, 'state_since_ts', sample_ts)
+        state_since = self._source_timestamp(source, 'state_since_ts', event_ts)
         age = max(0.0, float(ts) - state_since)
         try:
             active = float(source.get('value')) >= .5
@@ -199,8 +217,9 @@ class RoomBeliefModel:
             source = self.sources.get(eid)
             if not source:
                 continue
-            sample_ts = self._source_timestamp(source, 'ts', ts)
-            if sample_ts > float(ts):
+            event_ts = self._event_time(source, ts)
+            received_ts = self._received_time(source, event_ts)
+            if event_ts > float(ts) or received_ts > float(ts):
                 continue
             role = str(source.get('role') or 'auxiliary')
             params = self._params(role)
@@ -234,13 +253,15 @@ class RoomBeliefModel:
                 elif role in {'radar_activity', 'auxiliary'}:
                     contribution = q * float(params['active']) * comm * fresh
                     raw_activity.append(contribution)
-            state_since = self._source_timestamp(source, 'state_since_ts', sample_ts)
+            state_since = self._source_timestamp(source, 'state_since_ts', event_ts)
             rows.append({
                 'entity_id': eid,
                 'role': role,
                 'value_semantics': params['semantics'],
                 'available': available,
                 'communication_reliability': comm,
+                'communication_age_seconds': max(0.0, float(ts) - received_ts),
+                'event_age_seconds': max(0.0, float(ts) - event_ts),
                 'evidence_age_seconds': max(0.0, float(ts) - state_since),
                 'evidence_freshness': fresh,
                 'contribution': contribution,
@@ -395,28 +416,66 @@ class RoomBeliefModel:
             self.reset_movement_state()
             self.last_ts = 0.0
 
-    def observe(self, entity_id, area, probability, ts, learn=True, evidence=None):
+    def observe(self, entity_id, area, probability, ts, learn=True, evidence=None,
+                event_ts=None, received_ts=None):
+        """Observe one source with separate event and receive clocks.
+
+        ``ts`` remains the processing clock for backwards compatibility. New live/replay
+        callers should also provide ``event_ts`` and ``received_ts``. Movement hypotheses
+        advance on receive/processing time so a delayed packet cannot rewind the house,
+        while evidence freshness is measured from the HA event/change time.
+        """
         if not area:
             return False
-        ts = float(ts)
+        processing_ts = float(received_ts if received_ts is not None else ts)
+        event_ts = float(event_ts if event_ts is not None else ts)
+        received_ts = float(received_ts if received_ts is not None else processing_ts)
         evidence = dict(evidence or {})
-        # Compatibility: direct callers from old tests/simulators still represent a
-        # binary occupancy channel unless a new explicit role is provided.
         role = str(evidence.get('role') or
                    ('occupancy_binary' if probability in (0, 1, 0.0, 1.0, None) else 'auxiliary'))
         params = self._params(role)
         with self.lock:
             previous = self.sources.get(entity_id)
-            if previous and ts <= self._source_timestamp(previous, 'ts', ts):
-                return False
+            if previous:
+                previous_event = self._event_time(previous, event_ts)
+                previous_received = self._received_time(previous, previous_event)
+                if event_ts < previous_event - 1e-9:
+                    return False
+                if abs(event_ts - previous_event) <= 1e-9:
+                    same_confirmation = bool(
+                        previous.get('area') == area
+                        and previous.get('available') == (probability is not None)
+                        and previous.get('value') == probability
+                        and previous.get('role') == role
+                    )
+                    if not same_confirmation or received_ts <= previous_received + 1e-9:
+                        return False
+                    self.expire(processing_ts, learn=False)
+                    if probability is None:
+                        communication = 0.0
+                    elif not previous.get('available'):
+                        communication = .60
+                    else:
+                        communication = min(
+                            1.0,
+                            float(previous.get('communication_reliability') or .6) + .15,
+                        )
+                    previous['received_ts'] = received_ts
+                    previous['communication_reliability'] = communication
+                    previous['available'] = probability is not None
+                    previous['value_semantics'] = (
+                        evidence.get('value_semantics') or params['semantics']
+                    )
+                    self.last_ts = max(self.last_ts, processing_ts)
+                    self.revision += 1
+                    return False
             if area not in self.values and len(self.values) >= self.MAX_AREAS:
                 return False
             if entity_id not in self.sources and len(self.sources) >= self.MAX_SOURCES:
                 return False
-            self.expire(ts, learn)
+
+            self.expire(processing_ts, learn)
             old_area = previous.get('area') if previous else None
-            # No previous observable state means prior occupancy is unknown for forecast,
-            # but a first fresh direct ON must still be recognized as an entrance event.
             old_p = float(self.values.get(area, {}).get('p', 0.0))
             available = probability is not None
             if not available:
@@ -424,17 +483,27 @@ class RoomBeliefModel:
             elif previous and not previous.get('available'):
                 communication = .60
             elif previous:
-                communication = min(1.0, float(previous.get('communication_reliability') or .6) + .15)
+                communication = min(
+                    1.0, float(previous.get('communication_reliability') or .6) + .15
+                )
             else:
                 communication = 1.0
-            same_state = bool(previous and previous.get('available') == available
-                              and previous.get('value') == probability
-                              and previous.get('role') == role)
-            state_since = self._source_timestamp(previous, 'state_since_ts', ts) if same_state else ts
+            same_state = bool(
+                previous
+                and previous.get('available') == available
+                and previous.get('value') == probability
+                and previous.get('role') == role
+            )
+            state_since = (
+                self._source_timestamp(previous, 'state_since_ts', event_ts)
+                if same_state else event_ts
+            )
             self.sources[entity_id] = {
                 'area': area,
                 'value': probability,
-                'ts': ts,
+                'ts': event_ts,
+                'event_ts': event_ts,
+                'received_ts': received_ts,
                 'state_since_ts': state_since,
                 'available': available,
                 'communication_reliability': communication,
@@ -445,29 +514,44 @@ class RoomBeliefModel:
                 self.area_sources.get(old_area, set()).discard(entity_id)
             self.area_sources.setdefault(area, set()).add(entity_id)
             if old_area and old_area != area:
-                prior = self._fuse_room(old_area, ts)
-                old_slot = self.values.setdefault(old_area, {'p': .5, 'arrival': None, 'departure': None})
-                old_slot.update(p=prior['occupancy'], known=prior['known'],
-                                observability=prior['observability'], uncertainty=prior['uncertainty'])
-            belief = self._fuse_room(area, ts)
-            slot = self.values.setdefault(area, {'p': .5, 'arrival': None, 'departure': None})
-            slot.update(p=belief['occupancy'], known=belief['known'],
-                        observability=belief['observability'], uncertainty=belief['uncertainty'])
+                prior = self._fuse_room(old_area, processing_ts)
+                old_slot = self.values.setdefault(
+                    old_area, {'p': .5, 'arrival': None, 'departure': None}
+                )
+                old_slot.update(
+                    p=prior['occupancy'], known=prior['known'],
+                    observability=prior['observability'], uncertainty=prior['uncertainty']
+                )
+            belief = self._fuse_room(area, processing_ts)
+            slot = self.values.setdefault(
+                area, {'p': .5, 'arrival': None, 'departure': None}
+            )
+            slot.update(
+                p=belief['occupancy'], known=belief['known'],
+                observability=belief['observability'], uncertainty=belief['uncertainty']
+            )
             new_p = float(belief['occupancy'])
             entered = bool(belief['direct_active'] and new_p >= .5 and old_p < .5)
             departed = bool(new_p < .5 and old_p >= .5 and available)
             if entered:
-                self._movement_enter(area, ts, float(params.get('movement') or 0.0), learn=learn)
-                slot['arrival'] = ts
+                self._movement_enter(
+                    area, processing_ts, float(params.get('movement') or 0.0), learn=learn
+                )
+                slot['arrival'] = processing_ts
             elif departed:
-                slot['departure'] = ts
+                slot['departure'] = processing_ts
                 if learn and slot.get('arrival') is not None:
-                    duration = min(600, max(0, int(math.ceil(ts - float(slot['arrival'])))))
-                    row = self.dwell.setdefault(area, {'ts': ts, 'outcomes': {}})
-                    self._decay_row(row, ts)
+                    duration = min(
+                        600,
+                        max(0, int(math.ceil(processing_ts - float(slot['arrival'])))),
+                    )
+                    row = self.dwell.setdefault(
+                        area, {'ts': processing_ts, 'outcomes': {}}
+                    )
+                    self._decay_row(row, processing_ts)
                     bins = row['outcomes'].setdefault('duration', [0.0] * 61)
                     bins[min(60, duration // 10)] += 1
-            self.last_ts = max(self.last_ts, ts)
+            self.last_ts = max(self.last_ts, processing_ts)
             self.updated += int(bool(learn))
             self.revision += 1
             self._refresh_pending_compat()
