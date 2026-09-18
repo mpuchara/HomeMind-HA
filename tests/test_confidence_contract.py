@@ -198,7 +198,7 @@ class FixedFutureEvaluationTests(unittest.TestCase):
         self.assertTrue(report['promotion_quality_passed'])
         self.assertTrue(report['per_action_delta']['OFF']['non_regression_passed'])
         self.assertTrue(report['per_action_delta']['ON']['non_regression_passed'])
-        self.assertEqual(report['evidence_contract'], 'future_manual_user_preference_labels_only')
+        self.assertEqual(report['evidence_contract'], 'future_explicit_independent_preference_or_episode_labels_only')
 
     def test_backend_or_model_revision_requires_new_calibration_epoch(self):
         selection = [pair(i, i % 2, True) for i in range(12)]
@@ -318,6 +318,7 @@ class ContractParityTests(unittest.TestCase):
         self.assertEqual(descriptor['final_min_independent_episodes'], DEFAULT_FINAL_EPISODES)
         self.assertEqual(descriptor['final_min_per_action'], DEFAULT_MIN_PER_ACTION)
         self.assertEqual(descriptor['final_max_allowed_regression'], DEFAULT_FINAL_MAX_REGRESSION)
+        self.assertIn('screening', descriptor['selection_evidence_semantics'])
         self.assertIn('manual_user_target_change', descriptor['final_calibration_evidence_kinds'])
         self.assertIn('backend identity', descriptor['backend_recalibration'])
         self.assertIn('screening_only', descriptor['automation_replay'])
