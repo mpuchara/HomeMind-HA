@@ -102,15 +102,22 @@ def _make_dispatch(base, http_method, fallback_registry):
 
 def _bind_server_dispatch(core, registry, server):
     """Bind explicit routes to one concrete HTTP server without mutating core.Handler."""
-    current = getattr(server, "RequestHandlerClass", None) or core.Handler
+    current = getattr(server, "RequestHandlerClass", None)
+    if not isinstance(current, type):
+        # Packaged/startup tests may inject a Mock server. Production
+        # ThreadingHTTPServer always exposes a handler class here.
+        current = core.Handler
     server_id = id(server)
     if current.__dict__.get("_explicit_http_dispatch_server_id") == server_id:
         current._explicit_http_route_registry = registry
         server._explicit_http_route_registry = registry
         registry._binding = {
             "mode": "server_instance_handler_subclass",
-            "handler_class": current.__name__,
-            "base_handler_class": getattr(current, "_explicit_http_base_handler", core.Handler).__name__,
+            "handler_class": getattr(current, "__name__", type(current).__name__),
+            "base_handler_class": getattr(
+                getattr(current, "_explicit_http_base_handler", core.Handler),
+                "__name__", type(core.Handler).__name__
+            ),
         }
         return registry
 
