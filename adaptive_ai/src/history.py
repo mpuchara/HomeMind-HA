@@ -886,7 +886,8 @@ class HistoryManager(threading.Thread):
         fast_edge_rows = {eid: deque(maxlen=edge_limit) for eid in (behaviour_candidates | fast_targets)}
 
         previous_context = {}
-        for row in STORE.archive_iter(start_ts=start_ts, end_ts=end_ts, chunk_size=2000):
+        screening_rows = (STORE.archive_iter(start_ts=start_ts, end_ts=end_ts, chunk_size=2000) if screening_required else ())
+        for row in screening_rows:
             ts = float(row["ts"]); eid = row["entity_id"]
             if ts >= selection_end:
                 break
