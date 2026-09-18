@@ -47,6 +47,7 @@ ROLE_PARAMS = {
 class RoomBeliefModel:
     VERSION = 2
     LEGACY_VERSION = 1
+    TIME_CONTRACT_VERSION = 2
     MAX_AREAS = 128
     MAX_CONTEXTS = 2048
     MAX_HYPOTHESES = 8
@@ -71,6 +72,7 @@ class RoomBeliefModel:
         self.last_decay_ts = 0.0
         self.revision = 0
         self.migrated_from = None
+        self.time_contract_loaded = self.TIME_CONTRACT_VERSION
         self.lock = threading.RLock()
         self._load_checkpoint(raw)
 
@@ -89,6 +91,7 @@ class RoomBeliefModel:
         if version not in (self.LEGACY_VERSION, self.VERSION):
             return
         self.migrated_from = self.LEGACY_VERSION if version == self.LEGACY_VERSION else None
+        self.time_contract_loaded = int(raw.get('time_contract_version') or 1)
         for row in raw.get('graph', [])[:self.MAX_CONTEXTS]:
             try:
                 key = tuple(str(x) for x in row['context'])
@@ -687,6 +690,7 @@ class RoomBeliefModel:
         with self.lock:
             return {
                 'version': self.VERSION,
+                'time_contract_version': self.TIME_CONTRACT_VERSION,
                 'model': 'RoomBeliefModel',
                 'updates': self.updated,
                 'last_decay_ts': self.last_decay_ts,
@@ -782,6 +786,8 @@ class RoomBeliefModel:
                 'model': 'RoomBeliefModel',
                 'version': self.VERSION,
                 'migrated_from': self.migrated_from,
+                'time_contract_version': self.TIME_CONTRACT_VERSION,
+                'time_contract_loaded': self.time_contract_loaded,
                 'areas': len(self.values),
                 'edges': len(transitions),
                 'updates': self.updated,
