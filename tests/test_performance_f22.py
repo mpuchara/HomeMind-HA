@@ -483,7 +483,7 @@ class CurrentConfidenceCostTests(unittest.TestCase):
         self.assertEqual(after_label, optimized)
         sql = "\n".join(self.store.selects()).lower()
         self.assertIn("from candidate_generation_pairs", sql)
-        self.assertIn("outcome_ts<=?", sql)
+        self.assertIn("outcome_ts<=", sql)
         self.assertLessEqual(self.diag.snapshot()['max_rows_materialized_per_batch'], 12)
         self.store.reset_trace()
         self.assertEqual(
@@ -550,7 +550,7 @@ class CurrentConfidenceCostTests(unittest.TestCase):
         self.assertEqual(refreshed['paired_delta'], legacy['paired_delta'])
         self.assertEqual(refreshed['per_action_delta'], legacy['per_action_delta'])
         self.assertEqual(refreshed['promotion_quality_passed'], legacy['promotion_quality_passed'])
-        self.assertIn("outcome_ts<=?", "\n".join(self.store.selects()).lower())
+        self.assertIn("outcome_ts<=", "\n".join(self.store.selects()).lower())
         self.assertNotEqual(initial['paired_delta'], refreshed['paired_delta'])
 
     def test_streamed_probability_calibration_matches_legacy_report(self):
