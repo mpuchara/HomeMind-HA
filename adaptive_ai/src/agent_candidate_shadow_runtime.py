@@ -74,6 +74,10 @@ def ensure_shadow_tables(store):
                 evidence_kind TEXT NOT NULL DEFAULT 'legacy_unclassified',
                 calibration_eligible INTEGER NOT NULL DEFAULT 0,
                 dependency_cluster TEXT,
+                calibration_outcome REAL,
+                calibration_parent_correct INTEGER,
+                calibration_child_correct INTEGER,
+                calibration_source_id TEXT,
                 parent_lead_seconds REAL,
                 child_lead_seconds REAL,
                 lead_gain_seconds REAL,
@@ -99,6 +103,14 @@ def ensure_shadow_tables(store):
             c.execute("ALTER TABLE candidate_generation_pairs ADD COLUMN calibration_eligible INTEGER NOT NULL DEFAULT 0")
         if "dependency_cluster" not in columns:
             c.execute("ALTER TABLE candidate_generation_pairs ADD COLUMN dependency_cluster TEXT")
+        if "calibration_outcome" not in columns:
+            c.execute("ALTER TABLE candidate_generation_pairs ADD COLUMN calibration_outcome REAL")
+        if "calibration_parent_correct" not in columns:
+            c.execute("ALTER TABLE candidate_generation_pairs ADD COLUMN calibration_parent_correct INTEGER")
+        if "calibration_child_correct" not in columns:
+            c.execute("ALTER TABLE candidate_generation_pairs ADD COLUMN calibration_child_correct INTEGER")
+        if "calibration_source_id" not in columns:
+            c.execute("ALTER TABLE candidate_generation_pairs ADD COLUMN calibration_source_id TEXT")
 
 
 def _transition_evidence(target_state, target_entity, outcome_ts):
@@ -618,14 +630,19 @@ def install(manager):
                    (root_agent_id,parent_generation_id,child_generation_id,prediction_event_id,prediction_ts,
                     outcome_ts,outcome,parent_prediction,child_prediction,parent_confidence,child_confidence,
                     parent_correct,child_correct,paired_result,evidence_kind,calibration_eligible,dependency_cluster,
+                    calibration_outcome,calibration_parent_correct,calibration_child_correct,calibration_source_id,
                     parent_lead_seconds,child_lead_seconds,lead_gain_seconds)
-                   VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                   VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                 (
                     str(agent["id"]), edge["parent_generation_id"], edge["child_generation_id"],
                     bundle["event_id"], float(bundle["ts"]), float(outcome_ts), float(outcome),
                     float(parent["desired"]), float(child["desired"]), parent.get("confidence"), child.get("confidence"),
                     int(p_ok), int(c_ok), paired_result, evidence["evidence_kind"],
                     int(evidence["calibration_eligible"]), evidence["dependency_cluster"],
+                    float(outcome) if evidence["calibration_eligible"] else None,
+                    int(p_ok) if evidence["calibration_eligible"] else None,
+                    int(c_ok) if evidence["calibration_eligible"] else None,
+                    (bundle["event_id"] if evidence["calibration_eligible"] else None),
                     parent_lead, child_lead, lead_gain,
                 ),
             )
