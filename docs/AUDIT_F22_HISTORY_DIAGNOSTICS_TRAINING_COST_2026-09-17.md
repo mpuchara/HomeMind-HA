@@ -271,7 +271,7 @@ The final report no longer loads screening/automation history. Its source query 
 
 A durable `calibration_revision` invalidates the collecting report only when relevant independent evidence changes. Ordinary automation transitions do not invalidate this cache.
 
-Once `final_end_ts` is frozen, the report is immutable. Later labels are outside the declared test and therefore neither change nor rescan the completed holdout. This strengthens the existing optional-stopping protection while reducing status cost.
+Once `final_end_ts` is frozen, ordinary screening/automation history no longer invalidates the report. A new independent calibration fact still advances the calibration revision because it may have been attached retroactively to an episode whose `outcome_ts` is inside the locked window. In that case HomeMind recomputes only the bounded fixed-future window and then caches it again. This preserves the pre-optimization semantics instead of assuming that label-arrival time equals outcome time.
 
 The legacy prefix search for the first sufficient final window now starts at `final_target`; a shorter prefix cannot satisfy the declared minimum, so the skipped prefixes were provably unnecessary.
 
@@ -303,7 +303,7 @@ New tests require that:
 - optimized fixed-future output exactly matches the legacy report on the same rows;
 - twenty warm final-status polls perform zero Candidate-pair full scans;
 - growth of unrelated automation-transition history does not invalidate the final report;
-- a locked final holdout remains cacheable even when later independent labels arrive;
+- a locked final holdout ignores unrelated history growth, while a later independent label causes at most one bounded fixed-window recomputation before warm reads are cached again;
 - the durable cache survives a new journal/runtime instance;
 - unchanged probability calibration reports do not rescan source episodes.
 
