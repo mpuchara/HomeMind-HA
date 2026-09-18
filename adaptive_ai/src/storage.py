@@ -536,6 +536,46 @@ class Store:
                 for row in batch:
                     yield dict(row)
 
+    def archive_change_iter(self, start_ts=None, end_ts=None, entity_ids=None, chunk_size=2000):
+        """Stream only effective per-entity state/attribute changes.
+
+        Feature screening previously pulled every Recorder row into Python and discarded
+        consecutive duplicates there. SQLite can perform the identical per-entity LAG
+        comparison in C, materially reducing Python/GIL work for chatty sensors while
+        preserving the first row in the requested interval as a change.
+        """
+        where, vals = [], []
+        if start_ts is not None:
+            where.append("ts>=?"); vals.append(float(start_ts))
+        if end_ts is not None:
+            where.append("ts<=?"); vals.append(float(end_ts))
+        ids = sorted(set(entity_ids or []))
+        if ids:
+            where.append("entity_id IN (%s)" % ",".join("?" for _ in ids)); vals.extend(ids)
+        predicate = (" WHERE " + " AND ".join(where)) if where else ""
+        sql = f"""
+            SELECT id,entity_id,ts,state,attributes_json,context_user_id,source
+            FROM (
+                SELECT id,entity_id,ts,state,attributes_json,context_user_id,source,
+                       LAG(id) OVER (PARTITION BY entity_id ORDER BY ts,id) AS previous_id,
+                       LAG(state) OVER (PARTITION BY entity_id ORDER BY ts,id) AS previous_state,
+                       LAG(attributes_json) OVER (PARTITION BY entity_id ORDER BY ts,id) AS previous_attributes_json
+                FROM entity_history{predicate}
+            )
+            WHERE previous_id IS NULL
+               OR state IS NOT previous_state
+               OR attributes_json IS NOT previous_attributes_json
+            ORDER BY ts,id
+        """
+        with self.conn() as c:
+            cursor = c.execute(sql, vals)
+            while True:
+                batch = cursor.fetchmany(max(100, int(chunk_size)))
+                if not batch:
+                    break
+                for row in batch:
+                    yield dict(row)
+
     def archive_rows_for_entities(self, start_ts, end_ts, entity_ids):
         rows = list(islice(self.archive_iter(start_ts, end_ts, entity_ids, chunk_size=256), 20001))
         if len(rows)>20000:
