@@ -11,7 +11,7 @@ from urllib.parse import parse_qs, unquote, urlsplit
 from agent_candidate_lineage import _row as lineage_row
 from agent_workflow_actions import _resolve_generation
 from context import archived_state, target_value
-from teach_observed_history import DESIRED_STALE_SECONDS, _desired_at, _recorded_rows
+from teach_observed_history import DESIRED_STALE_SECONDS, _desired_at, _recorded_rows, _ensure_table
 from training_budget import TRAINING_BUDGET
 from teaching_rl import fingerprint as rl_fingerprint
 
@@ -81,6 +81,7 @@ def _current_at(rows, timestamp):
 def _live_observed_history(manager, generation, agent, start, end):
     """Build Correct history from two narrow indexed streams, with zero policy replay."""
     TRAINING_BUDGET.request_interactive_window(1.0, reason="correct_history")
+    _ensure_table(manager.store)
     decisions = _recorded_rows(
         manager.store, manager.engine, agent["id"], float(start), float(end)
     )
@@ -125,6 +126,7 @@ def _observed_generation_at(manager, generation, timestamp):
         if row:
             return dict(row)
     if generation.get("generation_type") == "live":
+        _ensure_table(manager.store)
         rows = _recorded_rows(
             manager.store, manager.engine, generation["agent_id"],
             float(timestamp), float(timestamp),
