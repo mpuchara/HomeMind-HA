@@ -1039,6 +1039,38 @@ class HistoryManager(threading.Thread):
         pending = {}
         last_value = {}
         new_count = 0
+
+        # Replay used to commit one SQLite transaction per completed dwell.  Keep the
+        # same uniqueness semantics in memory, then persist bounded batches.  A failed
+        # training pass is still rolled back by discard_uncommitted_experiences() because
+        # model watermarks are advanced only after the final batch has been flushed.
+        existing_experience_ids = {
+            a["id"]: STORE.historical_experience_target_ids(a["id"])
+            for a in agents
+        }
+        experience_batch = []
+        experience_batch_rows = max(
+            8, min(512, int(OPTIONS.get("training_experience_batch_rows", 64)))
+        )
+
+        def flush_experience_batch(force=False):
+            if not experience_batch:
+                return 0
+            if not force and len(experience_batch) < experience_batch_rows:
+                return 0
+            batch = list(experience_batch)
+            inserted = STORE.add_historical_experiences_batch(batch)
+            if inserted != len(batch):
+                # A concurrent duplicate would make the in-memory policy diverge from the
+                # durable audit log. Abort rather than silently checkpoint inconsistent
+                # learning. The single-heavy-job contract should make this unreachable.
+                raise RuntimeError(
+                    f"Historical experience batch mismatch: inserted {inserted}/{len(batch)}"
+                )
+            experience_batch.clear()
+            TRAINING_BUDGET.checkpoint("historical_experience_batch_flush", force=True)
+            return inserted
+
         heldout_updates = DeferredUpdates(policies)
         validation_fraction = clamp(float(OPTIONS.get("confidence_validation_fraction", 0.20)), 0.05, 0.40)
         validation_span = max(1800.0, (float(end_ts) - float(start_ts)) * validation_fraction)
@@ -1144,12 +1176,22 @@ class HistoryManager(threading.Thread):
             dwell = max(0.0, float(effective_end) - old["ts"])
             reward = historical_reward(agent, dwell, old.get("user_id"), next_user_id)
             primary_h = min(old["features_by_horizon"])
-            inserted = STORE.add_historical_experience(
-                agent["id"], old["history_id"], old["action_idx"], old["action_value"], reward,
-                dwell, old["features_by_horizon"][primary_h], old.get("user_id")
-            )
-            if not inserted:
+            target_history_id = int(old["history_id"])
+            seen = existing_experience_ids.setdefault(agent["id"], set())
+            if target_history_id in seen:
                 return False
+            seen.add(target_history_id)
+            experience_batch.append({
+                "agent_id": agent["id"],
+                "target_history_id": target_history_id,
+                "action_index": old["action_idx"],
+                "action_value": old["action_value"],
+                "reward": reward,
+                "dwell_seconds": dwell,
+                "features": old["features_by_horizon"][primary_h],
+                "user_id": old.get("user_id"),
+            })
+            flush_experience_batch()
 
             # Score the held-out transition before it is folded into training. This is
             # the behavioural benchmark against the legacy HA automations.
@@ -1311,6 +1353,11 @@ class HistoryManager(threading.Thread):
                             phase_detail=f"Replay complete · {new_count:,} new rewarded experiences")
         else:
             validation_end = model_end = benchmark_end = None
+
+        # Flush every accepted replay fact before the model watermark is advanced.
+        # This preserves crash rollback while reducing WAL commits by roughly the batch
+        # size compared with the previous per-dwell write path.
+        flush_experience_batch(force=True)
 
         # 0.14.18: replay used to stop at exactly this point and the next expensive
         # finalization work ran outside the archive-iterator throttle. Force a yield
