@@ -37,8 +37,12 @@ ma dopasowanej preferencji, stara polityka pozostaje fallbackiem.
 
 ## Zakres i konflikt
 
-Model korzysta z wersjonowanej semantycznej sygnatury Stage 06 i tego samego kontraktu
-`teaching.distance`. Zapis `one_time` nigdy nie jest generalizowany przez model.
+Model korzysta z wersjonowanej semantycznej sygnatury Stage 06/04 i tego samego kontraktu
+`teaching.distance`. `LightingPreferenceModel.predict()` odwołuje się do `teaching.signature`
+dynamicznie w runtime, dzięki czemu finalna instalacja observation contract v12 jest
+rzeczywiście używana również przez model preferencji (w tym reguła
+`reconstruction_complete`), zamiast pozostawać przy obiekcie funkcji przechwyconym przed
+kompozycją runtime. Zapis `one_time` nigdy nie jest generalizowany przez model.
 `episode` może być użyty tylko przy zgodnym `episode_id`. `similar_context` i
 `persistent_preference` mogą być dowodem modelu, ale konflikt oznaczony przez Stage 06
 pozostaje nietrenowalny.
@@ -57,7 +61,7 @@ Bezpośrednia instrukcja ma osobny zakres. Dla nowych, journal-linked etykiet:
 
 Finalny entrypoint nadal jest:
 
-`adaptive_ai/src/run.sh -> preference_queue_main.py -> fast_queue_main.py -> queue_main.py`.
+`adaptive_ai/src/run.sh -> trial_queue_main.py -> preference_queue_main.py -> fast_queue_main.py -> queue_main.py -> main.py`.
 
 `preference_queue_main.py` instaluje usługę `LightingPreferenceModel` i
 `PreferenceDecisionComposer` przed uruchomieniem workerów. Nie dodaje wrappera
@@ -86,7 +90,7 @@ wywołanie inferencji nie zwiększa tych liczników.
 
 ## Deterministyczny benchmark odbioru
 
-Test Stage 07 rozdziela dwa przyszłe konteksty:
+Test Stage 07 rozdziela dwa przyszłe konteksty, a dodatkowy test integracyjny zapisuje je jako dwa jawne epizody Stage 05 i ocenia wszystkie trzy polityki na tych samych `episode_id`:
 
 - kontekst wymagający adaptacji, w którym historyczny bootstrap nadal mówi OFF, a jawna
   korekta mówi ON,
@@ -99,7 +103,9 @@ W fixture:
 - nowy model po jednej korekcie: 0 błędów,
 - regresja w nietkniętym kontekście: 0.
 
-To test kontraktu i adaptacji na syntetycznych wydzielonych kontekstach, nie dowód jakości
+Dla epizodu wymagającego światła bootstrap i legacy pozostawiają 10 s `off_while_needed`, a model preferencji po jednej korekcie redukuje tę wartość do 0 s. W nietkniętym epizodzie wszystkie trzy ścieżki pozostawiają poprawne OFF i `unnecessary_on_seconds=0`, więc regresja wynosi 0. Liczba niezależnych korekt potrzebnych do adaptacji w fixture wynosi 1.
+
+To test kontraktu i adaptacji na syntetycznych wydzielonych epizodach, nie dowód jakości
 w prawdziwym domu.
 
 ## Migracja i trwałość
