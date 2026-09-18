@@ -15,7 +15,7 @@ from dataclasses import dataclass
 import time
 
 
-CONTRACT_VERSION = 3
+CONTRACT_VERSION = 2
 ENTRYPOINT_CHAIN = (
     "run.sh",
     "trial_queue_main.py",
