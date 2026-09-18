@@ -338,14 +338,6 @@ class Engine(threading.Thread):
                         event_ts=event_ts, received_ts=poll_received_ts,
                     )
                     self.dirty_entities.add(eid)
-                elif eid in self.context.admitted and current_state is not None:
-                    # A REST poll can confirm transport health without changing the HA
-                    # event timestamp. RoomBelief treats this as communication evidence,
-                    # not a fresh occupancy edge.
-                    self.context.observe(
-                        eid, current_state, poll_received_ts, learn=False,
-                        event_ts=event_ts, received_ts=poll_received_ts,
-                    )
             self.state_map = state_map
             if initial:
                 self.context.home.arrivals.clear()
