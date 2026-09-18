@@ -422,6 +422,10 @@ class AdaptivePresenceModel:
                 target['bins'][idx]['positive'] += int(row['bins'][idx].get('positive') or 0)
         for key in self.metrics:
             self.metrics[key] += other.metrics.get(key, 0)
+        for key, value in other.calibration_watermarks.items():
+            self.calibration_watermarks[key] = max(
+                float(self.calibration_watermarks.get(key) or 0.0), float(value)
+            )
 
 
 class HardwareThresholdAdapterContract:
