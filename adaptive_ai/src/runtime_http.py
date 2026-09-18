@@ -12,7 +12,7 @@ from collections import OrderedDict
 from urllib.parse import urlsplit
 
 
-CONTRACT_VERSION = 1
+CONTRACT_VERSION = 2
 
 
 class ExplicitRouteRegistry:
@@ -20,6 +20,7 @@ class ExplicitRouteRegistry:
         self.transport_name = str(transport_name)
         self._routes = OrderedDict()
         self._sequence = 0
+        self._binding = {"mode": "unbound"}
 
     def register(self, method, name, pattern, callback, *, require_trusted=True,
                  require_runtime=True, priority=0):
@@ -78,41 +79,112 @@ class ExplicitRouteRegistry:
             "fallback": "legacy_handler_chain_for_unmigrated_routes",
             "idempotency": "method+route_name_replaces_in_place_without_stacking",
             "mutable_module_globals": False,
+            "binding": dict(self._binding),
         }
 
 
-def install_dispatch(core, registry=None):
-    """Install exactly one final Handler dispatcher for an explicit registry."""
-    existing = getattr(core, "EXPLICIT_HTTP_ROUTES", None)
-    if existing is not None and getattr(core, "_explicit_http_dispatch_installed", False):
-        return existing
-    registry = registry or existing or ExplicitRouteRegistry()
-    core.EXPLICIT_HTTP_ROUTES = registry
+def _make_dispatch(base, http_method, fallback_registry):
+    def dispatched(http):
+        # Production ownership is attached to the concrete ThreadingHTTPServer. This
+        # prevents another runtime using the same base Handler class from rebinding us.
+        server = getattr(http, "server", None)
+        active = getattr(server, "_explicit_http_route_registry", None)
+        if active is None:
+            # Compatibility for unit/alternative entrypoints that do not expose a server.
+            active = getattr(type(http), "_explicit_http_route_registry", fallback_registry)
+        if active.dispatch(http_method, http):
+            return None
+        return base(http)
+    dispatched.__name__ = getattr(base, "__name__", "dispatched")
+    dispatched._explicit_http_fallback = base
+    return dispatched
+
+
+def _bind_server_dispatch(core, registry, server):
+    """Bind explicit routes to one concrete HTTP server without mutating core.Handler."""
+    current = getattr(server, "RequestHandlerClass", None) or core.Handler
+    server_id = id(server)
+    if current.__dict__.get("_explicit_http_dispatch_server_id") == server_id:
+        current._explicit_http_route_registry = registry
+        server._explicit_http_route_registry = registry
+        registry._binding = {
+            "mode": "server_instance_handler_subclass",
+            "handler_class": current.__name__,
+            "base_handler_class": getattr(current, "_explicit_http_base_handler", core.Handler).__name__,
+        }
+        return registry
+
+    base_handler = current
+    bound = type(
+        f"{base_handler.__name__}ExplicitRoutes_{server_id:x}",
+        (base_handler,),
+        {},
+    )
+    for method_name in ("do_GET", "do_POST", "do_PATCH", "do_DELETE"):
+        original = getattr(base_handler, method_name)
+        # If an alternative entrypoint already installed the compatibility dispatcher
+        # on the class, unwrap it. The server-owned dispatcher must have one fallback.
+        while hasattr(original, "_explicit_http_fallback"):
+            original = original._explicit_http_fallback
+        verb = method_name.split("_", 1)[1]
+        setattr(bound, method_name, _make_dispatch(original, verb, registry))
+
+    bound._explicit_http_route_registry = registry
+    bound._explicit_http_dispatch_installed = True
+    bound._explicit_http_dispatch_server_id = server_id
+    bound._explicit_http_base_handler = base_handler
+    server._explicit_http_route_registry = registry
+    server.RequestHandlerClass = bound
+    registry._binding = {
+        "mode": "server_instance_handler_subclass",
+        "handler_class": bound.__name__,
+        "base_handler_class": base_handler.__name__,
+    }
+    return registry
+
+
+def _bind_legacy_class_dispatch(core, registry):
+    """Compatibility path for entrypoints/tests without an exposed HTTP server."""
     handler = core.Handler
     if getattr(handler, "_explicit_http_dispatch_installed", False):
-        # The same core/Handler can be rebound to its existing registry without stacking.
         handler._explicit_http_route_registry = registry
-        core._explicit_http_dispatch_installed = True
+        registry._binding = {
+            "mode": "legacy_handler_class_compatibility",
+            "handler_class": handler.__name__,
+        }
         return registry
 
     for method_name in ("do_GET", "do_POST", "do_PATCH", "do_DELETE"):
         original = getattr(handler, method_name)
         verb = method_name.split("_", 1)[1]
-
-        def make_dispatch(base, http_method):
-            def dispatched(http):
-                active = getattr(type(http), "_explicit_http_route_registry", registry)
-                if active.dispatch(http_method, http):
-                    return None
-                return base(http)
-            dispatched.__name__ = method_name
-            dispatched._explicit_http_fallback = base
-            return dispatched
-
-        setattr(handler, method_name, make_dispatch(original, verb))
+        setattr(handler, method_name, _make_dispatch(original, verb, registry))
 
     handler._explicit_http_route_registry = registry
     handler._explicit_http_dispatch_installed = True
+    registry._binding = {
+        "mode": "legacy_handler_class_compatibility",
+        "handler_class": handler.__name__,
+    }
+    return registry
+
+
+def install_dispatch(core, registry=None):
+    """Install one explicit dispatcher, server-owned in the shipped runtime.
+
+    The production server is created before runtime composition. Binding a per-server
+    Handler subclass lets already-listening Ingress switch to explicit routes without
+    mutating the shared module Handler class or affecting another runtime/test instance.
+    """
+    existing = getattr(core, "EXPLICIT_HTTP_ROUTES", None)
+    registry = registry or existing or ExplicitRouteRegistry()
+    core.EXPLICIT_HTTP_ROUTES = registry
+
+    server = getattr(core, "HTTP_SERVER", None)
+    if server is not None:
+        _bind_server_dispatch(core, registry, server)
+    else:
+        _bind_legacy_class_dispatch(core, registry)
+
     core._explicit_http_dispatch_installed = True
     return registry
 
