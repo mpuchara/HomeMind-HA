@@ -64,6 +64,7 @@ class ExecutorTests(unittest.TestCase):
         handler.send_json=Mock()
         with patch.object(main,'STORE',self.store), patch.object(main,'ENGINE',self.e), \
              patch.object(main,'runtime_available',return_value=True), \
+             patch.object(main,'startup_snapshot',return_value={'ready':True}), \
              patch.object(main,'assess_control_qualification',qualification_module.assess_control_qualification), \
              patch.object(self.e,'refresh_states'), \
              patch.object(executor_module.AUTOMATION_KNOWLEDGE,'scan'), \
