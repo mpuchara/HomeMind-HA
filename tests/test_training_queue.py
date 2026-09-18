@@ -248,5 +248,33 @@ class TrainingQueueTests(unittest.TestCase):
         self.assertEqual(self.engine.rl_teaching.aborted[0][:2], ('a', 'cancelled'))
 
 
+    def test_interactive_teach_rl_jumps_ahead_of_automatic_initial_training(self):
+        self.history.blocked = True
+        automatic = self.queue.enqueue('a', rebuild=True, reason='initial_training')
+        interactive = self.queue.enqueue('b', rebuild=True, reason='teach_rl')
+        self.assertEqual(automatic['priority_class'], 'automatic')
+        self.assertEqual(interactive['priority_class'], 'interactive')
+        snapshot = self.queue.snapshot()
+        self.assertEqual([row['agent_id'] for row in snapshot['queued']], ['b', 'a'])
+        self.assertEqual(snapshot['queued'][0]['priority_class'], 'interactive')
+        self.assertEqual(snapshot['queued'][1]['priority_class'], 'automatic')
+
+    def test_same_priority_remains_fifo(self):
+        self.history.blocked = True
+        self.queue.enqueue('a', rebuild=True, reason='initial_training')
+        self.queue.enqueue('b', rebuild=True, reason='initial_training')
+        snapshot = self.queue.snapshot()
+        self.assertEqual([row['agent_id'] for row in snapshot['queued']], ['a', 'b'])
+
+    def test_pending_automatic_job_is_reprioritized_when_user_requests_training(self):
+        self.history.blocked = True
+        first = self.queue.enqueue('a', rebuild=True, reason='initial_training')
+        second = self.queue.enqueue('a', rebuild=True, reason='training')
+        self.assertEqual(first['priority_class'], 'automatic')
+        self.assertEqual(second['priority_class'], 'user')
+        self.assertEqual(self.queue.snapshot()['queued_count'], 1)
+        self.assertEqual(self.queue.snapshot()['queued'][0]['reason'], 'training')
+
+
 if __name__ == '__main__':
     unittest.main()
