@@ -162,25 +162,33 @@ class SQLiteTemporalTracker:
             yield ids[offset:offset + cls.SQL_ENTITY_CHUNK]
 
     @staticmethod
-    def _row_order(row):
-        # entity_history ordering is (ts,id) with an integer primary key. Keep that exact
-        # tie-breaker in the base tracker; observation-contract v12 overrides this with
-        # its historical string-id merge ordering for archive + fast-journal rows.
+    def _availability_time(row):
+        value = row.get("_feature_received_time")
+        if value is None:
+            value = row.get("received_ts")
+        if value is None:
+            value = row.get("ts")
+        return float(value or 0.0)
+
+    @classmethod
+    def _row_order(cls, row):
+        # Feature vectors remain ordered on event time; receive time is a causal
+        # availability tie-breaker. Legacy rows with unknown receive time fall back to ts.
+        raw_id = row.get("id")
+        received = cls._availability_time(row)
+        try:
+            return (float(row.get("ts") or 0.0), received, 0, int(raw_id))
+        except (TypeError, ValueError):
+            return (float(row.get("ts") or 0.0), received, 1, str(raw_id or ""))
+
+    @classmethod
+    def _home_causal_order(cls, row):
         raw_id = row.get("id")
         try:
-            return (
-                float(row.get("ts") or 0.0),
-                float(row.get("_feature_received_time") or 0.0),
-                0,
-                int(raw_id),
-            )
+            suffix = (0, int(raw_id))
         except (TypeError, ValueError):
-            return (
-                float(row.get("ts") or 0.0),
-                float(row.get("_feature_received_time") or 0.0),
-                1,
-                str(raw_id or ""),
-            )
+            suffix = (1, str(raw_id or ""))
+        return (cls._availability_time(row), float(row.get("ts") or 0.0), *suffix)
 
     def _fetch_rows(self, sql, params):
         rows = [dict(row) for row in self.conn.execute(sql, params).fetchall()]
@@ -202,11 +210,12 @@ class SQLiteTemporalTracker:
             for eid in ids:
                 parts.append(
                     "SELECT * FROM ("
-                    "SELECT id,entity_id,ts,state,attributes_json,context_user_id,source "
+                    "SELECT id,entity_id,ts,received_ts,state,attributes_json,context_user_id,source "
                     "FROM entity_history WHERE entity_id=? AND ts<=? "
+                    "AND COALESCE(received_ts,ts)<=? "
                     "ORDER BY ts DESC,id DESC LIMIT ?)"
                 )
-                params.extend([eid, float(ts), count])
+                params.extend([eid, float(ts), float(ts), count])
             if not parts:
                 continue
             sql = " UNION ALL ".join(parts)
@@ -223,22 +232,25 @@ class SQLiteTemporalTracker:
             marks = ",".join("?" for _ in ids)
             if per_entity_limit is None:
                 sql = (
-                    "SELECT id,entity_id,ts,state,attributes_json,context_user_id,source "
+                    "SELECT id,entity_id,ts,received_ts,state,attributes_json,context_user_id,source "
                     f"FROM entity_history WHERE entity_id IN ({marks}) "
-                    "AND ts>? AND ts<=? ORDER BY ts,id"
+                    "AND ts<=? AND COALESCE(received_ts,ts)<=? "
+                    "AND (ts>? OR COALESCE(received_ts,ts)>?) ORDER BY ts,id"
                 )
-                params = [*ids, float(lo), float(hi)]
+                params = [*ids, float(hi), float(hi), float(lo), float(lo)]
             else:
                 limit = max(1, int(per_entity_limit))
                 parts, params = [], []
                 for eid in ids:
                     parts.append(
                         "SELECT * FROM ("
-                        "SELECT id,entity_id,ts,state,attributes_json,context_user_id,source "
-                        "FROM entity_history WHERE entity_id=? AND ts>? AND ts<=? "
+                        "SELECT id,entity_id,ts,received_ts,state,attributes_json,context_user_id,source "
+                        "FROM entity_history WHERE entity_id=? "
+                        "AND ts<=? AND COALESCE(received_ts,ts)<=? "
+                        "AND (ts>? OR COALESCE(received_ts,ts)>?) "
                         "ORDER BY ts DESC,id DESC LIMIT ?)"
                     )
-                    params.extend([eid, float(lo), float(hi), limit])
+                    params.extend([eid, float(hi), float(hi), float(lo), float(lo), limit])
                 sql = " UNION ALL ".join(parts)
             result.extend(self._fetch_rows(sql, params))
             TRAINING_BUDGET.checkpoint("temporal_forward_query")
@@ -340,9 +352,12 @@ class SQLiteTemporalTracker:
             if row is not None:
                 st = archived_state(row)
                 area = self.context.area_for(eid)
+                event_ts = float(row["ts"])
+                received_ts = self._availability_time(row)
                 view.home.observe(
                     eid, area, self.context.sensor_probability(eid, st),
-                    cutoff, learn=False, evidence=self.context.evidence_metadata(eid),
+                    received_ts, learn=False, evidence=self.context.evidence_metadata(eid),
+                    event_ts=event_ts, received_ts=received_ts,
                 )
                 if area:
                     seeded_areas.add(area)
@@ -352,17 +367,22 @@ class SQLiteTemporalTracker:
         for area in sorted(seeded_areas):
             view.observe_adaptive(area, cutoff)
 
-        for row in self._home_window_rows:
-            if float(row["ts"]) <= cutoff or float(row["ts"]) > float(ts):
+        for row in sorted(self._home_window_rows, key=self._home_causal_order):
+            event_ts = float(row["ts"])
+            received_ts = self._availability_time(row)
+            if event_ts > float(ts) or received_ts > float(ts):
+                continue
+            if event_ts <= cutoff and received_ts <= cutoff:
                 continue
             eid = row["entity_id"]
             area = self.context.area_for(eid)
             view.home.observe(
                 eid, area,
-                self.context.sensor_probability(eid, archived_state(row)), row["ts"],
+                self.context.sensor_probability(eid, archived_state(row)), received_ts,
                 learn=False, evidence=self.context.evidence_metadata(eid),
+                event_ts=event_ts, received_ts=received_ts,
             )
-            view.observe_adaptive(area, row["ts"])
+            view.observe_adaptive(area, received_ts)
             TRAINING_BUDGET.checkpoint("temporal_home_event")
 
         self.history.home_context = view
@@ -395,7 +415,7 @@ class SQLiteTemporalTracker:
         )
         combined = list(self._home_window_rows)
         combined.extend(new_rows)
-        combined.sort(key=self._row_order)
+        combined.sort(key=self._home_causal_order)
 
         retained = []
         seeds = dict(self._home_seed_rows)
@@ -403,9 +423,11 @@ class SQLiteTemporalTracker:
             seeds[row["entity_id"]] = row
             TRAINING_BUDGET.checkpoint("temporal_home_seed_advance")
         for row in combined:
-            if float(row["ts"]) <= cutoff:
-                # Raw archive rows are also valid seeds. Observation subclasses may have
-                # already supplied a newer fast-journal seed above.
+            received_ts = self._availability_time(row)
+            if float(row["ts"]) <= cutoff and received_ts <= cutoff:
+                # A row may become a seed only after it was causally available by the
+                # seed cutoff. Delayed older events stay in the active window until their
+                # receive time has passed.
                 previous = seeds.get(row["entity_id"])
                 if previous is None or self._row_order(row) >= self._row_order(previous):
                     seeds[row["entity_id"]] = row
