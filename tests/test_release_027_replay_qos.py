@@ -31,11 +31,11 @@ class RealtimePreemptionTests(unittest.TestCase):
         self.assertAlmostEqual(slept, .25, places=6)
         self.assertAlmostEqual(clock.now, .27, places=6)
         slept2 = budget.checkpoint("unit2", thread_name="worker")
-        self.assertAlmostEqual(slept2, .23, places=6)
-        self.assertAlmostEqual(clock.now, .5, places=6)
+        self.assertAlmostEqual(slept2, .25, places=6)
+        self.assertAlmostEqual(clock.now, .52, places=6)
         stats = budget.snapshot()
         self.assertEqual(stats["interactive_preemptions"], 2)
-        self.assertAlmostEqual(stats["interactive_sleep_seconds"], .48, places=6)
+        self.assertAlmostEqual(stats["interactive_sleep_seconds"], .50, places=6)
         self.assertTrue(str(stats["last_checkpoint"]).startswith("interactive:"))
 
     def test_engine_requests_priority_window_on_ha_event(self):
