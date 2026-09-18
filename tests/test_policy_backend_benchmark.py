@@ -239,6 +239,10 @@ class TrialAndShadowTests(unittest.TestCase):
         head = service.backends['a1'].heads[1]
         self.assertGreater(head.counts[0], 0)
         self.assertEqual(head.counts[1], 0)
+        action0_before = head.counts[0]
+        service.observe_demonstration(agent, policy, {0: 1, 1: .8}, 1, timestamp=time.time())
+        self.assertEqual(head.counts[0], action0_before)
+        self.assertGreater(head.counts[1], 0)
         diag = service.diagnostics('a1')
         self.assertFalse(diag['dispatch_capability'])
         self.assertEqual(diag['mode'], 'shadow')
