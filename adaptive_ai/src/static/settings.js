@@ -34,7 +34,8 @@ window.editAgent = function(id) {
     <details><summary>Diagnostyka i szczegóły agenta</summary>${window.agentDiagnostics?.(a)||''}</details>
     <div class="settings-tools"><b>Pozostałe operacje</b><div class="actions">
       <button type="button" class="ghost" data-tool="undo">Cofnij ostatnią naukę</button>
-      <button type="button" class="ghost" data-tool="paused">Pause</button>
+      <button type="button" class="ghost ${a.mode==='shadow'?'active':''}" data-tool="shadow" ${hasLearnedModel && !['training','waiting','needs_retrain'].includes(training)?'':'disabled'} title="Run inference in Shadow without physical device commands; paused training results may keep collecting future evidence">Shadow</button>
+      <button type="button" class="ghost ${a.mode==='paused'?'active':''}" data-tool="paused">Pause</button>
       <button type="button" class="ghost" data-tool="train">Train</button>
       <button type="button" class="ghost" data-tool="resume">Resume</button>
       <button type="button" class="ghost" data-tool="rebuild">Rebuild model</button>
@@ -46,6 +47,7 @@ window.editAgent = function(id) {
   settingsDialog.querySelector('.dialog-actions button[type=button]').onclick = () => settingsDialog.close();
   const operations={
     undo:()=>undoTeaching(id),
+    shadow:()=>setMode(id,'shadow'),
     paused:()=>setMode(id,'paused'),
     train:()=>trainAgent(id),
     resume:()=>resumeLearning(id),
