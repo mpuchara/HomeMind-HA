@@ -813,7 +813,8 @@ def install(manager):
     def finish(aid, reward, reason):
         aid = str(aid)
         data = experiments._get(aid)
-        trial = copy.deepcopy(data.get("active") or {})
+        active = data.get("active") or {}
+        trial = copy.deepcopy(active)
         if not trial:
             return previous_finish(aid, reward, reason)
         session = _session_for_live(manager.store, aid)
@@ -821,6 +822,30 @@ def install(manager):
         if journal.get(trial.get("trial_id")) is None:
             trial["owner_agent_id"] = aid
             journal.start(aid, trial, session)
+
+        # Resolve Stage-05 episode semantics before Agent Explore can queue child work.
+        # The inner EpisodeEvaluator wrapper reuses the runtime marker, so the same
+        # immutable episode is never evaluated twice with different timestamps.
+        evaluator = getattr(manager.engine, "episode_evaluator", None)
+        if evaluator is not None and str(active.get("property") or "") == "power":
+            try:
+                from episode_evaluator_runtime import resolve_experiment_outcome
+                _episode, reward, reason = resolve_experiment_outcome(
+                    manager.engine, evaluator, aid, active, reward, reason
+                )
+                trial = copy.deepcopy(active)
+            except Exception as exc:
+                manager.store.event(
+                    aid, "warning", "trial_episode_resolution_gap",
+                    "TrialRecord could not resolve the shared EpisodeEvaluator outcome",
+                    {"trial_id": trial.get("trial_id"),
+                     "error": f"{type(exc).__name__}: {exc}"},
+                )
+
+        # Persist the durable outcome before the Explore wrapper can wake Candidate
+        # training. This removes the old race where the worker could see a queued child
+        # before the TrialRecord reward/status was committed.
+        journal.finish(trial, reward, reason, experiments.clock())
         result = previous_finish(aid, reward, reason)
         if session is not None:
             # F19: Free Explore cannot train the Live residual owner. Restore exactly the
@@ -829,7 +854,6 @@ def install(manager):
             current = experiments._get(aid)
             current["learners"] = learner_snapshot
             experiments._save(aid)
-        journal.finish(trial, reward, reason, experiments.clock())
         return result
 
     def workflow_explore(ref, payload):
