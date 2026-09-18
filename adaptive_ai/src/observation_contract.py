@@ -651,43 +651,13 @@ def policy_features(self, state_map, temporal, at_ts=None):
     if provider:
         query_ts = at_ts if at_ts is not None else now_ts()
         forecast = provider.forecast(self.agent["target_entity"], query_ts)
-        home_known = bool(forecast.get("known"))
-        fast_light_v2 = bool(
-            int(getattr(self.schema, "feature_contract_version",
-                        LEGACY_FEATURE_CONTRACT_VERSION)) >= FEATURE_CONTRACT_VERSION
-            and is_fast_reactive_agent(self.agent)
-            and str(self.agent.get("target_entity") or "").split(".", 1)[0] == "light"
-            and str(self.agent.get("target_property") or "") == "power"
-        )
-        occupancy_names = {
-            "occupancy_now", "occupancy_in_1s", "occupancy_in_3s", "occupancy_in_5s"
-        }
         for offset, name in enumerate(HOME_FEATURE_NAMES):
             index = self.dims - HOME_TAIL + offset
-            if fast_light_v2 and name in occupancy_names:
-                # A fused probability is evidence about a binary action, not a positive
-                # magnitude. Center a *known* room belief so occupancy and absence vote
-                # symmetrically for the two per-action heads. Unknown stays neutral.
-                probability = clamp(float(forecast.get(name, 0.0) or 0.0), 0.0, 1.0)
-                value = (2.0 * probability - 1.0) if home_known else 0.0
-            elif fast_light_v2 and name == "known":
-                # "Known" is transport/observability metadata. Healthy observability is
-                # nominal zero; only unknown context carries a negative diagnostic signal.
-                value = 0.0 if home_known else -1.0
-            else:
-                value = (1.0 if home_known else 0.0) if name == "known" else float(
-                    forecast.get(name, 0.0) or 0.0
-                )
-            if abs(value) > 1e-12:
-                vector[index] = value
-            else:
-                vector.pop(index, None)
+            value = (1.0 if forecast.get("known") else 0.0) if name == "known" else float(forecast.get(name, 0.0) or 0.0)
+            vector[index] = value
             labels[index] = ["home:" + name]
         meta["home_forecast"] = forecast
-        meta["home_known"] = home_known
-        meta["home_feature_encoding"] = (
-            "signed_occupancy_v2" if fast_light_v2 else "legacy_probability_v1"
-        )
+        meta["home_known"] = bool(forecast.get("known"))
     return vector, labels, meta
 
 
