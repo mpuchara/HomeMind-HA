@@ -36,7 +36,11 @@ async function load(){
     // /agents, /events or live card reads until Engine.start() and the final adapters are
     // actually ready; otherwise a slow migration looks like missing Shadow predictions.
     if(!window.__adaptiveAiRuntimeReady)return;
-  }catch(e){window.__adaptiveAiRuntimeReady=false;$('#connection').textContent='App API error: '+e.message;return;}
+  }catch(e){
+    // Preserve a previously established ready state. A transient rich-status timeout
+    // during training must not disable the independent lightweight /api/live loop.
+    $('#connection').textContent='App API error: '+e.message;return;
+  }
   try{
     const [agents,events]=await Promise.all([api('api/agents'),api('api/events?limit=60')]);
     lastAgents=agents;renderAgents();renderEvents(events);
