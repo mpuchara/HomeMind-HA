@@ -2,7 +2,7 @@
 (()=>{
   const COLORS={current:'#73dbec',parent:'#c2a6ff',candidate:'#ff9f43',correct:'#ffd166'};
   const html=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-  const api=async(path,opts={})=>{const r=await fetch(path,{headers:{'Content-Type':'application/json'},...opts});let b={};try{b=await r.json();}catch(_){ }if(!r.ok)throw Error(b.error||`HTTP ${r.status}`);return b;};
+  const api=async(path,opts={})=>{const r=await fetch(path,{headers:{'Content-Type':'application/json'},...opts});let b={};try{b=await r.json();}catch(_){ }if(!r.ok){const e=Error(b.error||`HTTP ${r.status}`);e.status=r.status;throw e;}return b;};
   const fmt=(subject,v)=>v==null?'—':subject?.target_property==='power'?(Number(v)>=.5?'ON':'OFF'):Number(v).toFixed(3).replace(/\.000$/,'');
   const local=ts=>{const d=new Date(Number(ts)*1000);return new Date(d-d.getTimezoneOffset()*60000).toISOString().slice(0,19);};
   const notifyError=e=>alert(e?.message||String(e));
@@ -13,6 +13,21 @@
   // not a window property. Read that binding directly so the workflow layer decorates
   // the actual current Live cards after every normal render.
   const liveAgents=()=>{try{return Array.isArray(lastAgents)?lastAgents:[];}catch(_){return [];}};
+  const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
+  const requestStorageKey=ref=>`adaptive-ai:correct-request:${String(ref)}`;
+  const rememberRequest=(ref,id)=>{try{sessionStorage.setItem(requestStorageKey(ref),String(id));}catch(_){}};
+  const pendingRequest=ref=>{try{return sessionStorage.getItem(requestStorageKey(ref));}catch(_){return null;}};
+  const clearRequest=ref=>{try{sessionStorage.removeItem(requestStorageKey(ref));}catch(_){}};
+  const newRequestId=()=>{try{if(globalThis.crypto?.randomUUID)return crypto.randomUUID();}catch(_){}return `correct-${Date.now()}-${Math.random().toString(16).slice(2)}`;};
+  const provisionalSubject=generationRef=>{
+    const a=liveAgents().find(x=>String(x.id)===String(generationRef));
+    if(!a)return {name:'Agent',generation_number:'…',target_property:'power',min_value:0,max_value:1,current:null};
+    return {
+      name:a.name||a.id,generation_number:a.generation_number??a.generation??'…',
+      target_property:a.target_property,min_value:a.min_value,max_value:a.max_value,
+      current:a.runtime?.current_value??null,
+    };
+  };
 
   window.workflowAutonomous=async(ref,button)=>{
     if(button)button.disabled=true;
@@ -60,9 +75,9 @@
   const setBusy=busy=>dialog.querySelectorAll('button,input').forEach(el=>{if(!el.hasAttribute('data-close'))el.disabled=!!busy;});
 
   function shell(){
-    dialog.innerHTML=`<div class="teach-head"><h2>Correct: ${html(subject.name)} · Gen ${subject.generation_number}</h2><button class="ghost" data-close>Zamknij</button></div>
+    dialog.innerHTML=`<div class="teach-head"><h2 data-title>Correct: ${html(subject.name)} · Gen ${subject.generation_number}</h2><button class="ghost" data-close>Zamknij</button></div>
       <p>Kliknij wykres, aby wskazać moment, albo przeciągnij poziomo po wykresie, aby zaznaczyć zakres i go przybliżyć. Kółko myszy przybliża wokół kursora. Correct nie zmienia Gen ${subject.generation_number} w miejscu — po zatwierdzeniu utworzy child Candidate.</p>
-      <div class="teach-range"><label>Od<input data-start type="datetime-local" step="1"></label><label>Do<input data-end type="datetime-local" step="1"></label><button class="ghost" data-load>Pokaż</button><button class="ghost" data-prev>←</button><button class="ghost" data-next>→</button><button class="ghost" data-in>+</button><button class="ghost" data-out>−</button></div>
+      <div class="teach-range"><label>Od<input data-start type="datetime-local" step="1"></label><label>Do<input data-end type="datetime-local" step="1"></label><button class="ghost" data-load>Pokaż</button><button class="ghost" data-retry>Połącz ponownie</button><button class="ghost" data-prev>←</button><button class="ghost" data-next>→</button><button class="ghost" data-in>+</button><button class="ghost" data-out>−</button></div>
       <p class="teach-legend" data-legend></p>
       <div class="teach-chart" data-chart></div><p data-status role="status"></p><p data-error role="alert"></p>
       <form data-point><label>Wybrany moment<input data-time type="datetime-local" step="1" required></label><button type="button" class="ghost" data-inspect>Sprawdź punkt</button><p data-point-info>Wybierz moment na wykresie.</p><label>Poprawne Desired<input data-value type="number" step="any" required></label><button class="primary" type="submit" data-save disabled>Dodaj Correct</button><button class="ghost" type="button" data-undo>Cofnij ostatni Correct</button></form>
@@ -70,6 +85,7 @@
       <p>Wykres używa wyłącznie observed generation decision history. Candidate jest porównywany tylko z bezpośrednim parentem; brak runtime pozostaje luką i nie jest odtwarzany obecną policy.</p>`;
     dialog.querySelector('[data-close]').onclick=()=>dialog.close();
     dialog.querySelector('[data-load]').onclick=()=>{const a=Date.parse(dialog.querySelector('[data-start]').value)/1000,b=Date.parse(dialog.querySelector('[data-end]').value)/1000;if(Number.isFinite(a)&&Number.isFinite(b)){range={start:a,end:b};load();}};
+    dialog.querySelector('[data-retry]').onclick=()=>refreshSubjectAndLoad();
     for(const [k,f] of [['in',.5],['out',2]])dialog.querySelector(`[data-${k}]`).onclick=()=>zoom(f);
     for(const [k,d] of [['prev',-1],['next',1]])dialog.querySelector(`[data-${k}]`).onclick=()=>shift(d);
     dialog.querySelector('[data-inspect]').onclick=()=>inspect(Date.parse(dialog.querySelector('[data-time]').value)/1000);
@@ -79,11 +95,77 @@
     dialog.querySelector('[data-point]').onsubmit=save;
   }
 
-  window.openWorkflowCorrect=async generationRef=>{
+  async function refreshSubjectAndLoad(){
+    if(!dialog.open)return;
+    dialog.querySelector('[data-error]').textContent='';
+    dialog.querySelector('[data-status]').textContent='Łączę z Adaptive AI i ładuję historię…';
     try{
-      ref=String(generationRef);subject=await status(ref);
-      const end=Date.now()/1000;range={start:end-600,end};selected=null;data=null;shell();dialog.showModal();await load();
-    }catch(e){notifyError(e);}
+      const fresh=await status(ref);
+      if(!dialog.open)return;
+      subject=fresh;
+      const title=dialog.querySelector('[data-title]');
+      if(title)title.textContent=`Correct: ${subject.name} · Gen ${subject.generation_number}`;
+      await load();
+    }catch(e){
+      if(!dialog.open)return;
+      error(e);
+      dialog.querySelector('[data-status]').textContent='Backend jest zajęty. Okno Correct pozostaje otwarte — użyj „Połącz ponownie”, gdy odczyt wróci.';
+    }
+  }
+
+  async function monitorCorrectRequest(requestId,{postFailed=false}={}){
+    let seen=false,missing=0,lastError=null;
+    for(let attempt=0;attempt<40&&dialog.open;attempt++){
+      try{
+        const state=await api(`api/agent-workflow-requests/${encodeURIComponent(requestId)}`);
+        seen=true;
+        const statusNode=dialog.querySelector('[data-status]');
+        if(state.state==='done'){
+          clearRequest(ref);
+          if(statusNode)statusNode.textContent='Correct zapisany. Child Candidate został utworzony lub zaktualizowany.';
+          await refresh();
+          setBusy(false);
+          if(dialog.open)dialog.close();
+          return state;
+        }
+        if(state.state==='failed'){
+          clearRequest(ref);
+          throw Error(state.error||'Correct request failed');
+        }
+        if(statusNode)statusNode.textContent=state.state==='processing'
+          ?'Correct jest zapisany trwale · tworzę child Candidate…'
+          :'Correct jest zapisany trwale · oczekuje na obsługę…';
+      }catch(e){
+        lastError=e;
+        if(e?.status===404)missing+=1;
+        const statusNode=dialog.querySelector('[data-status]');
+        if(statusNode)statusNode.textContent=seen
+          ?'Correct jest zapisany trwale. Backend jest chwilowo zajęty; sprawdzę ponownie…'
+          :`Sprawdzam trwałe żądanie Correct ${requestId.slice(0,8)}…`;
+      }
+      await sleep(500);
+    }
+    if(!seen&&postFailed&&missing>=10){
+      clearRequest(ref);
+      throw lastError||Error('Nie udało się potwierdzić zapisu Correct');
+    }
+    const statusNode=dialog.querySelector('[data-status]');
+    if(statusNode)statusNode.textContent='Correct ma trwały request ID i będzie przetwarzany w tle. Możesz zamknąć okno i wrócić później.';
+    setBusy(false);
+    const applyButton=dialog.querySelector('[data-apply]');
+    if(applyButton)applyButton.disabled=true;
+    return null;
+  }
+
+  window.openWorkflowCorrect=async generationRef=>{
+    ref=String(generationRef);subject=provisionalSubject(ref);
+    const end=Date.now()/1000;range={start:end-600,end};selected=null;data=null;shell();dialog.showModal();
+    const pending=pendingRequest(ref);
+    if(pending){
+      setBusy(true);
+      monitorCorrectRequest(pending).catch(e=>{clearRequest(ref);setBusy(false);error(e);});
+    }
+    await refreshSubjectAndLoad();
   };
 
   function zoom(factor,anchor=.5){if(!Number.isFinite(range.end-range.start))return;const oldWidth=range.end-range.start,width=Math.max(10,Math.min(31*86400,oldWidth*factor)),center=range.start+oldWidth*anchor;range={start:center-width*anchor,end:center+width*(1-anchor)};load();}
@@ -145,11 +227,23 @@
 
   async function undo(){setBusy(true);try{await post(ref,'correct-undo');selected=null;await load();}catch(e){error(e);}finally{setBusy(false);}}
   async function apply(){
+    const requestId=newRequestId();
+    rememberRequest(ref,requestId);
     setBusy(true);dialog.querySelector('[data-error]').textContent='';
+    dialog.querySelector('[data-status]').textContent='Zapisuję trwałe żądanie Correct…';
+    let postFailed=false;
     try{
-      const out=await post(ref,'correct');
-      dialog.close();await refresh();return out;
-    }catch(e){error(e);}finally{setBusy(false);}
+      await post(ref,'correct',{request_id:requestId});
+    }catch(e){
+      postFailed=true;
+      dialog.querySelector('[data-status]').textContent='Nie mam potwierdzenia odpowiedzi HTTP. Sprawdzam request ID zamiast ponawiać korektę…';
+    }
+    try{
+      return await monitorCorrectRequest(requestId,{postFailed});
+    }catch(e){
+      clearRequest(ref);setBusy(false);error(e);
+      return null;
+    }
   }
 
   function draw(){
