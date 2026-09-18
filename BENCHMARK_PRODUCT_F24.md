@@ -1,8 +1,8 @@
 # F24 Product Runtime Benchmark Report
 
 Date: 2026-09-18  
-Branch: `task-18-product-benchmark-hardening`  
-Base: `19a788c1d4161f7bf0ca891192096ed3d3e9b159`  
+Branch: `fix-manual-override-runtime-hold`  
+Base: `121e69ada10de92578da0bedd90a9c30b1831c39`  
 Benchmark contract: F24 v2  
 Seeds: 11, 23, 37  
 Replicas per scenario/split: 1
@@ -16,6 +16,8 @@ This is the deterministic product-level benchmark for the shipped runtime compos
 The benchmark uses separate hidden occupancy/light-need truth and HA-like observations with delay, noise, missing values, multiple reporting modes and `light -> lux` coupling. Future `sensor_moved` changes the Entity Registry area assignment for the same entity. `manual_change` emits an explicit target event with `context.user_id`.
 
 No HA service is dispatched by Shadow/Candidate. The benchmark does not lower qualification thresholds, fabricate a positive `benchmark_score`, promote a challenger or deploy a model.
+
+This follow-up fixes the production fast-runtime exception that used to suppress manual hold for lights/switches. The F24 scenario, thresholds and acceptance logic are unchanged.
 
 ## Data split
 
@@ -38,17 +40,21 @@ Values below are means over 3 seeds. CI also stores 95% confidence intervals in 
 
 | Metric | Fixed automation | Production current | Full-ridge Shadow | Conservative fallback |
 |---|---:|---:|---:|---:|
-| Needed-light fraction | 90.39% | 17.32% | 15.18% | 89.68% |
-| False ON seconds | 156.33 | 11.00 | 9.00 | 178.00 |
-| Premature OFF events | 1.67 | 32.00 | 35.00 | 1.00 |
-| Mean ON delay | 0.12 s | 8.39 s | 9.36 s | 0.64 s |
-| Chatter events | 3.00 | 58.67 | 66.00 | 0.67 |
-| Corrections / 100 episodes | 200.00 | 294.44 | 300.00 | 147.22 |
-| Manual-override violations in 11-tick window | 11.00 | 2.00 | 2.33 | 11.00 |
-| Runtime manual-hold ticks | 0.00 | 0.00 | 0.00 | 0.00 |
-| Mean inference cost on CI host | 0.0007 ms | 73.89 ms | 3.74 ms | 0.0007 ms |
+| Needed-light fraction | 90.39% | 14.12% | 15.18% | 89.68% |
+| False ON seconds | 156.33 | 5.33 | 9.00 | 178.00 |
+| Premature OFF events | 1.67 | 26.33 | 35.00 | 1.00 |
+| Mean ON delay | 0.12 s | 20.52 s | 9.36 s | 0.64 s |
+| Chatter events | 3.00 | 43.33 | 66.00 | 0.67 |
+| Corrections / 100 episodes | 200.00 | 261.11 | 300.00 | 147.22 |
+| Manual-override violations in 11-tick window | 11.00 | 0.00 | 2.33 | 11.00 |
+| Runtime manual-hold ticks | 0.00 | 115.00 | 0.00 | 0.00 |
+| Mean inference cost on CI host | 0.0008 ms | 71.75 ms | 3.74 ms | 0.0007 ms |
 
-Interpretation: the current production policy strongly reduces false ON time, but this synthetic future test shows that it does so by becoming too conservative: needed-light coverage collapses and OFF/chatter/correction metrics regress materially. The full-ridge challenger does not solve this trade-off and remains Shadow-only.
+The manual-priority regression is fixed: all three seeds observe the explicit user event, production has zero violations in the 11-tick protected window, and the final composed runtime enters manual hold. Per-seed production hold counts are 155, 155 and 35 ticks.
+
+The benchmark clock is continuous between synthetic episodes and the production light hold remains the unchanged 300 s. Therefore a hold can remain active beyond the 11-tick assertion window and into later synthetic episodes, depending on shuffled scenario order. This is intentionally reported rather than shortened or reset for the benchmark. It makes the aggregate production policy even more conservative: false ON decreases further, while needed-light coverage and ON latency worsen.
+
+The full-ridge challenger still does not solve the quality trade-off and remains Shadow-only.
 
 ## Control qualification
 
@@ -66,6 +72,9 @@ This distinction is intentional: historical/validation accuracy is not sufficien
 
 Passed:
 - `false_on_not_worse_than_fixed`
+- `manual_override_respected`
+- `manual_override_enters_runtime_hold`
+- `production_shadow_reaches_executor`
 - `moved_sensor_topology_reaches_runtime`
 - `all_required_scenarios_present`
 
@@ -73,17 +82,15 @@ Unmet:
 - `needed_light_not_worse_than_fixed_by_more_than_2pp`
 - `premature_off_not_worse_than_fixed`
 - `corrections_not_worse_than_fixed`
-- `manual_override_respected`
-- `manual_override_enters_runtime_hold`
 - `all_seeds_have_future_control_qualification`
 
-The unmet manual-hold criteria are intentionally retained as benchmark findings. The baseline Engine fixture exercises manual hold, while the final composed runtime benchmark reports `runtime_manual_hold_ticks=0`. Task 18 does not alter runtime learning/control behavior merely to make this benchmark pass; this is recorded as a regression/follow-up item.
+The manual criteria now pass without changing F24. Remaining unmet criteria stay visible and do not trigger automatic model deployment.
 
 ## CI verification
 
-GitHub Actions run `35394907836` completed successfully:
-- Python 3.11: 882 tests, all passing;
-- Python 3.13: 882 tests, all passing;
+GitHub Actions run `35398707349` completed successfully for the runtime fix before the later test-cost-only optimization:
+- Python 3.11: 883 tests, all passing;
+- Python 3.13: 883 tests, all passing;
 - compileall: passing;
 - JS syntax checks: passing;
 - Stage 17 history-cost smoke: passing;
@@ -100,4 +107,4 @@ CI publishes `product-benchmark-f24-py311/product-benchmark-f24.json` with per-s
 
 ## Migration and compatibility
 
-No production data migration is required. This task does not reinterpret persisted model vectors, labels, Candidate lineage, rollback state or settings. ActionIntent -> Executor ownership remains unchanged. Shadow and unpromoted Candidate remain non-actuating.
+No production data migration is required. Existing explicit `explicit_user_v8` manual holds are no longer cleared by fast timing normalization at startup. Persisted model vectors, labels, Candidate lineage, rollback state and settings are not reinterpreted. ActionIntent -> Executor ownership remains unchanged. Shadow and unpromoted Candidate remain non-actuating.

@@ -38,6 +38,12 @@ def normalize_fast_payload(payload, existing=None, include_defaults=False):
 
 
 def migrate_existing_fast_agents(core):
+    """Normalize fast timing without weakening explicit user priority.
+
+    Older fast-runtime releases cleared manual holds while migrating lights/switches.
+    Manual priority is a safety/intent contract independent from reaction latency, so a
+    valid explicit_user_v8 hold must survive startup and timing normalization unchanged.
+    """
     changed = []
     for agent in core.STORE.list_agent_configs():
         if not is_fast_target(agent):
@@ -54,11 +60,6 @@ def migrate_existing_fast_agents(core):
         if update:
             core.STORE.update_agent(agent["id"], update)
             changed.append({"agent_id": agent["id"], "target": agent["target_entity"], **update})
-        core.STORE.meta_set("manual_hold:" + agent["id"], "0")
-        core.STORE.meta_set("manual_hold_source:" + agent["id"], "")
-        runtime = core.ENGINE.runtime.get(agent["id"])
-        if runtime is not None:
-            runtime["manual_override_until"] = 0.0
     return changed
 
 
@@ -83,14 +84,13 @@ def install(core):
         return original_update(agent_id, normalize_fast_payload(payload, existing=existing, include_defaults=False))
 
     def set_manual_hold(agent, rt, timestamp):
+        # Fast targets need short action/settling timing, not weaker user priority.
+        # Delegate to the authoritative Engine contract so runtime + durable
+        # explicit_user_v8 evidence are preserved exactly like every other target.
+        result = original_manual_hold(agent, rt, timestamp)
         if is_fast_target(agent):
-            rt["manual_override_until"] = 0.0
-            store.meta_set("manual_hold:" + agent["id"], "0")
-            store.meta_set("manual_hold_source:" + agent["id"], "")
             rt["manual_feedback_ts"] = float(timestamp)
-            engine.wake_event.set()
-            return
-        return original_manual_hold(agent, rt, timestamp)
+        return result
 
     def default_action_interval(entity_id, target_property):
         probe = {"target_entity": entity_id, "target_property": target_property}

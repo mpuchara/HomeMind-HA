@@ -305,7 +305,12 @@ class ExperimentIntegrationTests(unittest.TestCase):
             outcome = self.e.experiments.status(self.a['id'])
             self.assertEqual(outcome['last_outcome']['reward'], -1.)
             self.assertEqual(self.service.call_count, 1)
-            self.assertEqual(self.e.runtime[self.a['id']]['manual_override_until'], 0.)
+            hold_until = self.e.runtime[self.a['id']]['manual_override_until']
+            self.assertGreater(hold_until, engine_module.now_ts() + 250)
+            self.assertEqual(
+                self.store.meta_get("manual_hold_source:" + self.a['id'], ""),
+                "explicit_user_v8",
+            )
             self.assertGreater(outcome['next_trial_after'], engine_module.now_ts()+3500)
 
     def test_trial_transport_failure_is_unlabelled_and_consumes_budget(self):
