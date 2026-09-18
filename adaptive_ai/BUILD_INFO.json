@@ -40,11 +40,11 @@
   "migration": "no migration; frontend-only hotfix preserves agents, models, raw archive, historical experiences, feedback, Candidate lineage, TrialRecords, Teach labels, settings and rollback state",
   "physical_control": "unchanged; only Executor dispatches Home Assistant services",
   "pi4": "0.14.18 targets the observed ~94% CPU spike and second-open blank Ingress UI at the transition from REPLAY COMPLETE to model/benchmark finalization; on-device verification is still required",
-  "ci_status": "pending 0.14.19 PR validation; base 0.14.18 main validation was green",
+  "ci_status": "0.14.19 validation rerun pending after release-regression assertion fix",
   "training_slice_budget": "adaptive-ai-index workers call a shared CooperativeTrainingBudget; expensive temporal tracker loops yield between entities/events and finalization is no longer outside the throttle",
   "finalization_lifeline": "HEAVY_JOBS remains owned through final gc.collect(), so /api/status and /api/agents stay on lightweight lifeline reads until the worker is actually finished",
   "finalization_progress": "post-replay UI now exposes bounded stages: replay complete, policy serialization, benchmark save, qualification, checkpoint complete",
   "benchmark_finalization": "set_partial_benchmark uses get_agent_config instead of history COUNT/AVG aggregates",
   "ui_mutation_stability": "confidence diagnostics use idempotent DOM writes and observe only direct #agents child replacement; the body-wide subtree MutationObserver self-loop from 0.14.18 is removed",
-  "browser_reproduction": "old body-wide observer + unconditional textContent pattern reproduces a non-terminating mutation loop in headless Chromium; 0.14.19 removes that pattern"
+  "browser_reproduction": "source-level regression: the body-wide subtree observer could observe confidence textContent writes performed by its own callback; 0.14.19 removes that self-triggering feedback path"
 }
