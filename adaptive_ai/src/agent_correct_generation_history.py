@@ -4,11 +4,15 @@ The chart is evidence-only: it renders decisions that were actually observed fro
 selected generation and, for Candidate generations, its direct parent. It never replays
 the current policy into historical state.
 """
+from bisect import bisect_right
 import time
 from urllib.parse import parse_qs, unquote, urlsplit
 
 from agent_candidate_lineage import _row as lineage_row
 from agent_workflow_actions import _resolve_generation
+from context import archived_state, target_value
+from teach_observed_history import DESIRED_STALE_SECONDS, _desired_at, _recorded_rows
+from training_budget import TRAINING_BUDGET
 from teaching_rl import fingerprint as rl_fingerprint
 
 
@@ -42,6 +46,95 @@ def _active_labels(manager, agent):
     ]
 
 
+def _current_rows(manager, agent, start, end):
+    """Observed target-state curve only; never replay policy/context for Correct UI."""
+    entity_id = str(agent["target_entity"])
+    with manager.store.conn() as c:
+        seed = c.execute(
+            "SELECT * FROM entity_history WHERE entity_id=? AND ts<=? "
+            "ORDER BY ts DESC,id DESC LIMIT 1",
+            (entity_id, float(start)),
+        ).fetchone()
+        rows = [dict(seed)] if seed else []
+        rows.extend(
+            dict(row) for row in c.execute(
+                "SELECT * FROM entity_history WHERE entity_id=? AND ts>? AND ts<=? "
+                "ORDER BY ts,id",
+                (entity_id, float(start), float(end)),
+            ).fetchall()
+        )
+    out = []
+    for row in rows:
+        value = target_value(archived_state(row), agent["target_property"])
+        out.append({"ts": float(row["ts"]), "current": value})
+    return out
+
+
+def _current_at(rows, timestamp):
+    if not rows:
+        return None
+    times = [float(row["ts"]) for row in rows]
+    idx = bisect_right(times, float(timestamp)) - 1
+    return None if idx < 0 else rows[idx].get("current")
+
+
+def _live_observed_history(manager, generation, agent, start, end):
+    """Build Correct history from two narrow indexed streams, with zero policy replay."""
+    TRAINING_BUDGET.request_interactive_window(1.0, reason="correct_history")
+    decisions = _recorded_rows(
+        manager.store, manager.engine, agent["id"], float(start), float(end)
+    )
+    currents = _current_rows(manager, agent, start, end)
+
+    times = {float(start), float(end)}
+    times.update(float(row["ts"]) for row in decisions)
+    times.update(float(row["ts"]) for row in currents)
+    for row in decisions:
+        cutoff = float(row["ts"]) + float(DESIRED_STALE_SECONDS) + 1e-4
+        if float(start) <= cutoff <= float(end):
+            times.add(cutoff)
+
+    points = []
+    gaps = []
+    gap_start = None
+    for ts in sorted(times):
+        desired = _desired_at(decisions, ts)
+        current = _current_at(currents, ts)
+        points.append({"ts": ts, "current": current, "desired": desired})
+        if desired is None and gap_start is None:
+            gap_start = ts
+        elif desired is not None and gap_start is not None:
+            gaps.append({"start": gap_start, "end": ts})
+            gap_start = None
+    if gap_start is not None:
+        gaps.append({"start": gap_start, "end": float(end)})
+
+    return {
+        "points": points,
+        "gaps": gaps,
+        "desired_source": "observed_runtime_decision_history",
+        "desired_semantics": "Live Desired actually observed from this generation",
+        "stale_after_seconds": DESIRED_STALE_SECONDS,
+        "policy_replay_used": False,
+    }
+
+
+def _observed_generation_at(manager, generation, timestamp):
+    if callable(getattr(manager, "generation_decision_at", None)):
+        row = manager.generation_decision_at(generation["generation_id"], float(timestamp))
+        if row:
+            return dict(row)
+    if generation.get("generation_type") == "live":
+        rows = _recorded_rows(
+            manager.store, manager.engine, generation["agent_id"],
+            float(timestamp), float(timestamp),
+        )
+        desired = _desired_at(rows, float(timestamp))
+        if desired is not None:
+            return {"ts": float(timestamp), "desired": desired, "confidence": None}
+    return None
+
+
 def _base_payload(generation, agent, start, end):
     return {
         "root_agent_id": generation["root_agent_id"],
@@ -70,7 +163,7 @@ def build_correct_history(manager, ref, start, end, legacy_history):
     labels = _active_labels(manager, agent)
 
     if generation.get("generation_type") == "live":
-        observed = legacy_history(ref, start, end)
+        observed = _live_observed_history(manager, generation, agent, start, end)
         points = list(observed.get("points") or [])
         payload.update({
             "chart_mode": "live",
@@ -83,8 +176,9 @@ def build_correct_history(manager, ref, start, end, legacy_history):
             "labels": labels,
             "points": points,
             "gaps": list(observed.get("gaps") or []),
-            "desired_source": observed.get("desired_source") or "observed_live_generation_runtime",
-            "desired_semantics": "Live Desired actually observed from this generation",
+            "stale_after_seconds": observed.get("stale_after_seconds"),
+            "desired_source": observed.get("desired_source"),
+            "desired_semantics": observed.get("desired_semantics"),
         })
         return payload
 
@@ -123,15 +217,32 @@ def build_correct_history(manager, ref, start, end, legacy_history):
 
 
 def build_correct_point(manager, ref, timestamp, legacy_point):
-    generation, _ = _resolve_generation(manager, ref)
-    point = dict(legacy_point(ref, float(timestamp)))
-    point["chart_contract"] = CHART_CONTRACT
-    point["policy_replay_used_for_desired"] = False
-    point["generation_number"] = int(generation["generation_number"])
-    point["generation_type"] = generation["generation_type"]
+    generation, agent = _resolve_generation(manager, ref)
+    timestamp = float(timestamp)
+    TRAINING_BUDGET.request_interactive_window(1.0, reason="correct_point")
+
+    current_rows = _current_rows(manager, agent, timestamp, timestamp)
+    current = _current_at(current_rows, timestamp)
+    observed = _observed_generation_at(manager, generation, timestamp)
+    desired = None if observed is None else observed.get("desired")
+    confidence = None if observed is None else observed.get("confidence")
+
+    point = {
+        "ts": timestamp,
+        "current": current,
+        "desired": desired,
+        "confidence": confidence,
+        "context_complete": bool(current is not None and desired is not None),
+        "gap": desired is None,
+        "desired_source": "observed_generation_runtime",
+        "chart_contract": CHART_CONTRACT,
+        "policy_replay_used_for_desired": False,
+        "generation_number": int(generation["generation_number"]),
+        "generation_type": generation["generation_type"],
+    }
 
     if generation.get("generation_type") == "live":
-        point["live_desired"] = point.get("desired")
+        point["live_desired"] = desired
         point["live_desired_label"] = "Live Desired"
         point["parent_generation_id"] = None
         return point
@@ -140,14 +251,18 @@ def build_correct_point(manager, ref, timestamp, legacy_point):
     parent = lineage_row(manager.store, generation_id=parent_id) if parent_id else None
     if not parent:
         raise ValueError("Candidate direct parent generation not found")
-    observed_parent = manager.generation_decision_at(parent["generation_id"], float(timestamp))
+    observed_parent = _observed_generation_at(manager, parent, timestamp)
     point["parent_generation_id"] = parent["generation_id"]
     point["parent_generation_number"] = int(parent["generation_number"])
     point["parent_generation_type"] = parent["generation_type"]
-    point["parent_desired"] = None if observed_parent is None else observed_parent.get("desired")
-    point["parent_confidence"] = None if observed_parent is None else observed_parent.get("confidence")
+    point["parent_desired"] = (
+        None if observed_parent is None else observed_parent.get("desired")
+    )
+    point["parent_confidence"] = (
+        None if observed_parent is None else observed_parent.get("confidence")
+    )
     point["parent_desired_label"] = _generation_label(parent)
-    point["candidate_desired"] = point.get("desired")
+    point["candidate_desired"] = desired
     point["candidate_desired_label"] = _generation_label(generation)
     point["parent_policy_replay_used"] = False
     return point
