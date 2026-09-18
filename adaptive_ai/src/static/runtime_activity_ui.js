@@ -137,7 +137,8 @@
           const slice=Math.round(Number(lp.max_continuous_work_ms||0));
           const observed=Math.round(Number(lp.max_observed_slice_ms||0));
           const overruns=Number(lp.slice_overruns||0);
-          const budget=duty?`CPU budget ${duty}%${slice?` · max slice ${slice} ms`:''}`:'Pi-safe CPU budget';
+          const replayBatch=Math.round(Number(lp.experience_batch_rows||0));
+          const budget=duty?`CPU budget ${duty}%${slice?` · max slice ${slice} ms`:''}${replayBatch?` · replay batch ${replayBatch}`:''}`:'Pi-safe CPU budget';
           const observedText=observed?` Longest measured slice ${observed} ms${overruns?` · ${overruns} overrun${overruns===1?'':'s'}`:''}.`:'';
           panel.innerHTML=`<div class="history-head"><div><b>${esc(title)}</b><span>${esc(active.name||active.agent_id||'agent')} · ${esc(reason)}</span></div><div class="history-percent"><strong>ACTIVE</strong><small>${Math.round(elapsed)} s</small></div></div><div class="history-timing"><b>${esc(budget)}</b><span>Training yields between bounded work slices so Ingress and realtime control keep CPU priority.${esc(observedText)}</span></div>`;
         }
