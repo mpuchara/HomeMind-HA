@@ -34,6 +34,11 @@ class ProductRuntimeBenchmarkContractTests(unittest.TestCase):
         self.assertNotIn("light_need", json.dumps(dark))
         self.assertNotIn("occupied", json.dumps(dark))
         self.assertGreater(float(lit[bench.SENSORS[4]]["state"]), float(dark[bench.SENSORS[4]]["state"]) + 150.0)
+        manual = bench.observation(
+            11, 1, "manual_change", "future", 25, 0, manual_user=True
+        )
+        self.assertEqual(manual[bench.TARGET]["context"]["user_id"], "benchmark-user")
+        self.assertNotIn("light_need", json.dumps(manual))
 
     def test_required_scenarios_and_split_ids_are_disjoint(self):
         required = {"one_occupant", "two_occupants", "branch", "stillness", "no_arrival",
@@ -46,6 +51,36 @@ class ProductRuntimeBenchmarkContractTests(unittest.TestCase):
         self.assertFalse(train & validation)
         self.assertFalse(train & future)
         self.assertFalse(validation & future)
+
+    def test_future_scenario_context_reaches_controller_and_sensor_move_changes_topology(self):
+        class DummyBackend:
+            def predict(self, features):
+                return {"value": 0.0}, 0.9, [], 1, 0.9, 0.1
+
+        first = bench.observation(11, 1, "one_occupant", "train", 0, 0)
+        runtime = bench.FeatureRuntime(bench.agent_template(), first)
+        controller = bench.RidgeShadow(DummyBackend(), runtime)
+        states = bench.observation(11, 2, "sensor_moved", "future", 20, 0)
+        _, meta = controller.decide(
+            states, 20, 1700000020.0, scenario="sensor_moved", phase="future"
+        )
+        self.assertEqual(runtime.registry[bench.SENSORS[1]]["area_id"], "adjacent_room")
+        self.assertEqual(meta["sensor_area"], "adjacent_room")
+
+    def test_manual_hold_effective_action_is_separate_from_shadow_prediction(self):
+        states = bench.observation(11, 1, "manual_change", "future", 26, 0)
+        self.assertEqual(
+            bench._manual_hold_action(states, {"manual_override_until": 400.0}, 100.0), 0
+        )
+        self.assertIsNone(
+            bench._manual_hold_action(states, {"manual_override_until": 100.0}, 100.0)
+        )
+        metrics = self.seed["metrics"]["production_current"]
+        self.assertEqual(metrics["manual_override_events"], 1)
+        self.assertEqual(metrics["manual_override_window_ticks"], 11)
+        self.assertGreater(metrics["runtime_manual_hold_ticks"], 0)
+        self.assertGreater(metrics["executor_shadow_ticks"], 0)
+        self.assertGreater(metrics["moved_sensor_topology_ticks"], 0)
 
     def test_validation_is_real_and_control_threshold_is_not_lowered(self):
         built = bench.build_training_data(11, replicas=1)
@@ -72,6 +107,9 @@ class ProductRuntimeBenchmarkContractTests(unittest.TestCase):
         self.assertIn("shipped_core.prepare_engine_extensions()", source)
         self.assertIn("fresh process", source)
         self.assertIn("final RuntimeCompositionRoot", source)
+        self.assertIn("registry=core.registry_for(phase, scenario)", source)
+        self.assertIn("core._manual_hold_action(states, rt, ts)", source)
+        self.assertIn('store.update_agent(agent["id"], {"mode": "shadow"})', source)
         workflow = (ROOT / ".github" / "workflows" / "validate.yml").read_text(encoding="utf-8")
         self.assertIn("python tools/run_product_runtime_benchmark.py --seeds 11,23,37 --replicas 1", workflow)
 
@@ -91,13 +129,25 @@ class ProductRuntimeBenchmarkContractTests(unittest.TestCase):
 
     def test_build_info_records_real_entrypoint_and_product_benchmark_contract(self):
         build = json.loads((ROOT / "adaptive_ai" / "BUILD_INFO.json").read_text(encoding="utf-8"))
-        self.assertEqual(build["product_benchmark_contract"], 1)
+        self.assertEqual(build["product_benchmark_contract"], 2)
         self.assertIn("trial_queue_main.py", build["production_entrypoint"])
         self.assertEqual(build["product_benchmark_seeds"], [11, 23, 37])
         self.assertIsInstance(build["product_benchmark_unmet_criteria"], list)
         self.assertIn("not deployed", build["product_benchmark_full_ridge"])
         self.assertIn("component fixture", build["anticipation_simulator"])
-        self.assertGreaterEqual(build["tests_passed"], 784)
+        self.assertEqual(build["product_benchmark_unmet_criteria"], [
+            "needed_light_not_worse_than_fixed_by_more_than_2pp",
+            "premature_off_not_worse_than_fixed",
+            "corrections_not_worse_than_fixed",
+            "manual_override_respected",
+            "manual_override_enters_runtime_hold",
+            "all_seeds_have_future_control_qualification",
+        ])
+        self.assertEqual(build["tests_passed"], 882)
+        report = (ROOT / "BENCHMARK_PRODUCT_F24.md").read_text(encoding="utf-8")
+        self.assertIn("Needed-light fraction", report)
+        self.assertIn("runtime_manual_hold_ticks=0", report)
+        self.assertIn("does **not** mean all product acceptance criteria passed", report)
 
 
 class ProductRuntimeBenchmarkFixtureNamingTests(unittest.TestCase):

@@ -67,13 +67,16 @@ def _rng(seed: int, episode: int, tick: int, token: str) -> random.Random:
     return random.Random(f"f24:{seed}:{episode}:{tick}:{token}")
 
 
-def _state(entity_id, value, *, unit=None, device_class=None):
+def _state(entity_id, value, *, unit=None, device_class=None, context=None):
     attrs = {}
     if unit is not None:
         attrs["unit_of_measurement"] = unit
     if device_class is not None:
         attrs["device_class"] = device_class
-    return {"entity_id": entity_id, "state": str(value), "attributes": attrs}
+    out = {"entity_id": entity_id, "state": str(value), "attributes": attrs}
+    if context:
+        out["context"] = dict(context)
+    return out
 
 
 def _truth(scenario: str, tick: int, phase: str):
@@ -135,8 +138,12 @@ def _truth_delayed(scenario, tick, phase, delay):
     return _truth(scenario, max(0, tick - delay), phase)
 
 
-def observation(seed, episode, scenario, phase, tick, physical_light):
-    """Observed HA-like states; hidden occupancy/light_need are intentionally absent."""
+def observation(seed, episode, scenario, phase, tick, physical_light, *, manual_user=False):
+    """Observed HA-like states; hidden occupancy/light_need are intentionally absent.
+
+    manual_user marks explicit HA target provenance from a user. Hidden desired state
+    remains separate in _truth.
+    """
     truth = _truth(scenario, tick, phase)
     delayed = _truth_delayed(scenario, tick, phase, 1)
     r_presence = _rng(seed, episode, tick, "presence")
@@ -186,7 +193,10 @@ def observation(seed, episode, scenario, phase, tick, physical_light):
         SENSORS[3]: _state(SENSORS[3], tracker_state),
         SENSORS[4]: _state(SENSORS[4], lux_state, unit="lx", device_class="illuminance"),
         SENSORS[5]: _state(SENSORS[5], "on" if false_value else "off", device_class="occupancy"),
-        TARGET: _state(TARGET, "on" if physical_light else "off"),
+        TARGET: _state(
+            TARGET, "on" if physical_light else "off",
+            context={"user_id": "benchmark-user"} if manual_user else None,
+        ),
     }
     return states
 
@@ -267,7 +277,7 @@ class FixedAutomation:
     name = "fixed_automation"
     def __init__(self):
         self.action = 0; self.off_since = None
-    def decide(self, states, tick, ts):
+    def decide(self, states, tick, ts, *, scenario=None, phase="future"):
         presence = states[SENSORS[1]]["state"] == "on"
         entry = states[SENSORS[0]]["state"] == "on"
         try: lux = float(states[SENSORS[4]]["state"])
@@ -289,7 +299,7 @@ class ConservativeFallback:
     name = "conservative_fallback"
     def __init__(self):
         self.action = 0; self.clear_since = None
-    def decide(self, states, tick, ts):
+    def decide(self, states, tick, ts, *, scenario=None, phase="future"):
         presence_raw = states[SENSORS[1]]["state"]
         try: lux = float(states[SENSORS[4]]["state"])
         except Exception: lux = None
@@ -307,16 +317,31 @@ class ConservativeFallback:
         return self.action, {"abstained": False}
 
 
+def _manual_hold_action(states, runtime_row, ts):
+    """Effective target during an explicit user hold; never dispatches a command."""
+    if float((runtime_row or {}).get("manual_override_until") or 0.0) <= float(ts):
+        return None
+    raw = str((states.get(TARGET) or {}).get("state") or "").lower()
+    if raw not in ("on", "off"):
+        return None
+    return 1 if raw == "on" else 0
+
+
 class RidgeShadow:
     name = "full_ridge_shadow"
     def __init__(self, backend, feature_runtime):
         self.backend = backend; self.runtime = feature_runtime; self.action = 0
-    def decide(self, states, tick, ts):
-        features = self.runtime.ingest(states, ts, registry=registry_for("future"))
+    def decide(self, states, tick, ts, *, scenario=None, phase="future"):
+        features = self.runtime.ingest(
+            states, ts, registry=registry_for(phase, scenario)
+        )
         chosen, confidence, _, _, support, novelty = self.backend.predict(features)
         self.action = int(float(chosen["value"]) >= 0.5)
-        return self.action, {"abstained": False, "confidence": confidence, "support": support, "novelty": novelty,
-                             "shadow_proxy": True}
+        return self.action, {
+            "abstained": False, "confidence": confidence, "support": support,
+            "novelty": novelty, "shadow_proxy": True,
+            "sensor_area": (self.runtime.registry.get(SENSORS[1]) or {}).get("area_id"),
+        }
 
 
 class ProductionShadow:
@@ -336,8 +361,8 @@ class ProductionShadow:
     def close(self):
         self.engine.control_workers.shutdown(wait=True); self.engine.poll_worker.shutdown(wait=True); self._stack.close()
 
-    def decide(self, states, tick, ts):
-        self.runtime.ingest(states, ts, registry=registry_for("future"))
+    def decide(self, states, tick, ts, *, scenario=None, phase="future"):
+        self.runtime.ingest(states, ts, registry=registry_for(phase, scenario))
         self.engine.context = self.runtime.context
         self.engine.temporal_history = self.runtime.temporal
         self.engine.state_map = dict(self.runtime.states)
@@ -351,18 +376,39 @@ class ProductionShadow:
         confidence = float(rt.get("last_confidence") or 0.0)
         support = float(rt.get("historical_support") or 0.0)
         novelty = float(rt.get("context_novelty") or 1.0)
+        executor_shadow = str(intent.get("status") or "").upper() == "SHADOW"
+        manual_action = _manual_hold_action(states, rt, ts)
+        if manual_action is not None:
+            self.action = manual_action
+            return self.action, {
+                "abstained": True, "reason": "explicit_user_manual_hold",
+                "shadow_proxy": True, "manual_override_active": True,
+                "executor_shadow": executor_shadow,
+                "confidence": confidence, "support": support, "novelty": novelty,
+                "decision_state": decision_state,
+                "sensor_area": (self.runtime.registry.get(SENSORS[1]) or {}).get("area_id"),
+            }
         # Counterfactual product action: only a Shadow intent that passed the normal
         # decision gates is allowed to drive the synthetic lamp.  Otherwise use the
         # conservative fallback rather than weakening a gate for the benchmark.
         allowed = decision_state == "shadow" or str(intent.get("status") or "").upper() == "SHADOW"
         if allowed and prediction is not None:
             self.action = int(float(prediction) >= 0.5)
-            return self.action, {"abstained": False, "shadow_proxy": True, "confidence": confidence,
-                                 "support": support, "novelty": novelty, "decision_state": decision_state}
+            return self.action, {
+                "abstained": False, "shadow_proxy": True, "executor_shadow": executor_shadow,
+                "confidence": confidence,
+                "support": support, "novelty": novelty, "decision_state": decision_state,
+                "sensor_area": (self.runtime.registry.get(SENSORS[1]) or {}).get("area_id"),
+            }
         value, meta = self.fallback.decide(states, tick, ts)
         self.action = value
-        return value, {**meta, "shadow_proxy": True, "fallback_used": True, "decision_state": decision_state,
-                       "confidence": confidence, "support": support, "novelty": novelty}
+        return value, {
+            **meta, "shadow_proxy": True, "fallback_used": True,
+            "executor_shadow": executor_shadow,
+            "decision_state": decision_state, "confidence": confidence,
+            "support": support, "novelty": novelty,
+            "sensor_area": (self.runtime.registry.get(SENSORS[1]) or {}).get("area_id"),
+        }
 
 
 def split_episode_id(seed, phase, scenario, replica):
@@ -467,6 +513,9 @@ def replay_history_for_features(seed, trained_policy_model, replicas=1):
 def evaluate_controller(seed, controller, start_episode_no, base, replicas=1):
     decision_ms = []; needed = 0; needed_on = 0; false_on = 0; premature = 0; chatter = 0
     delays = []; corrections = 0; episodes = 0; abstains = 0; fallback_uses = 0
+    manual_events = 0; manual_window_ticks = 0; manual_violations = 0
+    runtime_manual_hold_ticks = 0; moved_sensor_topology_ticks = 0
+    executor_shadow_ticks = 0
     episode_no = start_episode_no
     for scenario, replica in _phase_sequence(seed, "future", replicas):
         episode_no += 1; episodes += 1; action = 0; last_action = 0; last_change = -999
@@ -474,12 +523,34 @@ def evaluate_controller(seed, controller, start_episode_no, base, replicas=1):
         for tick in range(TICKS):
             ts = base + episode_no * 120.0 + tick
             truth = _truth(scenario, tick, "future")
-            states = observation(seed, episode_no, scenario, "future", tick, action)
+            # Make the target observation unambiguously ON immediately before the user's
+            # OFF action. This is a deterministic environment precondition, not an AI
+            # dispatch, and guarantees that the next user-origin state is a real change.
+            if scenario == "manual_change" and tick == 24:
+                action = 1
+            manual_event = scenario == "manual_change" and tick == 25
+            if manual_event:
+                # Exogenous user action, not an ActionIntent.
+                action = 0
+                manual_events += 1
+            states = observation(
+                seed, episode_no, scenario, "future", tick, action,
+                manual_user=manual_event,
+            )
             start = time.perf_counter()
-            new_action, meta = controller.decide(states, tick, ts)
+            new_action, meta = controller.decide(
+                states, tick, ts, scenario=scenario, phase="future"
+            )
             decision_ms.append((time.perf_counter() - start) * 1000.0)
             new_action = int(bool(new_action))
             abstains += int(bool(meta.get("abstained"))); fallback_uses += int(bool(meta.get("fallback_used")))
+            runtime_manual_hold_ticks += int(bool(meta.get("manual_override_active")))
+            executor_shadow_ticks += int(bool(meta.get("executor_shadow")))
+            if scenario == "sensor_moved" and meta.get("sensor_area") == "adjacent_room":
+                moved_sensor_topology_ticks += 1
+            if scenario == "manual_change" and 25 <= tick < 36:
+                manual_window_ticks += 1
+                manual_violations += int(new_action != 0)
             need = bool(truth["light_need"])
             needed += int(need); needed_on += int(need and new_action); false_on += int((not need) and new_action)
             if last_action == 1 and new_action == 0 and need:
@@ -513,6 +584,12 @@ def evaluate_controller(seed, controller, start_episode_no, base, replicas=1):
         "mean_on_delay_seconds": statistics.mean(delays) if delays else 0.0,
         "chatter_events": chatter,
         "corrections_per_100_episodes": 100.0 * corrections / max(1, episodes),
+        "manual_override_events": manual_events,
+        "manual_override_window_ticks": manual_window_ticks,
+        "manual_override_violations": manual_violations,
+        "runtime_manual_hold_ticks": runtime_manual_hold_ticks,
+        "moved_sensor_topology_ticks": moved_sensor_topology_ticks,
+        "executor_shadow_ticks": executor_shadow_ticks,
         "abstain_ticks": abstains, "fallback_ticks": fallback_uses,
         "episodes": episodes, "decision_calls": len(decision_ms), "inference_p95_ms_host": p95,
         "inference_mean_ms_host": statistics.mean(decision_ms) if decision_ms else 0.0,
@@ -544,11 +621,13 @@ def run_seed(seed, replicas=1):
                              score=score, samples=built["validation_detail"]["counts"]["samples"],
                              source="f24_actual_chronological_validation",
                              detail=built["validation_detail"])
+    # Executor re-reads the authoritative Store row. Persist Shadow rather than mutating
+    # only the benchmark's local agent dict; Shadow still never dispatches HA services.
+    store.update_agent(agent["id"], {"mode": "shadow"})
     agent = store.get_agent_config(agent["id"])
     # Evaluation needs Shadow predictions even when Control proof is insufficient.  A
     # failed historical qualification is reported and the production comparator uses the
     # conservative fallback whenever runtime decision gates abstain.
-    agent["mode"] = "shadow"
     agent["training_state"] = "qualified" if shadow_qualified else "paused"
     current_policy.agent = agent
     store.save_model(agent["id"], current_policy.serialize())
@@ -607,6 +686,14 @@ def _criteria(aggregate, seed_runs):
          current["premature_off_events"]["mean"] <= fixed["premature_off_events"]["mean"]),
         ("corrections_not_worse_than_fixed",
          current["corrections_per_100_episodes"]["mean"] <= fixed["corrections_per_100_episodes"]["mean"]),
+        ("manual_override_respected",
+         current["manual_override_violations"]["mean"] == 0.0),
+        ("manual_override_enters_runtime_hold",
+         current["runtime_manual_hold_ticks"]["mean"] > 0.0),
+        ("production_shadow_reaches_executor",
+         current["executor_shadow_ticks"]["mean"] > 0.0),
+        ("moved_sensor_topology_reaches_runtime",
+         current["moved_sensor_topology_ticks"]["mean"] > 0.0),
         ("all_seeds_have_future_control_qualification", all(bool(r["control_qualification"].get("passed")) for r in seed_runs)),
         ("all_required_scenarios_present", all(set(SCENARIOS) == {x.split(":")[-2] for x in r["split_episode_ids"]["future"]} for r in seed_runs)),
     ]
@@ -626,18 +713,18 @@ def run(seeds=DEFAULT_SEEDS, replicas=1):
     criteria = _criteria(aggregate, runs)
     unmet = [x["name"] for x in criteria if not x["passed"]]
     return {
-        "benchmark": "HomeMind product runtime benchmark F24 v1",
-        "deterministic_quality_contract": 1,
+        "benchmark": "HomeMind product runtime benchmark F24 v2",
+        "deterministic_quality_contract": 2,
         "seeds": list(seeds), "replicas_per_scenario_per_split": replicas,
         "scenarios": list(SCENARIOS), "ticks_per_episode": TICKS,
         "splits": "chronological train demonstrations -> validation demonstrations -> untouched future hidden-truth evaluation",
         "ground_truth": "hidden occupancy and hidden light_need are separate from observations; future truth is evaluation-only",
-        "observation_model": "binary/numeric/tracker sensors with delay, noise, missing values; synthetic light changes measured lux",
+        "observation_model": "binary/numeric/tracker sensors with delay, noise, missing values; synthetic light changes measured lux; future sensor_moved changes the Entity Registry area mapping",
         "evidence_semantics": {
             "historical_demonstration": "teacher action used to fit policy; not physical outcome and not preference probability",
             "bandit_reward": "backend update for logged demonstrated action only; unchosen action reward remains unknown",
             "presence_model": "production ContextEngine forecast derived causally from observed sensors, never direct hidden truth",
-            "correction": "manual_change scenario changes hidden desired light state; no synthetic correction is relabeled as generic reward",
+            "correction": "manual_change includes explicit user-origin target provenance plus a hidden desired-state change; it is not relabeled as generic reward",
             "experiment": "not fabricated by this benchmark; production TrialRecord/Experiments tests remain authoritative",
             "shadow_proxy": "production_current and full_ridge_shadow are counterfactual synthetic actions; Candidate/Shadow never dispatch HA",
             "physical_outcome": "only simulated lamp/lux coupling; not evidence of real Home Assistant hardware performance",
@@ -651,6 +738,7 @@ def run(seeds=DEFAULT_SEEDS, replicas=1):
             "quality_path": "production ContextEngine + MultiHorizonPolicy + Engine.process_agent Shadow + ActionIntent/Executor gates",
             "transport": "deterministic synthetic HA observations; source/image entrypoint boot is verified separately in CI",
             "ha_service_dispatch": "forbidden/asserted in Shadow benchmark",
+            "manual_priority": "explicit user target provenance drives the production manual-hold path; benchmark effective action cannot override that hold",
         },
         "host_cost_notice": "wall-clock timings are host-specific and are not Raspberry Pi measurements",
     }

@@ -80,7 +80,7 @@ Status i diagnostyka korzystają z cursorów, sufficient statistics i bounded ba
 
 `tools/benchmark_product_runtime.py` definiuje deterministyczny świat z ukrytą prawdziwą obecnością oraz ukrytą potrzebą światła, osobnymi od obserwacji. Oficjalny executable to `tools/run_product_runtime_benchmark.py`: przed generowaniem train/validation instaluje ten sam finalny `RuntimeCompositionRoot`, którego używa shipped `trial_queue_main.py`, a każdy seed uruchamia w świeżym procesie. Dzięki temu Observation Contract, preference/episode/provenance, Tournament, Candidate, TrialKnowledge, confidence/drift, DeviceAgent, promotion validation i Stage17 performance composition są takie jak w produkcyjnym rootcie, bez przenoszenia globalnego stanu installerów między syntetycznymi domami.
 
-Sensory mają opóźnienia, noise, missingness i różne reprezentacje; akcja lampy wpływa na obserwowany lux. Benchmark-only clock bridge zapewnia wspólny event-time dla `Engine` i `Executor`, aby syntetyczny historyczny timestamp nie wygaszał intentu względem zegara runnera. Nie zmienia to produkcyjnego TTL ani progów.
+Sensory mają opóźnienia, noise, missingness i różne reprezentacje; akcja lampy wpływa na obserwowany lux. W scenariuszu `sensor_moved` ten sam `entity_id` zmienia w future test przypisanie obszaru w Entity Registry i nowe mapowanie jest podawane do ocenianego runtime, zamiast jedynie zmieniać dane sensora. `manual_change` emituje jawne zdarzenie targetu z `context.user_id`; dla światła produkcyjny timing zachowuje domyślny manual hold, a syntetyczny efektywny target nie może zostać nadpisany przez Shadow proxy podczas aktywnego hold. Benchmark-only clock bridge zapewnia wspólny event-time dla `Engine` i `Executor`, aby syntetyczny historyczny timestamp nie wygaszał intentu względem zegara runnera. Nie zmienia to produkcyjnego TTL ani progów.
 
 Benchmark rozdziela:
 
@@ -92,6 +92,6 @@ future test: niewidziany wcześniej hidden truth używany wyłącznie do oceny p
 
 Porównywane są: stała automatyzacja, bieżący produkcyjny runtime w Shadow, full-ridge challenger w Shadow i ostrożny fallback. Raport obejmuje needed-light coverage, false ON, premature OFF, opóźnienie, chatter, korekty/100 epizodów i koszt obliczeń z wieloma seedami oraz przedziałami niepewności.
 
-Benchmark **nie** obniża kwalifikacji, nie wstawia gotowego `benchmark_score` i nie promuje backendu. Niespełnione kryteria są prawidłowym wynikiem. Wynik syntetyczny/CI nie zastępuje fizycznego M&V.
+Benchmark **nie** obniża kwalifikacji, nie wstawia gotowego `benchmark_score` i nie promuje backendu. Niespełnione kryteria są prawidłowym wynikiem. Wynik syntetyczny/CI nie zastępuje fizycznego M&V. CI zapisuje pełny raport jako artefakt `product-benchmark-f24-py311/product-benchmark-f24.json`, aby lista kryteriów i przedziały niepewności były audytowalne poza logiem joba. Zwięzły raport porównawczy z bieżącego kontraktu v2 jest utrzymywany w `BENCHMARK_PRODUCT_F24.md`.
 
 CI dodatkowo uruchamia dokładny source entrypoint oraz obraz i sprawdza, że PID 1 obrazu startuje przez `/app/run.sh`, który kończy w `trial_queue_main.py`. Dzięki temu benchmark jakości i test uruchomienia dotyczą tego samego stosu kompozycji.

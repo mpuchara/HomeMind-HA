@@ -27,6 +27,14 @@ jobs:
         env:
           ADAPTIVE_AI_DATA: ${{ runner.temp }}/homemind-product-benchmark
         run: python tools/run_product_runtime_benchmark.py --seeds 11,23,37 --replicas 1 --compact | tee product-benchmark-f24.json
+      - name: Upload Stage 18 product benchmark report
+        if: matrix.python == '3.11'
+        uses: actions/upload-artifact@v4
+        with:
+          name: product-benchmark-f24-py311
+          path: product-benchmark-f24.json
+          if-no-files-found: error
+          retention-days: 30
       - name: Stage 18 actual source entrypoint smoke
         if: matrix.python == '3.11'
         run: python tools/smoke_entrypoint.py
