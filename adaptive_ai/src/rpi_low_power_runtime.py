@@ -19,8 +19,9 @@ import time
 from training_budget import TRAINING_BUDGET
 
 
-CONTRACT_VERSION = 3
+CONTRACT_VERSION = 4
 DEFAULT_ARCHIVE_BATCH_ROWS = 16
+DEFAULT_EXPERIENCE_BATCH_ROWS = 64
 DEFAULT_TRAINING_DUTY_CYCLE = 0.25
 DEFAULT_MAX_THROTTLE_SLEEP_SECONDS = 2.0
 DEFAULT_MAX_CONTINUOUS_WORK_MS = 75
@@ -54,6 +55,7 @@ def install(core, manager):
         core.OPTIONS["training_cpu_duty_cycle"] = DEFAULT_TRAINING_DUTY_CYCLE
     core.OPTIONS.setdefault("training_cpu_duty_cycle", DEFAULT_TRAINING_DUTY_CYCLE)
     core.OPTIONS.setdefault("training_archive_batch_rows", DEFAULT_ARCHIVE_BATCH_ROWS)
+    core.OPTIONS.setdefault("training_experience_batch_rows", DEFAULT_EXPERIENCE_BATCH_ROWS)
     core.OPTIONS.setdefault(
         "training_throttle_max_sleep_seconds", DEFAULT_MAX_THROTTLE_SLEEP_SECONDS
     )
@@ -71,6 +73,13 @@ def install(core, manager):
             int(core.OPTIONS.get("training_archive_batch_rows", DEFAULT_ARCHIVE_BATCH_ROWS)),
             8,
             128,
+        )
+    )
+    experience_batch_rows = int(
+        _clamp(
+            int(core.OPTIONS.get("training_experience_batch_rows", DEFAULT_EXPERIENCE_BATCH_ROWS)),
+            8,
+            512,
         )
     )
     max_sleep = _clamp(
@@ -157,6 +166,7 @@ def install(core, manager):
             "contract_version": CONTRACT_VERSION,
             "training_cpu_duty_cycle": duty,
             "archive_batch_rows": batch_rows,
+            "experience_batch_rows": experience_batch_rows,
             "max_throttle_sleep_seconds": max_sleep,
             "max_continuous_work_ms": max_slice_ms,
             "candidate_idle_poll_seconds": DEFAULT_CANDIDATE_IDLE_POLL_SECONDS,
@@ -172,7 +182,7 @@ def install(core, manager):
         "rpi_low_power_runtime_ready",
         (
             "Historical training has a Pi-safe CPU duty cycle plus a "
-            f"{max_slice_ms:.0f} ms continuous-work slice budget"
+            f"{max_slice_ms:.0f} ms continuous-work slice budget and batched replay persistence"
         ),
         snapshot(),
     )

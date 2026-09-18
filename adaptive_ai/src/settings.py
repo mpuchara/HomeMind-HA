@@ -15,7 +15,7 @@ try:
 except Exception:
     ws_connect = None
 
-APP_VERSION = "0.14.23"
+APP_VERSION = "0.14.24"
 HISTORY_BOOTSTRAP_REVISION = "target-attrs-v2"
 TRAINING_REVISION = "shared-home-intents-v18"
 DATA_DIR = Path(os.environ.get("ADAPTIVE_AI_DATA", "/data"))
@@ -95,6 +95,7 @@ DEFAULT_OPTIONS = {
     "process_nice": 10,
     "training_cpu_duty_cycle": 0.25,
     "training_archive_batch_rows": 16,
+    "training_experience_batch_rows": 64,
     "training_throttle_max_sleep_seconds": 2.0,
     "training_max_continuous_work_ms": 75,
     "manual_agent_training": True,

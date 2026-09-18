@@ -407,27 +407,100 @@ def install(core):
 
     # --- Historical replay provenance --------------------------------------
     original_add_historical = store.add_historical_experience
+    original_add_historical_batch = getattr(store, "add_historical_experiences_batch", None)
 
-    def add_historical_experience(agent_id, target_history_id, action_index, action_value,
-                                  reward, dwell_seconds, features, user_id=None):
+    def _provenance_for_history_id(target_history_id):
         with store.conn() as c:
             history = c.execute(
                 "SELECT entity_id,ts FROM entity_history WHERE id=?", (int(target_history_id),)
             ).fetchone()
-        provenance = journal.history_provenance(history["entity_id"], history["ts"]) if history else {
+        return journal.history_provenance(history["entity_id"], history["ts"]) if history else {
             "origin": UNKNOWN, "source": UNKNOWN, "event_id": None,
         }
+
+    def historical_replay_provenance(start_ts, end_ts, entity_ids):
+        """Load linked provenance for replay target rows in one indexed query.
+
+        Rows without a v1 provenance link intentionally remain absent and therefore map
+        to UNKNOWN in the caller.  This removes two SQLite reads from every completed
+        dwell while preserving the own-command exclusion boundary.
+        """
+        ids = sorted(set(str(x) for x in (entity_ids or []) if x))
+        if not ids:
+            return {}
+        placeholders = ",".join("?" for _ in ids)
+        params = [float(start_ts), float(end_ts)] + ids
+        with store.conn() as c:
+            rows = c.execute(
+                f"""SELECT h.id AS target_history_id,e.event_id,e.origin,e.source
+                    FROM entity_history h
+                    JOIN provenance_history_links l
+                      ON l.entity_id=h.entity_id AND l.event_time=h.ts
+                    JOIN provenance_events e ON e.event_id=l.event_id
+                    WHERE h.ts>=? AND h.ts<=?
+                      AND h.entity_id IN ({placeholders})""",
+                params,
+            ).fetchall()
+        return {
+            int(row["target_history_id"]): {
+                "event_id": row["event_id"],
+                "origin": str(row["origin"] or UNKNOWN),
+                "source": str(row["source"] or UNKNOWN),
+            }
+            for row in rows
+        }
+
+    def _audit_row(row, provenance, *, excluded=False):
+        origin = str((provenance or {}).get("origin") or UNKNOWN)
+        target_history_id = int(row["target_history_id"])
+        if excluded:
+            return {
+                "experience_key": f"history-excluded:{row['agent_id']}:{target_history_id}",
+                "agent_id": row["agent_id"],
+                "source": "historical_replay_excluded",
+                "origin": origin,
+                "source_event_id": (provenance or {}).get("event_id"),
+                "action_index": row.get("action_index"),
+                "action_value": row.get("action_value"),
+                "reward": None,
+                "features": row.get("features"),
+                "metadata": {
+                    "target_history_id": target_history_id,
+                    "reason": "own_command_ack",
+                },
+            }
+        return {
+            "experience_key": f"history:{row['agent_id']}:{target_history_id}",
+            "agent_id": row["agent_id"],
+            "source": "historical_replay",
+            "origin": origin,
+            "source_event_id": (provenance or {}).get("event_id"),
+            "action_index": row.get("action_index"),
+            "action_value": row.get("action_value"),
+            "reward": row.get("reward"),
+            "features": row.get("features"),
+            "metadata": {
+                "target_history_id": target_history_id,
+                "dwell_seconds": float(row.get("dwell_seconds") or 0.0),
+            },
+        }
+
+    def add_historical_experience(agent_id, target_history_id, action_index, action_value,
+                                  reward, dwell_seconds, features, user_id=None):
+        provenance = _provenance_for_history_id(target_history_id)
         origin = str(provenance.get("origin") or UNKNOWN)
         if origin == "own_command":
             # Preserve raw history for chronology but refuse to turn the system's own ACK
             # into an independent user demonstration during rebuild.
-            journal.record_experience(
-                experience_key=f"history-excluded:{agent_id}:{target_history_id}",
-                agent_id=agent_id, source="historical_replay_excluded", origin=origin,
-                source_event_id=provenance.get("event_id"), action_index=action_index,
-                action_value=action_value, reward=None, features=features,
-                metadata={"target_history_id": int(target_history_id), "reason": "own_command_ack"},
-            )
+            journal.record_experience(**_audit_row({
+                "agent_id": agent_id,
+                "target_history_id": target_history_id,
+                "action_index": action_index,
+                "action_value": action_value,
+                "reward": reward,
+                "dwell_seconds": dwell_seconds,
+                "features": features,
+            }, provenance, excluded=True))
             return False
         inserted = original_add_historical(
             agent_id, target_history_id, action_index, action_value,
@@ -437,16 +510,45 @@ def install(core):
             user_id if origin in {"user", "user_intent"} else None,
         )
         if inserted:
-            journal.record_experience(
-                experience_key=f"history:{agent_id}:{target_history_id}",
-                agent_id=agent_id, source="historical_replay", origin=origin,
-                source_event_id=provenance.get("event_id"), action_index=action_index,
-                action_value=action_value, reward=reward, features=features,
-                metadata={"target_history_id": int(target_history_id), "dwell_seconds": float(dwell_seconds)},
-            )
+            journal.record_experience(**_audit_row({
+                "agent_id": agent_id,
+                "target_history_id": target_history_id,
+                "action_index": action_index,
+                "action_value": action_value,
+                "reward": reward,
+                "dwell_seconds": dwell_seconds,
+                "features": features,
+            }, provenance))
         return inserted
 
+    def add_historical_experiences_batch(rows):
+        """Batch persistence with the same provenance/exclusion semantics as one-row replay."""
+        rows = list(rows or [])
+        if not rows:
+            return 0
+        accepted, audit = [], []
+        for raw in rows:
+            row = dict(raw)
+            provenance = dict(row.pop("_provenance", None) or _provenance_for_history_id(row["target_history_id"]))
+            origin = str(provenance.get("origin") or UNKNOWN)
+            if origin == "own_command":
+                audit.append(_audit_row(row, provenance, excluded=True))
+                continue
+            row["user_id"] = row.get("user_id") if origin in {"user", "user_intent"} else None
+            accepted.append(row)
+            audit.append(_audit_row(row, provenance, excluded=False))
+
+        inserted = original_add_historical_batch(accepted) if (accepted and callable(original_add_historical_batch)) else 0
+        # One bounded provenance transaction per replay batch. INSERT OR IGNORE keeps
+        # restart/retry idempotency exactly like the single-row journal path.
+        if audit:
+            journal.record_experiences_batch(audit)
+        return int(inserted)
+
+    store.historical_replay_provenance = historical_replay_provenance
     store.add_historical_experience = add_historical_experience
+    if callable(original_add_historical_batch):
+        store.add_historical_experiences_batch = add_historical_experiences_batch
 
     # Legacy benchmark code guessed manual/automation provenance. Replace only the
     # diagnostic count at persistence boundaries with journal-derived values. Old rows

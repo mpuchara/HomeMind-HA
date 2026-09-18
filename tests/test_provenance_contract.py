@@ -69,6 +69,25 @@ class ProvenanceJournalTests(unittest.TestCase):
             experience_key='feedback:one', agent_id='a', source='test', origin='user', reward=1.0))
         self.assertEqual(len(self.journal.list_experiences('a')), 1)
 
+    def test_experience_batch_is_idempotent_and_uses_one_audit_contract(self):
+        rows = [
+            {
+                "experience_key": f"batch:{i}",
+                "agent_id": "a",
+                "source": "historical_replay",
+                "origin": "unknown",
+                "action_index": i % 2,
+                "action_value": float(i % 2),
+                "reward": 1.0,
+                "features": {0: float(i)},
+                "metadata": {"i": i},
+            }
+            for i in range(16)
+        ]
+        self.assertEqual(self.journal.record_experiences_batch(rows), 16)
+        self.assertEqual(self.journal.record_experiences_batch(rows), 0)
+        self.assertEqual(len(self.journal.list_experiences("a")), 16)
+
     def test_action_probability_is_optional_and_never_invented(self):
         self.journal.record_decision(
             decision_id='none', created_time=1.0, agent_id='a',
@@ -176,6 +195,37 @@ class ProvenanceRuntimeIntegrationTests(unittest.TestCase):
         self.assertEqual(excluded[0]['decision_id'], None)
         self.assertEqual(excluded[0]['origin'], 'own_command')
         self.assertIsNotNone(intent.intent_id)
+
+    def test_own_command_ack_is_excluded_by_batched_replay_too(self):
+        f = self.fixture
+        self._dispatch_and_ack()
+        rows = f.store.archive_rows(entity_id="light.kitchen")
+        self.assertTrue(rows)
+        target_row = rows[-1]
+        mapping = f.store.historical_replay_provenance(
+            target_row["ts"] - 1.0, target_row["ts"] + 1.0, ["light.kitchen"]
+        )
+        self.assertEqual(mapping[target_row["id"]]["origin"], "own_command")
+
+        inserted = f.store.add_historical_experiences_batch([{
+            "agent_id": f.a["id"],
+            "target_history_id": target_row["id"],
+            "action_index": 1,
+            "action_value": 1.0,
+            "reward": 1.0,
+            "dwell_seconds": 30.0,
+            "features": {0: 1.0},
+            "user_id": None,
+            "_provenance": mapping[target_row["id"]],
+        }])
+        self.assertEqual(inserted, 0)
+        self.assertEqual(f.store.list_historical_experiences(f.a["id"]), [])
+        excluded = [
+            r for r in f.e.provenance.list_experiences(f.a["id"])
+            if r["source"] == "historical_replay_excluded"
+        ]
+        self.assertEqual(len(excluded), 1)
+        self.assertEqual(excluded[0]["origin"], "own_command")
 
     def test_duplicate_feedback_key_does_not_apply_second_model_update(self):
         f = self.fixture

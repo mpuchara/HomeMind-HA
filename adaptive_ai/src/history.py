@@ -113,7 +113,7 @@ class HistoryManager(threading.Thread):
         return start_ts, end_ts
 
     def _start_agent_job(self, agent_id, rebuild=False):
-        agent = STORE.get_agent(agent_id)
+        agent = STORE.get_agent_config(agent_id)
         if not agent:
             return False
         with self.agent_jobs_lock:
@@ -252,7 +252,7 @@ class HistoryManager(threading.Thread):
             STORE.event(agent["id"], "warning", "agent_history_refresh_partial", str(exc), None)
 
     def _run_agent_indexing(self, agent_id, rebuild=False):
-        agent = STORE.get_agent(agent_id)
+        agent = STORE.get_agent_config(agent_id)
         if not agent:
             return
         archive_start, archive_end = self._training_bounds()
@@ -312,7 +312,7 @@ class HistoryManager(threading.Thread):
         return self._start_agent_job(agent_id, rebuild=True)
 
     def request_agent_resume(self, agent_id):
-        agent = STORE.get_agent(agent_id)
+        agent = STORE.get_agent_config(agent_id)
         if not agent or agent.get("training_state") not in ("paused", "training", "waiting"):
             return False
         return self._start_agent_job(agent_id, rebuild=False)
@@ -799,7 +799,7 @@ class HistoryManager(threading.Thread):
 
     def _train_from_archive(self, start_ts, end_ts, *, qualify=False, agent_ids=None, include_candidates=False, benchmark=None, accumulate_benchmark=False, progress_lo=None, progress_hi=None, progress_label=None):
         benchmark = bool(qualify) if benchmark is None else bool(benchmark)
-        agents = [a for a in STORE.list_agents() if a["enabled"]]
+        agents = [a for a in STORE.list_agent_configs() if a["enabled"]]
         if agent_ids is not None:
             wanted = set(agent_ids)
             agents = [a for a in agents if a["id"] in wanted]
@@ -812,16 +812,45 @@ class HistoryManager(threading.Thread):
         target_map = {}
         for a in agents:
             target_map.setdefault(a["target_entity"], []).append(a)
+
+        # Feature screening is only needed while the policy schema is unresolved.
+        # Once a model checkpoint exists, its explicit schema is authoritative for later
+        # chunks/resume. Likewise, an explicitly selected input list (Teach/Correct or a
+        # manual agent) does not need another whole-home precursor scan.
+        saved_models = {a["id"]: STORE.get_model(a["id"]) for a in agents}
+        screen_agents = [
+            a for a in agents
+            if saved_models.get(a["id"]) is None
+            and ("*" in set(a.get("input_entities") or ["*"]))
+        ]
+        screen_target_map = {}
+        for a in screen_agents:
+            screen_target_map.setdefault(a["target_entity"], []).append(a)
+        screening_required = bool(screen_agents)
+
         archive_row_count = STORE.archive_count(start_ts=start_ts, end_ts=end_ts)
         if archive_row_count <= 0:
             return 0
         progress_enabled = progress_lo is not None and progress_hi is not None and float(progress_hi) > float(progress_lo)
         progress_label = progress_label or "Historical policy rebuild"
         if progress_enabled:
-            self.set_status(progress=float(progress_lo), message=f"{progress_label}: screening context candidates",
-                            work_done=0, work_total=archive_row_count, work_unit="history rows",
-                            eta_source="measured replay throughput",
-                            phase_detail="Finding causal precursors and behavioural drivers")
+            self.set_status(
+                progress=float(progress_lo),
+                message=(
+                    f"{progress_label}: screening context candidates"
+                    if screening_required else
+                    f"{progress_label}: reusing persisted feature schema"
+                ),
+                work_done=0,
+                work_total=archive_row_count if screening_required else 0,
+                work_unit="history rows" if screening_required else "schema cache",
+                eta_source="measured replay throughput" if screening_required else "persisted schema",
+                phase_detail=(
+                    "Finding causal precursors and behavioural drivers"
+                    if screening_required else
+                    "Historical feature screening skipped: persisted/explicit schema is already authoritative"
+                ),
+            )
 
         # Historical precursor relevance: every usable HA entity is considered. Entities
         # that repeatedly change shortly before a real target action receive a structural
@@ -829,12 +858,12 @@ class HistoryManager(threading.Thread):
         # never a reward or supervised label.
         recent_change = {}
         activity_counts = {}
-        relevance_raw = {a["id"]: {} for a in agents}
-        target_action_counts = {a["id"]: 0 for a in agents}
+        relevance_raw = {a["id"]: {} for a in screen_agents}
+        target_action_counts = {a["id"]: 0 for a in screen_agents}
         last_target_value = {}
         precursor_window = max(300.0, float(OPTIONS.get("temporal_long_seconds", 300)) * 2.0)
         archive_span = max(1.0, float(end_ts) - float(start_ts))
-        selection_end = float(end_ts) - max(1800.0, archive_span * float(OPTIONS.get("confidence_validation_fraction", .2)))
+        selection_end = (float(end_ts) - max(1800.0, archive_span * float(OPTIONS.get("confidence_validation_fraction", .2)))) if screening_required else float(start_ts)
 
         # Build a small edge index for fast-light causal driver discovery.  This does not
         # depend on HA area metadata or direct automation target mapping: every eligible
@@ -846,7 +875,7 @@ class HistoryManager(threading.Thread):
         excluded_control, _ = controllable_context_exclusions(discovery_states, discovery_registry)
         excluded_electrical, _ = electrical_context_exclusions(discovery_states, discovery_registry)
         discovery_excluded = excluded_control | excluded_electrical
-        fast_agents = [a for a in agents if is_fast_reactive_agent(a)]
+        fast_agents = [a for a in screen_agents if is_fast_reactive_agent(a)]
         behaviour_candidates = {
             eid for eid, st in discovery_states.items()
             if is_context_candidate_entity(eid, st, discovery_excluded)
@@ -856,19 +885,35 @@ class HistoryManager(threading.Thread):
         edge_limit = max(8, min(2048, 32768 // max(1, len(behaviour_candidates | fast_targets))))
         fast_edge_rows = {eid: deque(maxlen=edge_limit) for eid in (behaviour_candidates | fast_targets)}
 
-        previous_context = {}
-        for row in STORE.archive_iter(start_ts=start_ts, end_ts=end_ts, chunk_size=2000):
+        # Fast behavioural scoring intentionally keeps the bounded raw sensor rows,
+        # while generic precursor screening only needs effective per-entity changes.
+        # Split the two streams so chatty unchanged Recorder rows never enter Python's
+        # broad whole-home screening loop.
+        if screening_required and fast_edge_rows:
+            for edge_row in STORE.archive_iter(
+                start_ts=start_ts,
+                end_ts=selection_end,
+                entity_ids=set(fast_edge_rows),
+                chunk_size=512,
+            ):
+                if float(edge_row["ts"]) >= selection_end:
+                    break
+                fast_edge_rows[edge_row["entity_id"]].append(edge_row)
+
+        screening_rows = (
+            STORE.archive_change_iter(start_ts=start_ts, end_ts=selection_end, chunk_size=2000)
+            if screening_required else ()
+        )
+        screening_checkpoint_rows = max(
+            8, min(128, int(OPTIONS.get("training_archive_batch_rows", 16)))
+        )
+        screening_rows_done = 0
+        for row in screening_rows:
             ts = float(row["ts"]); eid = row["entity_id"]
             if ts >= selection_end:
                 break
-            if eid in fast_edge_rows:
-                fast_edge_rows[eid].append(row)
-            signature = (row.get("state"), row.get("attributes_json"))
-            if previous_context.get(eid) == signature:
-                continue
-            previous_context[eid] = signature
             activity_counts[eid] = activity_counts.get(eid, 0) + 1
-            for agent in target_map.get(eid, []):
+            for agent in screen_target_map.get(eid, []):
                 st = archived_state(row)
                 val = target_value(st, agent["target_property"])
                 if val is None:
@@ -892,8 +937,20 @@ class HistoryManager(threading.Thread):
                             # sensor that just changed. Slow plants keep the broad window.
                             tau = float(OPTIONS.get("fast_recent_change_seconds", 3)) if is_fast_reactive_agent(agent) else max(30.0, precursor_window / 2.0)
                             scores[ceid] = scores.get(ceid, 0.0) + math.exp(-age / max(0.5, tau))
+                    # This fan-out can touch hundreds of context entities for one target
+                    # edge. Yield before another target edge even if archive_iter has not
+                    # yet reached its forced batch checkpoint.
+                    TRAINING_BUDGET.checkpoint("context_screen_target_edge")
                     last_target_value[agent["id"]] = float(val)
             recent_change[eid] = ts
+            screening_rows_done += 1
+            if screening_rows_done % screening_checkpoint_rows == 0:
+                TRAINING_BUDGET.checkpoint("context_screen_change_batch", force=True)
+            else:
+                TRAINING_BUDGET.checkpoint("context_screen_change_row")
+
+        if screening_required:
+            TRAINING_BUDGET.checkpoint("context_screen_complete", force=True)
 
         occupancy_edge_index = {
             eid: transition_edges(fast_edge_rows.get(eid) or [], occupancy_state_bool)
@@ -922,7 +979,7 @@ class HistoryManager(threading.Thread):
                     scores[eid] = max(scores.get(eid, 0.0), score)
             fast_driver_scores[agent["id"]] = scores
 
-        for agent in agents:
+        for agent in screen_agents:
             raw = relevance_raw.get(agent["id"], {})
             actions_n = max(1, int(target_action_counts.get(agent["id"], 0)))
             adjusted = {}
@@ -959,10 +1016,23 @@ class HistoryManager(threading.Thread):
 
         if progress_enabled:
             screening_end = float(progress_lo) + (float(progress_hi) - float(progress_lo)) * 0.20
-            self.set_status(progress=screening_end, message=f"{progress_label}: context screening complete; replaying recorded behaviour",
-                            work_done=0, work_total=archive_row_count, work_unit="history rows",
-                            eta_source="measured replay throughput",
-                            phase_detail=f"Screened context for {len(agents)} agent(s); starting chronological replay")
+            self.set_status(
+                progress=screening_end,
+                message=(
+                    f"{progress_label}: context screening complete; replaying recorded behaviour"
+                    if screening_required else
+                    f"{progress_label}: persisted feature schema reused; replaying recorded behaviour"
+                ),
+                work_done=0,
+                work_total=archive_row_count,
+                work_unit="history rows",
+                eta_source="measured replay throughput",
+                phase_detail=(
+                    f"Screened context for {len(screen_agents)} unresolved-schema agent(s); starting chronological replay"
+                    if screening_required else
+                    "No full context rescan required for this checkpoint; starting chronological replay"
+                ),
+            )
         policies = {a["id"]: self.engine.policy(a) for a in agents}
         automation_infos_by_agent = {
             a["id"]: list(AUTOMATION_KNOWLEDGE.hints_for_target(a["target_entity"])[1] or [])
@@ -993,6 +1063,47 @@ class HistoryManager(threading.Thread):
         pending = {}
         last_value = {}
         new_count = 0
+
+        # Replay used to commit one SQLite transaction per completed dwell.  Keep the
+        # same uniqueness semantics in memory, then persist bounded batches.  A failed
+        # training pass is still rolled back by discard_uncommitted_experiences() because
+        # model watermarks are advanced only after the final batch has been flushed.
+        existing_experience_ids = {
+            a["id"]: STORE.historical_experience_target_ids(a["id"])
+            for a in agents
+        }
+        provenance_loader = getattr(STORE, "historical_replay_provenance", None)
+        replay_provenance = (
+            provenance_loader(start_ts, end_ts, target_map.keys())
+            if callable(provenance_loader) else {}
+        )
+        experience_batch = []
+        experience_batch_rows = max(
+            8, min(512, int(OPTIONS.get("training_experience_batch_rows", 64)))
+        )
+
+        def flush_experience_batch(force=False):
+            if not experience_batch:
+                return 0
+            if not force and len(experience_batch) < experience_batch_rows:
+                return 0
+            batch = list(experience_batch)
+            expected_inserted = sum(
+                1 for row in batch
+                if str((row.get("_provenance") or {}).get("origin") or "unknown") != "own_command"
+            )
+            inserted = STORE.add_historical_experiences_batch(batch)
+            if inserted != expected_inserted:
+                # A concurrent duplicate would make the in-memory policy diverge from the
+                # durable audit log. Abort rather than silently checkpoint inconsistent
+                # learning. The single-heavy-job contract should make this unreachable.
+                raise RuntimeError(
+                    f"Historical experience batch mismatch: inserted {inserted}/{expected_inserted}"
+                )
+            experience_batch.clear()
+            TRAINING_BUDGET.checkpoint("historical_experience_batch_flush", force=True)
+            return inserted
+
         heldout_updates = DeferredUpdates(policies)
         validation_fraction = clamp(float(OPTIONS.get("confidence_validation_fraction", 0.20)), 0.05, 0.40)
         validation_span = max(1800.0, (float(end_ts) - float(start_ts)) * validation_fraction)
@@ -1098,11 +1209,34 @@ class HistoryManager(threading.Thread):
             dwell = max(0.0, float(effective_end) - old["ts"])
             reward = historical_reward(agent, dwell, old.get("user_id"), next_user_id)
             primary_h = min(old["features_by_horizon"])
-            inserted = STORE.add_historical_experience(
-                agent["id"], old["history_id"], old["action_idx"], old["action_value"], reward,
-                dwell, old["features_by_horizon"][primary_h], old.get("user_id")
-            )
-            if not inserted:
+            target_history_id = int(old["history_id"])
+            seen = existing_experience_ids.setdefault(agent["id"], set())
+            if target_history_id in seen:
+                return False
+
+            provenance = dict(replay_provenance.get(target_history_id) or {
+                "origin": "unknown", "source": "unknown", "event_id": None,
+            })
+            origin = str(provenance.get("origin") or "unknown")
+            experience_batch.append({
+                "agent_id": agent["id"],
+                "target_history_id": target_history_id,
+                "action_index": old["action_idx"],
+                "action_value": old["action_value"],
+                "reward": reward,
+                "dwell_seconds": dwell,
+                "features": old["features_by_horizon"][primary_h],
+                "user_id": old.get("user_id"),
+                "_provenance": provenance,
+            })
+            seen.add(target_history_id)
+            flush_experience_batch()
+
+            # Preserve the Stage-06 provenance boundary before any policy mutation:
+            # our own command acknowledgements are chronology, never independent
+            # demonstrations. They are still written to the excluded audit journal by
+            # the batched persistence adapter.
+            if origin == "own_command":
                 return False
 
             # Score the held-out transition before it is folded into training. This is
@@ -1265,6 +1399,11 @@ class HistoryManager(threading.Thread):
                             phase_detail=f"Replay complete · {new_count:,} new rewarded experiences")
         else:
             validation_end = model_end = benchmark_end = None
+
+        # Flush every accepted replay fact before the model watermark is advanced.
+        # This preserves crash rollback while reducing WAL commits by roughly the batch
+        # size compared with the previous per-dwell write path.
+        flush_experience_batch(force=True)
 
         # 0.14.18: replay used to stop at exactly this point and the next expensive
         # finalization work ran outside the archive-iterator throttle. Force a yield
