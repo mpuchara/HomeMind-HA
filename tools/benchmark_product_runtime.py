@@ -614,11 +614,13 @@ def run_seed(seed, replicas=1):
                              score=score, samples=built["validation_detail"]["counts"]["samples"],
                              source="f24_actual_chronological_validation",
                              detail=built["validation_detail"])
+    # Executor re-reads the authoritative Store row. Persist Shadow rather than mutating
+    # only the benchmark's local agent dict; Shadow still never dispatches HA services.
+    store.update_agent(agent["id"], {"mode": "shadow"})
     agent = store.get_agent_config(agent["id"])
     # Evaluation needs Shadow predictions even when Control proof is insufficient.  A
     # failed historical qualification is reported and the production comparator uses the
     # conservative fallback whenever runtime decision gates abstain.
-    agent["mode"] = "shadow"
     agent["training_state"] = "qualified" if shadow_qualified else "paused"
     current_policy.agent = agent
     store.save_model(agent["id"], current_policy.serialize())
