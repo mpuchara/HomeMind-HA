@@ -194,7 +194,7 @@ class Experiments:
 
     @staticmethod
     def _verified_presence_outcome_role(eid, state, registry):
-        """Return an explicit HA-backed role that may confirm physical presence.
+        """Return broad compatibility kind plus explicit HA-backed presence role.
 
         Prediction may use broader heuristics, but positive experiment outcomes require
         stronger evidence: a tracker domain or an explicit HA occupancy device class.
@@ -207,7 +207,7 @@ class Experiments:
         domain = str(eid).split('.', 1)[0]
         kind, _ = source_kind(eid, state, reg)
         if domain in {'person', 'device_tracker'}:
-            return 'tracker' if kind == 'tracker' else None
+            return ('tracker', 'tracker') if kind == 'tracker' else None
         if domain != 'binary_sensor' or kind != 'binary':
             return None
         attrs = state.get('attributes') or {}
@@ -216,7 +216,7 @@ class Experiments:
         ).strip().lower()
         if device_class not in {'motion', 'occupancy', 'presence'}:
             return None
-        return 'binary:' + device_class
+        return 'binary', device_class
 
     @classmethod
     def _presence_outcome_sources(cls, agent, selected, states, registry):
@@ -236,14 +236,18 @@ class Experiments:
                 continue
             state = states.get(eid)
             reg = registry.get(eid, {}) or {}
-            role = cls._verified_presence_outcome_role(eid, state, reg)
+            verified = cls._verified_presence_outcome_role(eid, state, reg)
             source_area = reg.get('area_id')
-            if not role or not source_area or source_area != target_area:
+            if not verified or not source_area or source_area != target_area:
                 continue
             before = state_scalar(state)
             if before is None:
                 continue
-            sources[eid] = {'role': role, 'area_id': source_area, 'before': before, 'anchored_at': None}
+            role, verified_role = verified
+            sources[eid] = {
+                'role': role, 'verified_role': verified_role, 'area_id': source_area,
+                'before': before, 'anchored_at': None,
+            }
         return sources
 
     @staticmethod
