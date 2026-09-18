@@ -4,6 +4,7 @@ import sqlite3
 import threading
 import time
 import unittest
+from pathlib import Path
 from contextlib import contextmanager
 from types import SimpleNamespace
 
@@ -132,6 +133,15 @@ class FastMetricFixture:
                         "INSERT INTO candidate_generation_decisions VALUES(?,?,?,?,?,?,?,?,?)",
                         ("root", gid, f"{gid}:go:{i}", ts-lead, outcome, desired, .8, "m", "s"),
                     )
+
+
+class StartupIndexTests(unittest.TestCase):
+    def test_f22_does_not_build_redundant_entity_history_index(self):
+        source = Path(__file__).resolve().parents[1].joinpath(
+            "adaptive_ai", "src", "performance_f22.py"
+        ).read_text(encoding="utf-8")
+        self.assertNotIn("idx_entity_history_entity_ts_id_f22", source)
+        self.assertIn("idx_entity_history_entity_ts(entity_id,ts)", source)
 
 
 class FastMetricsTests(unittest.TestCase):
