@@ -110,7 +110,8 @@ class SQLiteTemporalTracker:
     """
 
     HISTORY_SAMPLES = 64
-    SQL_ENTITY_CHUNK = 700
+    # Keep UNION terms and bound parameters below conservative SQLite limits.
+    SQL_ENTITY_CHUNK = 200
 
     def __init__(self, store, watched, context, start, end):
         self.conn = sqlite3.connect(store.path, timeout=30)
@@ -168,25 +169,28 @@ class SQLiteTemporalTracker:
         return rows
 
     def _base_bulk_before(self, entity_ids, ts, count):
-        """Last count history rows per entity in a bounded number of SQL queries."""
+        """Last count rows per entity using indexed LIMIT subqueries in one round-trip.
+
+        A window-function scan still walks every historical row for the selected
+        entities. UNIONing small per-entity LIMIT queries keeps the entity_time index hot
+        while eliminating Python's old N+1 connection/query loop.
+        """
         result = []
         count = max(1, int(count))
         for ids in self._chunks(entity_ids):
-            marks = ",".join("?" for _ in ids)
-            sql = f"""
-                SELECT id,entity_id,ts,state,attributes_json,context_user_id,source
-                FROM (
-                    SELECT h.*,
-                           ROW_NUMBER() OVER (
-                               PARTITION BY entity_id ORDER BY ts DESC,id DESC
-                           ) AS _hm_rank
-                    FROM entity_history h
-                    WHERE entity_id IN ({marks}) AND ts<=?
+            parts, params = [], []
+            for eid in ids:
+                parts.append(
+                    "SELECT * FROM ("
+                    "SELECT id,entity_id,ts,state,attributes_json,context_user_id,source "
+                    "FROM entity_history WHERE entity_id=? AND ts<=? "
+                    "ORDER BY ts DESC,id DESC LIMIT ?)"
                 )
-                WHERE _hm_rank<=?
-                ORDER BY ts,id
-            """
-            result.extend(self._fetch_rows(sql, [*ids, float(ts), count]))
+                params.extend([eid, float(ts), count])
+            if not parts:
+                continue
+            sql = "SELECT * FROM (" + " UNION ALL ".join(parts) + ") ORDER BY ts,id"
+            result.extend(self._fetch_rows(sql, params))
             TRAINING_BUDGET.checkpoint("temporal_before_query")
         result.sort(key=self._row_order)
         return result
@@ -206,20 +210,16 @@ class SQLiteTemporalTracker:
                 params = [*ids, float(lo), float(hi)]
             else:
                 limit = max(1, int(per_entity_limit))
-                sql = f"""
-                    SELECT id,entity_id,ts,state,attributes_json,context_user_id,source
-                    FROM (
-                        SELECT h.*,
-                               ROW_NUMBER() OVER (
-                                   PARTITION BY entity_id ORDER BY ts DESC,id DESC
-                               ) AS _hm_rank
-                        FROM entity_history h
-                        WHERE entity_id IN ({marks}) AND ts>? AND ts<=?
+                parts, params = [], []
+                for eid in ids:
+                    parts.append(
+                        "SELECT * FROM ("
+                        "SELECT id,entity_id,ts,state,attributes_json,context_user_id,source "
+                        "FROM entity_history WHERE entity_id=? AND ts>? AND ts<=? "
+                        "ORDER BY ts DESC,id DESC LIMIT ?)"
                     )
-                    WHERE _hm_rank<=?
-                    ORDER BY ts,id
-                """
-                params = [*ids, float(lo), float(hi), limit]
+                    params.extend([eid, float(lo), float(hi), limit])
+                sql = "SELECT * FROM (" + " UNION ALL ".join(parts) + ") ORDER BY ts,id"
             result.extend(self._fetch_rows(sql, params))
             TRAINING_BUDGET.checkpoint("temporal_forward_query")
         result.sort(key=self._row_order)
