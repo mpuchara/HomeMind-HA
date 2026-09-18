@@ -553,6 +553,47 @@ class CurrentConfidenceCostTests(unittest.TestCase):
         self.assertIn("outcome_ts<=?", "\n".join(self.store.selects()).lower())
         self.assertNotEqual(initial['paired_delta'], refreshed['paired_delta'])
 
+    def test_streamed_probability_calibration_matches_legacy_report(self):
+        journal = confidence.ProbabilityCalibrationJournal(self.store)
+        journal._performance_diagnostics = self.diag
+        for i in range(80):
+            journal.record(
+                metric_id='presence_3s', model_key='room-v2', scope_id='kitchen',
+                episode_id=f'stream-p-{i}', ts=float(i * 7),
+                prediction=(0.15 + 0.7 * ((i % 9) / 8.0)),
+                observed=float((i % 4) != 0),
+                source_kind='manual_ground_truth',
+                dependency_cluster=f'pc-{i // 3}',
+                independent=True,
+            )
+        legacy = confidence.probability_calibration(
+            journal.rows('presence_3s','room-v2','kitchen'),
+            scope_id='kitchen', model_key='room-v2',
+        )
+        optimized = journal.report('presence_3s','room-v2','kitchen')
+        for key in (
+            'episodes','sufficient_evidence','overconfident',
+            'mean_prediction','observed_frequency','calibration_gap','brier_score',
+            'effective_n',
+        ):
+            if isinstance(legacy[key], float):
+                self.assertAlmostEqual(optimized[key], legacy[key], places=10, msg=key)
+            else:
+                self.assertEqual(optimized[key], legacy[key], key)
+        self.assertEqual(len(optimized['reliability_bins']), len(legacy['reliability_bins']))
+        for left, right in zip(optimized['reliability_bins'], legacy['reliability_bins']):
+            self.assertEqual(left['episodes'], right['episodes'])
+            self.assertAlmostEqual(left['weight'], right['weight'], places=10)
+            for key in ('mean_prediction','observed_frequency'):
+                if right[key] is None:
+                    self.assertIsNone(left[key])
+                else:
+                    self.assertAlmostEqual(left[key], right[key], places=10)
+        self.assertLessEqual(
+            self.diag.snapshot()['max_rows_materialized_per_batch'],
+            confidence.PROBABILITY_BINS,
+        )
+
     def test_probability_report_reuses_durable_scope_revision_cache(self):
         journal = confidence.ProbabilityCalibrationJournal(self.store)
         journal._performance_diagnostics = self.diag
