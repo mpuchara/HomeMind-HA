@@ -361,6 +361,7 @@ class DeviceAgentService:
         """Durably reserve every conflicting resource before the caller commits mode=control."""
         now = time.time() if now is None else float(now)
         keys = self.descriptor(agent)["resource_keys"]
+        newly_claimed = []
         with self.lock_resources(keys):
             with self.store.lock, self.store.conn() as c:
                 rows = {row["resource_key"]: dict(row) for row in c.execute(
@@ -371,22 +372,41 @@ class DeviceAgentService:
                     owner = str((rows.get(key) or {}).get("control_owner_agent_id") or "")
                     if owner and owner != str(agent["id"]):
                         return None
+                    if owner != str(agent["id"]):
+                        newly_claimed.append(key)
                 for key in keys:
                     c.execute(
                         """INSERT INTO device_resource_state
                            (resource_key,control_owner_agent_id,control_acquired_ts,updated_ts)
                            VALUES(?,?,?,?) ON CONFLICT(resource_key) DO UPDATE SET
                            control_owner_agent_id=excluded.control_owner_agent_id,
-                           control_acquired_ts=COALESCE(device_resource_state.control_acquired_ts,
-                                                       excluded.control_acquired_ts),
+                           control_acquired_ts=CASE
+                             WHEN device_resource_state.control_owner_agent_id=excluded.control_owner_agent_id
+                               THEN device_resource_state.control_acquired_ts
+                             ELSE excluded.control_acquired_ts END,
                            updated_ts=excluded.updated_ts""",
                         (key, str(agent["id"]), now, now),
                     )
-        return {"resource_keys": keys, "agent_id": str(agent["id"]), "acquired_ts": now}
+        return {
+            "resource_keys": keys,
+            "newly_claimed_keys": newly_claimed,
+            "agent_id": str(agent["id"]),
+            "acquired_ts": now,
+        }
 
-    def release_control_resources(self, agent, *, now=None):
+    def release_control_resources(self, agent, *, now=None, resource_keys=None):
         now = time.time() if now is None else float(now)
-        keys = self.descriptor(agent)["resource_keys"]
+        aid = str(agent["id"])
+        with self.store.conn() as c:
+            owned = [
+                str(row["resource_key"]) for row in c.execute(
+                    "SELECT resource_key FROM device_resource_state WHERE control_owner_agent_id=?",
+                    (aid,),
+                ).fetchall()
+            ]
+        keys = sorted(set(str(x) for x in (resource_keys if resource_keys is not None else owned)))
+        if not keys:
+            return True
         with self.lock_resources(keys):
             with self.store.lock, self.store.conn() as c:
                 for key in keys:
@@ -394,7 +414,7 @@ class DeviceAgentService:
                         """UPDATE device_resource_state
                            SET control_owner_agent_id=NULL,control_acquired_ts=NULL,updated_ts=?
                            WHERE resource_key=? AND control_owner_agent_id=?""",
-                        (now, key, str(agent["id"])),
+                        (now, key, aid),
                     )
         return True
 
@@ -416,14 +436,21 @@ class DeviceAgentService:
         control_ids = {str(a["id"]) for a in agents if a.get("mode") == "control"}
         now = time.time()
         with self.store.lock, self.store.conn() as c:
-            c.execute(
-                """UPDATE device_resource_state
-                   SET control_owner_agent_id=NULL,control_acquired_ts=NULL,updated_ts=?
-                   WHERE control_owner_agent_id IS NOT NULL
-                     AND control_owner_agent_id NOT IN (%s)""" %
-                (",".join("?" for _ in control_ids) if control_ids else "''"),
-                ([now] + sorted(control_ids)) if control_ids else [now],
-            )
+            rows = c.execute(
+                "SELECT resource_key,control_owner_agent_id FROM device_resource_state "
+                "WHERE control_owner_agent_id IS NOT NULL"
+            ).fetchall()
+            stale_keys = [
+                str(row["resource_key"]) for row in rows
+                if str(row["control_owner_agent_id"] or "") not in control_ids
+            ]
+            for key in stale_keys:
+                c.execute(
+                    """UPDATE device_resource_state
+                       SET control_owner_agent_id=NULL,control_acquired_ts=NULL,updated_ts=?
+                       WHERE resource_key=?""",
+                    (now, key),
+                )
         conflicts = []
         claimed = []
         for agent in sorted((by_id[x] for x in control_ids), key=lambda a: str(a["id"])):
@@ -761,16 +788,20 @@ def install_runtime(engine):
     def update_entity_registry(entries):
         result = original_entity_registry(entries)
         service.migrate_agent_identities()
+        service.reconcile_control_resources()
         return result
 
     def update_device_registry(entries):
         result = original_device_registry(entries)
         service.migrate_agent_identities()
+        service.reconcile_control_resources()
         return result
 
     engine.runtime_for = runtime_for
     engine.update_entity_registry = update_entity_registry
     engine.update_device_registry = update_device_registry
+    service.migrate_agent_identities()
+    engine.device_control_reconciliation = service.reconcile_control_resources()
     engine.device_agents = service
     engine._device_agent_runtime_installed = True
     return engine
