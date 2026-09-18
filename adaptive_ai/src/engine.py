@@ -715,8 +715,9 @@ class Engine(threading.Thread):
                 support, novelty = trial['support'], trial['novelty']
                 decision_source = "experiment"
         raw_prediction = float(chosen["value"])
+        forecast = context_meta.get('home_forecast', {})
         stabilized_value, off_confirmation = stabilize_fast_light_power_decision(
-            agent, rt, current, raw_prediction, decision_source, now_ts()
+            agent, rt, current, raw_prediction, decision_source, now_ts(), forecast=forecast
         )
         rt["raw_policy_prediction"] = raw_prediction
         if off_confirmation:
@@ -754,7 +755,6 @@ class Engine(threading.Thread):
         rt["top_context"] = self.top_context(policy, horizon, chosen["index"], features, labels)
 
         intent_horizon = horizon
-        forecast = context_meta.get('home_forecast', {})
         if chosen['value'] >= .5 and agent['target_property'] == 'power' and forecast.get('occupancy_now', 0) < .5:
             intent_horizon = next((h for h in (1,3,5) if forecast.get(f'occupancy_in_{h}s', 0) >= .5), horizon)
         preference_count = int((preference or {}).get('independent_evidence_count') or 0)
