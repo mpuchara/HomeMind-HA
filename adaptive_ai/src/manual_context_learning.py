@@ -316,8 +316,22 @@ def _migrate_schema(policy, new_entities, new_meta):
     old_labels = {_canonical_label(v): i for i, v in policy.schema.labels().items()}
     new_labels = {_canonical_label(v): i for i, v in new_schema.labels().items()}
     mapping = {new_i: old_labels[label] for label, new_i in new_labels.items() if label in old_labels}
-    # Home-intelligence slots live at fixed tail indices and are not part of schema.labels().
-    for idx in range(max(0, policy.dims - 7), policy.dims):
+    # Home-intelligence slots live at fixed tail indices and are not part of
+    # schema.labels(). The tail width is versioned by the active schema contract
+    # (v12 adds home:known), so never hard-code the historical seven-slot layout.
+    try:
+        exported = new_schema.export() or {}
+    except Exception:
+        exported = {}
+    home_features = list(exported.get("home_features") or [])
+    if not home_features:
+        try:
+            from policy import FEATURE_NAMES as active_home_features
+            home_features = list(active_home_features or [])
+        except Exception:
+            home_features = []
+    home_tail = max(0, min(policy.dims, len(home_features)))
+    for idx in range(max(0, policy.dims - home_tail), policy.dims):
         mapping[idx] = idx
 
     for head in policy.heads.values():
