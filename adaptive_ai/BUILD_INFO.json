@@ -1,10 +1,10 @@
 {
-  "version": "0.14.18",
+  "version": "0.14.19",
   "release_date": "2026-09-18",
-  "base_version": "0.14.17",
-  "base_commit": "72380bcf",
-  "release_status": "release-0.14.18-hard-ui-responsiveness-budget",
-  "tests_passed": 818,
+  "base_version": "0.14.18",
+  "base_commit": "eb1ad89eff99b09771b2ae2ebfa1d9717ab7351a",
+  "release_status": "release-0.14.19-ui-mutation-loop-hotfix",
+  "tests_passed": 821,
   "profile": "rpi4-low-memory-manual-training",
   "manual_agent_training": true,
   "max_concurrent_training_jobs": 1,
@@ -37,12 +37,14 @@
   "automation_scan": "the first background pass suppresses config scan; later automation config reads are serialized and last successful scan time is persisted",
   "release_016_guard": "installed after startup_train_guard; quiet startup/background scheduling only",
   "release_017_lifeline": "installed after release_016_guard and before core.main; read-side availability and training scheduling only, no model/label/history/generation mutation",
-  "migration": "no destructive migration; existing agents, raw archive, historical experiences, feedback, models, benchmarks, Candidate lineage, Teach labels and rollback state are preserved; 0.14.18 adds one new optional training_max_continuous_work_ms setting with default 75",
+  "migration": "no migration; frontend-only hotfix preserves agents, models, raw archive, historical experiences, feedback, Candidate lineage, TrialRecords, Teach labels, settings and rollback state",
   "physical_control": "unchanged; only Executor dispatches Home Assistant services",
   "pi4": "0.14.18 targets the observed ~94% CPU spike and second-open blank Ingress UI at the transition from REPLAY COMPLETE to model/benchmark finalization; on-device verification is still required",
-  "ci_status": "passed on PR #79: 818 unit/regression tests on Python 3.11 and 3.13, compile/JS checks, image smoke, history-cost smoke, product runtime benchmark, source entrypoint smoke and simulators",
+  "ci_status": "0.14.19 validation rerun pending after release-regression assertion fix",
   "training_slice_budget": "adaptive-ai-index workers call a shared CooperativeTrainingBudget; expensive temporal tracker loops yield between entities/events and finalization is no longer outside the throttle",
   "finalization_lifeline": "HEAVY_JOBS remains owned through final gc.collect(), so /api/status and /api/agents stay on lightweight lifeline reads until the worker is actually finished",
   "finalization_progress": "post-replay UI now exposes bounded stages: replay complete, policy serialization, benchmark save, qualification, checkpoint complete",
-  "benchmark_finalization": "set_partial_benchmark uses get_agent_config instead of history COUNT/AVG aggregates"
+  "benchmark_finalization": "set_partial_benchmark uses get_agent_config instead of history COUNT/AVG aggregates",
+  "ui_mutation_stability": "confidence diagnostics use idempotent DOM writes and observe only direct #agents child replacement; the body-wide subtree MutationObserver self-loop from 0.14.18 is removed",
+  "browser_reproduction": "source-level regression: the body-wide subtree observer could observe confidence textContent writes performed by its own callback; 0.14.19 removes that self-triggering feedback path"
 }

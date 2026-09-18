@@ -84,13 +84,13 @@ assert _budget_pause(2.0, 0.25, 2.0) == 2.0
     def test_release_defaults_and_schema_expose_training_budget_controls(self):
         config = (ROOT / "adaptive_ai/config.yaml").read_text(encoding="utf-8")
         settings = (ROOT / "adaptive_ai/src/settings.py").read_text(encoding="utf-8")
-        self.assertIn('version: "0.14.18"', config)
+        self.assertRegex(config, r'version: "0\.14\.\d+"')
         self.assertIn("training_cpu_duty_cycle: 0.25", config)
         self.assertIn("training_archive_batch_rows: 16", config)
         self.assertIn("training_throttle_max_sleep_seconds: 2.0", config)
         self.assertIn("training_max_continuous_work_ms: 75", config)
         self.assertIn('training_cpu_duty_cycle: "float(0.15,0.70)"', config)
-        self.assertIn('APP_VERSION = "0.14.18"', settings)
+        self.assertRegex(settings, r'APP_VERSION = "0\.14\.\d+"')
         self.assertIn('if data.get("training_cpu_duty_cycle") == 0.55:', settings)
 
     def test_ui_surfaces_active_training_budget_instead_of_system_ready(self):

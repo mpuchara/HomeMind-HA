@@ -31,6 +31,13 @@
     return [...document.querySelectorAll('.agent-details[data-agent-id]')]
       .find(x=>String(x.dataset.agentId)===String(agentId));
   }
+  const setText=(node,value)=>{
+    if(!node)return;
+    const text=String(value??'');
+    if(node.textContent!==text)node.textContent=text;
+  };
+  const setDisplay=(node,value)=>{if(node&&node.style.display!==value)node.style.display=value;};
+
   function ensureMetric(root,key,label,value,title=''){
     if(!root)return;
     let node=root.querySelector(`[data-confidence-metric="${key}"]`);
@@ -40,11 +47,11 @@
       node.innerHTML='<span></span><b></b><small></small>';
       root.appendChild(node);
     }
-    node.querySelector('span').textContent=label;
-    node.querySelector('b').textContent=value;
+    setText(node.querySelector('span'),label);
+    setText(node.querySelector('b'),value);
     const small=node.querySelector('small');
-    small.textContent=title;
-    small.style.display=title?'':'none';
+    setText(small,title);
+    setDisplay(small,title?'':'none');
   }
 
   function decorateLive(a){
@@ -119,8 +126,19 @@
     decorateAll();
   }
 
-  const root=document.body;
-  if(root)new MutationObserver(()=>decorateAll()).observe(root,{childList:true,subtree:true});
+  // Observe only replacement of top-level agent cards. Observing the entire body with
+  // subtree=true creates a self-triggering loop because confidence decoration itself
+  // adds/updates descendants. Full refresh still runs every 2 s, so nested Candidate
+  // updates don't need a body-wide observer.
+  const root=document.getElementById('agents');
+  if(root){
+    let queued=false;
+    new MutationObserver(()=>{
+      if(queued)return;
+      queued=true;
+      queueMicrotask(()=>{queued=false;decorateAll();});
+    }).observe(root,{childList:true});
+  }
   setInterval(refresh,2000);
   refresh();
 })();

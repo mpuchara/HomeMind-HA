@@ -1,3 +1,10 @@
+# 0.14.19 — 2026-09-18
+
+- Fix a Chromium/Ingress UI freeze during training caused by the confidence diagnostics observing the entire document subtree while also mutating that subtree.
+- Make confidence metric text/style writes idempotent and observe only direct Device-agent card replacement; nested confidence decoration can no longer recursively wake its own MutationObserver.
+- Keep the existing 2 s confidence refresh, 250 ms lightweight Current/Desired path and training CPU budget unchanged.
+- Frontend-only hotfix: no retraining, data migration, policy/reward/schema change or physical-control change is required.
+
 # 0.11.2 — 2026-09-14
 
 - Separate historical Teach from Wrong decision; Wrong decision keeps its existing immediate correction path unchanged.
