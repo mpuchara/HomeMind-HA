@@ -142,7 +142,9 @@ class F22ContractParityTests(unittest.TestCase):
         build = json.loads((root / "adaptive_ai" / "BUILD_INFO.json").read_text(encoding="utf-8"))
         self.assertEqual(build["history_cost_contract_version"], f22.CONTRACT_VERSION)
         self.assertIn("revision cache", build["history_cost_confidence_selection"])
-        self.assertIn("locked fixed holdout", build["history_cost_confidence_final"])
+        self.assertIn("bounded fixed-window recomputation", build["history_cost_confidence_final"])
+        self.assertIn("one row", build["history_cost_confidence_selection"])
+        self.assertIn("reliability-bin count", build["history_cost_probability_calibration"])
         self.assertEqual(
             build["history_cost_pi_budgets_not_measurements"]["training_queue_pending_max"],
             16,
