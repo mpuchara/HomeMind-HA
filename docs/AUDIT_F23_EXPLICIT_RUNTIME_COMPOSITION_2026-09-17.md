@@ -161,3 +161,40 @@ Stage-16 tests cover:
 - legacy Candidate bool is decomposed into named validation results;
 - Candidate Shadow invariant remains present;
 - AST characterization exposes remaining install-time method/function overlays for subsequent PRs.
+
+## v2 hardening on the current runtime stack
+
+Stage 16 was already merged in PR #75 and still owns the final composition root, named promotion validation and explicit feedback/promotion routes. Re-review on the Stage-15-v2 stack found one isolation bug in the transport binding rather than a policy/composition-order bug.
+
+### Shared Handler class leak
+
+`ExplicitRouteRegistry` itself was instance-owned, but the original `install_dispatch()` stored the active registry on the shared `Handler` class. If two runtime/test instances reused that base class, the second installation could replace `_explicit_http_route_registry` for the first instance. The old unit test compared two registries directly and therefore did not exercise the actual installed dispatcher.
+
+Version 2 makes the shipped transport owner the concrete `ThreadingHTTPServer` instance:
+
+- `main.main()` exposes the active server as `HTTP_SERVER` before the background runtime composition starts;
+- `install_dispatch()` creates a small per-server Handler subclass and assigns it to `server.RequestHandlerClass`;
+- the route registry is stored on the concrete server instance;
+- the shared `main.Handler` class is not modified in the shipped runtime;
+- two servers may therefore share one base Handler class while keeping completely separate route registries;
+- repeated installation for one server reuses the same subclass and registry, so wrappers do not stack;
+- requests that were already accepted before runtime composition continue through the original compatibility Handler, which is safe because explicit feature routes require the runtime to be ready;
+- entrypoints/tests with no exposed server retain the previous class-binding path as a compatibility fallback only.
+
+This is intentionally not a rewrite of `main.py` or the HTTP stack. The existing server still starts before heavy runtime initialization, preserving the UI/startup lifeline.
+
+### Current tested startup chain
+
+`Dockerfile -> run.sh -> trial_queue_main.py -> preference_queue_main.py -> fast_queue_main.py -> queue_main.py -> main.py`
+
+The Stage-16 characterization test now also scans `prepare_*` hooks, so historical `preference/fast/queue` composition mutations cannot disappear from the overlay map merely because they are not named `install_*`.
+
+### Replaced contract
+
+| Previous mechanism | v2 replacement |
+|---|---|
+| active explicit registry stored on shared `Handler` class | registry owned by concrete HTTP server + per-server Handler subclass |
+| route-isolation test exercised registries only | test installs two runtimes sharing one base Handler and proves independent dispatch |
+| overlay AST map scanned only `install*` / `bind*` | map also scans `prepare_*` composition hooks |
+
+Promotion validation, feedback domain functions, queue semantics, Candidate Shadow isolation, ActionIntent, Executor and all persistence formats are unchanged.
