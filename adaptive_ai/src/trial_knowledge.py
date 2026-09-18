@@ -199,9 +199,9 @@ class TrialJournal:
                 "experiment:" + trial_id if str(trial.get("property") or "") == "power" else ""
             )) or None
             c.execute(
-                """UPDATE experiment_trial_records SET record_version=?,episode_id=COALESCE(episode_id,?),
+                """UPDATE experiment_trial_records SET episode_id=COALESCE(episode_id,?),
                    learning_status=COALESCE(learning_status,'pending'),updated_ts=? WHERE trial_id=?""",
-                (self.VERSION, episode_id, time.time(), trial_id),
+                (episode_id, time.time(), trial_id),
             )
         return self.get(trial_id)
 
@@ -269,10 +269,10 @@ class TrialJournal:
         learning_status = "eligible" if reward is not None else "no_outcome"
         with self.store.lock, self.store.conn() as c:
             c.execute(
-                """UPDATE experiment_trial_records SET record_version=?,reward=?,termination_reason=?,status=?,
+                """UPDATE experiment_trial_records SET reward=?,termination_reason=?,status=?,
                    episode_id=COALESCE(?,episode_id),episode_result_json=?,outcome_sources_json=?,
                    learning_status=?,updated_ts=? WHERE trial_id=?""",
-                (self.VERSION, None if reward is None else float(reward), str(reason), status,
+                (None if reward is None else float(reward), str(reason), status,
                  episode_id, _dumps(result), _dumps(trial.get("outcome_sources") or {}),
                  learning_status, at, trial_id),
             )
