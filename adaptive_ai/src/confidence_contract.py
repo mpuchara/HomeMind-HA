@@ -29,7 +29,7 @@ DEFAULT_DEPENDENCY_WINDOW_SECONDS = 30.0
 DEFAULT_HALF_LIFE_EPISODES = 40.0
 DEFAULT_OVERCONFIDENCE_GAP = 0.15
 DEFAULT_FINAL_MAX_REGRESSION = 0.03
-FINAL_CALIBRATION_EVIDENCE_KINDS = {"manual_user_target_change", "independent_preference_label"}
+FINAL_CALIBRATION_EVIDENCE_KINDS = {"manual_user_target_change", "independent_preference_label", "episode_evaluator_independent"}
 EVALUATION_REVISION_SEPARATOR = "::backend="
 
 METRIC_SEMANTICS = {
@@ -263,7 +263,22 @@ def probability_calibration(rows, *, scope_id=None, model_key=None,
 
 def _eligible_calibration_row(row):
     kind = str(row.get("evidence_kind") or "")
-    return bool(row.get("calibration_eligible")) and kind in FINAL_CALIBRATION_EVIDENCE_KINDS
+    return bool(
+        row.get("calibration_eligible")
+        and kind in FINAL_CALIBRATION_EVIDENCE_KINDS
+        and _finite(row.get("calibration_outcome")) is not None
+        and row.get("calibration_parent_correct") is not None
+        and row.get("calibration_child_correct") is not None
+    )
+
+
+def _calibration_view(row):
+    out = dict(row or {})
+    if _eligible_calibration_row(out):
+        out["outcome"] = float(out["calibration_outcome"])
+        out["parent_correct"] = int(out["calibration_parent_correct"])
+        out["child_correct"] = int(out["calibration_child_correct"])
+    return out
 
 
 def action_quality_report(rows, *, scope_id=None, end_ts=None,
@@ -408,7 +423,7 @@ def paired_future_quality_report(rows, *, scope_id=None, end_ts=None,
             continue
         if not _eligible_calibration_row(row):
             continue
-        selected.append(row)
+        selected.append(_calibration_view(row))
     selected = independent_episode_rows(selected, end_ts=end_ts)
     weights = dependency_adjusted_weights(
         selected,
@@ -470,6 +485,48 @@ def paired_future_quality_report(rows, *, scope_id=None, end_ts=None,
             "abstain_insufficient_independent_evidence"
         ),
     }
+
+
+def record_independent_candidate_label(store, *, parent_generation_id, child_generation_id,
+                                       prediction_event_id, desired_action, source_kind,
+                                       source_id, dependency_cluster=None):
+    """Attach one immutable independent label without rewriting the raw target transition."""
+    kind = str(source_kind or "")
+    if kind not in FINAL_CALIBRATION_EVIDENCE_KINDS - {"manual_user_target_change"}:
+        raise ValueError("unsupported independent Candidate calibration source")
+    desired = 1.0 if float(desired_action) >= .5 else 0.0
+    with store.lock, store.conn() as c:
+        row = c.execute(
+            """SELECT parent_prediction,child_prediction,calibration_source_id
+               FROM candidate_generation_pairs
+               WHERE parent_generation_id=? AND child_generation_id=? AND prediction_event_id=?
+               ORDER BY outcome_ts DESC LIMIT 1""",
+            (str(parent_generation_id), str(child_generation_id), str(prediction_event_id)),
+        ).fetchone()
+        if not row:
+            return False
+        row = dict(row)
+        existing = row.get("calibration_source_id")
+        if existing and str(existing) != str(source_id):
+            return False
+        parent_ok = int((1.0 if float(row["parent_prediction"]) >= .5 else 0.0) == desired)
+        child_ok = int((1.0 if float(row["child_prediction"]) >= .5 else 0.0) == desired)
+        c.execute(
+            """UPDATE candidate_generation_pairs
+               SET evidence_kind=?,calibration_eligible=1,dependency_cluster=?,
+                   calibration_outcome=?,calibration_parent_correct=?,
+                   calibration_child_correct=?,calibration_source_id=?
+               WHERE parent_generation_id=? AND child_generation_id=? AND prediction_event_id=?
+                 AND (calibration_source_id IS NULL OR calibration_source_id=?)""",
+            (
+                kind,
+                None if dependency_cluster is None else str(dependency_cluster),
+                desired, parent_ok, child_ok, str(source_id),
+                str(parent_generation_id), str(child_generation_id), str(prediction_event_id),
+                str(source_id),
+            ),
+        )
+        return c.execute("SELECT changes()").fetchone()[0] > 0
 
 
 def ensure_tables(store):
@@ -967,6 +1024,9 @@ def install(manager):
         handler.static = static
 
     manager.confidence_contract = contract_descriptor()
+    manager.record_independent_candidate_label = (
+        lambda **kwargs: record_independent_candidate_label(manager.store, **kwargs)
+    )
     manager.confidence_probability_journal = probabilities
     manager.confidence_evaluation_epochs = epochs
     manager._confidence_contract_installed = True
