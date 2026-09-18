@@ -54,19 +54,20 @@ class DeferredUpdates:
 
 
 class HistoricalHomeView:
-    def __init__(self, context, raw):
+    def __init__(self, context, raw, adaptive_raw=None):
         self.context, self.raw = context, raw
+        self.adaptive_raw = dict(adaptive_raw or {})
         self.home = RoomBeliefModel(context.options.get('home_model_half_life_days', 45), raw)
         self.stats = self.home.graph, self.home.dwell, self.home.calibration
-        self.adaptive = AdaptivePresenceModel()
+        self.adaptive = AdaptivePresenceModel(self.adaptive_raw)
         self.adaptive_cache = {}
 
     def reset(self):
         self.home = RoomBeliefModel(self.context.options.get('home_model_half_life_days', 45))
         self.home.graph, self.home.dwell, self.home.calibration = self.stats
-        # Virtual ON/hysteresis is causal runtime state, not checkpoint state. Rebuild it
-        # from the same as-of event window on every replay query.
-        self.adaptive = AdaptivePresenceModel()
+        # Virtual ON/hysteresis is causal runtime state, not checkpoint state. Calibration
+        # is versioned/persisted; rebuild only runtime state from the causal event window.
+        self.adaptive = AdaptivePresenceModel(self.adaptive_raw)
         self.adaptive_cache = {}
 
     def observe_adaptive(self, area, ts):
@@ -153,7 +154,18 @@ class SQLiteTemporalTracker:
             self._metrics["sql_queries"] += 1
         except sqlite3.OperationalError:
             row = None
-        self.home_view = HistoricalHomeView(context, json.loads(row[0]) if row else None)
+        try:
+            adaptive_row = self.conn.execute(
+                'SELECT model_json FROM adaptive_presence_checkpoints WHERE ts<? ORDER BY ts DESC LIMIT 1',
+                (self.start,),
+            ).fetchone()
+            self._metrics["sql_queries"] += 1
+        except sqlite3.OperationalError:
+            adaptive_row = None
+        self.home_view = HistoricalHomeView(
+            context, json.loads(row[0]) if row else None,
+            json.loads(adaptive_row[0]) if adaptive_row else None,
+        )
 
     @classmethod
     def _chunks(cls, entity_ids):
@@ -376,11 +388,14 @@ class SQLiteTemporalTracker:
                 continue
             eid = row["entity_id"]
             area = self.context.area_for(eid)
+            probability = self.context.sensor_probability(eid, archived_state(row))
             view.home.observe(
-                eid, area,
-                self.context.sensor_probability(eid, archived_state(row)), received_ts,
+                eid, area, probability, received_ts,
                 learn=False, evidence=self.context.evidence_metadata(eid),
                 event_ts=event_ts, received_ts=received_ts,
+            )
+            self.context.calibrate_adaptive_from_home_event(
+                view.home, view.adaptive, eid, area, probability, event_ts, received_ts
             )
             view.observe_adaptive(area, received_ts)
             TRAINING_BUDGET.checkpoint("temporal_home_event")
