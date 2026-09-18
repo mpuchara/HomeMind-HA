@@ -279,10 +279,12 @@ def load_options():
             # HA realtime requests on Raspberry Pi. Preserve explicit custom values.
             if data.get("history_background_start_delay_seconds") == 10:
                 options["history_background_start_delay_seconds"] = 60
-            # 0.14.17: migrate only the 0.14.15/16 shipped training CPU default.
+            # 0.14.26: migrate only defaults shipped by earlier releases.
             # Explicit custom budgets stay untouched.
-            if data.get("training_cpu_duty_cycle") == 0.55:
-                options["training_cpu_duty_cycle"] = 0.25
+            if data.get("training_cpu_duty_cycle") in (0.55, 0.25):
+                options["training_cpu_duty_cycle"] = 0.20
+            if data.get("training_max_continuous_work_ms") == 75:
+                options["training_max_continuous_work_ms"] = 50
     except Exception as exc:
         print(f"[options] Failed to read options: {exc}", flush=True)
     # 0.9 never starts heavy replay implicitly, including installations with the
