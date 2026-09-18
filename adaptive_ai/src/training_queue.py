@@ -422,8 +422,11 @@ class TrainingQueue(threading.Thread):
                                  str(exc), {"error": f"{type(exc).__name__}: {exc}"})
 
         # Slot completion only needs lifecycle fields; avoid aggregate history scans
-        # immediately after the heavy worker releases CPU.
-        agent = self.store.get_agent_config(job["agent_id"])
+        # immediately after the heavy worker releases CPU. Test/legacy stores without the
+        # config-only helper keep the old compatible fallback.
+        config_getter = getattr(self.store, "get_agent_config", None)
+        agent = (config_getter(job["agent_id"]) if callable(config_getter)
+                 else self.store.get_agent(job["agent_id"]))
         with self.cv:
             if self.active and self.active["agent_id"] == job["agent_id"]:
                 self.active = None
