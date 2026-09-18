@@ -113,7 +113,7 @@ class HistoryManager(threading.Thread):
         return start_ts, end_ts
 
     def _start_agent_job(self, agent_id, rebuild=False):
-        agent = STORE.get_agent(agent_id)
+        agent = STORE.get_agent_config(agent_id)
         if not agent:
             return False
         with self.agent_jobs_lock:
@@ -252,7 +252,7 @@ class HistoryManager(threading.Thread):
             STORE.event(agent["id"], "warning", "agent_history_refresh_partial", str(exc), None)
 
     def _run_agent_indexing(self, agent_id, rebuild=False):
-        agent = STORE.get_agent(agent_id)
+        agent = STORE.get_agent_config(agent_id)
         if not agent:
             return
         archive_start, archive_end = self._training_bounds()
@@ -312,7 +312,7 @@ class HistoryManager(threading.Thread):
         return self._start_agent_job(agent_id, rebuild=True)
 
     def request_agent_resume(self, agent_id):
-        agent = STORE.get_agent(agent_id)
+        agent = STORE.get_agent_config(agent_id)
         if not agent or agent.get("training_state") not in ("paused", "training", "waiting"):
             return False
         return self._start_agent_job(agent_id, rebuild=False)
@@ -799,7 +799,7 @@ class HistoryManager(threading.Thread):
 
     def _train_from_archive(self, start_ts, end_ts, *, qualify=False, agent_ids=None, include_candidates=False, benchmark=None, accumulate_benchmark=False, progress_lo=None, progress_hi=None, progress_label=None):
         benchmark = bool(qualify) if benchmark is None else bool(benchmark)
-        agents = [a for a in STORE.list_agents() if a["enabled"]]
+        agents = [a for a in STORE.list_agent_configs() if a["enabled"]]
         if agent_ids is not None:
             wanted = set(agent_ids)
             agents = [a for a in agents if a["id"] in wanted]
