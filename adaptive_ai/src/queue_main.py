@@ -1,4 +1,4 @@
-"""Runtime wrapper that adds FIFO training admission without bloating main.py.
+"""Runtime wrapper that adds prioritized training admission without bloating main.py.
 
 `main.py` remains the core HTTP/runtime implementation.  This module installs the
 training queue hooks before calling it, so a busy low-memory training slot becomes
@@ -31,7 +31,7 @@ def initialize_runtime():
     core.TRAINING_QUEUE = TRAINING_QUEUE
     TRAINING_QUEUE.start()
     core.STORE.event(None, "info", "training_queue_ready",
-                     "FIFO training queue ready; heavy jobs will run one at a time", None)
+                     "Priority training queue ready; heavy jobs will run one at a time", None)
 
 
 def status_payload(self):
