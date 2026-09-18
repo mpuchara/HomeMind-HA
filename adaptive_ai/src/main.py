@@ -15,6 +15,7 @@ from settings import (APP_VERSION, OPTIONS, STATIC_DIR, SUPPORTED_TARGETS, clamp
 ENGINE = None
 HISTORY = None
 EVENT_STREAM = None
+HTTP_SERVER = None
 STORE = None
 AUTOMATION_KNOWLEDGE = None
 target_options_for_state = None
@@ -652,6 +653,7 @@ def run_initialize_runtime():
 
 
 def main():
+    global HTTP_SERVER
     try:
         nice_by = int(OPTIONS.get("process_nice", 10))
         if nice_by > 0 and hasattr(os, "nice"):
@@ -661,6 +663,7 @@ def main():
         print(f"[startup] Could not adjust process niceness: {exc}", flush=True)
 
     server = ThreadingHTTPServer(("0.0.0.0", 8099), Handler)
+    HTTP_SERVER = server
     set_startup("http_ready", 0, "Web interface ready; starting Adaptive AI runtime")
     print("Adaptive AI UI listening on :8099", flush=True)
     runtime_thread = threading.Thread(target=run_initialize_runtime, name="adaptive-ai-runtime-init", daemon=True)
@@ -672,6 +675,7 @@ def main():
     finally:
         shutdown_runtime()
         server.server_close()
+        HTTP_SERVER = None
 
 
 if __name__ == "__main__":

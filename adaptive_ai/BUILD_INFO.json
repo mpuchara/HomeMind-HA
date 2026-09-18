@@ -122,5 +122,23 @@
   "perception_configuration_owner": "perception_service",
   "perception_lease_authority": "DeviceAgentService.perception_resource_leases; adapter-local lease is planning-only",
   "process_model_contract": "HVAC/cover/water-heater/humidifier expose process-model-required semantics; lighting bandit is not declared sufficient",
-  "generic_autonomy": "auto-created switch/number/select remains non-autonomous without explicit device description"
+  "generic_autonomy": "auto-created switch/number/select remains non-autonomous without explicit device description",
+  "runtime_composition_contract_version": 2,
+  "explicit_http_route_contract_version": 2,
+  "runtime_entrypoint_chain": [
+    "run.sh",
+    "trial_queue_main.py",
+    "preference_queue_main.py",
+    "fast_queue_main.py",
+    "queue_main.py",
+    "main.py"
+  ],
+  "runtime_transport_binding": "concrete ThreadingHTTPServer owns explicit route registry via per-server Handler subclass; shared main.Handler is not mutated in shipped runtime",
+  "runtime_route_isolation": "two server/runtime instances may share one base Handler class without replacing each other's registry",
+  "runtime_overlay_characterization": "AST map includes install*, bind*, and prepare_* method/function mutations",
+  "runtime_explicit_routes": [
+    "feedback.*",
+    "promotion.*"
+  ],
+  "runtime_remaining_compatibility": "unmigrated queue/GET/static/process-agent overlays remain staged compatibility fallbacks"
 }
