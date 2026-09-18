@@ -97,8 +97,7 @@ class Release024SourceContractTests(unittest.TestCase):
     def test_replay_uses_bounded_batch_writer_not_one_transaction_per_dwell(self):
         source = self.source("history.py")
         start = source.index("    def _train_from_archive")
-        end = source.index("    def request_agent_rebuild", start)
-        body = source[start:end]
+        body = source[start:]
         self.assertIn("historical_experience_target_ids", body)
         self.assertIn("experience_batch_rows", body)
         self.assertIn("add_historical_experiences_batch", body)
