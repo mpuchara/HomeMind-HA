@@ -123,7 +123,16 @@ class ContextEngine:
         except ValueError:
             return None
 
-    def observe(self, eid, state, ts, learn=True):
+    def observe(self, eid, state, ts, learn=True, *, event_ts=None, received_ts=None):
+        """Observe with an explicit causal receive clock and HA event clock.
+
+        Legacy callers may pass only ts; then both clocks are identical. Live runtime
+        supplies both so a late packet is not treated as fresh state and cannot rewind
+        anonymous movement hypotheses.
+        """
+        processing_ts = float(received_ts if received_ts is not None else ts)
+        event_ts = float(event_ts if event_ts is not None else ts)
+        received_ts = float(received_ts if received_ts is not None else processing_ts)
         with self.lock:
             self._discard_orphan_movement_state()
             if eid not in self.admitted:
@@ -132,19 +141,30 @@ class ContextEngine:
                     previous_role = self.home.source_role(eid)
                     evidence = {'role': previous_role} if previous_role else None
                     if self.bootstrap_delta is not None:
-                        self.bootstrap_delta.observe(eid, previous_area, None, ts, learn=False, evidence=evidence)
-                    changed = self.home.observe(eid, previous_area, None, ts, learn=False, evidence=evidence)
+                        self.bootstrap_delta.observe(
+                            eid, previous_area, None, processing_ts, learn=False,
+                            evidence=evidence, event_ts=event_ts, received_ts=received_ts,
+                        )
+                    changed = self.home.observe(
+                        eid, previous_area, None, processing_ts, learn=False,
+                        evidence=evidence, event_ts=event_ts, received_ts=received_ts,
+                    )
                     self._adaptive_cache.clear()
                     return changed
                 return False
             value = self.sensor_probability(eid, state)
             evidence = self.evidence_metadata(eid)
-            if self.bootstrap_delta is not None and ts > self.bootstrap_started:
-                self.bootstrap_delta.observe(eid, self.area_for(eid), value, ts,
-                                             learn=learn, evidence=evidence)
-            changed = self.home.observe(eid, self.area_for(eid), value, ts,
-                                        learn=learn and ts > self.bootstrap_cutoff,
-                                        evidence=evidence)
+            if self.bootstrap_delta is not None and processing_ts > self.bootstrap_started:
+                self.bootstrap_delta.observe(
+                    eid, self.area_for(eid), value, processing_ts,
+                    learn=learn, evidence=evidence,
+                    event_ts=event_ts, received_ts=received_ts,
+                )
+            changed = self.home.observe(
+                eid, self.area_for(eid), value, processing_ts,
+                learn=learn and processing_ts > self.bootstrap_cutoff,
+                evidence=evidence, event_ts=event_ts, received_ts=received_ts,
+            )
             self._adaptive_cache.clear()
             return changed
 
