@@ -254,7 +254,8 @@ class FullRidgeLinUCBHead:
 class FullRidgeLinUCBBackend(PolicyBackend):
     """PolicyBackend-compatible multi-horizon full-ridge challenger."""
     BACKEND = "full_ridge_linucb"
-    VERSION = 1
+    VERSION = 2
+    FEATURE_CONTRACT = "semantic_projection_v2"
 
     def __init__(self, actions, horizons, feature_indices, alpha=0.65, ridge=1.0, model=None):
         self.actions = [float(x) for x in actions]
@@ -265,7 +266,11 @@ class FullRidgeLinUCBBackend(PolicyBackend):
         self.alpha = float(alpha)
         self.ridge = float(ridge)
         self.model_revision = (model or {}).get("model_revision") or str(uuid.uuid4())
-        valid = bool(model and model.get("backend") == self.BACKEND and int(model.get("version", 0)) == self.VERSION)
+        valid = bool(
+            model and model.get("backend") == self.BACKEND
+            and int(model.get("version", 0)) == self.VERSION
+            and str(model.get("feature_contract") or "") == self.FEATURE_CONTRACT
+        )
         raw_heads = (model or {}).get("heads", {}) if valid else {}
         self.heads = {
             h: FullRidgeLinUCBHead(self.feature_indices, self.actions, self.alpha, self.ridge, raw_heads.get(str(h)))
@@ -295,8 +300,9 @@ class FullRidgeLinUCBBackend(PolicyBackend):
 
     def serialize(self):
         return json.loads(json.dumps({
-            "format": "homemind-policy-backend-v1", "backend": self.BACKEND,
-            "version": self.VERSION, "model_revision": self.model_revision,
+            "format": "homemind-policy-backend-v2", "backend": self.BACKEND,
+            "version": self.VERSION, "feature_contract": self.FEATURE_CONTRACT,
+            "model_revision": self.model_revision,
             "actions": self.actions, "horizons": self.horizons,
             "feature_indices": self.feature_indices, "alpha": self.alpha, "ridge": self.ridge,
             "heads": {str(h): head.export() for h, head in self.heads.items()},
@@ -304,8 +310,10 @@ class FullRidgeLinUCBBackend(PolicyBackend):
 
     @classmethod
     def deserialize(cls, raw, **kwargs):
-        if raw.get("backend") != cls.BACKEND or int(raw.get("version", 0)) != cls.VERSION:
-            raise ValueError("NEEDS_RETRAIN: incompatible full-ridge backend version")
+        if (raw.get("backend") != cls.BACKEND
+                or int(raw.get("version", 0)) != cls.VERSION
+                or str(raw.get("feature_contract") or "") != cls.FEATURE_CONTRACT):
+            raise ValueError("NEEDS_RETRAIN: incompatible full-ridge backend/feature contract")
         return cls(actions=raw["actions"], horizons=raw["horizons"],
                    feature_indices=raw["feature_indices"], alpha=raw.get("alpha", 0.65),
                    ridge=raw.get("ridge", 1.0), model=raw, **kwargs)
@@ -321,6 +329,7 @@ class FullRidgeLinUCBBackend(PolicyBackend):
         raw = self.serialize()
         return {
             "backend": self.BACKEND, "backend_version": self.VERSION,
+            "feature_contract": self.FEATURE_CONTRACT,
             "model_revision": self.model_revision, "effective_updates": self.total_updates,
             "feature_count": len(self.feature_indices), "ridge": self.ridge, "alpha": self.alpha,
             "serialized_bytes": len(json.dumps(raw, separators=(",", ":"))),
