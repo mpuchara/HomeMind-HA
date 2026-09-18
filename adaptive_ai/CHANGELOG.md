@@ -1,8 +1,8 @@
 # 0.14.27 — 2026-09-18
 
 - Make Correct history genuinely observed-only for live generations. The Correct chart and point inspector now read the recorded `decision_history` plus the target entity's observed state history directly; they no longer invoke Teach-RL policy replay merely to draw the chart.
-- Give fresh Home Assistant events strict short-lived priority over historical training. A state change opens a 0.75 s interactive window; the training worker yields at its next checkpoint so Shadow/Control inference is not left behind offline replay.
-- Correct chart/point reads request the same cooperative priority window before touching SQLite.
+- Give fresh Home Assistant events strict short-lived priority over historical training. A state change opens a 0.75 s interactive window and the actual debounced inference pass extends priority for 1.0 s; the training worker yields at its next checkpoint so Shadow/Control inference is not left behind offline replay.
+- Correct chart/point reads request the same cooperative priority window before touching SQLite; saving a Correct label gives its required context-signature reconstruction a 2.0 s interactive window as well.
 - Cache the moving 30-second Room Belief replay window across forward samples. Rewinds still rebuild causally, but normal chronological replay promotes old window rows into per-entity seeds instead of re-querying every seed at every feature timestamp.
 - Preserve observation-contract v12 semantics while advancing the moving Room Belief seed: late fast-journal observations remain gated by event and received time and can become the authoritative seed when their timestamp exits the active 30-second window.
 - Add recent 60-second p95 telemetry for inference and event→intent latency. The UI now prefers recent p95 so a one-off startup stall does not remain displayed for hundreds of later decisions.
