@@ -77,8 +77,11 @@ class ObservationFeatureTests(unittest.TestCase):
         valid_idx = label_index(labels, ":valid")
         self.assertEqual(vu.get(value_idx, 0.0), 0.0)
         self.assertEqual(vz.get(value_idx, 0.0), 0.0)
-        self.assertEqual(vu.get(valid_idx, 0.0), 0.0)
-        self.assertEqual(vz.get(valid_idx, 0.0), 1.0)
+        # v2 centers nominal validity at zero and encodes missingness as negative;
+        # the two states remain distinguishable without adding a repeated +1 column to
+        # every healthy fast-light sensor.
+        self.assertEqual(vu.get(valid_idx, 0.0), -1.0)
+        self.assertEqual(vz.get(valid_idx, 0.0), 0.0)
         self.assertNotEqual(vu, vz)
 
     def test_celsius_and_fahrenheit_are_equivalent(self):
@@ -123,6 +126,32 @@ class ObservationFeatureTests(unittest.TestCase):
         self.assertEqual(a["kind"], "category")
         self.assertEqual(b["kind"], "category")
         self.assertNotEqual(a["category"], b["category"])
+
+    def test_fast_light_v2_nominal_transport_metadata_is_neutral(self):
+        history = TemporalHistory()
+        st = sensor_state("sensor.test", "on", 100.0, device_class="occupancy")
+        add_live(history, st, 100.0, received=None)
+        vector, labels, _ = build_observation_features(
+            self.schema, {"sensor.test": st}, history, 100.0, self.a
+        )
+        self.assertEqual(vector.get(label_index(labels, ":valid"), 0.0), 0.0)
+        self.assertEqual(vector.get(label_index(labels, ":communication_age"), 0.0), 0.0)
+        self.assertEqual(vector.get(label_index(labels, ":quality"), 0.0), 0.0)
+
+        legacy = FeatureSchemaV12(
+            128, ["sensor.test"],
+            feature_contract_version=LEGACY_FEATURE_CONTRACT_VERSION,
+        )
+        legacy_vector, legacy_labels, _ = build_observation_features(
+            legacy, {"sensor.test": st}, history, 100.0, self.a
+        )
+        self.assertEqual(legacy_vector.get(label_index(legacy_labels, ":valid"), 0.0), 1.0)
+        self.assertEqual(
+            legacy_vector.get(label_index(legacy_labels, ":communication_age"), 0.0), 1.0
+        )
+        self.assertGreater(
+            legacy_vector.get(label_index(legacy_labels, ":quality"), 0.0), 0.0
+        )
 
     def test_feature_contract_is_versioned_without_reinterpreting_legacy_schema(self):
         fresh = FeatureSchemaV12(128, ["sensor.test"])
