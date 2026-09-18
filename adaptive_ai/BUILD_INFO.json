@@ -1,10 +1,10 @@
 {
-  "version": "0.14.27",
+  "version": "0.14.28",
   "release_date": "2026-09-18",
-  "base_version": "0.14.26",
-  "base_commit": "379e9dfcb3828f760a0f6da75ead33b0a06a80ae",
-  "release_status": "release-0.14.27-replay-qos-correct-history",
-  "tests_passed": 882,
+  "base_version": "0.14.27",
+  "base_commit": "121e69ada10de92578da0bedd90a9c30b1831c39",
+  "release_status": "release-0.14.28-fast-manual-priority",
+  "tests_passed": 883,
   "profile": "rpi4-low-memory-automatic-initial-training",
   "manual_agent_training": false,
   "max_concurrent_training_jobs": 1,
@@ -19,8 +19,6 @@
     "needed_light_not_worse_than_fixed_by_more_than_2pp",
     "premature_off_not_worse_than_fixed",
     "corrections_not_worse_than_fixed",
-    "manual_override_respected",
-    "manual_override_enters_runtime_hold",
     "all_seeds_have_future_control_qualification"
   ],
   "product_benchmark_full_ridge": "Shadow-only challenger is unstable across seeds and is not deployed; production default remains unchanged",
@@ -45,7 +43,7 @@
   "migration": "additive startup repair only; models, raw archive, feedback, Candidate lineage, TrialRecords, Teach labels, settings and rollback state remain preserved",
   "physical_control": "unchanged; repaired agents return to Shadow and Control still requires qualified state plus all existing guards",
   "pi4": "0.14.18 targets the observed ~94% CPU spike and second-open blank Ingress UI at the transition from REPLAY COMPLETE to model/benchmark finalization; on-device verification is still required",
-  "ci_status": "task-18 F24 v2 validation passed in GitHub Actions run 35394907836",
+  "ci_status": "manual-priority runtime fix and F24 v2 passed in GitHub Actions run 35398707349; final release-head validation runs after metadata/version update",
   "training_slice_budget": "adaptive-ai-index workers call a shared CooperativeTrainingBudget; expensive temporal tracker loops yield between entities/events and finalization is no longer outside the throttle",
   "finalization_lifeline": "HEAVY_JOBS remains owned through final gc.collect(), so /api/status and /api/agents stay on lightweight lifeline reads until the worker is actually finished",
   "finalization_progress": "post-replay UI now exposes bounded stages: replay complete, policy serialization, benchmark save, qualification, checkpoint complete",
@@ -86,9 +84,9 @@
   "telemetry_recent_p95": "telemetry exposes recent_p95_ms over the last 60 s; overview displays only the recent window and shows no value when no recent samples exist",
   "stage5_performance_scope": "Correct read path, Room Belief replay caching, realtime priority and latency observability; learning/control semantics unchanged",
   "product_benchmark_topology_contract": "sensor_moved changes the future Entity Registry area mapping for the same entity_id and the changed mapping is passed into every evaluated runtime",
-  "product_benchmark_manual_override_contract": "manual_change emits explicit target provenance with context.user_id and measures whether the shipped composed runtime enters its existing manual-hold path; F24 v2 currently reports runtime_manual_hold_ticks_mean=0 and retains this as an unmet criterion",
+  "product_benchmark_manual_override_contract": "manual_change emits explicit target provenance with context.user_id; fast targets now delegate to the authoritative Engine manual-hold path. F24 v2 measures zero manual_override_violations and runtime_manual_hold_ticks_mean=115 across seeds 11,23,37 without changing benchmark thresholds or scenario logic",
   "product_benchmark_report_artifact": "GitHub Actions uploads product-benchmark-f24-py311/product-benchmark-f24.json for the final 3-seed composed-runtime run",
-  "product_benchmark_unmet_criteria_status": "measured by GitHub Actions run 35394907836; unmet criteria are retained as findings and do not fail benchmark execution",
+  "product_benchmark_unmet_criteria_status": "measured by GitHub Actions run 35398707349 after the fast-runtime manual-priority fix; remaining unmet criteria are retained as findings and do not fail benchmark execution",
   "product_benchmark_summary": {
     "seeds": [
       11,
@@ -96,14 +94,16 @@
       37
     ],
     "fixed_needed_light_fraction_mean": 0.9039145907473309,
-    "production_needed_light_fraction_mean": 0.17319098457888493,
+    "production_needed_light_fraction_mean": 0.14116251482799524,
     "fixed_false_on_seconds_mean": 156.33333333333334,
-    "production_false_on_seconds_mean": 11,
-    "production_premature_off_events_mean": 32,
-    "production_corrections_per_100_episodes_mean": 294.44444444444446,
-    "production_inference_mean_ms_host": 73.89050351481401,
-    "runtime_manual_hold_ticks_mean": 0
+    "production_false_on_seconds_mean": 5.333333333333333,
+    "production_premature_off_events_mean": 26.333333333333332,
+    "production_corrections_per_100_episodes_mean": 261.1111111111111,
+    "production_inference_mean_ms_host": 71.7489259013887,
+    "runtime_manual_hold_ticks_mean": 115,
+    "manual_override_violations_mean": 0
   },
   "product_benchmark_control_qualification": "all 3 seeds fail unchanged 78% per-action Wilson lower-bound gate; ON lower bounds 77.12%, 76.05%, 75.70%",
-  "product_benchmark_report": "BENCHMARK_PRODUCT_F24.md"
+  "product_benchmark_report": "BENCHMARK_PRODUCT_F24.md",
+  "manual_priority_fast_runtime": "fast light/switch/input_boolean targets retain short action/settling/ack timing but no longer suppress or clear explicit_user_v8 manual hold; startup timing normalization preserves active trusted holds"
 }
