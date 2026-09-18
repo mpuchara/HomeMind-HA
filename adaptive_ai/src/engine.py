@@ -17,7 +17,7 @@ from executor import Executor
 from intent import ActionIntent
 from experiments import Experiments
 from telemetry import TELEMETRY, HEAVY_JOBS
-from fast_runtime import stabilize_fast_light_power_decision
+from fast_runtime import fast_light_on_assist_action, stabilize_fast_light_power_decision
 from training_budget import TRAINING_BUDGET
 
 class HAEventStream(threading.Thread):
@@ -715,10 +715,38 @@ class Engine(threading.Thread):
                 support, novelty = trial['support'], trial['novelty']
                 decision_source = "experiment"
         raw_prediction = float(chosen["value"])
-        stabilized_value, off_confirmation = stabilize_fast_light_power_decision(
-            agent, rt, current, raw_prediction, decision_source, now_ts()
+        forecast = context_meta.get('home_forecast', {})
+        assist_idx = fast_light_on_assist_action(
+            agent, current, raw_prediction, decision_source, arms, forecast
         )
         rt["raw_policy_prediction"] = raw_prediction
+        rt["fast_on_assist_active"] = assist_idx is not None
+        if assist_idx is not None:
+            selected_arm = next(
+                (arm for arm in arms if int(arm.get("index", -1)) == int(assist_idx)),
+                None,
+            )
+            if selected_arm is not None:
+                chosen = {**chosen, **selected_arm}
+                head = policy.heads[int(horizon)]
+                structural = head.structural_confidence(arms, int(assist_idx))
+                calibration = head.calibration(int(assist_idx))
+                confidence = min(float(structural), float(calibration["ceiling"]))
+                chosen["structural_confidence"] = structural
+                chosen["validation_accuracy"] = calibration["accuracy"]
+                chosen["validation_lower_bound"] = calibration["ceiling"]
+                chosen["validation_samples"] = calibration["samples"]
+                support = float(selected_arm.get("support", support))
+                novelty = float(selected_arm.get("novelty", novelty))
+                chosen = dict(
+                    chosen,
+                    value=float(policy.actions[int(assist_idx)]),
+                    index=int(assist_idx),
+                )
+
+        stabilized_value, off_confirmation = stabilize_fast_light_power_decision(
+            agent, rt, current, float(chosen["value"]), decision_source, now_ts()
+        )
         if off_confirmation:
             current_idx = min(
                 range(len(policy.actions)),
@@ -754,7 +782,6 @@ class Engine(threading.Thread):
         rt["top_context"] = self.top_context(policy, horizon, chosen["index"], features, labels)
 
         intent_horizon = horizon
-        forecast = context_meta.get('home_forecast', {})
         if chosen['value'] >= .5 and agent['target_property'] == 'power' and forecast.get('occupancy_now', 0) < .5:
             intent_horizon = next((h for h in (1,3,5) if forecast.get(f'occupancy_in_{h}s', 0) >= .5), horizon)
         preference_count = int((preference or {}).get('independent_evidence_count') or 0)
@@ -829,6 +856,7 @@ class Engine(threading.Thread):
             "fast_off_confirmation_active": bool(rt.get("fast_off_confirmation_active")),
             "fast_off_confirmation_elapsed": float(rt.get("fast_off_confirmation_elapsed") or 0.0),
             "fast_off_confirmation_required": float(rt.get("fast_off_confirmation_required") or 0.0),
+            "fast_on_assist_active": bool(rt.get("fast_on_assist_active")),
             "teaching_id": rt.get("teaching_id"),
             "decision_source": rt.get("decision_source") or "historical_policy_bootstrap",
             "preference_model": rt.get("preference_model"),
