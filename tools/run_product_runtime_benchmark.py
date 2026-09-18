@@ -178,8 +178,10 @@ def _worker_run_seed(seed, replicas=1):
                 source="f24_actual_chronological_validation",
                 detail=built["validation_detail"],
             )
+            # Executor validates mode from Store, so persist Shadow through the normal
+            # settings path. A local-only mutation would benchmark fallback after reject.
+            store.update_agent(agent["id"], {"mode": "shadow"})
             agent = store.get_agent_config(agent["id"])
-            agent["mode"] = "shadow"
             agent["training_state"] = "qualified" if shadow_qualified else "paused"
             current_policy.agent = agent
             store.save_model(agent["id"], current_policy.serialize())
