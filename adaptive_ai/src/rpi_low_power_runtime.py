@@ -99,8 +99,8 @@ def install(core, manager):
         max_slice_seconds=max_slice_ms / 1000.0,
         max_sleep_seconds=max_sleep,
         thread_prefixes=("adaptive-ai-index-",),
-        clock=time.perf_counter,
-        sleeper=time.sleep,
+        clock=lambda: time.perf_counter(),
+        sleeper=lambda seconds: time.sleep(seconds),
     )
 
     # Store.archive_iter is a common streaming boundary for historical screening and
