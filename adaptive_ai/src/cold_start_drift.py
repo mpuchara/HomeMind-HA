@@ -659,7 +659,7 @@ class AdaptationService:
                     }
             if _table_exists(c, "episode_evaluator_episodes"):
                 row = c.execute(
-                    "SELECT end_ts,labels_json FROM episode_evaluator_episodes WHERE episode_id=?",
+                    "SELECT start_ts,labels_json FROM episode_evaluator_episodes WHERE episode_id=?",
                     (str(episode_id),),
                 ).fetchone()
                 if row:
@@ -667,7 +667,7 @@ class AdaptationService:
                     light_need = str(labels.get("light_need") or "")
                     if light_need in ("true", "false"):
                         return {
-                            "anchor_ts": float(row["end_ts"]),
+                            "anchor_ts": float(row["start_ts"]),
                             "desired_action": 1.0 if light_need == "true" else 0.0,
                             "label_source": "episode_evaluator:light_need",
                         }
