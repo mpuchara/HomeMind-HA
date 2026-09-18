@@ -137,16 +137,15 @@ class ProductRuntimeBenchmarkContractTests(unittest.TestCase):
         self.assertIn("component fixture", build["anticipation_simulator"])
         self.assertEqual(build["product_benchmark_unmet_criteria"], [
             "needed_light_not_worse_than_fixed_by_more_than_2pp",
-            "premature_off_not_worse_than_fixed",
-            "corrections_not_worse_than_fixed",
-            "all_seeds_have_future_control_qualification",
         ])
-        self.assertEqual(build["tests_passed"], 883)
+        self.assertEqual(build["tests_passed"], 891)
+        self.assertIn("6 s", build["fast_light_off_confirmation"])
+        self.assertIn("82.52%", build["product_benchmark_control_qualification"])
         report = (ROOT / "BENCHMARK_PRODUCT_F24.md").read_text(encoding="utf-8")
         self.assertIn("Needed-light fraction", report)
         self.assertIn("Runtime manual-hold ticks", report)
         self.assertIn("manual_override_enters_runtime_hold", report)
-        self.assertIn("does **not** mean all product acceptance criteria passed", report)
+        self.assertIn("Product acceptance is represented by the explicit criteria above", report)
 
 
 class ProductRuntimeBenchmarkFixtureNamingTests(unittest.TestCase):
