@@ -400,6 +400,13 @@ class Engine(threading.Thread):
 
     def process(self, state_map, changed_entities=None):
         changed = set(changed_entities or ())
+        if changed:
+            # Extend the event's strict-priority window from the actual inference pass,
+            # after websocket debounce. This prevents a slow multi-target pass from
+            # handing CPU back to replay halfway through the decisions it was woken to make.
+            TRAINING_BUDGET.request_interactive_window(
+                1.0, reason="realtime_inference"
+            )
         groups = {}
         for agent in STORE.list_agent_configs():
             if not agent["enabled"] or agent["mode"] == "paused" or agent.get("training_state") != "qualified":
