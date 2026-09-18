@@ -4,7 +4,7 @@
   "base_version": "0.14.23",
   "base_commit": "36c18d2e87fa27d8af1f7933d5ce7c3c10553f79",
   "release_status": "release-0.14.24-batched-replay-schema-aware-screening",
-  "tests_passed": 821,
+  "tests_passed": 854,
   "profile": "rpi4-low-memory-automatic-initial-training",
   "manual_agent_training": false,
   "max_concurrent_training_jobs": 1,
@@ -40,7 +40,7 @@
   "migration": "additive startup repair only; models, raw archive, feedback, Candidate lineage, TrialRecords, Teach labels, settings and rollback state remain preserved",
   "physical_control": "unchanged; repaired agents return to Shadow and Control still requires qualified state plus all existing guards",
   "pi4": "0.14.18 targets the observed ~94% CPU spike and second-open blank Ingress UI at the transition from REPLAY COMPLETE to model/benchmark finalization; on-device verification is still required",
-  "ci_status": "pending 0.14.24 validation",
+  "ci_status": "0.14.24 validation rerunning after final provenance batching documentation",
   "training_slice_budget": "adaptive-ai-index workers call a shared CooperativeTrainingBudget; expensive temporal tracker loops yield between entities/events and finalization is no longer outside the throttle",
   "finalization_lifeline": "HEAVY_JOBS remains owned through final gc.collect(), so /api/status and /api/agents stay on lightweight lifeline reads until the worker is actually finished",
   "finalization_progress": "post-replay UI now exposes bounded stages: replay complete, policy serialization, benchmark save, qualification, checkpoint complete",
@@ -63,5 +63,5 @@
   "feature_screening_yield": "target-edge precursor fan-out has an explicit cooperative training-budget checkpoint in addition to archive iterator checkpoints",
   "stage2_performance_scope": "SQLite replay write batching plus schema-aware/incremental feature-screening lifecycle; policy/reward/qualification semantics unchanged",
   "feature_screening_stream": "SQLite LAG emits only effective per-entity state/attribute changes to Python; fast occupancy/activity driver rows stay raw and bounded",
-  "replay_provenance": "batched replay preloads linked provenance for target rows; own_command acknowledgements are excluded before policy mutation and accepted/excluded audit rows are journaled in bounded batches"
+  "replay_provenance": "target-row provenance is preloaded in one indexed query; accepted/excluded replay audit facts are persisted in bounded batches, preserving own-command exclusion without per-dwell reads/commits"
 }
