@@ -7,6 +7,8 @@ from fast_runtime import (
     FAST_ACK_TIMEOUT_SECONDS,
     FAST_SETTLING_SECONDS,
     FAST_OFF_CONFIRMATION_SECONDS,
+    fast_light_presence_evidence,
+    fast_light_on_assist_action,
     is_fast_target,
     normalize_fast_payload,
     migrate_existing_fast_agents,
@@ -75,6 +77,74 @@ class FastRuntimeTests(unittest.TestCase):
         self.assertEqual(store.meta['manual_hold:lamp'], '999999.0')
         self.assertEqual(store.meta['manual_hold_source:lamp'], 'explicit_user_v8')
         self.assertEqual(engine.runtime['lamp']['manual_override_until'], 999999.0)
+
+    def test_fast_light_on_assist_requires_two_independent_positive_sources(self):
+        a = self.fast_agent()
+        arms = [
+            {"index": 0, "value": 0.0, "mean": 0.62, "ucb": 0.66},
+            {"index": 1, "value": 1.0, "mean": 0.58, "ucb": 0.70},
+        ]
+        forecast = {
+            "known": True,
+            "occupancy_now": 0.75,
+            "occupancy_in_1s": 0.82,
+            "evidence_sources": [
+                {"entity_id": "binary_sensor.presence", "role": "occupancy_binary",
+                 "available": True, "communication_reliability": 1.0,
+                 "evidence_freshness": 1.0, "contribution": 0.9},
+                {"entity_id": "binary_sensor.motion", "role": "pir",
+                 "available": True, "communication_reliability": 1.0,
+                 "evidence_freshness": 1.0, "contribution": 0.7},
+            ],
+        }
+        evidence = fast_light_presence_evidence(forecast)
+        self.assertEqual(len(evidence), 2)
+        self.assertEqual(
+            fast_light_on_assist_action(
+                a, 0.0, 0.0, "historical_policy_bootstrap", arms, forecast
+            ),
+            1,
+        )
+
+        one_source = {**forecast, "evidence_sources": forecast["evidence_sources"][:1]}
+        self.assertIsNone(
+            fast_light_on_assist_action(
+                a, 0.0, 0.0, "historical_policy_bootstrap", arms, one_source
+            )
+        )
+
+    def test_fast_light_on_assist_respects_policy_plausibility_and_explicit_sources(self):
+        a = self.fast_agent()
+        forecast = {
+            "known": True,
+            "occupancy_now": 0.8,
+            "occupancy_in_1s": 0.8,
+            "evidence_sources": [
+                {"entity_id": "binary_sensor.presence", "role": "occupancy_binary",
+                 "available": True, "communication_reliability": 1.0,
+                 "evidence_freshness": 1.0, "contribution": 0.9},
+                {"entity_id": "binary_sensor.motion", "role": "pir",
+                 "available": True, "communication_reliability": 1.0,
+                 "evidence_freshness": 1.0, "contribution": 0.7},
+            ],
+        }
+        contradicted = [
+            {"index": 0, "value": 0.0, "mean": 0.80, "ucb": 0.82},
+            {"index": 1, "value": 1.0, "mean": 0.30, "ucb": 0.55},
+        ]
+        self.assertIsNone(
+            fast_light_on_assist_action(
+                a, 0.0, 0.0, "historical_policy_bootstrap", contradicted, forecast
+            )
+        )
+        plausible = [
+            {"index": 0, "value": 0.0, "mean": 0.60, "ucb": 0.64},
+            {"index": 1, "value": 1.0, "mean": 0.55, "ucb": 0.65},
+        ]
+        for source in ("preference_model", "experiment", "scoped_instruction:one_time"):
+            self.assertIsNone(
+                fast_light_on_assist_action(a, 0.0, 0.0, source, plausible, forecast)
+            )
 
     def test_statistical_off_requires_continuous_confirmation_but_on_is_immediate(self):
         a = self.fast_agent()
