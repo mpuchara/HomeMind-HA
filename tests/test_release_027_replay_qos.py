@@ -44,6 +44,13 @@ class RealtimePreemptionTests(unittest.TestCase):
         self.assertIn('reason="ha_state_changed"', source)
         self.assertIn('reason="realtime_inference"', source)
 
+    def test_ui_uses_only_recent_60s_event_latency(self):
+        p0 = (ROOT / "adaptive_ai" / "src" / "static" / "p0.js").read_text(encoding="utf-8")
+        home = (ROOT / "adaptive_ai" / "src" / "static" / "home.js").read_text(encoding="utf-8")
+        self.assertIn("const p95=latency.recent_p95_ms;", p0)
+        self.assertNotIn("recent_p95_ms??latency.p95_ms", p0)
+        self.assertIn("const inferenceP95=inf.recent_p95_ms, eventP95=latency.recent_p95_ms;", home)
+
     def test_correct_label_context_reconstruction_has_interactive_priority(self):
         source = (ROOT / "adaptive_ai" / "src" / "manual_feedback_workflow.py").read_text(encoding="utf-8")
         self.assertIn('reason="correct_label"', source)
