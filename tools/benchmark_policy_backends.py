@@ -62,7 +62,7 @@ def manual_demonstrations(store, agent_id, start_index=0):
             "id": f"feedback:{row['id']}",
             "timestamp": _ts(row.get("created_at"), start_index + offset),
             "features": features,
-            "feature_labels": {str(idx): feature_labels.get(idx, []) for idx in features if idx in feature_labels},
+            "feature_labels": {str(idx): value for idx, value in feature_labels.items()},
             "allowed_actions": None,
             "kind": "demonstration",
             "demonstration_action": action,
