@@ -518,6 +518,11 @@ def evaluate_controller(seed, controller, start_episode_no, base, replicas=1):
         for tick in range(TICKS):
             ts = base + episode_no * 120.0 + tick
             truth = _truth(scenario, tick, "future")
+            # Make the target observation unambiguously ON immediately before the user's
+            # OFF action. This is a deterministic environment precondition, not an AI
+            # dispatch, and guarantees that the next user-origin state is a real change.
+            if scenario == "manual_change" and tick == 24:
+                action = 1
             manual_event = scenario == "manual_change" and tick == 25
             if manual_event:
                 # Exogenous user action, not an ActionIntent.
@@ -674,6 +679,8 @@ def _criteria(aggregate, seed_runs):
          current["corrections_per_100_episodes"]["mean"] <= fixed["corrections_per_100_episodes"]["mean"]),
         ("manual_override_respected",
          current["manual_override_violations"]["mean"] == 0.0),
+        ("manual_override_enters_runtime_hold",
+         current["runtime_manual_hold_ticks"]["mean"] > 0.0),
         ("moved_sensor_topology_reaches_runtime",
          current["moved_sensor_topology_ticks"]["mean"] > 0.0),
         ("all_seeds_have_future_control_qualification", all(bool(r["control_qualification"].get("passed")) for r in seed_runs)),
