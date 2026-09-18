@@ -90,7 +90,7 @@ The tool reads manual demonstrations and labelled Stage-11 TrialRecords, persist
 
 `PolicyBackendShadowService` is non-controlling by contract (`dispatch_capability=false`) and is now wired into the shipped runtime as an **optional observer**. It can be enabled with `policy_backend_shadow_enabled=true` or `HOMEMIND_POLICY_BACKEND_SHADOW=1`.
 
-When enabled it observes the same live feature vector and allowed action set after the production policy prediction, but its result is never used to choose the `ActionIntent`. It receives reward only for the action actually executed. Durable TrialRecords are also consumed exactly once using a persistent source marker, preserving their logged propensity. Disabled mode performs no shadow inference or learning.
+When enabled it first requires the latest persisted benchmark for that agent to be `BENCHMARK_VERSION>=2` with `candidate_status=shadow_candidate_supported`. Without that proof it reports `shadow_waiting_for_supported_benchmark` and creates no challenger. A supported Shadow uses exactly the benchmark's feature projection and ridge/alpha. It then observes the same live feature vector and allowed action set after the production policy prediction, but its result is never used to choose the `ActionIntent`. It receives reward only for the action actually executed. Durable TrialRecords are also consumed exactly once using a persistent source marker, preserving their logged propensity. Disabled mode performs no shadow inference or learning.
 
 ## Additive persistence
 
