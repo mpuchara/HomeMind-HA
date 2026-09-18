@@ -9,7 +9,7 @@
   "manual_agent_training": false,
   "max_concurrent_training_jobs": 1,
   "production_entrypoint": "run.sh -> trial_queue_main.py -> preference_queue_main.py -> fast_queue_main.py -> queue_main.py",
-  "product_benchmark_contract": 1,
+  "product_benchmark_contract": 2,
   "product_benchmark_seeds": [
     11,
     23,
@@ -40,7 +40,7 @@
   "migration": "additive startup repair only; models, raw archive, feedback, Candidate lineage, TrialRecords, Teach labels, settings and rollback state remain preserved",
   "physical_control": "unchanged; repaired agents return to Shadow and Control still requires qualified state plus all existing guards",
   "pi4": "0.14.18 targets the observed ~94% CPU spike and second-open blank Ingress UI at the transition from REPLAY COMPLETE to model/benchmark finalization; on-device verification is still required",
-  "ci_status": "0.14.27 final validation pending",
+  "ci_status": "task-18 product benchmark hardening validation pending",
   "training_slice_budget": "adaptive-ai-index workers call a shared CooperativeTrainingBudget; expensive temporal tracker loops yield between entities/events and finalization is no longer outside the throttle",
   "finalization_lifeline": "HEAVY_JOBS remains owned through final gc.collect(), so /api/status and /api/agents stay on lightweight lifeline reads until the worker is actually finished",
   "finalization_progress": "post-replay UI now exposes bounded stages: replay complete, policy serialization, benchmark save, qualification, checkpoint complete",
@@ -79,5 +79,9 @@
   "realtime_training_preemption": "fresh HA events request 0.75 s priority; the debounced realtime inference pass extends it by 1.0 s; Correct history/point use 1.0 s and Correct label signature reconstruction uses 2.0 s; historical worker yields at checkpoints",
   "room_belief_replay_cache": "forward chronological replay keeps a moving 30 s in-memory source window and advances per-entity seeds instead of re-reading every seed from SQLite",
   "telemetry_recent_p95": "telemetry exposes recent_p95_ms over the last 60 s; overview displays only the recent window and shows no value when no recent samples exist",
-  "stage5_performance_scope": "Correct read path, Room Belief replay caching, realtime priority and latency observability; learning/control semantics unchanged"
+  "stage5_performance_scope": "Correct read path, Room Belief replay caching, realtime priority and latency observability; learning/control semantics unchanged",
+  "product_benchmark_topology_contract": "sensor_moved changes the future Entity Registry area mapping for the same entity_id and the changed mapping is passed into every evaluated runtime",
+  "product_benchmark_manual_override_contract": "manual_change emits explicit target provenance with context.user_id; the shipped Shadow comparator records the real manual-hold runtime state and the effective synthetic target cannot override an active user hold",
+  "product_benchmark_report_artifact": "GitHub Actions uploads product-benchmark-f24-py311/product-benchmark-f24.json for the final 3-seed composed-runtime run",
+  "product_benchmark_unmet_criteria_status": "recorded list is refreshed from the final CI benchmark after this contract change"
 }
