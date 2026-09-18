@@ -637,9 +637,12 @@ class AdaptationService:
 
     def retain_regression_anchors(self, agent_id, episode_ids, reason="pre_drift_baseline"):
         now = time.time()
+        rows = [
+            (str(episode_id), self._regression_anchor_label(episode_id))
+            for episode_id in list(episode_ids or [])[:MAX_REGRESSION_ANCHORS]
+        ]
         with self.store.lock, self.store.conn() as c:
-            for episode_id in list(episode_ids or [])[:MAX_REGRESSION_ANCHORS]:
-                label = self._regression_anchor_label(episode_id)
+            for episode_id, label in rows:
                 c.execute(
                     """INSERT INTO adaptation_regression_anchors
                        (agent_id,episode_id,reason,retained_ts,training_weight,
@@ -902,6 +905,7 @@ class AdaptationService:
             rollback_backup_id=None,
             recovered_ts=None,
             episodes_to_recover=None,
+            recovery_seconds=None,
         )
         self.store.event(
             aid, "warning", "controlled_drift_adaptation_started",
@@ -1063,14 +1067,21 @@ class AdaptationService:
         corrections = sum(int(row.get("correction_count") or 0) for row in recent)
         baseline = _finite(state.get("baseline_quality"))
         if baseline is not None and quality >= baseline - RECOVERY_MARGIN and corrections == 0:
+            recovered_ts = float(recent[-1]["ts"])
+            recovery_seconds = max(0.0, recovered_ts - float(state["promoted_ts"]))
             self._update_state(
-                str(agent_id), status="recovered", recovered_ts=time.time(),
-                episodes_to_recover=len(rows),
+                str(agent_id), status="recovered", recovered_ts=recovered_ts,
+                episodes_to_recover=len(rows), recovery_seconds=recovery_seconds,
             )
             self.store.event(
                 str(agent_id), "info", "controlled_drift_quality_recovered",
                 "Adapted generation recovered pre-drift episode quality",
-                {"episodes_to_recover": len(rows), "quality": quality, "baseline_quality": baseline},
+                {
+                    "episodes_to_recover": len(rows),
+                    "seconds_to_recover": recovery_seconds,
+                    "quality": quality,
+                    "baseline_quality": baseline,
+                },
             )
             return "recovered"
         if baseline is not None and (baseline - quality >= ROLLBACK_DROP_THRESHOLD or corrections >= 2):
@@ -1105,23 +1116,37 @@ class AdaptationService:
         state = self._state(agent_id)
         detection = self.detect(agent_id)
         anchors = self.regression_anchors(agent_id)
+        promoted_ts = _finite(state.get("promoted_ts"))
+        post_rows = self._post_promotion_rows(agent_id, promoted_ts) if promoted_ts is not None else []
+        latest_post_ts = max([_finite(row.get("ts"), promoted_ts) for row in post_rows], default=promoted_ts)
+        elapsed = (
+            max(0.0, float(latest_post_ts) - promoted_ts)
+            if promoted_ts is not None and latest_post_ts is not None else None
+        )
         return {
             "contract_version": CONTRACT_VERSION,
             "state": state,
             "current_detection": detection,
             "regression_anchors": {
-                "count": len(anchors), "training_weight": 0.0,
+                "count": len(anchors),
+                "labeled_count": sum(_finite(row.get("desired_action")) is not None for row in anchors),
+                "training_weight": 0.0,
                 "episode_ids": [row["episode_id"] for row in anchors],
+                "semantics": "offline replay guard only; never Stage-13 final calibration",
             },
             "decay": decay_contract(),
             "promotion": {
                 "automatic": False,
                 "uses_existing_stage13_gate": True,
+                "stage13_confidence_contract_version": CONFIDENCE_CONTRACT_VERSION,
                 "candidate_dispatch": False,
             },
             "recovery": {
                 "post_promotion_min_episodes": POST_PROMOTION_EPISODES,
+                "observed_post_promotion_episodes": len(post_rows),
+                "monitoring_elapsed_seconds": elapsed,
                 "episodes_to_recover": state.get("episodes_to_recover"),
+                "seconds_to_recover": state.get("recovery_seconds"),
                 "recovered_ts": state.get("recovered_ts"),
                 "rollback_backup_id": state.get("rollback_backup_id"),
             },
@@ -1135,6 +1160,7 @@ def contract_descriptor():
             "fallback_or_shadow": True,
             "history_absence_relaxes_safety": False,
             "optional_question_budget": MAX_OPTIONAL_QUESTIONS,
+            "questions_are_optional_and_non_dispatching": True,
         },
         "drift_inputs": [
             "episode_quality", "manual_corrections", "context_distribution",
@@ -1142,10 +1168,20 @@ def contract_descriptor():
         ],
         "drift_classes": ["sensor_failure", "topology_change", "new_habit", "new_preference"],
         "adaptation": "isolated_candidate_only_no_live_reset",
-        "promotion": "existing Stage-13 fixed future gate only; never automatic here",
+        "promotion": (
+            "Stage-13 fixed future independent calibration remains mandatory; "
+            "replay anchors are an additional non-training regression veto when evaluable"
+        ),
+        "stage13_confidence_contract_version": CONFIDENCE_CONTRACT_VERSION,
         "rollback": "exact unexpired pre-promotion generation backup restored after degradation",
+        "recovery_metrics": ["episodes_to_recover", "seconds_to_recover"],
         "decay": decay_contract(),
-        "regression_anchors": "durable evaluation references with training_weight=0",
+        "regression_anchors": {
+            "retention": "durable",
+            "training_weight": 0.0,
+            "evaluation": "cached parent-vs-candidate historical replay",
+            "not_final_calibration": True,
+        },
     }
 
 
