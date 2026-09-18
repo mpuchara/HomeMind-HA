@@ -125,6 +125,15 @@ class Release024SourceContractTests(unittest.TestCase):
         self.assertIn('TRAINING_BUDGET.checkpoint("context_screen_target_edge")', source)
         self.assertIn('TRAINING_BUDGET.checkpoint("context_screen_change_batch", force=True)', source)
 
+    def test_training_hot_paths_use_config_only_agent_reads(self):
+        source = self.source("history.py")
+        start = source.index("    def _train_from_archive")
+        body = source[start:]
+        self.assertIn("STORE.list_agent_configs()", body)
+        start_job = source[source.index("    def _start_agent_job"):source.index("    def _eligible_rebuild_context")]
+        self.assertIn("STORE.get_agent_config(agent_id)", start_job)
+        self.assertNotIn("STORE.get_agent(agent_id)", start_job)
+
     def test_new_batch_size_is_bounded_and_configurable(self):
         config = (ROOT / "adaptive_ai" / "config.yaml").read_text(encoding="utf-8")
         settings = self.source("settings.py")
