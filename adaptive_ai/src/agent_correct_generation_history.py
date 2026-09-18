@@ -80,7 +80,6 @@ def _current_at(rows, timestamp):
 
 def _live_observed_history(manager, generation, agent, start, end):
     """Build Correct history from two narrow indexed streams, with zero policy replay."""
-    TRAINING_BUDGET.request_interactive_window(1.0, reason="correct_history")
     _ensure_table(manager.store)
     decisions = _recorded_rows(
         manager.store, manager.engine, agent["id"], float(start), float(end)
@@ -157,6 +156,7 @@ def _base_payload(generation, agent, start, end):
 
 
 def build_correct_history(manager, ref, start, end, legacy_history):
+    TRAINING_BUDGET.request_interactive_window(1.0, reason="correct_history")
     generation, agent = _resolve_generation(manager, ref)
     start, end = float(start), float(end)
     if end <= start or end - start > 31 * 86400:
@@ -219,10 +219,9 @@ def build_correct_history(manager, ref, start, end, legacy_history):
 
 
 def build_correct_point(manager, ref, timestamp, legacy_point):
+    TRAINING_BUDGET.request_interactive_window(1.0, reason="correct_point")
     generation, agent = _resolve_generation(manager, ref)
     timestamp = float(timestamp)
-    TRAINING_BUDGET.request_interactive_window(1.0, reason="correct_point")
-
     current_rows = _current_rows(manager, agent, timestamp, timestamp)
     current = _current_at(current_rows, timestamp)
     observed = _observed_generation_at(manager, generation, timestamp)
