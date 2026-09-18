@@ -33,6 +33,8 @@ class CooperativeTrainingBudget:
         self._max_slice_seconds = 0.075
         self._max_sleep_seconds = 2.0
         self._thread_prefixes = ("adaptive-ai-index-",)
+        self._interactive_until = 0.0
+        self._interactive_reason = None
         self._stats = {
             "checkpoints": 0,
             "throttle_sleeps": 0,
@@ -41,6 +43,8 @@ class CooperativeTrainingBudget:
             "max_observed_slice_seconds": 0.0,
             "slice_overruns": 0,
             "last_label": None,
+            "interactive_preemptions": 0,
+            "interactive_sleep_seconds": 0.0,
         }
 
     @staticmethod
@@ -76,6 +80,21 @@ class CooperativeTrainingBudget:
         name = str(thread_name or threading.current_thread().name)
         return any(name.startswith(prefix) for prefix in self._thread_prefixes)
 
+    def request_interactive_window(self, seconds=0.75, reason="interactive"):
+        """Temporarily give HTTP/realtime inference strict priority over training.
+
+        This is intentionally cooperative and process-local. Realtime/event threads call
+        it when fresh work arrives; the historical worker observes it at its next
+        checkpoint and sleeps until the short priority window expires.
+        """
+        duration = self._clamp(float(seconds), 0.05, 3.0)
+        until = self._clock() + duration
+        with self._lock:
+            if until > self._interactive_until:
+                self._interactive_until = until
+                self._interactive_reason = str(reason or "interactive")
+        return until
+
     def begin(self, *, thread_name=None):
         if not self._eligible(thread_name):
             return False
@@ -97,6 +116,22 @@ class CooperativeTrainingBudget:
             return 0.0
 
         now = self._clock()
+        with self._lock:
+            interactive_until = float(self._interactive_until or 0.0)
+            interactive_reason = self._interactive_reason
+        if now < interactive_until:
+            pause = min(0.25, max(0.001, interactive_until - now))
+            self._sleep(pause)
+            with self._lock:
+                self._stats["interactive_preemptions"] += 1
+                self._stats["interactive_sleep_seconds"] += pause
+                self._stats["last_label"] = (
+                    "interactive:" + str(interactive_reason or "priority")
+                )
+            self._local.slice_started = self._clock()
+            self._local.active = True
+            return pause
+
         started = getattr(self._local, "slice_started", None)
         if started is None:
             self._local.slice_started = now
@@ -164,6 +199,8 @@ class CooperativeTrainingBudget:
                 float(stats["max_observed_slice_seconds"]) * 1000.0, 1
             ),
             "slice_overruns": int(stats["slice_overruns"]),
+            "interactive_preemptions": int(stats["interactive_preemptions"]),
+            "interactive_sleep_seconds": round(float(stats["interactive_sleep_seconds"]), 3),
             "last_checkpoint": stats["last_label"],
         }
 
