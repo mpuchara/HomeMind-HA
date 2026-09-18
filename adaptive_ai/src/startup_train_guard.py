@@ -22,6 +22,68 @@ from __future__ import annotations
 import time
 
 
+COLD_START_STATES = {"waiting", "paused", "needs_retrain"}
+
+
+def _install_initial_training_bridge(history, queue, store):
+    """Queue the first real model for auto-discovered agents, never a Candidate.
+
+    Candidate generations are meaningful only after a persisted Live/base policy exists.
+    Discovery may therefore create many WAITING agents, but their first historical build
+    is admitted through the existing single-heavy-job FIFO.  This keeps Raspberry Pi
+    resource bounds intact while removing the cold-start dead end where only Candidate
+    cards could appear.
+
+    The bridge also repairs existing auto-created WAITING/PAUSED agents from previous
+    releases. TrainingQueue deduplication makes repeated discovery/rescan calls harmless.
+    """
+    if getattr(history, "_initial_training_bridge_installed", False):
+        return history
+
+    original_discover = history.auto_discover_agents
+
+    def discover_and_queue_initial(*args, **kwargs):
+        created = original_discover(*args, **kwargs)
+        enqueued = []
+        for agent in store.list_agent_configs():
+            aid = str(agent.get("id") or "")
+            if (
+                not aid
+                or not agent.get("enabled")
+                or not agent.get("auto_created")
+                or str(agent.get("training_state") or "") not in COLD_START_STATES
+                or store.get_model(aid) is not None
+            ):
+                continue
+            try:
+                status = queue.enqueue(aid, rebuild=True, reason="initial_training")
+                if isinstance(status, dict):
+                    enqueued.append({
+                        "agent_id": aid,
+                        "state": status.get("state"),
+                        "position": status.get("position"),
+                    })
+            except Exception as exc:
+                store.event(
+                    aid, "error", "initial_training_queue_failed",
+                    f"Could not queue initial agent training: {type(exc).__name__}: {exc}",
+                    {"error": str(exc)},
+                )
+        history.initial_training_enqueued = enqueued
+        if enqueued:
+            store.event(
+                None, "info", "initial_training_queued",
+                f"Queued initial historical training for {len(enqueued)} auto-discovered agent(s)",
+                {"agents": enqueued, "resource_policy": "single_heavy_job_fifo"},
+            )
+        return created
+
+    history.auto_discover_agents = discover_and_queue_initial
+    history._initial_training_bridge_installed = True
+    history.initial_training_enqueued = []
+    return history
+
+
 def install(runtime):
     core = runtime.core
     if getattr(core, "_startup_train_guard_installed", False):
@@ -160,6 +222,9 @@ def install(runtime):
                     None, "info", "training_queue_ready",
                     "FIFO training queue ready before background discovery", None,
                 )
+            else:
+                queue = queued_runtime.TRAINING_QUEUE
+            _install_initial_training_bridge(history_self, queue, core.STORE)
             return original_history_start(history_self, *args, **kwargs)
 
         history_module.HistoryManager.start = history_start_with_queue
@@ -174,6 +239,8 @@ def install(runtime):
         "status_until_ready": "lightweight_only",
         "training_queue_order": "before_history_discovery",
         "explicit_train_idle_slot": "immediate_admission_attempt",
+        "initial_auto_agent_training": "first_model_in_place_via_single_heavy_job_fifo",
+        "candidate_before_base_model": "forbidden_by_candidate_manager",
         "worker_failure": "recover_and_continue",
         "internal_runtime_available_semantics": "preserved_for_extension_installers",
     }
