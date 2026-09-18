@@ -1006,26 +1006,18 @@ class EvaluationEpochJournal:
             "contract_version": CONTRACT_VERSION,
         })
         with self.store.conn() as c:
-            if _finite(epoch.get("final_end_ts")) is not None:
-                # A locked fixed-future test is immutable. Later independent labels are
-                # outside its declared window and must not invalidate or rescan it.
-                cached = c.execute(
-                    """SELECT report_json FROM confidence_final_report_cache
-                       WHERE parent_generation_id=? AND child_generation_id=?
-                         AND evaluation_revision=? AND contract_version=?
-                         AND params_fingerprint=?""",
-                    (str(parent_gid), str(child_gid), str(epoch["model_revision"]),
-                     CONTRACT_VERSION, params),
-                ).fetchone()
-            else:
-                cached = c.execute(
-                    """SELECT report_json FROM confidence_final_report_cache
-                       WHERE parent_generation_id=? AND child_generation_id=?
-                         AND evaluation_revision=? AND contract_version=?
-                         AND calibration_revision=? AND params_fingerprint=?""",
-                    (str(parent_gid), str(child_gid), str(epoch["model_revision"]),
-                     CONTRACT_VERSION, revision, params),
-                ).fetchone()
+            # Even a locked holdout must notice a newly attached independent label on an
+            # already-existing episode inside final_end_ts. The revision therefore stays
+            # part of the cache key. Ordinary automation-history growth does not advance
+            # calibration_revision, so warm UI polling remains O(1).
+            cached = c.execute(
+                """SELECT report_json FROM confidence_final_report_cache
+                   WHERE parent_generation_id=? AND child_generation_id=?
+                     AND evaluation_revision=? AND contract_version=?
+                     AND calibration_revision=? AND params_fingerprint=?""",
+                (str(parent_gid), str(child_gid), str(epoch["model_revision"]),
+                 CONTRACT_VERSION, revision, params),
+            ).fetchone()
         diagnostics = getattr(self, "_performance_diagnostics", None)
         if cached:
             if diagnostics is not None:
