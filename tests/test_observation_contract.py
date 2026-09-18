@@ -259,23 +259,17 @@ class ObservationFeatureTests(unittest.TestCase):
         )
         self.assertFalse(meta["reconstruction_complete"])
 
-    def test_home_known_and_occupancy_are_centered_only_for_fast_light_v2(self):
+    def test_home_known_is_an_explicit_tail_feature(self):
         history = TemporalHistory()
         st = sensor_state("sensor.test", "0", 100.0, unit="%", last_changed=50.0)
         add_live(history, st, 100.0, 100.01)
 
         class Home:
-            def __init__(self, known, occupancy=0.0):
+            def __init__(self, known):
                 self.known = known
-                self.occupancy = occupancy
             def forecast(self, target, ts):
                 values = {name: 0.0 for name in HOME_FEATURE_NAMES}
                 values["known"] = self.known
-                for name in (
-                    "occupancy_now", "occupancy_in_1s",
-                    "occupancy_in_3s", "occupancy_in_5s",
-                ):
-                    values[name] = self.occupancy
                 values["area_id"] = "kitchen"
                 return values
 
@@ -283,34 +277,15 @@ class ObservationFeatureTests(unittest.TestCase):
             context_engine=None, excluded_context_entities=set(), schema=self.schema,
             agent=self.a, dims=128,
         )
+        history.home_context = Home(False)
+        vf, labels, _ = policy_features(fake, {"sensor.test": st}, history, 100.02)
         known_idx = 128 - HOME_TAIL + HOME_FEATURE_NAMES.index("known")
-        occupancy_idx = 128 - HOME_TAIL + HOME_FEATURE_NAMES.index("occupancy_now")
-
-        history.home_context = Home(False, .8)
-        vf, labels, mf = policy_features(fake, {"sensor.test": st}, history, 100.02)
         self.assertEqual(labels[known_idx], ["home:known"])
-        self.assertEqual(vf.get(known_idx), -1.0)
-        self.assertEqual(vf.get(occupancy_idx, 0.0), 0.0)
-        self.assertEqual(mf["home_feature_encoding"], "signed_occupancy_v2")
+        self.assertEqual(vf.get(known_idx), 0.0)
 
-        history.home_context = Home(True, .8)
-        vt, _, mt = policy_features(fake, {"sensor.test": st}, history, 100.02)
-        self.assertEqual(vt.get(known_idx, 0.0), 0.0)
-        self.assertAlmostEqual(vt.get(occupancy_idx, 0.0), .6, places=12)
-        self.assertEqual(mt["home_feature_encoding"], "signed_occupancy_v2")
-
-        legacy_schema = FeatureSchemaV12(
-            128, ["sensor.test"],
-            feature_contract_version=LEGACY_FEATURE_CONTRACT_VERSION,
-        )
-        legacy = SimpleNamespace(
-            context_engine=None, excluded_context_entities=set(), schema=legacy_schema,
-            agent=self.a, dims=128,
-        )
-        vl, _, ml = policy_features(legacy, {"sensor.test": st}, history, 100.02)
-        self.assertEqual(vl.get(known_idx), 1.0)
-        self.assertAlmostEqual(vl.get(occupancy_idx), .8, places=12)
-        self.assertEqual(ml["home_feature_encoding"], "legacy_probability_v1")
+        history.home_context = Home(True)
+        vt, _, _ = policy_features(fake, {"sensor.test": st}, history, 100.02)
+        self.assertEqual(vt.get(known_idx), 1.0)
 
 
 class ObservationReplayParityTests(unittest.TestCase):
