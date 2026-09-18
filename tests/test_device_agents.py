@@ -384,6 +384,32 @@ class DurableControlOwnershipTests(unittest.TestCase):
         self.service.release_control_resources(self.a, now=101)
         self.assertIsNotNone(self.service.claim_control_resources(self.b, now=101.1))
 
+    def test_explicit_remap_reconciles_old_control_claim_to_new_resource(self):
+        solo_store = Store(Path(self.tmp.name) / 'remap.db')
+        engine = _Engine({}, {}, {'light.solo': _light_state('light.solo')})
+        service = DeviceAgentService(engine, solo_store)
+        agent = _agent(solo_store, 'light.solo', 'power')
+        solo_store.update_agent(agent['id'], {'mode': 'control'})
+        agent = solo_store.get_agent_config(agent['id'])
+        old_key = service.descriptor(agent)['resource_keys'][0]
+        self.assertIsNotNone(service.claim_control_resources(agent, now=10))
+
+        service.set_explicit_mapping('light.solo', 'stable-device-id')
+        migrated = solo_store.get_agent_config(agent['id'])
+        new_key = service.descriptor(migrated)['resource_keys'][0]
+        self.assertNotEqual(old_key, new_key)
+        with solo_store.conn() as db:
+            old = db.execute(
+                'SELECT control_owner_agent_id FROM device_resource_state WHERE resource_key=?',
+                (old_key,),
+            ).fetchone()
+            new = db.execute(
+                'SELECT control_owner_agent_id FROM device_resource_state WHERE resource_key=?',
+                (new_key,),
+            ).fetchone()
+        self.assertIsNone(old[0])
+        self.assertEqual(new[0], agent['id'])
+
     def test_restart_reconciliation_preserves_valid_owner_and_clears_stale_shadow_claim(self):
         self.store.update_agent(self.a['id'], {'mode': 'control'})
         self.store.update_agent(self.b['id'], {'mode': 'shadow'})
