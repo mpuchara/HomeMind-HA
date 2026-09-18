@@ -110,8 +110,10 @@ class SQLiteTemporalTracker:
     """
 
     HISTORY_SAMPLES = 64
-    # Keep UNION terms and bound parameters below conservative SQLite limits.
-    SQL_ENTITY_CHUNK = 150
+    # Small chunks are intentional: on Raspberry Pi one large UNION query can hold a
+    # CPU core/SQLite connection long enough to starve Ingress despite a good average
+    # training duty cycle. Python already merges/sorts the bounded result afterwards.
+    SQL_ENTITY_CHUNK = 32
 
     def __init__(self, store, watched, context, start, end):
         self.conn = sqlite3.connect(store.path, timeout=30)
@@ -202,7 +204,7 @@ class SQLiteTemporalTracker:
                 params.extend([eid, float(ts), count])
             if not parts:
                 continue
-            sql = "SELECT * FROM (" + " UNION ALL ".join(parts) + ") ORDER BY ts,id"
+            sql = " UNION ALL ".join(parts)
             result.extend(self._fetch_rows(sql, params))
             TRAINING_BUDGET.checkpoint("temporal_before_query")
         result.sort(key=self._row_order)
@@ -232,7 +234,7 @@ class SQLiteTemporalTracker:
                         "ORDER BY ts DESC,id DESC LIMIT ?)"
                     )
                     params.extend([eid, float(lo), float(hi), limit])
-                sql = "SELECT * FROM (" + " UNION ALL ".join(parts) + ") ORDER BY ts,id"
+                sql = " UNION ALL ".join(parts)
             result.extend(self._fetch_rows(sql, params))
             TRAINING_BUDGET.checkpoint("temporal_forward_query")
         result.sort(key=self._row_order)
