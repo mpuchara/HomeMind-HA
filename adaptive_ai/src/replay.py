@@ -111,7 +111,7 @@ class SQLiteTemporalTracker:
 
     HISTORY_SAMPLES = 64
     # Keep UNION terms and bound parameters below conservative SQLite limits.
-    SQL_ENTITY_CHUNK = 200
+    SQL_ENTITY_CHUNK = 150
 
     def __init__(self, store, watched, context, start, end):
         self.conn = sqlite3.connect(store.path, timeout=30)
