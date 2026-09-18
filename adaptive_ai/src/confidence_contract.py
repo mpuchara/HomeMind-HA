@@ -530,6 +530,450 @@ def record_independent_candidate_label(store, *, parent_generation_id, child_gen
         return c.execute("SELECT changes()").fetchone()[0] > 0
 
 
+def _table_exists(connection, name):
+    return bool(connection.execute(
+        "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?",
+        (str(name),),
+    ).fetchone())
+
+
+def _ensure_pair_revision_tracking(store):
+    """Install O(1) edge revision tracking once candidate pair storage exists.
+
+    Existing historical rows intentionally do not need a bootstrap scan. The first
+    report on an old edge computes from source evidence and caches revision 0; every
+    subsequent insert/update advances the durable revision through SQLite triggers.
+    """
+    if getattr(store, "_confidence_pair_revision_tracking_ready", False):
+        return True
+    with store.lock, store.conn() as c:
+        if not _table_exists(c, "candidate_generation_pairs"):
+            return False
+        columns = {str(row["name"]) for row in c.execute(
+            "PRAGMA table_info(candidate_generation_pairs)"
+        ).fetchall()}
+        required = {
+            "parent_generation_id", "child_generation_id",
+            "calibration_eligible",
+        }
+        if not required.issubset(columns):
+            # Stage-13 pair-schema migration owns these columns. Do not make a
+            # performance accelerator mutate/reinterpret an older evidence table.
+            return False
+        c.executescript(
+            """
+            CREATE INDEX IF NOT EXISTS idx_confidence_pairs_final_window
+                ON candidate_generation_pairs(
+                    parent_generation_id,child_generation_id,
+                    calibration_eligible,outcome_ts
+                );
+
+            CREATE TABLE IF NOT EXISTS confidence_pair_revisions (
+                parent_generation_id TEXT NOT NULL,
+                child_generation_id TEXT NOT NULL,
+                selection_revision INTEGER NOT NULL DEFAULT 0,
+                calibration_revision INTEGER NOT NULL DEFAULT 0,
+                updated_ts REAL NOT NULL,
+                PRIMARY KEY(parent_generation_id,child_generation_id)
+            );
+
+            CREATE TRIGGER IF NOT EXISTS trg_confidence_pair_insert_revision
+            AFTER INSERT ON candidate_generation_pairs
+            BEGIN
+                INSERT INTO confidence_pair_revisions
+                    (parent_generation_id,child_generation_id,selection_revision,
+                     calibration_revision,updated_ts)
+                VALUES(
+                    NEW.parent_generation_id,NEW.child_generation_id,1,
+                    CASE WHEN COALESCE(NEW.calibration_eligible,0)=1 THEN 1 ELSE 0 END,
+                    CAST(strftime('%s','now') AS REAL)
+                )
+                ON CONFLICT(parent_generation_id,child_generation_id) DO UPDATE SET
+                    selection_revision=confidence_pair_revisions.selection_revision+1,
+                    calibration_revision=confidence_pair_revisions.calibration_revision+
+                        CASE WHEN COALESCE(NEW.calibration_eligible,0)=1 THEN 1 ELSE 0 END,
+                    updated_ts=excluded.updated_ts;
+            END;
+
+            CREATE TRIGGER IF NOT EXISTS trg_confidence_pair_update_revision
+            AFTER UPDATE ON candidate_generation_pairs
+            BEGIN
+                INSERT INTO confidence_pair_revisions
+                    (parent_generation_id,child_generation_id,selection_revision,
+                     calibration_revision,updated_ts)
+                VALUES(
+                    NEW.parent_generation_id,NEW.child_generation_id,1,1,
+                    CAST(strftime('%s','now') AS REAL)
+                )
+                ON CONFLICT(parent_generation_id,child_generation_id) DO UPDATE SET
+                    selection_revision=confidence_pair_revisions.selection_revision+1,
+                    calibration_revision=confidence_pair_revisions.calibration_revision+1,
+                    updated_ts=excluded.updated_ts;
+            END;
+            """
+        )
+    store._confidence_pair_revision_tracking_ready = True
+    return True
+
+
+def _pair_revisions(store, parent_gid, child_gid):
+    if not _ensure_pair_revision_tracking(store):
+        return {"selection_revision": 0, "calibration_revision": 0}
+    with store.conn() as c:
+        row = c.execute(
+            """SELECT selection_revision,calibration_revision
+               FROM confidence_pair_revisions
+               WHERE parent_generation_id=? AND child_generation_id=?""",
+            (str(parent_gid), str(child_gid)),
+        ).fetchone()
+    return dict(row) if row else {"selection_revision": 0, "calibration_revision": 0}
+
+
+def _selection_pair_rows(store, parent_gid, child_gid):
+    """Minimal source rows required by the selection-quality contract."""
+    with store.conn() as c:
+        return [dict(row) for row in c.execute(
+            """SELECT root_agent_id,prediction_event_id,outcome_ts,outcome,
+                      parent_confidence,child_confidence,parent_correct,child_correct,
+                      dependency_cluster,evidence_kind,calibration_eligible,
+                      calibration_outcome,calibration_parent_correct,
+                      calibration_child_correct,calibration_source_id
+               FROM candidate_generation_pairs
+               WHERE parent_generation_id=? AND child_generation_id=?
+               ORDER BY outcome_ts""",
+            (str(parent_gid), str(child_gid)),
+        ).fetchall()]
+
+
+def _selection_sufficiency_from_store(store, parent_gid, child_gid, *,
+                                     selection_target, min_per_action):
+    """Exact Stage-13 selection sufficiency with O(1) Python working memory.
+
+    This preserves independent_episode_rows + dependency_adjusted_weights semantics,
+    but lets SQLite stream/group the full edge instead of materializing every pair in
+    Python. Only the evidence-readiness quantities used by EvaluationEpochJournal.ensure
+    are returned; correctness/quality values do not participate in selection freezing.
+    """
+    recent = max(1, int(selection_target))
+    min_action = max(1, int(min_per_action))
+    with store.conn() as db:
+        db.create_function(
+            "_hm_f22_episode_weight", 2,
+            lambda idx, total: float(_episode_weight(
+                int(idx), int(total),
+                DEFAULT_HALF_LIFE_EPISODES, recent,
+            )),
+        )
+        row = db.execute(
+            """
+            WITH source AS (
+                SELECT rowid AS _rid,root_agent_id,prediction_event_id,
+                       outcome_ts,outcome,dependency_cluster,
+                       ROW_NUMBER() OVER (
+                         PARTITION BY CASE
+                           WHEN prediction_event_id IS NOT NULL AND prediction_event_id<>''
+                             THEN prediction_event_id
+                           ELSE 'compat:' || COALESCE(root_agent_id,'') || ':' ||
+                                printf('%.6f',outcome_ts)
+                         END
+                         ORDER BY outcome_ts,rowid
+                       ) AS duplicate_rank
+                FROM candidate_generation_pairs
+                WHERE parent_generation_id=? AND child_generation_id=?
+            ),
+            dedup AS (
+                SELECT * FROM source WHERE duplicate_rank=1
+            ),
+            ranked AS (
+                SELECT *,
+                       ROW_NUMBER() OVER (ORDER BY outcome_ts,_rid)-1 AS evidence_index,
+                       COUNT(*) OVER () AS evidence_total
+                FROM dedup
+            ),
+            weighted AS (
+                SELECT *,
+                       _hm_f22_episode_weight(evidence_index,evidence_total) AS raw_weight,
+                       CASE WHEN CAST(outcome AS REAL)>=0.5 THEN 1 ELSE 0 END AS action_value,
+                       CASE
+                         WHEN dependency_cluster IS NOT NULL AND dependency_cluster<>''
+                           THEN dependency_cluster
+                         ELSE COALESCE(root_agent_id,'global') || ':' ||
+                              CAST(outcome_ts / ? AS INTEGER)
+                       END AS cluster_key
+                FROM ranked
+            ),
+            clusters AS (
+                SELECT cluster_key,
+                       SUM(raw_weight) AS cluster_raw,
+                       SUM(CASE WHEN action_value=0 THEN raw_weight ELSE 0 END) AS off_raw,
+                       SUM(CASE WHEN action_value=1 THEN raw_weight ELSE 0 END) AS on_raw,
+                       SUM(CASE WHEN action_value=0 THEN 1 ELSE 0 END) AS off_episodes,
+                       SUM(CASE WHEN action_value=1 THEN 1 ELSE 0 END) AS on_episodes,
+                       MAX(outcome_ts) AS cluster_max_ts
+                FROM weighted
+                GROUP BY cluster_key
+            ),
+            scaled AS (
+                SELECT *,
+                       CASE WHEN cluster_raw>1.0 THEN 1.0/cluster_raw ELSE 1.0 END AS scale
+                FROM clusters
+            )
+            SELECT
+                COALESCE(SUM(off_episodes+on_episodes),0) AS episodes,
+                COALESCE(SUM(off_episodes),0) AS off_episodes,
+                COALESCE(SUM(on_episodes),0) AS on_episodes,
+                COALESCE(SUM(cluster_raw*scale),0.0) AS total_cluster_weight,
+                COALESCE(SUM((cluster_raw*scale)*(cluster_raw*scale)),0.0) AS total_cluster_sq,
+                COALESCE(SUM(off_raw*scale),0.0) AS off_cluster_weight,
+                COALESCE(SUM((off_raw*scale)*(off_raw*scale)),0.0) AS off_cluster_sq,
+                COALESCE(SUM(on_raw*scale),0.0) AS on_cluster_weight,
+                COALESCE(SUM((on_raw*scale)*(on_raw*scale)),0.0) AS on_cluster_sq,
+                MAX(cluster_max_ts) AS cutoff_ts
+            FROM scaled
+            """,
+            (str(parent_gid), str(child_gid), float(DEFAULT_DEPENDENCY_WINDOW_SECONDS)),
+        ).fetchone()
+    values = dict(row) if row else {}
+    def ess(total, squares):
+        total = max(0.0, float(total or 0.0))
+        squares = max(0.0, float(squares or 0.0))
+        return (total * total / squares) if squares > 1e-12 else 0.0
+    episodes = int(values.get("episodes") or 0)
+    off_episodes = int(values.get("off_episodes") or 0)
+    on_episodes = int(values.get("on_episodes") or 0)
+    total_eff = ess(values.get("total_cluster_weight"), values.get("total_cluster_sq"))
+    off_eff = ess(values.get("off_cluster_weight"), values.get("off_cluster_sq"))
+    on_eff = ess(values.get("on_cluster_weight"), values.get("on_cluster_sq"))
+    return {
+        "episodes": episodes,
+        "effective_n": total_eff,
+        "cutoff_ts": _finite(values.get("cutoff_ts")),
+        "per_action": {
+            "OFF": {
+                "episodes": off_episodes,
+                "effective_n": off_eff,
+                "sufficient_evidence": bool(
+                    off_episodes >= min_action and off_eff >= float(min_action)
+                ),
+            },
+            "ON": {
+                "episodes": on_episodes,
+                "effective_n": on_eff,
+                "sufficient_evidence": bool(
+                    on_episodes >= min_action and on_eff >= float(min_action)
+                ),
+            },
+        },
+        "sufficient_evidence": bool(
+            episodes >= recent
+            and total_eff >= float(recent)
+            and off_episodes >= min_action and off_eff >= float(min_action)
+            and on_episodes >= min_action and on_eff >= float(min_action)
+        ),
+        "query_mode": "sqlite_streamed_dependency_weight_aggregate",
+        "python_rows_materialized": 1,
+    }
+
+
+def _final_pair_rows(store, parent_gid, child_gid, cutoff, end_ts=None):
+    """Read only independent-final-evaluation candidates, never screening history."""
+    kinds = sorted(FINAL_CALIBRATION_EVIDENCE_KINDS)
+    placeholders = ",".join("?" for _ in kinds)
+    sql = f"""
+        SELECT root_agent_id,prediction_event_id,outcome_ts,outcome,
+               parent_confidence,child_confidence,parent_correct,child_correct,
+               dependency_cluster,evidence_kind,calibration_eligible,
+               calibration_outcome,calibration_parent_correct,
+               calibration_child_correct,calibration_source_id
+        FROM candidate_generation_pairs
+        WHERE parent_generation_id=? AND child_generation_id=?
+          AND outcome_ts>?
+          AND calibration_eligible=1
+          AND evidence_kind IN ({placeholders})
+          AND calibration_outcome IS NOT NULL
+          AND calibration_parent_correct IS NOT NULL
+          AND calibration_child_correct IS NOT NULL
+    """
+    params = [str(parent_gid), str(child_gid), float(cutoff)] + kinds
+    if end_ts is not None:
+        sql += " AND outcome_ts<=?"
+        params.append(float(end_ts))
+    sql += " ORDER BY outcome_ts"
+    with store.conn() as c:
+        return [dict(row) for row in c.execute(sql, params).fetchall()]
+
+
+def _cache_fingerprint(payload):
+    return json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str)
+
+
+def _probability_calibration_from_store(store, metric_id, model_key, scope_id,
+                                        *, bins=PROBABILITY_BINS,
+                                        half_life=DEFAULT_HALF_LIFE_EPISODES):
+    """Exact probability calibration aggregate with bounded Python materialization."""
+    metric_id = str(metric_id)
+    model_key = str(model_key)
+    scope_id = str(scope_id)
+    bins = max(1, int(bins))
+    recent = int(DEFAULT_FINAL_EPISODES)
+    with store.conn() as db:
+        db.create_function(
+            "_hm_f22_probability_weight", 2,
+            lambda idx, total: float(_episode_weight(
+                int(idx), int(total), float(half_life), recent,
+            )),
+        )
+        rows = [dict(row) for row in db.execute(
+            """
+            WITH filtered AS (
+                SELECT rowid AS _rid,ts,prediction,observed,dependency_cluster
+                FROM confidence_probability_episodes
+                WHERE metric_id=? AND model_key=? AND scope_id=?
+                  AND independent=1
+                  AND substr(source_kind,1,8)<>'training'
+                  AND substr(source_kind,1,6)<>'model:'
+                  AND prediction>=0.0 AND prediction<=1.0
+                  AND observed>=-1.0e308 AND observed<=1.0e308
+            ),
+            ranked AS (
+                SELECT *,
+                       ROW_NUMBER() OVER (ORDER BY ts,_rid)-1 AS evidence_index,
+                       COUNT(*) OVER () AS evidence_total
+                FROM filtered
+            ),
+            weighted AS (
+                SELECT *,
+                       _hm_f22_probability_weight(evidence_index,evidence_total) AS raw_weight,
+                       CASE
+                         WHEN prediction>=1.0 THEN ?-1
+                         WHEN prediction<=0.0 THEN 0
+                         ELSE CAST(prediction*? AS INTEGER)
+                       END AS bin_idx,
+                       CASE
+                         WHEN dependency_cluster IS NOT NULL AND dependency_cluster<>''
+                           THEN dependency_cluster
+                         ELSE ? || ':' || CAST(ts / ? AS INTEGER)
+                       END AS cluster_key
+                FROM ranked
+            ),
+            cluster_totals AS (
+                SELECT cluster_key,SUM(raw_weight) AS cluster_raw
+                FROM weighted GROUP BY cluster_key
+            ),
+            cluster_bins AS (
+                SELECT cluster_key,bin_idx,
+                       SUM(raw_weight) AS bin_raw,
+                       SUM(raw_weight*prediction) AS prediction_raw,
+                       SUM(raw_weight*CASE WHEN observed>=0.5 THEN 1.0 ELSE 0.0 END) AS observed_raw,
+                       SUM(raw_weight*(prediction-(CASE WHEN observed>=0.5 THEN 1.0 ELSE 0.0 END))*
+                                      (prediction-(CASE WHEN observed>=0.5 THEN 1.0 ELSE 0.0 END))) AS brier_raw,
+                       COUNT(*) AS episodes
+                FROM weighted
+                GROUP BY cluster_key,bin_idx
+            ),
+            scaled AS (
+                SELECT b.*,
+                       CASE WHEN t.cluster_raw>1.0 THEN 1.0/t.cluster_raw ELSE 1.0 END AS scale
+                FROM cluster_bins b
+                JOIN cluster_totals t USING(cluster_key)
+            )
+            SELECT bin_idx,
+                   SUM(bin_raw*scale) AS weight,
+                   SUM(prediction_raw*scale) AS prediction_sum,
+                   SUM(observed_raw*scale) AS observed_sum,
+                   SUM(brier_raw*scale) AS brier_sum,
+                   SUM(episodes) AS episodes,
+                   (SELECT COUNT(*) FROM ranked) AS total_episodes,
+                   (SELECT COALESCE(SUM(
+                       CASE WHEN cluster_raw>1.0 THEN 1.0 ELSE cluster_raw END
+                   ),0.0) FROM cluster_totals) AS cluster_weight_sum,
+                   (SELECT COALESCE(SUM(
+                       (CASE WHEN cluster_raw>1.0 THEN 1.0 ELSE cluster_raw END)*
+                       (CASE WHEN cluster_raw>1.0 THEN 1.0 ELSE cluster_raw END)
+                   ),0.0) FROM cluster_totals) AS cluster_weight_sq
+            FROM scaled
+            GROUP BY bin_idx
+            ORDER BY bin_idx
+            """,
+            (
+                metric_id, model_key, scope_id,
+                bins, bins, scope_id, float(DEFAULT_DEPENDENCY_WINDOW_SECONDS),
+            ),
+        ).fetchall()]
+    reliability = [
+        {
+            "lo": idx / float(bins),
+            "hi": (idx + 1) / float(bins),
+            "episodes": 0,
+            "weight": 0.0,
+            "mean_prediction": None,
+            "observed_frequency": None,
+        }
+        for idx in range(bins)
+    ]
+    total_w = 0.0
+    pred_sum = 0.0
+    observed_sum = 0.0
+    brier_sum = 0.0
+    episodes = 0
+    cluster_weight = 0.0
+    cluster_sq = 0.0
+    for row in rows:
+        idx = max(0, min(bins - 1, int(row.get("bin_idx") or 0)))
+        weight = max(0.0, float(row.get("weight") or 0.0))
+        cell = reliability[idx]
+        cell["episodes"] = int(row.get("episodes") or 0)
+        cell["weight"] = weight
+        cell["mean_prediction"] = (
+            float(row.get("prediction_sum") or 0.0) / weight if weight else None
+        )
+        cell["observed_frequency"] = (
+            float(row.get("observed_sum") or 0.0) / weight if weight else None
+        )
+        total_w += weight
+        pred_sum += float(row.get("prediction_sum") or 0.0)
+        observed_sum += float(row.get("observed_sum") or 0.0)
+        brier_sum += float(row.get("brier_sum") or 0.0)
+        episodes = int(row.get("total_episodes") or episodes)
+        cluster_weight = float(row.get("cluster_weight_sum") or cluster_weight)
+        cluster_sq = float(row.get("cluster_weight_sq") or cluster_sq)
+    n_eff = (
+        cluster_weight * cluster_weight / cluster_sq
+        if cluster_sq > 1e-12 else 0.0
+    )
+    mean_prediction = pred_sum / total_w if total_w else None
+    observed_rate = observed_sum / total_w if total_w else None
+    gap = (
+        None if mean_prediction is None or observed_rate is None
+        else mean_prediction - observed_rate
+    )
+    report = {
+        "metric": "probability_calibration",
+        "probability_claim": True,
+        "scope_id": scope_id,
+        "model_key": model_key,
+        "episodes": episodes,
+        "effective_n": n_eff,
+        "brier_score": brier_sum / total_w if total_w else None,
+        "reliability_bins": reliability,
+        "mean_prediction": mean_prediction,
+        "observed_frequency": observed_rate,
+        "calibration_gap": gap,
+        "overconfident": bool(
+            n_eff >= 8 and gap is not None and gap > DEFAULT_OVERCONFIDENCE_GAP
+        ),
+        "sufficient_evidence": bool(
+            episodes >= DEFAULT_FINAL_EPISODES
+            and n_eff >= DEFAULT_FINAL_EPISODES
+        ),
+    }
+    return report, {
+        "source_rows": episodes,
+        "python_rows_materialized": len(rows),
+        "query_mode": "sqlite_streamed_probability_cluster_bins",
+    }
+
+
 def ensure_tables(store):
     with store.lock, store.conn() as c:
         c.executescript(
@@ -567,8 +1011,56 @@ def ensure_tables(store):
             );
             CREATE INDEX IF NOT EXISTS idx_confidence_epoch_child
                 ON confidence_evaluation_epochs(child_generation_id,created_ts DESC);
+
+            CREATE TABLE IF NOT EXISTS confidence_selection_scan_cache (
+                parent_generation_id TEXT NOT NULL,
+                child_generation_id TEXT NOT NULL,
+                evaluation_revision TEXT NOT NULL,
+                contract_version INTEGER NOT NULL,
+                selection_revision INTEGER NOT NULL,
+                params_fingerprint TEXT NOT NULL,
+                sufficient INTEGER NOT NULL,
+                scanned_rows INTEGER NOT NULL,
+                updated_ts REAL NOT NULL,
+                PRIMARY KEY(parent_generation_id,child_generation_id,evaluation_revision,contract_version)
+            );
+
+            CREATE TABLE IF NOT EXISTS confidence_final_report_cache (
+                parent_generation_id TEXT NOT NULL,
+                child_generation_id TEXT NOT NULL,
+                evaluation_revision TEXT NOT NULL,
+                contract_version INTEGER NOT NULL,
+                calibration_revision INTEGER NOT NULL,
+                params_fingerprint TEXT NOT NULL,
+                report_json TEXT NOT NULL,
+                scanned_rows INTEGER NOT NULL,
+                updated_ts REAL NOT NULL,
+                PRIMARY KEY(parent_generation_id,child_generation_id,evaluation_revision,contract_version)
+            );
+
+            CREATE TABLE IF NOT EXISTS confidence_probability_revisions (
+                metric_id TEXT NOT NULL,
+                model_key TEXT NOT NULL,
+                scope_id TEXT NOT NULL,
+                revision INTEGER NOT NULL DEFAULT 0,
+                updated_ts REAL NOT NULL,
+                PRIMARY KEY(metric_id,model_key,scope_id)
+            );
+
+            CREATE TABLE IF NOT EXISTS confidence_probability_report_cache (
+                metric_id TEXT NOT NULL,
+                model_key TEXT NOT NULL,
+                scope_id TEXT NOT NULL,
+                contract_version INTEGER NOT NULL,
+                revision INTEGER NOT NULL,
+                report_json TEXT NOT NULL,
+                scanned_rows INTEGER NOT NULL,
+                updated_ts REAL NOT NULL,
+                PRIMARY KEY(metric_id,model_key,scope_id,contract_version)
+            );
             """
         )
+    _ensure_pair_revision_tracking(store)
 
 
 class ProbabilityCalibrationJournal:
@@ -601,6 +1093,16 @@ class ProbabilityCalibrationJournal:
                  1 if independent else 0, now),
             )
             inserted = c.execute("SELECT changes()").fetchone()[0] > 0
+            if inserted:
+                c.execute(
+                    """INSERT INTO confidence_probability_revisions
+                       (metric_id,model_key,scope_id,revision,updated_ts)
+                       VALUES(?,?,?,?,?)
+                       ON CONFLICT(metric_id,model_key,scope_id) DO UPDATE SET
+                         revision=confidence_probability_revisions.revision+1,
+                         updated_ts=excluded.updated_ts""",
+                    (str(metric_id), str(model_key), str(scope_id), 1, now),
+                )
         return inserted
 
     def rows(self, metric_id, model_key, scope_id):
@@ -612,11 +1114,48 @@ class ProbabilityCalibrationJournal:
             ).fetchall()]
 
     def report(self, metric_id, model_key, scope_id):
-        return probability_calibration(
-            self.rows(metric_id, model_key, scope_id),
-            scope_id=str(scope_id),
-            model_key=str(model_key),
+        metric_id = str(metric_id)
+        model_key = str(model_key)
+        scope_id = str(scope_id)
+        with self.store.conn() as c:
+            rev = c.execute(
+                """SELECT revision FROM confidence_probability_revisions
+                   WHERE metric_id=? AND model_key=? AND scope_id=?""",
+                (metric_id, model_key, scope_id),
+            ).fetchone()
+            revision = int(rev[0]) if rev else 0
+            cached = c.execute(
+                """SELECT report_json FROM confidence_probability_report_cache
+                   WHERE metric_id=? AND model_key=? AND scope_id=?
+                     AND contract_version=? AND revision=?""",
+                (metric_id, model_key, scope_id, CONTRACT_VERSION, revision),
+            ).fetchone()
+        diagnostics = getattr(self, "_performance_diagnostics", None)
+        if cached:
+            if diagnostics is not None:
+                diagnostics.confidence_probability_cache_hits += 1
+            return json.loads(cached[0])
+
+        report, aggregate_meta = _probability_calibration_from_store(
+            self.store, metric_id, model_key, scope_id,
         )
+        with self.store.lock, self.store.conn() as c:
+            c.execute(
+                """INSERT INTO confidence_probability_report_cache
+                   (metric_id,model_key,scope_id,contract_version,revision,
+                    report_json,scanned_rows,updated_ts)
+                   VALUES(?,?,?,?,?,?,?,?)
+                   ON CONFLICT(metric_id,model_key,scope_id,contract_version) DO UPDATE SET
+                     revision=excluded.revision,report_json=excluded.report_json,
+                     scanned_rows=excluded.scanned_rows,updated_ts=excluded.updated_ts""",
+                (metric_id, model_key, scope_id, CONTRACT_VERSION, revision,
+                 json.dumps(report, separators=(",", ":"), sort_keys=True),
+                 int(aggregate_meta.get("source_rows") or 0), time.time()),
+            )
+        if diagnostics is not None:
+            diagnostics.confidence_probability_scans += 1
+            diagnostics.record_batch(aggregate_meta.get("python_rows_materialized") or 0)
+        return report
 
 
 class EvaluationEpochJournal:
@@ -684,6 +1223,153 @@ class EvaluationEpochJournal:
             )
         return self.get(parent_gid, child_gid, evaluation_revision)
 
+    def ensure_from_store(self, parent_gid, child_gid, model_revision, backend_key,
+                          *, selection_target=DEFAULT_SELECTION_EPISODES,
+                          final_target=DEFAULT_FINAL_EPISODES,
+                          min_per_action=DEFAULT_MIN_PER_ACTION):
+        """Freeze selection without rescanning an unchanged Candidate edge on UI polls."""
+        evaluation_revision = _evaluation_revision(model_revision, backend_key)
+        existing = self.get(parent_gid, child_gid, evaluation_revision)
+        if existing:
+            return existing
+        revisions = _pair_revisions(self.store, parent_gid, child_gid)
+        revision = int(revisions.get("selection_revision") or 0)
+        params = _cache_fingerprint({
+            "selection_target": int(selection_target),
+            "final_target": int(final_target),
+            "min_per_action": int(min_per_action),
+            "contract_version": CONTRACT_VERSION,
+        })
+        with self.store.conn() as c:
+            cached = c.execute(
+                """SELECT sufficient FROM confidence_selection_scan_cache
+                   WHERE parent_generation_id=? AND child_generation_id=?
+                     AND evaluation_revision=? AND contract_version=?
+                     AND selection_revision=? AND params_fingerprint=?""",
+                (str(parent_gid), str(child_gid), evaluation_revision, CONTRACT_VERSION,
+                 revision, params),
+            ).fetchone()
+        diagnostics = getattr(self, "_performance_diagnostics", None)
+        if cached is not None and not bool(cached[0]):
+            if diagnostics is not None:
+                diagnostics.confidence_selection_cache_hits += 1
+            return None
+
+        selection = _selection_sufficiency_from_store(
+            self.store, parent_gid, child_gid,
+            selection_target=selection_target,
+            min_per_action=min_per_action,
+        )
+        if diagnostics is not None:
+            diagnostics.confidence_selection_scans += 1
+            diagnostics.record_batch(selection.get("python_rows_materialized") or 0)
+        epoch = None
+        if selection["sufficient_evidence"] and selection.get("cutoff_ts") is not None:
+            now = time.time()
+            with self.store.lock, self.store.conn() as c:
+                c.execute(
+                    """INSERT OR IGNORE INTO confidence_evaluation_epochs
+                       (parent_generation_id,child_generation_id,model_revision,backend_key,
+                        contract_version,selection_cutoff_ts,final_target,min_per_action,created_ts)
+                       VALUES(?,?,?,?,?,?,?,?,?)""",
+                    (str(parent_gid), str(child_gid), evaluation_revision, str(backend_key),
+                     CONTRACT_VERSION, float(selection["cutoff_ts"]), int(final_target),
+                     int(min_per_action), now),
+                )
+            epoch = self.get(parent_gid, child_gid, evaluation_revision)
+        with self.store.lock, self.store.conn() as c:
+            c.execute(
+                """INSERT INTO confidence_selection_scan_cache
+                   (parent_generation_id,child_generation_id,evaluation_revision,
+                    contract_version,selection_revision,params_fingerprint,sufficient,
+                    scanned_rows,updated_ts)
+                   VALUES(?,?,?,?,?,?,?,?,?)
+                   ON CONFLICT(parent_generation_id,child_generation_id,evaluation_revision,
+                               contract_version) DO UPDATE SET
+                     selection_revision=excluded.selection_revision,
+                     params_fingerprint=excluded.params_fingerprint,
+                     sufficient=excluded.sufficient,scanned_rows=excluded.scanned_rows,
+                     updated_ts=excluded.updated_ts""",
+                (str(parent_gid), str(child_gid), evaluation_revision, CONTRACT_VERSION,
+                 revision, params, 1 if epoch else 0, int(selection.get("episodes") or 0), time.time()),
+            )
+        return epoch
+
+    def final_report_from_store(self, epoch, parent_gid, child_gid, *, scope_id=None,
+                                max_regression=DEFAULT_FINAL_MAX_REGRESSION):
+        """Evaluate only final-calibration rows and reuse an unchanged fixed-test report."""
+        if not epoch:
+            return self.final_report(None, (), scope_id=scope_id, max_regression=max_regression)
+        revisions = _pair_revisions(self.store, parent_gid, child_gid)
+        revision = int(revisions.get("calibration_revision") or 0)
+        params = _cache_fingerprint({
+            "selection_cutoff_ts": float(epoch["selection_cutoff_ts"]),
+            "final_end_ts": _finite(epoch.get("final_end_ts")),
+            "final_target": int(epoch["final_target"]),
+            "min_per_action": int(epoch["min_per_action"]),
+            "scope_id": None if scope_id is None else str(scope_id),
+            "max_regression": float(max_regression),
+            "contract_version": CONTRACT_VERSION,
+        })
+        with self.store.conn() as c:
+            # Even a locked holdout must notice a newly attached independent label on an
+            # already-existing episode inside final_end_ts. The revision therefore stays
+            # part of the cache key. Ordinary automation-history growth does not advance
+            # calibration_revision, so warm UI polling remains O(1).
+            cached = c.execute(
+                """SELECT report_json FROM confidence_final_report_cache
+                   WHERE parent_generation_id=? AND child_generation_id=?
+                     AND evaluation_revision=? AND contract_version=?
+                     AND calibration_revision=? AND params_fingerprint=?""",
+                (str(parent_gid), str(child_gid), str(epoch["model_revision"]),
+                 CONTRACT_VERSION, revision, params),
+            ).fetchone()
+        diagnostics = getattr(self, "_performance_diagnostics", None)
+        if cached:
+            if diagnostics is not None:
+                diagnostics.confidence_final_cache_hits += 1
+            return json.loads(cached[0])
+
+        rows = _final_pair_rows(
+            self.store, parent_gid, child_gid,
+            float(epoch["selection_cutoff_ts"]), _finite(epoch.get("final_end_ts")),
+        )
+        if diagnostics is not None:
+            diagnostics.confidence_final_scans += 1
+            diagnostics.record_batch(len(rows))
+        report = self.final_report(
+            epoch, rows, scope_id=scope_id, max_regression=max_regression
+        )
+        current = self.get(parent_gid, child_gid, epoch["model_revision"]) or epoch
+        final_params = _cache_fingerprint({
+            "selection_cutoff_ts": float(current["selection_cutoff_ts"]),
+            "final_end_ts": _finite(current.get("final_end_ts")),
+            "final_target": int(current["final_target"]),
+            "min_per_action": int(current["min_per_action"]),
+            "scope_id": None if scope_id is None else str(scope_id),
+            "max_regression": float(max_regression),
+            "contract_version": CONTRACT_VERSION,
+        })
+        with self.store.lock, self.store.conn() as c:
+            c.execute(
+                """INSERT INTO confidence_final_report_cache
+                   (parent_generation_id,child_generation_id,evaluation_revision,
+                    contract_version,calibration_revision,params_fingerprint,
+                    report_json,scanned_rows,updated_ts)
+                   VALUES(?,?,?,?,?,?,?,?,?)
+                   ON CONFLICT(parent_generation_id,child_generation_id,evaluation_revision,
+                               contract_version) DO UPDATE SET
+                     calibration_revision=excluded.calibration_revision,
+                     params_fingerprint=excluded.params_fingerprint,
+                     report_json=excluded.report_json,scanned_rows=excluded.scanned_rows,
+                     updated_ts=excluded.updated_ts""",
+                (str(parent_gid), str(child_gid), str(current["model_revision"]),
+                 CONTRACT_VERSION, revision, final_params,
+                 json.dumps(report, separators=(",", ":"), sort_keys=True),
+                 len(rows), time.time()),
+            )
+        return report
+
     def final_report(self, epoch, pairs, *, scope_id=None,
                      max_regression=DEFAULT_FINAL_MAX_REGRESSION):
         if not epoch:
@@ -714,7 +1400,8 @@ class EvaluationEpochJournal:
         # healed by peeking at later observations.
         if end_ts is None and report["sufficient_evidence"]:
             locked_end = None
-            for idx in range(1, len(rows) + 1):
+            # No prefix shorter than final_target can satisfy the declared test.
+            for idx in range(max(1, int(epoch["final_target"])), len(rows) + 1):
                 prefix = paired_future_quality_report(
                     rows[:idx],
                     scope_id=scope_id,
@@ -842,7 +1529,6 @@ def _decorate_summary(manager, epochs, row, summary, parent, candidate):
 
     parent_gid = str(generation["parent_generation_id"])
     child_gid = str(generation["generation_id"])
-    pairs = _pair_rows(manager.store, parent_gid, child_gid)
     model = manager.store.get_model(candidate["id"]) if candidate and candidate.get("id") else None
     model_revision = str(
         (model or {}).get("model_revision")
@@ -852,12 +1538,11 @@ def _decorate_summary(manager, epochs, row, summary, parent, candidate):
     backend_key = _backend_key(model)
     selection_target = max(DEFAULT_SELECTION_EPISODES, int(summary.get("required_future_samples") or 0))
     min_per_action = max(DEFAULT_MIN_PER_ACTION, int(summary.get("required_future_samples_per_action") or 0))
-    epoch = epochs.ensure(
+    epoch = epochs.ensure_from_store(
         parent_gid,
         child_gid,
         model_revision,
         backend_key,
-        pairs,
         selection_target=selection_target,
         final_target=DEFAULT_FINAL_EPISODES,
         min_per_action=min_per_action,
@@ -871,9 +1556,10 @@ def _decorate_summary(manager, epochs, row, summary, parent, candidate):
         )
     except Exception:
         pass
-    final = epochs.final_report(
+    final = epochs.final_report_from_store(
         epoch,
-        pairs,
+        parent_gid,
+        child_gid,
         scope_id=str(generation.get("root_agent_id") or ""),
         max_regression=max_regression,
     )

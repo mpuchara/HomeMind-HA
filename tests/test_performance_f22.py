@@ -11,6 +11,7 @@ from types import SimpleNamespace
 import agent_candidate_preference_metrics as pref
 import agent_candidate_shadow_runtime as shadow
 import performance_f22 as f22
+import confidence_contract as confidence
 import teaching_rl
 from settings import OPTIONS
 
@@ -133,6 +134,25 @@ class FastMetricFixture:
                         "INSERT INTO candidate_generation_decisions VALUES(?,?,?,?,?,?,?,?,?)",
                         ("root", gid, f"{gid}:go:{i}", ts-lead, outcome, desired, .8, "m", "s"),
                     )
+
+
+class F22ContractParityTests(unittest.TestCase):
+    def test_build_info_and_runtime_source_publish_current_bounded_cost_contract(self):
+        root = Path(__file__).resolve().parents[1]
+        build = json.loads((root / "adaptive_ai" / "BUILD_INFO.json").read_text(encoding="utf-8"))
+        self.assertEqual(build["history_cost_contract_version"], f22.CONTRACT_VERSION)
+        self.assertIn("revision cache", build["history_cost_confidence_selection"])
+        self.assertIn("bounded fixed-window recomputation", build["history_cost_confidence_final"])
+        self.assertIn("one row", build["history_cost_confidence_selection"])
+        self.assertIn("reliability-bin count", build["history_cost_probability_calibration"])
+        self.assertEqual(
+            build["history_cost_pi_budgets_not_measurements"]["training_queue_pending_max"],
+            16,
+        )
+        self.assertIn("--pairs 3000", build["history_cost_pi_benchmark_command"])
+        runtime = (root / "adaptive_ai" / "src" / "runtime_composition.py").read_text(encoding="utf-8")
+        self.assertIn('"performance"', runtime)
+        self.assertIn("manager.performance_f22", runtime)
 
 
 class StartupIndexTests(unittest.TestCase):
@@ -303,6 +323,298 @@ class TeachBatchTests(unittest.TestCase):
             self.fake._f22_diagnostics.snapshot()["max_rows_materialized_per_batch"],
             f22.TEACH_CANDIDATE_CHUNK * len(self.labels),
         )
+
+
+class CurrentConfidenceCostTests(unittest.TestCase):
+    def setUp(self):
+        self.store = MemoryStore()
+        FastMetricFixture.schema(self.store)
+        with self.store.conn() as db:
+            for ddl in (
+                "ALTER TABLE candidate_generation_pairs ADD COLUMN evidence_kind TEXT NOT NULL DEFAULT 'legacy_unclassified'",
+                "ALTER TABLE candidate_generation_pairs ADD COLUMN calibration_eligible INTEGER NOT NULL DEFAULT 0",
+                "ALTER TABLE candidate_generation_pairs ADD COLUMN dependency_cluster TEXT",
+                "ALTER TABLE candidate_generation_pairs ADD COLUMN calibration_outcome REAL",
+                "ALTER TABLE candidate_generation_pairs ADD COLUMN calibration_parent_correct INTEGER",
+                "ALTER TABLE candidate_generation_pairs ADD COLUMN calibration_child_correct INTEGER",
+                "ALTER TABLE candidate_generation_pairs ADD COLUMN calibration_source_id TEXT",
+            ):
+                db.execute(ddl)
+        confidence.ensure_tables(self.store)
+        self.epochs = confidence.EvaluationEpochJournal(self.store)
+        self.diag = f22.PerformanceDiagnostics()
+        self.epochs._performance_diagnostics = self.diag
+
+    def _insert_pair(self, i, *, eligible=False, outcome=None, parent_ok=True, child_ok=True):
+        outcome = float(i % 2 if outcome is None else outcome)
+        ts = 1000.0 + float(i) * 10.0
+        kind = 'manual_user_target_change' if eligible else 'external_target_transition'
+        with self.store.conn() as db:
+            db.execute(
+                """INSERT INTO candidate_generation_pairs
+                   (root_agent_id,parent_generation_id,child_generation_id,prediction_event_id,
+                    prediction_ts,outcome_ts,outcome,parent_prediction,child_prediction,
+                    parent_confidence,child_confidence,parent_correct,child_correct,paired_result,
+                    parent_lead_seconds,child_lead_seconds,lead_gain_seconds,
+                    evidence_kind,calibration_eligible,dependency_cluster,calibration_outcome,
+                    calibration_parent_correct,calibration_child_correct,calibration_source_id)
+                   VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                (
+                    'root','g0','g1',f'ce-{i}',ts-1,ts,outcome,
+                    outcome if parent_ok else 1.0-outcome,
+                    outcome if child_ok else 1.0-outcome,
+                    .8,.8,int(parent_ok),int(child_ok),
+                    'both_correct' if parent_ok and child_ok else
+                    'child_win' if child_ok else 'parent_win' if parent_ok else 'both_wrong',
+                    1.0,1.0,0.0,
+                    kind,1 if eligible else 0,f'cluster-{i}',
+                    outcome if eligible else None,
+                    int(parent_ok) if eligible else None,
+                    int(child_ok) if eligible else None,
+                    f'label-{i}' if eligible else None,
+                ),
+            )
+
+    def test_streamed_selection_sufficiency_matches_legacy_dependency_weighting(self):
+        # Mix ON/OFF, repeated dependency clusters and enough rows to exercise decay.
+        for i in range(40):
+            self._insert_pair(i, outcome=(i % 3 != 0))
+        with self.store.conn() as db:
+            # Force several separated observations into shared dependency clusters.
+            for i in range(0, 40, 5):
+                db.execute(
+                    """UPDATE candidate_generation_pairs SET dependency_cluster=?
+                       WHERE parent_generation_id='g0' AND child_generation_id='g1'
+                         AND prediction_event_id=?""",
+                    (f'shared-{i % 10}', f'ce-{i}'),
+                )
+        rows = confidence._selection_pair_rows(self.store, 'g0', 'g1')
+        legacy = confidence.action_quality_report(
+            confidence.independent_episode_rows(rows),
+            scope_id=None, min_total=12, min_per_action=4,
+        )
+        streamed = confidence._selection_sufficiency_from_store(
+            self.store, 'g0', 'g1', selection_target=12, min_per_action=4,
+        )
+        self.assertEqual(streamed['episodes'], legacy['episodes'])
+        self.assertAlmostEqual(streamed['effective_n'], legacy['effective_n'], places=10)
+        for action in ('OFF','ON'):
+            self.assertEqual(
+                streamed['per_action'][action]['episodes'],
+                legacy['per_action'][action]['episodes'],
+            )
+            self.assertAlmostEqual(
+                streamed['per_action'][action]['effective_n'],
+                legacy['per_action'][action]['effective_n'],
+                places=10,
+            )
+            self.assertEqual(
+                streamed['per_action'][action]['sufficient_evidence'],
+                legacy['per_action'][action]['sufficient_evidence'],
+            )
+        self.assertEqual(streamed['sufficient_evidence'], legacy['sufficient_evidence'])
+        self.assertEqual(streamed['python_rows_materialized'], 1)
+
+    def test_unchanged_insufficient_selection_uses_revision_cache_not_pair_scan(self):
+        for i in range(6):
+            self._insert_pair(i)
+        first = self.epochs.ensure_from_store(
+            'g0','g1','rev-a','diagonal_linucb:v11',
+            selection_target=12,final_target=12,min_per_action=4,
+        )
+        self.assertIsNone(first)
+        self.store.reset_trace()
+        second = self.epochs.ensure_from_store(
+            'g0','g1','rev-a','diagonal_linucb:v11',
+            selection_target=12,final_target=12,min_per_action=4,
+        )
+        self.assertIsNone(second)
+        sql = "\n".join(self.store.selects()).lower()
+        self.assertNotIn("from candidate_generation_pairs", sql)
+        self.assertGreaterEqual(self.diag.confidence_selection_cache_hits, 1)
+
+    def test_fixed_future_report_is_exact_cached_and_ignores_unrelated_pair_growth(self):
+        for i in range(12):
+            self._insert_pair(i)
+        epoch = self.epochs.ensure_from_store(
+            'g0','g1','rev-a','diagonal_linucb:v11',
+            selection_target=12,final_target=12,min_per_action=4,
+        )
+        self.assertIsNotNone(epoch)
+        for i in range(20, 32):
+            self._insert_pair(i, eligible=True)
+        optimized = self.epochs.final_report_from_store(
+            epoch,'g0','g1',scope_id='root'
+        )
+        self.assertTrue(optimized['sufficient_evidence'])
+        self.assertTrue(optimized['promotion_quality_passed'])
+        locked = self.epochs.get('g0','g1','rev-a','diagonal_linucb:v11')
+        legacy = self.epochs.final_report(
+            locked, confidence._pair_rows(self.store,'g0','g1'), scope_id='root'
+        )
+        for key in ('episodes','effective_n','promotion_quality_passed','status','final_end_ts'):
+            self.assertEqual(optimized[key], legacy[key], key)
+        self.assertEqual(optimized['paired_delta'], legacy['paired_delta'])
+        self.assertEqual(optimized['per_action_delta'], legacy['per_action_delta'])
+
+        self.store.reset_trace()
+        warm = self.epochs.final_report_from_store(
+            locked,'g0','g1',scope_id='root'
+        )
+        self.assertEqual(warm, optimized)
+        self.assertNotIn("from candidate_generation_pairs", "\n".join(self.store.selects()).lower())
+
+        # Thousands of ordinary automation transitions belong to screening history only.
+        for i in range(100, 1100):
+            self._insert_pair(i, eligible=False)
+        self.store.reset_trace()
+        after_unrelated = self.epochs.final_report_from_store(
+            locked,'g0','g1',scope_id='root'
+        )
+        self.assertEqual(after_unrelated, optimized)
+        self.assertNotIn("from candidate_generation_pairs", "\n".join(self.store.selects()).lower())
+
+        # A later independent label invalidates the calibration revision, but the
+        # recomputation is constrained to the already locked fixed-future window rather
+        # than the full Candidate edge. The following warm read is cached again.
+        self._insert_pair(1200, eligible=True)
+        self.store.reset_trace()
+        after_label = self.epochs.final_report_from_store(
+            locked,'g0','g1',scope_id='root'
+        )
+        self.assertEqual(after_label, optimized)
+        sql = "\n".join(self.store.selects()).lower()
+        self.assertIn("from candidate_generation_pairs", sql)
+        self.assertIn("outcome_ts<=", sql)
+        self.assertLessEqual(self.diag.snapshot()['max_rows_materialized_per_batch'], 12)
+        self.store.reset_trace()
+        self.assertEqual(
+            self.epochs.final_report_from_store(locked,'g0','g1',scope_id='root'),
+            optimized,
+        )
+        self.assertNotIn("from candidate_generation_pairs", "\n".join(self.store.selects()).lower())
+
+        # Durable cache survives a new journal/runtime instance.
+        restarted = confidence.EvaluationEpochJournal(self.store)
+        restarted._performance_diagnostics = self.diag
+        self.store.reset_trace()
+        restarted_report = restarted.final_report_from_store(
+            restarted.get('g0','g1','rev-a','diagonal_linucb:v11'),
+            'g0','g1',scope_id='root',
+        )
+        self.assertEqual(restarted_report, optimized)
+        self.assertNotIn("from candidate_generation_pairs", "\n".join(self.store.selects()).lower())
+
+    def test_retroactive_label_inside_locked_window_invalidates_cache_and_matches_legacy(self):
+        for i in range(12):
+            self._insert_pair(i)
+        epoch = self.epochs.ensure_from_store(
+            'g0','g1','rev-retro','diagonal_linucb:v11',
+            selection_target=12,final_target=12,min_per_action=4,
+        )
+        for i in range(20, 32):
+            # Keep one parent/child disagreement so a later independent label can
+            # legitimately reverse which model was correct without rewriting predictions.
+            self._insert_pair(i, eligible=True, child_ok=(i != 20))
+        initial = self.epochs.final_report_from_store(epoch,'g0','g1',scope_id='root')
+        locked = self.epochs.get('g0','g1','rev-retro','diagonal_linucb:v11')
+        self.assertIsNotNone(locked['final_end_ts'])
+
+        # Simulate a late independent label attached to an existing pair whose outcome
+        # timestamp belongs to the locked window. Old semantics would include it.
+        with self.store.conn() as db:
+            target = db.execute(
+                """SELECT prediction_event_id FROM candidate_generation_pairs
+                   WHERE parent_generation_id='g0' AND child_generation_id='g1'
+                     AND outcome_ts>? AND outcome_ts<=?
+                   ORDER BY outcome_ts LIMIT 1""",
+                (locked['selection_cutoff_ts'], locked['final_end_ts']),
+            ).fetchone()[0]
+            db.execute(
+                """UPDATE candidate_generation_pairs SET
+                   evidence_kind='episode_evaluator_independent',
+                   calibration_eligible=1,
+                   calibration_outcome=1-calibration_outcome,
+                   calibration_parent_correct=0,
+                   calibration_child_correct=1,
+                   calibration_source_id='retroactive-label'
+                   WHERE parent_generation_id='g0' AND child_generation_id='g1'
+                     AND prediction_event_id=?""",
+                (target,),
+            )
+
+        self.store.reset_trace()
+        refreshed = self.epochs.final_report_from_store(
+            locked,'g0','g1',scope_id='root'
+        )
+        legacy = self.epochs.final_report(
+            locked, confidence._pair_rows(self.store,'g0','g1'), scope_id='root'
+        )
+        self.assertEqual(refreshed['episodes'], legacy['episodes'])
+        self.assertEqual(refreshed['paired_delta'], legacy['paired_delta'])
+        self.assertEqual(refreshed['per_action_delta'], legacy['per_action_delta'])
+        self.assertEqual(refreshed['promotion_quality_passed'], legacy['promotion_quality_passed'])
+        self.assertIn("outcome_ts<=", "\n".join(self.store.selects()).lower())
+        self.assertNotEqual(initial['paired_delta'], refreshed['paired_delta'])
+
+    def test_streamed_probability_calibration_matches_legacy_report(self):
+        journal = confidence.ProbabilityCalibrationJournal(self.store)
+        journal._performance_diagnostics = self.diag
+        for i in range(80):
+            journal.record(
+                metric_id='presence_3s', model_key='room-v2', scope_id='kitchen',
+                episode_id=f'stream-p-{i}', ts=float(i * 7),
+                prediction=(0.15 + 0.7 * ((i % 9) / 8.0)),
+                observed=float((i % 4) != 0),
+                source_kind='manual_ground_truth',
+                dependency_cluster=f'pc-{i // 3}',
+                independent=True,
+            )
+        legacy = confidence.probability_calibration(
+            journal.rows('presence_3s','room-v2','kitchen'),
+            scope_id='kitchen', model_key='room-v2',
+        )
+        optimized = journal.report('presence_3s','room-v2','kitchen')
+        for key in (
+            'episodes','sufficient_evidence','overconfident',
+            'mean_prediction','observed_frequency','calibration_gap','brier_score',
+            'effective_n',
+        ):
+            if isinstance(legacy[key], float):
+                self.assertAlmostEqual(optimized[key], legacy[key], places=10, msg=key)
+            else:
+                self.assertEqual(optimized[key], legacy[key], key)
+        self.assertEqual(len(optimized['reliability_bins']), len(legacy['reliability_bins']))
+        for left, right in zip(optimized['reliability_bins'], legacy['reliability_bins']):
+            self.assertEqual(left['episodes'], right['episodes'])
+            self.assertAlmostEqual(left['weight'], right['weight'], places=10)
+            for key in ('mean_prediction','observed_frequency'):
+                if right[key] is None:
+                    self.assertIsNone(left[key])
+                else:
+                    self.assertAlmostEqual(left[key], right[key], places=10)
+        self.assertLessEqual(
+            self.diag.snapshot()['max_rows_materialized_per_batch'],
+            confidence.PROBABILITY_BINS,
+        )
+
+    def test_probability_report_reuses_durable_scope_revision_cache(self):
+        journal = confidence.ProbabilityCalibrationJournal(self.store)
+        journal._performance_diagnostics = self.diag
+        for i in range(20):
+            journal.record(
+                metric_id='presence_3s', model_key='room-v2', scope_id='kitchen',
+                episode_id=f'p-{i}', ts=float(i), prediction=.8 if i % 2 else .2,
+                observed=float(i % 2), source_kind='manual_ground_truth',
+                dependency_cluster=f'pc-{i}', independent=True,
+            )
+        first = journal.report('presence_3s','room-v2','kitchen')
+        self.store.reset_trace()
+        second = journal.report('presence_3s','room-v2','kitchen')
+        self.assertEqual(first, second)
+        sql = "\n".join(self.store.selects()).lower()
+        self.assertNotIn("from confidence_probability_episodes", sql)
+        self.assertGreaterEqual(self.diag.confidence_probability_cache_hits, 1)
 
 
 class AnchorAndBackpressureTests(unittest.TestCase):

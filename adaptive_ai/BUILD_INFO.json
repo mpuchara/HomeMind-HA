@@ -140,5 +140,25 @@
     "feedback.*",
     "promotion.*"
   ],
-  "runtime_remaining_compatibility": "unmigrated queue/GET/static/process-agent overlays remain staged compatibility fallbacks"
+  "runtime_remaining_compatibility": "unmigrated queue/GET/static/process-agent overlays remain staged compatibility fallbacks",
+  "history_cost_contract_version": 2,
+  "history_cost_candidate_summary": "durable incremental cursor; raw Candidate pairs retained",
+  "history_cost_fast_metrics": "bounded pair batches + batched decision history; warm status consumes only rows after cursor",
+  "history_cost_confidence_selection": "SQLite-streamed exact Stage-13 evidence-readiness aggregate + durable edge revision cache; Python materializes one row and unchanged insufficient status does not rescan pairs",
+  "history_cost_confidence_final": "calibration-only fixed-future query + durable revision cache; ordinary screening history never invalidates it, while new independent evidence triggers only a bounded fixed-window recomputation",
+  "history_cost_probability_calibration": "SQLite-streamed exact Brier/reliability/dependency aggregate + durable per-scope revision cache; Python materializes at most reliability-bin count",
+  "history_cost_teach_scoring": "batched as-of lookup, <=24 sensors x <=256 active labels per batch",
+  "history_cost_regression_anchors": "latest 64 active references; older rows retained for audit with zero training weight",
+  "history_cost_training_queue": "bounded deduplicated heavy-work queue with retryable backpressure",
+  "history_cost_diagnostics": "bounded latency/query diagnostics include Stage-13 selection/final/probability scan/cache counters",
+  "history_cost_pi_budgets_not_measurements": {
+    "inference_p95_ms_under_one_heavy_job": 50,
+    "status_poll_p95_ms_under_one_heavy_job": 150,
+    "write_commit_latency_p95_ms": 100,
+    "training_queue_pending_max": 16,
+    "teach_rows_materialized_per_batch_max": 6144,
+    "addon_peak_rss_mb": 512
+  },
+  "history_cost_pi_benchmark_command": "python tools/benchmark_history_costs.py --pairs 3000 --teach-sensors 96 --teach-labels 24",
+  "history_cost_benchmark": "v2 covers legacy fast metrics, current Stage-13 selection/fixed-future metrics, probability calibration, Teach scoring, concurrent inference/status latency and RSS; host environment is always reported"
 }
