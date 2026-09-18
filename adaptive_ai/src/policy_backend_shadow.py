@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import math
+import os
 import time
 
 from policy_full_ridge import FullRidgeLinUCBBackend
@@ -47,6 +48,14 @@ def ensure_shadow_tables(store):
             );
             CREATE INDEX IF NOT EXISTS idx_policy_backend_shadow_events_agent
                 ON policy_backend_shadow_events(agent_id,ts);
+            CREATE TABLE IF NOT EXISTS policy_backend_shadow_sources (
+                agent_id TEXT NOT NULL,
+                backend TEXT NOT NULL,
+                source_type TEXT NOT NULL,
+                source_id TEXT NOT NULL,
+                applied_ts REAL NOT NULL,
+                PRIMARY KEY(agent_id,backend,source_type,source_id)
+            );
             """
         )
 
@@ -54,7 +63,10 @@ def ensure_shadow_tables(store):
 class PolicyBackendShadowService:
     def __init__(self, store, enabled=None):
         self.store = store
-        self.enabled = bool(OPTIONS.get("policy_backend_shadow_enabled", False) if enabled is None else enabled)
+        if enabled is None:
+            env = os.environ.get("HOMEMIND_POLICY_BACKEND_SHADOW", "").strip().lower()
+            enabled = bool(OPTIONS.get("policy_backend_shadow_enabled", False) or env in {"1", "true", "yes", "on"})
+        self.enabled = bool(enabled)
         self.max_features = max(4, int(OPTIONS.get("policy_backend_shadow_max_features", 24)))
         self.ridge = float(OPTIONS.get("policy_backend_shadow_ridge", 1.0))
         self.alpha = float(OPTIONS.get("rl_alpha", 0.65))
@@ -112,7 +124,7 @@ class PolicyBackendShadowService:
                     return backend
             except Exception:
                 pass
-        pseudo = [{"features": dict(features or {}), "timestamp": time.time()}]
+        pseudo = [{"features": dict(features or {}), "feature_labels": dict(labels or {}), "timestamp": time.time()}]
         selected = semantic_feature_indices(pseudo, max_features=self.max_features) or [0]
         backend = FullRidgeLinUCBBackend(
             actions=policy.actions, horizons=policy.horizons, feature_indices=selected,
@@ -178,11 +190,19 @@ class PolicyBackendShadowService:
 
     def observe_trial_record(self, record):
         if not self.enabled or not record or record.get("reward") is None:
-            return
+            return False
         aid = str(record.get("owner_agent_id") or "")
+        trial_id = str(record.get("trial_id") or "")
         backend = self.backends.get(aid)
-        if backend is None:
-            return
+        if not aid or not trial_id or backend is None:
+            return False
+        with self.store.conn() as c:
+            if c.execute(
+                """SELECT 1 FROM policy_backend_shadow_sources
+                   WHERE agent_id=? AND backend=? AND source_type='trial_record' AND source_id=?""",
+                (aid, FullRidgeLinUCBBackend.BACKEND, trial_id),
+            ).fetchone():
+                return False
         context = _json(record.get("context_json"), {})
         assigned = _json(record.get("assigned_action_json"), {})
         try:
@@ -191,17 +211,39 @@ class PolicyBackendShadowService:
             features = {int(k): float(v) for k, v in dict(context.get("policy_features") or {}).items()}
             reward = float(record["reward"])
         except (KeyError, TypeError, ValueError):
-            return
+            return False
         if horizon not in backend.horizons or action_idx < 0 or action_idx >= len(backend.actions):
-            return
+            return False
         backend.update(horizon, action_idx, features, reward,
                        _json(record.get("episode_result_json"), {}).get("finished_at"))
-        self._persist(aid, backend)
-        self._event(aid, "trial_record_reward", {
-            "trial_id": record.get("trial_id"), "executed_action": action_idx,
-            "reward": reward, "logged_propensity": record.get("propensity"),
-            "counterfactual_rewards_added": 0,
-        })
+        raw = backend.serialize()
+        now = time.time()
+        # Model state and source marker commit together: restart cannot count the same
+        # TrialRecord twice even if the process stops immediately after this transaction.
+        with self.store.lock, self.store.conn() as c:
+            c.execute(
+                """INSERT INTO policy_backend_shadow_models
+                   (agent_id,backend,backend_version,model_json,updated_ts) VALUES(?,?,?,?,?)
+                   ON CONFLICT(agent_id,backend) DO UPDATE SET
+                     backend_version=excluded.backend_version,model_json=excluded.model_json,
+                     updated_ts=excluded.updated_ts""",
+                (aid, FullRidgeLinUCBBackend.BACKEND, FullRidgeLinUCBBackend.VERSION,
+                 json.dumps(raw, sort_keys=True, separators=(",", ":"), allow_nan=False), now),
+            )
+            c.execute(
+                """INSERT INTO policy_backend_shadow_sources
+                   (agent_id,backend,source_type,source_id,applied_ts) VALUES(?,?,?,?,?)""",
+                (aid, FullRidgeLinUCBBackend.BACKEND, "trial_record", trial_id, now),
+            )
+            c.execute(
+                "INSERT INTO policy_backend_shadow_events(agent_id,ts,event_type,payload_json) VALUES(?,?,?,?)",
+                (aid, now, "trial_record_reward", json.dumps({
+                    "trial_id": trial_id, "executed_action": action_idx,
+                    "reward": reward, "logged_propensity": record.get("propensity"),
+                    "counterfactual_rewards_added": 0,
+                }, sort_keys=True, separators=(",", ":"), allow_nan=False)),
+            )
+        return True
 
     def diagnostics(self, agent_id=None):
         if agent_id is not None:
