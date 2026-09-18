@@ -93,24 +93,40 @@ class AdaptivePresenceModel:
     def evidence_is_independent(self, entity_id, ts):
         return float(self.threshold_tainted_until.get(str(entity_id), 0.0)) < float(ts)
 
-    def record_independent_label(self, source_id, raw_value, observed, label_source, ts=0.0):
-        """Calibrate one raw channel from an explicitly independent label source."""
+    def record_independent_label(self, source_id, raw_value, observed, label_source,
+                                 ts=0.0, label_event_ts=None):
+        """Calibrate once per independent physical label event."""
         source_id = str(source_id or '').strip()
         label_source = str(label_source or '').strip()
         if not source_id or not label_source:
             raise ValueError('Adaptive presence calibration requires source and label_source')
         if label_source == source_id or label_source.startswith('model:'):
             raise ValueError('Adaptive presence calibration requires independent evidence')
-        if not self.evidence_is_independent(label_source, ts):
+        if (not self.evidence_is_independent(label_source, ts)
+                or not self.evidence_is_independent(source_id, ts)):
             raise ValueError('Threshold-modified sensor output is not independent evidence')
         value = _finite(raw_value)
         if value is None or not 0.0 <= value <= 1.0:
             raise ValueError('Raw presence signal must be within [0,1]')
+        watermark_key = source_id + '|' + label_source
+        event_ts = _finite(label_event_ts)
+        if event_ts is not None:
+            previous = _finite(self.calibration_watermarks.get(watermark_key))
+            if previous is not None and event_ts <= previous + 1e-9:
+                result = self.calibration_summary(source_id)
+                result['applied'] = False
+                result['duplicate_label_event'] = True
+                return result
         row = self.calibration.setdefault(source_id, {'bins': self._blank_bins()})
         idx = min(self.CALIBRATION_BINS - 1, int(value * self.CALIBRATION_BINS))
         row['bins'][idx]['count'] += 1
         row['bins'][idx]['positive'] += 1 if bool(observed) else 0
-        return self.calibration_summary(source_id)
+        if event_ts is not None:
+            self.calibration_watermarks[watermark_key] = event_ts
+        result = self.calibration_summary(source_id)
+        result['applied'] = True
+        result['duplicate_label_event'] = False
+        return result
 
     def calibration_summary(self, source_id):
         bins = (self.calibration.get(str(source_id)) or {}).get('bins') or self._blank_bins()
