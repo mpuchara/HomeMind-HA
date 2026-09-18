@@ -1,14 +1,19 @@
+import tempfile
 import unittest
+from pathlib import Path
 
 from support import state
 from adaptive_presence import AdaptivePresenceModel, HardwareThresholdAdapterContract
 from context_engine import ContextEngine
+from replay import HistoricalHomeView
 from settings import DEFAULT_OPTIONS
+from storage import Store
 
 
-def raw(entity='sensor.raw', value=.4, quality=1.0):
+def raw(entity='sensor.raw', value=.4, quality=1.0, device_id=None):
     return {
         'entity_id': entity,
+        'device_id': device_id,
         'role': 'radar_activity',
         'value': value,
         'quality': quality,
@@ -65,6 +70,43 @@ class AdaptivePresenceModelTests(unittest.TestCase):
         self.assertAlmostEqual(single['posterior'], multiple['posterior'], places=9)
         self.assertEqual(multiple['selected_raw_source'], 'sensor.a')
         self.assertEqual(multiple['alternative_raw_sources_not_multiplied'], ['sensor.b'])
+
+    def test_raw_from_arrival_prior_device_is_not_reused_as_local_evidence(self):
+        model = AdaptivePresenceModel()
+        result = model.evaluate(
+            'kitchen', 1, .80, 1.0,
+            [raw('sensor.radar_energy', .90, 1.0, device_id='radar-1')],
+            prior_device_ids=['radar-1'],
+        )
+        self.assertEqual(result['mode'], 'anticipation_only')
+        self.assertFalse(result['virtual_presence_active'])
+        self.assertIsNone(result['posterior'])
+        self.assertEqual(result['excluded_raw_sources'], ['sensor.radar_energy'])
+        self.assertEqual(result['capability']['reason'], 'raw_signal_not_independent_of_arrival_prior')
+
+    def test_calibration_label_is_idempotent_and_survives_model_restart(self):
+        model = AdaptivePresenceModel()
+        first = model.record_independent_label(
+            'sensor.raw', .4, True, 'binary_sensor.reference', ts=10, label_event_ts=9
+        )
+        duplicate = model.record_independent_label(
+            'sensor.raw', .4, True, 'binary_sensor.reference', ts=11, label_event_ts=9
+        )
+        self.assertTrue(first['applied'])
+        self.assertFalse(duplicate['applied'])
+        self.assertEqual(duplicate['independent_labels'], 1)
+
+        restored = AdaptivePresenceModel(model.export())
+        repeated_after_restart = restored.record_independent_label(
+            'sensor.raw', .4, True, 'binary_sensor.reference', ts=12, label_event_ts=9
+        )
+        self.assertFalse(repeated_after_restart['applied'])
+        self.assertEqual(repeated_after_restart['independent_labels'], 1)
+        next_event = restored.record_independent_label(
+            'sensor.raw', .4, False, 'binary_sensor.reference', ts=13, label_event_ts=13
+        )
+        self.assertTrue(next_event['applied'])
+        self.assertEqual(next_event['independent_labels'], 2)
 
     def test_false_on_budget_limits_repeated_unconfirmed_virtual_triggers(self):
         model = AdaptivePresenceModel()
@@ -134,6 +176,89 @@ class AdaptivePresenceIntegrationTests(unittest.TestCase):
         self.assertGreater(result['occupancy_in_1s'], base['occupancy_in_1s'])
         self.assertEqual(result['presence_capability']['mode'], 'virtual_threshold')
         self.assertFalse(result['presence_capability']['hardware_threshold_adapter']['enabled'])
+
+    def test_runtime_calibrates_raw_only_from_independent_device_label_once_per_event(self):
+        states = {
+            'sensor.kitchen_activity': state(
+                'sensor.kitchen_activity', '40', unit_of_measurement='%', friendly_name='Kitchen Radar Activity'
+            ),
+            'binary_sensor.kitchen_presence': state(
+                'binary_sensor.kitchen_presence', 'off', device_class='occupancy', friendly_name='Kitchen Presence'
+            ),
+            'light.kitchen': state('light.kitchen', 'off'),
+        }
+        registry = {
+            'sensor.kitchen_activity': {'area_id': 'kitchen', 'device_id': 'raw-device'},
+            'binary_sensor.kitchen_presence': {'area_id': 'kitchen', 'device_id': 'label-device'},
+            'light.kitchen': {'area_id': 'kitchen', 'device_id': 'light-device'},
+        }
+        context = self._context(states, registry)
+        context.observe('sensor.kitchen_activity', states['sensor.kitchen_activity'], 1, event_ts=1, received_ts=1)
+        on_state = state(
+            'binary_sensor.kitchen_presence', 'on', device_class='occupancy', friendly_name='Kitchen Presence'
+        )
+        context.observe('binary_sensor.kitchen_presence', on_state, 2, event_ts=2, received_ts=2)
+        self.assertEqual(
+            context.adaptive_presence.calibration_summary('sensor.kitchen_activity')['independent_labels'], 1
+        )
+        # Poll confirmation of the same HA event may improve transport reliability but
+        # cannot become another independent calibration label.
+        context.observe('binary_sensor.kitchen_presence', on_state, 3, event_ts=2, received_ts=3)
+        self.assertEqual(
+            context.adaptive_presence.calibration_summary('sensor.kitchen_activity')['independent_labels'], 1
+        )
+
+    def test_same_radar_device_is_excluded_from_virtual_threshold_evidence(self):
+        states = {
+            'sensor.kitchen_activity': state(
+                'sensor.kitchen_activity', '40', unit_of_measurement='%', friendly_name='Kitchen Radar Activity'
+            ),
+            'binary_sensor.kitchen_presence': state(
+                'binary_sensor.kitchen_presence', 'on', device_class='occupancy', friendly_name='Kitchen Presence'
+            ),
+            'light.kitchen': state('light.kitchen', 'off'),
+        }
+        registry = {
+            'sensor.kitchen_activity': {'area_id': 'kitchen', 'device_id': 'radar-1'},
+            'binary_sensor.kitchen_presence': {'area_id': 'kitchen', 'device_id': 'radar-1'},
+            'light.kitchen': {'area_id': 'kitchen', 'device_id': 'light-device'},
+        }
+        context = self._context(states, registry)
+        context.observe('sensor.kitchen_activity', states['sensor.kitchen_activity'], 1, event_ts=1, received_ts=1)
+        context.observe('binary_sensor.kitchen_presence', states['binary_sensor.kitchen_presence'], 2, event_ts=2, received_ts=2)
+        forecast = context.forecast('light.kitchen', 2.1)
+        self.assertIn('radar-1', forecast['arrival_prior_devices'])
+        self.assertEqual(forecast['presence_capability']['mode'], 'anticipation_only')
+        self.assertIn('sensor.kitchen_activity', forecast['presence_capability']['excluded_raw_sources'])
+        self.assertEqual(
+            context.adaptive_presence.calibration_summary('sensor.kitchen_activity')['independent_labels'], 0
+        )
+
+    def test_calibration_persists_and_historical_view_loads_same_contract(self):
+        temp = tempfile.TemporaryDirectory(prefix='adaptive-presence-')
+        try:
+            store = Store(Path(temp.name) / 'adaptive.db')
+            options = dict(DEFAULT_OPTIONS)
+            context = ContextEngine(options, store=store)
+            context.adaptive_presence.record_independent_label(
+                'sensor.raw', .4, True, 'binary_sensor.reference', ts=10, label_event_ts=9
+            )
+            context.save(force=True)
+            restarted = ContextEngine(options, store=store)
+            self.assertEqual(
+                restarted.adaptive_presence.calibration_summary('sensor.raw')['independent_labels'], 1
+            )
+            with store.conn() as db:
+                row = db.execute(
+                    'SELECT model_json FROM adaptive_presence_checkpoints ORDER BY ts DESC LIMIT 1'
+                ).fetchone()
+            self.assertIsNotNone(row)
+            historical = HistoricalHomeView(restarted, None, restarted.adaptive_presence.export())
+            self.assertEqual(
+                historical.adaptive.calibration_summary('sensor.raw')['independent_labels'], 1
+            )
+        finally:
+            temp.cleanup()
 
     def test_binary_only_capability_explicitly_offers_anticipation_only(self):
         states = {
