@@ -76,6 +76,10 @@ class CandidateBuildRequestTests(unittest.TestCase):
             "exploration_step": 1,
             "input_entities": ["binary_sensor.bathroom_presence"],
         })
+        self.store.save_model(
+            self.parent["id"],
+            {"version": 10, "schema": {"version": 11, "entities": []}, "marker": "baseline"},
+        )
         self.engine = SimpleNamespace(
             teaching=FakeTeaching(), rl_teaching=None, models={}, runtime={},
             executor=FakeExecutor(), process_agent=lambda *args, **kwargs: None,
@@ -92,6 +96,28 @@ class CandidateBuildRequestTests(unittest.TestCase):
     def tearDown(self):
         self.manager.stop()
         self.temp.cleanup()
+
+    def test_cold_start_feedback_trains_parent_in_place_before_candidate(self):
+        cold = self.store.create_agent({
+            "name": "Cold start light",
+            "target_entity": "light.cold_start",
+            "target_property": "power",
+            "min_value": 0,
+            "max_value": 1,
+            "deadband": .5,
+            "action_interval": .25,
+            "exploration_step": 1,
+            "input_entities": ["binary_sensor.cold_start_presence"],
+        })
+        queue = RecordingQueue()
+        self.core.TRAINING_QUEUE = queue
+
+        result = self.manager.enqueue(cold["id"], "teach")
+
+        self.assertEqual(result["state"], "initial_training")
+        self.assertIsNone(result["candidate_id"])
+        self.assertIsNone(self.manager.status(cold["id"]))
+        self.assertEqual(queue.calls, [(cold["id"], True, "initial_training")])
 
     def test_first_queued_revision_is_pending_not_stale(self):
         status = self.manager.enqueue(self.parent["id"], "teach")
