@@ -78,6 +78,7 @@ class ProductRuntimeBenchmarkContractTests(unittest.TestCase):
         metrics = self.seed["metrics"]["production_current"]
         self.assertEqual(metrics["manual_override_events"], 1)
         self.assertEqual(metrics["manual_override_window_ticks"], 11)
+        self.assertGreater(metrics["runtime_manual_hold_ticks"], 0)
         self.assertGreater(metrics["moved_sensor_topology_ticks"], 0)
 
     def test_validation_is_real_and_control_threshold_is_not_lowered(self):
