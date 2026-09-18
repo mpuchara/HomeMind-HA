@@ -123,7 +123,7 @@
   "perception_lease_authority": "DeviceAgentService.perception_resource_leases; adapter-local lease is planning-only",
   "process_model_contract": "HVAC/cover/water-heater/humidifier expose process-model-required semantics; lighting bandit is not declared sufficient",
   "generic_autonomy": "auto-created switch/number/select remains non-autonomous without explicit device description",
-  "runtime_composition_contract_version": 3,
+  "runtime_composition_contract_version": 2,
   "explicit_http_route_contract_version": 2,
   "runtime_entrypoint_chain": [
     "run.sh",
