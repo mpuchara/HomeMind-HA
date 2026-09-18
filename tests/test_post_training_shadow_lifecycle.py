@@ -86,6 +86,10 @@ class PostTrainingShadowLifecycleTests(unittest.TestCase):
         self.assertIn("shadow:()=>setMode(id,'shadow')", source)
         self.assertIn('data-tool="paused"', source)
 
+    def test_paused_shadow_resume_label_is_explicitly_about_training(self):
+        source = (ROOT / "adaptive_ai/src/static/agent_workflow_ui.js").read_text(encoding="utf-8")
+        self.assertIn(">Resume training</button>", source)
+
     def test_control_still_requires_qualified_training_state(self):
         source = (ROOT / "adaptive_ai/src/main.py").read_text(encoding="utf-8")
         self.assertIn('if existing.get("training_state") != "qualified":', source)
