@@ -1,3 +1,12 @@
+# 0.14.21 — 2026-09-18
+
+- Complete the post-training lifecycle: every completed policy with a persisted model returns to Shadow, even when its historical benchmark is insufficient for Control.
+- Keep Control qualification strict: failed/insufficient benchmark results remain `training_state=paused`, so they can observe in Shadow but cannot enter Control.
+- Preserve true Pause for interrupted/error training and explicit user CPU-saving pauses.
+- Add explicit Shadow and Pause controls to agent Settings; Shadow is available only when a learned model exists and no rebuild/training is active.
+- Wake realtime inference immediately after training finalization so a completed model does not wait for an unrelated HA event before becoming visible.
+- No data/model migration or retraining is required for existing persisted policies.
+
 # 0.14.20 — 2026-09-18
 
 - Restore a complete cold-start lifecycle: auto-discovered agents now queue their first historical base-policy training automatically instead of remaining indefinitely in WAITING.
