@@ -395,12 +395,14 @@ class AdaptationService:
             questions.append({
                 "id": "cold_start_on_preference", "optional": True,
                 "question": "W jednej niepewnej sytuacji: czy urządzenie powinno wtedy przejść do ON?",
+                "selection_reason": "missing_independent_on_evidence",
                 "creates": "explicit_demonstration", "auto_dispatch": False,
             })
         if demonstrations["off"] <= 0:
             questions.append({
                 "id": "cold_start_off_preference", "optional": True,
                 "question": "W jednej niepewnej sytuacji: czy urządzenie powinno wtedy pozostać/przejść do OFF?",
+                "selection_reason": "missing_independent_off_evidence",
                 "creates": "explicit_demonstration", "auto_dispatch": False,
             })
         model = self.store.get_model(aid)
@@ -418,6 +420,7 @@ class AdaptationService:
             "recommended_mode": recommended,
             "fallback": fallback,
             "fallback_automations": automations,
+            "automation_baseline_available": bool(automations),
             "recognized_sensors": sensors,
             "history_samples": target_history,
             "demonstrations": demonstrations,
@@ -428,6 +431,9 @@ class AdaptationService:
                 "thresholds_relaxed": False,
                 "control_without_history": False,
                 "insufficient_evidence_means": "fallback_or_shadow",
+                "stage13_final_evaluation_required": True,
+                "stage13_confidence_contract_version": CONFIDENCE_CONTRACT_VERSION,
+                "optional_answers_do_not_bypass_promotion_gates": True,
             },
             "decay": decay_contract(),
         }
