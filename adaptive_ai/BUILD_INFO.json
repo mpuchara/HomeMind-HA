@@ -1,10 +1,10 @@
 {
-  "version": "0.14.24",
+  "version": "0.14.25",
   "release_date": "2026-09-18",
-  "base_version": "0.14.23",
-  "base_commit": "36c18d2e87fa27d8af1f7933d5ce7c3c10553f79",
-  "release_status": "release-0.14.24-batched-replay-schema-aware-screening",
-  "tests_passed": 859,
+  "base_version": "0.14.24",
+  "base_commit": "2b052783cc82fc2b1181cdeeb18075a653887505",
+  "release_status": "release-0.14.25-incremental-temporal-replay",
+  "tests_passed": 869,
   "profile": "rpi4-low-memory-automatic-initial-training",
   "manual_agent_training": false,
   "max_concurrent_training_jobs": 1,
@@ -40,7 +40,7 @@
   "migration": "additive startup repair only; models, raw archive, feedback, Candidate lineage, TrialRecords, Teach labels, settings and rollback state remain preserved",
   "physical_control": "unchanged; repaired agents return to Shadow and Control still requires qualified state plus all existing guards",
   "pi4": "0.14.18 targets the observed ~94% CPU spike and second-open blank Ingress UI at the transition from REPLAY COMPLETE to model/benchmark finalization; on-device verification is still required",
-  "ci_status": "0.14.24 final validation pending on current head; code path previously green through full Stage 18 and current changes add config-only reads/runtime diagnostics",
+  "ci_status": "0.14.25 final validation pending",
   "training_slice_budget": "adaptive-ai-index workers call a shared CooperativeTrainingBudget; expensive temporal tracker loops yield between entities/events and finalization is no longer outside the throttle",
   "finalization_lifeline": "HEAVY_JOBS remains owned through final gc.collect(), so /api/status and /api/agents stay on lightweight lifeline reads until the worker is actually finished",
   "finalization_progress": "post-replay UI now exposes bounded stages: replay complete, policy serialization, benchmark save, qualification, checkpoint complete",
@@ -63,5 +63,12 @@
   "feature_screening_yield": "target-edge precursor fan-out has an explicit cooperative training-budget checkpoint in addition to archive iterator checkpoints",
   "stage2_performance_scope": "SQLite replay write batching plus schema-aware/incremental feature-screening lifecycle; policy/reward/qualification semantics unchanged",
   "feature_screening_stream": "SQLite LAG emits only effective per-entity state/attribute changes to Python; fast occupancy/activity driver rows stay raw and bounded",
-  "replay_provenance": "target-row provenance is preloaded in one indexed query; accepted/excluded replay audit facts are persisted in bounded batches, preserving own-command exclusion without per-dwell reads/commits"
+  "replay_provenance": "target-row provenance is preloaded in one indexed query; accepted/excluded replay audit facts are persisted in bounded batches, preserving own-command exclusion without per-dwell reads/commits",
+  "temporal_replay_contract": "selected-input replay uses two bounded incremental cursors: first access/rewind is indexed bulk as-of reconstruction; forward advance consumes only newly eligible rows; same timestamp performs zero SQLite reads",
+  "temporal_replay_memory": "maximum 64 selected-input samples per entity; bulk SQL is chunked to 150 entities to stay below conservative SQLite compound/parameter limits",
+  "temporal_replay_home_semantics": "room-belief features preserve the previous exact 30-second causal rebuild semantics while replacing one seed query per home source with indexed bulk LIMIT queries",
+  "temporal_replay_observation_semantics": "feature-observation replay remains gated by both event_time and received_time; late packets become visible only after receipt and same-timestamp v12 merge behavior is preserved",
+  "temporal_replay_scheduling": "onset/anticipation and dwell-persistence use separate cursors; requested timestamps are processed oldest-first inside each role to reduce non-semantic rewinds",
+  "temporal_replay_diagnostics": "history status exposes SQL queries, rows loaded, forward advances, rewinds, bulk rebuilds, same-timestamp hits and estimated query reduction",
+  "stage3_performance_scope": "temporal reconstruction/query topology only; reward, policy/schema versions, qualification, provenance, feedback and physical-control semantics are unchanged"
 }
