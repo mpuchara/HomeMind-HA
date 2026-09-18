@@ -11,6 +11,7 @@ from types import SimpleNamespace
 import agent_candidate_preference_metrics as pref
 import agent_candidate_shadow_runtime as shadow
 import performance_f22 as f22
+import confidence_contract as confidence
 import teaching_rl
 from settings import OPTIONS
 
@@ -303,6 +304,156 @@ class TeachBatchTests(unittest.TestCase):
             self.fake._f22_diagnostics.snapshot()["max_rows_materialized_per_batch"],
             f22.TEACH_CANDIDATE_CHUNK * len(self.labels),
         )
+
+
+class CurrentConfidenceCostTests(unittest.TestCase):
+    def setUp(self):
+        self.store = MemoryStore()
+        FastMetricFixture.schema(self.store)
+        with self.store.conn() as db:
+            for ddl in (
+                "ALTER TABLE candidate_generation_pairs ADD COLUMN evidence_kind TEXT NOT NULL DEFAULT 'legacy_unclassified'",
+                "ALTER TABLE candidate_generation_pairs ADD COLUMN calibration_eligible INTEGER NOT NULL DEFAULT 0",
+                "ALTER TABLE candidate_generation_pairs ADD COLUMN dependency_cluster TEXT",
+                "ALTER TABLE candidate_generation_pairs ADD COLUMN calibration_outcome REAL",
+                "ALTER TABLE candidate_generation_pairs ADD COLUMN calibration_parent_correct INTEGER",
+                "ALTER TABLE candidate_generation_pairs ADD COLUMN calibration_child_correct INTEGER",
+                "ALTER TABLE candidate_generation_pairs ADD COLUMN calibration_source_id TEXT",
+            ):
+                db.execute(ddl)
+        confidence.ensure_tables(self.store)
+        self.epochs = confidence.EvaluationEpochJournal(self.store)
+        self.diag = f22.PerformanceDiagnostics()
+        self.epochs._performance_diagnostics = self.diag
+
+    def _insert_pair(self, i, *, eligible=False, outcome=None, parent_ok=True, child_ok=True):
+        outcome = float(i % 2 if outcome is None else outcome)
+        ts = 1000.0 + float(i) * 10.0
+        kind = 'manual_user_target_change' if eligible else 'external_target_transition'
+        with self.store.conn() as db:
+            db.execute(
+                """INSERT INTO candidate_generation_pairs
+                   (root_agent_id,parent_generation_id,child_generation_id,prediction_event_id,
+                    prediction_ts,outcome_ts,outcome,parent_prediction,child_prediction,
+                    parent_confidence,child_confidence,parent_correct,child_correct,paired_result,
+                    parent_lead_seconds,child_lead_seconds,lead_gain_seconds,
+                    evidence_kind,calibration_eligible,dependency_cluster,calibration_outcome,
+                    calibration_parent_correct,calibration_child_correct,calibration_source_id)
+                   VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                (
+                    'root','g0','g1',f'ce-{i}',ts-1,ts,outcome,
+                    outcome if parent_ok else 1.0-outcome,
+                    outcome if child_ok else 1.0-outcome,
+                    .8,.8,int(parent_ok),int(child_ok),
+                    'both_correct' if parent_ok and child_ok else
+                    'child_win' if child_ok else 'parent_win' if parent_ok else 'both_wrong',
+                    1.0,1.0,0.0,
+                    kind,1 if eligible else 0,f'cluster-{i}',
+                    outcome if eligible else None,
+                    int(parent_ok) if eligible else None,
+                    int(child_ok) if eligible else None,
+                    f'label-{i}' if eligible else None,
+                ),
+            )
+
+    def test_unchanged_insufficient_selection_uses_revision_cache_not_pair_scan(self):
+        for i in range(6):
+            self._insert_pair(i)
+        first = self.epochs.ensure_from_store(
+            'g0','g1','rev-a','diagonal_linucb:v11',
+            selection_target=12,final_target=12,min_per_action=4,
+        )
+        self.assertIsNone(first)
+        self.store.reset_trace()
+        second = self.epochs.ensure_from_store(
+            'g0','g1','rev-a','diagonal_linucb:v11',
+            selection_target=12,final_target=12,min_per_action=4,
+        )
+        self.assertIsNone(second)
+        sql = "\n".join(self.store.selects()).lower()
+        self.assertNotIn("from candidate_generation_pairs", sql)
+        self.assertGreaterEqual(self.diag.confidence_selection_cache_hits, 1)
+
+    def test_fixed_future_report_is_exact_cached_and_ignores_unrelated_pair_growth(self):
+        for i in range(12):
+            self._insert_pair(i)
+        epoch = self.epochs.ensure_from_store(
+            'g0','g1','rev-a','diagonal_linucb:v11',
+            selection_target=12,final_target=12,min_per_action=4,
+        )
+        self.assertIsNotNone(epoch)
+        for i in range(20, 32):
+            self._insert_pair(i, eligible=True)
+        optimized = self.epochs.final_report_from_store(
+            epoch,'g0','g1',scope_id='root'
+        )
+        self.assertTrue(optimized['sufficient_evidence'])
+        self.assertTrue(optimized['promotion_quality_passed'])
+        locked = self.epochs.get('g0','g1','rev-a','diagonal_linucb:v11')
+        legacy = self.epochs.final_report(
+            locked, confidence._pair_rows(self.store,'g0','g1'), scope_id='root'
+        )
+        for key in ('episodes','effective_n','promotion_quality_passed','status','final_end_ts'):
+            self.assertEqual(optimized[key], legacy[key], key)
+        self.assertEqual(optimized['paired_delta'], legacy['paired_delta'])
+        self.assertEqual(optimized['per_action_delta'], legacy['per_action_delta'])
+
+        self.store.reset_trace()
+        warm = self.epochs.final_report_from_store(
+            locked,'g0','g1',scope_id='root'
+        )
+        self.assertEqual(warm, optimized)
+        self.assertNotIn("from candidate_generation_pairs", "\n".join(self.store.selects()).lower())
+
+        # Thousands of ordinary automation transitions belong to screening history only.
+        for i in range(100, 1100):
+            self._insert_pair(i, eligible=False)
+        self.store.reset_trace()
+        after_unrelated = self.epochs.final_report_from_store(
+            locked,'g0','g1',scope_id='root'
+        )
+        self.assertEqual(after_unrelated, optimized)
+        self.assertNotIn("from candidate_generation_pairs", "\n".join(self.store.selects()).lower())
+
+        # A new independent label invalidates the final cache, but the locked query is
+        # constrained to the original fixed end and therefore materializes only that holdout.
+        self._insert_pair(1200, eligible=True)
+        self.store.reset_trace()
+        after_label = self.epochs.final_report_from_store(
+            locked,'g0','g1',scope_id='root'
+        )
+        self.assertEqual(after_label, optimized)
+        self.assertIn("from candidate_generation_pairs", "\n".join(self.store.selects()).lower())
+        self.assertLessEqual(self.diag.snapshot()['max_rows_materialized_per_batch'], 12)
+
+        # Durable cache survives a new journal/runtime instance.
+        restarted = confidence.EvaluationEpochJournal(self.store)
+        restarted._performance_diagnostics = self.diag
+        self.store.reset_trace()
+        restarted_report = restarted.final_report_from_store(
+            restarted.get('g0','g1','rev-a','diagonal_linucb:v11'),
+            'g0','g1',scope_id='root',
+        )
+        self.assertEqual(restarted_report, optimized)
+        self.assertNotIn("from candidate_generation_pairs", "\n".join(self.store.selects()).lower())
+
+    def test_probability_report_reuses_durable_scope_revision_cache(self):
+        journal = confidence.ProbabilityCalibrationJournal(self.store)
+        journal._performance_diagnostics = self.diag
+        for i in range(20):
+            journal.record(
+                metric_id='presence_3s', model_key='room-v2', scope_id='kitchen',
+                episode_id=f'p-{i}', ts=float(i), prediction=.8 if i % 2 else .2,
+                observed=float(i % 2), source_kind='manual_ground_truth',
+                dependency_cluster=f'pc-{i}', independent=True,
+            )
+        first = journal.report('presence_3s','room-v2','kitchen')
+        self.store.reset_trace()
+        second = journal.report('presence_3s','room-v2','kitchen')
+        self.assertEqual(first, second)
+        sql = "\n".join(self.store.selects()).lower()
+        self.assertNotIn("from confidence_probability_episodes", sql)
+        self.assertGreaterEqual(self.diag.confidence_probability_cache_hits, 1)
 
 
 class AnchorAndBackpressureTests(unittest.TestCase):
