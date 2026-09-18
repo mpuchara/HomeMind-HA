@@ -60,23 +60,31 @@ class FastRuntimeTests(unittest.TestCase):
         self.assertEqual(out['settling_seconds'], FAST_SETTLING_SECONDS)
         self.assertEqual(out['ack_timeout'], FAST_ACK_TIMEOUT_SECONDS)
 
-    def test_migration_updates_auto_agents_and_clears_old_hold(self):
+    def test_migration_updates_fast_timing_without_clearing_explicit_manual_hold(self):
         store = FakeStore([self.fast_agent(auto_created=True)])
+        store.meta['manual_hold:lamp'] = '999999.0'
+        store.meta['manual_hold_source:lamp'] = 'explicit_user_v8'
         engine = SimpleNamespace(runtime={'lamp': {'manual_override_until': 999999.0}})
         core = SimpleNamespace(STORE=store, ENGINE=engine)
         changed = migrate_existing_fast_agents(core)
         self.assertEqual(len(changed), 1)
         self.assertEqual(store.agents['lamp']['action_interval'], FAST_ACTION_INTERVAL_SECONDS)
         self.assertEqual(store.agents['lamp']['settling_seconds'], FAST_SETTLING_SECONDS)
-        self.assertEqual(store.meta['manual_hold:lamp'], '0')
-        self.assertEqual(engine.runtime['lamp']['manual_override_until'], 0.0)
+        self.assertEqual(store.meta['manual_hold:lamp'], '999999.0')
+        self.assertEqual(store.meta['manual_hold_source:lamp'], 'explicit_user_v8')
+        self.assertEqual(engine.runtime['lamp']['manual_override_until'], 999999.0)
 
-    def test_install_keeps_manual_feedback_non_blocking_for_light(self):
+    def test_install_preserves_manual_priority_for_fast_light(self):
         store = FakeStore([self.fast_agent(action_interval=.25, settling_seconds=.1, ack_timeout=2)])
         wake = Mock()
         engine = SimpleNamespace(runtime={}, wake_event=wake)
+
         def old_hold(agent, rt, timestamp):
             rt['manual_override_until'] = timestamp + 300
+            store.meta_set('manual_hold:' + agent['id'], str(rt['manual_override_until']))
+            store.meta_set('manual_hold_source:' + agent['id'], 'explicit_user_v8')
+            wake.set()
+
         engine.set_manual_hold = old_hold
         core = SimpleNamespace(
             STORE=store,
@@ -91,7 +99,10 @@ class FastRuntimeTests(unittest.TestCase):
             install(core)
             rt = {}
             engine.set_manual_hold(store.agents['lamp'], rt, 100.0)
-            self.assertEqual(rt['manual_override_until'], 0.0)
+            self.assertEqual(rt['manual_override_until'], 400.0)
+            self.assertEqual(rt['manual_feedback_ts'], 100.0)
+            self.assertEqual(store.meta['manual_hold:lamp'], '400.0')
+            self.assertEqual(store.meta['manual_hold_source:lamp'], 'explicit_user_v8')
             self.assertEqual(core.default_action_interval('light.kitchen', 'power'), FAST_ACTION_INTERVAL_SECONDS)
             wake.set.assert_called()
         finally:
