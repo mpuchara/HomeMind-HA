@@ -373,6 +373,46 @@ class CurrentConfidenceCostTests(unittest.TestCase):
                 ),
             )
 
+    def test_streamed_selection_sufficiency_matches_legacy_dependency_weighting(self):
+        # Mix ON/OFF, repeated dependency clusters and enough rows to exercise decay.
+        for i in range(40):
+            self._insert_pair(i, outcome=(i % 3 != 0))
+        with self.store.conn() as db:
+            # Force several separated observations into shared dependency clusters.
+            for i in range(0, 40, 5):
+                db.execute(
+                    """UPDATE candidate_generation_pairs SET dependency_cluster=?
+                       WHERE parent_generation_id='g0' AND child_generation_id='g1'
+                         AND prediction_event_id=?""",
+                    (f'shared-{i % 10}', f'ce-{i}'),
+                )
+        rows = confidence._selection_pair_rows(self.store, 'g0', 'g1')
+        legacy = confidence.action_quality_report(
+            confidence.independent_episode_rows(rows),
+            scope_id=None, min_total=12, min_per_action=4,
+        )
+        streamed = confidence._selection_sufficiency_from_store(
+            self.store, 'g0', 'g1', selection_target=12, min_per_action=4,
+        )
+        self.assertEqual(streamed['episodes'], legacy['episodes'])
+        self.assertAlmostEqual(streamed['effective_n'], legacy['effective_n'], places=10)
+        for action in ('OFF','ON'):
+            self.assertEqual(
+                streamed['per_action'][action]['episodes'],
+                legacy['per_action'][action]['episodes'],
+            )
+            self.assertAlmostEqual(
+                streamed['per_action'][action]['effective_n'],
+                legacy['per_action'][action]['effective_n'],
+                places=10,
+            )
+            self.assertEqual(
+                streamed['per_action'][action]['sufficient_evidence'],
+                legacy['per_action'][action]['sufficient_evidence'],
+            )
+        self.assertEqual(streamed['sufficient_evidence'], legacy['sufficient_evidence'])
+        self.assertEqual(streamed['python_rows_materialized'], 1)
+
     def test_unchanged_insufficient_selection_uses_revision_cache_not_pair_scan(self):
         for i in range(6):
             self._insert_pair(i)
