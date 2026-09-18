@@ -20,7 +20,7 @@
   ],
   "product_benchmark_full_ridge": "Shadow-only challenger is unstable across seeds and is not deployed; production default remains unchanged",
   "anticipation_simulator": "component fixture simulator with intentionally permissive setup; mandatory regression smoke but never used as product benchmark evidence",
-  "confidence_contract_version": 1,
+  "confidence_contract_version": 2,
   "confidence_selection_min_independent_episodes": 12,
   "confidence_final_min_independent_episodes": 12,
   "confidence_final_min_per_action": 4,
@@ -79,5 +79,9 @@
   "realtime_training_preemption": "fresh HA events request 0.75 s priority; the debounced realtime inference pass extends it by 1.0 s; Correct history/point use 1.0 s and Correct label signature reconstruction uses 2.0 s; historical worker yields at checkpoints",
   "room_belief_replay_cache": "forward chronological replay keeps a moving 30 s in-memory source window and advances per-entity seeds instead of re-reading every seed from SQLite",
   "telemetry_recent_p95": "telemetry exposes recent_p95_ms over the last 60 s; overview displays only the recent window and shows no value when no recent samples exist",
-  "stage5_performance_scope": "Correct read path, Room Belief replay caching, realtime priority and latency observability; learning/control semantics unchanged"
+  "stage5_performance_scope": "Correct read path, Room Belief replay caching, realtime priority and latency observability; learning/control semantics unchanged",
+  "confidence_final_max_allowed_regression": 0.03,
+  "confidence_final_evidence": "manual_user_target_change",
+  "confidence_final_gate": "fixed future independent ON/OFF preference labels + paired child-vs-parent non-regression; window locks when evidence target is reached even if quality fails",
+  "confidence_automation_replay": "screening/diagnostic only; never final calibration evidence"
 }
