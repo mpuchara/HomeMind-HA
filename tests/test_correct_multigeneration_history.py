@@ -61,6 +61,22 @@ class CorrectGenerationHistoryTests(unittest.TestCase):
         self.manager.generation_history = self.generation_history
         self.manager.generation_decision_at = self.generation_decision_at
         self.ts = time.time() - 60
+        self.store.archive_batch([
+            ("light.history", self.ts - 5, "off", {}, None, "test"),
+            ("light.history", self.ts + 0.5, "on", {}, None, "test"),
+        ])
+        with self.store.lock, self.store.conn() as c:
+            c.executescript(
+                """
+                CREATE TABLE IF NOT EXISTS decision_history (
+                  agent_id TEXT NOT NULL, ts REAL NOT NULL, current REAL, desired REAL,
+                  PRIMARY KEY(agent_id,ts));
+                """
+            )
+            c.execute(
+                "INSERT INTO decision_history(agent_id,ts,current,desired) VALUES(?,?,?,?)",
+                (self.root["id"], self.ts, 0.0, 0.0),
+            )
         self.insert_observed(self.g0["generation_id"], self.ts, 0.0, 0.0, "g0")
         self.insert_observed(self.g1["generation_id"], self.ts, 0.0, 1.0, "g1")
         self.insert_observed(self.g2["generation_id"], self.ts, 0.0, 0.0, "g2")
@@ -101,10 +117,7 @@ class CorrectGenerationHistoryTests(unittest.TestCase):
         return dict(row) if row else None
 
     def test_live_chart_has_only_current_live_desired_and_correct(self):
-        legacy = Mock(return_value={
-            "points": [{"ts": self.ts, "current": 0.0, "desired": 1.0}],
-            "gaps": [], "desired_source": "observed_live_runtime", "policy_replay_used": False,
-        })
+        legacy = Mock(side_effect=AssertionError("Live Correct must not call RL/policy history"))
         result = build_correct_history(self.manager, self.g0["generation_id"], self.ts - 1, self.ts + 1, legacy)
         self.assertEqual(result["chart_mode"], "live")
         self.assertEqual(result["series_order"], ["current", "live_desired", "correct"])
@@ -113,7 +126,20 @@ class CorrectGenerationHistoryTests(unittest.TestCase):
         self.assertNotIn("parent_desired", result["series"])
         self.assertNotIn("candidate_desired", result["series"])
         self.assertFalse(result["policy_replay_used"])
+        legacy.assert_not_called()
         self.engine.policy.assert_not_called()
+
+    def test_live_history_reads_observed_current_and_desired_without_policy_replay(self):
+        legacy = Mock(side_effect=AssertionError("policy history forbidden"))
+        result = build_correct_history(
+            self.manager, self.g0["generation_id"],
+            self.ts - 10, self.ts + 2, legacy,
+        )
+        self.assertEqual(result["desired_source"], "observed_runtime_decision_history")
+        self.assertEqual(result["series"]["live_desired"]["points"][0]["value"], 0.0)
+        self.assertEqual(result["series"]["current"]["points"][0]["value"], 0.0)
+        self.assertEqual(result["series"]["current"]["points"][-1]["value"], 1.0)
+        legacy.assert_not_called()
 
     def test_candidate_g1_compares_only_live_g0_to_candidate_g1(self):
         result = build_correct_history(
@@ -144,10 +170,7 @@ class CorrectGenerationHistoryTests(unittest.TestCase):
         self.engine.policy.assert_not_called()
 
     def test_candidate_point_reports_observed_direct_parent_and_child(self):
-        legacy_point = Mock(return_value={
-            "ts": self.ts, "current": 0.0, "desired": 0.0, "confidence": .9,
-            "context_complete": True, "gap": False,
-        })
+        legacy_point = Mock(side_effect=AssertionError("Correct point must not replay policy"))
         point = build_correct_point(self.manager, self.g2["generation_id"], self.ts, legacy_point)
         self.assertEqual(point["parent_desired_label"], "Candidate G1 Desired")
         self.assertEqual(point["candidate_desired_label"], "Candidate G2 Desired")
@@ -155,6 +178,7 @@ class CorrectGenerationHistoryTests(unittest.TestCase):
         self.assertEqual(point["candidate_desired"], 0.0)
         self.assertFalse(point["policy_replay_used_for_desired"])
         self.assertFalse(point["parent_policy_replay_used"])
+        legacy_point.assert_not_called()
         self.engine.policy.assert_not_called()
 
 

@@ -42,14 +42,15 @@ function renderHome(status){
   const sourcesOpen=sourcePanel?.open||false, sourceScroll=sourcePanel?.querySelector('.home-source-table')?.scrollTop||0;
   const h=status.home_intelligence||{}, b=status.home_bootstrap||{}, t=status.telemetry||{};
   const inf=t.metrics?.inference||{}, latency=t.metrics?.event_to_intent||{};
+  const inferenceP95=inf.recent_p95_ms, eventP95=latency.recent_p95_ms;
   const running=['IMPORTING','TRAINING'].includes(b.state), names=h.area_names||{};
   const paths=(h.top_transitions||[]).slice(0,5);
   $('#homePanel').innerHTML='<div class="history-head"><div><b>Home Intelligence</b><span>Shared occupancy and trajectory model · live learning is automatic</span></div><strong>'+esc(b.state||'IDLE')+'</strong></div>'+
     '<div class="home-metrics">'+[
       [num(h.areas),'observed areas'],[num(h.edges),'transitions'],[num(h.updates),'online / bootstrap updates'],
       [num(h.unmapped_sources),'sources without area'],[t.rss_mb==null?'—':num(t.rss_mb,1)+' MB','RSS'],
-      [inf.p95_ms==null?'—':num(inf.p95_ms,2)+' ms','inference p95'],
-      [latency.p95_ms==null?'—':num(latency.p95_ms,2)+' ms','event → intent p95']
+      [inferenceP95==null?'—':num(inferenceP95,2)+' ms','inference p95 · last 60 s'],
+      [eventP95==null?'—':num(eventP95,2)+' ms','event → intent p95 · last 60 s']
     ].map(([v,label])=>'<div><b>'+v+'</b><span>'+label+'</span></div>').join('')+'</div>'+
     '<div class="home-transitions">'+(paths.length?paths.map(p=>'<span>'+p.path.map(id=>esc(names[id]||id)).join(' → ')+' <b>'+pct(p.probability)+'</b></span>').join(''):'No observed area-to-area transitions yet. Existing mapped presence/activity sensors learn the live map automatically as state changes arrive.')+'</div>'+
     '<div class="history-meta"><span>Graph half-life '+num(h.half_life_days)+' days</span><span>Policy half-life '+num(status.options?.policy_half_life_days||30)+' days</span><span>Heavy job: '+esc(status.heavy_job||'idle')+'</span><span>Inference count '+num(inf.count)+'</span></div>'+

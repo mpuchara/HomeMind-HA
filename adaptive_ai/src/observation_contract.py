@@ -800,6 +800,19 @@ class ObservationSQLiteTemporalTracker(replay_module.SQLiteTemporalTracker):
         result.sort(key=self._row_order)
         return result
 
+    def _home_seed_interval_rows(self, entity_ids, lo, hi):
+        base = super()._home_seed_interval_rows(entity_ids, lo, hi)
+        fast = self._feature_interval_rows(entity_ids, lo, hi)
+        grouped = {}
+        for row in [*base, *fast]:
+            grouped.setdefault(row["entity_id"], []).append(row)
+        out = []
+        for eid in sorted(grouped):
+            rows = grouped[eid]
+            out.extend(self._compact_rows(rows, max(1, len(rows))))
+        out.sort(key=self._row_order)
+        return out
+
     def _edges(self, eid, lo, hi):
         # Keep the established v12 edge semantics while routing the as-of reconstruction
         # through the new bulk path. The 512-row cap is unchanged.

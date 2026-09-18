@@ -17,6 +17,7 @@ from executor import Executor
 from intent import ActionIntent
 from experiments import Experiments
 from telemetry import TELEMETRY, HEAVY_JOBS
+from training_budget import TRAINING_BUDGET
 
 class HAEventStream(threading.Thread):
     """Near-real-time state_changed stream plus Entity Registry metadata.
@@ -233,6 +234,12 @@ class Engine(threading.Thread):
             self.last_trigger_entity = entity_id
             self.dirty_entities.add(entity_id)
             self.last_event_received = time.perf_counter()
+            # Historical replay shares this process. Give fresh HA state changes a short
+            # strict-priority window so Shadow/Control inference is never queued behind
+            # cooperative offline work for seconds.
+            TRAINING_BUDGET.request_interactive_window(
+                0.75, reason="ha_state_changed"
+            )
             self.context.observe(entity_id, new_state, now_ts())
         HA.last_ok = now_ts(); HA.last_error = None
         if new_state is not None:
@@ -393,6 +400,13 @@ class Engine(threading.Thread):
 
     def process(self, state_map, changed_entities=None):
         changed = set(changed_entities or ())
+        if changed:
+            # Extend the event's strict-priority window from the actual inference pass,
+            # after websocket debounce. This prevents a slow multi-target pass from
+            # handing CPU back to replay halfway through the decisions it was woken to make.
+            TRAINING_BUDGET.request_interactive_window(
+                1.0, reason="realtime_inference"
+            )
         groups = {}
         for agent in STORE.list_agent_configs():
             if not agent["enabled"] or agent["mode"] == "paused" or agent.get("training_state") != "qualified":

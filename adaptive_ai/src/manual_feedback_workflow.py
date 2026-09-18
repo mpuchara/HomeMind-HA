@@ -17,6 +17,7 @@ from agent_workflow_actions import _resolve_generation
 from manual_feedback import _manual_value
 from manual_feedback_unified import latest_feedback_since
 from teaching_rl import fingerprint as rl_fingerprint
+from training_budget import TRAINING_BUDGET
 
 
 def _model_snapshot(manager, agent_id):
@@ -178,6 +179,10 @@ def install(manager):
             raise ValueError("This generation has no observed prediction at that moment; a gap cannot be corrected")
         if point.get("current") is None or not point.get("context_complete"):
             raise ValueError("Historical context is incomplete at that moment")
+        # This one context reconstruction is necessary for the durable feedback signature.
+        # It is user-interactive work, so do not let a different agent's historical replay
+        # consume the same Pi core while we reconstruct it.
+        TRAINING_BUDGET.request_interactive_window(2.0, reason="correct_label")
         states, temporal, _ = manager.engine.teaching.point_context(
             manager.engine, agent, float(sample_ts)
         )

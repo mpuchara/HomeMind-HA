@@ -128,6 +128,9 @@ class SQLiteTemporalTracker:
         self.history = TemporalHistory(maxlen=self.HISTORY_SAMPLES)
         self.current_ts = None
         self._watched_rows = {}
+        self._home_seed_rows = {}
+        self._home_window_rows = []
+        self._home_cache_ts = None
         self._closed = False
         self._metrics = {
             "advances": 0,
@@ -138,6 +141,8 @@ class SQLiteTemporalTracker:
             "sql_queries": 0,
             "rows_loaded": 0,
             "home_rebuilds": 0,
+            "home_cache_full_rebuilds": 0,
+            "home_cache_forward_updates": 0,
             "legacy_asof_queries_estimate": 0,
         }
         try:
@@ -257,6 +262,14 @@ class SQLiteTemporalTracker:
             entity_ids, lo, hi, per_entity_limit=self.HISTORY_SAMPLES
         )
 
+    def _home_seed_interval_rows(self, entity_ids, lo, hi):
+        # Seed advancement follows the same source contract as _bulk_before(). The base
+        # tracker has only entity_history; observation-contract subclasses add their fast
+        # received-time journal here so the moving t-30 seed remains exact.
+        return self._base_interval_rows(
+            entity_ids, lo, hi, per_entity_limit=None
+        )
+
     def _home_interval_rows(self, entity_ids, lo, hi):
         # Deliberately raw archive only. Observation-contract v12 historically augmented
         # the as-of seed with its fast journal but replayed the recent home window from
@@ -309,19 +322,21 @@ class SQLiteTemporalTracker:
             self._set_entity_rows(eid, list(self._watched_rows.get(eid, ())) + new_rows)
             TRAINING_BUDGET.checkpoint("temporal_watched_entity")
 
-    def _rebuild_home(self, ts):
-        """Reproduce the exact legacy 30-second causal room-belief window in bulk."""
+    def _render_home_cache(self, ts):
+        """Render the exact 30-second causal Room Belief view from cached rows.
+
+        The semantic rebuild remains deliberate: movement hypotheses are window-relative.
+        The expensive part was repeatedly asking SQLite for every seed on every feature
+        timestamp. Seeds/window rows now advance incrementally in memory.
+        """
         view = self.home_view
         view.reset()
         cutoff = float(ts) - 30.0
         ids = self.home_entities
         seeded_areas = set()
 
-        seed_rows = self._bulk_before(ids, cutoff, 1) if ids else []
-        seed_by_entity = {row["entity_id"]: row for row in seed_rows}
-        # The legacy implementation seeded in sorted entity-id order at exactly t-30.
         for eid in ids:
-            row = seed_by_entity.get(eid)
+            row = self._home_seed_rows.get(eid)
             if row is not None:
                 st = archived_state(row)
                 area = self.context.area_for(eid)
@@ -337,7 +352,9 @@ class SQLiteTemporalTracker:
         for area in sorted(seeded_areas):
             view.observe_adaptive(area, cutoff)
 
-        for row in self._home_interval_rows(ids, cutoff, ts) if ids else ():
+        for row in self._home_window_rows:
+            if float(row["ts"]) <= cutoff or float(row["ts"]) > float(ts):
+                continue
             eid = row["entity_id"]
             area = self.context.area_for(eid)
             view.home.observe(
@@ -350,6 +367,57 @@ class SQLiteTemporalTracker:
 
         self.history.home_context = view
         self._metrics["home_rebuilds"] += 1
+
+    def _rebuild_home_cache(self, ts):
+        cutoff = float(ts) - 30.0
+        ids = self.home_entities
+        seeds = self._bulk_before(ids, cutoff, 1) if ids else []
+        self._home_seed_rows = {row["entity_id"]: row for row in seeds}
+        self._home_window_rows = (
+            self._home_interval_rows(ids, cutoff, ts) if ids else []
+        )
+        self._home_window_rows.sort(key=self._row_order)
+        self._home_cache_ts = float(ts)
+        self._metrics["home_cache_full_rebuilds"] += 1
+        self._render_home_cache(ts)
+
+    def _forward_home_cache(self, lo, hi):
+        """Advance the 30-second Room Belief source window without re-reading seeds."""
+        ids = self.home_entities
+        old_cutoff = float(lo) - 30.0
+        cutoff = float(hi) - 30.0
+        new_rows = (
+            self._home_interval_rows(ids, lo, hi) if ids and float(hi) > float(lo) else []
+        )
+        seed_advances = (
+            self._home_seed_interval_rows(ids, old_cutoff, cutoff)
+            if ids and cutoff > old_cutoff else []
+        )
+        combined = list(self._home_window_rows)
+        combined.extend(new_rows)
+        combined.sort(key=self._row_order)
+
+        retained = []
+        seeds = dict(self._home_seed_rows)
+        for row in sorted(seed_advances, key=self._row_order):
+            seeds[row["entity_id"]] = row
+            TRAINING_BUDGET.checkpoint("temporal_home_seed_advance")
+        for row in combined:
+            if float(row["ts"]) <= cutoff:
+                # Raw archive rows are also valid seeds. Observation subclasses may have
+                # already supplied a newer fast-journal seed above.
+                previous = seeds.get(row["entity_id"])
+                if previous is None or self._row_order(row) >= self._row_order(previous):
+                    seeds[row["entity_id"]] = row
+            else:
+                retained.append(row)
+            TRAINING_BUDGET.checkpoint("temporal_home_cache_advance")
+
+        self._home_seed_rows = seeds
+        self._home_window_rows = retained
+        self._home_cache_ts = float(hi)
+        self._metrics["home_cache_forward_updates"] += 1
+        self._render_home_cache(hi)
 
     def advance(self, ts):
         ts = min(float(ts), self.end)
@@ -368,20 +436,20 @@ class SQLiteTemporalTracker:
             len(self.watched) + len(self.home_entities) + (1 if self.home_entities else 0)
         )
 
-        if self.current_ts is None:
+        previous_ts = self.current_ts
+        if previous_ts is None:
             self._metrics["bulk_rebuilds"] += 1
             self._rebuild_watched(ts)
-        elif ts > float(self.current_ts):
+            self._rebuild_home_cache(ts)
+        elif ts > float(previous_ts):
             self._metrics["forward_advances"] += 1
-            self._forward_watched(float(self.current_ts), ts)
+            self._forward_watched(float(previous_ts), ts)
+            self._forward_home_cache(float(previous_ts), ts)
         else:
             self._metrics["rewinds"] += 1
             self._metrics["bulk_rebuilds"] += 1
             self._rebuild_watched(ts)
-
-        # Room belief keeps its exact legacy semantics. The expensive per-source seed
-        # lookup is now a partitioned bulk query; recent events remain a causal 30 s scan.
-        self._rebuild_home(ts)
+            self._rebuild_home_cache(ts)
         self.current_ts = ts
         TRAINING_BUDGET.checkpoint("temporal_advance_done")
 
@@ -419,6 +487,8 @@ class SQLiteTemporalTracker:
             "current_ts": self.current_ts,
             "watched_entities": len(self.watched),
             "home_entities": len(self.home_entities),
+            "home_window_rows": len(self._home_window_rows),
+            "home_seed_entities": len(self._home_seed_rows),
             "history_samples_per_entity": self.HISTORY_SAMPLES,
             "query_reduction_ratio": (
                 max(0.0, 1.0 - (actual / legacy)) if legacy > 0 else None

@@ -1,10 +1,10 @@
 {
-  "version": "0.14.26",
+  "version": "0.14.27",
   "release_date": "2026-09-18",
-  "base_version": "0.14.25",
-  "base_commit": "9e1fbfcd8133b6665feb9396149be3a3e1bd6d17",
-  "release_status": "release-0.14.26-startup-inference-qos",
-  "tests_passed": 873,
+  "base_version": "0.14.26",
+  "base_commit": "379e9dfcb3828f760a0f6da75ead33b0a06a80ae",
+  "release_status": "release-0.14.27-replay-qos-correct-history",
+  "tests_passed": 880,
   "profile": "rpi4-low-memory-automatic-initial-training",
   "manual_agent_training": false,
   "max_concurrent_training_jobs": 1,
@@ -40,7 +40,7 @@
   "migration": "additive startup repair only; models, raw archive, feedback, Candidate lineage, TrialRecords, Teach labels, settings and rollback state remain preserved",
   "physical_control": "unchanged; repaired agents return to Shadow and Control still requires qualified state plus all existing guards",
   "pi4": "0.14.18 targets the observed ~94% CPU spike and second-open blank Ingress UI at the transition from REPLAY COMPLETE to model/benchmark finalization; on-device verification is still required",
-  "ci_status": "0.14.26 validation pending",
+  "ci_status": "0.14.27 final validation pending",
   "training_slice_budget": "adaptive-ai-index workers call a shared CooperativeTrainingBudget; expensive temporal tracker loops yield between entities/events and finalization is no longer outside the throttle",
   "finalization_lifeline": "HEAVY_JOBS remains owned through final gc.collect(), so /api/status and /api/agents stay on lightweight lifeline reads until the worker is actually finished",
   "finalization_progress": "post-replay UI now exposes bounded stages: replay complete, policy serialization, benchmark save, qualification, checkpoint complete",
@@ -74,5 +74,10 @@
   "temporal_replay_ordering": "archive-only replay preserves integer entity_history id ordering on equal timestamps; observation-contract replay preserves the established v12 event/received/string-id merge ordering",
   "startup_http_readiness": "runtime_available remains internal construction semantics; user-facing agent/live APIs require startup.ready so half-built Engine state cannot appear as missing Shadow predictions",
   "startup_index_qos": "F22 no longer creates redundant entity_history(entity_id,ts,id); the existing entity_id,ts index already carries rowid/id as the implicit tie-breaker",
-  "stage4_performance_scope": "startup/runtime readiness and interactive QoS only; no model/reward/evidence/qualification semantics changed"
+  "stage4_performance_scope": "startup/runtime readiness and interactive QoS only; no model/reward/evidence/qualification semantics changed",
+  "correct_history": "live Correct chart/point reads observed target state + decision_history directly; no RL policy replay on the HTTP path",
+  "realtime_training_preemption": "fresh HA events request 0.75 s priority; the debounced realtime inference pass extends it by 1.0 s; Correct history/point use 1.0 s and Correct label signature reconstruction uses 2.0 s; historical worker yields at checkpoints",
+  "room_belief_replay_cache": "forward chronological replay keeps a moving 30 s in-memory source window and advances per-entity seeds instead of re-reading every seed from SQLite",
+  "telemetry_recent_p95": "telemetry exposes recent_p95_ms over the last 60 s; overview displays only the recent window and shows no value when no recent samples exist",
+  "stage5_performance_scope": "Correct read path, Room Belief replay caching, realtime priority and latency observability; learning/control semantics unchanged"
 }
