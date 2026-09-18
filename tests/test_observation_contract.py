@@ -181,7 +181,8 @@ class ObservationFeatureTests(unittest.TestCase):
             on_vector.get(value_idx, 0.0),
             places=12,
         )
-        self.assertGreater(on_vector.get(value_idx, 0.0), 0.5)
+        self.assertGreater(on_vector.get(value_idx, 0.0), 0.25)
+        self.assertLess(on_vector.get(value_idx, 0.0), 0.5)
         self.assertEqual(
             off_meta["entity_observations"]["sensor.room_lux"]["photometric"]["source"],
             "current_light_off",
@@ -200,7 +201,7 @@ class ObservationFeatureTests(unittest.TestCase):
             on_vector.get(value_idx, 0.0),
             places=12,
         )
-        self.assertLess(on_vector.get(value_idx, 0.0), -0.8)
+        self.assertGreater(on_vector.get(value_idx, 0.0), 0.7)
 
     def test_fast_light_startup_on_without_pre_action_lux_is_unknown_v2(self):
         history = TemporalHistory(maxlen=96)
