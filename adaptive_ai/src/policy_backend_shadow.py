@@ -80,6 +80,34 @@ class PolicyBackendShadowService:
         domain = target.split(".", 1)[0]
         return domain in FAST_DOMAINS
 
+    def _benchmark_gate(self, agent_id):
+        try:
+            with self.store.conn() as c:
+                row = c.execute(
+                    """SELECT benchmark_version,result_json FROM policy_backend_benchmarks
+                       WHERE agent_id=? ORDER BY created_ts DESC LIMIT 1""",
+                    (str(agent_id),),
+                ).fetchone()
+        except Exception:
+            row = None
+        if not row:
+            return {"supported": False, "reason": "no_persisted_benchmark"}
+        result = _json(row["result_json"], {})
+        if int(row["benchmark_version"] or 0) < 2:
+            return {"supported": False, "reason": "benchmark_contract_too_old"}
+        if str(result.get("candidate_status") or "") != "shadow_candidate_supported":
+            return {"supported": False, "reason": "latest_benchmark_keeps_diagonal"}
+        indices = [int(x) for x in ((result.get("feature_selection") or {}).get("indices") or [])]
+        hp = result.get("hyperparameter_selection") or {}
+        if not indices:
+            return {"supported": False, "reason": "benchmark_projection_missing"}
+        return {
+            "supported": True, "reason": "supported_future_holdout",
+            "run_id": result.get("run_id"), "feature_indices": indices,
+            "ridge": float(hp.get("ridge", self.ridge)),
+            "alpha": float(hp.get("alpha", self.alpha)),
+        }
+
     def _load_model(self, agent_id):
         with self.store.conn() as c:
             row = c.execute(
@@ -112,36 +140,58 @@ class PolicyBackendShadowService:
 
     def _backend(self, agent, policy, features, labels):
         aid = str(agent["id"])
+        gate = self._benchmark_gate(aid)
+        if not gate.get("supported"):
+            self.backends.pop(aid, None)
+            return None, gate
+        selected = sorted(set(int(x) for x in gate["feature_indices"]))
+        target_actions = [float(x) for x in policy.actions]
+        target_horizons = [int(x) for x in policy.horizons]
         cached = self.backends.get(aid)
-        if cached is not None and cached.actions == [float(x) for x in policy.actions] and cached.horizons == [int(x) for x in policy.horizons]:
-            return cached
+        if (cached is not None and cached.actions == target_actions
+                and cached.horizons == target_horizons
+                and cached.feature_indices == selected
+                and abs(float(cached.ridge) - float(gate["ridge"])) <= 1e-12
+                and abs(float(cached.alpha) - float(gate["alpha"])) <= 1e-12):
+            return cached, gate
         raw = self._load_model(aid)
         if raw:
             try:
                 backend = FullRidgeLinUCBBackend.deserialize(raw)
-                if backend.actions == [float(x) for x in policy.actions] and backend.horizons == [int(x) for x in policy.horizons]:
+                if (backend.actions == target_actions and backend.horizons == target_horizons
+                        and backend.feature_indices == selected
+                        and abs(float(backend.ridge) - float(gate["ridge"])) <= 1e-12
+                        and abs(float(backend.alpha) - float(gate["alpha"])) <= 1e-12):
                     self.backends[aid] = backend
-                    return backend
+                    return backend, gate
             except Exception:
                 pass
-        pseudo = [{"features": dict(features or {}), "feature_labels": dict(labels or {}), "timestamp": time.time()}]
-        selected = semantic_feature_indices(pseudo, max_features=self.max_features) or [0]
         backend = FullRidgeLinUCBBackend(
             actions=policy.actions, horizons=policy.horizons, feature_indices=selected,
-            alpha=self.alpha, ridge=self.ridge,
+            alpha=gate["alpha"], ridge=gate["ridge"],
         )
         self.backends[aid] = backend
         self._persist(aid, backend)
         self._event(aid, "shadow_backend_created", {
             "backend": backend.BACKEND, "backend_version": backend.VERSION,
-            "feature_indices": selected, "source": "current_explicit_semantic_vector",
+            "feature_indices": selected, "source": "persisted_benchmark_v2",
+            "benchmark_run_id": gate.get("run_id"),
         })
-        return backend
+        return backend, gate
 
     def observe_decision(self, agent, policy, features, labels, allowed_indices=None, timestamp=None):
         if not self.enabled or not self._fast(agent):
             return None
-        backend = self._backend(agent, policy, features, labels)
+        backend, gate = self._backend(agent, policy, features, labels)
+        if backend is None:
+            result = {
+                "backend": FullRidgeLinUCBBackend.BACKEND,
+                "backend_version": FullRidgeLinUCBBackend.VERSION,
+                "evaluation": "shadow_waiting_for_supported_benchmark",
+                "reason": gate.get("reason"), "dispatch_capability": False,
+            }
+            self.last_predictions[str(agent["id"])] = result
+            return result
         chosen, confidence, _arms, horizon, support, novelty = backend.predict(
             features, allowed_indices=allowed_indices
         )
@@ -151,6 +201,8 @@ class PolicyBackendShadowService:
             "mean": float(chosen["mean"]), "confidence": float(confidence),
             "horizon": int(horizon), "support": float(support), "novelty": float(novelty),
             "evaluation": "shadow_only_no_dispatch",
+            "benchmark_run_id": gate.get("run_id"),
+            "dispatch_capability": False,
         }
         self.last_predictions[str(agent["id"])] = result
         return result
@@ -202,7 +254,7 @@ class PolicyBackendShadowService:
             if agent:
                 features = {int(k): float(v) for k, v in dict(context.get("policy_features") or {}).items()}
                 labels = dict(context.get("policy_feature_labels") or {})
-                backend = self._backend(agent, policy, features, labels)
+                backend, _gate = self._backend(agent, policy, features, labels)
         if backend is None:
             return False
         with self.store.conn() as c:
@@ -258,6 +310,7 @@ class PolicyBackendShadowService:
             backend = self.backends.get(str(agent_id))
             return {
                 "enabled": self.enabled, "mode": "shadow", "dispatch_capability": False,
+                "benchmark_gate": self._benchmark_gate(str(agent_id)) if self.enabled else {"supported": False, "reason": "disabled"},
                 "backend": backend.diagnostics() if backend else None,
                 "last_prediction": self.last_predictions.get(str(agent_id)),
             }
