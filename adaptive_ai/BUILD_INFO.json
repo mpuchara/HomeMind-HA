@@ -61,5 +61,7 @@
   "replay_crash_safety": "existing model _history_watermark remains authoritative; failed passes discard all experience rows committed after the previous model checkpoint",
   "feature_screening": "broad precursor screening runs only while a policy schema is unresolved; persisted model schemas and explicit Teach/Correct/manual input selections bypass the full scan",
   "feature_screening_yield": "target-edge precursor fan-out has an explicit cooperative training-budget checkpoint in addition to archive iterator checkpoints",
-  "stage2_performance_scope": "SQLite replay write batching plus schema-aware/incremental feature-screening lifecycle; policy/reward/qualification semantics unchanged"
+  "stage2_performance_scope": "SQLite replay write batching plus schema-aware/incremental feature-screening lifecycle; policy/reward/qualification semantics unchanged",
+  "feature_screening_stream": "SQLite LAG emits only effective per-entity state/attribute changes to Python; fast occupancy/activity driver rows stay raw and bounded",
+  "replay_provenance": "batched replay preloads linked provenance for target rows; own_command acknowledgements are excluded before policy mutation and accepted/excluded audit rows are journaled in bounded batches"
 }
