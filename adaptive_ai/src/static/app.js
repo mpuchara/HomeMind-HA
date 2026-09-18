@@ -57,6 +57,11 @@ function renderHistory(h,status={}){
   const etaPrimary=stageEta?`Current phase ${stageEta}`:(eta?`Adaptive overall estimate ${eta}`:'Calibrating ETA…');
   const workLine=workTotal?`${num(workDone)} / ${num(workTotal)} ${esc(h.work_unit||'items')} · ${workPct}%`:null;
   const ak=status.automation_knowledge||{};
+  const tr=h.temporal_replay?.totals||{};
+  const trReduction=tr.query_reduction_ratio==null?null:Math.round(Number(tr.query_reduction_ratio)*100);
+  const trMeta=Number(tr.advances||0)
+    ?`<span>Temporal replay: ${num(tr.sql_queries||0)} SQL · ${num(tr.forward_advances||0)} forward · ${num(tr.rewinds||0)} rewind${Number(tr.rewinds||0)===1?'':'s'}${trReduction!=null?` · ~${trReduction}% fewer as-of queries`:''}</span>`
+    :'';
   $('#historyPanel').innerHTML=`
     <div class="history-head"><div><b>${esc(h.message||'Starting history engine…')}</b><span>${esc(phase.toUpperCase())}${h.phase_detail?` · ${esc(h.phase_detail)}`:''}</span></div><div class="history-percent"><strong>${progress}%</strong><small>${esc(etaPrimary)}</small></div></div>
     <div class="bar history-bar"><i style="width:${progress}%"></i></div>
@@ -70,7 +75,7 @@ function renderHistory(h,status={}){
       <div><b>${num(h.esphome_context_candidates||0)}</b><span>ESPHome sensors eligible</span></div>
       <div><b>${h.active||0}/${h.eligible||h.controllable||0}</b><span>active / eligible targets</span></div>
     </div>
-    <div class="history-meta"><span>${h.filtered_config||0} config/diagnostic targets filtered</span><span>${h.inactive||0} insufficient target activity</span><span>${ak.automation_count||0} automations scanned</span><span>${status.realtime?.connected?'Realtime event stream active':'REST fallback active'}</span><span>${h.esphome_sensor_sibling_overrides||0} ESPHome sensor siblings preserved</span>${ak.error?`<span title="${esc(ak.error)}">Automation scan partial</span>`:''}</div>`;
+    <div class="history-meta"><span>${h.filtered_config||0} config/diagnostic targets filtered</span><span>${h.inactive||0} insufficient target activity</span><span>${ak.automation_count||0} automations scanned</span><span>${status.realtime?.connected?'Realtime event stream active':'REST fallback active'}</span><span>${h.esphome_sensor_sibling_overrides||0} ESPHome sensor siblings preserved</span>${trMeta}${ak.error?`<span title="${esc(ak.error)}">Automation scan partial</span>`:''}</div>`;
 }
 function sensorRecommendations(a){const recs=a.runtime?.sensor_recommendations||[];if(!recs.length)return `<div class="sensor-ok">✓ Core sensor classes expected for this target are present.</div>`;return recs.map(r=>`<div class="sensor-rec"><i class="dot"></i><div><b>${esc(r.label)}</b><span>${esc(r.reason)}</span></div></div>`).join('');}
 function contextInfluence(a){const xs=a.runtime?.top_context||[];if(!xs.length)return 'Not enough rewarded history to rank context yet.';return xs.map(x=>`${esc(x.feature)} (${Number(x.contribution)>=0?'+':''}${Number(x.contribution).toFixed(2)})`).join(' · ');}

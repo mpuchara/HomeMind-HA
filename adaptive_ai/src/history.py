@@ -63,6 +63,7 @@ class HistoryManager(threading.Thread):
         self.agent_jobs = set()
         self.training_rows_per_second = 0.0
         self.history_rows_per_second = 0.0
+        self.temporal_replay_stats = {}
         self.job_cancel_event = None
         self.agent_jobs_lock = threading.RLock()
         if bool(OPTIONS.get("manual_agent_training", True)):
@@ -90,6 +91,7 @@ class HistoryManager(threading.Thread):
                 "archive": dict(self.archive_cache),
                 "training_rows_per_second": self.training_rows_per_second,
                 "history_rows_per_second": self.history_rows_per_second,
+                "temporal_replay": dict(self.temporal_replay_stats),
             }
         return d
 
@@ -799,6 +801,7 @@ class HistoryManager(threading.Thread):
 
     def _train_from_archive(self, start_ts, end_ts, *, qualify=False, agent_ids=None, include_candidates=False, benchmark=None, accumulate_benchmark=False, progress_lo=None, progress_hi=None, progress_label=None):
         benchmark = bool(qualify) if benchmark is None else bool(benchmark)
+        self.temporal_replay_stats = {}
         agents = [a for a in STORE.list_agent_configs() if a["enabled"]]
         if agent_ids is not None:
             wanted = set(agent_ids)
@@ -1051,15 +1054,26 @@ class HistoryManager(threading.Thread):
             }
 
 
-        # One chronological replay cursor per prediction horizon. A 30 s head sees the
-        # house exactly as it looked 30 s before the historical action; a 5 min HVAC head
-        # sees the state 5 min earlier. All heads receive the same reward for the action.
+        # Historical features are reconstructed causally as-of each requested timestamp.
+        # 0.14.25 keeps two bounded incremental cursor roles (onset/anticipation and dwell
+        # persistence) so chronological work advances forward instead of repeatedly
+        # rebuilding selected-input history from SQLite. Prediction heads still receive
+        # the exact same feature timestamp/reward semantics as before.
         horizons = sorted({h for p in policies.values() for h in p.horizons})
         watched_entities = {eid for p in policies.values() for eid in p.schema.entities}
         replay_entities = set(watched_entities) | set(target_map.keys())
         rows = STORE.archive_iter(start_ts, end_ts, replay_entities, chunk_size=256)
-        timeline = SQLiteTemporalTracker(STORE, watched_entities, self.engine.context, start_ts, end_ts)
-        trackers = {h: timeline for h in horizons}
+        # Separate onset/anticipation and dwell-persistence cursors. 0.14.24 used one
+        # mutable as-of tracker for both roles, so persistence sampling near the end of a
+        # dwell was immediately followed by a rewind to the next action's precursor.
+        # Incremental cursors stay forward-moving far more often when these roles do not
+        # fight over one timestamp.
+        timeline = SQLiteTemporalTracker(
+            STORE, watched_entities, self.engine.context, start_ts, end_ts
+        )
+        persistence_timeline = SQLiteTemporalTracker(
+            STORE, watched_entities, self.engine.context, start_ts, end_ts
+        )
         pending = {}
         last_value = {}
         new_count = 0
@@ -1108,6 +1122,30 @@ class HistoryManager(threading.Thread):
         validation_fraction = clamp(float(OPTIONS.get("confidence_validation_fraction", 0.20)), 0.05, 0.40)
         validation_span = max(1800.0, (float(end_ts) - float(start_ts)) * validation_fraction)
         validation_start = max(float(start_ts), float(end_ts) - validation_span)
+
+        def _publish_temporal_replay_stats():
+            onset = timeline.stats()
+            persistence = persistence_timeline.stats()
+            numeric = (
+                "advances", "same_ts_hits", "forward_advances", "bulk_rebuilds",
+                "rewinds", "sql_queries", "rows_loaded", "home_rebuilds",
+                "legacy_asof_queries_estimate",
+            )
+            totals = {
+                key: int(onset.get(key) or 0) + int(persistence.get(key) or 0)
+                for key in numeric
+            }
+            legacy = totals["legacy_asof_queries_estimate"]
+            totals["query_reduction_ratio"] = (
+                max(0.0, 1.0 - totals["sql_queries"] / legacy) if legacy else None
+            )
+            self.temporal_replay_stats = {
+                "contract": "incremental_bulk_v1",
+                "onset": onset,
+                "persistence": persistence,
+                "totals": totals,
+            }
+            return self.temporal_replay_stats
 
         def _primary_occupancy_sensor(policy):
             meta = policy.selection_meta or {}
@@ -1265,6 +1303,7 @@ class HistoryManager(threading.Thread):
             # the policy merely because it lasted longer. Only sample contexts that are
             # safely inside the dwell for that prediction horizon.
             settle = min(20.0, max(3.0, float(OPTIONS.get("temporal_short_seconds", 60)) * 0.10))
+            persistence_tasks = []
             for h in policy.horizons:
                 h = int(h)
                 earliest_target = old["ts"] + h + settle
@@ -1277,24 +1316,33 @@ class HistoryManager(threading.Thread):
                     target_times.append(earliest_target + span * 0.5)
                 if span >= max(60.0, h):
                     target_times.append(latest_target)
-                tracker = trackers[h]
                 seen = set()
                 for target_time in target_times:
-                    context_ts = target_time
-                    key = int(context_ts)
+                    key = int(target_time)
                     if key in seen:
                         continue
                     seen.add(key)
-                    tracker.advance(context_ts)
-                    features, _, _ = policy.features(tracker.state_map, tracker.history, at_ts=context_ts)
-                    if target_time < validation_start <= effective_end:
-                        continue
-                    if target_time >= validation_start:
-                        # Correlated samples within a dwell are training evidence,
-                        # not independent validation trials. Validate onset only.
-                        heldout_updates.append((policy, h, old["action_idx"], features, float(reward), float(target_time)))
-                    else:
-                        policy.update(h, old["action_idx"], features, reward, target_time)
+                    persistence_tasks.append((float(target_time), h))
+
+            # Heads are independent. Sorting their observation timestamps does not change
+            # reward/order within any head, but avoids artificial cursor rewinds between
+            # horizons of the same dwell.
+            for target_time, h in sorted(persistence_tasks, key=lambda item: (item[0], item[1])):
+                context_ts = target_time
+                persistence_timeline.advance(context_ts)
+                features, _, _ = policy.features(
+                    persistence_timeline.state_map,
+                    persistence_timeline.history,
+                    at_ts=context_ts,
+                )
+                if target_time < validation_start <= effective_end:
+                    continue
+                if target_time >= validation_start:
+                    # Correlated samples within a dwell are training evidence,
+                    # not independent validation trials. Validate onset only.
+                    heldout_updates.append((policy, h, old["action_idx"], features, float(reward), float(target_time)))
+                else:
+                    policy.update(h, old["action_idx"], features, reward, target_time)
 
             new_count += 1
             return True
@@ -1321,6 +1369,7 @@ class HistoryManager(threading.Thread):
                 remaining = (replay_total - replay_done) / max(rate, 1e-9)
                 frac = replay_done / replay_total
                 p = screening_end + (replay_end - screening_end) * frac
+                _publish_temporal_replay_stats()
                 self.set_status(progress=p, message=f"{progress_label}: replay {replay_done:,}/{replay_total:,} archived state changes",
                                 stage_eta_seconds=remaining, work_done=replay_done, work_total=replay_total,
                                 work_unit="history rows", eta_source="measured replay throughput",
@@ -1344,30 +1393,59 @@ class HistoryManager(threading.Thread):
                     old = pending[aid]
                     replay_completed_dwell(agent, policy, old, float(row["ts"]), row.get("context_user_id"))
 
-                features_by_horizon = {}
-                anchor_ts, upstream_anchor_ts = _fast_anchor(agent, policy, value, float(row["ts"]))
-                for h in policy.horizons:
-                    tracker = trackers[h]
-                    tracker.advance(anchor_ts)
-                    features, _, _ = policy.features(tracker.state_map, tracker.history, at_ts=anchor_ts)
-                    features_by_horizon[h] = features
-                upstream_features_by_horizon = {}
-                if upstream_anchor_ts is not None and upstream_anchor_ts < anchor_ts and anchor_ts - upstream_anchor_ts <= float(OPTIONS.get("fast_upstream_lead_seconds", 4)):
-                    for h in policy.horizons:
-                        tracker = trackers[h]
-                        tracker.advance(upstream_anchor_ts)
-                        features, _, _ = policy.features(tracker.state_map, tracker.history, at_ts=upstream_anchor_ts)
-                        upstream_features_by_horizon[h] = features
-
+                anchor_ts, upstream_anchor_ts = _fast_anchor(
+                    agent, policy, value, float(row["ts"])
+                )
+                upstream_valid = (
+                    upstream_anchor_ts is not None
+                    and upstream_anchor_ts < anchor_ts
+                    and anchor_ts - upstream_anchor_ts
+                        <= float(OPTIONS.get("fast_upstream_lead_seconds", 4))
+                )
+                early_times = {}
+                query_times = {float(anchor_ts)}
+                if upstream_valid:
+                    query_times.add(float(upstream_anchor_ts))
                 if is_fast_reactive_agent(agent) and value >= .5:
                     for h in policy.horizons:
-                        tracker = trackers[h]
-                        tracker.advance(anchor_ts - max(1, h))
-                        early, _, early_meta = policy.features(tracker.state_map, tracker.history, at_ts=anchor_ts-max(1,h))
-                        forecast = early_meta.get('home_forecast', {})
-                        if forecast.get('arrival_probability', 0) > .1 and forecast.get('occupancy_now', 0) < .5:
-                            upstream_features_by_horizon[h] = early
-                            upstream_anchor_ts = anchor_ts-max(1,h)
+                        early_ts = float(anchor_ts) - max(1, int(h))
+                        early_times[int(h)] = early_ts
+                        query_times.add(early_ts)
+
+                # policy.features is observation-only. Capture each unique causal
+                # timestamp once, oldest -> newest, so the onset cursor can stay
+                # incremental instead of anchor -> upstream -> early rewinds.
+                snapshots = {}
+                for query_ts in sorted(query_times):
+                    timeline.advance(query_ts)
+                    features, _, meta = policy.features(
+                        timeline.state_map, timeline.history, at_ts=query_ts
+                    )
+                    snapshots[query_ts] = (dict(features), dict(meta or {}))
+
+                anchor_features = snapshots[float(anchor_ts)][0]
+                features_by_horizon = {
+                    h: dict(anchor_features) for h in policy.horizons
+                }
+                upstream_features_by_horizon = {}
+                if upstream_valid:
+                    upstream_features = snapshots[float(upstream_anchor_ts)][0]
+                    for h in policy.horizons:
+                        upstream_features_by_horizon[h] = dict(upstream_features)
+
+                # Preserve the existing per-head early-cue rule and its global
+                # upstream_anchor_ts compatibility field; only the query order changed.
+                if early_times:
+                    for h in policy.horizons:
+                        early_ts = early_times[int(h)]
+                        early, early_meta = snapshots[early_ts]
+                        forecast = early_meta.get("home_forecast", {})
+                        if (
+                            forecast.get("arrival_probability", 0) > .1
+                            and forecast.get("occupancy_now", 0) < .5
+                        ):
+                            upstream_features_by_horizon[h] = dict(early)
+                            upstream_anchor_ts = early_ts
                 actions = policy.actions
                 action_idx = min(range(len(actions)), key=lambda i: abs(actions[i] - float(value)))
                 pending[aid] = {
@@ -1535,10 +1613,13 @@ class HistoryManager(threading.Thread):
                 {"experiences": new_count, "prediction_horizons_seconds": horizons,
                  "feature_dimensions": int(OPTIONS.get("feature_dimensions", 128)),
                  "validation_fraction": validation_fraction, "heldout_updates": len(heldout_updates),
-                 "qualification": qualification_summary},
+                 "qualification": qualification_summary,
+                 "temporal_replay": _publish_temporal_replay_stats()},
             )
         heldout_updates.close()
+        _publish_temporal_replay_stats()
         timeline.close()
+        persistence_timeline.close()
         TRAINING_BUDGET.checkpoint("finalization_complete", force=True)
         if progress_enabled:
             self.set_status(progress=float(progress_hi), message=f"{progress_label}: training checkpoint complete",

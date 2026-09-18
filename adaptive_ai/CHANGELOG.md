@@ -1,3 +1,15 @@
+# 0.14.25 — 2026-09-18
+
+- Replace repeated per-entity temporal as-of reconstruction with bounded incremental replay cursors for selected policy inputs.
+- First access and genuine timestamp rewinds use indexed bulk per-entity LIMIT queries; forward movement consumes only newly eligible rows and repeated requests for the same timestamp perform no SQLite read.
+- Split historical replay into independent onset/anticipation and dwell-persistence cursors, and evaluate each cursor's requested timestamps in chronological order to avoid artificial rewinds between feature samples.
+- Keep at most 64 temporal samples per selected input, including large forward jumps, while retaining bulk rewind support so overlapping agent dwells cannot leak future state into earlier features.
+- Preserve the Room Belief replay contract: every query still reconstructs the same causal 30-second home window, but source seeds are fetched in indexed bulk rather than one SELECT per source.
+- Extend observation-contract replay incrementally across both event time and received time. Late-arriving fast observations remain invisible before receipt and become visible causally without rebuilding the whole selected-input view.
+- Keep the v12 same-timestamp fast-journal/archive merge rule and transition-edge semantics unchanged.
+- Expose temporal replay diagnostics in History: SQL query count, forward advances, rewinds and estimated reduction versus the former per-entity as-of query path.
+- Preserve reward math, feature schema, policy version, qualification thresholds, provenance gates, raw history, Candidate lineage, Correct/Teach labels, rollback and physical-control guards.
+
 # 0.14.24 — 2026-09-18
 
 - Batch historical replay audit writes into bounded SQLite transactions instead of committing one transaction for every completed dwell. The default batch size is 64 rows and remains configurable.
