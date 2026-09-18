@@ -432,16 +432,25 @@ class CurrentConfidenceCostTests(unittest.TestCase):
         self.assertEqual(after_unrelated, optimized)
         self.assertNotIn("from candidate_generation_pairs", "\n".join(self.store.selects()).lower())
 
-        # A later independent label is outside the locked fixed-future window and
-        # cannot invalidate or rescan the immutable completed holdout.
+        # A later independent label invalidates the calibration revision, but the
+        # recomputation is constrained to the already locked fixed-future window rather
+        # than the full Candidate edge. The following warm read is cached again.
         self._insert_pair(1200, eligible=True)
         self.store.reset_trace()
         after_label = self.epochs.final_report_from_store(
             locked,'g0','g1',scope_id='root'
         )
         self.assertEqual(after_label, optimized)
-        self.assertNotIn("from candidate_generation_pairs", "\n".join(self.store.selects()).lower())
+        sql = "\n".join(self.store.selects()).lower()
+        self.assertIn("from candidate_generation_pairs", sql)
+        self.assertIn("outcome_ts<=?", sql)
         self.assertLessEqual(self.diag.snapshot()['max_rows_materialized_per_batch'], 12)
+        self.store.reset_trace()
+        self.assertEqual(
+            self.epochs.final_report_from_store(locked,'g0','g1',scope_id='root'),
+            optimized,
+        )
+        self.assertNotIn("from candidate_generation_pairs", "\n".join(self.store.selects()).lower())
 
         # Durable cache survives a new journal/runtime instance.
         restarted = confidence.EvaluationEpochJournal(self.store)
@@ -453,6 +462,56 @@ class CurrentConfidenceCostTests(unittest.TestCase):
         )
         self.assertEqual(restarted_report, optimized)
         self.assertNotIn("from candidate_generation_pairs", "\n".join(self.store.selects()).lower())
+
+    def test_retroactive_label_inside_locked_window_invalidates_cache_and_matches_legacy(self):
+        for i in range(12):
+            self._insert_pair(i)
+        epoch = self.epochs.ensure_from_store(
+            'g0','g1','rev-retro','diagonal_linucb:v11',
+            selection_target=12,final_target=12,min_per_action=4,
+        )
+        for i in range(20, 32):
+            self._insert_pair(i, eligible=True)
+        initial = self.epochs.final_report_from_store(epoch,'g0','g1',scope_id='root')
+        locked = self.epochs.get('g0','g1','rev-retro','diagonal_linucb:v11')
+        self.assertIsNotNone(locked['final_end_ts'])
+
+        # Simulate a late independent label attached to an existing pair whose outcome
+        # timestamp belongs to the locked window. Old semantics would include it.
+        with self.store.conn() as db:
+            target = db.execute(
+                """SELECT prediction_event_id FROM candidate_generation_pairs
+                   WHERE parent_generation_id='g0' AND child_generation_id='g1'
+                     AND outcome_ts>? AND outcome_ts<=?
+                   ORDER BY outcome_ts LIMIT 1""",
+                (locked['selection_cutoff_ts'], locked['final_end_ts']),
+            ).fetchone()[0]
+            db.execute(
+                """UPDATE candidate_generation_pairs SET
+                   evidence_kind='episode_evaluator_independent',
+                   calibration_eligible=1,
+                   calibration_outcome=1-calibration_outcome,
+                   calibration_parent_correct=0,
+                   calibration_child_correct=0,
+                   calibration_source_id='retroactive-label'
+                   WHERE parent_generation_id='g0' AND child_generation_id='g1'
+                     AND prediction_event_id=?""",
+                (target,),
+            )
+
+        self.store.reset_trace()
+        refreshed = self.epochs.final_report_from_store(
+            locked,'g0','g1',scope_id='root'
+        )
+        legacy = self.epochs.final_report(
+            locked, confidence._pair_rows(self.store,'g0','g1'), scope_id='root'
+        )
+        self.assertEqual(refreshed['episodes'], legacy['episodes'])
+        self.assertEqual(refreshed['paired_delta'], legacy['paired_delta'])
+        self.assertEqual(refreshed['per_action_delta'], legacy['per_action_delta'])
+        self.assertEqual(refreshed['promotion_quality_passed'], legacy['promotion_quality_passed'])
+        self.assertIn("outcome_ts<=?", "\n".join(self.store.selects()).lower())
+        self.assertNotEqual(initial['paired_delta'], refreshed['paired_delta'])
 
     def test_probability_report_reuses_durable_scope_revision_cache(self):
         journal = confidence.ProbabilityCalibrationJournal(self.store)
