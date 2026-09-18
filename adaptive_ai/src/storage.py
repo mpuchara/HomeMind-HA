@@ -584,16 +584,26 @@ class Store:
         return r[0] if r else default
 
     def migrate_models(self):
-        """Additive, idempotent migration; never replay or erase historical data."""
+        """Storage-level legacy guard; current feature contracts migrate themselves later.
+
+        This layer runs before runtime composition, so it must not hard-code the newest
+        policy/schema pair. Doing that would misclassify a newer valid model on every
+        restart before the observation contract has a chance to inspect it.
+        """
         with self.lock, self.conn() as c:
             c.execute('CREATE TABLE IF NOT EXISTS model_backups (agent_id TEXT, model_json TEXT, saved_at TEXT, PRIMARY KEY(agent_id,saved_at))')
             for row in c.execute('SELECT agent_id,model_json FROM rl_models'):
                 try:
                     raw = json.loads(row['model_json'])
-                    valid = raw.get('version') == 10 and raw.get('schema', {}).get('version') == 11
-                except (ValueError, TypeError):
-                    valid = False
-                if not valid:
+                    policy_version = int(raw.get('version') or 0)
+                    schema_version = int((raw.get('schema') or {}).get('version') or 0)
+                    # v10/schema11 was the first explicit modern contract. Newer
+                    # contracts are intentionally left to observation_contract.py,
+                    # which owns exact compatibility after composition is installed.
+                    modern = policy_version >= 10 and schema_version >= 11
+                except (ValueError, TypeError, AttributeError):
+                    modern = False
+                if not modern:
                     c.execute('INSERT OR IGNORE INTO model_backups VALUES (?,?,?)',
                               (row['agent_id'], row['model_json'], 'migration-0.9.0'))
                     c.execute("UPDATE agents SET training_state='needs_retrain',mode='paused',training_cursor_ts=NULL,training_progress=0 WHERE id=?", (row['agent_id'],))
