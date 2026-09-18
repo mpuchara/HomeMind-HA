@@ -277,7 +277,8 @@ class AdaptivePresenceModel:
         }
 
     def evaluate(self, area, ts, arrival_prior, trajectory_confidence, raw_sources,
-                 room_calibration=None, capability=None):
+                 room_calibration=None, capability=None, prior_source_ids=None,
+                 prior_device_ids=None):
         """Fuse one arrival prior with one independent raw channel, then apply hysteresis."""
         ts = float(ts)
         prior_raw = _clamp(arrival_prior)
@@ -286,9 +287,14 @@ class AdaptivePresenceModel:
         # Arrival prior remains a prior, not proof. Weak topology/calibration shrinks it
         # toward zero rather than toward 0.5, avoiding fabricated occupancy.
         prior = _clamp(prior_raw * (0.55 + 0.45 * trajectory) * (0.75 + 0.25 * room_quality), 0.001, 0.95)
-        chosen, alternatives = self._select_raw_source(raw_sources)
+        chosen, alternatives, excluded = self._select_raw_source(
+            raw_sources, prior_source_ids=prior_source_ids, prior_device_ids=prior_device_ids
+        )
         all_sources = [dict(x) for x in (raw_sources or []) if isinstance(x, dict)]
-        cap = dict(capability or self.capability(area, all_sources))
+        cap = dict(capability or self.capability(
+            area, all_sources,
+            prior_source_ids=prior_source_ids, prior_device_ids=prior_device_ids,
+        ))
         state = self._runtime(area)
         self._prune_false_budget(state, ts)
         self.metrics['evaluations'] += 1
@@ -306,6 +312,9 @@ class AdaptivePresenceModel:
                 'effective_arrival_prior': prior,
                 'trajectory_confidence': trajectory,
                 'selected_raw_source': None,
+                'excluded_raw_sources': [str(x.get('entity_id')) for x in excluded],
+                'prior_source_ids': sorted(str(x) for x in (prior_source_ids or []) if x),
+                'prior_device_ids': sorted(str(x) for x in (prior_device_ids or []) if x),
                 'fixed_boundary': self.FIXED_BOUNDARY,
                 'fixed_boundary_active': False,
                 'enter_threshold': self.ENTER_THRESHOLD,
@@ -372,6 +381,9 @@ class AdaptivePresenceModel:
             'raw_independent_labels': calibration_labels,
             'likelihood_ratio': likelihood_ratio,
             'alternative_raw_sources_not_multiplied': [str(x.get('entity_id')) for x in alternatives],
+            'excluded_raw_sources': [str(x.get('entity_id')) for x in excluded],
+            'prior_source_ids': sorted(str(x) for x in (prior_source_ids or []) if x),
+            'prior_device_ids': sorted(str(x) for x in (prior_device_ids or []) if x),
             'fixed_boundary': self.FIXED_BOUNDARY,
             'fixed_boundary_active': bool(fixed_active),
             'enter_threshold': self.ENTER_THRESHOLD,
