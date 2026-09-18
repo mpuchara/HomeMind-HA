@@ -92,6 +92,6 @@ future test: niewidziany wcześniej hidden truth używany wyłącznie do oceny p
 
 Porównywane są: stała automatyzacja, bieżący produkcyjny runtime w Shadow, full-ridge challenger w Shadow i ostrożny fallback. Raport obejmuje needed-light coverage, false ON, premature OFF, opóźnienie, chatter, korekty/100 epizodów i koszt obliczeń z wieloma seedami oraz przedziałami niepewności.
 
-Benchmark **nie** obniża kwalifikacji, nie wstawia gotowego `benchmark_score` i nie promuje backendu. Niespełnione kryteria są prawidłowym wynikiem. Wynik syntetyczny/CI nie zastępuje fizycznego M&V. CI zapisuje pełny raport jako artefakt `product-benchmark-f24-py311/product-benchmark-f24.json`, aby lista kryteriów i przedziały niepewności były audytowalne poza logiem joba.
+Benchmark **nie** obniża kwalifikacji, nie wstawia gotowego `benchmark_score` i nie promuje backendu. Niespełnione kryteria są prawidłowym wynikiem. Wynik syntetyczny/CI nie zastępuje fizycznego M&V. CI zapisuje pełny raport jako artefakt `product-benchmark-f24-py311/product-benchmark-f24.json`, aby lista kryteriów i przedziały niepewności były audytowalne poza logiem joba. Zwięzły raport porównawczy z bieżącego kontraktu v2 jest utrzymywany w `BENCHMARK_PRODUCT_F24.md`.
 
 CI dodatkowo uruchamia dokładny source entrypoint oraz obraz i sprawdza, że PID 1 obrazu startuje przez `/app/run.sh`, który kończy w `trial_queue_main.py`. Dzięki temu benchmark jakości i test uruchomienia dotyczą tego samego stosu kompozycji.
