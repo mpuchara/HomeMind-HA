@@ -146,6 +146,7 @@ class DeviceAgentService:
         # Explicit operator mapping is authoritative immediately. Physical target_property
         # is untouched; only the additive logical property/device metadata is migrated.
         self.migrate_agent_identities(entity_ids={entity_id})
+        self.reconcile_control_resources()
         return self.explicit_mapping(entity_id)
 
     def explicit_mapping(self, entity_id):
@@ -434,16 +435,22 @@ class DeviceAgentService:
         agents = [a for a in self.store.list_agent_configs() if a.get("enabled")]
         by_id = {str(a["id"]): a for a in agents}
         control_ids = {str(a["id"]) for a in agents if a.get("mode") == "control"}
+        desired_resources = {
+            aid: set(self.descriptor(by_id[aid])["resource_keys"])
+            for aid in control_ids
+        }
         now = time.time()
         with self.store.lock, self.store.conn() as c:
             rows = c.execute(
                 "SELECT resource_key,control_owner_agent_id FROM device_resource_state "
                 "WHERE control_owner_agent_id IS NOT NULL"
             ).fetchall()
-            stale_keys = [
-                str(row["resource_key"]) for row in rows
-                if str(row["control_owner_agent_id"] or "") not in control_ids
-            ]
+            stale_keys = []
+            for row in rows:
+                key = str(row["resource_key"])
+                owner = str(row["control_owner_agent_id"] or "")
+                if owner not in control_ids or key not in desired_resources.get(owner, set()):
+                    stale_keys.append(key)
             for key in stale_keys:
                 c.execute(
                     """UPDATE device_resource_state
@@ -753,7 +760,7 @@ class DeviceAgentService:
             "control_ownership": "durable pre-commit resource claim closes mode=control transition races and is reconciled on restart",
             "manual_priority": "hard guard independent of reward",
             "action_mask": "legal_value + autonomy description + shared manual hold + in-flight lease + cross-agent min dwell",
-            "dispatch_reservation": "rechecks manual hold, lease and cross-agent dwell atomically under all shared-resource locks",
+            "dispatch_reservation": "rechecks manual hold, Control owner, in-flight lease and cross-agent dwell atomically under all shared-resource locks",
             "perception_owner": PERCEPTION_OWNER,
             "perception_lease": "durable authority; active snapshot immutable; expired generation drops stale consumers; last release requires restore",
             "power_brightness": "one resource owner; brightness command is a single compound light.turn_on/off action",
