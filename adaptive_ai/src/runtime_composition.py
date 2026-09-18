@@ -75,6 +75,15 @@ class RuntimeCompositionRoot:
                 "final_gate": "fixed_future_independent_on_off_paired_non_regression",
                 "automation_replay": "screening_only_not_final_calibration_evidence",
             },
+            "controlled_adaptation": {
+                "owner": "manager.adaptation_service",
+                "contract": getattr(manager, "cold_start_drift_contract", None),
+                "cold_start": "fallback_or_shadow_no_gate_relaxation",
+                "drift": "isolated_candidate_no_live_reset",
+                "regression_memory": "zero_weight_cached_offline_replay_guard",
+                "recovery_metrics": ["episodes_to_recover", "seconds_to_recover"],
+                "promotion": "Stage13_v2_future_holdout_remains_authoritative",
+            },
             "execution": {"owner": "engine.executor", "contract": "ActionIntent_to_Executor_only_physical_dispatch"},
             "policy_backend_shadow": {
                 "owner": "engine.policy_backend_shadow",

@@ -88,5 +88,30 @@
     "episode_evaluator_independent",
     "independent_preference_label",
     "manual_user_target_change"
-  ]
+  ],
+  "controlled_adaptation_contract_version": 2,
+  "cold_start_contract": "fallback_or_shadow; missing history never relaxes safety; optional questions are limited, explicit and non-dispatching",
+  "drift_inputs": [
+    "episode_quality",
+    "manual_corrections",
+    "context_distribution",
+    "sensor_health",
+    "topology",
+    "persistent_preference"
+  ],
+  "drift_classes": [
+    "sensor_failure",
+    "topology_change",
+    "new_habit",
+    "new_preference"
+  ],
+  "drift_adaptation": "sustained drift creates/reuses isolated Candidate; Live is not reset and Candidate cannot dispatch",
+  "drift_promotion": "Stage-13 v2 fixed future independent ON/OFF holdout remains mandatory",
+  "drift_regression_anchors": "durable zero-training-weight replay guard; never final calibration evidence",
+  "drift_recovery_metrics": [
+    "episodes_to_recover",
+    "seconds_to_recover"
+  ],
+  "drift_rollback": "post-promotion degradation restores exact unexpired pre-promotion backup under Executor target lock",
+  "decay_semantics": "statistical evidence decays by declared clock; persistent instructions do not decay; regression anchors never train"
 }

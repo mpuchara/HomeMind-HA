@@ -11,7 +11,10 @@ from cold_start_drift import (
     AdaptationService,
     CONTRACT_VERSION,
     POST_PROMOTION_EPISODES,
+    contract_descriptor,
     decay_contract,
+    ensure_tables as ensure_adaptation_tables,
+    install as install_adaptation,
 )
 from storage import Store
 
@@ -88,6 +91,18 @@ class _Manager:
             )
         return {'candidate_id': 'candidate-agent', 'generation_id': f'candidate:{parent_id}'}
 
+    def after_live_process(self, agent, state_map):
+        return {'agent_id': agent['id']}
+
+    def _comparison_summary(self, row, parent=None, candidate=None):
+        return {'promotable': True, 'promotion_gates': {}, 'promotion_vetoes': []}
+
+    def status(self, parent_id):
+        return {'parent_agent_id': str(parent_id), 'comparison': self._comparison_summary({'parent_agent_id': str(parent_id)})}
+
+    def list_status(self):
+        return []
+
     def promote(self, *args, **kwargs):
         self.promote_calls += 1
         raise AssertionError('Adaptation monitor must never promote automatically')
@@ -130,6 +145,9 @@ class ColdStartTests(unittest.TestCase):
         self.assertLessEqual(len(report['optional_questions']), 2)
         self.assertTrue(all(item['optional'] for item in report['optional_questions']))
         self.assertTrue(all(item['auto_dispatch'] is False for item in report['optional_questions']))
+        self.assertTrue(report['safety']['stage13_final_evaluation_required'])
+        self.assertTrue(report['safety']['optional_answers_do_not_bypass_promotion_gates'])
+        self.assertTrue(all(item.get('selection_reason') for item in report['optional_questions']))
 
     def test_no_recognized_sensors_stays_cold_start_not_sensor_failure(self):
         for ts in range(1, 7):
@@ -250,6 +268,157 @@ class DriftClassificationTests(unittest.TestCase):
         self.assertEqual(detection['kind'], 'sensor_failure')
 
 
+class RegressionAnchorTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory(prefix='drift-anchor-')
+        self.store = Store(Path(self.tmp.name) / 'test.db')
+        self.manager = _Manager(self.store)
+        self.parent = _agent(self.store, name='Parent')
+        self.candidate = _agent(self.store, name='Candidate')
+        self.service = AdaptationService(self.manager)
+        self.aid = self.parent['id']
+        now = time.time()
+        with self.store.lock, self.store.conn() as db:
+            for idx, desired in enumerate((0.0, 1.0), start=1):
+                db.execute(
+                    """INSERT INTO adaptation_regression_anchors
+                       (agent_id,episode_id,reason,retained_ts,training_weight,
+                        anchor_ts,desired_action,label_source)
+                       VALUES(?,?,?,?,0,?,?,?)""",
+                    (
+                        self.aid, f'anchor-{idx}', 'test', now,
+                        float(100 + idx), desired, 'manual_feedback:test',
+                    ),
+                )
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_zero_weight_anchor_replay_detects_candidate_regression(self):
+        def replay(agent_id, ts):
+            desired_by_ts = {101.0: 0.0, 102.0: 1.0}
+            desired = desired_by_ts[float(ts)]
+            if str(agent_id) == str(self.aid):
+                return {'complete': True, 'prediction': desired}
+            # Candidate loses the ON anchor.
+            return {'complete': True, 'prediction': 0.0}
+        self.service._replay_prediction = replay
+        report = self.service.regression_anchor_report(
+            self.aid, self.candidate['id'], 'candidate:g1'
+        )
+        self.assertTrue(report['gate_applicable'])
+        self.assertFalse(report['passed'])
+        self.assertEqual(report['parent_correct'], 2)
+        self.assertEqual(report['candidate_correct'], 1)
+        self.assertEqual(report['training_weight'], 0.0)
+        self.assertIn('not_stage13_future_calibration', report['evidence_semantics'])
+
+    def test_regression_anchor_gate_is_additional_and_non_overridable(self):
+        service = install_adaptation(self.manager).adaptation_service
+        service._update_state(
+            self.aid,
+            status='candidate_active',
+            candidate_generation_id='candidate:g1',
+            candidate_agent_id=self.candidate['id'],
+        )
+        service.regression_anchor_report = lambda *args, **kwargs: {
+            'gate_applicable': True,
+            'passed': False,
+            'training_weight': 0.0,
+            'evidence_semantics': 'offline_regression_replay_not_future_calibration',
+        }
+        summary = self.manager._comparison_summary(
+            {'parent_agent_id': self.aid, 'candidate_id': self.candidate['id']},
+            self.parent, self.candidate,
+        )
+        gate = summary['promotion_gates']['drift_regression_anchors']
+        self.assertFalse(gate['passed'])
+        self.assertEqual(gate['custom_override'], 'never')
+        self.assertFalse(summary['promotable'])
+
+    def test_unreplayable_anchors_do_not_replace_stage13_future_gate(self):
+        self.service._replay_prediction = lambda *args, **kwargs: {
+            'complete': False, 'reason': 'historical_context_incomplete'
+        }
+        report = self.service.regression_anchor_report(
+            self.aid, self.candidate['id'], 'candidate:g1'
+        )
+        self.assertFalse(report['gate_applicable'])
+        self.assertIsNone(report['passed'])
+        self.assertIn('stage13_still_required', report['recommendation'])
+
+
+class AdaptationMigrationTests(unittest.TestCase):
+    def test_v1_tables_upgrade_additively(self):
+        tmp = tempfile.TemporaryDirectory(prefix='drift-migration-')
+        try:
+            store = Store(Path(tmp.name) / 'legacy.db')
+            with store.lock, store.conn() as db:
+                db.executescript(
+                    """CREATE TABLE adaptation_state (
+                       agent_id TEXT PRIMARY KEY, contract_version INTEGER NOT NULL,
+                       status TEXT NOT NULL, episodes_to_recover INTEGER,
+                       preference_revision_seen INTEGER NOT NULL DEFAULT 0,
+                       updated_ts REAL NOT NULL);
+                       CREATE TABLE adaptation_regression_anchors (
+                       agent_id TEXT NOT NULL, episode_id TEXT NOT NULL,
+                       reason TEXT NOT NULL, retained_ts REAL NOT NULL,
+                       training_weight REAL NOT NULL DEFAULT 0,
+                       PRIMARY KEY(agent_id,episode_id));"""
+                )
+                db.execute(
+                    "INSERT INTO adaptation_state(agent_id,contract_version,status,updated_ts) VALUES('a',1,'monitoring',1)"
+                )
+                db.execute(
+                    "INSERT INTO adaptation_regression_anchors(agent_id,episode_id,reason,retained_ts,training_weight) VALUES('a','e','old',1,0)"
+                )
+            ensure_adaptation_tables(store)
+            with store.conn() as db:
+                state_cols = {row['name'] for row in db.execute('PRAGMA table_info(adaptation_state)').fetchall()}
+                anchor_cols = {row['name'] for row in db.execute('PRAGMA table_info(adaptation_regression_anchors)').fetchall()}
+                state = dict(db.execute("SELECT * FROM adaptation_state WHERE agent_id='a'").fetchone())
+                anchor = dict(db.execute("SELECT * FROM adaptation_regression_anchors WHERE agent_id='a'").fetchone())
+            self.assertIn('recovery_seconds', state_cols)
+            self.assertIn('anchor_ts', anchor_cols)
+            self.assertIn('desired_action', anchor_cols)
+            self.assertIn('label_source', anchor_cols)
+            self.assertEqual(state['status'], 'monitoring')
+            self.assertEqual(anchor['training_weight'], 0.0)
+            self.assertIsNone(anchor['desired_action'])
+        finally:
+            tmp.cleanup()
+
+
+class AdaptationContractParityTests(unittest.TestCase):
+    def test_runtime_build_info_and_contract_share_stage14_v2_semantics(self):
+        contract = contract_descriptor()
+        self.assertEqual(contract['version'], CONTRACT_VERSION)
+        self.assertEqual(
+            contract['recovery_metrics'],
+            ['episodes_to_recover', 'seconds_to_recover'],
+        )
+        self.assertEqual(contract['regression_anchors']['training_weight'], 0.0)
+        self.assertTrue(contract['regression_anchors']['not_final_calibration'])
+
+        build = json.loads(
+            (ROOT / 'adaptive_ai' / 'BUILD_INFO.json').read_text(encoding='utf-8')
+        )
+        self.assertEqual(build['controlled_adaptation_contract_version'], CONTRACT_VERSION)
+        self.assertEqual(
+            build['drift_recovery_metrics'],
+            ['episodes_to_recover', 'seconds_to_recover'],
+        )
+        self.assertIn('zero-training-weight', build['drift_regression_anchors'])
+        self.assertIn('Stage-13 v2', build['drift_promotion'])
+
+        composition = (
+            ROOT / 'adaptive_ai' / 'src' / 'runtime_composition.py'
+        ).read_text(encoding='utf-8')
+        self.assertIn('"controlled_adaptation"', composition)
+        self.assertIn('zero_weight_cached_offline_replay_guard', composition)
+        self.assertIn('Stage13_v2_future_holdout_remains_authoritative', composition)
+
+
 class RecoveryTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory(prefix='drift-recovery-')
@@ -281,6 +450,8 @@ class RecoveryTests(unittest.TestCase):
         state = self.service.status(self.aid)['state']
         self.assertEqual(state['status'], 'recovered')
         self.assertEqual(state['episodes_to_recover'], POST_PROMOTION_EPISODES)
+        self.assertEqual(state['recovery_seconds'], 6.0)
+        self.assertEqual(self.service.status(self.aid)['recovery']['seconds_to_recover'], 6.0)
         self.assertIsNotNone(state['recovered_ts'])
 
     def test_post_promotion_regression_restores_previous_model(self):

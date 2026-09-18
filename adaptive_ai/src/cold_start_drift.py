@@ -14,11 +14,11 @@ import math
 import time
 from collections import Counter
 
-from confidence_contract import DEFAULT_HALF_LIFE_EPISODES
+from confidence_contract import CONTRACT_VERSION as CONFIDENCE_CONTRACT_VERSION, DEFAULT_HALF_LIFE_EPISODES
 from settings import OPTIONS, iso_now
 
 
-CONTRACT_VERSION = 1
+CONTRACT_VERSION = 2
 BASELINE_EPISODES = 12
 RECENT_EPISODES = 6
 ENV_STABLE_SNAPSHOTS = 3
@@ -32,6 +32,9 @@ SENSOR_HEALTH_DROP = 0.20
 MAX_OPTIONAL_QUESTIONS = 2
 OBSERVE_THROTTLE_SECONDS = 30.0
 POST_PROMOTION_EPISODES = 6
+MIN_REGRESSION_ANCHORS = 2
+MAX_REGRESSION_ANCHORS = 8
+MAX_ANCHOR_NET_LOSSES = 0
 ACTIVE_PREFERENCE_STATUSES = {"recorded", "applied", "learning_queued", "rebuild_queued"}
 
 
@@ -94,27 +97,59 @@ def _tv_distance(left, right):
 
 
 def decay_contract():
-    """Report the meaning of decay instead of conflating instructions with statistics."""
+    """One semantic contract for statistical evidence, instructions and regression memory."""
     return {
         "version": CONTRACT_VERSION,
+        "rule": (
+            "statistical evidence may decay according to its declared clock; explicit "
+            "persistent instructions do not decay; retained regression anchors never train"
+        ),
         "policy_learning": {
+            "kind": "statistical_training_evidence",
             "basis": "wall_clock",
             "half_life_days": float(OPTIONS.get("policy_half_life_days", 30)),
             "meaning": "old statistical policy evidence gradually loses training influence",
         },
+        "context_statistics": {
+            "kind": "statistical_context_model",
+            "basis": "wall_clock",
+            "meaning": (
+                "context/topology models use their own declared wall-clock half-life; "
+                "their decay is diagnostic/statistical and never weakens explicit instructions"
+            ),
+        },
         "future_evaluation": {
+            "kind": "independent_evaluation_evidence",
             "basis": "episode_order",
             "half_life_episodes": float(DEFAULT_HALF_LIFE_EPISODES),
-            "meaning": "old evaluation evidence decays outside the locked Stage-13 future test",
+            "confidence_contract_version": CONFIDENCE_CONTRACT_VERSION,
+            "meaning": (
+                "Stage-13 weighting applies outside the locked fixed future test; the "
+                "locked holdout is not enlarged or healed by later evidence"
+            ),
+        },
+        "probability_calibration": {
+            "kind": "independent_probability_evidence",
+            "basis": "episode_order_plus_dependency_effective_n",
+            "half_life_episodes": float(DEFAULT_HALF_LIFE_EPISODES),
+            "meaning": (
+                "canonical probability claims use Stage-13 deduplicated/dependency-adjusted "
+                "calibration, not a model's own training labels"
+            ),
         },
         "persistent_instruction": {
+            "kind": "instruction",
             "decays": False,
             "meaning": "explicit persistent preference is an instruction, not historical statistics",
         },
         "regression_anchor": {
+            "kind": "evaluation_memory",
             "decays_for_retention": False,
             "training_weight": 0.0,
-            "meaning": "durable regression reference only; never multiplied into training weight",
+            "meaning": (
+                "durable regression reference only; can veto a replay regression but is "
+                "never multiplied into training weight or Stage-13 final calibration"
+            ),
         },
     }
 
@@ -174,6 +209,7 @@ def ensure_tables(store):
                 rollback_backup_id INTEGER,
                 recovered_ts REAL,
                 episodes_to_recover INTEGER,
+                recovery_seconds REAL,
                 preference_revision_seen INTEGER NOT NULL DEFAULT 0,
                 last_episode_ts REAL,
                 last_observe_ts REAL,
@@ -186,10 +222,32 @@ def ensure_tables(store):
                 reason TEXT NOT NULL,
                 retained_ts REAL NOT NULL,
                 training_weight REAL NOT NULL DEFAULT 0,
+                anchor_ts REAL,
+                desired_action REAL,
+                label_source TEXT,
                 PRIMARY KEY(agent_id,episode_id)
+            );
+
+            CREATE TABLE IF NOT EXISTS adaptation_regression_reports (
+                agent_id TEXT NOT NULL,
+                candidate_generation_id TEXT NOT NULL,
+                fingerprint TEXT NOT NULL,
+                report_json TEXT NOT NULL,
+                created_ts REAL NOT NULL,
+                PRIMARY KEY(agent_id,candidate_generation_id)
             );
             """
         )
+        state_columns = {row["name"] for row in c.execute("PRAGMA table_info(adaptation_state)").fetchall()}
+        if "recovery_seconds" not in state_columns:
+            c.execute("ALTER TABLE adaptation_state ADD COLUMN recovery_seconds REAL")
+        anchor_columns = {row["name"] for row in c.execute("PRAGMA table_info(adaptation_regression_anchors)").fetchall()}
+        if "anchor_ts" not in anchor_columns:
+            c.execute("ALTER TABLE adaptation_regression_anchors ADD COLUMN anchor_ts REAL")
+        if "desired_action" not in anchor_columns:
+            c.execute("ALTER TABLE adaptation_regression_anchors ADD COLUMN desired_action REAL")
+        if "label_source" not in anchor_columns:
+            c.execute("ALTER TABLE adaptation_regression_anchors ADD COLUMN label_source TEXT")
 
 
 def _quality_from_metrics(metrics):
@@ -369,12 +427,14 @@ class AdaptationService:
             questions.append({
                 "id": "cold_start_on_preference", "optional": True,
                 "question": "W jednej niepewnej sytuacji: czy urządzenie powinno wtedy przejść do ON?",
+                "selection_reason": "missing_independent_on_evidence",
                 "creates": "explicit_demonstration", "auto_dispatch": False,
             })
         if demonstrations["off"] <= 0:
             questions.append({
                 "id": "cold_start_off_preference", "optional": True,
                 "question": "W jednej niepewnej sytuacji: czy urządzenie powinno wtedy pozostać/przejść do OFF?",
+                "selection_reason": "missing_independent_off_evidence",
                 "creates": "explicit_demonstration", "auto_dispatch": False,
             })
         model = self.store.get_model(aid)
@@ -392,6 +452,7 @@ class AdaptationService:
             "recommended_mode": recommended,
             "fallback": fallback,
             "fallback_automations": automations,
+            "automation_baseline_available": bool(automations),
             "recognized_sensors": sensors,
             "history_samples": target_history,
             "demonstrations": demonstrations,
@@ -402,6 +463,9 @@ class AdaptationService:
                 "thresholds_relaxed": False,
                 "control_without_history": False,
                 "insufficient_evidence_means": "fallback_or_shadow",
+                "stage13_final_evaluation_required": True,
+                "stage13_confidence_contract_version": CONFIDENCE_CONTRACT_VERSION,
+                "optional_answers_do_not_bypass_promotion_gates": True,
             },
             "decay": decay_contract(),
         }
@@ -577,14 +641,59 @@ class AdaptationService:
             "latest_preference_ts": _finite(recent[-1].get("preference_latest_ts")),
         }
 
+    def _regression_anchor_label(self, episode_id):
+        """Resolve only durable independent labels; never treat automation replay as truth."""
+        with self.store.conn() as c:
+            if _table_exists(c, "manual_feedback_journal"):
+                row = c.execute(
+                    """SELECT selected_ts,correct_action,feedback_id FROM manual_feedback_journal
+                       WHERE episode_id=? AND undone_ts IS NULL AND correct_action IS NOT NULL
+                       ORDER BY created_ts DESC LIMIT 1""",
+                    (str(episode_id),),
+                ).fetchone()
+                if row:
+                    return {
+                        "anchor_ts": _finite(row["selected_ts"]),
+                        "desired_action": _finite(row["correct_action"]),
+                        "label_source": "manual_feedback:" + str(row["feedback_id"]),
+                    }
+            if _table_exists(c, "episode_evaluator_episodes"):
+                row = c.execute(
+                    "SELECT start_ts,labels_json FROM episode_evaluator_episodes WHERE episode_id=?",
+                    (str(episode_id),),
+                ).fetchone()
+                if row:
+                    labels = _json(row["labels_json"], {})
+                    light_need = str(labels.get("light_need") or "")
+                    if light_need in ("true", "false"):
+                        return {
+                            "anchor_ts": float(row["start_ts"]),
+                            "desired_action": 1.0 if light_need == "true" else 0.0,
+                            "label_source": "episode_evaluator:light_need",
+                        }
+        return {"anchor_ts": None, "desired_action": None, "label_source": None}
+
     def retain_regression_anchors(self, agent_id, episode_ids, reason="pre_drift_baseline"):
         now = time.time()
+        rows = [
+            (str(episode_id), self._regression_anchor_label(episode_id))
+            for episode_id in list(episode_ids or [])[:MAX_REGRESSION_ANCHORS]
+        ]
         with self.store.lock, self.store.conn() as c:
-            for episode_id in list(episode_ids or [])[:8]:
+            for episode_id, label in rows:
                 c.execute(
-                    """INSERT OR IGNORE INTO adaptation_regression_anchors
-                       (agent_id,episode_id,reason,retained_ts,training_weight) VALUES(?,?,?,?,0)""",
-                    (str(agent_id), str(episode_id), str(reason), now),
+                    """INSERT INTO adaptation_regression_anchors
+                       (agent_id,episode_id,reason,retained_ts,training_weight,
+                        anchor_ts,desired_action,label_source)
+                       VALUES(?,?,?,?,0,?,?,?)
+                       ON CONFLICT(agent_id,episode_id) DO UPDATE SET
+                         anchor_ts=COALESCE(adaptation_regression_anchors.anchor_ts,excluded.anchor_ts),
+                         desired_action=COALESCE(adaptation_regression_anchors.desired_action,excluded.desired_action),
+                         label_source=COALESCE(adaptation_regression_anchors.label_source,excluded.label_source)""",
+                    (
+                        str(agent_id), str(episode_id), str(reason), now,
+                        label.get("anchor_ts"), label.get("desired_action"), label.get("label_source"),
+                    ),
                 )
 
     def regression_anchors(self, agent_id):
@@ -593,6 +702,138 @@ class AdaptationService:
                 "SELECT * FROM adaptation_regression_anchors WHERE agent_id=? ORDER BY retained_ts,episode_id",
                 (str(agent_id),),
             ).fetchall()]
+
+    @staticmethod
+    def _model_revision(model):
+        model = dict(model or {})
+        return str(model.get("model_revision") or _hash(model) if model else "missing")
+
+    def _replay_prediction(self, agent_id, timestamp):
+        agent = self.store.get_agent_config(str(agent_id))
+        if not agent or self.store.get_model(str(agent_id)) is None:
+            return {"complete": False, "reason": "model_or_agent_missing"}
+        teaching = getattr(self.engine, "teaching", None)
+        if teaching is None or not callable(getattr(teaching, "point_context", None)):
+            return {"complete": False, "reason": "historical_replay_unavailable"}
+        try:
+            policy = self.engine.policy(agent)
+            states, temporal, _ = teaching.point_context(
+                self.engine, agent, float(timestamp), policy=policy
+            )
+            features, _labels, meta = policy.features(states, temporal, at_ts=float(timestamp))
+            if not bool((meta or {}).get("reconstruction_complete", False)):
+                return {
+                    "complete": False,
+                    "reason": "historical_context_incomplete",
+                    "details": dict(meta or {}),
+                }
+            prediction = policy.predict(features)[0]["value"]
+            prediction = _finite(prediction)
+            if prediction is None:
+                return {"complete": False, "reason": "prediction_unavailable"}
+            return {"complete": True, "prediction": prediction}
+        except Exception as exc:
+            return {"complete": False, "reason": f"{type(exc).__name__}: {exc}"}
+
+    def regression_anchor_report(self, agent_id, candidate_agent_id, candidate_generation_id):
+        aid = str(agent_id)
+        candidate_id = str(candidate_agent_id or "")
+        generation_id = str(candidate_generation_id or "")
+        anchors = [
+            row for row in self.regression_anchors(aid)
+            if _finite(row.get("anchor_ts")) is not None
+            and _finite(row.get("desired_action")) is not None
+        ]
+        parent_model = self.store.get_model(aid) or {}
+        child_model = self.store.get_model(candidate_id) or {}
+        fingerprint = _hash({
+            "contract_version": CONTRACT_VERSION,
+            "confidence_contract_version": CONFIDENCE_CONTRACT_VERSION,
+            "parent_model": self._model_revision(parent_model),
+            "child_model": self._model_revision(child_model),
+            "anchors": [
+                (row["episode_id"], row.get("anchor_ts"), row.get("desired_action"), row.get("label_source"))
+                for row in anchors
+            ],
+        })
+        with self.store.conn() as c:
+            cached = c.execute(
+                """SELECT report_json FROM adaptation_regression_reports
+                   WHERE agent_id=? AND candidate_generation_id=? AND fingerprint=?""",
+                (aid, generation_id, fingerprint),
+            ).fetchone()
+        if cached:
+            return _json(cached["report_json"], {})
+
+        evaluated = []
+        for row in anchors:
+            ts = float(row["anchor_ts"])
+            desired = 1.0 if float(row["desired_action"]) >= .5 else 0.0
+            parent = self._replay_prediction(aid, ts)
+            child = self._replay_prediction(candidate_id, ts)
+            item = {
+                "episode_id": row["episode_id"],
+                "anchor_ts": ts,
+                "desired_action": desired,
+                "label_source": row.get("label_source"),
+                "parent": parent,
+                "candidate": child,
+            }
+            if parent.get("complete") and child.get("complete"):
+                p_action = 1.0 if float(parent["prediction"]) >= .5 else 0.0
+                c_action = 1.0 if float(child["prediction"]) >= .5 else 0.0
+                item["parent_correct"] = bool(p_action == desired)
+                item["candidate_correct"] = bool(c_action == desired)
+                evaluated.append(item)
+            else:
+                item["parent_correct"] = None
+                item["candidate_correct"] = None
+
+        parent_correct = sum(int(row["parent_correct"]) for row in evaluated)
+        candidate_correct = sum(int(row["candidate_correct"]) for row in evaluated)
+        child_wins = sum(
+            int(row["candidate_correct"] and not row["parent_correct"]) for row in evaluated
+        )
+        parent_wins = sum(
+            int(row["parent_correct"] and not row["candidate_correct"]) for row in evaluated
+        )
+        applicable = len(evaluated) >= MIN_REGRESSION_ANCHORS
+        passed = bool(applicable and (parent_wins - child_wins) <= MAX_ANCHOR_NET_LOSSES)
+        report = {
+            "contract_version": CONTRACT_VERSION,
+            "evidence_semantics": "offline_regression_replay_only_not_stage13_future_calibration",
+            "training_weight": 0.0,
+            "retained_anchors": len(anchors),
+            "evaluated_anchors": len(evaluated),
+            "minimum_evaluable_anchors": MIN_REGRESSION_ANCHORS,
+            "gate_applicable": applicable,
+            "passed": passed if applicable else None,
+            "parent_correct": parent_correct,
+            "candidate_correct": candidate_correct,
+            "parent_wins": parent_wins,
+            "candidate_wins": child_wins,
+            "max_net_losses": MAX_ANCHOR_NET_LOSSES,
+            "rows": evaluated,
+            "recommendation": (
+                "pass_regression_anchor_replay"
+                if passed else
+                "fail_regression_anchor_replay"
+                if applicable else
+                "insufficient_replayable_anchors_stage13_still_required"
+            ),
+        }
+        with self.store.lock, self.store.conn() as c:
+            c.execute(
+                """INSERT INTO adaptation_regression_reports
+                   (agent_id,candidate_generation_id,fingerprint,report_json,created_ts)
+                   VALUES(?,?,?,?,?)
+                   ON CONFLICT(agent_id,candidate_generation_id) DO UPDATE SET
+                     fingerprint=excluded.fingerprint,report_json=excluded.report_json,
+                     created_ts=excluded.created_ts""",
+                (aid, generation_id, fingerprint,
+                 json.dumps(report, separators=(",", ":"), default=str), time.time()),
+            )
+        return report
 
     def detect(self, agent_id):
         aid = str(agent_id)
@@ -702,6 +943,7 @@ class AdaptationService:
             rollback_backup_id=None,
             recovered_ts=None,
             episodes_to_recover=None,
+            recovery_seconds=None,
         )
         self.store.event(
             aid, "warning", "controlled_drift_adaptation_started",
@@ -863,14 +1105,21 @@ class AdaptationService:
         corrections = sum(int(row.get("correction_count") or 0) for row in recent)
         baseline = _finite(state.get("baseline_quality"))
         if baseline is not None and quality >= baseline - RECOVERY_MARGIN and corrections == 0:
+            recovered_ts = float(recent[-1]["ts"])
+            recovery_seconds = max(0.0, recovered_ts - float(state["promoted_ts"]))
             self._update_state(
-                str(agent_id), status="recovered", recovered_ts=time.time(),
-                episodes_to_recover=len(rows),
+                str(agent_id), status="recovered", recovered_ts=recovered_ts,
+                episodes_to_recover=len(rows), recovery_seconds=recovery_seconds,
             )
             self.store.event(
                 str(agent_id), "info", "controlled_drift_quality_recovered",
                 "Adapted generation recovered pre-drift episode quality",
-                {"episodes_to_recover": len(rows), "quality": quality, "baseline_quality": baseline},
+                {
+                    "episodes_to_recover": len(rows),
+                    "seconds_to_recover": recovery_seconds,
+                    "quality": quality,
+                    "baseline_quality": baseline,
+                },
             )
             return "recovered"
         if baseline is not None and (baseline - quality >= ROLLBACK_DROP_THRESHOLD or corrections >= 2):
@@ -905,23 +1154,37 @@ class AdaptationService:
         state = self._state(agent_id)
         detection = self.detect(agent_id)
         anchors = self.regression_anchors(agent_id)
+        promoted_ts = _finite(state.get("promoted_ts"))
+        post_rows = self._post_promotion_rows(agent_id, promoted_ts) if promoted_ts is not None else []
+        latest_post_ts = max([_finite(row.get("ts"), promoted_ts) for row in post_rows], default=promoted_ts)
+        elapsed = (
+            max(0.0, float(latest_post_ts) - promoted_ts)
+            if promoted_ts is not None and latest_post_ts is not None else None
+        )
         return {
             "contract_version": CONTRACT_VERSION,
             "state": state,
             "current_detection": detection,
             "regression_anchors": {
-                "count": len(anchors), "training_weight": 0.0,
+                "count": len(anchors),
+                "labeled_count": sum(_finite(row.get("desired_action")) is not None for row in anchors),
+                "training_weight": 0.0,
                 "episode_ids": [row["episode_id"] for row in anchors],
+                "semantics": "offline replay guard only; never Stage-13 final calibration",
             },
             "decay": decay_contract(),
             "promotion": {
                 "automatic": False,
                 "uses_existing_stage13_gate": True,
+                "stage13_confidence_contract_version": CONFIDENCE_CONTRACT_VERSION,
                 "candidate_dispatch": False,
             },
             "recovery": {
                 "post_promotion_min_episodes": POST_PROMOTION_EPISODES,
+                "observed_post_promotion_episodes": len(post_rows),
+                "monitoring_elapsed_seconds": elapsed,
                 "episodes_to_recover": state.get("episodes_to_recover"),
+                "seconds_to_recover": state.get("recovery_seconds"),
                 "recovered_ts": state.get("recovered_ts"),
                 "rollback_backup_id": state.get("rollback_backup_id"),
             },
@@ -935,6 +1198,7 @@ def contract_descriptor():
             "fallback_or_shadow": True,
             "history_absence_relaxes_safety": False,
             "optional_question_budget": MAX_OPTIONAL_QUESTIONS,
+            "questions_are_optional_and_non_dispatching": True,
         },
         "drift_inputs": [
             "episode_quality", "manual_corrections", "context_distribution",
@@ -942,10 +1206,20 @@ def contract_descriptor():
         ],
         "drift_classes": ["sensor_failure", "topology_change", "new_habit", "new_preference"],
         "adaptation": "isolated_candidate_only_no_live_reset",
-        "promotion": "existing Stage-13 fixed future gate only; never automatic here",
+        "promotion": (
+            "Stage-13 fixed future independent calibration remains mandatory; "
+            "replay anchors are an additional non-training regression veto when evaluable"
+        ),
+        "stage13_confidence_contract_version": CONFIDENCE_CONTRACT_VERSION,
         "rollback": "exact unexpired pre-promotion generation backup restored after degradation",
+        "recovery_metrics": ["episodes_to_recover", "seconds_to_recover"],
         "decay": decay_contract(),
-        "regression_anchors": "durable evaluation references with training_weight=0",
+        "regression_anchors": {
+            "retention": "durable",
+            "training_weight": 0.0,
+            "evaluation": "cached parent-vs-candidate historical replay",
+            "not_final_calibration": True,
+        },
     }
 
 
@@ -955,6 +1229,7 @@ def install(manager):
     service = AdaptationService(manager)
     original_after = manager.after_live_process
     original_promote = manager.promote
+    original_summary = getattr(manager, "_comparison_summary", None)
     original_status = manager.status
     original_list_status = manager.list_status
     original_runtime_for = getattr(manager.engine, "runtime_for", None)
@@ -970,6 +1245,40 @@ def install(manager):
                 {"error": f"{type(exc).__name__}: {exc}"},
             )
         return result
+
+    def comparison_summary(row, parent=None, candidate=None):
+        out = dict(original_summary(row, parent, candidate) or {})
+        root_id = str((parent or {}).get("id") or row.get("parent_agent_id") or "")
+        candidate_id = str((candidate or {}).get("id") or row.get("candidate_id") or "")
+        if not root_id or not candidate_id:
+            return out
+        state = service._state(root_id)
+        if (
+            state.get("status") == "candidate_active"
+            and str(state.get("candidate_agent_id") or "") == candidate_id
+            and state.get("candidate_generation_id")
+        ):
+            report = service.regression_anchor_report(
+                root_id, candidate_id, state.get("candidate_generation_id")
+            )
+            out["drift_regression_anchor_report"] = report
+            if report.get("gate_applicable"):
+                passed = bool(report.get("passed"))
+                gates = dict(out.get("promotion_gates") or {})
+                gates["drift_regression_anchors"] = {
+                    "passed": passed,
+                    "reason": (
+                        "Candidate preserved retained zero-weight regression anchors"
+                        if passed else
+                        "Candidate regressed on retained zero-weight regression anchors"
+                    ),
+                    "custom_override": "never",
+                    "metric_semantics": "offline_regression_replay_not_future_calibration",
+                    "observed": report,
+                }
+                out["promotion_gates"] = gates
+                out["promotable"] = bool(out.get("promotable")) and passed
+        return out
 
     def promote(parent_id, target_mode=None):
         result = original_promote(parent_id, target_mode)
@@ -991,6 +1300,8 @@ def install(manager):
         return out
 
     manager.after_live_process = after_live_process
+    if callable(original_summary):
+        manager._comparison_summary = comparison_summary
     manager.promote = promote
     manager.status = lambda parent_id: decorate(original_status(parent_id))
     manager.list_status = lambda: [decorate(item) for item in (original_list_status() or []) if item]
