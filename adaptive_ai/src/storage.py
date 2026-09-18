@@ -558,15 +558,68 @@ class Store:
         with self.lock, self.conn() as c:
             c.execute("DELETE FROM entity_history WHERE ts<?", (cutoff,))
 
-    def add_historical_experience(self, agent_id, target_history_id, action_index, action_value, reward, dwell_seconds, features, user_id=None):
+    @staticmethod
+    def _pack_historical_experience(agent_id, target_history_id, action_index, action_value,
+                                    reward, dwell_seconds, features, user_id=None, created_at=None):
         raw = json.dumps({str(k): v for k, v in features.items()}, separators=(",", ":"))
+        return (
+            str(agent_id), int(target_history_id), created_at or iso_now(), int(action_index),
+            float(action_value), float(reward), float(dwell_seconds), raw, user_id,
+        )
+
+    def historical_experience_target_ids(self, agent_id):
+        """Small dedup index used by one offline replay job.
+
+        Reading only the unique target-history keys once is much cheaper than opening and
+        committing one SQLite transaction for every dwell during replay.
+        """
+        with self.conn() as c:
+            return {
+                int(row[0]) for row in c.execute(
+                    "SELECT target_history_id FROM historical_experiences WHERE agent_id=?",
+                    (str(agent_id),),
+                ).fetchall()
+            }
+
+    def add_historical_experiences_batch(self, rows):
+        """Persist many replay experiences in one WAL transaction.
+
+        The caller still owns policy-ordering semantics; this method changes persistence
+        granularity only. INSERT OR IGNORE keeps the historical uniqueness contract.
+        """
+        rows = list(rows or [])
+        if not rows:
+            return 0
+        created_at = iso_now()
+        packed = [
+            self._pack_historical_experience(
+                row["agent_id"], row["target_history_id"], row["action_index"],
+                row["action_value"], row["reward"], row["dwell_seconds"],
+                row["features"], row.get("user_id"), created_at=created_at,
+            )
+            for row in rows
+        ]
+        with self.lock, self.conn() as c:
+            before = int(c.total_changes)
+            c.executemany(
+                """INSERT OR IGNORE INTO historical_experiences
+                   (agent_id,target_history_id,created_at,action_index,action_value,reward,dwell_seconds,features_json,user_id)
+                   VALUES(?,?,?,?,?,?,?,?,?)""",
+                packed,
+            )
+            return max(0, int(c.total_changes) - before)
+
+    def add_historical_experience(self, agent_id, target_history_id, action_index, action_value, reward, dwell_seconds, features, user_id=None):
+        packed = self._pack_historical_experience(
+            agent_id, target_history_id, action_index, action_value,
+            reward, dwell_seconds, features, user_id,
+        )
         with self.lock, self.conn() as c:
             cur = c.execute(
                 """INSERT OR IGNORE INTO historical_experiences
                    (agent_id,target_history_id,created_at,action_index,action_value,reward,dwell_seconds,features_json,user_id)
                    VALUES(?,?,?,?,?,?,?,?,?)""",
-                (agent_id, int(target_history_id), iso_now(), int(action_index), float(action_value), float(reward),
-                 float(dwell_seconds), raw, user_id),
+                packed,
             )
             return cur.rowcount > 0
 
