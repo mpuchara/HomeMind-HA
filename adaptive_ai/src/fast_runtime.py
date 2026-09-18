@@ -3,7 +3,8 @@ FAST_SETTLING_SECONDS = 0.10
 FAST_ACK_TIMEOUT_SECONDS = 2.0
 FAST_OFF_CONFIRMATION_SECONDS = 6.0
 FAST_CONFIDENT_EMPTY_OFF_CONFIRMATION_SECONDS = 1.0
-FAST_CONFIDENT_EMPTY_MAX_UNCERTAINTY = 0.25
+FAST_CONFIDENT_EMPTY_MAX_UNCERTAINTY = 0.10
+FAST_CONFIDENT_EMPTY_MAX_OCCUPANCY = 0.10
 
 
 def is_fast_target(agent):
@@ -36,7 +37,8 @@ def fast_light_off_confirmation_seconds(forecast, default=None):
         )
     except (TypeError, ValueError):
         return normal
-    if uncertainty <= FAST_CONFIDENT_EMPTY_MAX_UNCERTAINTY and occupancy < 0.5:
+    if (uncertainty <= FAST_CONFIDENT_EMPTY_MAX_UNCERTAINTY
+            and occupancy <= FAST_CONFIDENT_EMPTY_MAX_OCCUPANCY):
         return min(normal, FAST_CONFIDENT_EMPTY_OFF_CONFIRMATION_SECONDS)
     return normal
 
