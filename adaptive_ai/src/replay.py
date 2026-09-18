@@ -262,6 +262,14 @@ class SQLiteTemporalTracker:
             entity_ids, lo, hi, per_entity_limit=self.HISTORY_SAMPLES
         )
 
+    def _home_seed_interval_rows(self, entity_ids, lo, hi):
+        # Seed advancement follows the same source contract as _bulk_before(). The base
+        # tracker has only entity_history; observation-contract subclasses add their fast
+        # received-time journal here so the moving t-30 seed remains exact.
+        return self._base_interval_rows(
+            entity_ids, lo, hi, per_entity_limit=None
+        )
+
     def _home_interval_rows(self, entity_ids, lo, hi):
         # Deliberately raw archive only. Observation-contract v12 historically augmented
         # the as-of seed with its fast journal but replayed the recent home window from
@@ -376,9 +384,14 @@ class SQLiteTemporalTracker:
     def _forward_home_cache(self, lo, hi):
         """Advance the 30-second Room Belief source window without re-reading seeds."""
         ids = self.home_entities
+        old_cutoff = float(lo) - 30.0
         cutoff = float(hi) - 30.0
         new_rows = (
             self._home_interval_rows(ids, lo, hi) if ids and float(hi) > float(lo) else []
+        )
+        seed_advances = (
+            self._home_seed_interval_rows(ids, old_cutoff, cutoff)
+            if ids and cutoff > old_cutoff else []
         )
         combined = list(self._home_window_rows)
         combined.extend(new_rows)
@@ -386,11 +399,16 @@ class SQLiteTemporalTracker:
 
         retained = []
         seeds = dict(self._home_seed_rows)
+        for row in sorted(seed_advances, key=self._row_order):
+            seeds[row["entity_id"]] = row
+            TRAINING_BUDGET.checkpoint("temporal_home_seed_advance")
         for row in combined:
             if float(row["ts"]) <= cutoff:
-                # Chronological order means the last promoted row is exactly the
-                # authoritative seed at/before the moving cutoff for that entity.
-                seeds[row["entity_id"]] = row
+                # Raw archive rows are also valid seeds. Observation subclasses may have
+                # already supplied a newer fast-journal seed above.
+                previous = seeds.get(row["entity_id"])
+                if previous is None or self._row_order(row) >= self._row_order(previous):
+                    seeds[row["entity_id"]] = row
             else:
                 retained.append(row)
             TRAINING_BUDGET.checkpoint("temporal_home_cache_advance")
