@@ -13,6 +13,7 @@ including inside temporal tracking and post-replay finalization.
 """
 from __future__ import annotations
 
+import threading
 import time
 
 from training_budget import TRAINING_BUDGET
@@ -110,9 +111,7 @@ def install(core, manager):
 
     def archive_iter_low_power(*args, **kwargs):
         iterator = original_archive_iter(*args, **kwargs)
-        if not __import__("threading").current_thread().name.startswith(
-            "adaptive-ai-index-"
-        ):
+        if not threading.current_thread().name.startswith("adaptive-ai-index-"):
             yield from iterator
             return
 
