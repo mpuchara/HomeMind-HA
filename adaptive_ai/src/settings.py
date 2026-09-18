@@ -15,7 +15,7 @@ try:
 except Exception:
     ws_connect = None
 
-APP_VERSION = "0.14.26"
+APP_VERSION = "0.14.27"
 HISTORY_BOOTSTRAP_REVISION = "target-attrs-v2"
 TRAINING_REVISION = "shared-home-intents-v18"
 DATA_DIR = Path(os.environ.get("ADAPTIVE_AI_DATA", "/data"))
@@ -279,7 +279,7 @@ def load_options():
             # HA realtime requests on Raspberry Pi. Preserve explicit custom values.
             if data.get("history_background_start_delay_seconds") == 10:
                 options["history_background_start_delay_seconds"] = 60
-            # 0.14.26: migrate only defaults shipped by earlier releases.
+            # 0.14.27: migrate only defaults shipped by earlier releases.
             # Explicit custom budgets stay untouched.
             if data.get("training_cpu_duty_cycle") in (0.55, 0.25):
                 options["training_cpu_duty_cycle"] = 0.20
