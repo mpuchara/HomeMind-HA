@@ -56,12 +56,13 @@ assert _budget_pause(2.0, 0.25, 2.0) == 2.0
 
     def test_low_power_training_defaults_are_pi_safe_and_migrate_only_old_default(self):
         source = (ROOT / "adaptive_ai/src/rpi_low_power_runtime.py").read_text(encoding="utf-8")
+        budget_source = (ROOT / "adaptive_ai/src/training_budget.py").read_text(encoding="utf-8")
         self.assertIn("DEFAULT_ARCHIVE_BATCH_ROWS = 16", source)
         self.assertIn("DEFAULT_TRAINING_DUTY_CYCLE = 0.25", source)
         self.assertIn("DEFAULT_MAX_THROTTLE_SLEEP_SECONDS = 2.0", source)
         self.assertIn('== 0.55', source)
         self.assertIn('core.OPTIONS["training_cpu_duty_cycle"] = DEFAULT_TRAINING_DUTY_CYCLE', source)
-        self.assertIn('effective_training_duty_cycle', source)
+        self.assertIn('effective_training_duty_cycle', budget_source)
 
     def test_status_lifeline_never_calls_rich_engine_status_while_heavy(self):
         source = (ROOT / "adaptive_ai/src/release_017_ui_lifeline.py").read_text(encoding="utf-8")
