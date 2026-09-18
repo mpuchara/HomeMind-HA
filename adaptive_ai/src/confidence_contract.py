@@ -912,6 +912,137 @@ class EvaluationEpochJournal:
             )
         return self.get(parent_gid, child_gid, evaluation_revision)
 
+    def ensure_from_store(self, parent_gid, child_gid, model_revision, backend_key,
+                          *, selection_target=DEFAULT_SELECTION_EPISODES,
+                          final_target=DEFAULT_FINAL_EPISODES,
+                          min_per_action=DEFAULT_MIN_PER_ACTION):
+        """Freeze selection without rescanning an unchanged Candidate edge on UI polls."""
+        evaluation_revision = _evaluation_revision(model_revision, backend_key)
+        existing = self.get(parent_gid, child_gid, evaluation_revision)
+        if existing:
+            return existing
+        revisions = _pair_revisions(self.store, parent_gid, child_gid)
+        revision = int(revisions.get("selection_revision") or 0)
+        params = _cache_fingerprint({
+            "selection_target": int(selection_target),
+            "final_target": int(final_target),
+            "min_per_action": int(min_per_action),
+            "contract_version": CONTRACT_VERSION,
+        })
+        with self.store.conn() as c:
+            cached = c.execute(
+                """SELECT sufficient FROM confidence_selection_scan_cache
+                   WHERE parent_generation_id=? AND child_generation_id=?
+                     AND evaluation_revision=? AND contract_version=?
+                     AND selection_revision=? AND params_fingerprint=?""",
+                (str(parent_gid), str(child_gid), evaluation_revision, CONTRACT_VERSION,
+                 revision, params),
+            ).fetchone()
+        diagnostics = getattr(self, "_performance_diagnostics", None)
+        if cached is not None and not bool(cached[0]):
+            if diagnostics is not None:
+                diagnostics.confidence_selection_cache_hits += 1
+            return None
+
+        rows = _selection_pair_rows(self.store, parent_gid, child_gid)
+        if diagnostics is not None:
+            diagnostics.confidence_selection_scans += 1
+            diagnostics.record_batch(len(rows))
+        epoch = self.ensure(
+            parent_gid, child_gid, model_revision, backend_key, rows,
+            selection_target=selection_target,
+            final_target=final_target,
+            min_per_action=min_per_action,
+        )
+        with self.store.lock, self.store.conn() as c:
+            c.execute(
+                """INSERT INTO confidence_selection_scan_cache
+                   (parent_generation_id,child_generation_id,evaluation_revision,
+                    contract_version,selection_revision,params_fingerprint,sufficient,
+                    scanned_rows,updated_ts)
+                   VALUES(?,?,?,?,?,?,?,?,?)
+                   ON CONFLICT(parent_generation_id,child_generation_id,evaluation_revision,
+                               contract_version) DO UPDATE SET
+                     selection_revision=excluded.selection_revision,
+                     params_fingerprint=excluded.params_fingerprint,
+                     sufficient=excluded.sufficient,scanned_rows=excluded.scanned_rows,
+                     updated_ts=excluded.updated_ts""",
+                (str(parent_gid), str(child_gid), evaluation_revision, CONTRACT_VERSION,
+                 revision, params, 1 if epoch else 0, len(rows), time.time()),
+            )
+        return epoch
+
+    def final_report_from_store(self, epoch, parent_gid, child_gid, *, scope_id=None,
+                                max_regression=DEFAULT_FINAL_MAX_REGRESSION):
+        """Evaluate only final-calibration rows and reuse an unchanged fixed-test report."""
+        if not epoch:
+            return self.final_report(None, (), scope_id=scope_id, max_regression=max_regression)
+        revisions = _pair_revisions(self.store, parent_gid, child_gid)
+        revision = int(revisions.get("calibration_revision") or 0)
+        params = _cache_fingerprint({
+            "selection_cutoff_ts": float(epoch["selection_cutoff_ts"]),
+            "final_end_ts": _finite(epoch.get("final_end_ts")),
+            "final_target": int(epoch["final_target"]),
+            "min_per_action": int(epoch["min_per_action"]),
+            "scope_id": None if scope_id is None else str(scope_id),
+            "max_regression": float(max_regression),
+            "contract_version": CONTRACT_VERSION,
+        })
+        with self.store.conn() as c:
+            cached = c.execute(
+                """SELECT report_json FROM confidence_final_report_cache
+                   WHERE parent_generation_id=? AND child_generation_id=?
+                     AND evaluation_revision=? AND contract_version=?
+                     AND calibration_revision=? AND params_fingerprint=?""",
+                (str(parent_gid), str(child_gid), str(epoch["model_revision"]),
+                 CONTRACT_VERSION, revision, params),
+            ).fetchone()
+        diagnostics = getattr(self, "_performance_diagnostics", None)
+        if cached:
+            if diagnostics is not None:
+                diagnostics.confidence_final_cache_hits += 1
+            return json.loads(cached[0])
+
+        rows = _final_pair_rows(
+            self.store, parent_gid, child_gid,
+            float(epoch["selection_cutoff_ts"]), _finite(epoch.get("final_end_ts")),
+        )
+        if diagnostics is not None:
+            diagnostics.confidence_final_scans += 1
+            diagnostics.record_batch(len(rows))
+        report = self.final_report(
+            epoch, rows, scope_id=scope_id, max_regression=max_regression
+        )
+        current = self.get(parent_gid, child_gid, epoch["model_revision"]) or epoch
+        final_params = _cache_fingerprint({
+            "selection_cutoff_ts": float(current["selection_cutoff_ts"]),
+            "final_end_ts": _finite(current.get("final_end_ts")),
+            "final_target": int(current["final_target"]),
+            "min_per_action": int(current["min_per_action"]),
+            "scope_id": None if scope_id is None else str(scope_id),
+            "max_regression": float(max_regression),
+            "contract_version": CONTRACT_VERSION,
+        })
+        with self.store.lock, self.store.conn() as c:
+            c.execute(
+                """INSERT INTO confidence_final_report_cache
+                   (parent_generation_id,child_generation_id,evaluation_revision,
+                    contract_version,calibration_revision,params_fingerprint,
+                    report_json,scanned_rows,updated_ts)
+                   VALUES(?,?,?,?,?,?,?,?,?)
+                   ON CONFLICT(parent_generation_id,child_generation_id,evaluation_revision,
+                               contract_version) DO UPDATE SET
+                     calibration_revision=excluded.calibration_revision,
+                     params_fingerprint=excluded.params_fingerprint,
+                     report_json=excluded.report_json,scanned_rows=excluded.scanned_rows,
+                     updated_ts=excluded.updated_ts""",
+                (str(parent_gid), str(child_gid), str(current["model_revision"]),
+                 CONTRACT_VERSION, revision, final_params,
+                 json.dumps(report, separators=(",", ":"), sort_keys=True),
+                 len(rows), time.time()),
+            )
+        return report
+
     def final_report(self, epoch, pairs, *, scope_id=None,
                      max_regression=DEFAULT_FINAL_MAX_REGRESSION):
         if not epoch:
@@ -942,7 +1073,8 @@ class EvaluationEpochJournal:
         # healed by peeking at later observations.
         if end_ts is None and report["sufficient_evidence"]:
             locked_end = None
-            for idx in range(1, len(rows) + 1):
+            # No prefix shorter than final_target can satisfy the declared test.
+            for idx in range(max(1, int(epoch["final_target"])), len(rows) + 1):
                 prefix = paired_future_quality_report(
                     rows[:idx],
                     scope_id=scope_id,
@@ -1070,7 +1202,6 @@ def _decorate_summary(manager, epochs, row, summary, parent, candidate):
 
     parent_gid = str(generation["parent_generation_id"])
     child_gid = str(generation["generation_id"])
-    pairs = _pair_rows(manager.store, parent_gid, child_gid)
     model = manager.store.get_model(candidate["id"]) if candidate and candidate.get("id") else None
     model_revision = str(
         (model or {}).get("model_revision")
@@ -1080,12 +1211,11 @@ def _decorate_summary(manager, epochs, row, summary, parent, candidate):
     backend_key = _backend_key(model)
     selection_target = max(DEFAULT_SELECTION_EPISODES, int(summary.get("required_future_samples") or 0))
     min_per_action = max(DEFAULT_MIN_PER_ACTION, int(summary.get("required_future_samples_per_action") or 0))
-    epoch = epochs.ensure(
+    epoch = epochs.ensure_from_store(
         parent_gid,
         child_gid,
         model_revision,
         backend_key,
-        pairs,
         selection_target=selection_target,
         final_target=DEFAULT_FINAL_EPISODES,
         min_per_action=min_per_action,
@@ -1099,9 +1229,10 @@ def _decorate_summary(manager, epochs, row, summary, parent, candidate):
         )
     except Exception:
         pass
-    final = epochs.final_report(
+    final = epochs.final_report_from_store(
         epoch,
-        pairs,
+        parent_gid,
+        child_gid,
         scope_id=str(generation.get("root_agent_id") or ""),
         max_regression=max_regression,
     )
