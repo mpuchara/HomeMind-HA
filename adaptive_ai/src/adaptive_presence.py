@@ -461,6 +461,9 @@ class HardwareThresholdAdapterContract:
             'requires_snapshot': True,
             'restore_required': True,
             'physical_io': False,
+            'resource_ownership': 'DeviceAgentService.perception_resource_leases',
+            'local_lease_role': 'planning_token_only_not_resource_ownership',
+            'requires_authoritative_perception_lease': True,
             'evidence_rule': 'sensor output after an own threshold change is not independent validation evidence',
         }
 
