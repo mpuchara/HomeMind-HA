@@ -2,6 +2,8 @@ FAST_ACTION_INTERVAL_SECONDS = 0.25
 FAST_SETTLING_SECONDS = 0.10
 FAST_ACK_TIMEOUT_SECONDS = 2.0
 FAST_OFF_CONFIRMATION_SECONDS = 6.0
+FAST_CONFIDENT_EMPTY_OFF_CONFIRMATION_SECONDS = 1.0
+FAST_CONFIDENT_EMPTY_MAX_UNCERTAINTY = 0.25
 
 
 def is_fast_target(agent):
@@ -13,8 +15,34 @@ def is_fast_target(agent):
     return domain in ("switch", "input_boolean") and prop == "power"
 
 
+def fast_light_off_confirmation_seconds(forecast, default=None):
+    """Return shorter OFF confirmation only for a confidently observed empty room.
+
+    RoomBelief already defines 0.5 as the occupied/empty semantic boundary. We do not
+    invent a second occupancy model here: all present and short-horizon occupancy beliefs
+    must be below that boundary, the forecast must be known, and total uncertainty must
+    be low. Ambiguous/missing context keeps the conservative 6 s confirmation.
+    """
+    normal = FAST_OFF_CONFIRMATION_SECONDS if default is None else max(0.0, float(default))
+    if not isinstance(forecast, dict) or not bool(forecast.get("known")):
+        return normal
+    try:
+        uncertainty = float(forecast.get("uncertainty"))
+        occupancy = max(
+            float(forecast.get("occupancy_now", 1.0) or 0.0),
+            float(forecast.get("occupancy_in_1s", 1.0) or 0.0),
+            float(forecast.get("occupancy_in_3s", 1.0) or 0.0),
+            float(forecast.get("occupancy_in_5s", 1.0) or 0.0),
+        )
+    except (TypeError, ValueError):
+        return normal
+    if uncertainty <= FAST_CONFIDENT_EMPTY_MAX_UNCERTAINTY and occupancy < 0.5:
+        return min(normal, FAST_CONFIDENT_EMPTY_OFF_CONFIRMATION_SECONDS)
+    return normal
+
+
 def stabilize_fast_light_power_decision(agent, rt, current, desired, decision_source,
-                                        timestamp, confirmation_seconds=None):
+                                        timestamp, confirmation_seconds=None, forecast=None):
     """Suppress transient learned OFF flips without delaying explicit user intent.
 
     Fast lighting is intentionally asymmetric: ON remains immediate, while only the
@@ -40,8 +68,10 @@ def stabilize_fast_light_power_decision(agent, rt, current, desired, decision_so
         rt["fast_off_confirmation_active"] = False
         return desired_value, False
 
-    required = FAST_OFF_CONFIRMATION_SECONDS if confirmation_seconds is None else max(
-        0.0, float(confirmation_seconds)
+    required = (
+        fast_light_off_confirmation_seconds(forecast)
+        if confirmation_seconds is None
+        else max(0.0, float(confirmation_seconds))
     )
     if required <= 0.0:
         rt.pop("fast_off_candidate_since", None)
