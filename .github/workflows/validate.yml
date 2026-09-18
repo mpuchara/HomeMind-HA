@@ -63,7 +63,7 @@ jobs:
           import re, zipfile
           from pathlib import Path
           expected = re.search(r'^version: "([^"]+)"', Path('adaptive_ai/config.yaml').read_text(), re.M).group(1)
-          assert expected == '0.14.17', expected
+          assert expected == '0.14.18', expected
           cases = [
               ('HomeMind-Adaptive-AI-repository.zip', 'adaptive_ai/config.yaml', 'adaptive_ai/src/settings.py', 'adaptive_ai/'),
               ('HomeMind-Adaptive-AI-addon-root.zip', 'config.yaml', 'src/settings.py', ''),
@@ -82,6 +82,7 @@ jobs:
                       prefix+'src/rpi_low_power_runtime.py',
                       prefix+'src/release_016_guard.py',
                       prefix+'src/release_017_ui_lifeline.py',
+                      prefix+'src/training_budget.py',
                       prefix+'src/static/polling_guard.js',
                       prefix+'src/static/runtime_activity_ui.js',
                   ):
