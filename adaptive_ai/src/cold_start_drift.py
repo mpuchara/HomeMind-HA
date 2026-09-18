@@ -14,11 +14,11 @@ import math
 import time
 from collections import Counter
 
-from confidence_contract import DEFAULT_HALF_LIFE_EPISODES
+from confidence_contract import CONTRACT_VERSION as CONFIDENCE_CONTRACT_VERSION, DEFAULT_HALF_LIFE_EPISODES
 from settings import OPTIONS, iso_now
 
 
-CONTRACT_VERSION = 1
+CONTRACT_VERSION = 2
 BASELINE_EPISODES = 12
 RECENT_EPISODES = 6
 ENV_STABLE_SNAPSHOTS = 3
@@ -32,6 +32,9 @@ SENSOR_HEALTH_DROP = 0.20
 MAX_OPTIONAL_QUESTIONS = 2
 OBSERVE_THROTTLE_SECONDS = 30.0
 POST_PROMOTION_EPISODES = 6
+MIN_REGRESSION_ANCHORS = 2
+MAX_REGRESSION_ANCHORS = 8
+MAX_ANCHOR_NET_LOSSES = 0
 ACTIVE_PREFERENCE_STATUSES = {"recorded", "applied", "learning_queued", "rebuild_queued"}
 
 
@@ -174,6 +177,7 @@ def ensure_tables(store):
                 rollback_backup_id INTEGER,
                 recovered_ts REAL,
                 episodes_to_recover INTEGER,
+                recovery_seconds REAL,
                 preference_revision_seen INTEGER NOT NULL DEFAULT 0,
                 last_episode_ts REAL,
                 last_observe_ts REAL,
@@ -186,10 +190,32 @@ def ensure_tables(store):
                 reason TEXT NOT NULL,
                 retained_ts REAL NOT NULL,
                 training_weight REAL NOT NULL DEFAULT 0,
+                anchor_ts REAL,
+                desired_action REAL,
+                label_source TEXT,
                 PRIMARY KEY(agent_id,episode_id)
+            );
+
+            CREATE TABLE IF NOT EXISTS adaptation_regression_reports (
+                agent_id TEXT NOT NULL,
+                candidate_generation_id TEXT NOT NULL,
+                fingerprint TEXT NOT NULL,
+                report_json TEXT NOT NULL,
+                created_ts REAL NOT NULL,
+                PRIMARY KEY(agent_id,candidate_generation_id)
             );
             """
         )
+        state_columns = {row["name"] for row in c.execute("PRAGMA table_info(adaptation_state)").fetchall()}
+        if "recovery_seconds" not in state_columns:
+            c.execute("ALTER TABLE adaptation_state ADD COLUMN recovery_seconds REAL")
+        anchor_columns = {row["name"] for row in c.execute("PRAGMA table_info(adaptation_regression_anchors)").fetchall()}
+        if "anchor_ts" not in anchor_columns:
+            c.execute("ALTER TABLE adaptation_regression_anchors ADD COLUMN anchor_ts REAL")
+        if "desired_action" not in anchor_columns:
+            c.execute("ALTER TABLE adaptation_regression_anchors ADD COLUMN desired_action REAL")
+        if "label_source" not in anchor_columns:
+            c.execute("ALTER TABLE adaptation_regression_anchors ADD COLUMN label_source TEXT")
 
 
 def _quality_from_metrics(metrics):
