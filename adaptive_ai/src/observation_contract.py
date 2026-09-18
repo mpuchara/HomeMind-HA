@@ -707,9 +707,9 @@ class ObservationSQLiteTemporalTracker(replay_module.SQLiteTemporalTracker):
                 ORDER BY event_time,received_time,event_key
             """
             raw = self._fetch_rows(
-                sql, [*ids, float(ts), float(ts), count],
-                "temporal_feature_before_query",
+                sql, [*ids, float(ts), float(ts), count]
             )
+            TRAINING_BUDGET.checkpoint("temporal_feature_before_query")
             result.extend(FeatureJournal.normalized_row(row) for row in raw)
         result.sort(key=self._row_order)
         return result
@@ -731,9 +731,9 @@ class ObservationSQLiteTemporalTracker(replay_module.SQLiteTemporalTracker):
                 ORDER BY event_time,received_time,event_key
             """
             raw = self._fetch_rows(
-                sql, [*ids, float(hi), float(hi), float(lo), float(lo)],
-                "temporal_feature_forward_query",
+                sql, [*ids, float(hi), float(hi), float(lo), float(lo)]
             )
+            TRAINING_BUDGET.checkpoint("temporal_feature_forward_query")
             result.extend(FeatureJournal.normalized_row(row) for row in raw)
         result.sort(key=self._row_order)
         return result
