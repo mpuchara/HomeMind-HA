@@ -79,6 +79,7 @@ class ProductRuntimeBenchmarkContractTests(unittest.TestCase):
         self.assertEqual(metrics["manual_override_events"], 1)
         self.assertEqual(metrics["manual_override_window_ticks"], 11)
         self.assertGreater(metrics["runtime_manual_hold_ticks"], 0)
+        self.assertGreater(metrics["executor_shadow_ticks"], 0)
         self.assertGreater(metrics["moved_sensor_topology_ticks"], 0)
 
     def test_validation_is_real_and_control_threshold_is_not_lowered(self):
@@ -108,6 +109,7 @@ class ProductRuntimeBenchmarkContractTests(unittest.TestCase):
         self.assertIn("final RuntimeCompositionRoot", source)
         self.assertIn("registry=core.registry_for(phase, scenario)", source)
         self.assertIn("core._manual_hold_action(states, rt, ts)", source)
+        self.assertIn('store.update_agent(agent["id"], {"mode": "shadow"})', source)
         workflow = (ROOT / ".github" / "workflows" / "validate.yml").read_text(encoding="utf-8")
         self.assertIn("python tools/run_product_runtime_benchmark.py --seeds 11,23,37 --replicas 1", workflow)
 
