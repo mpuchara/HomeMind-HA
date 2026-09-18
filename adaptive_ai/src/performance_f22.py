@@ -91,8 +91,12 @@ def ensure_tables(store):
                 ON candidate_generation_pairs(parent_generation_id,child_generation_id,outcome_ts);
             CREATE INDEX IF NOT EXISTS idx_candidate_decisions_generation_ts_f22
                 ON candidate_generation_decisions(generation_id,ts);
-            CREATE INDEX IF NOT EXISTS idx_entity_history_entity_ts_id_f22
-                ON entity_history(entity_id,ts,id);
+            -- entity_history already has idx_entity_history_entity_ts(entity_id,ts)
+            -- and because id is INTEGER PRIMARY KEY / rowid, SQLite stores rowid as the
+            -- implicit final key of the secondary index. Creating a second
+            -- (entity_id,ts,id) index here adds no useful ordering for replay but can
+            -- spend minutes rebuilding hundreds of thousands of rows on a Raspberry Pi
+            -- during the first start after upgrade.
             """
         )
         if _table_exists(c, "adaptation_regression_anchors"):
