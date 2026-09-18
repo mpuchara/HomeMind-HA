@@ -244,7 +244,9 @@ class PolicyBackendShadowService:
     def observe_demonstration(self, agent, policy, features, action_idx, timestamp=None):
         if not self.enabled or not self._fast(agent):
             return
-        backend = self._backend(agent, policy, features, {})
+        backend, _gate = self._backend(agent, policy, features, {})
+        if backend is None:
+            return
         for horizon in backend.horizons:
             backend.update(horizon, int(action_idx), features, 1.0, timestamp)
         self._persist(agent["id"], backend)
