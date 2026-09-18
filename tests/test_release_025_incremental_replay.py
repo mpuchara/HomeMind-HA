@@ -94,6 +94,99 @@ class IncrementalTemporalReplayTests(unittest.TestCase):
         finally:
             tracker.close()
 
+    def test_forward_home_window_promotes_seed_without_full_seed_requery(self):
+        motion = "binary_sensor.kitchen_motion"
+        radar = "binary_sensor.kitchen_presence"
+        target = "light.kitchen"
+        states = {
+            motion: state(motion, "off", device_class="motion"),
+            radar: state(radar, "off", device_class="occupancy"),
+            target: state(target, "off"),
+        }
+        registry = {
+            motion: {"area_id": "kitchen"},
+            radar: {"area_id": "kitchen"},
+            target: {"area_id": "kitchen"},
+        }
+        ctx = self.context(states, registry)
+        self.store.archive_batch([
+            (motion, self.base + 0, "off", {"device_class": "motion"}, None, "test"),
+            (radar, self.base + 0, "off", {"device_class": "occupancy"}, None, "test"),
+            (motion, self.base + 10, "on", {"device_class": "motion"}, None, "test"),
+            (radar, self.base + 12, "on", {"device_class": "occupancy"}, None, "test"),
+            (motion, self.base + 18, "off", {"device_class": "motion"}, None, "test"),
+            (radar, self.base + 42, "off", {"device_class": "occupancy"}, None, "test"),
+        ])
+        tracker = SQLiteTemporalTracker(
+            self.store, [motion, radar], ctx, self.base, self.base + 90
+        )
+        try:
+            tracker.advance(self.base + 35)
+            first = tracker.stats()
+            tracker.advance(self.base + 50)
+            second = tracker.stats()
+            self.assertEqual(second["home_cache_full_rebuilds"], 1)
+            self.assertEqual(second["home_cache_forward_updates"], 1)
+            self.assertGreaterEqual(second["home_seed_entities"], 2)
+            self.assertLess(second["sql_queries"] - first["sql_queries"], 8)
+
+            actual = tracker.history.home_context.forecast(target, self.base + 50)
+        finally:
+            tracker.close()
+
+        # Independent legacy reference at the final timestamp.
+        query_ts = self.base + 50
+        cutoff = query_ts - 30
+        view = HistoricalHomeView(ctx, None)
+        seeded = set()
+        with self.store.conn() as conn:
+            for eid in ctx.relevant_entities():
+                row = conn.execute(
+                    "SELECT * FROM entity_history WHERE entity_id=? AND ts<=? "
+                    "ORDER BY ts DESC,id DESC LIMIT 1",
+                    (eid, cutoff),
+                ).fetchone()
+                if row:
+                    row = dict(row)
+                    area = ctx.area_for(eid)
+                    view.home.observe(
+                        eid, area, ctx.sensor_probability(eid, archived_state(row)),
+                        cutoff, learn=False, evidence=ctx.evidence_metadata(eid),
+                    )
+                    if area:
+                        seeded.add(area)
+            view.home.reset_movement_state()
+            for area in sorted(seeded):
+                view.observe_adaptive(area, cutoff)
+            ids = ctx.relevant_entities()
+            marks = ",".join("?" for _ in ids)
+            rows = conn.execute(
+                "SELECT * FROM entity_history WHERE ts>? AND ts<=? "
+                f"AND entity_id IN ({marks}) ORDER BY ts,id",
+                [cutoff, query_ts, *ids],
+            ).fetchall()
+            for raw in rows:
+                row = dict(raw)
+                eid = row["entity_id"]
+                area = ctx.area_for(eid)
+                view.home.observe(
+                    eid, area, ctx.sensor_probability(eid, archived_state(row)),
+                    row["ts"], learn=False, evidence=ctx.evidence_metadata(eid),
+                )
+                view.observe_adaptive(area, row["ts"])
+        expected = view.forecast(target, query_ts)
+        for key in (
+            "occupancy_now", "occupancy_in_1s", "occupancy_in_3s",
+            "occupancy_in_5s", "arrival_probability", "departure_probability",
+            "trajectory_confidence",
+        ):
+            self.assertAlmostEqual(
+                float(actual.get(key) or 0.0),
+                float(expected.get(key) or 0.0),
+                places=9,
+                msg=key,
+            )
+
     def test_same_timestamp_base_rows_keep_numeric_history_id_order(self):
         eid = "sensor.tie"
         self.store.archive_batch([
@@ -317,6 +410,8 @@ class Release025SourceContractTests(unittest.TestCase):
         self.assertIn('"rewinds"', source)
         self.assertIn('"same_ts_hits"', source)
         self.assertIn("query_reduction_ratio", source)
+        self.assertIn("def _forward_home_cache", source)
+        self.assertIn('"home_cache_forward_updates"', source)
 
     def test_history_separates_onset_and_persistence_cursor_roles(self):
         source = self.source("history.py")
