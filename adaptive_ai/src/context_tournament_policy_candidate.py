@@ -213,6 +213,31 @@ def plan_target_schema(agent, policy, challenger, tournament, health_lookup=None
             "reason": "replace_broken_primary" if is_primary and broken else "replace"}
 
 
+def exact_candidate_version_matches(model, raw, target_schema, policy, tournament):
+    """Require the persisted challenger to match the exact paired evaluation epoch."""
+    if not isinstance(raw, dict) or policy is None:
+        return False
+    current_revision = str(getattr(policy, "model_revision", "") or "")
+    expected_revision = str((model or {}).get("evaluation_champion_revision") or current_revision)
+    policy_version = int(getattr(policy, "VERSION", 0) or 0)
+    schema_version = int(getattr(getattr(policy, "schema", None), "VERSION", 0) or 0)
+    data_version = dict((model or {}).get("candidate_data_version") or {})
+    return bool(
+        current_revision == expected_revision
+        and list((raw.get("schema") or {}).get("entities") or []) == list(target_schema or [])
+        and int(raw.get("version") or 0) == policy_version
+        and int((raw.get("schema") or {}).get("version") or 0) == schema_version
+        and str((model or {}).get("candidate_source_model_revision") or "") == expected_revision
+        and int((model or {}).get("candidate_contract_version") or 0) == CONTRACT_VERSION
+        and str(data_version.get("contract") or "") == "paired_future_policy_v2"
+        and int(data_version.get("schema_revision") or -1)
+            == int((tournament or {}).get("schema_revision") or 0)
+        and str(data_version.get("champion_revision") or "") == expected_revision
+        and int(data_version.get("policy_version") or 0) == policy_version
+        and int(data_version.get("feature_schema_version") or 0) == schema_version
+    )
+
+
 def promotion_gate(*, model, gain, health, redundancy, duplicate_of, test_count,
                    active_schema, target_schema, replacement_is_primary=False,
                    primary_broken=False, event_frequency=0.0, base_gain=None):
@@ -531,24 +556,8 @@ def install_policy_candidates(service):
             return None
         current_revision = str(getattr(policy, "model_revision", "") or "")
         expected_revision = str(model.get("evaluation_champion_revision") or current_revision)
-        current_policy_version = int(getattr(policy, "VERSION", 0) or 0)
-        current_schema_version = int(getattr(policy.schema, "VERSION", 0) or 0)
-        data_version = dict(model.get("candidate_data_version") or {})
         raw = model.get("candidate_policy") if isinstance(model.get("candidate_policy"), dict) else None
-        valid = bool(
-            raw
-            and current_revision == expected_revision
-            and list((raw.get("schema") or {}).get("entities") or []) == target_schema
-            and int(raw.get("version") or 0) == current_policy_version
-            and int((raw.get("schema") or {}).get("version") or 0) == current_schema_version
-            and str(model.get("candidate_source_model_revision") or "") == expected_revision
-            and int(model.get("candidate_contract_version") or 0) == CONTRACT_VERSION
-            and str(data_version.get("contract") or "") == "paired_future_policy_v2"
-            and int(data_version.get("schema_revision") or -1) == int(tournament.get("schema_revision") or 0)
-            and str(data_version.get("champion_revision") or "") == expected_revision
-            and int(data_version.get("policy_version") or 0) == current_policy_version
-            and int(data_version.get("feature_schema_version") or 0) == current_schema_version
-        )
+        valid = exact_candidate_version_matches(model, raw, target_schema, policy, tournament)
         key = (aid, str(challenger))
         with getattr(service.engine, "lock", threading.RLock()):
             states = dict(getattr(service.engine, "state_map", {}) or {})
