@@ -690,26 +690,24 @@ class ObservationSQLiteTemporalTracker(replay_module.SQLiteTemporalTracker):
         result = []
         count = max(1, int(count))
         for ids in self._chunks(entity_ids):
-            marks = ",".join("?" for _ in ids)
-            sql = f"""
-                SELECT event_key,entity_id,event_time,received_time,state,attributes_json,
-                       last_changed,last_updated,source,quality
-                FROM (
-                    SELECT f.*,
-                           ROW_NUMBER() OVER (
-                               PARTITION BY entity_id
-                               ORDER BY event_time DESC,received_time DESC,event_key DESC
-                           ) AS _hm_rank
-                    FROM feature_observation_events f
-                    WHERE entity_id IN ({marks})
-                      AND event_time<=? AND received_time<=?
+            parts, params = [], []
+            for eid in ids:
+                parts.append(
+                    "SELECT * FROM ("
+                    "SELECT event_key,entity_id,event_time,received_time,state,attributes_json,"
+                    "last_changed,last_updated,source,quality "
+                    "FROM feature_observation_events "
+                    "WHERE entity_id=? AND event_time<=? AND received_time<=? "
+                    "ORDER BY event_time DESC,received_time DESC,event_key DESC LIMIT ?)"
                 )
-                WHERE _hm_rank<=?
-                ORDER BY event_time,received_time,event_key
-            """
-            raw = self._fetch_rows(
-                sql, [*ids, float(ts), float(ts), count]
+                params.extend([eid, float(ts), float(ts), count])
+            if not parts:
+                continue
+            sql = (
+                "SELECT * FROM (" + " UNION ALL ".join(parts) +
+                ") ORDER BY event_time,received_time,event_key"
             )
+            raw = self._fetch_rows(sql, params)
             TRAINING_BUDGET.checkpoint("temporal_feature_before_query")
             result.extend(FeatureJournal.normalized_row(row) for row in raw)
         result.sort(key=self._row_order)
@@ -721,30 +719,28 @@ class ObservationSQLiteTemporalTracker(replay_module.SQLiteTemporalTracker):
             return []
         result = []
         for ids in self._chunks(entity_ids):
-            marks = ",".join("?" for _ in ids)
-            sql = f"""
-                SELECT event_key,entity_id,event_time,received_time,state,attributes_json,
-                       last_changed,last_updated,source,quality
-                FROM (
-                    SELECT f.*,
-                           ROW_NUMBER() OVER (
-                               PARTITION BY entity_id
-                               ORDER BY event_time DESC,received_time DESC,event_key DESC
-                           ) AS _hm_rank
-                    FROM feature_observation_events f
-                    WHERE entity_id IN ({marks})
-                      AND event_time<=? AND received_time<=?
-                      AND (event_time>? OR received_time>?)
+            parts, params = [], []
+            for eid in ids:
+                parts.append(
+                    "SELECT * FROM ("
+                    "SELECT event_key,entity_id,event_time,received_time,state,attributes_json,"
+                    "last_changed,last_updated,source,quality "
+                    "FROM feature_observation_events "
+                    "WHERE entity_id=? AND event_time<=? AND received_time<=? "
+                    "AND (event_time>? OR received_time>?) "
+                    "ORDER BY event_time DESC,received_time DESC,event_key DESC LIMIT ?)"
                 )
-                WHERE _hm_rank<=?
-                ORDER BY event_time,received_time,event_key
-            """
-            raw = self._fetch_rows(
-                sql, [
-                    *ids, float(hi), float(hi), float(lo), float(lo),
+                params.extend([
+                    eid, float(hi), float(hi), float(lo), float(lo),
                     self.HISTORY_SAMPLES,
-                ]
+                ])
+            if not parts:
+                continue
+            sql = (
+                "SELECT * FROM (" + " UNION ALL ".join(parts) +
+                ") ORDER BY event_time,received_time,event_key"
             )
+            raw = self._fetch_rows(sql, params)
             TRAINING_BUDGET.checkpoint("temporal_feature_forward_query")
             result.extend(FeatureJournal.normalized_row(row) for row in raw)
         result.sort(key=self._row_order)
