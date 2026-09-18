@@ -1356,14 +1356,14 @@ class HistoryManager(threading.Thread):
                                "origin_counts": origin_counts},
                     "reason": reason,
                 }
+                detail["mode_after_training"] = "shadow"
+                detail["control_qualified"] = bool(passed)
                 STORE.set_training_state(
                     agent["id"], state, score=score, samples=samples,
                     source="recorded-behaviour", detail=detail, demote_control=True,
                     shadow_after_completion=True,
                 )
                 STORE.set_training_progress(agent["id"], float(start_ts), float(end_ts), float(end_ts))
-                detail["mode_after_training"] = "shadow"
-                detail["control_qualified"] = bool(passed)
                 if passed:
                     qualified_count += 1
                 else:
