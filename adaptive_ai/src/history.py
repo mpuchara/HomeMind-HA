@@ -812,16 +812,45 @@ class HistoryManager(threading.Thread):
         target_map = {}
         for a in agents:
             target_map.setdefault(a["target_entity"], []).append(a)
+
+        # Feature screening is only needed while the policy schema is unresolved.
+        # Once a model checkpoint exists, its explicit schema is authoritative for later
+        # chunks/resume. Likewise, an explicitly selected input list (Teach/Correct or a
+        # manual agent) does not need another whole-home precursor scan.
+        saved_models = {a["id"]: STORE.get_model(a["id"]) for a in agents}
+        screen_agents = [
+            a for a in agents
+            if saved_models.get(a["id"]) is None
+            and ("*" in set(a.get("input_entities") or ["*"]))
+        ]
+        screen_target_map = {}
+        for a in screen_agents:
+            screen_target_map.setdefault(a["target_entity"], []).append(a)
+        screening_required = bool(screen_agents)
+
         archive_row_count = STORE.archive_count(start_ts=start_ts, end_ts=end_ts)
         if archive_row_count <= 0:
             return 0
         progress_enabled = progress_lo is not None and progress_hi is not None and float(progress_hi) > float(progress_lo)
         progress_label = progress_label or "Historical policy rebuild"
         if progress_enabled:
-            self.set_status(progress=float(progress_lo), message=f"{progress_label}: screening context candidates",
-                            work_done=0, work_total=archive_row_count, work_unit="history rows",
-                            eta_source="measured replay throughput",
-                            phase_detail="Finding causal precursors and behavioural drivers")
+            self.set_status(
+                progress=float(progress_lo),
+                message=(
+                    f"{progress_label}: screening context candidates"
+                    if screening_required else
+                    f"{progress_label}: reusing persisted feature schema"
+                ),
+                work_done=0,
+                work_total=archive_row_count if screening_required else 0,
+                work_unit="history rows" if screening_required else "schema cache",
+                eta_source="measured replay throughput" if screening_required else "persisted schema",
+                phase_detail=(
+                    "Finding causal precursors and behavioural drivers"
+                    if screening_required else
+                    "Historical feature screening skipped: persisted/explicit schema is already authoritative"
+                ),
+            )
 
         # Historical precursor relevance: every usable HA entity is considered. Entities
         # that repeatedly change shortly before a real target action receive a structural
@@ -829,12 +858,12 @@ class HistoryManager(threading.Thread):
         # never a reward or supervised label.
         recent_change = {}
         activity_counts = {}
-        relevance_raw = {a["id"]: {} for a in agents}
-        target_action_counts = {a["id"]: 0 for a in agents}
+        relevance_raw = {a["id"]: {} for a in screen_agents}
+        target_action_counts = {a["id"]: 0 for a in screen_agents}
         last_target_value = {}
         precursor_window = max(300.0, float(OPTIONS.get("temporal_long_seconds", 300)) * 2.0)
         archive_span = max(1.0, float(end_ts) - float(start_ts))
-        selection_end = float(end_ts) - max(1800.0, archive_span * float(OPTIONS.get("confidence_validation_fraction", .2)))
+        selection_end = (float(end_ts) - max(1800.0, archive_span * float(OPTIONS.get("confidence_validation_fraction", .2)))) if screening_required else float(start_ts)
 
         # Build a small edge index for fast-light causal driver discovery.  This does not
         # depend on HA area metadata or direct automation target mapping: every eligible
@@ -846,7 +875,7 @@ class HistoryManager(threading.Thread):
         excluded_control, _ = controllable_context_exclusions(discovery_states, discovery_registry)
         excluded_electrical, _ = electrical_context_exclusions(discovery_states, discovery_registry)
         discovery_excluded = excluded_control | excluded_electrical
-        fast_agents = [a for a in agents if is_fast_reactive_agent(a)]
+        fast_agents = [a for a in screen_agents if is_fast_reactive_agent(a)]
         behaviour_candidates = {
             eid for eid, st in discovery_states.items()
             if is_context_candidate_entity(eid, st, discovery_excluded)
@@ -868,7 +897,7 @@ class HistoryManager(threading.Thread):
                 continue
             previous_context[eid] = signature
             activity_counts[eid] = activity_counts.get(eid, 0) + 1
-            for agent in target_map.get(eid, []):
+            for agent in screen_target_map.get(eid, []):
                 st = archived_state(row)
                 val = target_value(st, agent["target_property"])
                 if val is None:
@@ -892,6 +921,10 @@ class HistoryManager(threading.Thread):
                             # sensor that just changed. Slow plants keep the broad window.
                             tau = float(OPTIONS.get("fast_recent_change_seconds", 3)) if is_fast_reactive_agent(agent) else max(30.0, precursor_window / 2.0)
                             scores[ceid] = scores.get(ceid, 0.0) + math.exp(-age / max(0.5, tau))
+                    # This fan-out can touch hundreds of context entities for one target
+                    # edge. Yield before another target edge even if archive_iter has not
+                    # yet reached its forced batch checkpoint.
+                    TRAINING_BUDGET.checkpoint("context_screen_target_edge")
                     last_target_value[agent["id"]] = float(val)
             recent_change[eid] = ts
 
@@ -922,7 +955,7 @@ class HistoryManager(threading.Thread):
                     scores[eid] = max(scores.get(eid, 0.0), score)
             fast_driver_scores[agent["id"]] = scores
 
-        for agent in agents:
+        for agent in screen_agents:
             raw = relevance_raw.get(agent["id"], {})
             actions_n = max(1, int(target_action_counts.get(agent["id"], 0)))
             adjusted = {}
@@ -959,10 +992,23 @@ class HistoryManager(threading.Thread):
 
         if progress_enabled:
             screening_end = float(progress_lo) + (float(progress_hi) - float(progress_lo)) * 0.20
-            self.set_status(progress=screening_end, message=f"{progress_label}: context screening complete; replaying recorded behaviour",
-                            work_done=0, work_total=archive_row_count, work_unit="history rows",
-                            eta_source="measured replay throughput",
-                            phase_detail=f"Screened context for {len(agents)} agent(s); starting chronological replay")
+            self.set_status(
+                progress=screening_end,
+                message=(
+                    f"{progress_label}: context screening complete; replaying recorded behaviour"
+                    if screening_required else
+                    f"{progress_label}: persisted feature schema reused; replaying recorded behaviour"
+                ),
+                work_done=0,
+                work_total=archive_row_count,
+                work_unit="history rows",
+                eta_source="measured replay throughput",
+                phase_detail=(
+                    f"Screened context for {len(screen_agents)} unresolved-schema agent(s); starting chronological replay"
+                    if screening_required else
+                    "No full context rescan required for this checkpoint; starting chronological replay"
+                ),
+            )
         policies = {a["id"]: self.engine.policy(a) for a in agents}
         automation_infos_by_agent = {
             a["id"]: list(AUTOMATION_KNOWLEDGE.hints_for_target(a["target_entity"])[1] or [])
