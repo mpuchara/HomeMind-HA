@@ -10,6 +10,8 @@ from context import TemporalHistory
 from observation_contract import (
     FeatureJournal,
     FeatureSchemaV12,
+    FEATURE_CONTRACT_VERSION,
+    LEGACY_FEATURE_CONTRACT_VERSION,
     HOME_FEATURE_NAMES,
     HOME_TAIL,
     ObservationSQLiteTemporalTracker,
@@ -121,6 +123,109 @@ class ObservationFeatureTests(unittest.TestCase):
         self.assertEqual(a["kind"], "category")
         self.assertEqual(b["kind"], "category")
         self.assertNotEqual(a["category"], b["category"])
+
+    def test_feature_contract_is_versioned_without_reinterpreting_legacy_schema(self):
+        fresh = FeatureSchemaV12(128, ["sensor.test"])
+        self.assertEqual(fresh.feature_contract_version, FEATURE_CONTRACT_VERSION)
+        raw = fresh.export()
+        raw.pop("feature_contract_version")
+        legacy = FeatureSchemaV12.from_export(raw, 128)
+        self.assertIsNotNone(legacy)
+        self.assertEqual(
+            legacy.feature_contract_version, LEGACY_FEATURE_CONTRACT_VERSION
+        )
+        self.assertEqual(
+            legacy.export()["feature_contract_version"],
+            LEGACY_FEATURE_CONTRACT_VERSION,
+        )
+
+    def _photometric_pair(self, ambient, emitted):
+        history = TemporalHistory(maxlen=96)
+        schema = FeatureSchemaV12(128, ["sensor.room_lux"])
+        a = agent(target_entity="light.kitchen", target_property="power")
+
+        light_off = sensor_state("light.kitchen", "off", 99.0, last_changed=90.0)
+        lux_off = sensor_state(
+            "sensor.room_lux", ambient, 99.0, unit="lx",
+            device_class="illuminance", last_changed=99.0,
+        )
+        add_live(history, light_off, 99.0, 99.01)
+        add_live(history, lux_off, 99.0, 99.01)
+        off_vector, labels, off_meta = build_observation_features(
+            schema,
+            {"light.kitchen": light_off, "sensor.room_lux": lux_off},
+            history, 99.02, a,
+        )
+
+        light_on = sensor_state("light.kitchen", "on", 100.0, last_changed=100.0)
+        lux_on = sensor_state(
+            "sensor.room_lux", ambient + emitted, 100.0, unit="lx",
+            device_class="illuminance", last_changed=100.0,
+        )
+        add_live(history, light_on, 100.0, 100.01)
+        add_live(history, lux_on, 100.0, 100.01)
+        on_vector, _, on_meta = build_observation_features(
+            schema,
+            {"light.kitchen": light_on, "sensor.room_lux": lux_on},
+            history, 100.02, a,
+        )
+        return off_vector, on_vector, labels, off_meta, on_meta
+
+    def test_fast_light_lux_uses_pre_action_ambient_v2(self):
+        off_vector, on_vector, labels, off_meta, on_meta = self._photometric_pair(
+            12.0, 185.0
+        )
+        value_idx = label_index(labels, ":value")
+        self.assertAlmostEqual(
+            off_vector.get(value_idx, 0.0),
+            on_vector.get(value_idx, 0.0),
+            places=12,
+        )
+        self.assertGreater(on_vector.get(value_idx, 0.0), 0.5)
+        self.assertEqual(
+            off_meta["entity_observations"]["sensor.room_lux"]["photometric"]["source"],
+            "current_light_off",
+        )
+        self.assertEqual(
+            on_meta["entity_observations"]["sensor.room_lux"]["photometric"]["source"],
+            "pre_action_baseline",
+        )
+        self.assertEqual(on_meta["feature_contract_version"], FEATURE_CONTRACT_VERSION)
+
+    def test_fast_light_daylight_is_invariant_to_own_light_v2(self):
+        off_vector, on_vector, labels, _, _ = self._photometric_pair(220.0, 185.0)
+        value_idx = label_index(labels, ":value")
+        self.assertAlmostEqual(
+            off_vector.get(value_idx, 0.0),
+            on_vector.get(value_idx, 0.0),
+            places=12,
+        )
+        self.assertLess(on_vector.get(value_idx, 0.0), -0.8)
+
+    def test_fast_light_startup_on_without_pre_action_lux_is_unknown_v2(self):
+        history = TemporalHistory(maxlen=96)
+        schema = FeatureSchemaV12(128, ["sensor.room_lux"])
+        a = agent(target_entity="light.kitchen", target_property="power")
+        light_on = sensor_state("light.kitchen", "on", 100.0, last_changed=90.0)
+        lux_on = sensor_state(
+            "sensor.room_lux", 200.0, 100.0, unit="lx",
+            device_class="illuminance", last_changed=90.0,
+        )
+        add_live(history, light_on, 100.0, 100.01)
+        add_live(history, lux_on, 100.0, 100.01)
+
+        vector, labels, meta = build_observation_features(
+            schema,
+            {"light.kitchen": light_on, "sensor.room_lux": lux_on},
+            history, 100.02, a,
+        )
+
+        self.assertEqual(vector.get(label_index(labels, ":valid"), 0.0), 0.0)
+        self.assertEqual(
+            meta["entity_observations"]["sensor.room_lux"]["photometric"]["source"],
+            "unresolved_light_on",
+        )
+        self.assertFalse(meta["reconstruction_complete"])
 
     def test_home_known_is_an_explicit_tail_feature(self):
         history = TemporalHistory()
