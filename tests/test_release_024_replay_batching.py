@@ -45,6 +45,32 @@ class HistoricalExperienceBatchTests(unittest.TestCase):
         self.assertEqual(inserted, 64)
         self.assertEqual(calls["n"], 1)
 
+    def test_change_stream_matches_python_duplicate_filtering(self):
+        rows = [
+            ("sensor.a", 1.0, "0", {"x": 1}, None, "test"),
+            ("sensor.a", 2.0, "0", {"x": 1}, None, "test"),
+            ("sensor.b", 2.5, "off", {}, None, "test"),
+            ("sensor.a", 3.0, "1", {"x": 1}, None, "test"),
+            ("sensor.a", 4.0, "1", {"x": 2}, None, "test"),
+            ("sensor.b", 5.0, "off", {}, None, "test"),
+            ("sensor.b", 6.0, "on", {}, None, "test"),
+        ]
+        self.store.archive_batch(rows)
+        raw = list(self.store.archive_iter(1.0, 6.0))
+        previous = {}
+        expected = []
+        for row in raw:
+            signature = (row.get("state"), row.get("attributes_json"))
+            if previous.get(row["entity_id"]) == signature:
+                continue
+            previous[row["entity_id"]] = signature
+            expected.append((row["entity_id"], row["ts"], row["state"], row["attributes_json"]))
+        actual = [
+            (row["entity_id"], row["ts"], row["state"], row["attributes_json"])
+            for row in self.store.archive_change_iter(1.0, 6.0)
+        ]
+        self.assertEqual(actual, expected)
+
     def test_batch_keeps_unique_agent_target_history_contract(self):
         rows = self.rows(count=4)
         self.assertEqual(self.store.add_historical_experiences_batch(rows), 4)
@@ -85,8 +111,10 @@ class Release024SourceContractTests(unittest.TestCase):
         self.assertIn("screen_agents = [", source)
         self.assertIn('"*" in set(a.get("input_entities") or ["*"])', source)
         self.assertIn("if screening_required else ()", source)
+        self.assertIn("archive_change_iter", source)
         self.assertIn("persisted feature schema reused", source)
         self.assertIn('TRAINING_BUDGET.checkpoint("context_screen_target_edge")', source)
+        self.assertIn('TRAINING_BUDGET.checkpoint("context_screen_change_batch", force=True)', source)
 
     def test_new_batch_size_is_bounded_and_configurable(self):
         config = (ROOT / "adaptive_ai" / "config.yaml").read_text(encoding="utf-8")
