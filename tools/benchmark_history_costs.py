@@ -173,6 +173,17 @@ def confidence_fixed_future_benchmark(pair_count):
     for i in range(max(12, int(pair_count))):
         insert(i, eligible=False)
     screening = confidence._pair_rows(store, "g0", "g1")
+    legacy_selection = confidence.action_quality_report(
+        confidence.independent_episode_rows(screening),
+        scope_id=None, min_total=12, min_per_action=4,
+    )
+    store.reset_trace()
+    streamed_selection, selection_ms = timed(
+        lambda: confidence._selection_sufficiency_from_store(
+            store, "g0", "g1", selection_target=12, min_per_action=4
+        )
+    )
+    selection_queries = len(store.selects())
     epoch = epochs.ensure(
         "g0","g1","rev-bench","diagonal_linucb:v11",screening,
         selection_target=12,final_target=12,min_per_action=4,
@@ -212,6 +223,21 @@ def confidence_fixed_future_benchmark(pair_count):
     same = all(legacy_report.get(k) == optimized.get(k) for k in equality_keys)
     return {
         "screening_pairs": max(12, int(pair_count)),
+        "selection_streaming": {
+            "time_ms": selection_ms[0],
+            "select_statements": selection_queries,
+            "python_rows_materialized": streamed_selection.get("python_rows_materialized"),
+            "legacy_effective_n": legacy_selection.get("effective_n"),
+            "optimized_effective_n": streamed_selection.get("effective_n"),
+            "sufficient_evidence_equal": (
+                legacy_selection.get("sufficient_evidence")
+                == streamed_selection.get("sufficient_evidence")
+            ),
+            "effective_n_difference": abs(
+                float(legacy_selection.get("effective_n") or 0.0)
+                - float(streamed_selection.get("effective_n") or 0.0)
+            ),
+        },
         "fixed_future_rows": 12,
         "legacy": {
             "rows_materialized": len(legacy_pairs),
@@ -231,6 +257,96 @@ def confidence_fixed_future_benchmark(pair_count):
         "reports_equal": same,
         "warm_report_equal": warm == optimized,
         "cache_diagnostics": diag.snapshot(),
+    }
+
+
+def probability_calibration_benchmark(sample_count):
+    store = MemoryStore()
+    FastMetricFixture.schema(store)
+    journal = confidence.ProbabilityCalibrationJournal(store)
+    diag = f22.PerformanceDiagnostics()
+    journal._performance_diagnostics = diag
+    count = max(20, int(sample_count))
+    for i in range(count):
+        journal.record(
+            metric_id="presence_3s",
+            model_key="room-v2",
+            scope_id="kitchen",
+            episode_id=f"bench-p-{i}",
+            ts=float(i * 7),
+            prediction=0.1 + 0.8 * ((i % 11) / 10.0),
+            observed=float((i % 4) != 0),
+            source_kind="manual_ground_truth",
+            dependency_cluster=f"cluster-{i // 3}",
+            independent=True,
+        )
+
+    store.reset_trace()
+    legacy_rows, legacy_load_ms = timed(
+        lambda: journal.rows("presence_3s", "room-v2", "kitchen")
+    )
+    legacy_report, legacy_report_ms = timed(
+        lambda: confidence.probability_calibration(
+            legacy_rows, scope_id="kitchen", model_key="room-v2"
+        )
+    )
+    legacy_queries = len(store.selects())
+
+    store.reset_trace()
+    optimized, optimized_ms = timed(
+        lambda: journal.report("presence_3s", "room-v2", "kitchen")
+    )
+    optimized_queries = len(store.selects())
+
+    store.reset_trace()
+    warm, warm_ms = timed(
+        lambda: journal.report("presence_3s", "room-v2", "kitchen"),
+        repeats=20,
+    )
+    warm_sql = [x.lower() for x in store.selects()]
+    source_scans = sum("from confidence_probability_episodes" in x for x in warm_sql)
+
+    scalar_keys = (
+        "effective_n", "brier_score", "mean_prediction",
+        "observed_frequency", "calibration_gap",
+    )
+    diffs = [
+        abs(float(legacy_report.get(k) or 0.0) - float(optimized.get(k) or 0.0))
+        for k in scalar_keys
+    ]
+    for left, right in zip(
+        legacy_report.get("reliability_bins") or (),
+        optimized.get("reliability_bins") or (),
+    ):
+        diffs.append(abs(float(left.get("weight") or 0.0) - float(right.get("weight") or 0.0)))
+        for key in ("mean_prediction", "observed_frequency"):
+            diffs.append(abs(float(left.get(key) or 0.0) - float(right.get(key) or 0.0)))
+
+    structural_equal = all(
+        legacy_report.get(k) == optimized.get(k)
+        for k in ("episodes", "sufficient_evidence", "overconfident")
+    )
+    return {
+        "episodes": count,
+        "legacy": {
+            "rows_materialized": len(legacy_rows),
+            "load_time_ms": legacy_load_ms[0],
+            "report_time_ms": legacy_report_ms[0],
+            "select_statements": legacy_queries,
+        },
+        "optimized_cold": {
+            "time_ms": optimized_ms[0],
+            "select_statements": optimized_queries,
+            "max_python_rows_materialized": diag.snapshot()["max_rows_materialized_per_batch"],
+        },
+        "optimized_warm_20_polls": {
+            "total_time_ms": sum(warm_ms),
+            "p95_time_ms": percentile(warm_ms, .95),
+            "source_history_scans": source_scans,
+        },
+        "structure_equal": structural_equal,
+        "max_absolute_metric_difference": max(diffs or [0.0]),
+        "warm_report_equal": warm == optimized,
     }
 
 
@@ -357,11 +473,12 @@ def main():
     before_rss = rss_mb()
     fast, context = fast_metric_benchmark(max(20, args.pairs))
     confidence_future = confidence_fixed_future_benchmark(max(20, args.pairs))
+    probability = probability_calibration_benchmark(max(20, args.pairs))
     teach = teach_benchmark(max(12, args.teach_sensors), max(12, min(256, args.teach_labels)))
     under_load = inference_under_load(context, max(24, args.teach_sensors), max(12, min(256, args.teach_labels)))
     after_rss = rss_mb()
     result = {
-        "benchmark": "HomeMind F22 history-cost benchmark v1",
+        "benchmark": "HomeMind F22 history-cost benchmark v2",
         "environment": {
             "platform": platform.platform(),
             "python": platform.python_version(),
@@ -380,6 +497,7 @@ def main():
         },
         "fast_metrics": fast,
         "confidence_fixed_future": confidence_future,
+        "probability_calibration": probability,
         "teach_supervised_scores": teach,
         "concurrent_load": under_load,
         "peak_rss_mb": after_rss,
@@ -396,9 +514,15 @@ def main():
     }
     print(json.dumps(result, indent=2, sort_keys=True))
     if (fast["max_absolute_metric_difference"] > 1e-9
+            or not confidence_future["selection_streaming"]["sufficient_evidence_equal"]
+            or confidence_future["selection_streaming"]["effective_n_difference"] > 1e-9
             or not confidence_future["reports_equal"]
             or not confidence_future["warm_report_equal"]
             or confidence_future["optimized_warm_20_polls"]["candidate_pair_full_scans"] != 0
+            or not probability["structure_equal"]
+            or probability["max_absolute_metric_difference"] > 1e-9
+            or not probability["warm_report_equal"]
+            or probability["optimized_warm_20_polls"]["source_history_scans"] != 0
             or not teach["scores_equal"]):
         return 2
     return 0
