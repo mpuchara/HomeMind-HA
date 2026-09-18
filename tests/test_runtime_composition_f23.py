@@ -13,7 +13,7 @@ SRC = ROOT / "adaptive_ai/src"
 
 
 def _runtime_overlay_map():
-    """Characterize install-time method/function mutation in the actual source tree."""
+    """Characterize install/bind/prepare-time method mutation in the actual source tree."""
     found = []
     for path in sorted(SRC.glob("*.py")):
         try:
@@ -23,7 +23,12 @@ def _runtime_overlay_map():
         for node in ast.walk(tree):
             if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 continue
-            if not (node.name == "install" or node.name.startswith("install_") or node.name.startswith("bind_")):
+            if not (
+                node.name == "install"
+                or node.name.startswith("install_")
+                or node.name.startswith("bind_")
+                or node.name.startswith("prepare_")
+            ):
                 continue
             for child in ast.walk(node):
                 targets = []
