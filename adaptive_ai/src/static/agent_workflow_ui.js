@@ -130,12 +130,13 @@
         }
         if(state.state==='failed'){
           clearRequest(ref);
-          throw Error(state.error||'Correct request failed');
+          const terminal=Error(state.error||'Correct request failed');terminal.workflowTerminal=true;throw terminal;
         }
         if(statusNode)statusNode.textContent=state.state==='processing'
           ?'Correct jest zapisany trwale · tworzę child Candidate…'
           :'Correct jest zapisany trwale · oczekuje na obsługę…';
       }catch(e){
+        if(e?.workflowTerminal)throw e;
         lastError=e;
         if(e?.status===404)missing+=1;
         const statusNode=dialog.querySelector('[data-status]');
