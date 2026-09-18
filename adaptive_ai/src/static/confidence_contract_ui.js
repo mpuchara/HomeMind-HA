@@ -112,6 +112,7 @@
   }
 
   async function refresh(){
+    if(window.__adaptiveAiRuntimeReady===false){decorateAll();return;}
     try{
       const [agents,candidates]=await Promise.all([
         fetch('api/agents',{cache:'no-store'}),
