@@ -377,7 +377,9 @@ def _candidate_pair_episode(manager, evaluator, root_id):
             desired_action=1.0 if light_need == "true" else 0.0,
             source_kind="episode_evaluator_independent",
             source_id=str(evaluated.get("episode_id") or ""),
-            dependency_cluster=f"episode:{evaluated.get('episode_id')}",
+            # No unique cluster is invented here. Without an explicit dependence key,
+            # Stage 13 falls back to the conservative scope/time bucket.
+            dependency_cluster=None,
         )
     return evaluated
 
