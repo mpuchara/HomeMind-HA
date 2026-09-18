@@ -41,6 +41,25 @@ assert core.runtime_available() is True
 assert core.startup_train_guard_contract['internal_runtime_available_semantics'] == 'preserved_for_extension_installers'
 ''')
 
+    def test_half_built_runtime_is_not_http_ready(self):
+        self.run_isolated(r'''
+import trial_queue_main as entry
+core = entry.core
+core.ENGINE = object()
+core.STORE = object()
+core.AUTOMATION_KNOWLEDGE = object()
+core.set_startup('building_runtime', 2, 'still building', ready=False)
+handler = core.Handler.__new__(core.Handler)
+sent = {}
+handler.send_json = lambda code, payload: sent.update(code=code, payload=payload)
+assert core.runtime_available() is True
+assert handler.require_runtime() is False
+assert sent['code'] == 503, sent
+assert sent['payload']['error'] == 'runtime_starting', sent
+core.set_startup('ready', 7, 'ready', ready=True)
+assert handler.require_runtime() is True
+''')
+
     def test_plain_train_claims_idle_slot_without_queue_worker_schedule(self):
         self.run_isolated(r'''
 import threading
