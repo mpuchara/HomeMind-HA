@@ -376,12 +376,14 @@ class ProductionShadow:
         confidence = float(rt.get("last_confidence") or 0.0)
         support = float(rt.get("historical_support") or 0.0)
         novelty = float(rt.get("context_novelty") or 1.0)
+        executor_shadow = str(intent.get("status") or "").upper() == "SHADOW"
         manual_action = _manual_hold_action(states, rt, ts)
         if manual_action is not None:
             self.action = manual_action
             return self.action, {
                 "abstained": True, "reason": "explicit_user_manual_hold",
                 "shadow_proxy": True, "manual_override_active": True,
+                "executor_shadow": executor_shadow,
                 "confidence": confidence, "support": support, "novelty": novelty,
                 "decision_state": decision_state,
                 "sensor_area": (self.runtime.registry.get(SENSORS[1]) or {}).get("area_id"),
@@ -393,7 +395,8 @@ class ProductionShadow:
         if allowed and prediction is not None:
             self.action = int(float(prediction) >= 0.5)
             return self.action, {
-                "abstained": False, "shadow_proxy": True, "confidence": confidence,
+                "abstained": False, "shadow_proxy": True, "executor_shadow": executor_shadow,
+                "confidence": confidence,
                 "support": support, "novelty": novelty, "decision_state": decision_state,
                 "sensor_area": (self.runtime.registry.get(SENSORS[1]) or {}).get("area_id"),
             }
@@ -401,6 +404,7 @@ class ProductionShadow:
         self.action = value
         return value, {
             **meta, "shadow_proxy": True, "fallback_used": True,
+            "executor_shadow": executor_shadow,
             "decision_state": decision_state, "confidence": confidence,
             "support": support, "novelty": novelty,
             "sensor_area": (self.runtime.registry.get(SENSORS[1]) or {}).get("area_id"),
@@ -511,6 +515,7 @@ def evaluate_controller(seed, controller, start_episode_no, base, replicas=1):
     delays = []; corrections = 0; episodes = 0; abstains = 0; fallback_uses = 0
     manual_events = 0; manual_window_ticks = 0; manual_violations = 0
     runtime_manual_hold_ticks = 0; moved_sensor_topology_ticks = 0
+    executor_shadow_ticks = 0
     episode_no = start_episode_no
     for scenario, replica in _phase_sequence(seed, "future", replicas):
         episode_no += 1; episodes += 1; action = 0; last_action = 0; last_change = -999
@@ -540,6 +545,7 @@ def evaluate_controller(seed, controller, start_episode_no, base, replicas=1):
             new_action = int(bool(new_action))
             abstains += int(bool(meta.get("abstained"))); fallback_uses += int(bool(meta.get("fallback_used")))
             runtime_manual_hold_ticks += int(bool(meta.get("manual_override_active")))
+            executor_shadow_ticks += int(bool(meta.get("executor_shadow")))
             if scenario == "sensor_moved" and meta.get("sensor_area") == "adjacent_room":
                 moved_sensor_topology_ticks += 1
             if scenario == "manual_change" and 25 <= tick < 36:
@@ -583,6 +589,7 @@ def evaluate_controller(seed, controller, start_episode_no, base, replicas=1):
         "manual_override_violations": manual_violations,
         "runtime_manual_hold_ticks": runtime_manual_hold_ticks,
         "moved_sensor_topology_ticks": moved_sensor_topology_ticks,
+        "executor_shadow_ticks": executor_shadow_ticks,
         "abstain_ticks": abstains, "fallback_ticks": fallback_uses,
         "episodes": episodes, "decision_calls": len(decision_ms), "inference_p95_ms_host": p95,
         "inference_mean_ms_host": statistics.mean(decision_ms) if decision_ms else 0.0,
@@ -683,6 +690,8 @@ def _criteria(aggregate, seed_runs):
          current["manual_override_violations"]["mean"] == 0.0),
         ("manual_override_enters_runtime_hold",
          current["runtime_manual_hold_ticks"]["mean"] > 0.0),
+        ("production_shadow_reaches_executor",
+         current["executor_shadow_ticks"]["mean"] > 0.0),
         ("moved_sensor_topology_reaches_runtime",
          current["moved_sensor_topology_ticks"]["mean"] > 0.0),
         ("all_seeds_have_future_control_qualification", all(bool(r["control_qualification"].get("passed")) for r in seed_runs)),
