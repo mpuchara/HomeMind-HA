@@ -645,6 +645,136 @@ def _selection_pair_rows(store, parent_gid, child_gid):
         ).fetchall()]
 
 
+def _selection_sufficiency_from_store(store, parent_gid, child_gid, *,
+                                     selection_target, min_per_action):
+    """Exact Stage-13 selection sufficiency with O(1) Python working memory.
+
+    This preserves independent_episode_rows + dependency_adjusted_weights semantics,
+    but lets SQLite stream/group the full edge instead of materializing every pair in
+    Python. Only the evidence-readiness quantities used by EvaluationEpochJournal.ensure
+    are returned; correctness/quality values do not participate in selection freezing.
+    """
+    recent = max(1, int(selection_target))
+    min_action = max(1, int(min_per_action))
+    with store.conn() as db:
+        db.create_function(
+            "_hm_f22_episode_weight", 2,
+            lambda idx, total: float(_episode_weight(
+                int(idx), int(total),
+                DEFAULT_HALF_LIFE_EPISODES, recent,
+            )),
+        )
+        row = db.execute(
+            """
+            WITH source AS (
+                SELECT rowid AS _rid,root_agent_id,prediction_event_id,
+                       outcome_ts,outcome,dependency_cluster,
+                       ROW_NUMBER() OVER (
+                         PARTITION BY CASE
+                           WHEN prediction_event_id IS NOT NULL AND prediction_event_id<>''
+                             THEN prediction_event_id
+                           ELSE 'compat:' || COALESCE(root_agent_id,'') || ':' ||
+                                printf('%.6f',outcome_ts)
+                         END
+                         ORDER BY outcome_ts,rowid
+                       ) AS duplicate_rank
+                FROM candidate_generation_pairs
+                WHERE parent_generation_id=? AND child_generation_id=?
+            ),
+            dedup AS (
+                SELECT * FROM source WHERE duplicate_rank=1
+            ),
+            ranked AS (
+                SELECT *,
+                       ROW_NUMBER() OVER (ORDER BY outcome_ts,_rid)-1 AS evidence_index,
+                       COUNT(*) OVER () AS evidence_total
+                FROM dedup
+            ),
+            weighted AS (
+                SELECT *,
+                       _hm_f22_episode_weight(evidence_index,evidence_total) AS raw_weight,
+                       CASE WHEN CAST(outcome AS REAL)>=0.5 THEN 1 ELSE 0 END AS action_value,
+                       CASE
+                         WHEN dependency_cluster IS NOT NULL AND dependency_cluster<>''
+                           THEN dependency_cluster
+                         ELSE COALESCE(root_agent_id,'global') || ':' ||
+                              CAST(outcome_ts / ? AS INTEGER)
+                       END AS cluster_key
+                FROM ranked
+            ),
+            clusters AS (
+                SELECT cluster_key,
+                       SUM(raw_weight) AS cluster_raw,
+                       SUM(CASE WHEN action_value=0 THEN raw_weight ELSE 0 END) AS off_raw,
+                       SUM(CASE WHEN action_value=1 THEN raw_weight ELSE 0 END) AS on_raw,
+                       SUM(CASE WHEN action_value=0 THEN 1 ELSE 0 END) AS off_episodes,
+                       SUM(CASE WHEN action_value=1 THEN 1 ELSE 0 END) AS on_episodes,
+                       MAX(outcome_ts) AS cluster_max_ts
+                FROM weighted
+                GROUP BY cluster_key
+            ),
+            scaled AS (
+                SELECT *,
+                       CASE WHEN cluster_raw>1.0 THEN 1.0/cluster_raw ELSE 1.0 END AS scale
+                FROM clusters
+            )
+            SELECT
+                COALESCE(SUM(off_episodes+on_episodes),0) AS episodes,
+                COALESCE(SUM(off_episodes),0) AS off_episodes,
+                COALESCE(SUM(on_episodes),0) AS on_episodes,
+                COALESCE(SUM(cluster_raw*scale),0.0) AS total_cluster_weight,
+                COALESCE(SUM((cluster_raw*scale)*(cluster_raw*scale)),0.0) AS total_cluster_sq,
+                COALESCE(SUM(off_raw*scale),0.0) AS off_cluster_weight,
+                COALESCE(SUM((off_raw*scale)*(off_raw*scale)),0.0) AS off_cluster_sq,
+                COALESCE(SUM(on_raw*scale),0.0) AS on_cluster_weight,
+                COALESCE(SUM((on_raw*scale)*(on_raw*scale)),0.0) AS on_cluster_sq,
+                MAX(cluster_max_ts) AS cutoff_ts
+            FROM scaled
+            """,
+            (str(parent_gid), str(child_gid), float(DEFAULT_DEPENDENCY_WINDOW_SECONDS)),
+        ).fetchone()
+    values = dict(row) if row else {}
+    def ess(total, squares):
+        total = max(0.0, float(total or 0.0))
+        squares = max(0.0, float(squares or 0.0))
+        return (total * total / squares) if squares > 1e-12 else 0.0
+    episodes = int(values.get("episodes") or 0)
+    off_episodes = int(values.get("off_episodes") or 0)
+    on_episodes = int(values.get("on_episodes") or 0)
+    total_eff = ess(values.get("total_cluster_weight"), values.get("total_cluster_sq"))
+    off_eff = ess(values.get("off_cluster_weight"), values.get("off_cluster_sq"))
+    on_eff = ess(values.get("on_cluster_weight"), values.get("on_cluster_sq"))
+    return {
+        "episodes": episodes,
+        "effective_n": total_eff,
+        "cutoff_ts": _finite(values.get("cutoff_ts")),
+        "per_action": {
+            "OFF": {
+                "episodes": off_episodes,
+                "effective_n": off_eff,
+                "sufficient_evidence": bool(
+                    off_episodes >= min_action and off_eff >= float(min_action)
+                ),
+            },
+            "ON": {
+                "episodes": on_episodes,
+                "effective_n": on_eff,
+                "sufficient_evidence": bool(
+                    on_episodes >= min_action and on_eff >= float(min_action)
+                ),
+            },
+        },
+        "sufficient_evidence": bool(
+            episodes >= recent
+            and total_eff >= float(recent)
+            and off_episodes >= min_action and off_eff >= float(min_action)
+            and on_episodes >= min_action and on_eff >= float(min_action)
+        ),
+        "query_mode": "sqlite_streamed_dependency_weight_aggregate",
+        "python_rows_materialized": 1,
+    }
+
+
 def _final_pair_rows(store, parent_gid, child_gid, cutoff, end_ts=None):
     """Read only independent-final-evaluation candidates, never screening history."""
     kinds = sorted(FINAL_CALIBRATION_EVIDENCE_KINDS)
@@ -961,16 +1091,28 @@ class EvaluationEpochJournal:
                 diagnostics.confidence_selection_cache_hits += 1
             return None
 
-        rows = _selection_pair_rows(self.store, parent_gid, child_gid)
-        if diagnostics is not None:
-            diagnostics.confidence_selection_scans += 1
-            diagnostics.record_batch(len(rows))
-        epoch = self.ensure(
-            parent_gid, child_gid, model_revision, backend_key, rows,
+        selection = _selection_sufficiency_from_store(
+            self.store, parent_gid, child_gid,
             selection_target=selection_target,
-            final_target=final_target,
             min_per_action=min_per_action,
         )
+        if diagnostics is not None:
+            diagnostics.confidence_selection_scans += 1
+            diagnostics.record_batch(selection.get("python_rows_materialized") or 0)
+        epoch = None
+        if selection["sufficient_evidence"] and selection.get("cutoff_ts") is not None:
+            now = time.time()
+            with self.store.lock, self.store.conn() as c:
+                c.execute(
+                    """INSERT OR IGNORE INTO confidence_evaluation_epochs
+                       (parent_generation_id,child_generation_id,model_revision,backend_key,
+                        contract_version,selection_cutoff_ts,final_target,min_per_action,created_ts)
+                       VALUES(?,?,?,?,?,?,?,?,?)""",
+                    (str(parent_gid), str(child_gid), evaluation_revision, str(backend_key),
+                     CONTRACT_VERSION, float(selection["cutoff_ts"]), int(final_target),
+                     int(min_per_action), now),
+                )
+            epoch = self.get(parent_gid, child_gid, evaluation_revision)
         with self.store.lock, self.store.conn() as c:
             c.execute(
                 """INSERT INTO confidence_selection_scan_cache
@@ -985,7 +1127,7 @@ class EvaluationEpochJournal:
                      sufficient=excluded.sufficient,scanned_rows=excluded.scanned_rows,
                      updated_ts=excluded.updated_ts""",
                 (str(parent_gid), str(child_gid), evaluation_revision, CONTRACT_VERSION,
-                 revision, params, 1 if epoch else 0, len(rows), time.time()),
+                 revision, params, 1 if epoch else 0, int(selection.get("episodes") or 0), time.time()),
             )
         return epoch
 
