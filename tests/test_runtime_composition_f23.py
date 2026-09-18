@@ -6,6 +6,7 @@ from pathlib import Path
 from support import ROOT
 from promotion_validation import merge_named_results, named_result, PromotionValidationService
 from runtime_http import ExplicitRouteRegistry, install_dispatch
+from runtime_composition import bind_final_composition
 
 
 SRC = ROOT / "adaptive_ai/src"
@@ -225,6 +226,28 @@ class ExplicitRouteRegistryTests(unittest.TestCase):
         fallback = Handler("/legacy")
         fallback.do_POST()
         self.assertEqual(fallback.calls, ["post-fallback"])
+
+
+class CompositionRootIsolationTests(unittest.TestCase):
+    def test_repeated_binding_is_idempotent_but_distinct_cores_stay_isolated(self):
+        class Core:
+            def __init__(self):
+                self.prepare_engine_extensions = lambda: None
+
+        class Runtime:
+            def __init__(self):
+                self.core = Core()
+
+        left, right = Runtime(), Runtime()
+        left_root = bind_final_composition(left)
+        self.assertIs(bind_final_composition(left), left_root)
+        right_root = bind_final_composition(right)
+
+        self.assertIsNot(left_root, right_root)
+        self.assertIs(left.core.RUNTIME_COMPOSITION_ROOT, left_root)
+        self.assertIs(right.core.RUNTIME_COMPOSITION_ROOT, right_root)
+        self.assertIs(left.core.prepare_engine_extensions.__self__, left_root)
+        self.assertIs(right.core.prepare_engine_extensions.__self__, right_root)
 
 
 class FinalRuntimeCharacterizationTests(unittest.TestCase):
