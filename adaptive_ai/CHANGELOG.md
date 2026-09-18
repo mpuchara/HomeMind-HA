@@ -5,7 +5,7 @@
 - Correct chart/point reads request the same cooperative priority window before touching SQLite; saving a Correct label gives its required context-signature reconstruction a 2.0 s interactive window as well.
 - Cache the moving 30-second Room Belief replay window across forward samples. Rewinds still rebuild causally, but normal chronological replay promotes old window rows into per-entity seeds instead of re-querying every seed at every feature timestamp.
 - Preserve observation-contract v12 semantics while advancing the moving Room Belief seed: late fast-journal observations remain gated by event and received time and can become the authoritative seed when their timestamp exits the active 30-second window.
-- Add recent 60-second p95 telemetry for inference and event→intent latency. The UI now prefers recent p95 so a one-off startup stall does not remain displayed for hundreds of later decisions.
+- Add recent 60-second p95 telemetry for inference and event→intent latency. The UI shows this current window only (or — when there are no recent samples), so a one-off startup stall does not remain displayed for hundreds of later decisions.
 - Preserve model, reward, feature-schema, qualification, provenance, Candidate, Correct/Teach, rollback and physical-control semantics. No retraining or raw-history deletion is required.
 
 # 0.14.26 — 2026-09-18
