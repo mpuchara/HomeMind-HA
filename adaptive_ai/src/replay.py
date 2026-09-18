@@ -161,11 +161,10 @@ class SQLiteTemporalTracker:
             str(row.get("id") or ""),
         )
 
-    def _fetch_rows(self, sql, params, checkpoint):
+    def _fetch_rows(self, sql, params):
         rows = [dict(row) for row in self.conn.execute(sql, params).fetchall()]
         self._metrics["sql_queries"] += 1
         self._metrics["rows_loaded"] += len(rows)
-        TRAINING_BUDGET.checkpoint(checkpoint)
         return rows
 
     def _base_bulk_before(self, entity_ids, ts, count):
@@ -187,9 +186,8 @@ class SQLiteTemporalTracker:
                 WHERE _hm_rank<=?
                 ORDER BY ts,id
             """
-            result.extend(self._fetch_rows(
-                sql, [*ids, float(ts), count], "temporal_before_query"
-            ))
+            result.extend(self._fetch_rows(sql, [*ids, float(ts), count]))
+            TRAINING_BUDGET.checkpoint("temporal_before_query")
         result.sort(key=self._row_order)
         return result
 
@@ -204,9 +202,8 @@ class SQLiteTemporalTracker:
                 f"FROM entity_history WHERE entity_id IN ({marks}) "
                 "AND ts>? AND ts<=? ORDER BY ts,id"
             )
-            result.extend(self._fetch_rows(
-                sql, [*ids, float(lo), float(hi)], "temporal_forward_query"
-            ))
+            result.extend(self._fetch_rows(sql, [*ids, float(lo), float(hi)]))
+            TRAINING_BUDGET.checkpoint("temporal_forward_query")
         result.sort(key=self._row_order)
         return result
 
