@@ -99,6 +99,8 @@ def install(core, manager):
         max_slice_seconds=max_slice_ms / 1000.0,
         max_sleep_seconds=max_sleep,
         thread_prefixes=("adaptive-ai-index-",),
+        clock=time.perf_counter,
+        sleeper=time.sleep,
     )
 
     # Store.archive_iter is a common streaming boundary for historical screening and
@@ -115,9 +117,17 @@ def install(core, manager):
             yield from iterator
             return
 
+        rows = 0
         for row in iterator:
             yield row
-            TRAINING_BUDGET.checkpoint("archive_iter_row")
+            rows += 1
+            # A cheap-row batch keeps the historical 0.14.17 average-duty behavior,
+            # while per-row checkpoints still catch an expensive row as soon as it
+            # returns from downstream processing.
+            if rows % batch_rows == 0:
+                TRAINING_BUDGET.checkpoint("archive_iter_batch", force=True)
+            else:
+                TRAINING_BUDGET.checkpoint("archive_iter_row")
         TRAINING_BUDGET.checkpoint("archive_iter_end", force=True)
 
     store.archive_iter = archive_iter_low_power
