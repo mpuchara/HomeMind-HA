@@ -1,6 +1,7 @@
 FAST_ACTION_INTERVAL_SECONDS = 0.25
 FAST_SETTLING_SECONDS = 0.10
 FAST_ACK_TIMEOUT_SECONDS = 2.0
+FAST_OFF_CONFIRMATION_SECONDS = 3.0
 
 
 def is_fast_target(agent):
@@ -10,6 +11,63 @@ def is_fast_target(agent):
     if domain == "light" and prop in ("power", "brightness_pct"):
         return True
     return domain in ("switch", "input_boolean") and prop == "power"
+
+
+def stabilize_fast_light_power_decision(agent, rt, current, desired, decision_source,
+                                        timestamp, confirmation_seconds=None):
+    """Suppress transient learned OFF flips without delaying explicit user intent.
+
+    Fast lighting is intentionally asymmetric: ON remains immediate, while only the
+    statistical historical-policy path must sustain an OFF recommendation before an
+    already-ON lamp is allowed to transition. Explicit instructions/preferences,
+    experiments and a physical user OFF bypass this filter. Runtime state is ephemeral;
+    no model/data schema is reinterpreted.
+    """
+    target = str((agent or {}).get("target_entity") or "")
+    prop = str((agent or {}).get("target_property") or "")
+    applies = target.split(".", 1)[0] == "light" and prop == "power"
+    statistical = str(decision_source or "") == "historical_policy_bootstrap"
+    try:
+        current_value = float(current)
+        desired_value = float(desired)
+    except (TypeError, ValueError):
+        rt.pop("fast_off_candidate_since", None)
+        rt["fast_off_confirmation_active"] = False
+        return desired, False
+
+    if not applies or not statistical or current_value < .5 or desired_value >= .5:
+        rt.pop("fast_off_candidate_since", None)
+        rt["fast_off_confirmation_active"] = False
+        return desired_value, False
+
+    required = FAST_OFF_CONFIRMATION_SECONDS if confirmation_seconds is None else max(
+        0.0, float(confirmation_seconds)
+    )
+    if required <= 0.0:
+        rt.pop("fast_off_candidate_since", None)
+        rt["fast_off_confirmation_active"] = False
+        return desired_value, False
+
+    now = float(timestamp)
+    since = rt.get("fast_off_candidate_since")
+    try:
+        since = float(since)
+    except (TypeError, ValueError):
+        since = now
+        rt["fast_off_candidate_since"] = since
+
+    elapsed = max(0.0, now - since)
+    if elapsed + 1e-9 < required:
+        rt["fast_off_confirmation_active"] = True
+        rt["fast_off_confirmation_elapsed"] = elapsed
+        rt["fast_off_confirmation_required"] = required
+        return current_value, True
+
+    rt.pop("fast_off_candidate_since", None)
+    rt["fast_off_confirmation_active"] = False
+    rt["fast_off_confirmation_elapsed"] = elapsed
+    rt["fast_off_confirmation_required"] = required
+    return desired_value, False
 
 
 def _positive_cap(value, maximum, fallback):
