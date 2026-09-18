@@ -44,6 +44,11 @@ class RealtimePreemptionTests(unittest.TestCase):
         self.assertIn('reason="ha_state_changed"', source)
         self.assertIn('reason="realtime_inference"', source)
 
+    def test_correct_label_context_reconstruction_has_interactive_priority(self):
+        source = (ROOT / "adaptive_ai" / "src" / "manual_feedback_workflow.py").read_text(encoding="utf-8")
+        self.assertIn('reason="correct_label"', source)
+        self.assertIn("TRAINING_BUDGET.request_interactive_window(2.0", source)
+
     def test_correct_history_requests_priority_and_never_calls_policy_history(self):
         source = (ROOT / "adaptive_ai" / "src" / "agent_correct_generation_history.py").read_text(encoding="utf-8")
         self.assertIn('reason="correct_history"', source)
