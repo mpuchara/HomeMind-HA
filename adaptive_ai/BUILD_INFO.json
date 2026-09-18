@@ -4,7 +4,7 @@
   "base_version": "0.14.23",
   "base_commit": "36c18d2e87fa27d8af1f7933d5ce7c3c10553f79",
   "release_status": "release-0.14.24-batched-replay-schema-aware-screening",
-  "tests_passed": 857,
+  "tests_passed": 858,
   "profile": "rpi4-low-memory-automatic-initial-training",
   "manual_agent_training": false,
   "max_concurrent_training_jobs": 1,
