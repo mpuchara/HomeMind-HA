@@ -4,7 +4,7 @@
   "base_version": "0.14.24",
   "base_commit": "2b052783cc82fc2b1181cdeeb18075a653887505",
   "release_status": "release-0.14.25-incremental-temporal-replay",
-  "tests_passed": 869,
+  "tests_passed": 870,
   "profile": "rpi4-low-memory-automatic-initial-training",
   "manual_agent_training": false,
   "max_concurrent_training_jobs": 1,
@@ -70,5 +70,6 @@
   "temporal_replay_observation_semantics": "feature-observation replay remains gated by both event_time and received_time; late packets become visible only after receipt and same-timestamp v12 merge behavior is preserved",
   "temporal_replay_scheduling": "onset/anticipation and dwell-persistence use separate cursors; requested timestamps are processed oldest-first inside each role to reduce non-semantic rewinds",
   "temporal_replay_diagnostics": "history status exposes SQL queries, rows loaded, forward advances, rewinds, bulk rebuilds, same-timestamp hits and estimated query reduction",
-  "stage3_performance_scope": "temporal reconstruction/query topology only; reward, policy/schema versions, qualification, provenance, feedback and physical-control semantics are unchanged"
+  "stage3_performance_scope": "temporal reconstruction/query topology only; reward, policy/schema versions, qualification, provenance, feedback and physical-control semantics are unchanged",
+  "temporal_replay_ordering": "archive-only replay preserves integer entity_history id ordering on equal timestamps; observation-contract replay preserves the established v12 event/received/string-id merge ordering"
 }
