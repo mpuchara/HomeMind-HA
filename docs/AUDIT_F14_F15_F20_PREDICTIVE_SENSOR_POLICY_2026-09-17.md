@@ -6,7 +6,7 @@ Date: 2026-09-17
 
 The packaged entrypoint remains:
 
-`run.sh -> preference_queue_main.py -> fast_queue_main.py -> queue_main.py`
+`run.sh -> trial_queue_main.py -> preference_queue_main.py -> fast_queue_main.py -> queue_main.py -> main.py`
 
 Stage 09 is composed in `fast_queue_main.prepare_engine_extensions()` after the existing
 Tournament metrics, promotion, primary protection and sensor-quality layers, and before
@@ -195,3 +195,26 @@ At no point does the Stage-09 candidate dispatch a physical command.
   introduce a second policy backend or a large neural network.
 - No real Home Assistant deployment or physical experiment is part of this audit task;
   validation uses deterministic tests/simulators and the existing CI image smoke test.
+
+## Hardening po Observation v12 / RoomBelief time-contract v2
+
+Stage 09 policy-candidate contract ma teraz wersję 2. Exact candidate jest używany dalej tylko wtedy,
+gdy jednocześnie zgadzają się:
+
+- champion `model_revision`,
+- Tournament `schema_revision`,
+- `policy_version`,
+- `feature_schema_version`,
+- docelowa lista encji,
+- `paired_future_policy_v2` data contract.
+
+Zmiana któregokolwiek z tych elementów unieważnia persisted candidate i wymusza utworzenie
+nowego challengera z aktualnego championa. Prediction/training przechowuje snapshot
+`candidate_data_version`; outcome z innej epoki nie może zostać dopisany do nowego candidatu.
+
+Migracja schematu nie zakłada już historycznych siedmiu slotów home intelligence. Szerokość
+ogona jest pobierana z aktywnego versioned schema export. Dzięki temu Observation v12 zachowuje
+również `home:known` podczas budowy i promocji exact candidatu.
+
+Stare `context_tournament_shadow` pozostają czytelne, ale candidate contract v1 jest traktowany
+jako nieważny dla promocji i jest leniwie odbudowywany. Nie ma reinterpretacji starych wektorów.
