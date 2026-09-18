@@ -513,6 +513,7 @@ def replay_history_for_features(seed, trained_policy_model, replicas=1):
 def evaluate_controller(seed, controller, start_episode_no, base, replicas=1):
     decision_ms = []; needed = 0; needed_on = 0; false_on = 0; premature = 0; chatter = 0
     delays = []; corrections = 0; correction_need = 0; correction_false_on = 0
+    correction_scenarios = {name: 0 for name in SCENARIOS}
     episodes = 0; abstains = 0; fallback_uses = 0
     manual_events = 0; manual_window_ticks = 0; manual_violations = 0
     runtime_manual_hold_ticks = 0; moved_sensor_topology_ticks = 0
@@ -572,6 +573,7 @@ def evaluate_controller(seed, controller, start_episode_no, base, replicas=1):
                 corrections += 1
                 correction_need += int(need and new_action == 0)
                 correction_false_on += int((not need) and new_action == 1)
+                correction_scenarios[scenario] += 1
                 correction_latched = True
             if new_action == int(need):
                 correction_latched = False
@@ -590,6 +592,7 @@ def evaluate_controller(seed, controller, start_episode_no, base, replicas=1):
         "corrections_per_100_episodes": 100.0 * corrections / max(1, episodes),
         "correction_need_events": correction_need,
         "correction_false_on_events": correction_false_on,
+        **{"correction_scenario_" + name: correction_scenarios[name] for name in SCENARIOS},
         "manual_override_events": manual_events,
         "manual_override_window_ticks": manual_window_ticks,
         "manual_override_violations": manual_violations,
