@@ -3,7 +3,7 @@ let lastHistory={};
 let lastAgents=[];
 let lastStatus={};
 let loadInFlight=false;
-window.__adaptiveAiRuntimeReady=false;
+window.__adaptiveAiRuntimeReady=null; // unknown until status answers; server gates half-built runtime
 const openAgentDetails=new Set(JSON.parse(localStorage.getItem('adaptiveAiOpenAgentDetails')||'[]').map(String));
 const $=s=>document.querySelector(s);
 const api=async(path,opts={})=>{const r=await fetch(path,{headers:{'Content-Type':'application/json'},...opts});if(!r.ok)throw new Error(await r.text());return r.status===204?null:r.json()};
