@@ -83,7 +83,7 @@ assert _budget_pause(2.0, 0.25, 2.0) == 2.0
     def test_release_defaults_and_schema_expose_training_budget_controls(self):
         config = (ROOT / "adaptive_ai/config.yaml").read_text(encoding="utf-8")
         settings = (ROOT / "adaptive_ai/src/settings.py").read_text(encoding="utf-8")
-        self.assertIn('version: "0.14.17"', config)
+        self.assertIn('version: "0.14.18"', config)
         self.assertIn("training_cpu_duty_cycle: 0.25", config)
         self.assertIn("training_archive_batch_rows: 16", config)
         self.assertIn("training_throttle_max_sleep_seconds: 2.0", config)
