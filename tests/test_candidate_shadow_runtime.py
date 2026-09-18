@@ -10,7 +10,7 @@ import storage
 from agent_candidates import AgentCandidateManager, ensure_tables, install_store_overlay
 from agent_candidate_conservative_correct import install as install_conservative_correct
 from agent_candidate_lineage import install as install_lineage
-from agent_candidate_shadow_runtime import install as install_shadow_runtime
+from agent_candidate_shadow_runtime import ensure_shadow_tables, install as install_shadow_runtime
 
 
 class FakeTeaching:
@@ -140,9 +140,14 @@ class CandidateShadowRuntimeTests(unittest.TestCase):
         self.temp.cleanup()
 
     @staticmethod
-    def _states(light="off", presence="on"):
+    def _states(light="off", presence="on", user_id=None, parent_id=None):
+        context = {}
+        if user_id is not None:
+            context["user_id"] = user_id
+        if parent_id is not None:
+            context["parent_id"] = parent_id
         return {
-            "light.shadow": {"entity_id": "light.shadow", "state": light, "attributes": {}, "context": {}},
+            "light.shadow": {"entity_id": "light.shadow", "state": light, "attributes": {}, "context": context},
             "binary_sensor.presence": {"entity_id": "binary_sensor.presence", "state": presence, "attributes": {}},
         }
 
@@ -176,6 +181,48 @@ class CandidateShadowRuntimeTests(unittest.TestCase):
         states = states or self._states()
         self.engine.runtime[self.root["id"]] = {"last_prediction": 0.0, "last_confidence": .82}
         return self.manager.after_live_process(self.root, states)
+
+    def test_pair_evidence_migration_is_additive_and_legacy_rows_are_not_promoted_to_calibration(self):
+        other = Path(self.temp.name) / 'legacy-pairs.db'
+        store = storage.Store(other)
+        with store.lock, store.conn() as db:
+            db.execute(
+                '''CREATE TABLE candidate_generation_pairs (
+                   root_agent_id TEXT NOT NULL, parent_generation_id TEXT NOT NULL,
+                   child_generation_id TEXT NOT NULL, prediction_event_id TEXT NOT NULL,
+                   prediction_ts REAL NOT NULL, outcome_ts REAL NOT NULL, outcome REAL NOT NULL,
+                   parent_prediction REAL NOT NULL, child_prediction REAL NOT NULL,
+                   parent_confidence REAL, child_confidence REAL,
+                   parent_correct INTEGER NOT NULL, child_correct INTEGER NOT NULL,
+                   paired_result TEXT NOT NULL, parent_lead_seconds REAL,
+                   child_lead_seconds REAL, lead_gain_seconds REAL,
+                   PRIMARY KEY(parent_generation_id,child_generation_id,outcome_ts))'''
+            )
+            db.execute(
+                '''INSERT INTO candidate_generation_pairs
+                   (root_agent_id,parent_generation_id,child_generation_id,prediction_event_id,
+                    prediction_ts,outcome_ts,outcome,parent_prediction,child_prediction,
+                    parent_confidence,child_confidence,parent_correct,child_correct,paired_result)
+                   VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)''',
+                ('a','g0','g1','ev',1,2,1,0,1,.8,.9,0,1,'child_win'),
+            )
+        ensure_shadow_tables(store)
+        with store.conn() as db:
+            row = dict(db.execute('SELECT * FROM candidate_generation_pairs').fetchone())
+            columns = {x['name'] for x in db.execute('PRAGMA table_info(candidate_generation_pairs)').fetchall()}
+        self.assertIn('evidence_kind', columns)
+        self.assertIn('calibration_eligible', columns)
+        self.assertIn('dependency_cluster', columns)
+        self.assertIn('calibration_outcome', columns)
+        self.assertIn('calibration_parent_correct', columns)
+        self.assertIn('calibration_child_correct', columns)
+        self.assertIn('calibration_source_id', columns)
+        self.assertEqual(row['paired_result'], 'child_win')
+        self.assertEqual(row['evidence_kind'], 'legacy_unclassified')
+        self.assertEqual(row['calibration_eligible'], 0)
+        self.assertIsNone(row['dependency_cluster'])
+        self.assertIsNone(row['calibration_outcome'])
+        self.assertIsNone(row['calibration_source_id'])
 
     def test_candidate_shadow_inference_runs_after_training_and_exposes_card_values(self):
         status, generation = self._g1(prediction=1.0, confidence=.93)
@@ -272,7 +319,47 @@ class CandidateShadowRuntimeTests(unittest.TestCase):
         self.assertEqual(pair["parent_correct"], 0)
         self.assertEqual(pair["child_correct"], 1)
         self.assertEqual(pair["paired_result"], "child_win")
+        self.assertEqual(pair["evidence_kind"], "external_target_transition")
+        self.assertEqual(pair["calibration_eligible"], 0)
+        self.assertIsNone(pair["dependency_cluster"])
+        self.assertIsNone(pair["calibration_outcome"])
+        self.assertIsNone(pair["calibration_source_id"])
         self.assertIsNotNone(pair["child_lead_seconds"])
+
+    def test_direct_user_transition_is_independent_calibration_evidence(self):
+        _, g1 = self._g1(prediction=1.0, confidence=.94)
+        self._run_shadow(self._states(light="off"))
+        self.manager.before_live_process(
+            self.root, self._states(light="on", user_id="user-123")
+        )
+        with self.store.conn() as db:
+            row = dict(db.execute(
+                "SELECT * FROM candidate_generation_pairs ORDER BY outcome_ts DESC LIMIT 1"
+            ).fetchone())
+        self.assertEqual(row["evidence_kind"], "manual_user_target_change")
+        self.assertEqual(row["calibration_eligible"], 1)
+        self.assertEqual(row["calibration_outcome"], 1.0)
+        self.assertEqual(row["calibration_parent_correct"], row["parent_correct"])
+        self.assertEqual(row["calibration_child_correct"], row["child_correct"])
+        self.assertEqual(row["calibration_source_id"], row["prediction_event_id"])
+        self.assertIn("manual:user-123:light.shadow:", row["dependency_cluster"])
+        self.assertEqual(
+            self.manager.generation_comparison(g1["generation_id"])["pairs"], 1
+        )
+
+    def test_user_context_with_parent_is_not_independent_calibration(self):
+        self._g1(prediction=1.0, confidence=.94)
+        self._run_shadow(self._states(light="off"))
+        self.manager.before_live_process(
+            self.root,
+            self._states(light="on", user_id="user-123", parent_id="automation-parent"),
+        )
+        with self.store.conn() as db:
+            row = dict(db.execute(
+                "SELECT * FROM candidate_generation_pairs ORDER BY outcome_ts DESC LIMIT 1"
+            ).fetchone())
+        self.assertEqual(row["evidence_kind"], "external_target_transition")
+        self.assertEqual(row["calibration_eligible"], 0)
 
     def test_restart_preserves_generation_history_and_paired_comparison(self):
         _, g1 = self._g1(prediction=1.0)

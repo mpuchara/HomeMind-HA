@@ -69,6 +69,12 @@ class RuntimeCompositionRoot:
                 "contract": getattr(manager, "promotion_validation_contract", None),
                 "source_of_truth": "promotion_validations[]",
             },
+            "confidence_calibration": {
+                "owner": "manager.confidence_contract+engine.confidence_calibration",
+                "contract": getattr(manager, "confidence_contract", None),
+                "final_gate": "fixed_future_independent_on_off_paired_non_regression",
+                "automation_replay": "screening_only_not_final_calibration_evidence",
+            },
             "execution": {"owner": "engine.executor", "contract": "ActionIntent_to_Executor_only_physical_dispatch"},
             "policy_backend_shadow": {
                 "owner": "engine.policy_backend_shadow",

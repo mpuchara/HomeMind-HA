@@ -71,6 +71,13 @@ def ensure_shadow_tables(store):
                 parent_correct INTEGER NOT NULL,
                 child_correct INTEGER NOT NULL,
                 paired_result TEXT NOT NULL,
+                evidence_kind TEXT NOT NULL DEFAULT 'legacy_unclassified',
+                calibration_eligible INTEGER NOT NULL DEFAULT 0,
+                dependency_cluster TEXT,
+                calibration_outcome REAL,
+                calibration_parent_correct INTEGER,
+                calibration_child_correct INTEGER,
+                calibration_source_id TEXT,
                 parent_lead_seconds REAL,
                 child_lead_seconds REAL,
                 lead_gain_seconds REAL,
@@ -89,6 +96,47 @@ def ensure_shadow_tables(store):
             );
             """
         )
+        columns = {row["name"] for row in c.execute("PRAGMA table_info(candidate_generation_pairs)").fetchall()}
+        if "evidence_kind" not in columns:
+            c.execute("ALTER TABLE candidate_generation_pairs ADD COLUMN evidence_kind TEXT NOT NULL DEFAULT 'legacy_unclassified'")
+        if "calibration_eligible" not in columns:
+            c.execute("ALTER TABLE candidate_generation_pairs ADD COLUMN calibration_eligible INTEGER NOT NULL DEFAULT 0")
+        if "dependency_cluster" not in columns:
+            c.execute("ALTER TABLE candidate_generation_pairs ADD COLUMN dependency_cluster TEXT")
+        if "calibration_outcome" not in columns:
+            c.execute("ALTER TABLE candidate_generation_pairs ADD COLUMN calibration_outcome REAL")
+        if "calibration_parent_correct" not in columns:
+            c.execute("ALTER TABLE candidate_generation_pairs ADD COLUMN calibration_parent_correct INTEGER")
+        if "calibration_child_correct" not in columns:
+            c.execute("ALTER TABLE candidate_generation_pairs ADD COLUMN calibration_child_correct INTEGER")
+        if "calibration_source_id" not in columns:
+            c.execute("ALTER TABLE candidate_generation_pairs ADD COLUMN calibration_source_id TEXT")
+
+
+def _transition_evidence(target_state, target_entity, outcome_ts):
+    """Classify whether a target transition is an independent preference label.
+
+    Own HomeMind commands are excluded before this helper is called. A direct HA user
+    action is an explicit future preference observation. Anonymous/external transitions
+    remain useful paired behaviour evidence, but they may be an automation and therefore
+    cannot calibrate comfort/preference claims.
+    """
+    context = dict((target_state or {}).get("context") or {})
+    user_id = context.get("user_id") if not context.get("parent_id") else None
+    if user_id:
+        return {
+            "evidence_kind": "manual_user_target_change",
+            "calibration_eligible": 1,
+            "dependency_cluster": (
+                f"manual:{user_id}:{target_entity}:"
+                f"{int(float(outcome_ts) // 30.0)}"
+            ),
+        }
+    return {
+        "evidence_kind": "external_target_transition",
+        "calibration_eligible": 0,
+        "dependency_cluster": None,
+    }
 
 
 def _generation(store, *, generation_id=None, agent_id=None):
@@ -557,6 +605,7 @@ def install(manager):
         outcome = 1.0 if str(agent.get("target_property")) == "power" and current >= .5 else 0.0 if str(agent.get("target_property")) == "power" else current
         p_ok = _same_value(agent, parent["desired"], outcome)
         c_ok = _same_value(agent, child["desired"], outcome)
+        evidence = _transition_evidence(target_state, agent.get("target_entity"), outcome_ts)
         if c_ok and not p_ok:
             paired_result = "child_win"
         elif p_ok and not c_ok:
@@ -580,13 +629,21 @@ def install(manager):
                 """INSERT OR IGNORE INTO candidate_generation_pairs
                    (root_agent_id,parent_generation_id,child_generation_id,prediction_event_id,prediction_ts,
                     outcome_ts,outcome,parent_prediction,child_prediction,parent_confidence,child_confidence,
-                    parent_correct,child_correct,paired_result,parent_lead_seconds,child_lead_seconds,lead_gain_seconds)
-                   VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                    parent_correct,child_correct,paired_result,evidence_kind,calibration_eligible,dependency_cluster,
+                    calibration_outcome,calibration_parent_correct,calibration_child_correct,calibration_source_id,
+                    parent_lead_seconds,child_lead_seconds,lead_gain_seconds)
+                   VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                 (
                     str(agent["id"]), edge["parent_generation_id"], edge["child_generation_id"],
                     bundle["event_id"], float(bundle["ts"]), float(outcome_ts), float(outcome),
                     float(parent["desired"]), float(child["desired"]), parent.get("confidence"), child.get("confidence"),
-                    int(p_ok), int(c_ok), paired_result, parent_lead, child_lead, lead_gain,
+                    int(p_ok), int(c_ok), paired_result, evidence["evidence_kind"],
+                    int(evidence["calibration_eligible"]), evidence["dependency_cluster"],
+                    float(outcome) if evidence["calibration_eligible"] else None,
+                    int(p_ok) if evidence["calibration_eligible"] else None,
+                    int(c_ok) if evidence["calibration_eligible"] else None,
+                    (bundle["event_id"] if evidence["calibration_eligible"] else None),
+                    parent_lead, child_lead, lead_gain,
                 ),
             )
             inserted = c.total_changes > before

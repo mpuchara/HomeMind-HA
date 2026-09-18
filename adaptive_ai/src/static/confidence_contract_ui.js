@@ -84,17 +84,29 @@
     const alignment=c?.preference_alignment_score??m?.preference_alignment_score??m?.preference_confidence;
     ensureMetric(details,'preference-alignment','Preference alignment',pct(alignment),'selection metric · not a probability');
     if(final&&final.status){
-      const q=final.accuracy==null?'—':`${pct(final.accuracy)} [${pct(final.quality_lower_bound)}, ${pct(final.quality_upper_bound)}]`;
-      const ev=`n_eff ${n1(final.effective_n)} · ${final.status}`;
+      const child=final.child||final;
+      const parent=final.parent||{};
+      const delta=final.paired_delta||{};
+      const q=child.accuracy==null?'—':`${pct(child.accuracy)} [${pct(child.quality_lower_bound)}, ${pct(child.quality_upper_bound)}]`;
+      const ev=`n_eff ${n1(child.effective_n)} · ${final.status}`;
       ensureMetric(details,'final-quality','Final empirical quality',q,ev);
-      const off=final.per_action?.OFF, on=final.per_action?.ON;
+      ensureMetric(details,'parent-quality','Parent future quality',
+        parent.accuracy==null?'—':`${pct(parent.accuracy)} [${pct(parent.quality_lower_bound)}, ${pct(parent.quality_upper_bound)}]`,
+        'same locked independent future episodes');
+      ensureMetric(details,'paired-quality-delta','Paired quality delta',
+        delta.mean_delta==null?'—':`${signed(delta.mean_delta)} [${signed(delta.lower)}, ${signed(delta.upper)}]`,
+        `child − parent · allowed regression ${pct(final.max_allowed_regression)}`);
+      const off=child.per_action?.OFF, on=child.per_action?.ON;
+      const offDelta=final.per_action_delta?.OFF, onDelta=final.per_action_delta?.ON;
       ensureMetric(details,'off-safety','OFF future safety',off?.accuracy==null?'—':`${pct(off.accuracy)} · n_eff ${n1(off.effective_n)}`,
-        off?.sufficient_evidence?'independent evidence ready':'insufficient independent OFF evidence');
+        offDelta?.non_regression_passed?'independent OFF evidence + paired non-regression':'insufficient/failed independent OFF evidence');
       ensureMetric(details,'on-safety','ON future safety',on?.accuracy==null?'—':`${pct(on.accuracy)} · n_eff ${n1(on.effective_n)}`,
-        on?.sufficient_evidence?'independent evidence ready':'insufficient independent ON evidence');
-      const gate=final.sufficient_evidence?'future test locked':'Shadow / fallback';
-      ensureMetric(minimal,'final-eval','Independent final evaluation',gate,`fixed target ${final.final_target??cc.final_min_independent_episodes??'—'}`);
-      if(final.decision_strength_overstated){
+        onDelta?.non_regression_passed?'independent ON evidence + paired non-regression':'insufficient/failed independent ON evidence');
+      const gate=final.promotion_quality_passed?'future holdout passed':
+        final.sufficient_evidence?'future holdout failed quality':'Shadow / fallback';
+      ensureMetric(minimal,'final-eval','Independent final evaluation',gate,
+        `fixed target ${final.final_target??cc.final_min_independent_episodes??'—'} · automation replay is screening only`);
+      if(child.decision_strength_overstated){
         ensureMetric(details,'overstated-strength','Decision-strength warning','overstated','empirical future quality is materially below the decision-strength score');
       }
     }
