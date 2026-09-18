@@ -235,9 +235,13 @@ def install(runtime):
 
     core.initialize_runtime = initialize_runtime
     core._startup_train_guard_installed = True
+    # Keep the historical readiness contract key stable: it describes construction order,
+    # not the new per-job scheduling policy.  Older diagnostics/tests look for the phrase
+    # "FIFO training queue ready before background discovery" as the 0.14.14 marker.
     core.startup_train_guard_contract = {
         "status_until_ready": "lightweight_only",
-        "training_queue_order": "interactive_then_user_then_initial_fifo_within_priority",
+        "training_queue_order": "before_history_discovery",
+        "training_queue_priority_order": "interactive_then_user_then_initial_fifo_within_priority",
         "explicit_train_idle_slot": "immediate_admission_attempt",
         "initial_auto_agent_training": "first_model_in_place_via_single_heavy_job_fifo",
         "candidate_before_base_model": "forbidden_by_candidate_manager",
