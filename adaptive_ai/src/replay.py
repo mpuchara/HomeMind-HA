@@ -242,7 +242,11 @@ class SQLiteTemporalTracker:
             self._watched_rows[eid] = compact
             dq = deque(maxlen=self.HISTORY_SAMPLES)
             for row in compact:
-                dq.append((float(row["ts"]), archived_state(row)))
+                sample = (float(row["ts"]), archived_state(row))
+                if dq and abs(float(dq[-1][0]) - sample[0]) < 1e-6:
+                    dq[-1] = sample
+                else:
+                    dq.append(sample)
             self.history.samples[eid] = dq
             self.state_map[eid] = dq[-1][1]
         else:
