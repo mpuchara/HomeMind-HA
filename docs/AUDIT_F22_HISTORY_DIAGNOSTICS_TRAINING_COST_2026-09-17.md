@@ -9,7 +9,7 @@ This stage reduces computation that previously grew with all retained Candidate/
 
 The shipped execution path remains:
 
-`run.sh -> trial_queue_main.py -> RuntimeCompositionRoot -> preference/fast/queue stack -> Stage 11/13/14/15/16 -> Stage 17 -> workers`
+`run.sh -> trial_queue_main.py -> preference_queue_main.py -> fast_queue_main.py -> queue_main.py -> main.py -> RuntimeCompositionRoot -> Stage 11/13/14/15/16/17 -> workers`
 
 `ActionIntent -> Executor` remains the only AI physical dispatch boundary. Stage 17 has no HA service path.
 
@@ -236,3 +236,86 @@ Stage 17 is a performance layer installed explicitly by the runtime composition 
 The exceptional late/out-of-order edge intentionally prioritizes exact legacy semantics over incremental speed. It performs an exact recomputation only when relevant evidence/configuration changes and persists the result for subsequent status polls.
 
 The benchmark is synthetic. It validates scaling shape, same-data equivalence and UI/inference responsiveness under a controlled workload; it does not substitute for a multi-day Home Assistant deployment or a real Raspberry Pi measurement.
+
+
+## Current-stack hardening after Stage 13 v2
+
+A later review on the Stage-16-v2 stack found a new F22 regression introduced after the original Stage-17 work. Stage 13 v2 added fixed-future confidence/promotion metrics after PR #76, and its status decorator still loaded the complete Candidate pair edge on every request:
+
+`_decorate_summary -> _pair_rows -> EvaluationEpochJournal.ensure/final_report`.
+
+That meant the old `_fast_metrics` path was bounded, while the newer authoritative promotion metric could again grow with all retained Candidate history.
+
+Stage-17 contract v2 closes that gap without changing evidence semantics.
+
+### Selection evidence
+
+Before a fixed evaluation epoch exists, Stage 13 still computes the exact existing selection report. A durable per-edge revision and `confidence_selection_scan_cache` now make the computation change-driven:
+
+- unchanged insufficient evidence returns the cached result without reading Candidate pairs;
+- a new pair increments the edge revision through an SQLite trigger;
+- only then is the exact selection report recomputed;
+- once the epoch is frozen, selection history is never scanned again for that evaluation revision.
+
+The first status after upgrading an old edge may perform one exact source scan at revision 0. No startup migration scans all edges.
+
+### Fixed future holdout
+
+The final report no longer loads screening/automation history. Its source query is constrained to:
+
+- the exact parent/child generation edge;
+- rows after `selection_cutoff_ts`;
+- `calibration_eligible=1`;
+- declared Stage-13 independent evidence kinds;
+- non-null calibration outcome and paired correctness.
+
+A durable `calibration_revision` invalidates the collecting report only when relevant independent evidence changes. Ordinary automation transitions do not invalidate this cache.
+
+Once `final_end_ts` is frozen, the report is immutable. Later labels are outside the declared test and therefore neither change nor rescan the completed holdout. This strengthens the existing optional-stopping protection while reducing status cost.
+
+The legacy prefix search for the first sufficient final window now starts at `final_target`; a shorter prefix cannot satisfy the declared minimum, so the skipped prefixes were provably unnecessary.
+
+### Probability calibration
+
+`ProbabilityCalibrationJournal.report()` previously reloaded every probability episode in a scope. It now has a durable scope revision and report cache. The supported `record()` path increments the revision exactly once for a new stable episode id; duplicate records remain idempotent. Unchanged UI/report reads do not scan calibration history.
+
+### Additive persistence in v2
+
+Additional derived-only state:
+
+- `confidence_pair_revisions`;
+- `confidence_selection_scan_cache`;
+- `confidence_final_report_cache`;
+- `confidence_probability_revisions`;
+- `confidence_probability_report_cache`;
+- index `idx_confidence_pairs_final_window`;
+- two SQLite triggers that increment pair-edge revisions on insert/update.
+
+All of these are replaceable accelerators. Raw Candidate pairs, probability episodes, TrialRecords, manual feedback, Teach labels, EpisodeEvaluator rows and rollback state remain authoritative and are not deleted or reinterpreted.
+
+The pair index/triggers are installed lazily only after the Candidate pair schema, including Stage-13 calibration columns, exists. Probability calibration can therefore initialize before Candidate composition without imposing module-order coupling.
+
+### v2 acceptance invariants
+
+New tests require that:
+
+- an unchanged insufficient selection result does not rescan Candidate pairs;
+- optimized fixed-future output exactly matches the legacy report on the same rows;
+- twenty warm final-status polls perform zero Candidate-pair full scans;
+- growth of unrelated automation-transition history does not invalidate the final report;
+- a locked final holdout remains cacheable even when later independent labels arrive;
+- the durable cache survives a new journal/runtime instance;
+- unchanged probability calibration reports do not rescan source episodes.
+
+The original Stage-17 equivalence tests for fast metrics, batched Teach scoring, summary cursors, active-anchor retention and queue backpressure remain unchanged.
+
+### Benchmark extension
+
+`tools/benchmark_history_costs.py` now also measures the current Stage-13 fixed-future path. It reports:
+
+- legacy rows materialized by full `_pair_rows`;
+- optimized cold query count and maximum materialized final batch;
+- twenty warm status polls and the number of Candidate-pair full scans;
+- exact same-data report equality.
+
+The benchmark still reports its actual platform and only labels results as Raspberry Pi if `/proc/device-tree/model` identifies Pi hardware. Hosted CI/desktop timings are scaling evidence, not Raspberry Pi measurements.
