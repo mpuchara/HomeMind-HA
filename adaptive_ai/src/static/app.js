@@ -3,6 +3,7 @@ let lastHistory={};
 let lastAgents=[];
 let lastStatus={};
 let loadInFlight=false;
+window.__adaptiveAiRuntimeReady=false;
 const openAgentDetails=new Set(JSON.parse(localStorage.getItem('adaptiveAiOpenAgentDetails')||'[]').map(String));
 const $=s=>document.querySelector(s);
 const api=async(path,opts={})=>{const r=await fetch(path,{headers:{'Content-Type':'application/json'},...opts});if(!r.ok)throw new Error(await r.text());return r.status===204?null:r.json()};
@@ -25,12 +26,17 @@ async function load(){
   let status;
   try{
     status=await api('api/status');lastStatus=status;
+    window.__adaptiveAiRuntimeReady=Boolean(status.startup?.ready);
     const c=$('#connection');
     const rt=status.realtime||{};
     c.textContent=status.ha_connected?`HA connected · ${status.state_count} entities${rt.connected?' · realtime':''}`:`HA disconnected · ${status.ha_error||status.engine_error||'unknown error'}`;
     c.className='pill'+(status.ha_connected?' good':'');
     lastHistory=status.history||{};renderOverview(status);renderHistory(lastHistory,status);renderHome(status);
-  }catch(e){$('#connection').textContent='App API error: '+e.message;return;}
+    // HTTP is intentionally available before runtime composition. Do not fan out to
+    // /agents, /events or live card reads until Engine.start() and the final adapters are
+    // actually ready; otherwise a slow migration looks like missing Shadow predictions.
+    if(!window.__adaptiveAiRuntimeReady)return;
+  }catch(e){window.__adaptiveAiRuntimeReady=false;$('#connection').textContent='App API error: '+e.message;return;}
   try{
     const [agents,events]=await Promise.all([api('api/agents'),api('api/events?limit=60')]);
     lastAgents=agents;renderAgents();renderEvents(events);
