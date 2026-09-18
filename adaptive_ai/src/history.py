@@ -273,14 +273,18 @@ class HistoryManager(threading.Thread):
                     {"start_ts": start_ts, "cursor_ts": cursor, "end_ts": target_end})
 
         if cursor >= target_end - 0.5:
-            # Nothing new to index. Preserve PAUSED unless a prior completed score already passes.
+            # Nothing new to index. A completed persisted model returns to Shadow even
+            # when it is not Control-qualified; PAUSED training_state still blocks Control.
             score = float(agent.get("benchmark_score") or 0.0)
             threshold = float(OPTIONS.get("candidate_benchmark_threshold", 0.78))
             state = "qualified" if score > threshold else "paused"
-            STORE.set_training_state(agent_id, state, score=agent.get("benchmark_score"),
-                                     samples=agent.get("benchmark_samples") or 0, source=agent.get("benchmark_source"),
-                                     detail=agent.get("benchmark_detail") or {})
+            STORE.set_training_state(
+                agent_id, state, score=agent.get("benchmark_score"),
+                samples=agent.get("benchmark_samples") or 0, source=agent.get("benchmark_source"),
+                detail=agent.get("benchmark_detail") or {}, shadow_after_completion=True,
+            )
             STORE.set_training_progress(agent_id, start_ts, target_end, target_end)
+            self.engine.wake_event.set()
             return
 
         chunk_s = max(6.0, float(OPTIONS.get("agent_training_chunk_hours", 48))) * 3600.0
@@ -1355,24 +1359,32 @@ class HistoryManager(threading.Thread):
                 STORE.set_training_state(
                     agent["id"], state, score=score, samples=samples,
                     source="recorded-behaviour", detail=detail, demote_control=True,
+                    shadow_after_completion=True,
                 )
                 STORE.set_training_progress(agent["id"], float(start_ts), float(end_ts), float(end_ts))
+                detail["mode_after_training"] = "shadow"
+                detail["control_qualified"] = bool(passed)
                 if passed:
                     qualified_count += 1
                 else:
                     paused_count += 1
-                    # A failed full-history benchmark pauses all live inference/training CPU.
-                    self.engine.runtime.pop(agent["id"], None)
                 STORE.event(
                     agent["id"], "info" if passed else "warning",
-                    "candidate_qualified" if passed else "candidate_paused",
-                    f"Behaviour benchmark {score:.1%} over {samples} held-out transition(s): {reason}",
+                    "candidate_qualified" if passed else "candidate_shadow_observing",
+                    (
+                        f"Behaviour benchmark {score:.1%} over {samples} held-out transition(s): {reason}. "
+                        + ("Control qualification passed; Shadow is active."
+                           if passed else "Control remains blocked; Shadow stays active to collect future evidence.")
+                    ),
                     detail,
                 )
             qualification_summary = {
                 "qualified": qualified_count, "paused": paused_count,
+                "shadow_active": qualified_count + paused_count,
                 "threshold": threshold, "minimum_samples": min_samples,
             }
+            if qualified_count or paused_count:
+                self.engine.wake_event.set()
             if agent_ids is None:
                 STORE.meta_set("candidate_qualification_complete", "1")
 
