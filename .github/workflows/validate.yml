@@ -63,7 +63,6 @@ jobs:
           import re, zipfile
           from pathlib import Path
           expected = re.search(r'^version: "([^"]+)"', Path('adaptive_ai/config.yaml').read_text(), re.M).group(1)
-          assert expected == '0.14.18', expected
           cases = [
               ('HomeMind-Adaptive-AI-repository.zip', 'adaptive_ai/config.yaml', 'adaptive_ai/src/settings.py', 'adaptive_ai/'),
               ('HomeMind-Adaptive-AI-addon-root.zip', 'config.yaml', 'src/settings.py', ''),

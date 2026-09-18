@@ -60,6 +60,10 @@ class CandidateLifecycleHardeningTests(unittest.TestCase):
             "exploration_step": 1,
             "input_entities": ["binary_sensor.bathroom_presence"],
         })
+        self.store.save_model(
+            self.parent["id"],
+            {"version": 10, "schema": {"version": 11, "entities": []}, "marker": "baseline"},
+        )
         self.executor = FakeExecutor()
         self.engine = SimpleNamespace(
             teaching=FakeTeaching(), rl_teaching=None, models={}, runtime={},
@@ -166,10 +170,12 @@ class CandidateLifecycleHardeningTests(unittest.TestCase):
         self.assertEqual([float(row["desired"]) for row in rows], [1.0])
 
     def test_discard_request_finishes_without_candidate_model(self):
-        # Parent has no persisted model, so the freshly-created surrogate also has none.
-        # Discard must still delete it without trying to validate or rebuild the model.
+        # A post-baseline Candidate may still lose its own checkpoint (crash/corruption).
+        # Discard must delete it without trying to validate or rebuild the missing child model.
         status = self.manager.enqueue(self.parent["id"], "teach")
         candidate_id = status["candidate_id"]
+        with self.store.lock, self.store.conn() as c:
+            c.execute("DELETE FROM rl_models WHERE agent_id=?", (candidate_id,))
         self.assertIsNone(self.store.get_model(candidate_id))
         with self.store.lock, self.store.conn() as c:
             c.execute(

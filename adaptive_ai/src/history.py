@@ -598,7 +598,7 @@ class HistoryManager(threading.Thread):
         self.set_status(
             "manual_ready", 0.10,
             "Low-memory discovery: refreshing controllable-device history only",
-            phase_detail="Agent training is manual; whole-home context stays idle",
+            phase_detail="Cold-start agents train automatically through the single-job FIFO; whole-home context stays idle",
         )
         if controllable and end_ts > refresh_start:
             self._import_section(
@@ -616,12 +616,16 @@ class HistoryManager(threading.Thread):
         STORE.meta_set("training_revision", TRAINING_REVISION)
         self.last_run = now_ts()
         q = len(STORE.qualified_agents())
-        waiting = len([a for a in STORE.list_agents() if a.get("enabled") and a.get("training_state") == "paused"])
+        waiting = len([
+            a for a in STORE.list_agents()
+            if a.get("enabled") and a.get("training_state") in ("waiting", "paused", "needs_retrain")
+        ])
         self.set_status(
             "ready", 1.0,
-            f"Low-memory mode ready · {q} trained / {waiting} waiting for manual training",
+            f"Low-memory mode ready · {q} trained / {waiting} waiting or queued",
             stage_eta_seconds=0, work_done=0, work_total=0, work_unit="agents",
-            eta_source="idle", phase_detail="Press Train on one agent; only one training job can run at a time",
+            eta_source="idle",
+            phase_detail="Initial training is queued automatically; only one heavy training job runs at a time",
         )
 
     def bootstrap_and_train(self):

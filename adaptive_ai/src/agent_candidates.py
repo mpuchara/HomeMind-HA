@@ -291,10 +291,37 @@ class AgentCandidateManager(threading.Thread):
         self.engine.runtime.pop(candidate["id"], None)
         return self._candidate_row(parent["id"])
 
+    def _queue_initial_parent_training(self, parent, reason):
+        """Cold start belongs to the Live/base agent, never to a Candidate generation."""
+        queue = self._queue()
+        if queue is None:
+            raise ValueError("initial agent training queue is not ready")
+        queued = queue.enqueue(parent["id"], rebuild=True, reason="initial_training")
+        self.store.event(
+            parent["id"], "info", "agent_initial_training_required",
+            "Feedback arrived before the first base policy existed; training the Live agent in place",
+            {"reason": str(reason), "training_queue": queued},
+        )
+        return {
+            "state": "initial_training",
+            "parent_agent_id": parent["id"],
+            "candidate_id": None,
+            "generation": self._generation(parent["id"]),
+            "reason": str(reason),
+            "promotable": False,
+            "queue": queued,
+            "training_queue": queued,
+        }
+
     def enqueue(self, parent_id, reason="feedback"):
         parent = self.store.get_agent_config(str(parent_id))
         if not parent or is_candidate(self.store, parent_id):
             raise ValueError("live agent not found")
+        # A Candidate is a proposed *next* generation. Creating one before Gen-0 has
+        # produced any persisted model leaves the actual agent forever untrained and
+        # moves all learning into a hidden surrogate. Keep cold start on the parent.
+        if self.store.get_model(parent["id"]) is None:
+            return self._queue_initial_parent_training(parent, reason)
         with self.lock:
             row = self._candidate_row(parent_id)
             if not row:

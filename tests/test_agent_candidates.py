@@ -69,6 +69,10 @@ class CandidateTests(unittest.TestCase):
             "exploration_step": 1,
             "input_entities": ["binary_sensor.bathroom_presence"],
         })
+        self.store.save_model(
+            self.parent["id"],
+            {"version": 10, "schema": {"version": 11, "entities": []}, "marker": "baseline"},
+        )
         self.executor = FakeExecutor()
         self.engine = SimpleNamespace(
             teaching=FakeTeaching(),

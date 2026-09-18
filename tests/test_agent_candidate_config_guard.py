@@ -57,6 +57,10 @@ class CandidateConfigGuardTests(unittest.TestCase):
             "exploration_step": 1,
             "input_entities": ["binary_sensor.hall_presence"],
         })
+        self.store.save_model(
+            self.parent["id"],
+            {"version": 10, "schema": {"version": 11, "entities": []}, "marker": "live"},
+        )
         self.engine = SimpleNamespace(
             teaching=FakeTeaching(), rl_teaching=None, models={}, runtime={},
             executor=FakeExecutor(), temporal_history=None,
@@ -75,7 +79,6 @@ class CandidateConfigGuardTests(unittest.TestCase):
     def _ready_candidate(self):
         status = self.manager.enqueue(self.parent["id"], "teach")
         candidate_id = status["candidate_id"]
-        self.store.save_model(self.parent["id"], {"version": 10, "schema": {"version": 11, "entities": []}, "marker": "live"})
         self.store.save_model(candidate_id, {"version": 10, "schema": {"version": 11, "entities": []}, "marker": "candidate"})
         self.store.set_training_state(candidate_id, "qualified", score=.95, samples=80, source="test", detail={})
         comparison = {
