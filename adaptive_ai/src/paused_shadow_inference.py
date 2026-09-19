@@ -62,6 +62,8 @@ def install(core):
     engine.inference_eligible = lambda agent: inference_eligible(agent, store, engine)
     if hasattr(engine, "agent_index_at"):
         engine.agent_index_at = 0.0
+    if hasattr(engine, "agent_index_revision"):
+        engine.agent_index_revision = -1
 
     def runtime_for(agent):
         payload = original_runtime_for(agent)
