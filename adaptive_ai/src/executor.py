@@ -96,10 +96,61 @@ class Executor:
         return result
 
     def submit(self, intent, features=None, action_index=None):
-        # target_lock normalizes entity -> logical device, so two agents or two entity ids
-        # that address one physical lamp serialize before validation/dispatch.
+        # Shadow is observation-only. Use the scheduler's in-memory qualified-agent
+        # snapshot and keep the complete durable validation path exclusively for Control.
+        # A stale snapshot can at worst emit one extra SHADOW result; it can never cause a
+        # physical HA call. Control always enters _submit() and rereads durable config.
+        cached = None
+        with self.engine.lock:
+            cached = dict(getattr(self.engine, "agent_configs", {}).get(intent.agent_id) or {})
+        if cached.get("mode") == "shadow":
+            return self._submit_shadow(intent, cached)
+
+        # target_lock normalizes entity -> logical device, so two Control agents or two
+        # entity ids that address one physical lamp serialize before validation/dispatch.
         with self.target_lock(intent.target_entity):
             return self._submit(intent, features or {}, action_index)
+
+    def _submit_shadow(self, intent, agent):
+        engine = self.engine
+        rt = engine.runtime.setdefault(intent.agent_id, {})
+        timestamp = now_ts()
+        if intent.expired(timestamp):
+            return self._result(intent, rt, "EXPIRED", "expired: intent TTL exceeded")
+        if (
+            not agent.get("enabled")
+            or agent.get("training_state") != "qualified"
+            or agent.get("mode") != "shadow"
+        ):
+            return self._result(intent, rt, "REJECTED", "paused: stale Shadow routing snapshot", "paused")
+        if (
+            agent.get("target_entity") != intent.target_entity
+            or agent.get("target_property") != intent.target_property
+        ):
+            return self._result(intent, rt, "REJECTED", "target: intent target does not match agent")
+        model = engine.models.get(intent.agent_id)
+        if (
+            not model
+            or model.VERSION != intent.policy_version
+            or model.model_revision != intent.model_revision
+            or intent.policy_head not in model.heads
+        ):
+            return self._result(intent, rt, "REJECTED", "model: stale policy version or revision")
+        with engine.lock:
+            state = engine.state_map.get(intent.target_entity)
+            if engine.entity_revisions.get(intent.target_entity, 0) != intent.target_revision:
+                return self._result(intent, rt, "REJECTED", "state: target changed since prediction", "waiting")
+            if any(
+                engine.entity_revisions.get(eid, 0) != rev
+                for eid, rev in intent.context_dependencies
+            ):
+                return self._result(intent, rt, "REJECTED", "context: selected input changed since prediction", "waiting")
+            if engine.context.home.revision != intent.context_revision:
+                return self._result(intent, rt, "REJECTED", "context: home state changed since prediction", "waiting")
+        current = target_value(state, intent.target_property)
+        if current is None or not math.isfinite(current):
+            return self._result(intent, rt, "REJECTED", "unavailable: target state/value unavailable")
+        return self._result(intent, rt, "SHADOW", intent.reason, "shadow")
 
     def _submit(self, intent, features, action_index):
         engine = self.engine
