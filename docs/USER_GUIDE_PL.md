@@ -131,3 +131,7 @@ python tools/run_product_runtime_benchmark.py --seeds 11,23,37 --replicas 1
 Executable instaluje finalny `RuntimeCompositionRoot` przed treningiem i uruchamia każdy seed w świeżym procesie. Porównywane są stała automatyzacja, bieżący runtime, full-ridge Shadow oraz ostrożny fallback na oddzielnych train/validation/future danych. Wynik zawiera średnie, 95% przedziały niepewności i jawną listę `unmet_criteria`.
 
 Benchmark nie promuje modelu i nie obniża progów. Brak poprawy lub niespełnione kryteria są prawidłowym wynikiem. Wynik syntetyczny nie zastępuje testu na realnym Home Assistant ani fizycznego M&V. W CI raport z trzech seedów jest zachowywany jako artefakt `product-benchmark-f24-py311`; zawiera metryki, 95% przedziały niepewności i `unmet_criteria`. Czytelne podsumowanie aktualnego przebiegu znajduje się w `BENCHMARK_PRODUCT_F24.md`.
+
+### Tryb operational-first od 0.14.33
+
+Po restarcie dodatek uruchamia zapisanych agentów i realtime Home Assistant bez automatycznego importu Recorder, auto-discovery ani okresowego historycznego maintenance. `Rescan devices` jest jawną akcją użytkownika i uruchamia discovery w osobnym workerze; request HTTP wraca od razu. Cykliczne odczyty UI używają tylko konfiguracji agentów i bieżącego stanu runtime, bez COUNT/AVG po tabelach historii. Dzięki temu system może pracować stale bez uruchamiania ciężkich zadań. Train/Resume/Rebuild/Correct/Candidate nadal korzystają z istniejącej kolejki ciężkich zadań i nie zmieniają własności fizycznego sterowania.
