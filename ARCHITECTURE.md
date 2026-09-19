@@ -95,3 +95,7 @@ Porównywane są: stała automatyzacja, bieżący produkcyjny runtime w Shadow, 
 Benchmark **nie** obniża kwalifikacji, nie wstawia gotowego `benchmark_score` i nie promuje backendu. Niespełnione kryteria są prawidłowym wynikiem. Wynik syntetyczny/CI nie zastępuje fizycznego M&V. CI zapisuje pełny raport jako artefakt `product-benchmark-f24-py311/product-benchmark-f24.json`, aby lista kryteriów i przedziały niepewności były audytowalne poza logiem joba. Zwięzły raport porównawczy z bieżącego kontraktu v2 jest utrzymywany w `BENCHMARK_PRODUCT_F24.md`.
 
 CI dodatkowo uruchamia dokładny source entrypoint oraz obraz i sprawdza, że PID 1 obrazu startuje przez `/app/run.sh`, który kończy w `trial_queue_main.py`. Dzięki temu benchmark jakości i test uruchomienia dotyczą tego samego stosu kompozycji.
+
+### Startup inference QoS (0.14.30)
+
+HTTP/Ingress binds before runtime initialization. The background Engine keeps inference gated while the runtime composition, realtime stream, history manager and control reconciliation are being assembled. After `startup.ready`, proactive inference receives a 3 s grace so the initial UI/static/status reads can complete first. The initial REST snapshot warms state/context but is not treated as a realtime dirty burst. Device-control inference concurrency is capped at `min(4, os.cpu_count())`; realtime HA changes observed during the gate remain queued as dirty context and are processed after the gate opens. This scheduling contract does not change policy thresholds, model data, ActionIntent semantics or Executor ownership.
