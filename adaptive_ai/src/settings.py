@@ -15,7 +15,7 @@ try:
 except Exception:
     ws_connect = None
 
-APP_VERSION = "0.14.37"
+APP_VERSION = "0.14.38"
 HISTORY_BOOTSTRAP_REVISION = "target-attrs-v2"
 TRAINING_REVISION = "shared-home-intents-v18"
 DATA_DIR = Path(os.environ.get("ADAPTIVE_AI_DATA", "/data"))
@@ -35,6 +35,9 @@ DEFAULT_OPTIONS = {
     # With a healthy state_changed websocket, /states is only a consistency resync.
     # Avoid rebuilding 700+ entity context every 30 s on Raspberry Pi.
     "realtime_resync_seconds": 300,
+    # If realtime is unavailable, keep Current usable without restoring the old 30 s lag.
+    # Delta-only reconciliation makes this temporary fallback cheap enough for Pi 4.
+    "realtime_fallback_poll_seconds": 10,
     "proactive_tick_seconds": 1,
     # The 1 s engine tick is a lightweight deadline scheduler, not a global inference loop.
     "fast_idle_inference_interval_seconds": 30,
