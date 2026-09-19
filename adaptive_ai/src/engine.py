@@ -186,6 +186,18 @@ class Engine(threading.Thread):
         self.resubmit_targets = set()
         self.poll_future = None
         self.last_full_poll = 0.0
+        # REST /states health is tracked separately from generic HAClient requests.
+        # A failed history/automation/config request must never make the UI claim that
+        # Home Assistant itself is disconnected.
+        self.last_state_sync_ok = None
+        self.last_state_sync_error = "No successful state snapshot yet"
+        self.state_resync_stats = {
+            "runs": 0,
+            "failures": 0,
+            "last_changed_entities": 0,
+            "last_duration_ms": 0.0,
+            "max_duration_ms": 0.0,
+        }
         self.last_ws_event = None
         self.ws_connected = False
         self.ws_error = None
@@ -377,9 +389,26 @@ class Engine(threading.Thread):
         return int(written or 0)
 
     def refresh_states(self):
+        """Reconcile a REST snapshot without replaying the whole home on every resync.
+
+        Websocket state_changed is authoritative for the realtime path. REST is startup,
+        outage fallback and a low-frequency safety reconciliation. Periodic snapshots may
+        contain hundreds of entities, so only actual differences are fed through context,
+        temporal history and archive persistence after the initial bootstrap.
+        """
+        started = time.perf_counter()
         with self.lock:
             poll_revision = self.state_revision
-        states = HA.states()
+        try:
+            states = HA.states()
+        except Exception as exc:
+            with self.lock:
+                self.last_state_sync_error = f"{type(exc).__name__}: {exc}"
+                self.state_resync_stats["failures"] = int(
+                    self.state_resync_stats.get("failures") or 0
+                ) + 1
+            raise
+
         state_map = {s["entity_id"]: s for s in (states or [])}
         with self.lock:
             # A REST request may finish after newer websocket events. Never rewind them.
@@ -393,33 +422,68 @@ class Engine(threading.Thread):
             for eid, revision in self.entity_revisions.items():
                 if revision > poll_revision and eid not in self.state_map:
                     state_map.pop(eid, None)
-            initial = not self.state_map
-            self.context.configure(state_map)
-            for eid in set(self.state_map) | set(state_map):
-                if self.state_map.get(eid) != state_map.get(eid):
-                    self.state_revision += 1
-                    self.entity_revisions[eid] = self.state_revision
-                    self.context.observe(eid, state_map.get(eid), now_ts(), learn=not initial)
-                    # The initial REST snapshot is not a realtime transition. Marking
-                    # thousands of startup entities dirty causes an immediate all-agent
-                    # burst and defeats HTTP-first startup. A proactive pass after the
-                    # startup grace covers the same current state.
-                    if not initial:
-                        self.dirty_entities.add(eid)
+
+            previous = self.state_map
+            initial = not previous
+            changed_eids = {
+                eid for eid in set(previous) | set(state_map)
+                if previous.get(eid) != state_map.get(eid)
+            }
+            # Registry websocket updates already reconfigure topology. A routine /states
+            # reconciliation must not rebuild the full source map unless entity membership
+            # actually changed (or this is the initial bootstrap).
+            topology_changed = initial or set(previous) != set(state_map)
+            if topology_changed:
+                self.context.configure(state_map)
+
+            event_ts = now_ts()
+            for eid in changed_eids:
+                self.state_revision += 1
+                self.entity_revisions[eid] = self.state_revision
+                self.context.observe(eid, state_map.get(eid), event_ts, learn=not initial)
+                # The initial REST snapshot is not a realtime transition. Marking
+                # thousands of startup entities dirty causes an immediate all-agent
+                # burst and defeats HTTP-first startup. A proactive pass after the
+                # startup grace covers the same current state.
+                if not initial:
+                    self.dirty_entities.add(eid)
+
             self.state_map = state_map
             if initial:
                 self.context.home.arrivals.clear()
                 self.context.home.pending = None
+            sync_now = now_ts()
             self.last_state_count = len(state_map)
-            self.last_poll = now_ts()
-            self.last_full_poll = self.last_poll
+            self.last_poll = sync_now
+            self.last_full_poll = sync_now
+            self.last_state_sync_ok = sync_now
+            self.last_state_sync_error = None
             self.error = None
-        for st in state_map.values():
+
+        # Initial bootstrap needs every current entity once. Later safety/fallback polls
+        # touch only the changed suffix instead of rebuilding temporal/archive state for
+        # the whole Home Assistant installation.
+        process_eids = set(state_map) if initial else changed_eids
+        for eid in process_eids:
+            st = state_map.get(eid)
+            if st is None:
+                continue
             ts = parse_ts(st.get("last_updated") or st.get("last_changed")) or now_ts()
-            self.temporal_history.add(st.get("entity_id"), ts, self._temporal_state(st))
+            self.temporal_history.add(eid, ts, self._temporal_state(st))
             self._queue_archive_state(st)
         self.flush_archive(force=False)
-        self.wake_event.set()
+        if initial or changed_eids:
+            self.wake_event.set()
+
+        elapsed_ms = (time.perf_counter() - started) * 1000.0
+        with self.lock:
+            stats = self.state_resync_stats
+            stats["runs"] = int(stats.get("runs") or 0) + 1
+            stats["last_changed_entities"] = len(changed_eids)
+            stats["last_duration_ms"] = elapsed_ms
+            stats["max_duration_ms"] = max(
+                float(stats.get("max_duration_ms") or 0.0), elapsed_ms
+            )
         return state_map
 
     def _schedule_next_inference(self, agent, rt, timestamp=None):
@@ -562,7 +626,7 @@ class Engine(threading.Thread):
                 resync_seconds = float(
                     OPTIONS.get("realtime_resync_seconds", 300)
                     if self.ws_connected
-                    else OPTIONS["poll_seconds"]
+                    else OPTIONS.get("realtime_fallback_poll_seconds", 10)
                 )
                 if (now_ts() - self.last_full_poll >= max(5.0, resync_seconds)
                         and (self.poll_future is None or self.poll_future.done())):
