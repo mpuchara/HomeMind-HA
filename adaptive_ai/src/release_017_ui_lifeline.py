@@ -131,6 +131,8 @@ def install(runtime):
             hot_runtime = {
                 aid: dict(value) for aid, value in core.ENGINE.runtime.items()
             }
+            realtime_connected = bool(core.ENGINE.ws_connected)
+            realtime_error = core.ENGINE.ws_error
         with cache_lock:
             cached = {aid: dict(value) for aid, value in rich_agents.items()}
             state["agent_lifeline_reads"] += 1
@@ -175,6 +177,8 @@ def install(runtime):
                 else None
             )
             runtime_payload["training_state"] = config.get("training_state") or "training"
+            runtime_payload["realtime_connected"] = realtime_connected
+            runtime_payload["realtime_error"] = realtime_error
             runtime_payload["benchmark_score"] = config.get("benchmark_score")
             runtime_payload["benchmark_samples"] = int(
                 config.get("benchmark_samples") or 0
@@ -224,6 +228,7 @@ def install(runtime):
             registry_count = len(core.ENGINE.entity_registry)
             last_ws_event = core.ENGINE.last_ws_event
             active_inference_agent_count = len(core.ENGINE.agent_configs)
+            inference_scheduler = dict(core.ENGINE.inference_scheduler)
         configs = hot_configs()
         home_intelligence, home_bootstrap = hot_home_diagnostics()
         queue = queue_object()
@@ -248,6 +253,7 @@ def install(runtime):
                     "registry_entries": registry_count,
                     "last_event": last_ws_event,
                 },
+                "inference_scheduler": inference_scheduler,
                 "history": (
                     core.HISTORY.status()
                     if core.HISTORY is not None
@@ -265,8 +271,16 @@ def install(runtime):
                 "status_read_mode": "operational_hot",
             }
         )
-        payload.setdefault("ha_connected", bool(ws_connected))
-        payload.setdefault("ha_error", ws_error)
+        # HA reachability and realtime delivery are separate. REST may remain healthy
+        # while the websocket reconnects; do not label that situation "HA disconnected".
+        ha_client = getattr(core, "HA", None)
+        ha_connected = bool(
+            ha_client is not None
+            and getattr(ha_client, "last_ok", None) is not None
+            and getattr(ha_client, "last_error", None) is None
+        )
+        payload["ha_connected"] = ha_connected
+        payload["ha_error"] = getattr(ha_client, "last_error", None) if ha_client is not None else ws_error
         payload.setdefault("feedback_count", 0)
         payload.setdefault("historical_experience_count", 0)
         payload.setdefault("automation_knowledge", {})

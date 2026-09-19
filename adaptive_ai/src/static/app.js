@@ -41,10 +41,23 @@ async function load(){
     // during training must not disable the independent lightweight /api/live loop.
     $('#connection').textContent='App API error: '+e.message;return;
   }
-  try{
-    const [agents,events]=await Promise.all([api('api/agents'),api('api/events?limit=60')]);
-    lastAgents=agents;renderAgents();renderEvents(events);
-  }catch(e){$('#events').innerHTML=`<div class="empty">UI data will retry automatically. ${esc(e.message)}</div>`;}
+  const [agentsResult,eventsResult]=await Promise.allSettled([
+    api('api/agents'),
+    api('api/events?limit=60'),
+  ]);
+  if(agentsResult.status==='fulfilled'){
+    lastAgents=agentsResult.value;
+    renderAgents();
+  }
+  if(eventsResult.status==='fulfilled'){
+    renderEvents(eventsResult.value);
+  }else{
+    $('#events').innerHTML=`<div class="empty">Recent activity will retry automatically. ${esc(eventsResult.reason?.message||eventsResult.reason||'read failed')}</div>`;
+  }
+  if(agentsResult.status==='rejected'){
+    const c=$('#connection');
+    if(c)c.textContent=`Agent UI read delayed · ${agentsResult.reason?.message||agentsResult.reason||'retrying'}`;
+  }
   }finally{loadInFlight=false;}
 }
 function renderHistory(h,status={}){

@@ -13,6 +13,11 @@ class Store:
         DATA_DIR.mkdir(parents=True, exist_ok=True)
         self.path = str(path)
         self.lock = threading.RLock()
+        # Diagnostic events are operational telemetry, not Store transaction state.
+        # Keep their tiny RAM ring independently accessible while a large microSD write
+        # owns self.lock. This prevents /api/events and diagnostic producers from being
+        # serialized behind history/model persistence.
+        self._event_lock = threading.RLock()
         self._agent_index_revision = 0
         # Small, frequently-read metadata and diagnostic events are RAM-first. The SD
         # card remains the durable backing store, but unchanged metadata and one-row event
@@ -185,7 +190,7 @@ class Store:
             raw = item.pop("data_json", None)
             item["data"] = json.loads(raw) if raw else None
             recent.append(item)
-        with self.lock:
+        with self._event_lock:
             self._event_recent.extend(recent)
 
     @staticmethod
@@ -534,7 +539,7 @@ class Store:
         """
         try:
             now_mono = time.monotonic()
-            with self.lock:
+            with self._event_lock:
                 self._event_buffer_seq += 1
                 row = {
                     "id": None,
@@ -557,24 +562,33 @@ class Store:
             # reward) and must not force one WAL transaction each. Only errors bypass
             # coalescing; warning/info rows batch for up to 5 seconds or 64 records.
             if str(level).lower() == "error" or pending >= 64 or age >= 5.0:
-                self.flush_events()
+                # Diagnostic durability may lag briefly, but realtime inference must
+                # never wait behind an unrelated Store transaction.
+                self.flush_events(nonblocking=True)
         except Exception as exc:
             print(f"[event] {exc}", flush=True)
 
-    def flush_events(self):
-        with self.lock:
-            if not self._event_buffer:
-                return 0
-            batch = list(self._event_buffer)
-            self._event_buffer.clear()
-            self._event_buffer_first_at = None
-        packed = [
-            (row["created_at"], row.get("agent_id"), row["level"], row["kind"],
-             row["message"], json.dumps(row.get("data")) if row.get("data") is not None else None)
-            for row in batch
-        ]
+    def flush_events(self, nonblocking=False):
+        # Serialize the SQLite batch with other durable Store writers, but let realtime
+        # callers skip the flush rather than wait. Shutdown/explicit boundaries retain
+        # the default blocking behavior.
+        acquired = self.lock.acquire(blocking=not bool(nonblocking))
+        if not acquired:
+            return 0
+        batch = []
         try:
-            with self.lock, self.conn() as c:
+            with self._event_lock:
+                if not self._event_buffer:
+                    return 0
+                batch = list(self._event_buffer)
+                self._event_buffer.clear()
+                self._event_buffer_first_at = None
+            packed = [
+                (row["created_at"], row.get("agent_id"), row["level"], row["kind"],
+                 row["message"], json.dumps(row.get("data")) if row.get("data") is not None else None)
+                for row in batch
+            ]
+            with self.conn() as c:
                 c.executemany(
                     "INSERT INTO events(created_at,agent_id,level,kind,message,data_json) VALUES(?,?,?,?,?,?)",
                     packed,
@@ -585,14 +599,14 @@ class Store:
                         "DELETE FROM events WHERE id < COALESCE((SELECT id FROM events ORDER BY id DESC LIMIT 1 OFFSET 4999),-1)"
                     )
                     self._event_prune_batches = 0
-            with self.lock:
+            with self._event_lock:
                 for row in batch:
                     cached = dict(row)
                     cached.pop("_ram_seq", None)
                     self._event_recent.append(cached)
             return len(batch)
         except Exception:
-            with self.lock:
+            with self._event_lock:
                 for row in reversed(batch):
                     if self._event_buffer.maxlen and len(self._event_buffer) >= self._event_buffer.maxlen:
                         self._event_buffer_dropped += 1
@@ -600,11 +614,13 @@ class Store:
                 if self._event_buffer_first_at is None:
                     self._event_buffer_first_at = time.monotonic()
             raise
+        finally:
+            self.lock.release()
 
     def list_events(self, limit=100):
-        """Return the live diagnostic feed without polling SQLite."""
+        """Return the live diagnostic feed without polling SQLite or Store transaction locks."""
         limit = max(1, int(limit))
-        with self.lock:
+        with self._event_lock:
             pending = [dict(row) for row in list(self._event_buffer)[-limit:]]
             remaining = max(0, limit - len(pending))
             durable = [dict(row) for row in list(self._event_recent)[-remaining:]] if remaining else []
