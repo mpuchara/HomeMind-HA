@@ -365,6 +365,38 @@ class ObservationReplayParityTests(unittest.TestCase):
             tracker.close()
         self.assertAlmostEqual(value["physical_value"], 30.0)
 
+    def test_record_batch_preserves_single_record_contract_and_deduplication(self):
+        first = sensor_state("sensor.fast", 10, 900.0, unit="%")
+        second = sensor_state("sensor.fast", 20, 901.0, unit="%")
+        keys = self.journal.record_batch([
+            {
+                "entity_id": "sensor.fast", "state": first,
+                "event_time": 900.0, "received_time": 900.1,
+                "source": "ha_state_changed",
+            },
+            {
+                "entity_id": "sensor.fast", "state": second,
+                "event_time": 901.0, "received_time": 901.1,
+                "source": "ha_state_changed",
+            },
+        ])
+        self.assertEqual(len(keys), 2)
+        # Replaying the same HA event must keep the stable event identity and earliest
+        # receipt time, exactly like the former one-row writer.
+        again = self.journal.record(
+            "sensor.fast", second, event_time=901.0, received_time=902.0,
+            source="ha_state_changed",
+        )
+        self.assertEqual(again, keys[1])
+        with self.store.conn() as c:
+            rows = c.execute(
+                """SELECT event_key,event_time,received_time,state
+                   FROM feature_observation_events ORDER BY event_time"""
+            ).fetchall()
+        self.assertEqual(len(rows), 2)
+        self.assertEqual(float(rows[1]["received_time"]), 901.1)
+        self.assertEqual(rows[1]["state"], "20")
+
     def test_buffer_is_bounded_per_entity(self):
         tiny = FeatureJournal(
             self.store, clock=lambda: 1000.0, retention_hours=24,

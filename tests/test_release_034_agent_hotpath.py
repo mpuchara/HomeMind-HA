@@ -205,6 +205,27 @@ class AgentHotPathTests(unittest.TestCase):
         self.assertIn("_command_cache", match)
         self.assertIn("_load_active_command_cache()", source)
 
+    def test_feature_observations_are_batched_off_event_and_poll_paths(self):
+        source = (
+            ROOT / "adaptive_ai/src/observation_contract.py"
+        ).read_text(encoding="utf-8")
+        on_state = source.split("def on_state_changed(data):", 1)[1].split(
+            "engine.on_state_changed = on_state_changed", 1
+        )[0]
+        refresh = source.split("def refresh_states():", 1)[1].split(
+            "engine.refresh_states = refresh_states", 1
+        )[0]
+        watched = source.split("def _watched_fast_entities(engine, store):", 1)[1].split(
+            "def _patch_teaching_point_context", 1
+        )[0]
+        self.assertIn("queue_observation(", on_state)
+        self.assertNotIn("journal.record(", on_state)
+        self.assertIn("queue_observation(", refresh)
+        self.assertNotIn("journal.record(", refresh)
+        self.assertIn("engine.agent_configs", watched)
+        self.assertIn("record_batch", source)
+        self.assertIn("adaptive-ai-feature-journal-writer", source)
+
     def test_hot_status_includes_realtime_telemetry_snapshot(self):
         source = (
             ROOT / "adaptive_ai/src/release_017_ui_lifeline.py"
