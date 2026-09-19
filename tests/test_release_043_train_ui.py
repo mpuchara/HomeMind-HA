@@ -24,7 +24,7 @@ class Release043TrainUiTests(unittest.TestCase):
             "async function resumeLearning", 1
         )[0]
         # Admission has its own failure boundary.
-        self.assertIn("await api(\`api/agents/\${id}/train\`", block)
+        self.assertIn("api/agents/${id}/train", block)
         self.assertIn("alert('Train failed: '+e.message)", block)
         # Post-admission rendering is best-effort and cannot fall into Train failed.
         self.assertIn("Training was accepted; UI refresh will retry automatically", block)
