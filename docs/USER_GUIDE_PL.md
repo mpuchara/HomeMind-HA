@@ -174,3 +174,14 @@ Panel Home Intelligence ponownie pokazuje rzeczywisty stan modelu trajektorii za
 Po drugie, lista agentów i Recent activity nie są już jednym wspólnym punktem awarii. Jeżeli odczyt eventów jest opóźniony, udany odczyt agentów nadal aktualizuje Current, Desired, confidence i status runtime. Sam feed eventów ma osobną blokadę RAM i nie czeka na długą transakcję SQLite/microSD.
 
 Po trzecie, UI rozróżnia teraz połączenie z Home Assistant od połączenia realtime. Zdrowy REST przy chwilowym reconnect WebSocket jest pokazywany jako HA connected / REST fallback, a karty agentów dostają rzeczywisty bieżący stan WebSocket zamiast domyślnego fałszywego REST fallback.
+
+
+### Poprawki po trzecim teście Raspberry Pi - 0.14.38
+
+0.14.38 usuwa pracę, która narastała lub uruchamiała się okresowo poza właściwą ścieżką sterowania. Monitor driftu nie wykonuje już odczytów EpisodeEvaluator i analizy zmian synchronicznie po inferencji agenta. Zdarzenia jedynie zaznaczają agenta do obserwacji, a osobny, koaleskowany worker wykonuje tę analizę najwyżej raz na 30 sekund na agenta i pobiera wyłącznie brakujący, ograniczony suffix epizodów.
+
+Pełny REST-owy snapshot /states pozostaje zabezpieczeniem przy zdrowym websocketcie co 300 sekund, ale po starcie nie przebudowuje już kontekstu, historii czasowej i archiwum dla wszystkich encji. Przetwarzane są tylko encje faktycznie zmienione. Jeżeli websocket realtime zerwie się, Adaptive AI przechodzi tymczasowo na 10-sekundowy, delta-only fallback REST, dzięki czemu Current nadal może się aktualizować bez powrotu do ciężkiego globalnego pollingu.
+
+Stan połączenia z Home Assistant jest teraz liczony z dwóch niezależnych sygnałów: websocket realtime oraz dedykowany sukces /states. Błąd pobrania historii, konfiguracji automatyzacji albo innego wywołania HA nie oznacza już fałszywie, że rdzeń Home Assistant jest odłączony.
+
+Panel Home Intelligence pokazuje dodatkowo koszt pełnego resyncu (liczbę zmienionych encji oraz ostatni/maksymalny czas), ostatnie zużycie CPU, liczniki schedulerów i czas obserwatora driftu. Przy kolejnym soak teście szczególnie obserwuj, czy po 5 minutach State resync ma niewielką liczbę zmian i czy CPU po jego zakończeniu wraca do poziomu wyjściowego.
