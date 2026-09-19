@@ -3,7 +3,7 @@
 Date: 2026-09-19  
 Branch: `fix-f24-needed-light-photometric-leakage`  
 Base: `6d1631ae11e5d269f6160df654cf2a4a5ff8b7df`  
-Release candidate: `0.14.33`  
+Release candidate: `0.14.34`  
 Benchmark contract: F24 v2  
 Seeds: 11, 23, 37  
 Replicas per scenario/split: 1
@@ -59,7 +59,7 @@ Means over seeds 11, 23 and 37. CI stores 95% confidence intervals in the raw JS
 | Corrections / 100 episodes | 200.00 | **127.78** | 319.44 | 147.22 |
 | Manual-override violations in 11-tick window | 11.00 | **0.00** | 4.33 | 11.00 |
 | Runtime manual-hold ticks | 0.00 | 115.00 | 0.00 | 0.00 |
-| Mean inference cost on CI host | 0.0008 ms | 70.51 ms | 3.17 ms | 0.0007 ms |
+| Mean inference cost on CI host | 0.0008 ms | 58.78 ms | 3.23 ms | 0.0008 ms |
 
 Relative to the post-manual-hold baseline, production `premature_off_events` falls from 26.33 to 1.67, `needed_light_fraction` rises from 14.12% to 79.36%, chatter falls from 43.33 to 1.33 and corrections fall from 261.11 to 127.78 per 100 episodes.
 
@@ -113,9 +113,9 @@ The OFF confirmation never weakens manual priority: once the user physically tur
 
 ## CI verification
 
-GitHub Actions run `35433416814` validates the 0.14.33 operational-first recovery changes on the unchanged F24 v2 contract:
-- Python 3.11: 907 tests, all passing;
-- Python 3.13: 907 tests, all passing;
+GitHub Actions run `35436651094` validates the 0.14.34 agent-hot-path changes on the unchanged F24 v2 contract:
+- Python 3.11: 929 tests, all passing;
+- Python 3.13: 929 tests, all passing;
 - compileall: passing;
 - JS syntax checks: passing;
 - Stage 17 history-cost smoke: passing;
