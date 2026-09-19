@@ -113,6 +113,7 @@ function renderHistory(h,status={}){
   const etaPrimary=stageEta?`Current phase ${stageEta}`:(eta?`Adaptive overall estimate ${eta}`:'Calibrating ETA…');
   const workLine=workTotal?`${num(workDone)} / ${num(workTotal)} ${esc(h.work_unit||'items')} · ${workPct}%`:null;
   const ak=status.automation_knowledge||{};
+  const dr=h.discovery_reason_counts||{};
   const tr=h.temporal_replay?.totals||{};
   const trReduction=tr.query_reduction_ratio==null?null:Math.round(Number(tr.query_reduction_ratio)*100);
   const trMeta=Number(tr.advances||0)
@@ -131,7 +132,7 @@ function renderHistory(h,status={}){
       <div><b>${num(h.esphome_context_candidates||0)}</b><span>ESPHome sensors eligible</span></div>
       <div><b>${pending?'pending':(h.active||0)}/${h.eligible||h.controllable||0}</b><span>${pending?'activity classification / eligible targets':'active / eligible targets'}</span></div>
     </div>
-    <div class="history-meta"><span>${h.filtered_config||0} config/diagnostic targets filtered</span><span>${pending?'activity classification pending':(h.inactive||0)+' insufficient target activity'}</span><span>${ak.automation_count||0} automations scanned</span><span>${status.realtime?.connected?'Realtime event stream active':'REST fallback active'}</span><span>${h.esphome_sensor_sibling_overrides||0} ESPHome sensor siblings preserved</span>${trMeta}${ak.error?`<span title="${esc(ak.error)}">Automation scan partial</span>`:''}</div>`;
+    <div class="history-meta"><span>${h.filtered_config||0} config/diagnostic targets filtered</span><span>${pending?'activity classification pending':(h.inactive||0)+' insufficient target activity'}</span><span>Discovery window: ${h.discovery_deep_history_complete?'full':'recent only / deep scan pending'}</span><span>${num(dr.no_transition||0)} no transition · ${num(dr.below_threshold||0)} below threshold · ${num(dr.stale_transition||0)} stale</span><span>${ak.automation_count||0} automations scanned</span><span>${status.realtime?.connected?'Realtime event stream active':'REST fallback active'}</span><span>${h.esphome_sensor_sibling_overrides||0} ESPHome sensor siblings preserved</span>${trMeta}${ak.error?`<span title="${esc(ak.error)}">Automation scan partial</span>`:''}</div>`;
 }
 function sensorRecommendations(a){const recs=a.runtime?.sensor_recommendations||[];if(!recs.length)return `<div class="sensor-ok">✓ Core sensor classes expected for this target are present.</div>`;return recs.map(r=>`<div class="sensor-rec"><i class="dot"></i><div><b>${esc(r.label)}</b><span>${esc(r.reason)}</span></div></div>`).join('');}
 function contextInfluence(a){const xs=a.runtime?.top_context||[];if(!xs.length)return 'Not enough rewarded history to rank context yet.';return xs.map(x=>`${esc(x.feature)} (${Number(x.contribution)>=0?'+':''}${Number(x.contribution).toFixed(2)})`).join(' · ');}
