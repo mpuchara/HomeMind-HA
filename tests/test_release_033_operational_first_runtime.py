@@ -42,12 +42,14 @@ class OperationalFirstRuntimeTests(unittest.TestCase):
             time.sleep(0.01)
         self.assertFalse(manager.discovery_job_active)
 
-    def test_quiet_start_has_one_fresh_install_discovery_not_periodic_bootstrap(self):
+    def test_quiet_start_allows_only_bounded_one_time_discovery_work(self):
         source = inspect.getsource(release_016_guard.install)
         self.assertNotIn("original_bootstrap(history_self)", source)
         self.assertIn("request_discovery_rescan", source)
-        self.assertIn('reason="fresh_install"', source)
+        self.assertIn('reason = "fresh_install" if initial_needed else "deep_history_reconcile"', source)
         self.assertIn("INITIAL_DISCOVERY_META_KEY", source)
+        self.assertIn("DEEP_DISCOVERY_META_KEY", source)
+        self.assertIn("deep_reconcile_needed", source)
         self.assertIn("There is no", source)
 
     def test_rescan_route_is_async_and_does_not_run_discovery_in_http_handler(self):
