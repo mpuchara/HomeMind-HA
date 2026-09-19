@@ -118,6 +118,40 @@ class Release038PiDegradationTests(unittest.TestCase):
         self.assertIn('"realtime_resync_seconds": 300', settings)
         self.assertIn("self.engine.last_full_poll = 0.0", engine)
 
+    def test_websocket_outage_fallback_is_fast_but_resync_processing_is_delta_only(self):
+        engine = self.source("engine.py")
+        settings = self.source("settings.py")
+        self.assertIn('OPTIONS.get("realtime_fallback_poll_seconds", 10)', engine)
+        self.assertIn('"realtime_fallback_poll_seconds": 10', settings)
+        self.assertIn("changed_eids = {", engine)
+        self.assertIn(
+            "process_eids = set(state_map) if initial else changed_eids",
+            engine,
+        )
+        self.assertIn(
+            "topology_changed = initial or set(previous) != set(state_map)",
+            engine,
+        )
+        self.assertNotIn("for st in state_map.values():\n            ts =", engine)
+
+    def test_ha_status_uses_dedicated_state_sync_health(self):
+        engine = self.source("engine.py")
+        lifeline = self.source("release_017_ui_lifeline.py")
+        self.assertIn("self.last_state_sync_ok", engine)
+        self.assertIn("self.last_state_sync_error", engine)
+        self.assertIn('"state_resync": {', engine)
+        self.assertIn('last_state_sync_ok = getattr(core.ENGINE, "last_state_sync_ok", None)', lifeline)
+        self.assertIn("last_state_sync_error is None", lifeline)
+        self.assertNotIn('getattr(ha_client, "last_error", None)', lifeline)
+
+    def test_drift_observer_does_not_resignal_same_throttled_agent(self):
+        source = self.source("cold_start_drift.py")
+        block = source.split("def schedule_observe", 1)[1].split(
+            "def observer_snapshot", 1
+        )[0]
+        self.assertIn("if not existed:", block)
+        self.assertIn("self._observer_event.set()", block)
+
     def test_frontend_has_one_owner_for_full_agent_and_candidate_reads(self):
         candidate = (ROOT / "adaptive_ai/src/static/candidate_ui.js").read_text(encoding="utf-8")
         preference = (ROOT / "adaptive_ai/src/static/candidate_preference_ui.js").read_text(encoding="utf-8")
