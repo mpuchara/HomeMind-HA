@@ -18,7 +18,7 @@ from executor import Executor
 from intent import ActionIntent
 from experiments import Experiments
 from telemetry import TELEMETRY, HEAVY_JOBS
-from fast_runtime import fast_light_on_assist_action, stabilize_fast_light_power_decision
+from fast_runtime import fast_light_on_assist_action, is_fast_target, stabilize_fast_light_power_decision
 from training_budget import TRAINING_BUDGET
 
 class HAEventStream(threading.Thread):
@@ -110,6 +110,12 @@ class Engine(threading.Thread):
         self.inference_enabled = threading.Event()
         self.startup_inference_not_before = 0.0
         self.runtime = {}
+        self.inference_scheduler = {
+            "event_passes": 0,
+            "timer_passes": 0,
+            "idle_skips": 0,
+            "last_timer_targets": 0,
+        }
         self.models = {}
         self.context_relevance = {}
         self.last_state_count = 0
@@ -171,6 +177,7 @@ class Engine(threading.Thread):
             ws_error = self.ws_error
             registry_count = len(self.entity_registry)
             last_ws_event = self.last_ws_event
+            inference_scheduler = dict(self.inference_scheduler)
         agents = STORE.list_agents()
         confidences = [runtime_conf.get(a["id"]) for a in agents]
         confidences = [x for x in confidences if x is not None]
@@ -190,6 +197,11 @@ class Engine(threading.Thread):
             "feedback_count": sum(int(a.get("feedback_count") or 0) for a in agents),
             "historical_experience_count": sum(int(a.get("historical_count") or 0) for a in agents),
             "realtime": {"connected": ws_connected, "error": ws_error, "registry_entries": registry_count, "last_event": last_ws_event},
+            "inference_scheduler": {
+                **inference_scheduler,
+                "fast_idle_seconds": float(OPTIONS.get("fast_idle_inference_interval_seconds", 10)),
+                "default_idle_seconds": float(OPTIONS.get("idle_inference_interval_seconds", 30)),
+            },
             "automation_knowledge": AUTOMATION_KNOWLEDGE.status(),
             "history": history,
             "home_intelligence": self.context.diagnostics(),
@@ -359,6 +371,122 @@ class Engine(threading.Thread):
         self.wake_event.set()
         return state_map
 
+    def _schedule_next_inference(self, agent, rt, timestamp=None):
+        """Schedule only the next time-dependent inference; HA events remain immediate.
+
+        The 1 s engine tick is a cheap timer wheel, not a global inference cadence.
+        Fast targets need a modest heartbeat for time-decaying presence/context, while
+        slower plant targets can refresh less frequently. Exact runtime deadlines always
+        pre-empt the heartbeat.
+        """
+        now = float(now_ts() if timestamp is None else timestamp)
+        fast = is_fast_target(agent)
+        idle = float(OPTIONS.get(
+            "fast_idle_inference_interval_seconds" if fast
+            else "idle_inference_interval_seconds",
+            10.0 if fast else 30.0,
+        ))
+        idle = max(2.0 if fast else 10.0, idle)
+        due = now + idle
+
+        # During an explicit manual hold the learned policy cannot act, so repeatedly
+        # recomputing it is pure CPU waste. Wake at hold expiry unless another lifecycle
+        # deadline below must be observed earlier.
+        try:
+            hold_until = float(rt.get("manual_override_until") or 0.0)
+        except (TypeError, ValueError):
+            hold_until = 0.0
+        if hold_until > now:
+            due = hold_until
+
+        # Fast-light statistical OFF confirmation must complete close to its exact 6 s
+        # deadline even if no HA entity changes in the meantime.
+        if rt.get("fast_off_confirmation_active"):
+            try:
+                since = float(rt.get("fast_off_candidate_since"))
+                required = float(rt.get("fast_off_confirmation_required") or 0.0)
+                if required > 0:
+                    due = min(due, since + required)
+            except (TypeError, ValueError):
+                pass
+
+        pending = rt.get("pending")
+        if isinstance(pending, dict):
+            try:
+                started = float(pending.get("started_ts") or now)
+                acknowledged = pending.get("acknowledged_ts")
+                timing = timing_for(agent)
+                if acknowledged is None:
+                    due = min(due, started + max(0.05, float(timing.acknowledgement)))
+                else:
+                    due = min(
+                        due,
+                        float(acknowledged)
+                        + max(float(timing.settling), float(OPTIONS["reward_window_seconds"])),
+                    )
+                if pending.get("anticipated"):
+                    due = min(
+                        due,
+                        started
+                        + max(1.0, float(pending.get("horizon") or 1.0))
+                        + max(0.0, float(timing.settling)),
+                    )
+            except (TypeError, ValueError):
+                pass
+
+        for outcome in rt.get("outcomes") or ():
+            try:
+                outcome_due = (
+                    float(outcome["started_ts"])
+                    + max(1.0, float(outcome.get("horizon") or 1.0))
+                    + 1.0
+                )
+                due = min(due, outcome_due)
+            except (KeyError, TypeError, ValueError):
+                continue
+
+        try:
+            retry_after = float(rt.get("retry_after") or 0.0)
+            if retry_after > now:
+                due = min(due, retry_after)
+        except (TypeError, ValueError):
+            pass
+
+        # Never spin on a deadline already in the past. A short floor gives the current
+        # worker enough time to publish runtime state before a follow-up is admitted.
+        rt["next_periodic_inference_ts"] = max(now + 0.05, float(due))
+        return rt["next_periodic_inference_ts"]
+
+    def _due_inference_targets(self, timestamp=None):
+        """Return target entities whose in-memory timer deadline has arrived.
+
+        This is intentionally SQLite-free so the 1 s scheduler tick remains negligible.
+        Agents that have not run yet are handled by the initial startup pass or an HA
+        event; every successful inference schedules its next heartbeat/deadline.
+        """
+        now = float(now_ts() if timestamp is None else timestamp)
+        due = set()
+        with self.lock:
+            runtime = list(self.runtime.items())
+        for aid, rt in runtime:
+            try:
+                deadline = float(rt.get("next_periodic_inference_ts") or 0.0)
+            except (TypeError, ValueError):
+                deadline = 0.0
+            if deadline <= 0.0 or deadline > now:
+                continue
+            agent = STORE.get_agent_config(aid)
+            if not agent or not agent.get("enabled") or agent.get("mode") == "paused":
+                rt["next_periodic_inference_ts"] = 0.0
+                continue
+            due.add(str(agent.get("target_entity") or ""))
+            # Claim the deadline before scheduling. process_agent will publish the real
+            # next deadline after inference; this prevents a busy worker from being
+            # re-enqueued on every 1 s tick.
+            rt["next_periodic_inference_ts"] = now + 60.0
+        due.discard("")
+        return due
+
     def run(self):
         print(f"Adaptive AI {APP_VERSION} starting; HA={HA_BASE_URL}", flush=True)
         STORE.event(None, "info", "startup", f"Adaptive AI {APP_VERSION} started", None)
@@ -401,7 +529,24 @@ class Engine(threading.Thread):
                             with self.lock:
                                 self.dirty_entities.update(changed_entities)
                         continue
-                    self.process(state_map, changed_entities if event_wakeup else None)
+                    if event_wakeup:
+                        with self.lock:
+                            self.inference_scheduler["event_passes"] += 1
+                        # An empty changed set is the intentional one-time startup pass.
+                        self.process(state_map, changed_entities)
+                    else:
+                        due_targets = self._due_inference_targets()
+                        if due_targets:
+                            with self.lock:
+                                self.inference_scheduler["timer_passes"] += 1
+                                self.inference_scheduler["last_timer_targets"] = len(due_targets)
+                            # Reuse the normal dependency-aware event scheduler by marking
+                            # only due target entities. No HA state is fabricated or fed to
+                            # RoomBelief; these IDs are scheduling hints only.
+                            self.process(state_map, due_targets)
+                        else:
+                            with self.lock:
+                                self.inference_scheduler["idle_skips"] += 1
             except Exception as exc:
                 msg = f"{type(exc).__name__}: {exc}"
                 with self.lock:
@@ -840,6 +985,7 @@ class Engine(threading.Thread):
         received = getattr(self, 'last_event_received', None)
         if changed_entities and received:
             TELEMETRY.observe('event_to_intent', (time.perf_counter()-received)*1000)
+        self._schedule_next_inference(agent, rt)
         return self.executor.submit(intent, features, chosen['index'])
 
     def behavior_summary(self, agent, rt):
