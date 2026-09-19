@@ -170,7 +170,7 @@ class Release038PiDegradationTests(unittest.TestCase):
         # A clean install must not render "0 active" before the Recorder classifier has
         # actually run, and duplicate Rescan clicks are locked/idempotent.
         self.assertIn("function discoveryPending(h)", app)
-        self.assertIn("activity classification has not run yet", app)
+        self.assertIn("Activity classification has not run yet", app)
         self.assertIn("b.disabled=running", app)
         self.assertIn("manual_ready:'fast_targets'", app)
         main = self.source("main.py")
