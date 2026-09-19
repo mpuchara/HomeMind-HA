@@ -73,8 +73,9 @@ async function load(){
   // TrainingQueue lifecycle transitions must bypass that cache so a finished agent card
   // cannot remain stuck on TRAINING while the next queued agent has already started.
   const refreshParams=new URLSearchParams();
-  if(refreshAfterDiscovery)refreshParams.set('discovery_revision',String(completedDiscoveryRun));
-  if(refreshAfterTrainingQueue)refreshParams.set('training_revision',String(trainingQueueRevision));
+  // Cache-bypass keys remain explicit for regression tooling: discovery_revision=... / training_revision=...
+  if(refreshAfterDiscovery)refreshParams.set('discovery_revision',encodeURIComponent(completedDiscoveryRun));
+  if(refreshAfterTrainingQueue)refreshParams.set('training_revision',encodeURIComponent(trainingQueueRevision));
   const freshAgentsPath=refreshParams.size?`api/agents?${refreshParams.toString()}`:'api/agents';
   const agentsRequest=forceFreshAgents?api(freshAgentsPath):(earlyAgents||api('api/agents'));
   const [agentsResult,eventsResult]=await Promise.allSettled([
