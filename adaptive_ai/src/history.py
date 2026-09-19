@@ -613,7 +613,18 @@ class HistoryManager(threading.Thread):
                 label="Lightweight target discovery", max_hours=3, parallel_requests=1,
                 inter_chunk_pause_ms=int(OPTIONS.get("history_background_pause_ms", 500)),
             )
-        self.refresh_archive_cache()
+        # Do not run full-table archive_stats() here. At this exact point the Recorder
+        # import has just written the hottest pages in entity_history; COUNT(DISTINCT) and
+        # GROUP BY source used to stall Raspberry Pi for long enough to starve Ingress and
+        # the HA websocket. Archive diagnostics are cached and may refresh during explicit
+        # heavy work, but they are never a prerequisite for discovering/serving agents.
+        self.set_status(
+            "manual_ready", 0.66,
+            "Classifying controllable targets from the local archive",
+            work_done=0, work_total=max(1, len(controllable)), work_unit="targets",
+            eta_source="single-pass local archive scan",
+            phase_detail="One bounded discovery stream; UI and realtime stay live",
+        )
         created = self.auto_discover_agents(current, start_ts)
         self.auto_created += created
         # Populate diagnostics from current state only; this does not import context history.
@@ -623,7 +634,7 @@ class HistoryManager(threading.Thread):
         self.last_run = now_ts()
         q = len(STORE.qualified_agents())
         waiting = len([
-            a for a in STORE.list_agents()
+            a for a in STORE.list_agent_configs()
             if a.get("enabled") and a.get("training_state") in ("waiting", "paused", "needs_retrain")
         ])
         self.set_status(
@@ -693,6 +704,65 @@ class HistoryManager(threading.Thread):
                 last = float(v)
         return values
 
+    def _discovery_usage_summary(self, current, start_ts):
+        """Return usage_for-equivalent change counts in one bounded archive stream.
+
+        Previous discovery opened one archive iterator for every property of every
+        controllable entity. Small iterators repeatedly reset the Raspberry-Pi background
+        throttle and created an N-query/N-scan CPU burst immediately after Recorder import.
+        This pass preserves usage_for's exact change semantics (>1e-6), but streams all
+        controllable targets together so the shared archive throttle can actually yield.
+        """
+        specs = {}
+        for entity_id, state in current.items():
+            opts = target_options_for_state(state)
+            if opts:
+                specs[str(entity_id)] = tuple(opts)
+        if not specs:
+            return {}
+
+        summary = {
+            eid: {
+                str(opt["property"]): {
+                    "samples": 0,
+                    "last_value": None,
+                    "last_ts": 0.0,
+                }
+                for opt in opts
+            }
+            for eid, opts in specs.items()
+        }
+        rows = 0
+        for row in STORE.archive_iter(
+            start_ts=start_ts,
+            entity_ids=specs.keys(),
+            chunk_size=512,
+        ):
+            eid = str(row["entity_id"])
+            opts = specs.get(eid)
+            if not opts:
+                continue
+            archived = archived_state(row)
+            for opt in opts:
+                prop = str(opt["property"])
+                value = target_value(archived, prop)
+                if value is None:
+                    continue
+                try:
+                    value = float(value)
+                except (TypeError, ValueError):
+                    continue
+                stat = summary[eid][prop]
+                previous = stat["last_value"]
+                if previous is None or abs(value - float(previous)) > 1e-6:
+                    stat["samples"] += 1
+                    stat["last_value"] = value
+                    stat["last_ts"] = float(row["ts"])
+            rows += 1
+
+        self.discovery_usage_rows = rows
+        return summary
+
     def auto_discover_agents(self, current, start_ts, threshold_override=None, update_active=True):
         threshold = int(threshold_override if threshold_override is not None else OPTIONS["auto_agent_min_changes"])
         recent_days = max(float(OPTIONS["auto_agent_recent_days"]), min(30.0, float(OPTIONS["history_bootstrap_days"])))
@@ -705,7 +775,7 @@ class HistoryManager(threading.Thread):
         max_agents = max(1, int(OPTIONS.get("max_auto_agents", 250)))
         # Remove only stale auto-created agents that the Entity Registry now identifies
         # as configuration/diagnostic/hidden/disabled. Manual agents are never touched.
-        existing = STORE.list_agents()
+        existing = STORE.list_agent_configs()
         cleaned = 0
         for old_agent in list(existing):
             if not old_agent.get("auto_created"):
@@ -725,10 +795,11 @@ class HistoryManager(threading.Thread):
             STORE.event(None, "info", "auto_agent_cleanup",
                         f"Paused {cleaned} auto-agent(s) for config/diagnostic/hidden entities; data retained",
                         {"removed": cleaned})
-        existing = STORE.list_agents()
+        existing = STORE.list_agent_configs()
         # One primary policy per physical/logical controllable entity. Manual agents also
         # suppress auto-creation for that entity so discovery cannot create duplicates.
         existing_entities = {a["target_entity"] for a in existing}
+        usage_summary = self._discovery_usage_summary(current, start_ts)
         for entity_id, state in current.items():
             opts = target_options_for_state(state)
             if not opts:
@@ -739,11 +810,13 @@ class HistoryManager(threading.Thread):
                 continue
             eligible += 1
             candidates = []
+            entity_usage = usage_summary.get(str(entity_id), {})
             for opt in opts:
-                changes = self.usage_for(entity_id, opt["property"], start_ts)
-                last_ts = changes[-1][0]["ts"] if changes else 0
-                score = max(0, len(changes) - 1)
-                candidates.append((score, last_ts, opt, changes))
+                stat = entity_usage.get(str(opt["property"])) or {}
+                samples = int(stat.get("samples") or 0)
+                last_ts = float(stat.get("last_ts") or 0.0)
+                score = max(0, samples - 1)
+                candidates.append((score, last_ts, opt, None))
             # Existing automations that act on this target are evidence that a device is
             # intentionally controlled, so one observed historical transition is enough
             # to include it in Shadow. It is still trained only from rewards.
