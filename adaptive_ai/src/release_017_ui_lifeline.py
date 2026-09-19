@@ -285,18 +285,19 @@ def install(runtime):
         provenance_queue = getattr(core.ENGINE, "provenance_deferred_snapshot", None)
         if callable(provenance_queue):
             payload["provenance_queue"] = provenance_queue()
-        with core.ENGINE.lock:
-            archive_pending = len(getattr(core.ENGINE, "pending_archive", ()) or ())
+        # These are advisory backlog gauges only. Never wait for persistence/training
+        # locks merely to render /api/status: a long microSD transaction must not turn a
+        # harmless queue-length read into a 12 s UI timeout. CPython deque/list length and
+        # integer reads are atomic enough for intentionally approximate diagnostics.
+        archive_pending = len(getattr(core.ENGINE, "pending_archive", ()) or ())
         teaching = getattr(core.ENGINE, "teaching", None)
-        teaching_lock = getattr(teaching, "lock", None)
-        if teaching is not None and teaching_lock is not None:
-            with teaching_lock:
-                decision_history_pending = len(getattr(teaching, "buffer", ()) or ())
-        else:
-            decision_history_pending = 0
-        with core.STORE.lock:
-            diagnostic_events_pending = len(getattr(core.STORE, "_event_buffer", ()) or ())
-            diagnostic_events_dropped = int(getattr(core.STORE, "_event_buffer_dropped", 0) or 0)
+        decision_history_pending = (
+            len(getattr(teaching, "buffer", ()) or ()) if teaching is not None else 0
+        )
+        diagnostic_events_pending = len(getattr(core.STORE, "_event_buffer", ()) or ())
+        diagnostic_events_dropped = int(
+            getattr(core.STORE, "_event_buffer_dropped", 0) or 0
+        )
         tournament = getattr(core.ENGINE, "context_tournament", None)
         shadow_snapshot = getattr(tournament, "shadow_persistence_snapshot", None)
         fast_snapshot = getattr(tournament, "fast_light_persistence_snapshot", None)

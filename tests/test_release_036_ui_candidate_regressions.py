@@ -69,6 +69,15 @@ class Release036UiCandidateRegressionTests(unittest.TestCase):
         self.assertIn("setTimeout(loop,4000)", source)
         self.assertNotIn("setTimeout(loop,1500)", source)
 
+    def test_hot_status_backlog_gauges_never_wait_for_persistence_locks(self):
+        source = self.source("release_017_ui_lifeline.py")
+        block = source.split("# These are advisory backlog gauges only.", 1)[1].split(
+            'payload["ram_persistence_buffers"]', 1
+        )[0]
+        self.assertNotIn("with core.STORE.lock", block)
+        self.assertNotIn("with teaching_lock", block)
+        self.assertIn('len(getattr(core.STORE, "_event_buffer"', block)
+
 
 if __name__ == "__main__":
     unittest.main()
