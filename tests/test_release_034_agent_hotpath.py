@@ -170,6 +170,19 @@ class AgentHotPathTests(unittest.TestCase):
         self.assertNotIn("journal.event(event_id)", process)
         self.assertIn("event_origin", process)
 
+    def test_inactive_teach_rebenchmark_short_circuits_before_config_read(self):
+        source = (
+            ROOT / "adaptive_ai/src/teach_rl_rebenchmark.py"
+        ).read_text(encoding="utf-8")
+        before = source.split("def before_process(self, agent, state_map):", 1)[1].split(
+            "def after_process(self, agent):", 1
+        )[0]
+        after = source.split("def after_process(self, agent):", 1)[1].split(
+            "def install_teach_rl_rebenchmark", 1
+        )[0]
+        self.assertLess(before.index("if not self.active(agent)"), before.index("self.store.get_agent_config"))
+        self.assertLess(after.index("if not self.active(agent)"), after.index("self.store.get_agent_config"))
+
     def test_hot_status_includes_realtime_telemetry_snapshot(self):
         source = (
             ROOT / "adaptive_ai/src/release_017_ui_lifeline.py"

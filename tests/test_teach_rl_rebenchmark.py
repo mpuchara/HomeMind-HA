@@ -3,6 +3,7 @@ import threading
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import Mock
 
 from qualification import assess_control_qualification
 from storage import Store
@@ -206,6 +207,19 @@ class TeachRLRebenchmarkTests(unittest.TestCase):
         fresh = self.store.get_agent_config(self.agent['id'])
         self.assertEqual(fresh['benchmark_samples'], 0)
         self.assertTrue(fresh['benchmark_detail']['qualification_stale'])
+
+    def test_inactive_rebenchmark_hot_path_does_not_read_agent_config(self):
+        inactive = self.store.get_agent_config(self.agent['id'])
+        states = {'light.test': target_state(0)}
+        original = self.store.get_agent_config
+        self.store.get_agent_config = Mock(
+            side_effect=AssertionError("inactive Teach rebenchmark must not read SQLite")
+        )
+        try:
+            self.service.before_process(inactive, states)
+            self.service.after_process(inactive)
+        finally:
+            self.store.get_agent_config = original
 
     def test_other_agent_qualification_is_untouched(self):
         other = self.store.create_agent({

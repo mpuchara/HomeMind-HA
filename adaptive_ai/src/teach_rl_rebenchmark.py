@@ -255,8 +255,19 @@ class TeachRLShadowRebenchmark:
         return bool(qualification.get("passed"))
 
     def before_process(self, agent, state_map):
-        fresh = self.store.get_agent_config(agent["id"]) or agent
-        aid = str(fresh["id"])
+        # The scheduler already supplies a recently refreshed immutable agent snapshot.
+        # Almost every agent is outside the short post-Teach rebenchmark lifecycle, so
+        # reject that common case without reopening SQLite on every inference.
+        aid = str(agent["id"])
+        if not self.active(agent):
+            with self.lock:
+                self.last_target.pop(aid, None)
+                self.pending.pop(aid, None)
+            return agent
+
+        # Only an actually active rebenchmark needs the newest durable benchmark counts,
+        # because _persist() updates those counts prequentially between target events.
+        fresh = self.store.get_agent_config(aid) or agent
         if not self.active(fresh):
             with self.lock:
                 self.last_target.pop(aid, None)
@@ -303,8 +314,16 @@ class TeachRLShadowRebenchmark:
         return self.store.get_agent_config(aid) or fresh
 
     def after_process(self, agent):
-        fresh = self.store.get_agent_config(agent["id"]) or agent
-        aid = str(fresh["id"])
+        aid = str(agent["id"])
+        if not self.active(agent):
+            with self.lock:
+                self.pending.pop(aid, None)
+            return
+
+        # As above, only the active rebenchmark lifecycle requires a durable refresh.
+        # This also observes a qualification completed by before_process() before storing
+        # the next pending prediction.
+        fresh = self.store.get_agent_config(aid) or agent
         if not self.active(fresh):
             with self.lock:
                 self.pending.pop(aid, None)
