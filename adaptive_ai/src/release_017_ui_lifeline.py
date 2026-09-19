@@ -232,6 +232,9 @@ def install(runtime):
         release_016 = getattr(core, "RELEASE_016_RESOURCE_GUARD", None)
         if callable(release_016):
             payload["resource_guard"] = release_016()
+        feature_journal = getattr(core.ENGINE, "feature_observation_deferred_snapshot", None)
+        if callable(feature_journal):
+            payload["feature_journal"] = feature_journal()
         payload["ui_lifeline"] = snapshot()
         return payload
 

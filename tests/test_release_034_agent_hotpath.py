@@ -226,6 +226,13 @@ class AgentHotPathTests(unittest.TestCase):
         self.assertIn("record_batch", source)
         self.assertIn("adaptive-ai-feature-journal-writer", source)
 
+    def test_hot_status_surfaces_feature_journal_backlog_without_sql(self):
+        source = (
+            ROOT / "adaptive_ai/src/release_017_ui_lifeline.py"
+        ).read_text(encoding="utf-8")
+        self.assertIn('"feature_journal"', source)
+        self.assertIn("feature_observation_deferred_snapshot", source)
+
     def test_hot_status_includes_realtime_telemetry_snapshot(self):
         source = (
             ROOT / "adaptive_ai/src/release_017_ui_lifeline.py"
