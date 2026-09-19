@@ -32,7 +32,9 @@
       if(!lastAgents.length&&data.configs?.length){
         lastAgents=data.configs.map(a=>({...a,control_qualification:{passed:false,reason:'Ładuję kwalifikację agenta…'}}));
         window.__adaptiveAiAgents=lastAgents;
-        window.dispatchEvent(new CustomEvent('adaptive-ai:agents',{detail:lastAgents}));
+        if(typeof window.dispatchEvent==='function'&&typeof CustomEvent==='function'){
+          window.dispatchEvent(new CustomEvent('adaptive-ai:agents',{detail:lastAgents}));
+        }
         renderAgents();
       }
       // Fast path changes only the three decision tiles. Lifecycle, diagnostics and

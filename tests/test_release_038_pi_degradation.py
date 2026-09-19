@@ -77,9 +77,9 @@ class Release038PiDegradationTests(unittest.TestCase):
                            (episode_id,contract_version,domain,agent_id,start_ts,end_ts,
                             context_json,labels_json,observability_json,automation_replay_json,
                             physical_outcome_json,end_reason,fingerprint,created_ts)
-                           VALUES(?,1,'light_power',?,?,?,?,?,?,?,?,?,?,?,?)""",
+                           VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                         (
-                            eid, aid, now + idx, now + idx + 0.5,
+                            eid, 1, "light_power", aid, now + idx, now + idx + 0.5,
                             "{}", "{}", "{}", None, None, "test", f"fp-{idx}", now,
                         ),
                     )

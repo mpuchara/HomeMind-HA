@@ -1001,6 +1001,12 @@ class AdaptationService:
         aid = str((agent or {}).get("id") or "")
         if not aid:
             return False
+        # Direct/synthetic process_agent calls intentionally do not start runtime worker
+        # threads. In production Engine is alive before it can deliver realtime inference.
+        is_alive = getattr(self.engine, "is_alive", None)
+        if callable(is_alive) and not is_alive():
+            return False
+        self.start_observer()
         with self._observer_lock:
             existed = aid in self._observer_pending
             self._observer_pending[aid] = dict(agent)
@@ -1142,7 +1148,6 @@ def install(manager):
             return payload
         manager.engine.runtime_for = runtime_for
 
-    service.start_observer()
     manager.adaptation_service = service
     manager.cold_start_drift_contract = contract_descriptor()
     manager.rollback_adaptation = service.rollback_adaptation

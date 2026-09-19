@@ -41,7 +41,7 @@ class Release037PiRuntimeRegressionTests(unittest.TestCase):
     def test_hot_status_separates_ha_rest_reachability_from_websocket(self):
         source = self.source("release_017_ui_lifeline.py")
         status = source.split("def status_payload", 1)[1]
-        self.assertIn('payload["ha_connected"] = ha_connected', status)
+        self.assertIn('payload["ha_connected"] = bool(ws_connected or ha_rest_connected)', status)
         self.assertIn('"connected": bool(ws_connected)', status)
         self.assertIn('"inference_scheduler": inference_scheduler', status)
 
