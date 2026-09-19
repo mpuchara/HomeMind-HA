@@ -758,36 +758,96 @@ class FeatureJournal:
             (str(entity_id), float(event_time), float(event_time))).fetchone()
         return float(row[0] or 0.0) if row else 0.0
 
-    def record(self, entity_id, state, *, event_time, received_time, source, event_key=None, quality=1.0):
+    def _prepare_record(self, entity_id, state, *, event_time, received_time,
+                        source, event_key=None, quality=1.0):
         if not entity_id or state is None:
             return None
         event_time, received_time = float(event_time), float(received_time)
         context = (state or {}).get("context") or {}
         if event_key is None:
             if source == "ha_state_changed":
-                event_key = stable_event_id(entity_id, event_time, context.get("id"), context.get("parent_id"), state)
+                event_key = stable_event_id(
+                    entity_id, event_time, context.get("id"), context.get("parent_id"), state
+                )
             else:
-                raw = f"{entity_id}|{event_time:.9f}|{received_time:.9f}|{source}|{state.get('state')}"
+                raw = (
+                    f"{entity_id}|{event_time:.9f}|{received_time:.9f}|"
+                    f"{source}|{state.get('state')}"
+                )
                 event_key = "obs:" + hashlib.sha256(raw.encode("utf-8")).hexdigest()[:32]
-        attrs = json.dumps(self._compact_attributes(state), separators=(",", ":"), ensure_ascii=False)
+        return {
+            "event_key": str(event_key),
+            "entity_id": str(entity_id),
+            "event_time": event_time,
+            "received_time": received_time,
+            "state": None if state.get("state") is None else str(state.get("state")),
+            "attributes_json": json.dumps(
+                self._compact_attributes(state), separators=(",", ":"), ensure_ascii=False
+            ),
+            "last_changed": state.get("last_changed"),
+            "last_updated": state.get("last_updated"),
+            "source": str(source),
+            "quality": clamp(float(quality), 0.0, 1.0),
+        }
+
+    def record_batch(self, records):
+        """Persist multiple high-resolution observations in one writer transaction."""
+        prepared = []
+        for raw in records or ():
+            if raw is None:
+                continue
+            if "attributes_json" in raw and "event_key" in raw:
+                prepared.append(dict(raw))
+                continue
+            item = self._prepare_record(
+                raw.get("entity_id"), raw.get("state"),
+                event_time=raw.get("event_time"),
+                received_time=raw.get("received_time"),
+                source=raw.get("source") or "ha_state_changed",
+                event_key=raw.get("event_key"),
+                quality=raw.get("quality", 1.0),
+            )
+            if item is not None:
+                prepared.append(item)
+        if not prepared:
+            return []
+
         with self.store.lock, self.store.conn() as c:
-            protected = self._protection(c, entity_id, event_time)
-            c.execute("""INSERT INTO feature_observation_events
-                (event_key,contract_version,entity_id,event_time,received_time,state,attributes_json,
-                 last_changed,last_updated,source,quality,protected_until)
-                VALUES(?,?,?,?,?,?,?,?,?,?,?,?)
-                ON CONFLICT(event_key) DO UPDATE SET
-                  received_time=MIN(feature_observation_events.received_time,excluded.received_time),
-                  protected_until=MAX(feature_observation_events.protected_until,excluded.protected_until),
-                  quality=MAX(feature_observation_events.quality,excluded.quality)""",
-                (event_key, CONTRACT_VERSION, str(entity_id), event_time, received_time,
-                 None if state.get("state") is None else str(state.get("state")), attrs,
-                 state.get("last_changed"), state.get("last_updated"), str(source),
-                 clamp(float(quality), 0.0, 1.0), protected))
-        self._writes += 1
-        if self._writes % 128 == 0:
-            self.prune(entity_id=entity_id)
-        return event_key
+            for row in prepared:
+                protected = self._protection(c, row["entity_id"], row["event_time"])
+                c.execute(
+                    """INSERT INTO feature_observation_events
+                       (event_key,contract_version,entity_id,event_time,received_time,state,
+                        attributes_json,last_changed,last_updated,source,quality,protected_until)
+                       VALUES(?,?,?,?,?,?,?,?,?,?,?,?)
+                       ON CONFLICT(event_key) DO UPDATE SET
+                         received_time=MIN(feature_observation_events.received_time,excluded.received_time),
+                         protected_until=MAX(feature_observation_events.protected_until,excluded.protected_until),
+                         quality=MAX(feature_observation_events.quality,excluded.quality)""",
+                    (
+                        row["event_key"], CONTRACT_VERSION, row["entity_id"],
+                        row["event_time"], row["received_time"], row["state"],
+                        row["attributes_json"], row.get("last_changed"), row.get("last_updated"),
+                        row["source"], row["quality"], protected,
+                    ),
+                )
+
+        previous_writes = self._writes
+        self._writes += len(prepared)
+        if self._writes // 128 > previous_writes // 128:
+            self.prune(entity_id=prepared[-1]["entity_id"])
+        return [row["event_key"] for row in prepared]
+
+    def record(self, entity_id, state, *, event_time, received_time, source,
+               event_key=None, quality=1.0):
+        prepared = self._prepare_record(
+            entity_id, state, event_time=event_time, received_time=received_time,
+            source=source, event_key=event_key, quality=quality,
+        )
+        if prepared is None:
+            return None
+        keys = self.record_batch([prepared])
+        return keys[0] if keys else None
 
     def open_windows_batch(self, rows):
         """Persist evidence-window requests in one bounded writer transaction."""
@@ -1065,11 +1125,19 @@ class ObservationSQLiteTemporalTracker(replay_module.SQLiteTemporalTracker):
             TRAINING_BUDGET.checkpoint("temporal_edge_scan")
 
 def _watched_fast_entities(engine, store):
+    """Resolve high-resolution watched entities from the already-built agent index."""
+    with engine.lock:
+        agents = list((getattr(engine, "agent_configs", {}) or {}).values())
+        models = dict(getattr(engine, "models", {}) or {})
+    if not agents:
+        # Startup fallback before the first routing-index build. This is not the steady
+        # event path; once agent_configs exists, no second all-agent config scan is done.
+        agents = store.list_agent_configs()
     entities = set()
-    for agent in store.list_agent_configs():
+    for agent in agents:
         if not agent.get("enabled") or not is_fast_reactive_agent(agent):
             continue
-        policy = engine.models.get(agent["id"])
+        policy = models.get(agent["id"])
         if policy is not None:
             entities.update(policy.schema.entities)
         else:
@@ -1204,15 +1272,49 @@ def install(core):
     journal = FeatureJournal(store)
     engine.feature_journal = journal
     engine._observation_contract_installed = True
-    engine._observation_watch_cache = (0.0, set())
+    engine._observation_watch_cache = (None, set())
 
-    # Evidence windows protect the high-resolution samples around decisions/corrections,
-    # but their SQLite maintenance is audit work, not part of event->intent. Queue those
-    # windows and persist them in bounded batches on one low-frequency writer thread.
-    window_lock = threading.RLock()
-    window_event = threading.Event()
+    # Feature observations and evidence-window maintenance are audit/replay data, not
+    # part of event->intent. Persist both through one bounded background writer.
+    journal_lock = threading.RLock()
+    journal_event = threading.Event()
+    observation_rows = deque()
     window_rows = deque()
+    observation_limit = 8192
+    observation_stats = {
+        "queued": 0, "flushed": 0, "flushes": 0, "max_queue": 0,
+        "overflow_sync": 0, "errors": 0,
+    }
     window_stats = {"queued": 0, "flushed": 0, "flushes": 0, "max_queue": 0, "errors": 0}
+
+    def queue_observation(entity_id, state, *, event_time, received_time, source,
+                          event_key=None, quality=1.0):
+        prepared = journal._prepare_record(
+            entity_id, state, event_time=event_time, received_time=received_time,
+            source=source, event_key=event_key, quality=quality,
+        )
+        if prepared is None:
+            return None
+        overflow = False
+        with journal_lock:
+            if len(observation_rows) >= observation_limit:
+                overflow = True
+                observation_stats["overflow_sync"] += 1
+            else:
+                observation_rows.append(prepared)
+                observation_stats["queued"] += 1
+                observation_stats["max_queue"] = max(
+                    observation_stats["max_queue"], len(observation_rows)
+                )
+                if len(observation_rows) >= 64:
+                    journal_event.set()
+        if overflow:
+            # Preserve evidence rather than silently dropping it. This deliberately
+            # reintroduces backpressure only after >8k queued records, an observable
+            # overload state rather than an unbounded memory leak.
+            keys = journal.record_batch([prepared])
+            return keys[0] if keys else None
+        return prepared["event_key"]
 
     def queue_window(window_id, agent_id, entities, anchor_time, kind):
         row = {
@@ -1220,16 +1322,37 @@ def install(core):
             "entities": tuple(entities or ()), "anchor_time": float(anchor_time),
             "kind": str(kind),
         }
-        with window_lock:
+        with journal_lock:
             window_rows.append(row)
             window_stats["queued"] += 1
             window_stats["max_queue"] = max(window_stats["max_queue"], len(window_rows))
-        window_event.set()
+            if len(window_rows) >= 32:
+                journal_event.set()
         return row["window_id"]
+
+    def flush_observations(limit=256):
+        batch = []
+        with journal_lock:
+            while observation_rows and len(batch) < max(1, int(limit)):
+                batch.append(observation_rows.popleft())
+        if not batch:
+            return 0
+        try:
+            journal.record_batch(batch)
+        except Exception:
+            with journal_lock:
+                for row in reversed(batch):
+                    observation_rows.appendleft(row)
+                observation_stats["errors"] += 1
+            raise
+        with journal_lock:
+            observation_stats["flushed"] += len(batch)
+            observation_stats["flushes"] += 1
+        return len(batch)
 
     def flush_windows(limit=64):
         batch = []
-        with window_lock:
+        with journal_lock:
             while window_rows and len(batch) < max(1, int(limit)):
                 batch.append(window_rows.popleft())
         if not batch:
@@ -1237,56 +1360,64 @@ def install(core):
         try:
             written = journal.open_windows_batch(batch)
         except Exception:
-            with window_lock:
+            with journal_lock:
                 for row in reversed(batch):
                     window_rows.appendleft(row)
                 window_stats["errors"] += 1
             raise
-        with window_lock:
+        with journal_lock:
             window_stats["flushed"] += len(batch)
             window_stats["flushes"] += 1
         return written
 
-    def window_snapshot():
-        with window_lock:
-            return {**window_stats, "pending": len(window_rows)}
+    def journal_snapshot():
+        with journal_lock:
+            return {
+                "observations": {**observation_stats, "pending": len(observation_rows)},
+                "windows": {**window_stats, "pending": len(window_rows)},
+            }
 
-    def window_writer():
+    def journal_writer():
         while not engine.stop_event.is_set():
-            window_event.wait(0.25)
-            window_event.clear()
+            journal_event.wait(0.1)
+            journal_event.clear()
             try:
-                while flush_windows():
-                    pass
+                while True:
+                    observations = flush_observations()
+                    windows = flush_windows()
+                    if not observations and not windows:
+                        break
             except Exception as exc:
                 try:
                     store.event(
-                        None, "warning", "feature_window_batch_flush_failed",
-                        f"Deferred feature-window flush failed: {type(exc).__name__}: {exc}",
+                        None, "warning", "feature_journal_batch_flush_failed",
+                        f"Deferred feature-journal flush failed: {type(exc).__name__}: {exc}",
                         None,
                     )
                 except Exception:
                     pass
                 time.sleep(0.1)
         try:
-            while flush_windows():
+            while flush_observations() or flush_windows():
                 pass
         except Exception:
             pass
 
-    engine.feature_window_deferred_snapshot = window_snapshot
+    engine.feature_window_deferred_snapshot = journal_snapshot
+    engine.feature_observation_deferred_snapshot = journal_snapshot
     threading.Thread(
-        target=window_writer,
-        name="adaptive-ai-feature-window-writer",
+        target=journal_writer,
+        name="adaptive-ai-feature-journal-writer",
         daemon=True,
     ).start()
 
     def watched():
-        ts, values = engine._observation_watch_cache
-        now = now_ts()
-        if now - ts >= 2.0:
+        marker, values = engine._observation_watch_cache
+        with engine.lock:
+            current_marker = float(getattr(engine, "agent_index_at", 0.0) or 0.0)
+        if marker != current_marker:
             values = _watched_fast_entities(engine, store)
-            engine._observation_watch_cache = (now, values)
+            engine._observation_watch_cache = (current_marker, values)
         return values
 
     original_on_state_changed = engine.on_state_changed
@@ -1305,8 +1436,10 @@ def install(core):
             accepted = register_live_sample(engine.temporal_history, entity_id, state, event_time,
                                             received, "ha_state_changed")
         if accepted and entity_id in watched():
-            journal.record(entity_id, state, event_time=event_time, received_time=received,
-                           source="ha_state_changed")
+            queue_observation(
+                entity_id, state, event_time=event_time, received_time=received,
+                source="ha_state_changed",
+            )
         return result
     engine.on_state_changed = on_state_changed
 
@@ -1320,11 +1453,13 @@ def install(core):
             if not state:
                 continue
             event_time = parse_ts(state.get("last_updated") or state.get("last_changed")) or received
-            journal.record(entity_id, state, event_time=event_time, received_time=received,
-                           source="ha_poll_confirmation",
-                           event_key=("poll:" + hashlib.sha256(
-                               f"{entity_id}|{event_time:.9f}|{received:.3f}".encode("utf-8")
-                           ).hexdigest()[:32]))
+            queue_observation(
+                entity_id, state, event_time=event_time, received_time=received,
+                source="ha_poll_confirmation",
+                event_key=("poll:" + hashlib.sha256(
+                    f"{entity_id}|{event_time:.9f}|{received:.3f}".encode("utf-8")
+                ).hexdigest()[:32]),
+            )
             register_live_sample(engine.temporal_history, entity_id, state, event_time, received,
                                  "ha_poll_confirmation")
         return states
