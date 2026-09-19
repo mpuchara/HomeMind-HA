@@ -1016,7 +1016,11 @@ class AdaptationService:
                 int(self._observer_stats["pending_high_water"]),
                 len(self._observer_pending),
             )
-        self._observer_event.set()
+        # One pending item is enough to wake the observer. Re-signalling the Event after
+        # every inference while the same agent is still inside its 30 s throttle window
+        # creates a pointless wake/clear loop under active sensor traffic.
+        if not existed:
+            self._observer_event.set()
         return True
 
     def observer_snapshot(self):
