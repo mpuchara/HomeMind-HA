@@ -22,23 +22,48 @@ _STORE_PATCHED = False
 _HISTORY_PATCHED = False
 
 
-def _candidate_ids(store):
+def refresh_candidate_ids_cache(store):
+    """Refresh the tiny hidden-Candidate ID set after a lifecycle mutation.
+
+    Candidate membership changes only when a Candidate is created/promoted/discarded.
+    Normal agent enumeration and is_candidate() checks are much hotter, so they must not
+    open SQLite merely to hide a handful of surrogate IDs.
+    """
     try:
         with store.conn() as c:
-            if not c.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='agent_candidates'").fetchone():
-                return set()
-            return {str(r[0]) for r in c.execute("SELECT candidate_id FROM agent_candidates").fetchall()}
+            values = set()
+            if c.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='agent_candidates'").fetchone():
+                values.update(str(r[0]) for r in c.execute("SELECT candidate_id FROM agent_candidates").fetchall())
+            if c.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='agent_candidate_generations'").fetchone():
+                values.update(
+                    str(r[0]) for r in c.execute(
+                        """SELECT agent_id FROM agent_candidate_generations
+                           WHERE generation_type='candidate' AND agent_id IS NOT NULL"""
+                    ).fetchall()
+                )
     except Exception:
-        return set()
+        values = set(getattr(store, "_candidate_ids_ram", set()) or set())
+    lock = getattr(store, "_candidate_ids_ram_lock", None)
+    if lock is None:
+        lock = threading.RLock()
+        store._candidate_ids_ram_lock = lock
+    with lock:
+        store._candidate_ids_ram = set(values)
+        store._candidate_ids_ram_ready = True
+        store._candidate_ids_ram_revision = int(getattr(store, "_candidate_ids_ram_revision", 0)) + 1
+    return set(values)
+
+
+def _candidate_ids(store):
+    lock = getattr(store, "_candidate_ids_ram_lock", None)
+    if lock is not None and getattr(store, "_candidate_ids_ram_ready", False):
+        with lock:
+            return set(getattr(store, "_candidate_ids_ram", set()) or set())
+    return refresh_candidate_ids_cache(store)
 
 
 def is_candidate(store, agent_id):
-    try:
-        with store.conn() as c:
-            row = c.execute("SELECT 1 FROM agent_candidates WHERE candidate_id=?", (str(agent_id),)).fetchone()
-        return bool(row)
-    except Exception:
-        return False
+    return str(agent_id) in _candidate_ids(store)
 
 
 def ensure_tables(store):
@@ -90,6 +115,7 @@ def install_store_overlay(store):
     """Hide training surrogates from every normal live-agent enumeration."""
     global _STORE_PATCHED
     ensure_tables(store)
+    refresh_candidate_ids_cache(store)
     if _STORE_PATCHED:
         return
     cls = type(store)
@@ -287,6 +313,7 @@ class AgentCandidateManager(threading.Thread):
                 (parent["id"], candidate["id"], generation, "queued", "feedback",
                  now, json.dumps(_blank_comparison()), now),
             )
+        refresh_candidate_ids_cache(self.store)
         self.engine.models.pop(candidate["id"], None)
         self.engine.runtime.pop(candidate["id"], None)
         return self._candidate_row(parent["id"])
@@ -492,6 +519,7 @@ class AgentCandidateManager(threading.Thread):
                 if c.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (table,)).fetchone():
                     c.execute(f"DELETE FROM {table} WHERE agent_id=?", (candidate_id,))
             c.execute("DELETE FROM agent_candidates WHERE candidate_id=?", (candidate_id,))
+        refresh_candidate_ids_cache(self.store)
         self.store.delete_agent(candidate_id)
         self.runtime.pop(str(row["parent_agent_id"]), None)
 

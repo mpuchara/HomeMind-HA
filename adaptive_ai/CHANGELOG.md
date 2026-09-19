@@ -1,3 +1,13 @@
+# 0.14.46 — 2026-09-19
+
+- Move the 1 s Candidate live-card path to RAM. Current comes from the websocket-backed Engine state map; Candidate/Parent Desired, confidence and timestamp come from the in-memory generation runtime. SQLite is now only a cold restart/backfill source for these tiles.
+- Keep the latest observed decision snapshot for every active Candidate generation in RAM on every inference, even when the existing durable 30 s history heartbeat does not need to write another row.
+- Cache the active direct Parent/Candidate A/B edge in RAM so target transitions do not execute a SQLite lookup before outcome evaluation. Lifecycle mutations invalidate the cache synchronously.
+- Cache hidden Candidate IDs, including retained lineage surrogates, in RAM. Normal live-agent enumeration and candidate-membership checks no longer query Candidate tables repeatedly.
+- Prefer Engine.all_agent_configs for passive Candidate root configuration and Engine.models for already-materialized policy schema reads.
+- Preserve persistence boundaries: models, training state, user feedback, promotion state, decision history and paired future evidence remain durable. Active RL policies were already resident in Engine.models, so this release deliberately avoids a second mutable model cache.
+- Preserve Executor/HA isolation for Candidate Shadow and all 0.14.45 event-driven fallback semantics.
+
 # 0.14.45 — 2026-09-19
 
 - Fix false errors when switching a trained agent from Paused to Shadow. The successful mode PATCH is now separated from the subsequent layered UI refresh, so a transient renderer problem cannot be reported as a failed mode change or generate duplicate alerts.
