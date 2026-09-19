@@ -465,6 +465,9 @@ def install(manager):
     def invalidate_generation_cache(*_args, **_kwargs):
         # Candidate lineage mutations are rare. Invalidate all root caches immediately
         # instead of polling SQLite from every realtime inference.
+        manager.store._provenance_generation_revision = int(
+            getattr(manager.store, "_provenance_generation_revision", 0)
+        ) + 1
         for runtime in shadow_runtime.values():
             runtime["generation_cache_at"] = 0.0
             runtime["shadow_generations"] = None
