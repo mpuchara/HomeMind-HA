@@ -69,6 +69,8 @@ class ManualFeedbackJournal:
         self.store = store
         self.clock = clock
         self._listeners = []
+        if not hasattr(self.store, "_manual_feedback_revisions"):
+            self.store._manual_feedback_revisions = {}
         self._migrate()
 
     def add_listener(self, callback):
@@ -77,6 +79,10 @@ class ManualFeedbackJournal:
 
     def _notify(self, *agent_ids):
         ids = tuple(str(x) for x in agent_ids if x)
+        revisions = getattr(self.store, "_manual_feedback_revisions", None)
+        if isinstance(revisions, dict):
+            for agent_id in ids:
+                revisions[agent_id] = int(revisions.get(agent_id, 0)) + 1
         for callback in tuple(self._listeners):
             try:
                 callback(*ids)
