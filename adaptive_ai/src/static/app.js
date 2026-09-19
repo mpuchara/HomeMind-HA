@@ -63,7 +63,13 @@ async function load(){
   const completedDiscoveryRun=(!lastHistory?.discovery_job_active&&lastHistory?.discovery_classified)?Number(lastHistory?.last_run||0):0;
   const refreshAfterDiscovery=completedDiscoveryRun>0&&completedDiscoveryRun!==lastDiscoveryAgentRefresh;
   if(refreshAfterDiscovery&&earlyAgents)earlyAgents.catch(()=>null);
-  const agentsRequest=refreshAfterDiscovery?api('api/agents'):(earlyAgents||api('api/agents'));
+  // polling_guard intentionally caches api/agents for 3 s. A plain second GET here can
+  // therefore replay the pre-discovery one-card response. Give each completed discovery
+  // run its own read key so the completion refresh is guaranteed to reach the server.
+  const discoveryAgentsPath=refreshAfterDiscovery
+    ?`api/agents?discovery_revision=${encodeURIComponent(completedDiscoveryRun)}`
+    :'api/agents';
+  const agentsRequest=refreshAfterDiscovery?api(discoveryAgentsPath):(earlyAgents||api('api/agents'));
   const [agentsResult,eventsResult]=await Promise.allSettled([
     agentsRequest,
     earlyEvents||api('api/events?limit=60'),
