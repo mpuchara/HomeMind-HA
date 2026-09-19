@@ -449,6 +449,27 @@ def install(manager):
     original_get = handler.do_GET
 
     shadow_runtime = {}
+    active_candidate_parents = set()
+
+    def _refresh_active_candidate_parents():
+        # Candidate lifecycle mutations are rare. Rebuild one compact in-memory set there,
+        # instead of probing agent_candidates from every before/after live inference.
+        try:
+            with manager.store.conn() as db:
+                rows = db.execute(
+                    "SELECT DISTINCT parent_agent_id FROM agent_candidates"
+                ).fetchall()
+            values = {str(row[0]) for row in rows if row and row[0]}
+        except Exception:
+            values = set(active_candidate_parents)
+        active_candidate_parents.clear()
+        active_candidate_parents.update(values)
+        return len(active_candidate_parents)
+
+    def candidate_hot_active(agent_id):
+        return str(agent_id) in active_candidate_parents
+
+    _refresh_active_candidate_parents()
 
     def _root_runtime(root_id):
         return shadow_runtime.setdefault(str(root_id), {
@@ -468,6 +489,7 @@ def install(manager):
         manager.store._provenance_generation_revision = int(
             getattr(manager.store, "_provenance_generation_revision", 0)
         ) + 1
+        _refresh_active_candidate_parents()
         for runtime in shadow_runtime.values():
             runtime["generation_cache_at"] = 0.0
             runtime["shadow_generations"] = None
@@ -845,6 +867,8 @@ def install(manager):
             return result
         setattr(manager, method_name, wrapped)
     manager.invalidate_candidate_shadow_cache = invalidate_generation_cache
+    manager.candidate_hot_active = candidate_hot_active
+    manager.candidate_hot_active_count = lambda: len(active_candidate_parents)
 
     manager.before_live_process = before_live_process
     manager.after_live_process = after_live_process
