@@ -1,3 +1,13 @@
+# 0.14.44 — 2026-09-19
+
+- Replace misleading per-chunk training progress with a continuous whole-agent training progress contract. Recorder/screening/replay counters remain visible as the current stage and may restart between chunks without resetting the global percentage.
+- Add a whole-training ETA derived from real wall-clock end-to-end progress, including Recorder waits, Raspberry-Pi cooperative throttling and completed replay chunks. Current-stage ETA and rows/s remain separate diagnostics.
+- Overlay the in-memory global training progress onto the active agent card without adding periodic SQLite writes.
+- Add a monotonic TrainingQueue lifecycle revision. Completion of one agent and start of the next forces a fresh cache-bypassing agent-list read, so cards cannot remain stuck on stale TRAINING state.
+- Restore lifecycle actions hidden by the Generation Workflow action row: a trained `mode=paused` agent gets **Start Shadow**, an active Shadow can be paused, and `training_state=paused` gets **Resume training**.
+- Keep the 20% Pi-safe training CPU duty cycle and 50 ms continuous-work slice unchanged. Long training is reported truthfully rather than accelerated at the cost of Home Assistant/UI responsiveness.
+- Preserve discovery, model, reward, benchmark, Candidate, Teach/Correct and physical-control semantics.
+
 # 0.14.43 — 2026-09-19
 
 - Fix the false `Train failed: Cannot set properties of null (setting 'textContent')` alert after a successful manual Train queue admission.
