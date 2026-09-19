@@ -113,6 +113,8 @@ class SchemaAgeTracker:
     def __init__(self, store, service):
         self.store = store
         self.service = service
+        self.lock = threading.RLock()
+        self._cache = {}
         with self.store.lock, self.store.conn() as c:
             c.execute(
                 f"""CREATE TABLE IF NOT EXISTS {DIAGNOSTIC_TABLE} (
@@ -123,6 +125,18 @@ class SchemaAgeTracker:
                        updated_ts REAL NOT NULL
                    )"""
             )
+            rows = c.execute(
+                f"SELECT agent_id,schema_revision,schema_signature,schema_changed_ts FROM {DIAGNOSTIC_TABLE}"
+            ).fetchall()
+        with self.lock:
+            self._cache = {
+                str(row["agent_id"]): {
+                    "schema_revision": int(row["schema_revision"] or 0),
+                    "schema_signature": str(row["schema_signature"] or "[]"),
+                    "schema_changed_ts": float(row["schema_changed_ts"]),
+                }
+                for row in rows
+            }
 
     def _best_initial_ts(self, agent, active_features, now):
         history = getattr(self.service, "schema_history", None)
@@ -148,27 +162,40 @@ class SchemaAgeTracker:
         revision = int((tournament_state or {}).get("schema_revision") or 0)
         active = list((tournament_state or {}).get("active_features") or [])
         signature = _schema_signature(active)
+        with self.lock:
+            cached = dict(self._cache.get(aid) or {})
+        if (cached
+                and int(cached.get("schema_revision") or 0) == revision
+                and str(cached.get("schema_signature") or "[]") == signature):
+            changed_ts = float(cached["schema_changed_ts"])
+            return {
+                "schema_revision": revision,
+                "schema_changed_ts": changed_ts,
+                "schema_age": max(0.0, now - changed_ts),
+            }
+
+        changed_ts = (
+            self._best_initial_ts(agent, active, now)
+            if not cached else now
+        )
         with self.store.lock, self.store.conn() as c:
-            row = c.execute(
-                f"SELECT schema_revision,schema_signature,schema_changed_ts FROM {DIAGNOSTIC_TABLE} WHERE agent_id=?",
-                (aid,),
-            ).fetchone()
-            if row is None:
-                changed_ts = self._best_initial_ts(agent, active, now)
-                c.execute(
-                    f"INSERT INTO {DIAGNOSTIC_TABLE}(agent_id,schema_revision,schema_signature,schema_changed_ts,updated_ts) VALUES(?,?,?,?,?)",
-                    (aid, revision, signature, changed_ts, now),
-                )
-            else:
-                changed = (
-                    int(row["schema_revision"] or 0) != revision
-                    or str(row["schema_signature"] or "[]") != signature
-                )
-                changed_ts = now if changed else float(row["schema_changed_ts"])
-                c.execute(
-                    f"UPDATE {DIAGNOSTIC_TABLE} SET schema_revision=?,schema_signature=?,schema_changed_ts=?,updated_ts=? WHERE agent_id=?",
-                    (revision, signature, changed_ts, now, aid),
-                )
+            c.execute(
+                f"""INSERT INTO {DIAGNOSTIC_TABLE}
+                    (agent_id,schema_revision,schema_signature,schema_changed_ts,updated_ts)
+                    VALUES(?,?,?,?,?)
+                    ON CONFLICT(agent_id) DO UPDATE SET
+                      schema_revision=excluded.schema_revision,
+                      schema_signature=excluded.schema_signature,
+                      schema_changed_ts=excluded.schema_changed_ts,
+                      updated_ts=excluded.updated_ts""",
+                (aid, revision, signature, changed_ts, now),
+            )
+        with self.lock:
+            self._cache[aid] = {
+                "schema_revision": revision,
+                "schema_signature": signature,
+                "schema_changed_ts": changed_ts,
+            }
         return {
             "schema_revision": revision,
             "schema_changed_ts": changed_ts,

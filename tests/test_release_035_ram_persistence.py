@@ -83,5 +83,33 @@ class RamFirstPersistenceTests(unittest.TestCase):
             self.store.conn = original_conn
 
 
+
+    def test_context_shadow_and_fast_light_use_deferred_ram_writers(self):
+        from support import ROOT
+        tournament = (ROOT / "adaptive_ai/src/context_tournament.py").read_text(encoding="utf-8")
+        fast = (ROOT / "adaptive_ai/src/fast_light_objective.py").read_text(encoding="utf-8")
+        diagnostics = (ROOT / "adaptive_ai/src/control_diagnostics.py").read_text(encoding="utf-8")
+        self.assertIn("self._shadow_dirty = {}", tournament)
+        self.assertIn("self._shadow_flush_event.wait(5.0)", tournament)
+        save_shadow = tournament.split("def _save_shadow_model", 1)[1].split("@staticmethod", 1)[0]
+        self.assertNotIn("self.store.conn()", save_shadow)
+        self.assertIn("dirty_benchmarks = {}", fast)
+        self.assertIn("dirty_models = {}", fast)
+        self.assertIn("persistence_event.wait(5.0)", fast)
+        self.assertIn("store.save_models_batch(model_rows)", fast)
+        self.assertNotIn('store.save_model(agent["id"], policy.serialize())', fast)
+        observe = diagnostics.split("def observe(self, agent, tournament_state, now=None):", 1)[1].split("def enrich_qualification", 1)[0]
+        self.assertIn("cached = dict(self._cache.get(aid) or {})", observe)
+        self.assertIn("if (cached", observe)
+
+    def test_model_batch_checkpoint_preserves_latest_snapshots(self):
+        self.store.save_models_batch([
+            ("a", {"version": 1, "value": 1}),
+            ("b", {"version": 1, "value": 2}),
+            ("a", {"version": 1, "value": 3}),
+        ])
+        self.assertEqual(self.store.get_model("a")["value"], 3)
+        self.assertEqual(self.store.get_model("b")["value"], 2)
+
 if __name__ == "__main__":
     unittest.main()

@@ -42,6 +42,9 @@ class ContextTournament:
         self._runtime_fingerprints = {}
         self._shadow_models = {}
         self._shadow_runtime = {}
+        self._shadow_dirty = {}
+        self._shadow_flush_event = threading.Event()
+        self._shadow_persistence_stats = {"queued": 0, "flushed": 0, "flushes": 0, "errors": 0}
         self._last_error_ts = 0.0
         with self.store.lock, self.store.conn() as c:
             c.executescript(
@@ -65,6 +68,11 @@ class ContextTournament:
                 );
                 """
             )
+        threading.Thread(
+            target=self._shadow_writer,
+            name="adaptive-ai-context-shadow-writer",
+            daemon=True,
+        ).start()
 
     @staticmethod
     def _json_list(raw):
@@ -315,19 +323,68 @@ class ContextTournament:
             self._shadow_models[key] = model
         return model
 
+    def _flush_shadow_models(self):
+        with self.lock:
+            if not self._shadow_dirty:
+                return 0
+            batch = dict(self._shadow_dirty)
+            self._shadow_dirty.clear()
+        now = time.time()
+        packed = [
+            (key[0], key[1], raw, now)
+            for key, raw in batch.items()
+        ]
+        try:
+            with self.store.lock, self.store.conn() as c:
+                c.executemany(
+                    """INSERT INTO context_tournament_shadow(agent_id,challenger_entity,model_json,updated_ts)
+                       VALUES(?,?,?,?)
+                       ON CONFLICT(agent_id,challenger_entity) DO UPDATE SET
+                         model_json=excluded.model_json,updated_ts=excluded.updated_ts""",
+                    packed,
+                )
+            with self.lock:
+                self._shadow_persistence_stats["flushed"] += len(packed)
+                self._shadow_persistence_stats["flushes"] += 1
+            return len(packed)
+        except Exception:
+            with self.lock:
+                for key, raw in batch.items():
+                    self._shadow_dirty.setdefault(key, raw)
+                self._shadow_persistence_stats["errors"] += 1
+            raise
+
+    def _shadow_writer(self):
+        while not self.engine.stop_event.is_set():
+            self._shadow_flush_event.wait(5.0)
+            self._shadow_flush_event.clear()
+            try:
+                self._flush_shadow_models()
+            except Exception as exc:
+                self.report_runtime_error(exc)
+                time.sleep(0.1)
+        try:
+            self._flush_shadow_models()
+        except Exception:
+            pass
+
+    def shadow_persistence_snapshot(self):
+        with self.lock:
+            return {
+                **self._shadow_persistence_stats,
+                "pending": len(self._shadow_dirty),
+            }
+
     def _save_shadow_model(self, agent_id, challenger, model):
         key = (str(agent_id), str(challenger))
         raw = json.dumps(model, separators=(",", ":"), sort_keys=True)
-        with self.store.lock, self.store.conn() as c:
-            c.execute(
-                """INSERT INTO context_tournament_shadow(agent_id,challenger_entity,model_json,updated_ts)
-                   VALUES(?,?,?,?)
-                   ON CONFLICT(agent_id,challenger_entity) DO UPDATE SET
-                     model_json=excluded.model_json,updated_ts=excluded.updated_ts""",
-                (key[0], key[1], raw, time.time()),
-            )
         with self.lock:
             self._shadow_models[key] = model
+            self._shadow_dirty[key] = raw
+            self._shadow_persistence_stats["queued"] += 1
+            wake = len(self._shadow_dirty) >= 32
+        if wake:
+            self._shadow_flush_event.set()
 
     @staticmethod
     def _shadow_context_key(active_idx, bucket):

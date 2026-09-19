@@ -372,19 +372,52 @@ class Store:
             row = c.execute("SELECT model_json FROM rl_models WHERE agent_id=?", (agent_id,)).fetchone()
         return json.loads(row[0]) if row else None
 
-    def save_model(self, agent_id, model):
+    def save_models_batch(self, rows):
+        """Persist latest model snapshots for multiple agents in one transaction."""
+        latest = {}
+        for agent_id, model in list(rows or []):
+            latest[str(agent_id)] = dict(model)
+        if not latest:
+            return 0
+        ids = list(latest)
+        placeholders = ",".join("?" for _ in ids)
         with self.lock, self.conn() as c:
-            model = dict(model)
-            model['_history_watermark'] = c.execute('SELECT COALESCE(MAX(id),0) FROM historical_experiences WHERE agent_id=?', (agent_id,)).fetchone()[0]
-            previous = c.execute('SELECT model_json FROM rl_models WHERE agent_id=?', (agent_id,)).fetchone()
-            if previous and '_benchmark_counts' not in model:
-                model['_benchmark_counts'] = json.loads(previous[0]).get('_benchmark_counts', {})
-            raw = json.dumps(model, separators=(",", ":"))
-            c.execute(
+            watermarks = {
+                str(row["agent_id"]): int(row["watermark"] or 0)
+                for row in c.execute(
+                    f"""SELECT agent_id,COALESCE(MAX(id),0) AS watermark
+                        FROM historical_experiences WHERE agent_id IN ({placeholders})
+                        GROUP BY agent_id""",
+                    ids,
+                ).fetchall()
+            }
+            previous = {
+                str(row["agent_id"]): row["model_json"]
+                for row in c.execute(
+                    f"SELECT agent_id,model_json FROM rl_models WHERE agent_id IN ({placeholders})",
+                    ids,
+                ).fetchall()
+            }
+            stamp = iso_now()
+            packed = []
+            for agent_id in ids:
+                model = dict(latest[agent_id])
+                model["_history_watermark"] = int(watermarks.get(agent_id, 0))
+                if agent_id in previous and "_benchmark_counts" not in model:
+                    try:
+                        model["_benchmark_counts"] = json.loads(previous[agent_id] or "{}").get("_benchmark_counts", {})
+                    except Exception:
+                        model["_benchmark_counts"] = {}
+                packed.append((agent_id, json.dumps(model, separators=(",", ":")), stamp))
+            c.executemany(
                 """INSERT INTO rl_models(agent_id,model_json,updated_at) VALUES(?,?,?)
                    ON CONFLICT(agent_id) DO UPDATE SET model_json=excluded.model_json, updated_at=excluded.updated_at""",
-                (agent_id, raw, iso_now()),
+                packed,
             )
+        return len(packed)
+
+    def save_model(self, agent_id, model):
+        self.save_models_batch([(agent_id, model)])
 
     def discard_uncommitted_experiences(self, agent_id):
         model = self.get_model(agent_id) or {}

@@ -260,11 +260,16 @@ def install(runtime):
         with core.STORE.lock:
             diagnostic_events_pending = len(getattr(core.STORE, "_event_buffer", ()) or ())
             diagnostic_events_dropped = int(getattr(core.STORE, "_event_buffer_dropped", 0) or 0)
+        tournament = getattr(core.ENGINE, "context_tournament", None)
+        shadow_snapshot = getattr(tournament, "shadow_persistence_snapshot", None)
+        fast_snapshot = getattr(tournament, "fast_light_persistence_snapshot", None)
         payload["ram_persistence_buffers"] = {
             "archive_pending": archive_pending,
             "decision_history_pending": decision_history_pending,
             "diagnostic_events_pending": diagnostic_events_pending,
             "diagnostic_events_dropped": diagnostic_events_dropped,
+            "context_shadow": shadow_snapshot() if callable(shadow_snapshot) else {},
+            "fast_light": fast_snapshot() if callable(fast_snapshot) else {},
         }
         payload["ui_lifeline"] = snapshot()
         return payload
