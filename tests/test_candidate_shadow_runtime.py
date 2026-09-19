@@ -185,6 +185,14 @@ class CandidateShadowRuntimeTests(unittest.TestCase):
             count = c.execute("SELECT COUNT(*) FROM candidate_generation_decisions").fetchone()[0]
         self.assertEqual(count, 0)
 
+    def test_active_candidate_parent_index_tracks_create_and_discard(self):
+        self.assertFalse(self.manager.candidate_hot_active(self.root["id"]))
+        queued = self.manager.enqueue(self.root["id"], "teach")
+        self.assertIsNotNone(queued.get("candidate_id"))
+        self.assertTrue(self.manager.candidate_hot_active(self.root["id"]))
+        self.manager.discard(self.root["id"])
+        self.assertFalse(self.manager.candidate_hot_active(self.root["id"]))
+
     def test_no_candidate_generation_cache_is_event_invalidated_not_polled(self):
         original = shadow_runtime_module._shadow_generations
         calls = []
