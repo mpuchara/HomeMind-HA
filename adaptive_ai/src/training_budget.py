@@ -34,6 +34,13 @@ class CooperativeTrainingBudget:
         self._max_sleep_seconds = 2.0
         self._thread_prefixes = ("adaptive-ai-index-",)
         self._interactive_until = 0.0
+        self._interactive_started_at = 0.0
+        # Continuous HA sensor traffic must not starve offline training forever. A burst
+        # may keep strict realtime priority only for a bounded interval, followed by a
+        # short cooldown in which the training worker is guaranteed a scheduling slice.
+        self._interactive_max_burst_seconds = 1.25
+        self._interactive_cooldown_seconds = 0.10
+        self._interactive_cooldown_until = 0.0
         self._interactive_reason = None
         self._stats = {
             "checkpoints": 0,
@@ -45,6 +52,7 @@ class CooperativeTrainingBudget:
             "last_label": None,
             "interactive_preemptions": 0,
             "interactive_sleep_seconds": 0.0,
+            "interactive_requests_suppressed": 0,
         }
 
     @staticmethod
@@ -83,17 +91,43 @@ class CooperativeTrainingBudget:
     def request_interactive_window(self, seconds=0.75, reason="interactive"):
         """Temporarily give HTTP/realtime inference strict priority over training.
 
-        This is intentionally cooperative and process-local. Realtime/event threads call
-        it when fresh work arrives; the historical worker observes it at its next
-        checkpoint and sleeps until the short priority window expires.
+        Realtime priority is deliberately burst-bounded. Hundreds of Home Assistant
+        entities can produce state changes more often than once per second; extending the
+        deadline on every event used to keep an adaptive-ai-index worker asleep forever.
+        A burst can extend only up to the configured burst cap and is followed by a short
+        cooldown in which new priority requests are ignored. The training worker is still
+        capped to its normal short cooperative slice, so realtime latency remains protected
+        without starving the FIFO.
         """
         duration = self._clamp(float(seconds), 0.05, 3.0)
-        until = self._clock() + duration
+        now = self._clock()
         with self._lock:
-            if until > self._interactive_until:
-                self._interactive_until = until
-                self._interactive_reason = str(reason or "interactive")
-        return until
+            if (
+                now < float(self._interactive_cooldown_until or 0.0)
+                and now >= float(self._interactive_until or 0.0)
+            ):
+                self._stats["interactive_requests_suppressed"] += 1
+                return float(self._interactive_until or 0.0)
+
+            active = now < float(self._interactive_until or 0.0)
+            if active:
+                started = float(self._interactive_started_at or now)
+                cap = started + float(self._interactive_max_burst_seconds)
+                until = min(
+                    cap,
+                    max(float(self._interactive_until or 0.0), now + duration),
+                )
+            else:
+                self._interactive_started_at = now
+                until = now + min(duration, float(self._interactive_max_burst_seconds))
+
+            self._interactive_until = until
+            self._interactive_cooldown_until = max(
+                float(self._interactive_cooldown_until or 0.0),
+                until + float(self._interactive_cooldown_seconds),
+            )
+            self._interactive_reason = str(reason or "interactive")
+            return until
 
     def begin(self, *, thread_name=None):
         if not self._eligible(thread_name):
@@ -201,6 +235,9 @@ class CooperativeTrainingBudget:
             "slice_overruns": int(stats["slice_overruns"]),
             "interactive_preemptions": int(stats["interactive_preemptions"]),
             "interactive_sleep_seconds": round(float(stats["interactive_sleep_seconds"]), 3),
+            "interactive_requests_suppressed": int(stats["interactive_requests_suppressed"]),
+            "interactive_max_burst_seconds": float(self._interactive_max_burst_seconds),
+            "interactive_cooldown_seconds": float(self._interactive_cooldown_seconds),
             "last_checkpoint": stats["last_label"],
         }
 
