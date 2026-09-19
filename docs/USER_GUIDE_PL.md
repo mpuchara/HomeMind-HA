@@ -165,3 +165,12 @@ W 0.14.35 także Sensor Tournament shadow oraz fast-light timing nie utrwalają 
 Widok Candidate po restarcie nie wykonuje już zbiorczych COUNT/AVG po dużej historii uczenia tylko po to, aby narysować kartę. Status Candidate, confidence i promotion validation korzystają z konfiguracji oraz trwałego podsumowania porównania, a każdy Candidate jest oceniany raz na odświeżenie. Polling Candidate został zmniejszony z 1,5 s do 4 s.
 
 Panel Home Intelligence ponownie pokazuje rzeczywisty stan modelu trajektorii zamiast zer pochodzących z pustego payloadu lifeline. Diagnostyka jest liczona z RAM i cache'owana przez 5 s. Liczniki buforów RAM w `/api/status` nie czekają na blokady zapisu SQLite, więc wolna transakcja na microSD nie powinna blokować samego odczytu statusu.
+
+
+### Poprawki po drugim teście Raspberry Pi - 0.14.37
+
+0.14.37 naprawia trzy problemy widoczne w 0.14.36. Po pierwsze, Candidate nie był widoczny, ponieważ podczas poprzedniej poprawki do pliku JavaScript trafiły dosłowne znaki `\\n` wewnątrz komentarza `//`. Kod pozostawał poprawny składniowo, ale pętla odświeżania Candidate była w praktyce zakomentowana. W 0.14.37 Candidate ponownie odświeża się co 4 s.
+
+Po drugie, lista agentów i Recent activity nie są już jednym wspólnym punktem awarii. Jeżeli odczyt eventów jest opóźniony, udany odczyt agentów nadal aktualizuje Current, Desired, confidence i status runtime. Sam feed eventów ma osobną blokadę RAM i nie czeka na długą transakcję SQLite/microSD.
+
+Po trzecie, UI rozróżnia teraz połączenie z Home Assistant od połączenia realtime. Zdrowy REST przy chwilowym reconnect WebSocket jest pokazywany jako HA connected / REST fallback, a karty agentów dostają rzeczywisty bieżący stan WebSocket zamiast domyślnego fałszywego REST fallback.
