@@ -156,3 +156,12 @@ W teście Raspberry Pi obserwuj `event -> intent p95`, `feature_journal.pending`
 
 
 W 0.14.35 także Sensor Tournament shadow oraz fast-light timing nie utrwalają już każdej pojedynczej próbki osobną transakcją. Bieżące residual models, timing metrics i weight-only checkpoints pozostają w RAM i są deduplikowane, a writer zapisuje najnowszy stan paczką co maksymalnie kilka sekund. Diagnostyka wieku schematu jest odczytywana z cache i dotyka SQLite tylko po zmianie revision/signature.
+
+
+### Poprawki Raspberry Pi po pierwszym soak teście - 0.14.36
+
+0.14.36 naprawia regresje widoczne po optymalizacji 0.14.35. Lista agentów w UI korzysta teraz z pełnej pamięci konfiguracji, dlatego agenci PAUSED, WAITING i NEEDS_RETRAIN nie znikają tylko dlatego, że nie są aktualnie dopuszczeni do inferencji. Osobny, mniejszy indeks nadal obsługuje wyłącznie routing realtime.
+
+Widok Candidate po restarcie nie wykonuje już zbiorczych COUNT/AVG po dużej historii uczenia tylko po to, aby narysować kartę. Status Candidate, confidence i promotion validation korzystają z konfiguracji oraz trwałego podsumowania porównania, a każdy Candidate jest oceniany raz na odświeżenie. Polling Candidate został zmniejszony z 1,5 s do 4 s.
+
+Panel Home Intelligence ponownie pokazuje rzeczywisty stan modelu trajektorii zamiast zer pochodzących z pustego payloadu lifeline. Diagnostyka jest liczona z RAM i cache'owana przez 5 s. Liczniki buforów RAM w `/api/status` nie czekają na blokady zapisu SQLite, więc wolna transakcja na microSD nie powinna blokować samego odczytu statusu.

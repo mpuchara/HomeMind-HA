@@ -135,3 +135,12 @@ Raspberry Pi installations commonly run the add-on database from microSD, where 
 - `/api/status` exposes RAM persistence backlogs so a Raspberry Pi soak test can detect a writer that falls behind instead of hiding growing queues.
 
 These changes do not move physical safety state to volatile memory. Control still performs fresh durable configuration validation before dispatch, and ActionIntent -> Executor remains the sole physical command boundary.
+
+
+### Raspberry Pi UI/Candidate restart regression guard (0.14.36)
+
+The operational agent cache is split into two explicit views. `all_agent_configs` contains every configured agent for UI/lifecycle reporting, including PAUSED, WAITING and NEEDS_RETRAIN states. `agent_configs` remains the smaller inference-eligible routing set used by the event scheduler. This prevents performance optimization from making non-running agents disappear from the product.
+
+Candidate card/status reads are config-only. Rendering a Candidate, confidence gates or promotion-validation metadata must not execute `COUNT/AVG` scans over `rl_feedback` or `historical_experiences`, and `list_status()` evaluates each Candidate edge exactly once. Candidate lifecycle polling uses the same 4 s cadence as the main UI.
+
+Home Intelligence in `/api/status` again reports the actual in-memory ContextEngine/HomeBootstrap state. Its richer diagnostic snapshot is cached for 5 s; queue/backlog gauges are advisory and do not wait for persistence locks. These are read-side/QoS changes only and do not alter learning, Candidate durability, promotion semantics or the ActionIntent -> Executor physical-control boundary.
