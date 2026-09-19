@@ -1,10 +1,10 @@
 {
-  "version": "0.14.32",
+  "version": "0.14.33",
   "release_date": "2026-09-19",
-  "base_version": "0.14.31",
+  "base_version": "0.14.32",
   "base_commit": "6d1631ae11e5d269f6160df654cf2a4a5ff8b7df",
-  "release_status": "release-0.14.32-post-recorder-discovery-qos",
-  "tests_passed": 902,
+  "release_status": "release-0.14.33-operational-first-recovery",
+  "tests_passed": 907,
   "profile": "rpi4-low-memory-automatic-initial-training",
   "manual_agent_training": false,
   "max_concurrent_training_jobs": 1,
@@ -37,10 +37,10 @@
   "automation_scan": "the first background pass suppresses config scan; later automation config reads are serialized and last successful scan time is persisted",
   "release_016_guard": "installed after startup_train_guard; quiet startup/background scheduling only",
   "release_017_lifeline": "installed after release_016_guard and before core.main; read-side availability and training scheduling only, no model/label/history/generation mutation",
-  "migration": "additive startup repair only; models, raw archive, feedback, Candidate lineage, TrialRecords, Teach labels, settings and rollback state remain preserved",
+  "migration": "no destructive migration; existing agents, models, feedback, raw archive, historical experiences, candidate lineage, rollback and generation state preserved",
   "physical_control": "unchanged; repaired agents return to Shadow and Control still requires qualified state plus all existing guards",
-  "pi4": "0.14.32 specifically targets the on-device stall at Recorder 24/24 / 65% by removing the full archive diagnostic scan and N-per-property history scans from discovery",
-  "ci_status": "0.14.32 post-Recorder discovery QoS validated in GitHub Actions run 35431620733; F24 quality metrics unchanged",
+  "pi4": "0.14.33 is intended as a recovery build: startup and idle operation must remain usable even if Recorder discovery/training is never run",
+  "ci_status": "0.14.33 operational-first recovery validated in GitHub Actions run 35433416814; Python 3.11/3.13 and image smoke green; F24 quality metrics unchanged",
   "training_slice_budget": "adaptive-ai-index workers call a shared CooperativeTrainingBudget; expensive temporal tracker loops yield between entities/events and finalization is no longer outside the throttle",
   "finalization_lifeline": "HEAVY_JOBS remains owned through final gc.collect(), so /api/status and /api/agents stay on lightweight lifeline reads until the worker is actually finished",
   "finalization_progress": "post-replay UI now exposes bounded stages: replay complete, policy serialization, benchmark save, qualification, checkpoint complete",
@@ -83,7 +83,7 @@
   "product_benchmark_topology_contract": "sensor_moved changes the future Entity Registry area mapping for the same entity_id and the changed mapping is passed into every evaluated runtime",
   "product_benchmark_manual_override_contract": "manual_change emits explicit target provenance with context.user_id; fast targets now delegate to the authoritative Engine manual-hold path. F24 v2 measures zero manual_override_violations and runtime_manual_hold_ticks_mean=115 across seeds 11,23,37 without changing benchmark thresholds or scenario logic",
   "product_benchmark_report_artifact": "GitHub Actions uploads product-benchmark-f24-py311/product-benchmark-f24.json for the final 3-seed composed-runtime run",
-  "product_benchmark_unmet_criteria_status": "GitHub Actions run 35431620733 on unchanged F24 v2 leaves only needed_light_not_worse_than_fixed_by_more_than_2pp unmet",
+  "product_benchmark_unmet_criteria_status": "GitHub Actions run 35433416814 on unchanged F24 v2 leaves only needed_light_not_worse_than_fixed_by_more_than_2pp unmet",
   "product_benchmark_summary": {
     "seeds": [
       11,
@@ -123,5 +123,10 @@
   "post_recorder_archive_stats": "full-table archive_stats COUNT(DISTINCT)/GROUP BY is removed from the 65% post-Recorder critical path",
   "discovery_cpu_budget": "single discovery archive stream now remains inside the existing Raspberry-Pi background archive throttle instead of repeatedly resetting it across many short iterators",
   "discovery_agent_reads": "quiet startup and auto-discovery use list_agent_configs instead of aggregate list_agents reads when reward/history statistics are not required",
-  "websocket_keepalive_note": "websocket ping timeout observed on-device is treated as process-starvation symptom; transport keepalive thresholds were not relaxed to hide CPU/GIL contention"
+  "websocket_keepalive_note": "keepalive ping timeouts are treated as CPU/GIL starvation symptoms; websocket timeout thresholds are unchanged",
+  "operational_first": "normal startup serves saved agents + realtime only; Recorder backfill, auto-discovery and heavy historical work are not automatic background duties",
+  "discovery_activation": "device discovery/Recorder refresh runs only after explicit Rescan devices and executes on a background worker, never inside the HTTP request thread",
+  "periodic_ui_reads": "periodic /api/status and /api/agents stay on config + hot in-memory runtime paths and never call Engine.status or STORE.list_agents history aggregates",
+  "background_maintenance": "automatic periodic Recorder/discovery disabled in normal runtime; realtime ingestion keeps current events flowing; explicit maintenance remains available",
+  "recovery_rationale": "post-0.14.11 architecture accumulated large layered runtime changes; this release removes heavy automatic work from the steady-state path instead of adding further throttling"
 }
