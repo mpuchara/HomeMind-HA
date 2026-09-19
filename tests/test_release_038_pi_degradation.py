@@ -173,6 +173,8 @@ class Release038PiDegradationTests(unittest.TestCase):
         self.assertIn("cpu_percent_recent", home)
         self.assertIn("scheduler.event_passes", home)
         self.assertIn("drift.max_run_ms", home)
+        self.assertIn("resync.last_changed_entities", home)
+        self.assertIn("resync.max_duration_ms", home)
 
 
 if __name__ == "__main__":
