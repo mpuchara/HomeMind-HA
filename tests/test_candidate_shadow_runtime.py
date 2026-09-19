@@ -129,6 +129,7 @@ class CandidateShadowRuntimeTests(unittest.TestCase):
             own_command_echo=lambda *args, **kwargs: False,
             wake_event=SimpleNamespace(set=lambda: None),
             lock=threading.RLock(), state_revision=0, state_map=self._states(),
+            all_agent_configs={str(self.root["id"]): dict(self.root)},
             _inference_tls=threading.local(),
             context=SimpleNamespace(
                 area_for=lambda _entity: None,
@@ -242,6 +243,29 @@ class CandidateShadowRuntimeTests(unittest.TestCase):
         self.assertAlmostEqual(card["candidate_confidence"], .93)
         self.assertEqual(card["shadow_model_revision"], "g1-rev")
         self.assertEqual(card["shadow_schema_revision"], "10")
+
+    def test_candidate_live_tiles_are_served_from_ram_after_inference(self):
+        _, generation = self._g1(prediction=1.0, confidence=.93)
+        bundle = self._run_shadow()
+        self.assertIsNotNone(bundle)
+        snapshots = self.manager.candidate_live_runtime_snapshots()
+        row = next(x for x in snapshots if x["generation_id"] == generation["generation_id"])
+        self.assertEqual(row["read_source"], "ram_candidate_runtime")
+        self.assertEqual(row["shadow_current"], 0.0)
+        self.assertEqual(row["parent_desired"], 0.0)
+        self.assertEqual(row["candidate_desired"], 1.0)
+        self.assertAlmostEqual(row["candidate_confidence"], .93)
+
+        # Once the generation/root caches are warm, the 1 s Candidate tile path is RAM-only.
+        original_conn = self.store.conn
+        self.store.conn = lambda: (_ for _ in ()).throw(
+            AssertionError("Candidate live tile refresh touched SQLite")
+        )
+        try:
+            hot = self.manager.candidate_live_runtime_snapshots()
+            self.assertEqual(hot[0]["read_source"], "ram_candidate_runtime")
+        finally:
+            self.store.conn = original_conn
 
     def test_passive_state_changed_observer_keeps_candidate_shadow_alive_when_parent_is_paused(self):
         _, generation = self._g1(prediction=1.0, confidence=.93)
