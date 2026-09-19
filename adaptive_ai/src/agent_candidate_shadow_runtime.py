@@ -881,7 +881,7 @@ def install(manager):
         result = original_lineage_status(ref) if original_lineage_status is not None else None
         return _decorate_status(result)
 
-    def _queue_passive_root(root_id, revision, *, delay_seconds=0.35):
+    def _queue_passive_root(root_id, revision, *, delay_seconds=0.35, wake=True):
         root_id = str(root_id)
         with manager.lock:
             previous = passive_pending.get(root_id) or {}
@@ -892,7 +892,8 @@ def install(manager):
                     time.monotonic() + max(0.0, float(delay_seconds)),
                 ),
             }
-        manager.wake_event.set()
+        if wake:
+            manager.wake_event.set()
 
     def _observe_passive_root(root_id, revision):
         root_id = str(root_id)
@@ -901,6 +902,7 @@ def install(manager):
         root_rt = _root_runtime(root_id)
         if int(root_rt.get("last_candidate_observed_revision") or 0) >= int(revision or 0):
             return False
+        root_rt["last_candidate_attempt_monotonic"] = time.monotonic()
         root = manager.store.get_agent_config(root_id)
         if not root:
             return False
@@ -937,8 +939,14 @@ def install(manager):
         current_revision = int(getattr(manager.engine, "state_revision", 0) or 0)
         for root_id in tuple(active_candidate_parents):
             rt = _root_runtime(root_id)
-            if now - float(rt.get("last_candidate_observed_monotonic") or 0.0) >= DECISION_HEARTBEAT_SECONDS:
-                _queue_passive_root(root_id, current_revision, delay_seconds=0.0)
+            last_activity = max(
+                float(rt.get("last_candidate_observed_monotonic") or 0.0),
+                float(rt.get("last_candidate_attempt_monotonic") or 0.0),
+            )
+            if now - last_activity >= DECISION_HEARTBEAT_SECONDS:
+                # We are already on the Candidate worker. Do not self-signal the wake
+                # event or an untrained/temporarily unavailable Candidate could spin.
+                _queue_passive_root(root_id, current_revision, delay_seconds=0.0, wake=False)
 
         ready = []
         with manager.lock:
