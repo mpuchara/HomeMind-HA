@@ -444,8 +444,14 @@ class Handler(BaseHTTPRequestHandler):
                 if not callable(request):
                     return self.send_json(409, {"error": "Background discovery service is not ready"})
                 if not request():
-                    return self.send_json(409, {
-                        "error": "Discovery is already running",
+                    # Rescan is an idempotent "ensure discovery is running" operation.
+                    # Repeated UI clicks must not surface a technical conflict while the
+                    # first Recorder scan is making progress.
+                    return self.send_json(202, {
+                        "ok": True,
+                        "state": "running",
+                        "already_running": True,
+                        "message": "Recorder/discovery is already running",
                         "history": HISTORY.status(),
                     })
                 return self.send_json(202, {
