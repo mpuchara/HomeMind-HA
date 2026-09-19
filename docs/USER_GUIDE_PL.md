@@ -194,3 +194,14 @@ W 0.14.38 świeża instalacja mogła przez kilka minut pokazywać 0 agentów ora
 0.14.39 rozróżnia teraz wynik „0 aktywnych” od stanu „klasyfikacja jeszcze nie została wykonana”. W trakcie skanu UI pokazuje bieżące chunky Recorder oraz komunikat, że activity classification jest pending. Przycisk Rescan devices pozostaje zablokowany do zakończenia bieżącego skanu, a ponowne wywołanie API discovery jest idempotentne i zwraca aktualny stan zadania zamiast błędu 409.
 
 Nie dodano klasyfikowania całego archiwum po każdym chunku. Byłoby to kuszące dla szybszego pojawiania się kart, ale ponownie zwiększyłoby liczbę odczytów SQLite i obciążenie Raspberry Pi. Klasyfikacja nadal wykonuje jeden ograniczony przebieg po zakończeniu importu targetów.
+
+
+### Trening zatrzymany na 0% - 0.14.40
+
+Na świeżej instalacji z wieloma aktywnymi encjami pierwszy automatyczny trening mógł pozostać na etapie „screening context candidates” przy 0%. Kolejka zachowywała się wtedy poprawnie: aktywny agent nadal trzymał pojedynczy slot HEAVY_JOBS, więc następne agenty czekały. Problemem był brak postępu samego workera.
+
+Wykryto dwie przyczyny. Po pierwsze, każda zmiana stanu z Home Assistant odnawiała krótkie okno pierwszeństwa realtime. Przy częstych sensorach deadline był odnawiany szybciej niż trening dostawał CPU, przez co worker mógł być głodzony praktycznie bez końca. Od 0.14.40 pojedynczy burst realtime ma maksymalnie 1,25 s, po czym następuje 0,10 s cooldown, w którym worker może wykonać swój normalny krótki, ograniczony budżetem fragment pracy.
+
+Po drugie, feature screening wykonywał osobny pre-pass historii dla szybkich driverów, a następnie SQLite LAG/PARTITION dla całego przedziału. Na Raspberry Pi zapytanie okienkowe mogło długo przygotowywać wynik zanim oddało pierwszy rekord, więc UI pozostawało na 0%. Od 0.14.40 oba cele realizuje jeden chronologiczny strumień z istniejącego indeksu czasu. Surowe rekordy potrzebne do fast-driver scoring trafiają do ograniczonego bufora, a ten sam przebieg wyznacza effective changes dla precursor screeningu.
+
+Postęp screeningu jest aktualizowany od początku przebiegu. Po zakończeniu aktywnego treningu mechanizm kolejki pozostaje bez zmian: agent kończy jako Shadow/qualified albo Paused, slot HEAVY_JOBS jest zwalniany i następny oczekujący agent startuje automatycznie.
