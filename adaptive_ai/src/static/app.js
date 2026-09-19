@@ -136,7 +136,7 @@ function sortedFilteredAgents(){
   return xs;
 }
 function noAgentsMessage(h){
-  if(discoveryPending(h))return `Recorder discovery is still running (${discoveryProgressText(h)}). Active-device classification has not run yet, so 0 agents is not a final result.`;
+  if(discoveryPending(h))return `Recorder discovery is still running (${discoveryProgressText(h)}). Activity classification has not run yet, so 0 agents is not a final result.`;
   if(h?.phase==='ready')return 'No active controllable target met the discovery criteria. Try Rescan devices; config/diagnostic entities are intentionally ignored.';
   return 'Discovery is preparing target activity classification. Auto-discovered agents enter the initial-training FIFO after classification.';
 }
