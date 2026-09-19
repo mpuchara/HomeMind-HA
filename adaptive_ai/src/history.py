@@ -69,6 +69,10 @@ class HistoryManager(threading.Thread):
         self.discovery_job_lock = threading.RLock()
         self.discovery_job_active = False
         self.discovery_job_started_at = None
+        # "active=0" is not a meaningful result while Recorder discovery is still
+        # collecting target history. Expose whether the activity classifier has run so
+        # the UI can distinguish "pending" from a real zero-device result.
+        self.discovery_classified = False
         if bool(OPTIONS.get("manual_agent_training", True)):
             paused = STORE.pause_stale_training_agents()
             if paused:
@@ -97,6 +101,7 @@ class HistoryManager(threading.Thread):
                 "temporal_replay": dict(self.temporal_replay_stats),
                 "discovery_job_active": bool(self.discovery_job_active),
                 "discovery_job_started_at": self.discovery_job_started_at,
+                "discovery_classified": bool(self.discovery_classified),
             }
         return d
 
@@ -338,6 +343,7 @@ class HistoryManager(threading.Thread):
             self._progress_samples = []
             self.chunk_done = 0
             self.chunk_total = 0
+            self.discovery_classified = False
 
     def refresh_archive_cache(self):
         # Called by the history thread only, never synchronously from the UI.
@@ -664,8 +670,17 @@ class HistoryManager(threading.Thread):
             eta_source="single-pass local archive scan",
             phase_detail="One bounded discovery stream; UI and realtime stay live",
         )
+        self.set_status(
+            "manual_ready", 0.66,
+            "Classifying controllable targets from imported Recorder history",
+            work_done=0, work_total=max(1, len(controllable)), work_unit="targets",
+            eta_source="single-pass local archive scan",
+            phase_detail="Activity classification is now running; agents may appear after this pass",
+        )
         created = self.auto_discover_agents(current, start_ts)
         self.auto_created += created
+        with self.lock:
+            self.discovery_classified = True
         # Populate diagnostics from current state only; this does not import context history.
         self._eligible_rebuild_context()
         STORE.meta_set("manual_discovery_refresh", iso_from_ts(end_ts))
