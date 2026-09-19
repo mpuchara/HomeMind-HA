@@ -1,8 +1,11 @@
 from itertools import islice
 from contextlib import contextmanager
+from collections import deque
+import atexit
 import json
 import sqlite3
 import threading
+import time
 import uuid
 from settings import (DATA_DIR, DB_PATH, clamp, iso_now, now_ts)
 
@@ -12,8 +15,21 @@ class Store:
         self.path = str(path)
         self.lock = threading.RLock()
         self._agent_index_revision = 0
+        # Small, frequently-read metadata and diagnostic events are RAM-first. The SD
+        # card remains the durable backing store, but unchanged metadata and one-row event
+        # commits must not sit on realtime paths.
+        self._meta_cache = {}
+        self._event_buffer = deque(maxlen=4096)
+        self._event_recent = deque(maxlen=5000)
+        self._event_buffer_dropped = 0
+        self._event_buffer_first_at = None
+        self._event_buffer_seq = 0
+        self._event_prune_batches = 0
         self._init()
+        self._load_meta_cache()
+        self._load_recent_events()
         self.migrate_models()
+        atexit.register(self.flush_events)
 
     def touch_agent_index(self):
         # Lightweight in-process invalidation for the realtime routing cache.
@@ -27,8 +43,14 @@ class Store:
         c = sqlite3.connect(self.path, timeout=30)
         c.row_factory = sqlite3.Row
         c.execute("PRAGMA synchronous=NORMAL")
-        c.execute("PRAGMA temp_store=FILE")
-        c.execute("PRAGMA cache_size=-2048")
+        # Raspberry Pi deployments commonly run from microSD. Keep SQLite temp work and
+        # a useful page working set in RAM instead of generating avoidable card traffic.
+        c.execute("PRAGMA temp_store=MEMORY")
+        c.execute("PRAGMA cache_size=-16384")
+        try:
+            c.execute("PRAGMA mmap_size=67108864")
+        except sqlite3.DatabaseError:
+            pass
         try:
             with c:
                 yield c
@@ -147,6 +169,26 @@ class Store:
                            training_updated_at=COALESCE(training_updated_at, ?)
                            WHERE training_state IN ('qualified','paused')""",
                           (bounds[0], bounds[1], bounds[1], iso_now()))
+
+    def _load_meta_cache(self):
+        with self.conn() as c:
+            rows = c.execute("SELECT key,value FROM app_meta").fetchall()
+        with self.lock:
+            self._meta_cache = {str(row[0]): str(row[1]) for row in rows}
+
+    def _load_recent_events(self):
+        # One startup read warms the UI event feed. Periodic /api/events polls then stay
+        # entirely in RAM until process restart.
+        with self.conn() as c:
+            rows = c.execute("SELECT * FROM events ORDER BY id DESC LIMIT 5000").fetchall()
+        recent = []
+        for row in reversed(rows):
+            item = dict(row)
+            raw = item.pop("data_json", None)
+            item["data"] = json.loads(raw) if raw else None
+            recent.append(item)
+        with self.lock:
+            self._event_recent.extend(recent)
 
     @staticmethod
     def _ensure_column(c, table, column, ddl):
@@ -453,26 +495,91 @@ class Store:
         self.event(None, "info", "training_revision", "Rebuilding offline RL policies for the new predictive feature revision", None)
 
     def event(self, agent_id, level, kind, message, data=None):
+        """Queue diagnostic activity in RAM and persist it in coarse batches.
+
+        Event rows are operational diagnostics, not control state. Keeping the newest
+        rows visible from RAM lets the UI remain realtime without forcing a WAL commit on
+        every informational message. Warnings/errors still trigger prompt durability.
+        """
         try:
-            with self.lock, self.conn() as c:
-                c.execute(
-                    "INSERT INTO events(created_at,agent_id,level,kind,message,data_json) VALUES(?,?,?,?,?,?)",
-                    (iso_now(), agent_id, level, kind, message, json.dumps(data) if data is not None else None),
-                )
-                c.execute("DELETE FROM events WHERE id NOT IN (SELECT id FROM events ORDER BY id DESC LIMIT 5000)")
+            now_mono = time.monotonic()
+            with self.lock:
+                self._event_buffer_seq += 1
+                row = {
+                    "id": None,
+                    "_ram_seq": self._event_buffer_seq,
+                    "created_at": iso_now(),
+                    "agent_id": agent_id,
+                    "level": str(level),
+                    "kind": str(kind),
+                    "message": str(message),
+                    "data": data,
+                }
+                if self._event_buffer.maxlen and len(self._event_buffer) >= self._event_buffer.maxlen:
+                    self._event_buffer_dropped += 1
+                self._event_buffer.append(row)
+                if self._event_buffer_first_at is None:
+                    self._event_buffer_first_at = now_mono
+                pending = len(self._event_buffer)
+                age = now_mono - float(self._event_buffer_first_at or now_mono)
+            if str(level).lower() in {"warning", "error"} or pending >= 64 or age >= 5.0:
+                self.flush_events()
         except Exception as exc:
             print(f"[event] {exc}", flush=True)
 
+    def flush_events(self):
+        with self.lock:
+            if not self._event_buffer:
+                return 0
+            batch = list(self._event_buffer)
+            self._event_buffer.clear()
+            self._event_buffer_first_at = None
+        packed = [
+            (row["created_at"], row.get("agent_id"), row["level"], row["kind"],
+             row["message"], json.dumps(row.get("data")) if row.get("data") is not None else None)
+            for row in batch
+        ]
+        try:
+            with self.lock, self.conn() as c:
+                c.executemany(
+                    "INSERT INTO events(created_at,agent_id,level,kind,message,data_json) VALUES(?,?,?,?,?,?)",
+                    packed,
+                )
+                self._event_prune_batches += 1
+                if self._event_prune_batches >= 4:
+                    c.execute(
+                        "DELETE FROM events WHERE id < COALESCE((SELECT id FROM events ORDER BY id DESC LIMIT 1 OFFSET 4999),-1)"
+                    )
+                    self._event_prune_batches = 0
+            with self.lock:
+                for row in batch:
+                    cached = dict(row)
+                    cached.pop("_ram_seq", None)
+                    self._event_recent.append(cached)
+            return len(batch)
+        except Exception:
+            with self.lock:
+                for row in reversed(batch):
+                    if self._event_buffer.maxlen and len(self._event_buffer) >= self._event_buffer.maxlen:
+                        self._event_buffer_dropped += 1
+                    self._event_buffer.appendleft(row)
+                if self._event_buffer_first_at is None:
+                    self._event_buffer_first_at = time.monotonic()
+            raise
+
     def list_events(self, limit=100):
-        with self.conn() as c:
-            rows = c.execute("SELECT * FROM events ORDER BY id DESC LIMIT ?", (limit,)).fetchall()
+        """Return the live diagnostic feed without polling SQLite."""
+        limit = max(1, int(limit))
+        with self.lock:
+            pending = [dict(row) for row in list(self._event_buffer)[-limit:]]
+            remaining = max(0, limit - len(pending))
+            durable = [dict(row) for row in list(self._event_recent)[-remaining:]] if remaining else []
         out = []
-        for r in rows:
-            d = dict(r)
-            raw_data = d.pop("data_json", None)
-            d["data"] = json.loads(raw_data) if raw_data else None
-            out.append(d)
-        return out
+        for row in reversed(pending):
+            row.pop("_ram_seq", None)
+            out.append(row)
+        out.extend(reversed(durable))
+        return out[:limit]
 
 
     def find_agent_by_target(self, entity_id, property_name):
@@ -690,9 +797,9 @@ class Store:
         return out
 
     def meta_get(self, key, default=None):
-        with self.conn() as c:
-            r=c.execute("SELECT value FROM app_meta WHERE key=?", (key,)).fetchone()
-        return r[0] if r else default
+        key = str(key)
+        with self.lock:
+            return self._meta_cache.get(key, default)
 
     def migrate_models(self):
         """Storage-level legacy guard; current feature contracts migrate themselves later.
@@ -721,8 +828,14 @@ class Store:
             c.execute("UPDATE agents SET training_state='waiting' WHERE training_state='paused' AND benchmark_score IS NULL AND training_cursor_ts IS NULL AND id NOT IN (SELECT agent_id FROM rl_models)")
 
     def meta_set(self, key, value):
-        with self.lock, self.conn() as c:
-            c.execute("INSERT INTO app_meta(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", (key, str(value)))
+        key, value = str(key), str(value)
+        with self.lock:
+            if self._meta_cache.get(key) == value:
+                return False
+            with self.conn() as c:
+                c.execute("INSERT INTO app_meta(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", (key, value))
+            self._meta_cache[key] = value
+        return True
 
 
 STORE = Store(DB_PATH)

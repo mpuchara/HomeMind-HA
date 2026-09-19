@@ -12,6 +12,7 @@ import json
 import math
 import threading
 import uuid
+from collections import OrderedDict
 
 from context import target_value
 from control import same_value
@@ -48,7 +49,15 @@ class ProvenanceJournal:
         self._command_cache_lock = threading.RLock()
         self._command_cache = {}
         self._command_context_cache = {}
+        self._event_cache_lock = threading.RLock()
+        self._event_cache = OrderedDict()
+        self._history_event_cache = OrderedDict()
+        self._pending_events = OrderedDict()
+        self._event_cache_limit = 8192
+        self._pending_event_limit = 8192
+        self._dropped_pending_events = 0
         self._migrate()
+        self._load_recent_event_cache()
         self._load_active_command_cache()
 
     @staticmethod
@@ -184,6 +193,81 @@ class ProvenanceJournal:
                     "ALTER TABLE provenance_commands ADD COLUMN command_origin TEXT NOT NULL DEFAULT 'own_command'"
                 )
 
+    def _remember_event(self, row):
+        event_id = str(row["event_id"])
+        key = (str(row["entity_id"]), float(row["event_time"]))
+        with self._event_cache_lock:
+            self._event_cache[event_id] = dict(row)
+            self._event_cache.move_to_end(event_id)
+            self._history_event_cache[key] = event_id
+            self._history_event_cache.move_to_end(key)
+            while len(self._event_cache) > self._event_cache_limit:
+                old_id, old = self._event_cache.popitem(last=False)
+                old_key = (str(old.get("entity_id") or ""), float(old.get("event_time") or 0.0))
+                if self._history_event_cache.get(old_key) == old_id:
+                    self._history_event_cache.pop(old_key, None)
+            while len(self._history_event_cache) > self._event_cache_limit:
+                self._history_event_cache.popitem(last=False)
+
+    def _load_recent_event_cache(self):
+        with self.store.conn() as c:
+            rows = c.execute(
+                "SELECT * FROM provenance_events ORDER BY received_time DESC LIMIT ?",
+                (self._event_cache_limit,),
+            ).fetchall()
+        for row in reversed(rows):
+            self._remember_event(dict(row))
+
+    def pending_event_count(self):
+        with self._event_cache_lock:
+            return len(self._pending_events)
+
+    def flush_events_batch(self, limit=512):
+        limit = max(1, int(limit))
+        with self._event_cache_lock:
+            keys = list(self._pending_events.keys())[:limit]
+            rows = [dict(self._pending_events.pop(key)) for key in keys]
+        if not rows:
+            return 0
+        packed = [
+            (
+                row["event_id"], CONTRACT_VERSION, float(row["event_time"]),
+                float(row["received_time"]), str(row["entity_id"]),
+                row.get("context_id"), row.get("context_parent_id"), row.get("user_id"),
+                str(row.get("source") or UNKNOWN), str(row.get("origin") or UNKNOWN),
+                row.get("state_json"), row.get("processed_time"),
+            )
+            for row in rows
+        ]
+        links = [(str(row["entity_id"]), float(row["event_time"]), str(row["event_id"])) for row in rows]
+        try:
+            with self.store.lock, self.store.conn() as c:
+                c.executemany(
+                    """INSERT INTO provenance_events
+                       (event_id,contract_version,event_time,received_time,entity_id,context_id,
+                        context_parent_id,user_id,source,origin,state_json,processed_time)
+                       VALUES(?,?,?,?,?,?,?,?,?,?,?,?)
+                       ON CONFLICT(event_id) DO UPDATE SET
+                         received_time=MIN(provenance_events.received_time,excluded.received_time),
+                         origin=CASE WHEN provenance_events.origin='unknown' AND excluded.origin!='unknown'
+                                     THEN excluded.origin ELSE provenance_events.origin END,
+                         state_json=COALESCE(provenance_events.state_json,excluded.state_json),
+                         processed_time=COALESCE(provenance_events.processed_time,excluded.processed_time)""",
+                    packed,
+                )
+                c.executemany(
+                    """INSERT INTO provenance_history_links(entity_id,event_time,event_id)
+                       VALUES(?,?,?) ON CONFLICT(entity_id,event_time) DO UPDATE SET event_id=excluded.event_id""",
+                    links,
+                )
+            return len(rows)
+        except Exception:
+            with self._event_cache_lock:
+                for row in reversed(rows):
+                    self._pending_events[str(row["event_id"])] = row
+                    self._pending_events.move_to_end(str(row["event_id"]), last=False)
+            raise
+
     def _load_active_command_cache(self):
         """Hydrate restart-surviving command evidence once, outside event hot paths."""
         now = float(self.clock())
@@ -233,29 +317,46 @@ class ProvenanceJournal:
             "last_changed": state.get("last_changed"),
             "last_updated": state.get("last_updated"),
         }
-        with self.store.lock, self.store.conn() as c:
-            cur = c.execute(
-                """INSERT OR IGNORE INTO provenance_events
-                   (event_id,contract_version,event_time,received_time,entity_id,context_id,
-                    context_parent_id,user_id,source,origin,state_json,processed_time)
-                   VALUES(?,?,?,?,?,?,?,?,?,?,?,NULL)""",
-                (event_id, CONTRACT_VERSION, event_time, received_time, str(entity_id),
-                 context_id, parent_id, user_id, str(source), origin,
-                 _json(payload) if payload is not None else None),
-            )
-            c.execute(
-                """INSERT INTO provenance_history_links(entity_id,event_time,event_id)
-                   VALUES(?,?,?) ON CONFLICT(entity_id,event_time) DO UPDATE SET event_id=excluded.event_id""",
-                (str(entity_id), event_time, event_id),
-            )
-        return event_id, bool(cur.rowcount)
+        with self._event_cache_lock:
+            existing = self._event_cache.get(str(event_id)) or self._pending_events.get(str(event_id))
+            if existing is not None:
+                return str(event_id), False
+        row = {
+            "event_id": str(event_id), "contract_version": CONTRACT_VERSION,
+            "event_time": event_time, "received_time": received_time,
+            "entity_id": str(entity_id), "context_id": context_id,
+            "context_parent_id": parent_id, "user_id": user_id,
+            "source": str(source), "origin": origin,
+            "state_json": _json(payload) if payload is not None else None,
+            "processed_time": None,
+        }
+        self._remember_event(row)
+        with self._event_cache_lock:
+            if len(self._pending_events) >= self._pending_event_limit:
+                self._pending_events.popitem(last=False)
+                self._dropped_pending_events += 1
+            self._pending_events[str(event_id)] = dict(row)
+        return str(event_id), True
 
     def event(self, event_id):
         if not event_id:
             return None
+        event_id = str(event_id)
+        with self._event_cache_lock:
+            cached = self._event_cache.get(event_id)
+            if cached is not None:
+                self._event_cache.move_to_end(event_id)
+                return dict(cached)
+            pending = self._pending_events.get(event_id)
+            if pending is not None:
+                return dict(pending)
         with self.store.conn() as c:
-            row = c.execute("SELECT * FROM provenance_events WHERE event_id=?", (str(event_id),)).fetchone()
-        return dict(row) if row else None
+            row = c.execute("SELECT * FROM provenance_events WHERE event_id=?", (event_id,)).fetchone()
+        if not row:
+            return None
+        out = dict(row)
+        self._remember_event(out)
+        return out
 
     def event_processed(self, event_id):
         row = self.event(event_id)
@@ -264,22 +365,46 @@ class ProvenanceJournal:
     def mark_event_processed(self, event_id, processed_time=None):
         if not event_id:
             return
+        event_id = str(event_id)
         processed_time = float(self.clock() if processed_time is None else processed_time)
+        with self._event_cache_lock:
+            cached = self._event_cache.get(event_id)
+            pending = self._pending_events.get(event_id)
+            if cached is not None or pending is not None:
+                if cached is not None and cached.get("processed_time") is None:
+                    cached["processed_time"] = processed_time
+                if pending is not None and pending.get("processed_time") is None:
+                    pending["processed_time"] = processed_time
+                return
         with self.store.lock, self.store.conn() as c:
             c.execute(
                 "UPDATE provenance_events SET processed_time=COALESCE(processed_time,?) WHERE event_id=?",
-                (processed_time, str(event_id)),
+                (processed_time, event_id),
             )
 
     def history_provenance(self, entity_id, event_time):
+        key = (str(entity_id), float(event_time))
+        with self._event_cache_lock:
+            event_id = self._history_event_cache.get(key)
+            if event_id is not None:
+                row = self._event_cache.get(event_id) or self._pending_events.get(event_id)
+                if row is not None:
+                    self._history_event_cache.move_to_end(key)
+                    if event_id in self._event_cache:
+                        self._event_cache.move_to_end(event_id)
+                    return dict(row)
         with self.store.conn() as c:
             row = c.execute(
                 """SELECT e.* FROM provenance_history_links l
                    JOIN provenance_events e ON e.event_id=l.event_id
                    WHERE l.entity_id=? AND l.event_time=?""",
-                (str(entity_id), float(event_time)),
+                key,
             ).fetchone()
-        return dict(row) if row else {"origin": UNKNOWN, "source": UNKNOWN, "event_id": None}
+        if not row:
+            return {"origin": UNKNOWN, "source": UNKNOWN, "event_id": None}
+        out = dict(row)
+        self._remember_event(out)
+        return out
 
     def generation_for_agent(self, agent_id):
         with self.store.conn() as c:

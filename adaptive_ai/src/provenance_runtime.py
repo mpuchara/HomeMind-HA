@@ -99,6 +99,7 @@ def install(core):
         "flushes": 0,
         "max_queue": 0,
     }
+    event_stats = {"flushed": 0, "flushes": 0, "errors": 0}
     generation_cache = {}
     schema_cache = {}
 
@@ -160,31 +161,56 @@ def install(core):
 
     def deferred_snapshot():
         with deferred_lock:
-            return {**deferred_stats, "pending": len(deferred_rows)}
+            decision = {**deferred_stats, "pending": len(deferred_rows)}
+        return {
+            **decision,
+            "decisions": decision,
+            "events": {
+                **event_stats,
+                "pending": journal.pending_event_count(),
+                "dropped": int(getattr(journal, "_dropped_pending_events", 0) or 0),
+            },
+        }
+
+    def flush_event_provenance():
+        total = 0
+        while journal.pending_event_count():
+            written = journal.flush_events_batch(512)
+            if not written:
+                break
+            total += int(written)
+        if total:
+            event_stats["flushed"] += total
+            event_stats["flushes"] += 1
+        return total
 
     def provenance_writer():
         while not engine.stop_event.is_set():
-            deferred_event.wait(1.0)
+            deferred_event.wait(0.5)
             deferred_event.clear()
             try:
+                flush_event_provenance()
                 flush_deferred()
             except Exception as exc:
+                event_stats["errors"] += 1
                 try:
                     store.event(
                         None, "warning", "provenance_batch_flush_failed",
-                        f"Deferred Shadow provenance flush failed: {type(exc).__name__}: {exc}",
+                        f"Deferred provenance flush failed: {type(exc).__name__}: {exc}",
                         None,
                     )
                 except Exception:
                     pass
                 time.sleep(0.1)
         try:
+            flush_event_provenance()
             flush_deferred()
         except Exception:
             pass
 
     # Manual feedback and explicit provenance reads can force durability before lookup.
     store._flush_provenance_decisions = flush_deferred
+    store._flush_provenance_events = flush_event_provenance
     engine.provenance_deferred_snapshot = deferred_snapshot
     threading.Thread(
         target=provenance_writer,
@@ -221,9 +247,9 @@ def install(core):
             entity_id, state, event_time=event_time, received_time=received,
             source="ha_state_changed", origin=origin,
         )
-        # Exactly-once at the learning boundary, but crash-safe: an event inserted before
-        # a crash is retried while processed_time is NULL. Only a completed prior handler
-        # suppresses the duplicate.
+        # Duplicate suppression is RAM-first for current events and warmed from recent
+        # durable rows at startup. Event provenance itself is batch-durable; the physical
+        # Control boundary remains synchronous in decision/command persistence below.
         if journal.event_processed(event_id):
             return None
         # Keep origin beside the durable event id so downstream inference wrappers never

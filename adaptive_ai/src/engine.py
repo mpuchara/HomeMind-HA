@@ -150,6 +150,9 @@ class Engine(threading.Thread):
         self.archive_seen = {}
         self.archive_last_ts = {}
         self.pending_archive = []
+        self.archive_flush_interval_seconds = 5.0
+        self.archive_flush_batch_rows = 128
+        self.last_archive_flush = time.monotonic()
         self.command_echoes = {}
         self.command_contexts = {}
         self.state_revision = 0
@@ -336,12 +339,27 @@ class Engine(threading.Thread):
             self.archive_seen[entity_id] = fingerprint
             self.archive_last_ts[entity_id] = now
 
-    def flush_archive(self):
+    def flush_archive(self, force=True):
+        """Persist live history in coarse batches instead of one WAL txn per tick."""
+        now = time.monotonic()
         with self.lock:
+            pending = len(self.pending_archive)
+            if not pending:
+                self.last_archive_flush = now
+                return 0
+            if (not force and pending < self.archive_flush_batch_rows
+                    and now - self.last_archive_flush < self.archive_flush_interval_seconds):
+                return 0
             rows = self.pending_archive
             self.pending_archive = []
-        if rows:
-            STORE.archive_batch(rows)
+        try:
+            written = STORE.archive_batch(rows)
+        except Exception:
+            with self.lock:
+                self.pending_archive = rows + self.pending_archive
+            raise
+        self.last_archive_flush = time.monotonic()
+        return int(written or 0)
 
     def refresh_states(self):
         with self.lock:
@@ -385,7 +403,7 @@ class Engine(threading.Thread):
             ts = parse_ts(st.get("last_updated") or st.get("last_changed")) or now_ts()
             self.temporal_history.add(st.get("entity_id"), ts, self._temporal_state(st))
             self._queue_archive_state(st)
-        self.flush_archive()
+        self.flush_archive(force=False)
         self.wake_event.set()
         return state_map
 
@@ -526,8 +544,8 @@ class Engine(threading.Thread):
                 if now_ts() - self.last_full_poll >= float(OPTIONS["poll_seconds"]) and (self.poll_future is None or self.poll_future.done()):
                     self.last_full_poll = now_ts()
                     self.poll_future = self.poll_worker.submit(self.refresh_states)
-                self.flush_archive()
-                self.teaching.flush()
+                self.flush_archive(force=False)
+                self.teaching.flush(force=False)
                 self.context.home.expire(now_ts())
                 self.context.save()
                 with self.lock:
@@ -585,7 +603,7 @@ class Engine(threading.Thread):
         # changes and commits them in batches.
         for st in state_map.values():
             self._queue_archive_state(st)
-        self.flush_archive()
+        self.flush_archive(force=True)
 
     def policy(self, agent):
         aid = agent["id"]
