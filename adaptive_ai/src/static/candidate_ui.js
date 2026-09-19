@@ -147,9 +147,12 @@
     busy=true;
     try{
       const data=await api('api/candidates');
+      const candidates=data.candidates||[];
+      window.__adaptiveAiCandidates=candidates;
+      window.dispatchEvent(new CustomEvent('adaptive-ai:candidates',{detail:candidates}));
       const root=document.getElementById('agents');if(!root)return;
       root.querySelectorAll('.candidate-agent').forEach(el=>{remember(el,el.dataset.candidateRef||el.dataset.generationId||el.dataset.candidateParent||'');el.remove();});
-      for(const c of data.candidates||[]){
+      for(const c of candidates){
         const ref=candidateRef(c),draft=stateFor(ref);
         root.insertAdjacentHTML('beforeend',card(c,draft));
         const el=root.lastElementChild;

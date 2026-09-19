@@ -213,7 +213,7 @@
 
   async function liveLoop(){
     await refreshLive();
-    setTimeout(liveLoop,250);
+    setTimeout(liveLoop,1000);
   }
 
   function hydrateAddedNode(node){
@@ -229,24 +229,19 @@
     return missing;
   }
 
-  async function refresh(){
-    if(busy||document.hidden)return;
-    busy=true;
-    try{
-      const response=await fetch('api/candidates',{cache:'no-store'});
-      if(!response.ok)return;
-      const data=await response.json();
-      const liveRefs=new Set();
-      for(const candidate of data.candidates||[]){
-        const ref=refOf(candidate);
-        if(ref)liveRefs.add(ref);
-        decorate(candidate);
-      }
-      for(const ref of [...latestByRef.keys()])if(!liveRefs.has(ref))latestByRef.delete(ref);
-    }catch(_e){
-    }finally{
-      busy=false;
+  function applyCandidates(items){
+    const liveRefs=new Set();
+    for(const candidate of items||[]){
+      const ref=refOf(candidate);
+      if(ref)liveRefs.add(ref);
+      decorate(candidate);
     }
+    for(const ref of [...latestByRef.keys()])if(!liveRefs.has(ref))latestByRef.delete(ref);
+  }
+
+  function refresh(){
+    if(document.hidden)return;
+    applyCandidates(window.__adaptiveAiCandidates||[]);
   }
 
   ensureStyles();
@@ -263,8 +258,10 @@
       queueMicrotask(()=>{queued=false;refresh();});
     }).observe(root,{childList:true});
   }
+  window.addEventListener('adaptive-ai:candidates',event=>{
+    applyCandidates(event.detail||[]);
+  });
   document.addEventListener('visibilitychange',()=>{if(!document.hidden){refreshLive();refresh();}});
-  setInterval(refresh,1500);
   liveLoop();
   refresh();
 })();
