@@ -131,6 +131,9 @@ class Engine(threading.Thread):
         # from one coalesced event pass. Thread-local binding preserves the existing
         # process_agent(agent, states, changed) public signature used by extensions.
         self._inference_tls = threading.local()
+        # Runtime extensions may broaden observation-only inference eligibility, but they
+        # must not replace the scheduler. Control qualification remains in Executor.
+        self.inference_eligible = self._default_inference_eligible
         self.last_state_count = 0
         self.last_poll = None
         self.error = None
@@ -601,6 +604,15 @@ class Engine(threading.Thread):
     def take_control(self, agent, refresh=False):
         return self.executor.take_control(agent, refresh)
 
+    @staticmethod
+    def _default_inference_eligible(agent):
+        return bool(
+            agent
+            and agent.get("enabled")
+            and str(agent.get("mode") or "paused") != "paused"
+            and str(agent.get("training_state") or "") == "qualified"
+        )
+
     def _refresh_agent_index(self, force=False):
         """Refresh live agent configs and entity->agent routing outside the hot event path."""
         now = time.monotonic()
@@ -628,12 +640,7 @@ class Engine(threading.Thread):
         dependency_agents = {}
         for agent in configs:
             aid = str(agent.get("id") or "")
-            if (
-                not aid
-                or not agent.get("enabled")
-                or agent.get("mode") == "paused"
-                or agent.get("training_state") != "qualified"
-            ):
+            if not aid or not self.inference_eligible(agent):
                 continue
             active[aid] = agent
             target = str(agent.get("target_entity") or "")
