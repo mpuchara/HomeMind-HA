@@ -167,6 +167,16 @@ class Release038PiDegradationTests(unittest.TestCase):
         self.assertIn("setTimeout(liveLoop,1000)", manual)
         self.assertIn("adaptiveAiTimeoutMs:3500", app)
         self.assertIn("const earlyAgents=wasReady?api('api/agents'):null", app)
+        # A clean install must not render "0 active" before the Recorder classifier has
+        # actually run, and duplicate Rescan clicks are locked/idempotent.
+        self.assertIn("function discoveryPending(h)", app)
+        self.assertIn("activity classification has not run yet", app)
+        self.assertIn("b.disabled=running", app)
+        self.assertIn("manual_ready:'fast_targets'", app)
+        main = self.source("main.py")
+        history = self.source("history.py")
+        self.assertIn('"already_running": True', main)
+        self.assertIn('"discovery_classified": bool(self.discovery_classified)', history)
 
     def test_visible_diagnostics_expose_cpu_scheduler_and_drift_runtime(self):
         home = (ROOT / "adaptive_ai" / "src" / "static" / "home.js").read_text(encoding="utf-8")
