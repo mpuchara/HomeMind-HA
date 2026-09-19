@@ -58,7 +58,9 @@ assert snapshot['automation_scan_workers'] == 1
         self.assertIn('RECORDER_BACKOFF_SECONDS = 120.0', source)
         self.assertIn('if HEAVY_JOBS.owner == "discovery"', source)
         self.assertIn('history_background_backoff', source)
-        self.assertIn('return 0', source)
+        self.assertIn('Discovery coverage is paused, not skipped', source)
+        self.assertIn('history_self.stop_event.wait(min(1.0', source)
+        self.assertNotIn('recorder_backoff_until_monotonic"]\n                    ):\n                        return 0', source)
 
     def test_automation_config_reads_are_serial_and_scan_time_persists(self):
         source = (ROOT/'adaptive_ai/src/release_016_guard.py').read_text(encoding='utf-8')
