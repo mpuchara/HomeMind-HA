@@ -135,3 +135,10 @@ Benchmark nie promuje modelu i nie obniża progów. Brak poprawy lub niespełnio
 ### Tryb operational-first od 0.14.33
 
 Po restarcie dodatek uruchamia zapisanych agentów i realtime Home Assistant bez automatycznego importu Recorder, auto-discovery ani okresowego historycznego maintenance. `Rescan devices` jest jawną akcją użytkownika i uruchamia discovery w osobnym workerze; request HTTP wraca od razu. Cykliczne odczyty UI używają tylko konfiguracji agentów i bieżącego stanu runtime, bez COUNT/AVG po tabelach historii. Dzięki temu system może pracować stale bez uruchamiania ciężkich zadań. Train/Resume/Rebuild/Correct/Candidate nadal korzystają z istniejącej kolejki ciężkich zadań i nie zmieniają własności fizycznego sterowania.
+
+
+### Odciążony runtime agentów od 0.14.34
+
+W zwykłej pracy event z Home Assistant uruchamia tylko agentów zależnych od zmienionej encji. Konfiguracje agentów, zależności, preference facts, Candidate lineage bez aktywnego Candidate, provenance aktywnych komend oraz pochodzenie bieżącego eventu są trzymane w RAM i jawnie unieważniane przy zmianach. Shadow nie wykonuje durable walidacji Control, a feature observations, Shadow provenance i evidence windows są zapisywane poza ścieżką event -> intent przez ograniczone kolejki i batch write do SQLite. Control zachowuje pełną walidację przed fizycznym HA service call.
+
+W statusie runtime dostępny jest ponownie recent `event -> intent p95` oraz backlog odroczonego feature journal. Dla testu na Raspberry Pi ważne jest obserwowanie, czy p95 i backlog pozostają stabilne po kilkudziesięciu minutach pracy wielu agentów; wersja 0.14.34 jest pierwszym buildem po tej przebudowie i wymaga realnego soak testu przed uznaniem PR za gotowy do merge.
