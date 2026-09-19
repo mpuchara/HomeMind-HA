@@ -831,10 +831,11 @@ class FeatureJournal:
                         row["source"], row["quality"], protected,
                     ),
                 )
+            previous_writes = self._writes
+            self._writes += len(prepared)
+            should_prune = self._writes // 128 > previous_writes // 128
 
-        previous_writes = self._writes
-        self._writes += len(prepared)
-        if self._writes // 128 > previous_writes // 128:
+        if should_prune:
             self.prune(entity_id=prepared[-1]["entity_id"])
         return [row["event_key"] for row in prepared]
 
@@ -1281,11 +1282,15 @@ def install(core):
     observation_rows = deque()
     window_rows = deque()
     observation_limit = 8192
+    window_limit = 4096
     observation_stats = {
         "queued": 0, "flushed": 0, "flushes": 0, "max_queue": 0,
         "overflow_sync": 0, "errors": 0,
     }
-    window_stats = {"queued": 0, "flushed": 0, "flushes": 0, "max_queue": 0, "errors": 0}
+    window_stats = {
+        "queued": 0, "flushed": 0, "flushes": 0, "max_queue": 0,
+        "overflow_sync": 0, "errors": 0,
+    }
 
     def queue_observation(entity_id, state, *, event_time, received_time, source,
                           event_key=None, quality=1.0):
@@ -1322,12 +1327,19 @@ def install(core):
             "entities": tuple(entities or ()), "anchor_time": float(anchor_time),
             "kind": str(kind),
         }
+        overflow = False
         with journal_lock:
-            window_rows.append(row)
-            window_stats["queued"] += 1
-            window_stats["max_queue"] = max(window_stats["max_queue"], len(window_rows))
-            if len(window_rows) >= 32:
-                journal_event.set()
+            if len(window_rows) >= window_limit:
+                overflow = True
+                window_stats["overflow_sync"] += 1
+            else:
+                window_rows.append(row)
+                window_stats["queued"] += 1
+                window_stats["max_queue"] = max(window_stats["max_queue"], len(window_rows))
+                if len(window_rows) >= 32:
+                    journal_event.set()
+        if overflow:
+            journal.open_windows_batch([row])
         return row["window_id"]
 
     def flush_observations(limit=256):
