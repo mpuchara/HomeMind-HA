@@ -31,10 +31,16 @@ def refresh_candidate_ids_cache(store):
     """
     try:
         with store.conn() as c:
-            if not c.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='agent_candidates'").fetchone():
-                values = set()
-            else:
-                values = {str(r[0]) for r in c.execute("SELECT candidate_id FROM agent_candidates").fetchall()}
+            values = set()
+            if c.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='agent_candidates'").fetchone():
+                values.update(str(r[0]) for r in c.execute("SELECT candidate_id FROM agent_candidates").fetchall())
+            if c.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='agent_candidate_generations'").fetchone():
+                values.update(
+                    str(r[0]) for r in c.execute(
+                        """SELECT agent_id FROM agent_candidate_generations
+                           WHERE generation_type='candidate' AND agent_id IS NOT NULL"""
+                    ).fetchall()
+                )
     except Exception:
         values = set(getattr(store, "_candidate_ids_ram", set()) or set())
     lock = getattr(store, "_candidate_ids_ram_lock", None)
