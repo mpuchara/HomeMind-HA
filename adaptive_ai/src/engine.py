@@ -481,7 +481,6 @@ class Engine(threading.Thread):
         self._refresh_agent_index()
         with self.lock:
             runtime = list(self.runtime.items())
-            configs = dict(self.agent_configs)
         for aid, rt in runtime:
             try:
                 deadline = float(rt.get("next_periodic_inference_ts") or 0.0)
@@ -489,7 +488,8 @@ class Engine(threading.Thread):
                 deadline = 0.0
             if deadline <= 0.0 or deadline > now:
                 continue
-            agent = configs.get(str(aid))
+            with self.lock:
+                agent = self.agent_configs.get(str(aid))
             if not agent:
                 rt["next_periodic_inference_ts"] = 0.0
                 continue
@@ -658,16 +658,16 @@ class Engine(threading.Thread):
     def _active_agents_for_changes(self, changed):
         self._refresh_agent_index()
         with self.lock:
-            configs = dict(self.agent_configs)
-            dependency_agents = {
-                eid: set(ids) for eid, ids in self.dependency_agents.items()
-            }
-        if not changed:
-            return list(configs.values())
-        ids = set()
-        for eid in changed:
-            ids.update(dependency_agents.get(str(eid), ()))
-        return [configs[aid] for aid in ids if aid in configs]
+            if not changed:
+                return list(self.agent_configs.values())
+            ids = set()
+            for eid in changed:
+                ids.update(self.dependency_agents.get(str(eid), ()))
+            return [
+                self.agent_configs[aid]
+                for aid in ids
+                if aid in self.agent_configs
+            ]
 
     def event_dependencies(self, agent, policy=None):
         """Entities whose change can materially alter this agent's next decision.
