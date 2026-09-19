@@ -1,3 +1,4 @@
+import time
 import unittest
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
@@ -121,7 +122,7 @@ class AgentHotPathTests(unittest.TestCase):
             novelty=.1,
             prediction_horizon=1,
             policy_head=1,
-            created_at=now_ts(),
+            created_at=time.time(),
             ttl=2.0,
             policy_version=12,
             model_revision="model-r1",
