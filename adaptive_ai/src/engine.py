@@ -123,7 +123,10 @@ class Engine(threading.Thread):
         # Realtime routing cache. Event dispatch must not hit SQLite or recompute every
         # agent's dependency set on each HA state_changed event.
         self.agent_index_at = 0.0
-        self.agent_index_ttl_seconds = 5.0
+        # Normal invalidation is revision-driven. A 60 s fallback catches legacy/direct
+        # SQL mutations that bypass Store helpers without reintroducing 5 s all-agent scans.
+        self.agent_index_ttl_seconds = 60.0
+        self.agent_index_revision = -1
         self.agent_configs = {}
         self.active_agents_by_target = {}
         self.dependency_agents = {}
@@ -599,6 +602,7 @@ class Engine(threading.Thread):
         # The policy schema is part of event routing. Refresh the index before the next
         # event instead of rebuilding dependencies inside the current inference.
         self.agent_index_at = 0.0
+        self.agent_index_revision = -1
         return model
 
     def take_control(self, agent, refresh=False):
@@ -616,10 +620,12 @@ class Engine(threading.Thread):
     def _refresh_agent_index(self, force=False):
         """Refresh live agent configs and entity->agent routing outside the hot event path."""
         now = time.monotonic()
+        store_revision = int(getattr(STORE, "_agent_index_revision", 0))
         with self.lock:
             if (
                 not force
                 and self.agent_configs
+                and int(self.agent_index_revision) == store_revision
                 and now - float(self.agent_index_at or 0.0) < self.agent_index_ttl_seconds
             ):
                 return
@@ -656,6 +662,7 @@ class Engine(threading.Thread):
             self.active_agents_by_target = by_target
             self.dependency_agents = dependency_agents
             self.agent_index_at = now
+            self.agent_index_revision = store_revision
         for aid in removed:
             try:
                 self.experiments.cancel(aid, "mode, training or availability changed")
