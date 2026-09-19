@@ -186,6 +186,22 @@ class Release038PiDegradationTests(unittest.TestCase):
         self.assertIn("resync.last_changed_entities", home)
         self.assertIn("resync.max_duration_ms", home)
 
+        # 0.14.40 cold-start training must make bounded forward progress even under
+        # continuous HA event traffic. Feature screening is one indexed streaming pass,
+        # not a pre-pass followed by a blocking SQLite LAG/PARTITION query.
+        history = self.source("history.py")
+        budget = self.source("training_budget.py")
+        screening = history.split("One chronological streaming pass now serves both consumers:", 1)[1].split(
+            "occupancy_edge_index", 1
+        )[0]
+        self.assertIn("STORE.archive_iter(", screening)
+        self.assertNotIn("STORE.archive_change_iter(", screening)
+        self.assertIn("screening_rows_done", screening)
+        self.assertIn("streaming indexed history scan", screening)
+        self.assertIn("_interactive_max_burst_seconds = 1.25", budget)
+        self.assertIn("_interactive_cooldown_seconds = 0.10", budget)
+        self.assertIn("interactive_requests_suppressed", budget)
+
 
 if __name__ == "__main__":
     unittest.main()
