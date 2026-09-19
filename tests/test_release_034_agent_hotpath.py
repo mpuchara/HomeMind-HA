@@ -16,6 +16,7 @@ class CountingStore:
         self.list_calls = 0
         self.get_calls = 0
         self.events = []
+        self._agent_index_revision = 0
 
     def list_agent_configs(self):
         self.list_calls += 1
@@ -75,6 +76,28 @@ class AgentHotPathTests(unittest.TestCase):
         self.assertEqual([row["id"] for row in first], [configured["id"]])
         self.assertEqual([row["id"] for row in second], [configured["id"]])
         self.assertEqual(fake.list_calls, 1)
+
+    def test_agent_index_refreshes_on_revision_change_not_short_ttl_poll(self):
+        runtime = self.make_engine()
+        configured = self.configured_agent()
+        runtime.models[configured["id"]] = SimpleNamespace(
+            schema=SimpleNamespace(entities=("binary_sensor.kitchen_motion",))
+        )
+        runtime.experiments = SimpleNamespace(
+            watches=lambda aid: set(),
+            cancel=lambda *args, **kwargs: None,
+        )
+        fake = CountingStore([configured])
+
+        with patch.object(engine_module, "STORE", fake):
+            runtime._active_agents_for_changes({"binary_sensor.kitchen_motion"})
+            runtime._active_agents_for_changes({"binary_sensor.kitchen_motion"})
+            self.assertEqual(fake.list_calls, 1)
+            fake._agent_index_revision += 1
+            runtime._active_agents_for_changes({"binary_sensor.kitchen_motion"})
+
+        self.assertEqual(fake.list_calls, 2)
+        self.assertGreaterEqual(runtime.agent_index_ttl_seconds, 60.0)
 
     def test_process_target_uses_routed_agent_snapshot_without_second_config_read(self):
         runtime = self.make_engine()
