@@ -2,7 +2,7 @@ import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 from manual_feedback_unified import UnifiedManualFeedbackJournal
 from preference_model import LightingPreferenceModel, PreferenceDecisionComposer
@@ -101,6 +101,22 @@ class LightingPreferenceModelTests(unittest.TestCase):
         self.assertFalse(result["applied"])
         self.assertEqual(result["reason"], "no_matching_explicit_preference")
         self.assertEqual(result["independent_evidence_count"], 0)
+
+    def test_predict_skips_context_signature_when_no_feedback_exists(self):
+        policy = SimpleNamespace(actions=[0.0, 1.0])
+        with patch("preference_model.signature", side_effect=AssertionError("signature must stay off no-feedback hot path")):
+            result = self.model.predict(self.agent, policy, {}, None, self.now)
+        self.assertFalse(result["applied"])
+        self.assertEqual(result["reason"], "no_matching_explicit_preference")
+
+    def test_cache_is_invalidated_immediately_by_journal_revision(self):
+        # First lookup caches the empty fact set.
+        self.assertFalse(self.evaluate()["applied"])
+        self.record(1.0, rejected=0.0)
+        # No TTL wait: the journal bumps an in-memory Store revision synchronously.
+        result = self.evaluate()
+        self.assertTrue(result["applied"])
+        self.assertEqual(result["action_value"], 1.0)
 
     def test_undo_and_restart_remove_complete_preference_influence(self):
         row = self.record(1.0, rejected=0.0)
