@@ -1393,9 +1393,10 @@ def install(core):
 
     def journal_writer():
         while not engine.stop_event.is_set():
-            # Replay/audit evidence can tolerate sub-second durability. Coalescing here
-            # removes a large number of tiny WAL commits on microSD.
-            journal_event.wait(0.5)
+            # Replay/audit evidence can tolerate short RAM residency. Sparse sensors
+            # would otherwise cause one tiny WAL transaction per event, so coalesce for
+            # up to 2 seconds; large queues still wake the writer immediately.
+            journal_event.wait(2.0)
             journal_event.clear()
             try:
                 while True:

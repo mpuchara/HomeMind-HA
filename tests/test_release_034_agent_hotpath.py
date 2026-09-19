@@ -314,6 +314,11 @@ class AgentHotPathTests(unittest.TestCase):
         self.assertIn('self.flush_archive(force=False)', engine)
         self.assertIn('self.teaching.flush(force=False)', engine)
         self.assertIn('now - self.last_flush < 5.0', teaching)
+        self.assertIn('str(level).lower() == "error"', storage)
+        provenance_runtime = (ROOT / "adaptive_ai/src/provenance_runtime.py").read_text(encoding="utf-8")
+        observation = (ROOT / "adaptive_ai/src/observation_contract.py").read_text(encoding="utf-8")
+        self.assertIn("deferred_event.wait(2.0)", provenance_runtime)
+        self.assertIn("journal_event.wait(2.0)", observation)
         event_section = provenance.split("def record_event(", 1)[1].split("def generation_for_agent", 1)[0]
         self.assertNotIn("self.store.conn()", event_section.split("def event(", 1)[0])
         self.assertIn("flush_events_batch", provenance)

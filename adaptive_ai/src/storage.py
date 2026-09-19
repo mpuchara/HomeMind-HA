@@ -520,7 +520,10 @@ class Store:
                     self._event_buffer_first_at = now_mono
                 pending = len(self._event_buffer)
                 age = now_mono - float(self._event_buffer_first_at or now_mono)
-            if str(level).lower() in {"warning", "error"} or pending >= 64 or age >= 5.0:
+            # Warnings are frequent operational diagnostics (for example negative RL
+            # reward) and must not force one WAL transaction each. Only errors bypass
+            # coalescing; warning/info rows batch for up to 5 seconds or 64 records.
+            if str(level).lower() == "error" or pending >= 64 or age >= 5.0:
                 self.flush_events()
         except Exception as exc:
             print(f"[event] {exc}", flush=True)

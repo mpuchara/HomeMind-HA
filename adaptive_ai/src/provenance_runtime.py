@@ -186,7 +186,10 @@ def install(core):
 
     def provenance_writer():
         while not engine.stop_event.is_set():
-            deferred_event.wait(0.5)
+            # Sparse event streams otherwise degenerate into one SQLite transaction per
+            # event. Keep observational provenance in RAM for up to 2 seconds; large
+            # Shadow decision batches still wake this writer early.
+            deferred_event.wait(2.0)
             deferred_event.clear()
             try:
                 flush_event_provenance()
