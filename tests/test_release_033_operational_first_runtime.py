@@ -5,7 +5,7 @@ import unittest
 
 from support import *
 from history import HistoryManager
-import main
+from support import ROOT
 import release_016_guard
 import release_017_ui_lifeline
 
@@ -45,7 +45,7 @@ class OperationalFirstRuntimeTests(unittest.TestCase):
         self.assertIn("Operational-first runtime", source)
 
     def test_rescan_route_is_async_and_does_not_run_discovery_in_http_handler(self):
-        source = inspect.getsource(main.Handler.do_POST)
+        source = (ROOT / "adaptive_ai/src/main.py").read_text(encoding="utf-8")
         marker = 'if path == "/api/discovery/rescan":'
         self.assertIn(marker, source)
         block = source[source.index(marker):]
