@@ -1,6 +1,7 @@
 from concurrent.futures import ThreadPoolExecutor
 import json
 import math
+import os
 from control import same_value
 import threading
 import time
@@ -107,6 +108,7 @@ class Engine(threading.Thread):
         # Direct process/process_agent calls remain unchanged; only the background loop
         # waits for initialize_runtime() to explicitly open the gate.
         self.inference_enabled = threading.Event()
+        self.startup_inference_not_before = 0.0
         self.runtime = {}
         self.models = {}
         self.context_relevance = {}
@@ -129,7 +131,14 @@ class Engine(threading.Thread):
         self.entity_revisions = {}
         self.dirty_entities = set()
         self.last_trigger_entity = None
-        self.control_workers = ThreadPoolExecutor(max_workers=8, thread_name_prefix="device-control")
+        # CPU-heavy policy inference runs in Python and does not scale linearly with
+        # thread count. Eight workers can starve the HTTP/Ingress thread on Raspberry Pi
+        # during the initial all-agent pass. Keep enough parallelism for independent
+        # targets while leaving scheduler headroom for UI and HA event handling.
+        self.control_worker_count = min(4, max(1, int(os.cpu_count() or 1)))
+        self.control_workers = ThreadPoolExecutor(
+            max_workers=self.control_worker_count, thread_name_prefix="device-control"
+        )
         self.poll_worker = ThreadPoolExecutor(max_workers=1, thread_name_prefix="ha-poll")
         self.in_flight = {}
         self.resubmit_targets = set()
@@ -328,7 +337,12 @@ class Engine(threading.Thread):
                     self.state_revision += 1
                     self.entity_revisions[eid] = self.state_revision
                     self.context.observe(eid, state_map.get(eid), now_ts(), learn=not initial)
-                    self.dirty_entities.add(eid)
+                    # The initial REST snapshot is not a realtime transition. Marking
+                    # thousands of startup entities dirty causes an immediate all-agent
+                    # burst and defeats HTTP-first startup. A proactive pass after the
+                    # startup grace covers the same current state.
+                    if not initial:
+                        self.dirty_entities.add(eid)
             self.state_map = state_map
             if initial:
                 self.context.home.arrivals.clear()
@@ -374,11 +388,15 @@ class Engine(threading.Thread):
                     if event_wakeup:
                         self.dirty_entities.clear()
                 if state_map:
-                    if not self.inference_enabled.is_set():
+                    gate_open = self.inference_enabled.is_set()
+                    startup_grace = time.monotonic() < float(
+                        self.startup_inference_not_before or 0.0
+                    )
+                    if not gate_open or startup_grace:
                         # Keep ingest/archive/context warm during construction, but avoid
                         # the expensive first all-agent prediction pass until HTTP/runtime
-                        # startup is fully ready. Dirty entities stay accumulated and are
-                        # consumed by the wake issued when the gate opens.
+                        # startup is fully ready and Ingress has a short grace window.
+                        # Genuine realtime changes are retained and consumed afterwards.
                         if changed_entities:
                             with self.lock:
                                 self.dirty_entities.update(changed_entities)
