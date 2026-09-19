@@ -21,6 +21,7 @@ BACKGROUND_BATCH_ROWS = 128
 BACKGROUND_MIN_GRACE_SECONDS = 60.0
 RECORDER_BACKOFF_SECONDS = 120.0
 INITIAL_DISCOVERY_META_KEY = "initial_discovery_complete"
+DEEP_DISCOVERY_META_KEY = "discovery_deep_history_complete"
 
 
 def _initial_discovery_needed(store):
@@ -59,6 +60,8 @@ def install(runtime):
         "automation_scan_workers": 1,
         "initial_discovery_scheduled": False,
         "initial_discovery_completed": False,
+        "deep_discovery_reconciliation_scheduled": False,
+        "deep_discovery_reconciliation_completed": False,
     }
     state_lock = threading.RLock()
     core.OPTIONS["history_background_start_delay_seconds"] = state["background_grace_seconds"]
@@ -212,34 +215,50 @@ def install(runtime):
                         continue
 
                 marker = store.meta_get(INITIAL_DISCOVERY_META_KEY, "")
+                deep_marker = store.meta_get(DEEP_DISCOVERY_META_KEY, "")
                 with state_lock:
                     state["initial_discovery_completed"] = bool(marker)
+                    state["deep_discovery_reconciliation_completed"] = bool(deep_marker)
                 initial_needed = not marker and _initial_discovery_needed(store)
-                if initial_needed and not core.startup_snapshot().get("ready"):
+                # 0.14.41 and older low-memory installs can already have agents and an
+                # initial-discovery marker while their local archive only covers the last
+                # 24 h of the 10-day classifier window. Reconcile that mismatch exactly
+                # once after runtime readiness; the discovery cycle persists deep_marker.
+                deep_reconcile_needed = bool(marker) and not bool(deep_marker)
+                discovery_needed = initial_needed or deep_reconcile_needed
+                if discovery_needed and not core.startup_snapshot().get("ready"):
                     # History starts during runtime construction, just before the public
                     # ready flag flips. Do not turn that tiny ordering gap into a 60 s
                     # apparent cold-start stall.
                     history_self.stop_event.wait(0.25)
                     continue
-                if initial_needed and not history_self.discovery_job_active:
+                if discovery_needed and not history_self.discovery_job_active:
                     request = getattr(history_self, "request_discovery_rescan", None)
+                    reason = "fresh_install" if initial_needed else "deep_history_reconcile"
                     if callable(request) and request(
-                        threshold_override=1, reason="fresh_install"
+                        threshold_override=1, reason=reason
                     ):
                         with state_lock:
-                            state["initial_discovery_scheduled"] = True
+                            if initial_needed:
+                                state["initial_discovery_scheduled"] = True
+                            else:
+                                state["deep_discovery_reconciliation_scheduled"] = True
                         store.event(
                             None,
                             "info",
-                            "initial_discovery_started",
-                            "Fresh install: started one-time controllable-device discovery",
-                            {"threshold_override": 1},
+                            "initial_discovery_started" if initial_needed else "deep_discovery_reconciliation_started",
+                            (
+                                "Fresh install: started one-time controllable-device discovery"
+                                if initial_needed
+                                else "Upgrade: reconciling the full controllable-device discovery window once"
+                            ),
+                            {"threshold_override": 1, "reason": reason},
                         )
 
-                # Realtime ingestion keeps the local archive current.  There is no
-                # periodic Recorder maintenance here. If the one-time fresh-install job
-                # fails before writing its completion marker, this loop may retry after
-                # the bounded delay; established installs never enter that branch.
+                # Realtime ingestion keeps the local archive current. There is no
+                # periodic Recorder maintenance here. A failed one-time discovery or
+                # deep-window reconciliation may retry after the bounded delay until its
+                # durable marker is written; later restarts remain quiet.
                 history_self.stop_event.wait(60.0)
 
         history_module.HistoryManager.run = quiet_run
@@ -370,7 +389,7 @@ def install(runtime):
     core.RELEASE_016_RESOURCE_GUARD = snapshot
     core.release_016_resource_guard_contract = {
         "startup": "saved_agents_and_realtime_then_fresh_install_discovery",
-        "automatic_background_discovery": "fresh_install_once_then_explicit_rescan",
+        "automatic_background_discovery": "fresh_install_once_plus_one_time_deep_reconciliation_then_explicit_rescan",
         "background_archive_cpu": "20pct_default_duty_cycle_when_explicit",
         "recorder_timeout": "120s_circuit_breaker_no_recursive_burst",
         "automation_config_reads": "serialized_and_last_scan_persisted",
