@@ -227,21 +227,15 @@ def migrate_existing_candidates(store):
 
 
 def _all_hidden_ids(store):
-    ids = set()
+    lock = getattr(store, "_candidate_ids_ram_lock", None)
+    if lock is not None and getattr(store, "_candidate_ids_ram_ready", False):
+        with lock:
+            return set(getattr(store, "_candidate_ids_ram", set()) or set())
     try:
-        with store.conn() as c:
-            if c.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='agent_candidates'").fetchone():
-                ids.update(str(r[0]) for r in c.execute("SELECT candidate_id FROM agent_candidates").fetchall())
-            if c.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='agent_candidate_generations'").fetchone():
-                ids.update(
-                    str(r[0]) for r in c.execute(
-                        """SELECT agent_id FROM agent_candidate_generations
-                           WHERE generation_type='candidate' AND agent_id IS NOT NULL"""
-                    ).fetchall()
-                )
+        from agent_candidates import refresh_candidate_ids_cache
+        return refresh_candidate_ids_cache(store)
     except Exception:
-        return ids
-    return ids
+        return set()
 
 
 def _is_candidate(store, agent_id):
@@ -340,6 +334,11 @@ def _retention(manager, root_id):
                    WHERE generation_id=?""",
                 (time.time(), time.time(), generation["generation_id"]),
             )
+    try:
+        from agent_candidates import refresh_candidate_ids_cache
+        refresh_candidate_ids_cache(manager.store)
+    except Exception:
+        pass
 
 
 def install(manager):
@@ -354,6 +353,10 @@ def install(manager):
 
     ensure_lineage_tables(manager.store)
     migrate_existing_candidates(manager.store)
+    try:
+        candidate_module.refresh_candidate_ids_cache(manager.store)
+    except Exception:
+        pass
 
     # Existing Store overlays resolve these module globals dynamically.  Extending them
     # here keeps every retained ancestor hidden from ordinary live-agent enumeration.
