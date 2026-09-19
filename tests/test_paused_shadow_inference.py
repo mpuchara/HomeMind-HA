@@ -145,30 +145,28 @@ class PausedShadowInferenceTests(unittest.TestCase):
         a_control = agent(mode='control', training='qualified')
         self.assertTrue(inference_eligible(a_control, FakeStore([a_control], {})))
 
-    def test_installed_scheduler_processes_paused_shadow_model(self):
+    def test_installed_extension_admits_paused_shadow_without_replacing_scheduler(self):
         a = agent()
         store = FakeStore([a], {'a1': {'version': 10, 'schema': {'entities': ['binary_sensor.motion']}}})
         engine = FakeEngine()
         core = FakeCore(store, engine)
         self.assertTrue(install(core))
 
-        engine.process(engine.state_map)
-
-        self.assertEqual(engine.processed, ['a1'])
+        self.assertTrue(engine.inference_eligible(a))
         payload = engine.runtime_for(a)
         self.assertTrue(payload['paused_shadow_inference'])
         self.assertTrue(payload['inference_eligible'])
-        self.assertEqual(payload['last_prediction'], 1.0)
+        source = (ROOT / 'adaptive_ai/src/paused_shadow_inference.py').read_text(encoding='utf-8')
+        self.assertNotIn('engine.process =', source)
+        self.assertNotIn('engine.process_target =', source)
 
-    def test_installed_scheduler_keeps_paused_without_model_idle(self):
+    def test_installed_eligibility_keeps_paused_without_model_idle(self):
         a = agent()
         store = FakeStore([a], {})
         engine = FakeEngine()
         install(FakeCore(store, engine))
 
-        engine.process(engine.state_map)
-
-        self.assertEqual(engine.processed, [])
+        self.assertFalse(engine.inference_eligible(a))
         self.assertFalse(engine.runtime_for(a)['paused_shadow_inference'])
 
     def test_ui_does_not_dim_paused_training_when_runtime_mode_is_shadow(self):
