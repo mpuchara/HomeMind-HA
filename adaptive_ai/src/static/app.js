@@ -11,11 +11,23 @@ const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&
 const pct=v=>Math.round((Number(v)||0)*100)+'%';
 const num=(v,d=0)=>Number(v||0).toLocaleString(undefined,{maximumFractionDigits:d});
 function duration(v){if(v==null)return null;const s=Number(v);if(!Number.isFinite(s)||s<0)return null;if(s<20)return '< 1 min';if(s<90)return '≈ 1 min';const m=Math.round(s/60);if(m<60)return `≈ ${m} min`;const h=Math.floor(m/60),rm=m%60;return rm?`≈ ${h} h ${rm} min`:`≈ ${h} h`;}
+function discoveryPending(h){return Boolean(h?.discovery_job_active&&!h?.discovery_classified);}
+function discoveryProgressText(h){
+  const done=Number(h?.chunk_done||0),total=Number(h?.chunk_total||0);
+  return total?`${done}/${total} Recorder chunks`:'Recorder scan starting';
+}
+function updateRescanButton(h){
+  const b=$('#rescanBtn');if(!b)return;
+  const running=Boolean(h?.discovery_job_active);
+  b.disabled=running;
+  b.textContent=running?`Scanning… ${Number(h?.chunk_done||0)}/${Number(h?.chunk_total||0)||'…'}`:'Rescan devices';
+}
 function renderOverview(status){
-  const h=status.history||{};
+  const h=status.history||{},pending=discoveryPending(h);
+  const targetText=pending?`${discoveryProgressText(h)} · activity pending`:`${h.active||0} active / ${h.eligible||h.controllable||0} eligible`;
   $('#overview').innerHTML=`
     <div class="metric"><b>${status.state_count||0}</b><span>HA entities in context</span></div>
-    <div class="metric"><b>${status.agent_count||0}</b><span>agents · ${h.active||0} active / ${h.eligible||h.controllable||0} eligible</span></div>
+    <div class="metric"><b>${status.agent_count||0}</b><span>agents · ${targetText}</span></div>
     <div class="metric"><b>${pct(status.average_confidence)}</b><span>average policy confidence</span></div>
     <div class="metric"><b>${num(status.historical_experience_count||0)}</b><span>predictive RL experiences</span></div>`;
 }
@@ -69,7 +81,8 @@ async function load(){
   }finally{loadInFlight=false;}
 }
 function renderHistory(h,status={}){
-  const ar=h.archive||{}, progress=Math.round((Number(h.progress)||0)*100);
+  updateRescanButton(h);
+  const ar=h.archive||{}, progress=Math.round((Number(h.progress)||0)*100),pending=discoveryPending(h);
   const eta=duration(h.eta_seconds),stageEta=duration(h.stage_eta_seconds),elapsed=duration(h.elapsed_seconds);
   const workDone=Number(h.work_done||0),workTotal=Number(h.work_total||0),workPct=workTotal?Math.min(100,Math.round(workDone*100/workTotal)):null;
   const phase=String(h.phase||'starting');
@@ -81,7 +94,7 @@ function renderHistory(h,status={}){
     ['benchmarking','Validate','Held-out behaviour benchmark'],
     ['ready','Ready','Qualified agents enter Shadow'],
   ];
-  const phaseAliases={manual_ready:'ready',automation_scan:'fast_targets',discovering:'fast_targets',enriching_targets:'fast_targets',ready_enriching:'fast_context',enriching_context:'fast_context',importing:'fast_context',fast_training:'rebuilding',training:'rebuilding'};
+  const phaseAliases={manual_ready:'fast_targets',automation_scan:'fast_targets',discovering:'fast_targets',enriching_targets:'fast_targets',ready_enriching:'fast_context',enriching_context:'fast_context',importing:'fast_context',fast_training:'rebuilding',training:'rebuilding'};
   const canonical=phaseAliases[phase]||phase;
   let activeIdx=phases.findIndex(x=>x[0]===canonical);if(activeIdx<0)activeIdx=0;
   const pipeline=phases.map((x,i)=>`<div class="prep-step ${i<activeIdx?'done':i===activeIdx?'active':''}"><i>${i<activeIdx?'✓':i+1}</i><div><b>${esc(x[1])}</b><span>${esc(x[2])}</span></div></div>`).join('');
@@ -104,9 +117,9 @@ function renderHistory(h,status={}){
       <div><b>${Number(ar.days||0).toFixed(1)} d</b><span>local history coverage</span></div>
       <div><b>${num(h.context_candidates||ar.entities||0)}</b><span>eligible context candidates</span></div>
       <div><b>${num(h.esphome_context_candidates||0)}</b><span>ESPHome sensors eligible</span></div>
-      <div><b>${h.active||0}/${h.eligible||h.controllable||0}</b><span>active / eligible targets</span></div>
+      <div><b>${pending?'pending':(h.active||0)}/${h.eligible||h.controllable||0}</b><span>${pending?'activity classification / eligible targets':'active / eligible targets'}</span></div>
     </div>
-    <div class="history-meta"><span>${h.filtered_config||0} config/diagnostic targets filtered</span><span>${h.inactive||0} insufficient target activity</span><span>${ak.automation_count||0} automations scanned</span><span>${status.realtime?.connected?'Realtime event stream active':'REST fallback active'}</span><span>${h.esphome_sensor_sibling_overrides||0} ESPHome sensor siblings preserved</span>${trMeta}${ak.error?`<span title="${esc(ak.error)}">Automation scan partial</span>`:''}</div>`;
+    <div class="history-meta"><span>${h.filtered_config||0} config/diagnostic targets filtered</span><span>${pending?'activity classification pending':(h.inactive||0)+' insufficient target activity'}</span><span>${ak.automation_count||0} automations scanned</span><span>${status.realtime?.connected?'Realtime event stream active':'REST fallback active'}</span><span>${h.esphome_sensor_sibling_overrides||0} ESPHome sensor siblings preserved</span>${trMeta}${ak.error?`<span title="${esc(ak.error)}">Automation scan partial</span>`:''}</div>`;
 }
 function sensorRecommendations(a){const recs=a.runtime?.sensor_recommendations||[];if(!recs.length)return `<div class="sensor-ok">✓ Core sensor classes expected for this target are present.</div>`;return recs.map(r=>`<div class="sensor-rec"><i class="dot"></i><div><b>${esc(r.label)}</b><span>${esc(r.reason)}</span></div></div>`).join('');}
 function contextInfluence(a){const xs=a.runtime?.top_context||[];if(!xs.length)return 'Not enough rewarded history to rank context yet.';return xs.map(x=>`${esc(x.feature)} (${Number(x.contribution)>=0?'+':''}${Number(x.contribution).toFixed(2)})`).join(' · ');}
@@ -122,7 +135,11 @@ function sortedFilteredAgents(){
   xs.sort((a,b)=>sort==='confidence_asc'?conf(a)-conf(b):sort==='name_asc'?name(a).localeCompare(name(b)):sort==='name_desc'?name(b).localeCompare(name(a)):sort==='history_desc'?hist(b)-hist(a):conf(b)-conf(a));
   return xs;
 }
-function noAgentsMessage(h){if(h?.phase==='ready')return 'No active controllable target met the discovery criteria. Try Rescan devices; config/diagnostic entities are intentionally ignored.';return 'Discovery is running. Auto-discovered agents enter the initial-training FIFO as soon as they are created.';}
+function noAgentsMessage(h){
+  if(discoveryPending(h))return `Recorder discovery is still running (${discoveryProgressText(h)}). Active-device classification has not run yet, so 0 agents is not a final result.`;
+  if(h?.phase==='ready')return 'No active controllable target met the discovery criteria. Try Rescan devices; config/diagnostic entities are intentionally ignored.';
+  return 'Discovery is preparing target activity classification. Auto-discovered agents enter the initial-training FIFO after classification.';
+}
 function persistOpenAgentDetails(){localStorage.setItem('adaptiveAiOpenAgentDetails',JSON.stringify([...openAgentDetails]));}
 function bindAgentDetails(){document.querySelectorAll('.agent-details[data-agent-id]').forEach(d=>d.addEventListener('toggle',()=>{const id=String(d.dataset.agentId);if(d.open)openAgentDetails.add(id);else openAgentDetails.delete(id);persistOpenAgentDetails();}));}
 function renderAgents(){
@@ -167,7 +184,20 @@ async function resumeLearning(id){if(!confirm('Resume learning from the saved hi
 async function resetLearning(id){if(!confirm('FULL REBUILD: clear this agent model, benchmark and saved cursor, then index all locally archived history from the beginning? Use this after adding/changing sensors.'))return;await api(`api/agents/${id}/learning`,{method:'DELETE'});load();}
 async function removeAgent(id){if(!confirm('Delete this agent and its learned policy? Auto-discovery may recreate it if the device remains active.'))return;await api(`api/agents/${id}`,{method:'DELETE'});load();}
 window.setMode=setMode;window.verifyControl=verifyControl;window.trainAgent=trainAgent;window.resumeLearning=resumeLearning;window.resetLearning=resetLearning;window.removeAgent=removeAgent;
-async function rescan(){const b=$('#rescanBtn');b.disabled=true;b.textContent='Starting scan…';try{const r=await api('api/discovery/rescan',{method:'POST',body:'{}'});b.textContent=r.state==='running'?'Scanning in background…':'Rescan started';setTimeout(()=>b.textContent='Rescan devices',2500);await load();}catch(e){alert(e.message);b.textContent='Rescan devices';}finally{b.disabled=false;}}
+async function rescan(){
+  const b=$('#rescanBtn');
+  if(lastHistory?.discovery_job_active){updateRescanButton(lastHistory);return;}
+  b.disabled=true;b.textContent='Starting scan…';
+  try{
+    const r=await api('api/discovery/rescan',{method:'POST',body:'{}'});
+    if(r?.history)lastHistory=r.history;
+    updateRescanButton(lastHistory);
+    await load();
+  }catch(e){
+    alert(e.message);
+    updateRescanButton(lastHistory);
+  }
+}
 async function openDialog(){entities=await api('api/entities');const targets=entities.filter(e=>e.target_options?.length);$('#targetEntity').innerHTML=targets.map(e=>`<option value="${esc(e.entity_id)}">${esc(e.name)} — ${esc(e.entity_id)}</option>`).join('');updateTargetProps();$('#agentDialog').showModal();}
 function updateTargetProps(){const target=entities.find(e=>e.entity_id===$('#targetEntity').value),opts=target?.target_options||[];$('#targetProperty').innerHTML=opts.map(o=>`<option value="${esc(o.property)}" data-min="${o.min}" data-max="${o.max}" data-deadband="${o.deadband}" data-explore="${o.exploration_step}">${esc(o.label)}</option>`).join('');updateBounds();}
 function updateBounds(){const o=$('#targetProperty').selectedOptions[0];if(!o)return;const f=$('#agentForm');f.min_value.value=o.dataset.min;f.max_value.value=o.dataset.max;f.deadband.value=o.dataset.deadband;f.exploration_step.value=o.dataset.explore;}
