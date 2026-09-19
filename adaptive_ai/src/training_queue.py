@@ -120,13 +120,13 @@ class TrainingQueue(threading.Thread):
         """
         original_cycle = getattr(self.history, "_manual_lightweight_cycle", None)
         if callable(original_cycle) and not getattr(self.history, "_training_priority_cycle_bridge", False):
-            def priority_cycle(current, controllable, end_ts):
+            def priority_cycle(current, controllable, end_ts, *args, **kwargs):
                 if self._training_priority.is_set():
                     self._mark_discovery_preempted()
                     self._set_discovery_deferred_status()
                     return None
                 try:
-                    return original_cycle(current, controllable, end_ts)
+                    return original_cycle(current, controllable, end_ts, *args, **kwargs)
                 except _YieldDiscovery:
                     self._set_discovery_deferred_status()
                     return None
