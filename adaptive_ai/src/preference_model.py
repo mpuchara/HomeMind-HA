@@ -83,10 +83,13 @@ class LightingPreferenceModel:
         this cache synchronously on record/status/undo, so the hot path never polls SQLite.
         """
         key = str(agent_id)
+        revision = int(
+            getattr(self.store, "_manual_feedback_revisions", {}).get(key, 0)
+        )
         with self._cache_lock:
             cached = self._rows_cache.get(key)
-            if cached is not None:
-                return cached
+            if cached is not None and int(cached[0]) == revision:
+                return cached[1]
         with self.store.conn() as c:
             table = c.execute(
                 "SELECT 1 FROM sqlite_master WHERE type='table' AND name='manual_feedback_journal'"
@@ -110,7 +113,7 @@ class LightingPreferenceModel:
                 parsed = None
             row["_parsed_signature"] = parsed if isinstance(parsed, dict) and parsed else None
         with self._cache_lock:
-            self._rows_cache[key] = rows
+            self._rows_cache[key] = (revision, rows)
         return rows
 
     @staticmethod
@@ -257,7 +260,12 @@ class LightingPreferenceModel:
         # Most agents have no explicit preference facts. Avoid a second full context
         # signature/temporal-feature pass in that overwhelmingly common case.
         if not self._rows(agent.get("id")):
-            return self.evaluate(agent, getattr(policy, "actions", ()), {}, episode_id=episode_id)
+            # Preserve the previous semantic reason ("no_matching_explicit_preference")
+            # without paying for a full context signature that cannot match any fact.
+            return self.evaluate(
+                agent, getattr(policy, "actions", ()),
+                {"meta:no_feedback": 0.0}, episode_id=episode_id,
+            )
         current = signature(policy, states, temporal, timestamp)
         return self.evaluate(
             agent, getattr(policy, "actions", ()), current or {}, episode_id=episode_id
