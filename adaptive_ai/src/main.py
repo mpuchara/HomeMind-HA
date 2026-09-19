@@ -151,6 +151,13 @@ def initialize_runtime():
             STORE.event(None, "error", "control_startup_reconcile_failed", str(exc), None)
 
         set_startup("ready", 7, "Adaptive AI runtime is ready", ready=True)
+        # Open the background inference gate only after all runtime extensions, realtime
+        # state handling, history manager and ownership reconciliation are composed.
+        # This prevents the initial all-agent prediction burst from starving Ingress.
+        inference_gate = getattr(ENGINE, "inference_enabled", None)
+        if inference_gate is not None:
+            inference_gate.set()
+            ENGINE.wake_event.set()
         print("Adaptive AI runtime initialized", flush=True)
     except Exception as exc:
         traceback.print_exc()
