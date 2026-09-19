@@ -50,6 +50,30 @@ class ProvenanceJournalTests(unittest.TestCase):
         self.assertEqual(match['decision_id'], 'decision-1')
         self.assertEqual(match['command_origin'], 'own_command')
 
+    def test_restart_command_match_uses_hydrated_memory_cache_without_sql(self):
+        a = agent()
+        command_id = self.journal.reserve_command(a, 1.0, decision_id='decision-cache')
+        response = [state('light.kitchen', 'on') | {
+            'context': {'id': 'ctx-cache', 'parent_id': None}
+        }]
+        self.journal.dispatch_command(command_id, response=response)
+
+        fresh = ProvenanceJournal(Store(self.path), clock=lambda: self.now)
+        original_conn = fresh.store.conn
+        fresh.store.conn = Mock(
+            side_effect=AssertionError("live command echo matching must not query SQLite")
+        )
+        try:
+            matched = fresh.match_command_state(
+                state('light.kitchen', 'on') | {
+                    'context': {'id': 'ctx-cache', 'parent_id': None}
+                }
+            )
+        finally:
+            fresh.store.conn = original_conn
+        self.assertIsNotNone(matched)
+        self.assertEqual(matched['decision_id'], 'decision-cache')
+
     def test_duplicate_event_and_experience_are_idempotent(self):
         st = state('binary_sensor.pir', 'on') | {
             'context': {'id': 'ctx-pir', 'parent_id': None, 'user_id': 'human'}

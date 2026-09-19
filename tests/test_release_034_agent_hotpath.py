@@ -194,6 +194,17 @@ class AgentHotPathTests(unittest.TestCase):
         self.assertIn('root_rt.get("shadow_generations") is not None', cached)
         self.assertIn("invalidate_generation_cache", source)
 
+    def test_command_echo_matching_is_memory_only_after_journal_startup(self):
+        source = (
+            ROOT / "adaptive_ai/src/provenance.py"
+        ).read_text(encoding="utf-8")
+        match = source.split("def match_command_state(self, state):", 1)[1].split(
+            "def experience_exists", 1
+        )[0]
+        self.assertNotIn("self.store.conn()", match)
+        self.assertIn("_command_cache", match)
+        self.assertIn("_load_active_command_cache()", source)
+
     def test_hot_status_includes_realtime_telemetry_snapshot(self):
         source = (
             ROOT / "adaptive_ai/src/release_017_ui_lifeline.py"
