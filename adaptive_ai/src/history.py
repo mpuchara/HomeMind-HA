@@ -665,13 +665,6 @@ class HistoryManager(threading.Thread):
         # heavy work, but they are never a prerequisite for discovering/serving agents.
         self.set_status(
             "manual_ready", 0.66,
-            "Classifying controllable targets from the local archive",
-            work_done=0, work_total=max(1, len(controllable)), work_unit="targets",
-            eta_source="single-pass local archive scan",
-            phase_detail="One bounded discovery stream; UI and realtime stay live",
-        )
-        self.set_status(
-            "manual_ready", 0.66,
             "Classifying controllable targets from imported Recorder history",
             work_done=0, work_total=max(1, len(controllable)), work_unit="targets",
             eta_source="single-pass local archive scan",
