@@ -227,6 +227,9 @@ def install(runtime):
             ws_error = core.ENGINE.ws_error
             registry_count = len(core.ENGINE.entity_registry)
             last_ws_event = core.ENGINE.last_ws_event
+            last_state_sync_ok = getattr(core.ENGINE, "last_state_sync_ok", None)
+            last_state_sync_error = getattr(core.ENGINE, "last_state_sync_error", None)
+            state_resync_stats = dict(getattr(core.ENGINE, "state_resync_stats", {}) or {})
             active_inference_agent_count = len(core.ENGINE.agent_configs)
             inference_scheduler = dict(core.ENGINE.inference_scheduler)
         configs = hot_configs()
@@ -254,6 +257,11 @@ def install(runtime):
                     "last_event": last_ws_event,
                 },
                 "inference_scheduler": inference_scheduler,
+                "state_resync": {
+                    **state_resync_stats,
+                    "last_ok": last_state_sync_ok,
+                    "error": last_state_sync_error,
+                },
                 "history": (
                     core.HISTORY.status()
                     if core.HISTORY is not None
@@ -271,21 +279,18 @@ def install(runtime):
                 "status_read_mode": "operational_hot",
             }
         )
-        # HA reachability and realtime delivery are separate. REST may remain healthy
-        # while the websocket reconnects; do not label that situation "HA disconnected".
-        ha_client = getattr(core, "HA", None)
+        # HA reachability and realtime delivery are separate. Use only the dedicated
+        # /states reconciliation health for REST fallback. HAClient.last_error is shared
+        # by unrelated history/config/service calls and previously produced false
+        # "HA disconnected" banners even while the core state API was healthy.
         ha_rest_connected = bool(
-            ha_client is not None
-            and getattr(ha_client, "last_ok", None) is not None
-            and getattr(ha_client, "last_error", None) is None
+            last_state_sync_ok is not None and last_state_sync_error is None
         )
-        # A failed safety REST resync must not claim that HA is disconnected while the
-        # authenticated realtime websocket is actively delivering events.
         payload["ha_connected"] = bool(ws_connected or ha_rest_connected)
         payload["ha_rest_connected"] = ha_rest_connected
         payload["ha_error"] = (
-            None if ws_connected else
-            (getattr(ha_client, "last_error", None) if ha_client is not None else ws_error)
+            None if ws_connected or ha_rest_connected
+            else (last_state_sync_error or ws_error)
         )
         payload.setdefault("feedback_count", 0)
         payload.setdefault("historical_experience_count", 0)
