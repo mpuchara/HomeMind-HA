@@ -651,7 +651,7 @@ class HistoryManager(threading.Thread):
         self.set_status(
             "manual_ready", 0.10,
             "Low-memory discovery: refreshing controllable-device history only",
-            phase_detail="Cold-start agents train automatically through the single-job FIFO; whole-home context stays idle",
+            phase_detail="Discovery only; detected agents remain waiting until you choose Train",
         )
         if controllable and end_ts > refresh_start:
             self._import_section(
@@ -694,10 +694,10 @@ class HistoryManager(threading.Thread):
         ])
         self.set_status(
             "ready", 1.0,
-            f"Low-memory mode ready · {q} trained / {waiting} waiting or queued",
+            f"Discovery ready · {q} trained / {waiting} waiting for manual selection",
             stage_eta_seconds=0, work_done=0, work_total=0, work_unit="agents",
             eta_source="idle",
-            phase_detail="Initial training is queued automatically; only one heavy training job runs at a time",
+            phase_detail="Choose which discovered devices to train; no agent starts automatically",
         )
 
     def bootstrap_and_train(self, threshold_override=None):
