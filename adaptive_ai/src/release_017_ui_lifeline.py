@@ -20,7 +20,7 @@ def install(runtime):
         return getattr(core, "RELEASE_017_UI_LIFELINE", None)
 
     import queue_main as queue_runtime
-    from telemetry import HEAVY_JOBS
+    from telemetry import HEAVY_JOBS, TELEMETRY
     from training_queue import TrainingQueue
 
     cache_lock = threading.RLock()
@@ -214,6 +214,7 @@ def install(runtime):
                 ),
                 "startup": startup,
                 "options": core.OPTIONS,
+                "telemetry": TELEMETRY.snapshot(),
                 "status_read_mode": "operational_hot",
             }
         )
@@ -224,7 +225,6 @@ def install(runtime):
         payload.setdefault("automation_knowledge", {})
         payload.setdefault("home_intelligence", {})
         payload.setdefault("home_bootstrap", {})
-        payload.setdefault("telemetry", {})
 
         low_power = getattr(core, "LOW_POWER_RUNTIME", None)
         if callable(low_power):
