@@ -489,7 +489,11 @@ def install(manager):
         root_id = str(root_id)
         # Engine.all_agent_configs is revision-invalidated RAM state. Candidate passive
         # observation must not open SQLite on every HA event merely to recover the root.
-        with manager.engine.lock:
+        engine_lock = getattr(manager.engine, "lock", None)
+        if engine_lock is not None:
+            with engine_lock:
+                row = dict(getattr(manager.engine, "all_agent_configs", {}).get(root_id) or {})
+        else:
             row = dict(getattr(manager.engine, "all_agent_configs", {}).get(root_id) or {})
         if row:
             return row
@@ -919,8 +923,15 @@ def install(manager):
     def candidate_live_runtime_snapshots():
         """Return Candidate decision tiles from RAM on the normal polling path."""
         now = time.time()
-        with manager.engine.lock:
-            state_map = dict(manager.engine.state_map)
+        engine_lock = getattr(manager.engine, "lock", None)
+        if engine_lock is not None:
+            with engine_lock:
+                state_map = dict(getattr(manager.engine, "state_map", {}) or {})
+                roots_hot = {
+                    str(k): dict(v) for k, v in getattr(manager.engine, "all_agent_configs", {}).items()
+                }
+        else:
+            state_map = dict(getattr(manager.engine, "state_map", {}) or {})
             roots_hot = {
                 str(k): dict(v) for k, v in getattr(manager.engine, "all_agent_configs", {}).items()
             }
