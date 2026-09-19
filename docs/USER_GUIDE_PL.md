@@ -4,7 +4,7 @@ Ten dokument opisuje bieżący produkt. Starsze wersje instrukcji pozostają w r
 
 ## Główny ekran
 
-Aplikacja uruchamia interfejs HTTP przed cięższą inicjalizacją runtime. Status startu pokazuje, czy gotowe są baza, Engine, realtime Home Assistant, historia i workery. Normalnie stan HA jest odbierany przez WebSocket; REST pozostaje ścieżką resynchronizacji/fallbacku. Od 0.14.30 pierwszy pełny przebieg inference nie startuje w trakcie składania runtime: po `startup.ready` Ingress dostaje 3 s zapasu, a pula workerów inference jest ograniczona do maksymalnie 4. Initial REST snapshot służy do rozgrzania stanu i nie jest traktowany jako tysiące realtime transition.
+Aplikacja uruchamia interfejs HTTP przed cięższą inicjalizacją runtime. Status startu pokazuje, czy gotowe są baza, Engine, realtime Home Assistant, historia i workery. Normalnie stan HA jest odbierany przez WebSocket; REST pozostaje ścieżką resynchronizacji/fallbacku. Od 0.14.30 pierwszy pełny przebieg inference nie startuje w trakcie składania runtime: po `startup.ready` Ingress dostaje 3 s zapasu, a pula workerów inference jest ograniczona do maksymalnie 4. Initial REST snapshot służy do rozgrzania stanu i nie jest traktowany jako tysiące realtime transition. Od 0.14.31 runtime jest faktycznie event-driven: 1-sekundowy tick tylko sprawdza lekkie deadline'y, nie uruchamia wszystkich agentów. Fast target ma awaryjny heartbeat 10 s, pozostałe 30 s, a zwykły event HA uruchamia tylko agentów zależnych od targetu, ich aktywnego schema, jawnych wejść lub źródeł obecności z tego samego obszaru.
 
 ## Karta Live
 
