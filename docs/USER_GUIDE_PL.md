@@ -185,3 +185,12 @@ Pełny REST-owy snapshot /states pozostaje zabezpieczeniem przy zdrowym websocke
 Stan połączenia z Home Assistant jest teraz liczony z dwóch niezależnych sygnałów: websocket realtime oraz dedykowany sukces /states. Błąd pobrania historii, konfiguracji automatyzacji albo innego wywołania HA nie oznacza już fałszywie, że rdzeń Home Assistant jest odłączony.
 
 Panel Home Intelligence pokazuje dodatkowo koszt pełnego resyncu (liczbę zmienionych encji oraz ostatni/maksymalny czas), ostatnie zużycie CPU, liczniki schedulerów i czas obserwatora driftu. Przy kolejnym soak teście szczególnie obserwuj, czy po 5 minutach State resync ma niewielką liczbę zmian i czy CPU po jego zakończeniu wraca do poziomu wyjściowego.
+
+
+### Czysta instalacja i discovery - 0.14.39
+
+W 0.14.38 świeża instalacja mogła przez kilka minut pokazywać 0 agentów oraz 0 aktywnych urządzeń mimo poprawnie działającego skanu Recorder. Był to mylący status: klasyfikacja aktywności urządzeń wykonywała się dopiero po zakończeniu ograniczonego importu historii, a wartość 0 była wyświetlana jeszcze przed uruchomieniem klasyfikatora.
+
+0.14.39 rozróżnia teraz wynik „0 aktywnych” od stanu „klasyfikacja jeszcze nie została wykonana”. W trakcie skanu UI pokazuje bieżące chunky Recorder oraz komunikat, że activity classification jest pending. Przycisk Rescan devices pozostaje zablokowany do zakończenia bieżącego skanu, a ponowne wywołanie API discovery jest idempotentne i zwraca aktualny stan zadania zamiast błędu 409.
+
+Nie dodano klasyfikowania całego archiwum po każdym chunku. Byłoby to kuszące dla szybszego pojawiania się kart, ale ponownie zwiększyłoby liczbę odczytów SQLite i obciążenie Raspberry Pi. Klasyfikacja nadal wykonuje jeden ograniczony przebieg po zakończeniu importu targetów.
