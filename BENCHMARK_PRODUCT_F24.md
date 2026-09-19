@@ -114,8 +114,8 @@ The OFF confirmation never weakens manual priority: once the user physically tur
 ## CI verification
 
 GitHub Actions run `35439656239` validates the 0.14.35 RAM-first/microSD changes on the unchanged F24 v2 contract:
-- Python 3.11: 940 tests, all passing;
-- Python 3.13: 940 tests, all passing;
+- Python 3.11: 942 tests, all passing;
+- Python 3.13: 942 tests, all passing;
 - compileall: passing;
 - JS syntax checks: passing;
 - Stage 17 history-cost smoke: passing;

@@ -153,3 +153,6 @@ Konfiguracja agentów i routing są unieważniane zmianą revision, także gdy l
 Trwałe granice bezpieczeństwa nie zostały przeniesione do RAM. Modele, konfiguracja, explicit feedback oraz ścieżka Control/command pozostają trwałe, a Control nadal odczytuje i waliduje konfigurację przed fizycznym service call. Przy twardej utracie zasilania można utracić jedynie ostatnią krótką porcję danych obserwacyjnych/diagnostycznych oczekujących na batch flush, nie stan wymagany do bezpiecznego sterowania.
 
 W teście Raspberry Pi obserwuj `event -> intent p95`, `feature_journal.pending`, `provenance_queue.events.pending` oraz `ram_persistence_buffers`. Kolejki mogą chwilowo rosnąć, ale przy stabilnej pracy powinny okresowo wracać w okolice zera, a p95 nie powinno narastać wraz z czasem działania.
+
+
+W 0.14.35 także Sensor Tournament shadow oraz fast-light timing nie utrwalają już każdej pojedynczej próbki osobną transakcją. Bieżące residual models, timing metrics i weight-only checkpoints pozostają w RAM i są deduplikowane, a writer zapisuje najnowszy stan paczką co maksymalnie kilka sekund. Diagnostyka wieku schematu jest odczytywana z cache i dotyka SQLite tylko po zmianie revision/signature.
