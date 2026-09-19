@@ -320,9 +320,9 @@ def install(runtime):
     core.initialize_runtime = initialize_runtime
     core.RELEASE_016_RESOURCE_GUARD = snapshot
     core.release_016_resource_guard_contract = {
-        "startup": "saved_agents_and_realtime_before_recorder",
-        "first_background_pass": "automation_scan_suppressed",
-        "background_archive_cpu": "20pct_default_duty_cycle",
+        "startup": "saved_agents_and_realtime_only",
+        "automatic_background_discovery": "disabled_explicit_rescan_only",
+        "background_archive_cpu": "20pct_default_duty_cycle_when_explicit",
         "recorder_timeout": "120s_circuit_breaker_no_recursive_burst",
         "automation_config_reads": "serialized_and_last_scan_persisted",
         "entrypoint_import": "no_runtime_or_database_imports",
