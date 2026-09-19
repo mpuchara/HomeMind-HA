@@ -450,6 +450,9 @@ def install(manager):
 
     shadow_runtime = {}
     active_candidate_parents = set()
+    candidate_dependency_roots = {}
+    passive_pending = {}
+    original_on_state_changed = getattr(manager.engine, "on_state_changed", None)
 
     def _refresh_active_candidate_parents():
         # Candidate lifecycle mutations are rare. Rebuild one compact in-memory set there,
@@ -466,10 +469,57 @@ def install(manager):
         active_candidate_parents.update(values)
         return len(active_candidate_parents)
 
+    def _schema_entities(agent_id):
+        try:
+            raw = manager.store.get_model(str(agent_id)) or {}
+        except Exception:
+            return set()
+        schema = dict(raw.get("schema") or {}) if isinstance(raw, dict) else {}
+        return {str(eid) for eid in (schema.get("entities") or ()) if eid}
+
+    def _rebuild_candidate_dependency_index():
+        mapping = {}
+        for root_id in tuple(active_candidate_parents):
+            root = manager.store.get_agent_config(str(root_id))
+            if not root:
+                continue
+            deps = {str(root.get("target_entity") or "")}
+            deps.update(
+                str(eid) for eid in (root.get("input_entities") or ())
+                if isinstance(eid, str) and eid and eid != "*"
+            )
+            deps.update(_schema_entities(root_id))
+            try:
+                area = manager.engine.context.area_for(root.get("target_entity"))
+                if area:
+                    deps.update(
+                        str(eid)
+                        for eid in getattr(manager.engine.context.home, "area_sources", {}).get(area, ())
+                    )
+            except Exception:
+                pass
+            for generation in _shadow_generations(manager.store, root_id):
+                candidate_id = generation.get("agent_id")
+                if not candidate_id:
+                    continue
+                candidate = manager.store.get_agent_config(str(candidate_id)) or {}
+                deps.update(
+                    str(eid) for eid in (candidate.get("input_entities") or ())
+                    if isinstance(eid, str) and eid and eid != "*"
+                )
+                deps.update(_schema_entities(candidate_id))
+            deps.discard("")
+            for entity_id in deps:
+                mapping.setdefault(entity_id, set()).add(str(root_id))
+        candidate_dependency_roots.clear()
+        candidate_dependency_roots.update(mapping)
+        return sum(len(v) for v in mapping.values())
+
     def candidate_hot_active(agent_id):
         return str(agent_id) in active_candidate_parents
 
     _refresh_active_candidate_parents()
+    _rebuild_candidate_dependency_index()
 
     def _root_runtime(root_id):
         return shadow_runtime.setdefault(str(root_id), {
@@ -490,6 +540,7 @@ def install(manager):
             getattr(manager.store, "_provenance_generation_revision", 0)
         ) + 1
         _refresh_active_candidate_parents()
+        _rebuild_candidate_dependency_index()
         for runtime in shadow_runtime.values():
             runtime["generation_cache_at"] = 0.0
             runtime["shadow_generations"] = None
@@ -522,7 +573,7 @@ def install(manager):
                       "event_ts": event_ts, "previous_current": previous_current})
         return result
 
-    def _bundle(root_agent, state_map):
+    def _bundle(root_agent, state_map, *, include_parent=True, event_id=None, event_ts=None):
         root_gen, shadow_generations = _cached_generations(root_agent["id"])
         # No Candidate means no A/B observation work at all. Live runtime telemetry is
         # already stored by Engine; candidate_generation_decisions exist only to compare
@@ -536,13 +587,14 @@ def install(manager):
             return None
         if not math.isfinite(current):
             return None
-        event_ts = time.time()
-        event_id = str(uuid.uuid4())
+        event_ts = time.time() if event_ts is None else float(event_ts)
+        event_id = str(uuid.uuid4()) if event_id is None else str(event_id)
         root_rt = _root_runtime(root_agent["id"])
         results = {}
-        observed_root = _root_observation(manager, root_agent, root_gen)
-        if observed_root is not None:
-            results[root_gen["generation_id"]] = _decorate_result(root_rt, observed_root, event_ts, current)
+        if include_parent:
+            observed_root = _root_observation(manager, root_agent, root_gen)
+            if observed_root is not None:
+                results[root_gen["generation_id"]] = _decorate_result(root_rt, observed_root, event_ts, current)
         for generation in shadow_generations:
             observed = _predict_candidate(manager, generation, state_map, event_ts)
             if observed is not None:
@@ -631,6 +683,12 @@ def install(manager):
         _increment_false_early(agent["id"], previous_bundle, bundle)
         root_rt["bundle"] = bundle
         root_rt["previous_current"] = bundle["current"]
+        try:
+            observed_revision = int(getattr(manager.engine._inference_tls, "state_revision"))
+        except Exception:
+            observed_revision = int(getattr(manager.engine, "state_revision", 0) or 0)
+        root_rt["last_candidate_observed_revision"] = observed_revision
+        root_rt["last_candidate_observed_monotonic"] = time.monotonic()
         _persist_bundle(bundle, force=False)
         return bundle
 
@@ -823,10 +881,94 @@ def install(manager):
         result = original_lineage_status(ref) if original_lineage_status is not None else None
         return _decorate_status(result)
 
+    def _queue_passive_root(root_id, revision, *, delay_seconds=0.35):
+        root_id = str(root_id)
+        with manager.lock:
+            previous = passive_pending.get(root_id) or {}
+            passive_pending[root_id] = {
+                "revision": max(int(previous.get("revision") or 0), int(revision or 0)),
+                "due": min(
+                    float(previous.get("due") or (time.monotonic() + delay_seconds)),
+                    time.monotonic() + max(0.0, float(delay_seconds)),
+                ),
+            }
+        manager.wake_event.set()
+
+    def _observe_passive_root(root_id, revision):
+        root_id = str(root_id)
+        if root_id not in active_candidate_parents:
+            return False
+        root_rt = _root_runtime(root_id)
+        if int(root_rt.get("last_candidate_observed_revision") or 0) >= int(revision or 0):
+            return False
+        root = manager.store.get_agent_config(root_id)
+        if not root:
+            return False
+        with manager.engine.lock:
+            state_map = dict(manager.engine.state_map)
+            current_revision = int(getattr(manager.engine, "state_revision", 0) or 0)
+        event_id = f"candidate-passive:{uuid.uuid4()}"
+        bundle = _bundle(
+            root, state_map, include_parent=False,
+            event_id=event_id, event_ts=time.time(),
+        )
+        if not bundle or not bundle.get("results"):
+            return False
+        _persist_bundle(bundle, force=True)
+        root_rt["last_candidate_observed_revision"] = max(int(revision or 0), current_revision)
+        root_rt["last_candidate_observed_monotonic"] = time.monotonic()
+        root_rt["last_passive_bundle"] = bundle
+        manager.store.event(
+            root_id, "info", "candidate_shadow_passive_observation",
+            "Candidate Shadow observed a state revision independently of Parent inference",
+            {
+                "revision": int(root_rt["last_candidate_observed_revision"]),
+                "generations": len(bundle.get("results") or {}),
+                "event_id": event_id,
+            },
+        )
+        return True
+
+    def drain_candidate_shadow_events(*, force=False, max_roots=2):
+        now = time.monotonic()
+        # A 30 s heartbeat keeps persistent Candidate Shadow fresh even while Parent is
+        # paused or no relevant HA entity changes. Normal Parent inference updates the
+        # same monotonic timestamp and therefore suppresses this fallback.
+        current_revision = int(getattr(manager.engine, "state_revision", 0) or 0)
+        for root_id in tuple(active_candidate_parents):
+            rt = _root_runtime(root_id)
+            if now - float(rt.get("last_candidate_observed_monotonic") or 0.0) >= DECISION_HEARTBEAT_SECONDS:
+                _queue_passive_root(root_id, current_revision, delay_seconds=0.0)
+
+        ready = []
+        with manager.lock:
+            for root_id, pending in list(passive_pending.items()):
+                if force or float(pending.get("due") or 0.0) <= now:
+                    ready.append((root_id, int(pending.get("revision") or 0)))
+                    passive_pending.pop(root_id, None)
+                    if len(ready) >= max(1, int(max_roots)):
+                        break
+        completed = 0
+        for root_id, revision in ready:
+            completed += int(_observe_passive_root(root_id, revision))
+        return completed
+
+    def candidate_state_changed(data):
+        result = original_on_state_changed(data)
+        entity_id = str((data or {}).get("entity_id") or "")
+        if not entity_id:
+            return result
+        with manager.engine.lock:
+            revision = int(getattr(manager.engine, "state_revision", 0) or 0)
+        for root_id in tuple(candidate_dependency_roots.get(entity_id, ())):
+            _queue_passive_root(root_id, revision)
+        return result
+
     def maintenance():
-        # Runtime evidence is deliberately not rewritten or synthesized during maintenance.
-        # Existing model-retention logic may prune policies; their observed decision rows
-        # remain immutable lineage evidence.
+        # Runtime evidence is never synthesized from history. Passive observations use
+        # only the live websocket-backed state map and run on the Candidate worker, never
+        # on the websocket callback or HTTP thread.
+        drain_candidate_shadow_events()
         return original_maintenance()
 
     def do_get(http):
@@ -872,6 +1014,11 @@ def install(manager):
 
     manager.before_live_process = before_live_process
     manager.after_live_process = after_live_process
+    manager.drain_candidate_shadow_events = drain_candidate_shadow_events
+    manager.candidate_dependency_roots = candidate_dependency_roots
+    manager.rebuild_candidate_dependency_index = _rebuild_candidate_dependency_index
+    if callable(original_on_state_changed):
+        manager.engine.on_state_changed = candidate_state_changed
     manager.generation_history = generation_history
     manager.generation_decision_at = generation_decision_at
     manager.generation_comparison = generation_comparison
@@ -882,7 +1029,8 @@ def install(manager):
     manager._maintenance = maintenance
     handler.do_GET = do_get
     manager._candidate_shadow_runtime_installed = True
-    manager.candidate_shadow_contract = "observed_generation_predictions_no_executor"
+    manager.candidate_shadow_contract = "observed_generation_predictions_no_executor_plus_passive_event_fallback"
+    manager.candidate_event_contract = "state_changed_dependency_index_to_candidate_worker_with_parent_path_dedup"
     manager.candidate_decision_history_contract = "observed_only_no_policy_replay_gaps_preserved"
     manager.candidate_pair_contract = "same_prediction_event_same_future_outcome"
     return manager
