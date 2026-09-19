@@ -64,6 +64,11 @@ class Release036UiCandidateRegressionTests(unittest.TestCase):
             self.assertNotIn("manager.store.get_agent(row.get", install, name)
             self.assertIn("manager.store.get_agent_config(row.get", install, name)
 
+    def test_candidate_ui_does_not_outpoll_main_ui_on_pi(self):
+        source = (ROOT / "adaptive_ai" / "src" / "static" / "candidate_ui.js").read_text(encoding="utf-8")
+        self.assertIn("setTimeout(loop,4000)", source)
+        self.assertNotIn("setTimeout(loop,1500)", source)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -212,5 +212,5 @@
   }
 
   window.refreshCandidates=refresh;
-  async function loop(){await refresh();setTimeout(loop,1500);} loop();
+  // Candidate lifecycle is not a realtime control signal. Match the main 4 s UI cadence\n  // instead of running a second 1.5 s DB/status poller on Raspberry Pi.\n  async function loop(){await refresh();setTimeout(loop,4000);} loop();
 })();
