@@ -589,6 +589,11 @@ def install(core):
         ids = sorted(set(str(x) for x in (entity_ids or []) if x))
         if not ids:
             return {}
+        # Replay is a cold/background persistence boundary. Flush current RAM provenance
+        # once here so the indexed SQL join sees events acknowledged moments earlier,
+        # without reintroducing per-event writes into the live path.
+        if journal.pending_event_count():
+            flush_event_provenance()
         placeholders = ",".join("?" for _ in ids)
         params = [float(start_ts), float(end_ts)] + ids
         with store.conn() as c:

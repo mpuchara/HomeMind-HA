@@ -1,7 +1,6 @@
 from itertools import islice
 from contextlib import contextmanager
 from collections import deque
-import atexit
 import json
 import sqlite3
 import threading
@@ -29,7 +28,6 @@ class Store:
         self._load_meta_cache()
         self._load_recent_events()
         self.migrate_models()
-        atexit.register(self.flush_events)
 
     def touch_agent_index(self):
         # Lightweight in-process invalidation for the realtime routing cache.

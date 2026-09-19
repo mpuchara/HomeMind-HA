@@ -60,7 +60,8 @@ class OperationalFirstRuntimeTests(unittest.TestCase):
         hot_start = source.index("def hot_agent_payloads")
         hot_end = source.index("queue_runtime._agent_payloads = hot_agent_payloads")
         hot = source[hot_start:hot_end]
-        self.assertIn("list_agent_configs", hot)
+        self.assertIn("configs = hot_configs()", hot)
+        self.assertNotIn("list_agent_configs", hot)
         self.assertNotIn("original_agent_payloads(handler_self)", hot)
 
     def test_periodic_status_path_does_not_call_engine_status(self):
@@ -68,7 +69,8 @@ class OperationalFirstRuntimeTests(unittest.TestCase):
         status_start = source.index("def status_payload")
         status_end = source.index("core.Handler.status_payload = status_payload")
         status = source[status_start:status_end]
-        self.assertIn("list_agent_configs", status)
+        self.assertIn("configs = hot_configs()", status)
+        self.assertNotIn("list_agent_configs", status)
         self.assertNotIn("ENGINE.status(", status)
         self.assertIn('"status_read_mode": "operational_hot"', status)
 
