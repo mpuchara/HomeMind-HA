@@ -67,17 +67,8 @@ def install(core):
                 continue
             if changed:
                 cached = engine.models.get(agent["id"])
-                if (
-                    cached is not None
-                    and agent["target_entity"] not in changed
-                    and not (
-                        changed
-                        & (
-                            set(cached.schema.entities)
-                            | engine.context.admitted
-                            | engine.experiments.watches(agent['id'])
-                        )
-                    )
+                if cached is not None and not (
+                    changed & engine.event_dependencies(agent, cached)
                 ):
                     continue
             groups.setdefault(agent["target_entity"], []).append(agent)
