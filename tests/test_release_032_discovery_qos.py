@@ -71,6 +71,39 @@ class DiscoveryQoSTests(unittest.TestCase):
         self.assertEqual(summary["light.b"]["power"]["last_ts"], 14.0)
         self.assertEqual(manager.discovery_usage_rows, 6)
 
+    def test_coarse_discovery_counts_input_select_state_transitions_without_attributes(self):
+        rows = [
+            archived_row(1, "input_select.house_mode", 10, "home"),
+            archived_row(2, "input_select.house_mode", 11, "away"),
+            archived_row(3, "input_select.house_mode", 12, "away"),
+            archived_row(4, "input_select.house_mode", 13, "home"),
+        ]
+        store = FakeArchiveStore(rows)
+        manager = object.__new__(HistoryManager)
+        current = {
+            "input_select.house_mode": state(
+                "input_select.house_mode", "home", options=["home", "away"]
+            ),
+        }
+
+        with patch.object(history_module, "STORE", store):
+            summary = manager._discovery_usage_summary(current, 0)
+
+        self.assertEqual(summary["input_select.house_mode"]["option_index"]["samples"], 3)
+        self.assertEqual(summary["input_select.house_mode"]["option_index"]["last_ts"], 13.0)
+
+    def test_clean_discovery_backfills_full_classifier_window_once(self):
+        source = inspect.getsource(HistoryManager._manual_lightweight_cycle)
+        self.assertIn('STORE.meta_get("discovery_deep_history_complete")', source)
+        self.assertIn('state_targets, start_ts, refresh_start', source)
+        self.assertIn('source="ha_history_discovery_coarse"', source)
+        self.assertIn('attribute_only_targets, start_ts, refresh_start', source)
+        self.assertIn('source="ha_history_full"', source)
+        self.assertIn('STORE.meta_set("discovery_deep_history_complete"', source)
+        # The one-time deep scan must remain discovery-only and must not touch training.
+        self.assertNotIn("request_agent_resume(", source)
+        self.assertNotIn("_start_agent_job(", source)
+
     def test_auto_discovery_no_longer_opens_per_property_usage_iterators(self):
         source = inspect.getsource(HistoryManager.auto_discover_agents)
         self.assertIn("_discovery_usage_summary", source)
@@ -95,6 +128,16 @@ class DiscoveryQoSTests(unittest.TestCase):
         source = inspect.getsource(HistoryManager._manual_lightweight_cycle)
         self.assertNotIn("self.refresh_archive_cache()", source)
         self.assertIn("single-pass local archive scan", source)
+        self.assertIn("discovery_deep_history_complete", source)
+
+    def test_discovery_status_exposes_bounded_exclusion_diagnostics(self):
+        status_source = inspect.getsource(HistoryManager.status)
+        discovery_source = inspect.getsource(HistoryManager.auto_discover_agents)
+        self.assertIn('"discovery_reason_counts"', status_source)
+        self.assertIn('"discovery_inactive_examples"', status_source)
+        self.assertIn("len(inactive_examples) < 24", discovery_source)
+        self.assertIn('"no_transition"', discovery_source)
+        self.assertIn('"stale_transition"', discovery_source)
 
 
 if __name__ == "__main__":
