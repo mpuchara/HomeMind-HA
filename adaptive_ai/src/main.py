@@ -443,7 +443,7 @@ class Handler(BaseHTTPRequestHandler):
                 request = getattr(HISTORY, "request_discovery_rescan", None)
                 if not callable(request):
                     return self.send_json(409, {"error": "Background discovery service is not ready"})
-                if not request():
+                if not request(threshold_override=1, reason="manual"):
                     # Rescan is an idempotent "ensure discovery is running" operation.
                     # Repeated UI clicks must not surface a technical conflict while the
                     # first Recorder scan is making progress.
