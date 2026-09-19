@@ -2,8 +2,9 @@ import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
+from episode_evaluator import EpisodeEvaluator
 from manual_feedback_unified import UnifiedManualFeedbackJournal
 from preference_model import LightingPreferenceModel, PreferenceDecisionComposer
 from storage import Store
@@ -28,7 +29,7 @@ class LightingPreferenceModelTests(unittest.TestCase):
             "home:occupancy_now": 0.0,
             "meta:home_known": 1.0,
             "meta:feature_schema_version": 12.0,
-            "meta:policy_version": 10.0,
+            "meta:policy_version": 11.0,
             "meta:signature_contract": 2.0,
         }
 
@@ -145,6 +146,95 @@ class LightingPreferenceModelTests(unittest.TestCase):
         self.assertEqual(new_errors, 0)
         self.assertEqual(regression, 0)
         self.assertEqual(adapted_pref["independent_evidence_count"], 1)
+        self.assertFalse(untouched_pref["applied"])
+
+    def test_predict_uses_final_runtime_teaching_signature_contract(self):
+        row = self.record(1.0, rejected=0.0)
+        policy = SimpleNamespace(actions=[0.0, 1.0])
+        with patch("teaching.signature", return_value=dict(self.context)) as runtime_signature:
+            result = self.model.predict(
+                self.agent, policy, {"sensor.any": {}}, object(), self.now
+            )
+        runtime_signature.assert_called_once()
+        self.assertTrue(result["applied"])
+        self.assertEqual(result["action_value"], 1.0)
+        self.assertEqual(result["evidence_ids"], [row["feedback_id"]])
+
+    def test_held_out_episode_comparison_measures_adaptation_and_untouched_regression(self):
+        evaluator = EpisodeEvaluator(self.store)
+        adapted = dict(self.context)
+        adapted["home:p_arrival_30"] = 0.23
+        untouched = dict(self.context)
+        untouched["binary_sensor.motion / state"] = -1.0
+
+        # Before explicit feedback, both bootstrap and the old exact-point correction
+        # keep OFF in the held-out adapted episode. One new explicit correction teaches
+        # the semantic preference model to generalize ON only to the matching context.
+        bootstrap = {"adapted": 0.0, "untouched": 0.0}
+        legacy = dict(bootstrap)
+        correction = self.record(1.0, rejected=0.0, signature=self.context)
+        adapted_pref = self.model.evaluate(
+            self.agent, [0.0, 1.0], adapted, episode_id="heldout-adapted"
+        )
+        untouched_pref = self.model.evaluate(
+            self.agent, [0.0, 1.0], untouched, episode_id="heldout-untouched"
+        )
+        preference = {
+            "adapted": adapted_pref["action_value"] if adapted_pref["applied"] else bootstrap["adapted"],
+            "untouched": untouched_pref["action_value"] if untouched_pref["applied"] else bootstrap["untouched"],
+        }
+
+        adapted_episode = evaluator.evaluate_episode(
+            episode_id="heldout-adapted",
+            agent_id=self.agent["id"],
+            start_ts=100.0,
+            end_ts=110.0,
+            observations=[
+                {"ts": 100.0, "presence": True, "light_need": True, "power": False},
+                {"ts": 110.0, "presence": True, "light_need": True, "power": False},
+            ],
+            policies=[
+                {"policy_key": "bootstrap", "role": "historical_policy_bootstrap",
+                 "executed": False, "initial_power": bootstrap["adapted"]},
+                {"policy_key": "legacy", "role": "legacy_exact_correction",
+                 "executed": False, "initial_power": legacy["adapted"]},
+                {"policy_key": "preference", "role": "preference_model",
+                 "executed": False, "initial_power": preference["adapted"]},
+            ],
+        )
+        untouched_episode = evaluator.evaluate_episode(
+            episode_id="heldout-untouched",
+            agent_id=self.agent["id"],
+            start_ts=200.0,
+            end_ts=210.0,
+            observations=[
+                {"ts": 200.0, "presence": True, "light_need": False, "power": False},
+                {"ts": 210.0, "presence": True, "light_need": False, "power": False},
+            ],
+            policies=[
+                {"policy_key": "bootstrap", "role": "historical_policy_bootstrap",
+                 "executed": False, "initial_power": bootstrap["untouched"]},
+                {"policy_key": "legacy", "role": "legacy_exact_correction",
+                 "executed": False, "initial_power": legacy["untouched"]},
+                {"policy_key": "preference", "role": "preference_model",
+                 "executed": False, "initial_power": preference["untouched"]},
+            ],
+        )
+
+        adapted_metrics = {
+            row["policy_key"]: row["metrics"] for row in adapted_episode["policies"]
+        }
+        untouched_metrics = {
+            row["policy_key"]: row["metrics"] for row in untouched_episode["policies"]
+        }
+        self.assertEqual(adapted_metrics["bootstrap"]["off_while_needed_seconds"], 10.0)
+        self.assertEqual(adapted_metrics["legacy"]["off_while_needed_seconds"], 10.0)
+        self.assertEqual(adapted_metrics["preference"]["off_while_needed_seconds"], 0.0)
+        self.assertEqual(untouched_metrics["bootstrap"]["unnecessary_on_seconds"], 0.0)
+        self.assertEqual(untouched_metrics["preference"]["unnecessary_on_seconds"], 0.0)
+        self.assertEqual(preference["untouched"], bootstrap["untouched"])
+        self.assertEqual(adapted_pref["independent_evidence_count"], 1)
+        self.assertEqual(adapted_pref["evidence_ids"], [correction["feedback_id"]])
         self.assertFalse(untouched_pref["applied"])
 
     def test_instruction_scope_one_time_expires_using_existing_intent_ttl(self):
