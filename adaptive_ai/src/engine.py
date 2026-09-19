@@ -41,7 +41,13 @@ class HAEventStream(threading.Thread):
         backoff = 2.0
         while not self.stop_event.is_set():
             try:
-                with ws_connect("ws://supervisor/core/websocket", open_timeout=10, close_timeout=5) as ws:
+                with ws_connect(
+                    "ws://supervisor/core/websocket",
+                    open_timeout=10,
+                    close_timeout=5,
+                    ping_interval=20,
+                    ping_timeout=20,
+                ) as ws:
                     hello = json.loads(ws.recv())
                     if hello.get("type") == "auth_required":
                         ws.send(json.dumps({"type": "auth", "access_token": HA_TOKEN}))
@@ -89,6 +95,11 @@ class HAEventStream(threading.Thread):
             except Exception as exc:
                 self.engine.ws_connected = False
                 self.engine.ws_error = f"{type(exc).__name__}: {exc}"
+                # Realtime loss is the one case where a full REST snapshot should become
+                # urgent. Healthy websocket operation uses the much slower safety resync.
+                with self.engine.lock:
+                    self.engine.last_full_poll = 0.0
+                self.engine.wake_event.set()
                 if not self.stop_event.is_set():
                     time.sleep(backoff)
                     backoff = min(30.0, backoff * 1.7)
@@ -545,7 +556,16 @@ class Engine(threading.Thread):
                 # Coalesce bursts (motion + lux + light state etc.) into one inference pass.
                 self.stop_event.wait(debounce)
             try:
-                if now_ts() - self.last_full_poll >= float(OPTIONS["poll_seconds"]) and (self.poll_future is None or self.poll_future.done()):
+                # A healthy websocket already delivers every state_changed event. The
+                # full /states snapshot is only a low-frequency safety resync in that
+                # mode; when realtime is down, fall back to the ordinary REST cadence.
+                resync_seconds = float(
+                    OPTIONS.get("realtime_resync_seconds", 300)
+                    if self.ws_connected
+                    else OPTIONS["poll_seconds"]
+                )
+                if (now_ts() - self.last_full_poll >= max(5.0, resync_seconds)
+                        and (self.poll_future is None or self.poll_future.done())):
                     self.last_full_poll = now_ts()
                     self.poll_future = self.poll_worker.submit(self.refresh_states)
                 self.flush_archive(force=False)

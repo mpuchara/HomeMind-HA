@@ -32,6 +32,9 @@ DEFAULT_OPTIONS = {
     "entity_area_mapping": "{}",
     "intent_ttl_seconds": 2,
     "poll_seconds": 30,
+    # With a healthy state_changed websocket, /states is only a consistency resync.
+    # Avoid rebuilding 700+ entity context every 30 s on Raspberry Pi.
+    "realtime_resync_seconds": 300,
     "proactive_tick_seconds": 1,
     # The 1 s engine tick is a lightweight deadline scheduler, not a global inference loop.
     "fast_idle_inference_interval_seconds": 30,

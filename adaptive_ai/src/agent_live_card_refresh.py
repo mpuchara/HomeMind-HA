@@ -31,12 +31,18 @@ def _finite(value):
 
 def live_agent_payload(core, *, include_configs=False):
     """Return only the state needed by Current / Desired / Confidence tiles."""
-    agents = core.STORE.list_agent_configs()
+    # /api/live runs frequently. Reuse the revision-invalidated complete config cache;
+    # never hit SQLite merely to refresh Current / Desired / Confidence tiles.
+    core.ENGINE._refresh_agent_index()
     now = time.time()
 
-    # Snapshot both maps under the same short lock.  Building labels and JSON happens
-    # afterwards so websocket state_changed handling is not delayed by HTTP clients.
+    # Snapshot configs and both maps under the same short lock. Building labels and JSON
+    # happens afterwards so websocket state_changed handling is not delayed by HTTP clients.
     with core.ENGINE.lock:
+        agents = [
+            dict(agent)
+            for agent in core.ENGINE.all_agent_configs.values()
+        ]
         states = {
             str(agent["id"]): core.ENGINE.state_map.get(agent["target_entity"])
             for agent in agents

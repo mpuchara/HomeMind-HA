@@ -23,9 +23,14 @@ async function load(){
   if(loadInFlight)return;
   loadInFlight=true;
   try{
+  const wasReady=window.__adaptiveAiRuntimeReady===true;
+  // Once runtime readiness has been established, start the lightweight agent/event reads
+  // immediately. A slow diagnostic status response must not delay Current/Desired cards.
+  const earlyAgents=wasReady?api('api/agents'):null;
+  const earlyEvents=wasReady?api('api/events?limit=60'):null;
   let status;
   try{
-    status=await api('api/status');lastStatus=status;
+    status=await api('api/status',{adaptiveAiTimeoutMs:3500});lastStatus=status;
     window.__adaptiveAiRuntimeReady=Boolean(status.startup?.ready);
     const c=$('#connection');
     const rt=status.realtime||{};
@@ -37,16 +42,19 @@ async function load(){
     // actually ready; otherwise a slow migration looks like missing Shadow predictions.
     if(!window.__adaptiveAiRuntimeReady)return;
   }catch(e){
-    // Preserve a previously established ready state. A transient rich-status timeout
-    // during training must not disable the independent lightweight /api/live loop.
-    $('#connection').textContent='App API error: '+e.message;return;
+    // Preserve a previously established ready state. A transient status timeout must not
+    // cancel independent agent/event reads or the lightweight /api/live loop.
+    $('#connection').textContent='App API error: '+e.message;
+    if(!wasReady)return;
   }
   const [agentsResult,eventsResult]=await Promise.allSettled([
-    api('api/agents'),
-    api('api/events?limit=60'),
+    earlyAgents||api('api/agents'),
+    earlyEvents||api('api/events?limit=60'),
   ]);
   if(agentsResult.status==='fulfilled'){
     lastAgents=agentsResult.value;
+    window.__adaptiveAiAgents=lastAgents;
+    window.dispatchEvent(new CustomEvent('adaptive-ai:agents',{detail:lastAgents}));
     renderAgents();
   }
   if(eventsResult.status==='fulfilled'){

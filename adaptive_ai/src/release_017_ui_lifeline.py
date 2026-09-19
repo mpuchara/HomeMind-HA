@@ -274,13 +274,19 @@ def install(runtime):
         # HA reachability and realtime delivery are separate. REST may remain healthy
         # while the websocket reconnects; do not label that situation "HA disconnected".
         ha_client = getattr(core, "HA", None)
-        ha_connected = bool(
+        ha_rest_connected = bool(
             ha_client is not None
             and getattr(ha_client, "last_ok", None) is not None
             and getattr(ha_client, "last_error", None) is None
         )
-        payload["ha_connected"] = ha_connected
-        payload["ha_error"] = getattr(ha_client, "last_error", None) if ha_client is not None else ws_error
+        # A failed safety REST resync must not claim that HA is disconnected while the
+        # authenticated realtime websocket is actively delivering events.
+        payload["ha_connected"] = bool(ws_connected or ha_rest_connected)
+        payload["ha_rest_connected"] = ha_rest_connected
+        payload["ha_error"] = (
+            None if ws_connected else
+            (getattr(ha_client, "last_error", None) if ha_client is not None else ws_error)
+        )
         payload.setdefault("feedback_count", 0)
         payload.setdefault("historical_experience_count", 0)
         payload.setdefault("automation_knowledge", {})
@@ -299,6 +305,14 @@ def install(runtime):
         provenance_queue = getattr(core.ENGINE, "provenance_deferred_snapshot", None)
         if callable(provenance_queue):
             payload["provenance_queue"] = provenance_queue()
+        adaptation = getattr(
+            getattr(core.ENGINE, "agent_candidates", None),
+            "adaptation_service",
+            None,
+        )
+        adaptation_snapshot = getattr(adaptation, "observer_snapshot", None)
+        if callable(adaptation_snapshot):
+            payload["drift_observer"] = adaptation_snapshot()
         # These are advisory backlog gauges only. Never wait for persistence/training
         # locks merely to render /api/status: a long microSD transaction must not turn a
         # harmless queue-length read into a 12 s UI timeout. CPython deque/list length and
