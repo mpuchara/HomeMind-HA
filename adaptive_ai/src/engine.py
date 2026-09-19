@@ -225,6 +225,9 @@ class Engine(threading.Thread):
             ws_error = self.ws_error
             registry_count = len(self.entity_registry)
             last_ws_event = self.last_ws_event
+            last_state_sync_ok = self.last_state_sync_ok
+            last_state_sync_error = self.last_state_sync_error
+            state_resync_stats = dict(self.state_resync_stats)
             inference_scheduler = dict(self.inference_scheduler)
         agents = STORE.list_agents()
         confidences = [runtime_conf.get(a["id"]) for a in agents]
@@ -232,9 +235,16 @@ class Engine(threading.Thread):
         history = self.history_manager.status() if self.history_manager is not None else {"phase": "starting", "archive": {"n": 0, "days": 0, "entities": 0}}
         return {
             "version": APP_VERSION,
-            "ha_connected": HA.last_error is None and HA.last_ok is not None,
-            "ha_last_ok": HA.last_ok,
-            "ha_error": HA.last_error,
+            "ha_connected": bool(
+                ws_connected
+                or (last_state_sync_ok is not None and last_state_sync_error is None)
+            ),
+            "ha_last_ok": last_state_sync_ok,
+            "ha_error": (
+                None
+                if ws_connected or (last_state_sync_ok is not None and last_state_sync_error is None)
+                else (last_state_sync_error or ws_error)
+            ),
             "engine_error": engine_error,
             "last_poll": last_poll,
             "state_count": state_count,
@@ -245,6 +255,11 @@ class Engine(threading.Thread):
             "feedback_count": sum(int(a.get("feedback_count") or 0) for a in agents),
             "historical_experience_count": sum(int(a.get("historical_count") or 0) for a in agents),
             "realtime": {"connected": ws_connected, "error": ws_error, "registry_entries": registry_count, "last_event": last_ws_event},
+            "state_resync": {
+                **state_resync_stats,
+                "last_ok": last_state_sync_ok,
+                "error": last_state_sync_error,
+            },
             "inference_scheduler": {
                 **inference_scheduler,
                 "fast_idle_seconds": float(OPTIONS.get("fast_idle_inference_interval_seconds", 10)),
