@@ -11,8 +11,16 @@ class Store:
         DATA_DIR.mkdir(parents=True, exist_ok=True)
         self.path = str(path)
         self.lock = threading.RLock()
+        self._agent_index_revision = 0
         self._init()
         self.migrate_models()
+
+    def touch_agent_index(self):
+        # Lightweight in-process invalidation for the realtime routing cache.
+        # Durable safety still lives in Executor; this only avoids polling all agent rows.
+        with self.lock:
+            self._agent_index_revision = int(self._agent_index_revision) + 1
+            return self._agent_index_revision
 
     @contextmanager
     def conn(self):
@@ -248,6 +256,7 @@ class Store:
         timing = {k: payload[k] for k in ("ack_timeout", "settling_seconds", "manual_hold_seconds") if k in payload}
         if timing:
             self.update_agent(agent_id, timing)
+        self.touch_agent_index()
         self.event(agent_id, "info", "agent_created", f"Created RL agent {payload['name']}", payload)
         return self.get_agent(agent_id)
 
@@ -280,6 +289,8 @@ class Store:
             self.set_training_state(agent_id, 'needs_retrain', detail={'reason': 'Context or action range changed; press Train'})
             with self.conn() as c:
                 c.execute('UPDATE agents SET training_cursor_ts=NULL,training_progress=0 WHERE id=?', (agent_id,))
+        if updates:
+            self.touch_agent_index()
         self.event(agent_id, "info", "agent_updated", "Agent settings updated", payload)
         return self.get_agent(agent_id)
 
@@ -292,6 +303,7 @@ class Store:
             for table in ('teaching_labels', 'decision_history'):
                 if c.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (table,)).fetchone():
                     c.execute(f"DELETE FROM {table} WHERE agent_id=?", (agent_id,))
+        self.touch_agent_index()
         self.event(agent_id, "info", "agent_deleted", "Agent deleted", None)
 
     def add_feedback(self, agent_id, action_index, action_value, reward, reason, features, user_id=None, source="live"):
@@ -350,6 +362,7 @@ class Store:
                        benchmark_source=NULL, benchmark_detail_json='{}', benchmark_updated_at=NULL,
                        training_cursor_ts=NULL, training_window_start_ts=NULL, training_window_end_ts=NULL,
                        training_progress=0, training_updated_at=? WHERE id=?""", (iso_now(), agent_id))
+        self.touch_agent_index()
         self.event(agent_id, "warning", "learning_reset",
                    "Full rebuild reset: policy/benchmark/cursor cleared; local raw history retained", None)
 
@@ -370,6 +383,7 @@ class Store:
             c.execute("""UPDATE agents SET training_state=?, benchmark_score=?, benchmark_samples=?, benchmark_source=?,
                        benchmark_detail_json=?, benchmark_updated_at=?, mode=?, training_updated_at=? WHERE id=?""",
                       (state, score, int(samples), source, raw, iso_now(), mode, iso_now(), agent_id))
+        self.touch_agent_index()
 
     def set_training_progress(self, agent_id, start_ts, cursor_ts, end_ts):
         start_ts = float(start_ts); cursor_ts = float(cursor_ts); end_ts = float(end_ts)
@@ -417,7 +431,10 @@ class Store:
     def pause_stale_training_agents(self):
         with self.lock, self.conn() as c:
             cur = c.execute("UPDATE agents SET training_state='paused', mode='paused', training_updated_at=? WHERE training_state='training'", (iso_now(),))
-            return int(cur.rowcount or 0)
+            changed = int(cur.rowcount or 0)
+        if changed:
+            self.touch_agent_index()
+        return changed
 
     def qualified_agents(self):
         return [a for a in self.list_agents() if a.get("enabled") and a.get("training_state") == "qualified"]
@@ -431,6 +448,7 @@ class Store:
                        benchmark_source=NULL, benchmark_detail_json='{}', benchmark_updated_at=NULL,
                        training_cursor_ts=NULL, training_window_start_ts=NULL, training_window_end_ts=NULL,
                        training_progress=0, training_updated_at=?""", (iso_now(),))
+        self.touch_agent_index()
         self.meta_set("candidate_qualification_complete", "0")
         self.event(None, "info", "training_revision", "Rebuilding offline RL policies for the new predictive feature revision", None)
 
