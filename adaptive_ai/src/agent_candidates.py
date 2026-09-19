@@ -22,23 +22,42 @@ _STORE_PATCHED = False
 _HISTORY_PATCHED = False
 
 
-def _candidate_ids(store):
+def refresh_candidate_ids_cache(store):
+    """Refresh the tiny hidden-Candidate ID set after a lifecycle mutation.
+
+    Candidate membership changes only when a Candidate is created/promoted/discarded.
+    Normal agent enumeration and is_candidate() checks are much hotter, so they must not
+    open SQLite merely to hide a handful of surrogate IDs.
+    """
     try:
         with store.conn() as c:
             if not c.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='agent_candidates'").fetchone():
-                return set()
-            return {str(r[0]) for r in c.execute("SELECT candidate_id FROM agent_candidates").fetchall()}
+                values = set()
+            else:
+                values = {str(r[0]) for r in c.execute("SELECT candidate_id FROM agent_candidates").fetchall()}
     except Exception:
-        return set()
+        values = set(getattr(store, "_candidate_ids_ram", set()) or set())
+    lock = getattr(store, "_candidate_ids_ram_lock", None)
+    if lock is None:
+        lock = threading.RLock()
+        store._candidate_ids_ram_lock = lock
+    with lock:
+        store._candidate_ids_ram = set(values)
+        store._candidate_ids_ram_ready = True
+        store._candidate_ids_ram_revision = int(getattr(store, "_candidate_ids_ram_revision", 0)) + 1
+    return set(values)
+
+
+def _candidate_ids(store):
+    lock = getattr(store, "_candidate_ids_ram_lock", None)
+    if lock is not None and getattr(store, "_candidate_ids_ram_ready", False):
+        with lock:
+            return set(getattr(store, "_candidate_ids_ram", set()) or set())
+    return refresh_candidate_ids_cache(store)
 
 
 def is_candidate(store, agent_id):
-    try:
-        with store.conn() as c:
-            row = c.execute("SELECT 1 FROM agent_candidates WHERE candidate_id=?", (str(agent_id),)).fetchone()
-        return bool(row)
-    except Exception:
-        return False
+    return str(agent_id) in _candidate_ids(store)
 
 
 def ensure_tables(store):
@@ -90,6 +109,7 @@ def install_store_overlay(store):
     """Hide training surrogates from every normal live-agent enumeration."""
     global _STORE_PATCHED
     ensure_tables(store)
+    refresh_candidate_ids_cache(store)
     if _STORE_PATCHED:
         return
     cls = type(store)
