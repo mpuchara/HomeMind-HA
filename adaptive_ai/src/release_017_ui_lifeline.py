@@ -138,6 +138,10 @@ def install(runtime):
             state["agent_lifeline_reads"] += 1
 
         queue = queue_object()
+        history_hot = core.HISTORY.status() if core.HISTORY is not None else {}
+        active_training_id = str(history_hot.get("training_job_agent_id") or "")
+        active_training_progress = history_hot.get("training_overall_progress")
+        active_training_eta = history_hot.get("training_overall_eta_seconds")
         out = []
         runtime_keys = (
             "last_prediction",
@@ -191,6 +195,13 @@ def install(runtime):
             agent.setdefault("control_review", {})
             agent.setdefault("control_lease", None)
             agent["training_queue"] = queue.status_for(aid) if queue else None
+            if active_training_id and str(aid) == active_training_id:
+                if active_training_progress is not None:
+                    agent["training_progress"] = max(0.0, min(1.0, float(active_training_progress)))
+                runtime_payload["training_overall_eta_seconds"] = active_training_eta
+                runtime_payload["training_stage_progress"] = history_hot.get("training_stage_progress")
+                runtime_payload["training_stage_eta_seconds"] = history_hot.get("training_stage_eta_seconds")
+                runtime_payload["training_rows_per_second"] = history_hot.get("training_rows_per_second")
             agent["runtime"] = runtime_payload
             agent["_ui_read_mode"] = "operational_hot"
             out.append(agent)

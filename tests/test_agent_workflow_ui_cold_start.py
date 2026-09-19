@@ -45,9 +45,9 @@ class Dialog {
 }
 
 const card=new Card('fresh-1');
-const trainCalls=[],resumeCalls=[],editCalls=[],requests=[];
+const trainCalls=[],resumeCalls=[],editCalls=[],modeCalls=[],requests=[];
 const agents=[{
-  id:'fresh-1',name:'Fresh light',training_state:'waiting',benchmark_score:null,
+  id:'fresh-1',name:'Fresh light',mode:'paused',training_state:'waiting',benchmark_score:null,
   training_cursor_ts:null,runtime:{},target_property:'power'
 }];
 const context={
@@ -60,6 +60,7 @@ const context={
   renderAgents(){},
   trainAgent:id=>trainCalls.push(String(id)),
   resumeLearning:id=>resumeCalls.push(String(id)),
+  setMode:(id,mode)=>modeCalls.push([String(id),String(mode)]),
   editAgent:id=>editCalls.push(String(id)),
   fetch:path=>{requests.push(String(path));return Promise.reject(new Error('unexpected fetch'));},
   alert(){},confirm(){return true;},prompt(){return null;},console
@@ -85,18 +86,25 @@ agents[0].training_cursor_ts=123;
 context.bindExploreButtons=()=>{const b=card.actions.buttons.get('explore');if(b)b.disabled=false;};
 context.renderAgents();
 assert.ok(card.actions.buttons.has('resume'));
+assert.ok(card.actions.buttons.has('shadow'));
+assert.equal(card.actions.buttons.get('shadow').label,'Start Shadow');
 for(const key of ['auto','correct','explore','change','settings'])assert.ok(card.actions.buttons.has(key));
 assert.equal(card.actions.buttons.get('explore').disabled,false);
 card.actions.buttons.get('resume').onclick();
+card.actions.buttons.get('shadow').onclick();
 assert.deepEqual(resumeCalls,['fresh-1']);
+assert.deepEqual(modeCalls,[['fresh-1','shadow']]);
 
 // The workflow renderer must react to lifecycle changes on the same DOM node rather than
 // keeping its first button set forever.
 agents[0].training_state='qualified';
 agents[0].benchmark_score=.92;
+agents[0].mode='shadow';
 context.renderAgents();
 assert.equal(card.actions.buttons.has('train'),false);
 assert.equal(card.actions.buttons.has('resume'),false);
+assert.ok(card.actions.buttons.has('shadow'));
+assert.equal(card.actions.buttons.get('shadow').label,'Pause Shadow');
 for(const key of ['auto','correct','explore','change','settings'])assert.ok(card.actions.buttons.has(key));
 assert.equal(card.actions.buttons.get('auto').disabled,false);
 assert.equal(card.actions.buttons.get('correct').disabled,false);

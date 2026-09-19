@@ -283,7 +283,7 @@
 
   function liveLearningState(a){
     const rt=a.runtime||{};
-    const training=rt.training_state||a.training_state||'paused';
+    const training=a.training_state||rt.training_state||'paused';
     const paused=['paused','waiting','needs_retrain'].includes(training);
     const indexing=training==='training';
     const neverTrained=training==='waiting'||training==='needs_retrain'||(paused&&a.benchmark_score==null&&!a.training_cursor_ts);
@@ -318,7 +318,9 @@
     }
 
     const resume=state.paused?'<button class="ghost resume" data-wf="resume">Resume training</button>':'';
-    actions.innerHTML=`${resume}<button class="ghost" data-wf="auto">Autonomous</button><button class="primary" data-wf="correct">Correct</button><button class="ghost" data-wf="explore" disabled title="Explore będzie aktywowane przez warstwę Explore">Explore</button><button class="ghost" data-wf="change">Change decision</button><button class="ghost" data-wf="settings">Settings</button>`;
+    const shadow=a.mode==='paused'?'<button class="primary" data-wf="shadow">Start Shadow</button>':a.mode==='shadow'?'<button class="ghost" data-wf="shadow">Pause Shadow</button>':'';
+    actions.innerHTML=`${shadow}${resume}<button class="ghost" data-wf="auto">Autonomous</button><button class="primary" data-wf="correct">Correct</button><button class="ghost" data-wf="explore" disabled title="Explore będzie aktywowane przez warstwę Explore">Explore</button><button class="ghost" data-wf="change">Change decision</button><button class="ghost" data-wf="settings">Settings</button>`;
+    if(actions.querySelector('[data-wf=shadow]'))actions.querySelector('[data-wf=shadow]').onclick=()=>window.setMode?.(a.id,a.mode==='shadow'?'paused':'shadow');
     if(state.paused)actions.querySelector('[data-wf=resume]').onclick=()=>window.resumeLearning?.(a.id);
     actions.querySelector('[data-wf=auto]').onclick=e=>workflowAutonomous(a.id,e.currentTarget);
     actions.querySelector('[data-wf=correct]').onclick=()=>openWorkflowCorrect(a.id);

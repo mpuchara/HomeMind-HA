@@ -4,6 +4,7 @@ let lastAgents=[];
 let lastStatus={};
 let loadInFlight=false;
 let lastDiscoveryAgentRefresh=0;
+let lastTrainingQueueAgentRefresh=-1;
 window.__adaptiveAiRuntimeReady=null; // unknown until status answers; server gates half-built runtime
 const openAgentDetails=new Set(JSON.parse(localStorage.getItem('adaptiveAiOpenAgentDetails')||'[]').map(String));
 const $=s=>document.querySelector(s);
@@ -62,20 +63,28 @@ async function load(){
   }
   const completedDiscoveryRun=(!lastHistory?.discovery_job_active&&lastHistory?.discovery_classified)?Number(lastHistory?.last_run||0):0;
   const refreshAfterDiscovery=completedDiscoveryRun>0&&completedDiscoveryRun!==lastDiscoveryAgentRefresh;
-  if(refreshAfterDiscovery&&earlyAgents)earlyAgents.catch(()=>null);
-  // polling_guard intentionally caches api/agents for 3 s. A plain second GET here can
-  // therefore replay the pre-discovery one-card response. Give each completed discovery
-  // run its own read key so the completion refresh is guaranteed to reach the server.
-  const discoveryAgentsPath=refreshAfterDiscovery
-    ?`api/agents?discovery_revision=${encodeURIComponent(completedDiscoveryRun)}`
-    :'api/agents';
-  const agentsRequest=refreshAfterDiscovery?api(discoveryAgentsPath):(earlyAgents||api('api/agents'));
+  const trainingQueueRevision=Number(lastStatus?.training_queue?.revision??0);
+  const refreshAfterTrainingQueue=lastTrainingQueueAgentRefresh<0
+    ? false
+    : trainingQueueRevision!==lastTrainingQueueAgentRefresh;
+  const forceFreshAgents=refreshAfterDiscovery||refreshAfterTrainingQueue;
+  if(forceFreshAgents&&earlyAgents)earlyAgents.catch(()=>null);
+  // polling_guard intentionally caches api/agents for 3 s. Discovery completion and
+  // TrainingQueue lifecycle transitions must bypass that cache so a finished agent card
+  // cannot remain stuck on TRAINING while the next queued agent has already started.
+  const refreshParams=new URLSearchParams();
+  // Cache-bypass keys remain explicit for regression tooling: discovery_revision=... / training_revision=...
+  if(refreshAfterDiscovery)refreshParams.set('discovery_revision',encodeURIComponent(completedDiscoveryRun));
+  if(refreshAfterTrainingQueue)refreshParams.set('training_revision',encodeURIComponent(trainingQueueRevision));
+  const freshAgentsPath=refreshParams.size?`api/agents?${refreshParams.toString()}`:'api/agents';
+  const agentsRequest=forceFreshAgents?api(freshAgentsPath):(earlyAgents||api('api/agents'));
   const [agentsResult,eventsResult]=await Promise.allSettled([
     agentsRequest,
     earlyEvents||api('api/events?limit=60'),
   ]);
   if(agentsResult.status==='fulfilled'){
     if(refreshAfterDiscovery)lastDiscoveryAgentRefresh=completedDiscoveryRun;
+    lastTrainingQueueAgentRefresh=trainingQueueRevision;
     lastAgents=agentsResult.value;
     window.__adaptiveAiAgents=lastAgents;
     window.dispatchEvent(new CustomEvent('adaptive-ai:agents',{detail:lastAgents}));

@@ -64,6 +64,14 @@ class HistoryManager(threading.Thread):
         self.training_rows_per_second = 0.0
         self.history_rows_per_second = 0.0
         self.temporal_replay_stats = {}
+        # Explicit per-agent training has a global pass progress/ETA contract separate
+        # from the current Recorder/replay stage counters. The stage work may reset for
+        # every 6 h chunk; these fields never do until the whole selected agent finishes.
+        self.training_job_agent_id = None
+        self.training_job_name = None
+        self.training_job_started_at = None
+        self.training_job_start_progress = 0.0
+        self.training_overall_eta_seconds = None
         self.job_cancel_event = None
         self.agent_jobs_lock = threading.RLock()
         self.discovery_job_lock = threading.RLock()
@@ -101,6 +109,21 @@ class HistoryManager(threading.Thread):
                 "archive": dict(self.archive_cache),
                 "training_rows_per_second": self.training_rows_per_second,
                 "history_rows_per_second": self.history_rows_per_second,
+                "training_job_agent_id": self.training_job_agent_id,
+                "training_job_name": self.training_job_name,
+                "training_job_started_at": self.training_job_started_at,
+                "training_overall_progress": (
+                    self.progress if self.training_job_agent_id is not None else None
+                ),
+                "training_overall_eta_seconds": self.training_overall_eta_seconds,
+                "training_elapsed_seconds": (
+                    now_ts() - self.training_job_started_at
+                    if self.training_job_started_at is not None else None
+                ),
+                "training_stage_progress": (
+                    (self.work_done / self.work_total) if self.work_total else None
+                ),
+                "training_stage_eta_seconds": self.stage_eta_seconds,
                 "temporal_replay": dict(self.temporal_replay_stats),
                 "discovery_job_active": bool(self.discovery_job_active),
                 "discovery_job_started_at": self.discovery_job_started_at,
@@ -157,6 +180,29 @@ class HistoryManager(threading.Thread):
                         samples=agent.get("benchmark_samples") or 0, source=agent.get("benchmark_source"),
                         detail=agent.get("benchmark_detail") or {},
                     )
+            started_at = now_ts()
+            start_progress = 0.0 if rebuild else clamp(float(agent.get("training_progress") or 0.0), 0.0, 1.0)
+            with self.lock:
+                self.phase = "training"
+                self.phase_started_at = started_at
+                self.cycle_started_at = started_at
+                self.progress = start_progress
+                self._progress_samples = [(started_at, start_progress)]
+                self.progress_rate_per_min = None
+                self.eta_seconds = None
+                self.stage_eta_seconds = None
+                self.work_done = 0
+                self.work_total = 0
+                self.work_unit = None
+                self.eta_source = "measuring end-to-end training rate"
+                self.phase_detail = "Preparing Recorder history for the selected agent"
+                self.message = f"Training {agent['name']}: preparing history"
+                self.training_rows_per_second = 0.0
+                self.training_job_agent_id = agent_id
+                self.training_job_name = agent.get("name") or agent_id
+                self.training_job_started_at = started_at
+                self.training_job_start_progress = start_progress
+                self.training_overall_eta_seconds = None
         except Exception:
             with self.agent_jobs_lock:
                 self.agent_jobs.discard(agent_id)
@@ -183,6 +229,27 @@ class HistoryManager(threading.Thread):
                     with self.agent_jobs_lock:
                         self.agent_jobs.discard(agent_id)
                     HEAVY_JOBS.release("agent:" + agent_id)
+                    final_agent = STORE.get_agent_config(agent_id)
+                    final_progress = clamp(float((final_agent or {}).get("training_progress") or self.progress or 0.0), 0.0, 1.0)
+                    final_state = str((final_agent or {}).get("training_state") or "paused")
+                    with self.lock:
+                        self.progress = final_progress
+                        self.phase = "ready"
+                        self.phase_started_at = now_ts()
+                        self.message = f"Training finished: {self.training_job_name or agent_id}"
+                        self.phase_detail = f"Agent training finished in state {final_state}"
+                        self.stage_eta_seconds = None
+                        self.eta_seconds = None
+                        self.training_overall_eta_seconds = None
+                        self.work_done = 0
+                        self.work_total = 0
+                        self.work_unit = None
+                        self.eta_source = "complete"
+                        self.training_rows_per_second = 0.0
+                        self.training_job_agent_id = None
+                        self.training_job_name = None
+                        self.training_job_started_at = None
+                        self.training_job_start_progress = final_progress
 
         threading.Thread(target=worker, name=f"adaptive-ai-index-{agent_id}", daemon=True).start()
         return True
@@ -399,6 +466,20 @@ class HistoryManager(threading.Thread):
                         eta = clamp(eta, 0.0, 24 * 3600.0)
                         self.eta_seconds = eta if self.eta_seconds is None else (0.72 * self.eta_seconds + 0.28 * eta)
                         self.progress_rate_per_min = rate * 60.0
+                # Global ETA is based on real wall-clock throughput for the complete
+                # selected-agent pass, not on a local chunk counter. It therefore
+                # includes Recorder waits, Pi-safe throttling and every completed chunk.
+                if self.training_job_agent_id is not None and self.training_job_started_at is not None:
+                    start_p = clamp(float(self.training_job_start_progress or 0.0), 0.0, 0.999999)
+                    effective = (p - start_p) / max(1e-9, 1.0 - start_p)
+                    elapsed = max(0.0, now - float(self.training_job_started_at))
+                    if effective >= 0.005 and elapsed >= 5.0:
+                        raw_eta = elapsed * max(0.0, 1.0 - effective) / max(effective, 1e-9)
+                        raw_eta = clamp(raw_eta, 0.0, 24 * 3600.0)
+                        self.training_overall_eta_seconds = (
+                            raw_eta if self.training_overall_eta_seconds is None
+                            else 0.78 * self.training_overall_eta_seconds + 0.22 * raw_eta
+                        )
             if message is not None:
                 self.message = message
             if chunk_done is not None:

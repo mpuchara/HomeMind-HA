@@ -42,8 +42,19 @@
   const taskFor = (h,status) => {
     const s=status.startup||{};
     if (!s.ready) return {title:'Starting Adaptive AI', detail:s.message||'Preparing runtime', p:(s.step||0)/Math.max(1,s.steps||7), eta:null, work:null};
-    const training=lastAgents.find(a=>(a.runtime?.training_state||a.training_state)==='training');
-    if (training) return {title:`Training ${training.name}`,detail:h.phase_detail||h.message||'Replaying recorded behaviour',p:Number(training.training_progress||0),eta:h.stage_eta_seconds??h.eta_seconds,work:h.work_total?`${num(h.work_done)} / ${num(h.work_total)} ${h.work_unit||'history rows'}`:null};
+    const activeTrainingId=String(status.training_queue?.active?.agent_id||h.training_job_agent_id||'');
+    const training=lastAgents.find(a=>String(a.id)===activeTrainingId)
+      ||lastAgents.find(a=>(a.training_state||a.runtime?.training_state)==='training');
+    if (training) {
+      const overall=h.training_overall_progress==null?Number(training.training_progress||0):Number(h.training_overall_progress);
+      const stage=h.work_total?`${num(h.work_done)} / ${num(h.work_total)} ${h.work_unit||'history rows'}`:null;
+      const speed=Number(h.training_rows_per_second||0);
+      const stageEta=duration(h.training_stage_eta_seconds??h.stage_eta_seconds);
+      const details=[h.phase_detail||h.message||'Replaying recorded behaviour'];
+      if(speed>0)details.push(`${num(speed)} rows/s`);
+      if(stageEta)details.push(`current stage ${stageEta}`);
+      return {title:`Training ${training.name}`,detail:details.join(' · '),p:overall,eta:h.training_overall_eta_seconds??h.eta_seconds,work:stage?`Current stage: ${stage}`:'Preparing training history'};
+    }
     const b=status.home_bootstrap||{};
     if (['IMPORTING','TRAINING'].includes(b.state)) return {title:'Building Home Intelligence',detail:`${num(b.rows||0)} rows · ${num(b.rows_per_second||0)} rows/s`,p:Number(b.progress||0),eta:b.eta_seconds,work:null};
     if (status.heavy_job || (h.phase && h.phase!=='ready')) return {title:'Preparing local intelligence',detail:h.phase_detail||h.message||String(status.heavy_job||h.phase),p:Number(h.progress||0),eta:h.stage_eta_seconds??h.eta_seconds,work:h.work_total?`${num(h.work_done)} / ${num(h.work_total)} ${h.work_unit||'items'}`:null};
@@ -53,7 +64,7 @@
   renderHistory = (h,status={}) => {
     const t=taskFor(h,status), p=Math.max(0,Math.min(100,Math.round((t.p||0)*100))), eta=duration(t.eta);
     const task=$('#taskPanel');
-    if(task) task.innerHTML=`<div class="history-head"><div><b>${esc(t.title)}</b><span>${esc(t.detail)}</span></div><div class="history-percent"><strong>${p}%</strong><small>${esc(eta||(p>0&&p<100?'ETA after first measured batch':''))}</small></div></div>${p<100?`<div class="bar history-bar"><i style="width:${p}%"></i></div>`:''}<div class="history-timing"><b>${esc(t.work||'')}</b><span>${p<100?'Work is measured from actual throughput, not a fixed guess.':''}</span></div>`;
+    if(task) task.innerHTML=`<div class="history-head"><div><b>${esc(t.title)}</b><span>${esc(t.detail)}</span></div><div class="history-percent"><strong>${p}%</strong><small>${esc(eta||(p>0&&p<100?'Measuring whole-training ETA…':''))}</small></div></div>${p<100?`<div class="bar history-bar"><i style="width:${p}%"></i></div>`:''}<div class="history-timing"><b>${esc(t.work||'')}</b><span>${p<100?'Percent and ETA cover the complete selected-agent training pass; stage counters may restart between chunks.':''}</span></div>`;
     const ar=h.archive||{};
     $('#historyPanel').innerHTML=`<div class="history-head"><div><b>History / training diagnostics</b><span>${esc(h.message||h.phase||'idle')}</span></div><div class="history-percent"><strong>${p}%</strong><small>${esc(eta||'')}</small></div></div><div class="history-timing"><b>${h.work_total?`${num(h.work_done)} / ${num(h.work_total)} ${esc(h.work_unit||'items')}`:'No measurable background work'}</b><span>${esc(h.phase_detail||'')}</span></div><div class="history-grid"><div><b>${num(ar.n||0)}</b><span>archived changes</span></div><div><b>${Number(ar.days||0).toFixed(1)} d</b><span>coverage</span></div><div><b>${num(h.context_candidates||ar.entities||0)}</b><span>context candidates</span></div><div><b>${num(h.training_rows_per_second||0)}</b><span>training rows/s</span></div></div>`;
   };
@@ -72,7 +83,7 @@
   };
   const human = a => {
     const r=a.runtime||{}, training=r.training_state||a.training_state||'paused', reason=String(r.decision_reason||''), state=String(r.decision_state||'idle');
-    if(training==='training') return ['training',`Learning ${Math.round(Number(a.training_progress||0)*100)}%`,'Historical replay and validation are running.'];
+    if(training==='training') { const eta=duration(r.training_overall_eta_seconds); return ['training',`Learning ${Math.round(Number(a.training_progress||0)*100)}%`,`Whole training pass is running${eta?` · ETA ${eta}`:''}.`]; }
     if(training==='needs_retrain') return ['waiting','Needs training','Policy inputs changed. Press Train.'];
     if(training==='waiting') return ['waiting','Ready to train','Training has not started yet.'];
     if(training==='paused'&&a.mode==='paused') return ['paused','Paused','This agent is not making decisions.'];
@@ -153,7 +164,7 @@
   };
 
   const update = (el,a) => {
-    const r=a.runtime||{}, training=r.training_state||a.training_state||'paused', qualified=training==='qualified', conf=qualified&&r.last_prediction!=null?Number(r.last_confidence||0):Number(a.benchmark_score??r.last_confidence??0);
+    const r=a.runtime||{}, training=a.training_state||r.training_state||'paused', qualified=training==='qualified', conf=qualified&&r.last_prediction!=null?Number(r.last_confidence||0):Number(a.benchmark_score??r.last_confidence??0);
     text(el,'name',a.name); text(el,'badge',(a.auto_created?'AUTO · ':'')+training.toUpperCase()); text(el,'target',`${a.target_entity} · ${a.target_property}`); text(el,'mode',a.mode.toUpperCase()); text(el,'current',currentValue(a)); text(el,'desired',prediction(a)); text(el,'confidence',pct(conf)); text(el,'driver',driver(a)?`Sensor: ${driver(a)}`:'Sensor: learning context'); text(el,'latency',latency(a)); text(el,'training',training==='training'?`training ${Math.round(Number(a.training_progress||0)*100)}%`:training);
     el.querySelector('[data-p0=mode]').className=`mode ${a.mode}`;
     const [tone,title,detail]=r.experiments?.active?.kind==='probe' ? ['acted','Eksperyment w toku','Pewność dotyczy zwykłej predykcji. Trwa obserwacja niewielkiej zmiany nastawy.'] : human(a), box=el.querySelector('[data-p0=decision]'); box.className=`decision ${tone}`; text(el,'state',title); text(el,'detail',detail);
