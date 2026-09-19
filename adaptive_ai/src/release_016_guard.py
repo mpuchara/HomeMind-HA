@@ -103,7 +103,7 @@ def install(runtime):
                 if history_module.target_options_for_state(st)
             ]
             history_self.discovered_controllable = len(controllable)
-            existing = [a for a in store.list_agents() if a.get("enabled")]
+            existing = [a for a in store.list_agent_configs() if a.get("enabled")]
             history_self.discovered_active = len(
                 [a for a in existing if a.get("target_entity") in current]
             )
