@@ -10,6 +10,7 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import threading
 import uuid
 
 from context import target_value
@@ -44,7 +45,11 @@ class ProvenanceJournal:
     def __init__(self, store, clock=now_ts):
         self.store = store
         self.clock = clock
+        self._command_cache_lock = threading.RLock()
+        self._command_cache = {}
+        self._command_context_cache = {}
         self._migrate()
+        self._load_active_command_cache()
 
     @staticmethod
     def _columns(c, table):
@@ -178,6 +183,40 @@ class ProvenanceJournal:
                 c.execute(
                     "ALTER TABLE provenance_commands ADD COLUMN command_origin TEXT NOT NULL DEFAULT 'own_command'"
                 )
+
+    def _load_active_command_cache(self):
+        """Hydrate restart-surviving command evidence once, outside event hot paths."""
+        now = float(self.clock())
+        with self.store.conn() as c:
+            commands = [dict(row) for row in c.execute(
+                """SELECT * FROM provenance_commands
+                   WHERE expires_time>? AND status IN ('pending','dispatched')""",
+                (now,),
+            ).fetchall()]
+            contexts = [dict(row) for row in c.execute(
+                """SELECT context_id,command_id,expires_time
+                   FROM provenance_command_contexts WHERE expires_time>?""",
+                (now,),
+            ).fetchall()]
+        with self._command_cache_lock:
+            self._command_cache = {str(row["command_id"]): row for row in commands}
+            active = set(self._command_cache)
+            self._command_context_cache = {
+                str(row["context_id"]): (str(row["command_id"]), float(row["expires_time"]))
+                for row in contexts if str(row["command_id"]) in active
+            }
+
+    def _purge_command_cache(self, now):
+        expired = {
+            command_id for command_id, row in self._command_cache.items()
+            if float(row.get("expires_time") or 0.0) <= float(now)
+            or str(row.get("status") or "") not in {"pending", "dispatched"}
+        }
+        for command_id in expired:
+            self._command_cache.pop(command_id, None)
+        for context_id, (command_id, expires) in list(self._command_context_cache.items()):
+            if command_id not in self._command_cache or float(expires) <= float(now):
+                self._command_context_cache.pop(context_id, None)
 
     def record_event(self, entity_id, state, *, event_time, received_time=None,
                      source="ha_state_changed", origin=UNKNOWN, event_id=None):
@@ -383,7 +422,7 @@ class ProvenanceJournal:
                         created_time=None, command_origin="own_command"):
         created_time = float(self.clock() if created_time is None else created_time)
         expires = created_time + max(30.0, float(agent.get("ack_timeout") or 0.0) * 2.0, 10.0)
-        command_id = command_id or decision_id or str(uuid.uuid4())
+        command_id = str(command_id or decision_id or uuid.uuid4())
         command_origin = str(command_origin or "own_command")
         with self.store.lock, self.store.conn() as c:
             c.execute(
@@ -399,13 +438,33 @@ class ProvenanceJournal:
                        WHEN provenance_commands.command_origin='user_intent' THEN provenance_commands.command_origin
                        ELSE excluded.command_origin END,
                      status=CASE WHEN provenance_commands.status='dispatched' THEN provenance_commands.status ELSE excluded.status END""",
-                (str(command_id), decision_id, agent["target_entity"], agent["target_property"],
+                (command_id, decision_id, agent["target_entity"], agent["target_property"],
                  float(value), float(agent.get("deadband") or 0.0), created_time, None, expires,
                  "pending", command_origin),
             )
-        return str(command_id)
+        with self._command_cache_lock:
+            self._purge_command_cache(created_time)
+            previous = dict(self._command_cache.get(command_id) or {})
+            self._command_cache[command_id] = {
+                "command_id": command_id,
+                "decision_id": decision_id or previous.get("decision_id"),
+                "entity_id": previous.get("entity_id") or str(agent["target_entity"]),
+                "target_property": previous.get("target_property") or str(agent["target_property"]),
+                "desired_value": float(value),
+                "deadband": float(agent.get("deadband") or 0.0),
+                "created_time": float(previous.get("created_time") or created_time),
+                "dispatched_time": previous.get("dispatched_time"),
+                "expires_time": max(float(previous.get("expires_time") or 0.0), expires),
+                "status": "dispatched" if previous.get("status") == "dispatched" else "pending",
+                "command_origin": (
+                    "user_intent" if previous.get("command_origin") == "user_intent"
+                    else command_origin
+                ),
+            }
+        return command_id
 
     def dispatch_command(self, command_id, response=None, dispatched_time=None):
+        command_id = str(command_id)
         dispatched_time = float(self.clock() if dispatched_time is None else dispatched_time)
         contexts = []
         for state in response if isinstance(response, list) else []:
@@ -415,56 +474,82 @@ class ProvenanceJournal:
             for key in ("id", "parent_id"):
                 if context.get(key):
                     contexts.append(str(context[key]))
-        with self.store.lock, self.store.conn() as c:
-            row = c.execute("SELECT expires_time FROM provenance_commands WHERE command_id=?", (str(command_id),)).fetchone()
+        with self._command_cache_lock:
+            self._purge_command_cache(dispatched_time)
+            cached = dict(self._command_cache.get(command_id) or {})
+        expires = cached.get("expires_time")
+        if expires is None:
+            # Compatibility fallback for externally inserted command rows. Normal runtime
+            # commands and restart-surviving commands are already memory-cached.
+            with self.store.conn() as c:
+                row = c.execute(
+                    "SELECT * FROM provenance_commands WHERE command_id=?", (command_id,)
+                ).fetchone()
             if not row:
                 return
-            expires = float(row[0])
+            cached = dict(row)
+            expires = float(cached["expires_time"])
+        with self.store.lock, self.store.conn() as c:
             c.execute(
                 "UPDATE provenance_commands SET dispatched_time=?,status='dispatched' WHERE command_id=?",
-                (dispatched_time, str(command_id)),
+                (dispatched_time, command_id),
             )
             for context_id in set(contexts):
                 c.execute(
                     """INSERT INTO provenance_command_contexts(context_id,command_id,expires_time)
                        VALUES(?,?,?) ON CONFLICT(context_id) DO UPDATE SET
                        command_id=excluded.command_id,expires_time=excluded.expires_time""",
-                    (context_id, str(command_id), expires),
+                    (context_id, command_id, float(expires)),
                 )
+        with self._command_cache_lock:
+            cached["dispatched_time"] = dispatched_time
+            cached["status"] = "dispatched"
+            self._command_cache[command_id] = cached
+            for context_id in set(contexts):
+                self._command_context_cache[context_id] = (command_id, float(expires))
 
     def fail_command(self, command_id):
         if not command_id:
             return
+        command_id = str(command_id)
         now = float(self.clock())
         with self.store.lock, self.store.conn() as c:
             c.execute("UPDATE provenance_commands SET status='failed',expires_time=? WHERE command_id=?",
-                      (now, str(command_id)))
-            c.execute("DELETE FROM provenance_command_contexts WHERE command_id=?", (str(command_id),))
+                      (now, command_id))
+            c.execute("DELETE FROM provenance_command_contexts WHERE command_id=?", (command_id,))
+        with self._command_cache_lock:
+            self._command_cache.pop(command_id, None)
+            for context_id, (cached_id, _expires) in list(self._command_context_cache.items()):
+                if cached_id == command_id:
+                    self._command_context_cache.pop(context_id, None)
 
     def match_command_state(self, state):
+        """Match a live HA state against the restart-safe active-command cache."""
         if not state:
             return None
         now = float(self.clock())
-        entity_id = state.get("entity_id")
+        entity_id = str(state.get("entity_id") or "")
         context = state.get("context") or {}
         context_ids = [str(context[k]) for k in ("id", "parent_id") if context.get(k)]
-        with self.store.conn() as c:
+        with self._command_cache_lock:
+            self._purge_command_cache(now)
             for context_id in context_ids:
-                row = c.execute(
-                    """SELECT p.* FROM provenance_command_contexts x
-                       JOIN provenance_commands p ON p.command_id=x.command_id
-                       WHERE x.context_id=? AND x.expires_time>? AND p.status IN ('pending','dispatched')""",
-                    (context_id, now),
-                ).fetchone()
-                if row:
+                match = self._command_context_cache.get(context_id)
+                if not match:
+                    continue
+                command_id, expires = match
+                row = self._command_cache.get(command_id)
+                if row and float(expires) > now:
                     return dict(row)
-            rows = c.execute(
-                """SELECT * FROM provenance_commands WHERE entity_id=? AND expires_time>?
-                   AND status IN ('pending','dispatched') ORDER BY created_time DESC LIMIT 8""",
-                (str(entity_id), now),
-            ).fetchall()
+            rows = sorted(
+                (
+                    dict(row) for row in self._command_cache.values()
+                    if str(row.get("entity_id") or "") == entity_id
+                ),
+                key=lambda row: float(row.get("created_time") or 0.0),
+                reverse=True,
+            )[:8]
         for row in rows:
-            row = dict(row)
             current = target_value(state, row["target_property"])
             if current is not None and same_value(current, row["desired_value"], row["deadband"]):
                 return row
