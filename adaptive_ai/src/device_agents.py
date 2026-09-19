@@ -230,6 +230,7 @@ class DeviceAgentService:
                     """UPDATE agents SET logical_device_id=?,device_property=?,device_contract_version=? WHERE id=?""",
                     (logical, prop, CONTRACT_VERSION, str(agent["id"])),
                 )
+            self.store.touch_agent_index()
         return {"agent_id": str(agent["id"]), "logical_device_id": logical, "device_property": prop}
 
     def migrate_agent_identities(self, entity_ids=None):

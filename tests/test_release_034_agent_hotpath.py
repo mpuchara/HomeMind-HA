@@ -97,7 +97,23 @@ class AgentHotPathTests(unittest.TestCase):
             runtime._active_agents_for_changes({"binary_sensor.kitchen_motion"})
 
         self.assertEqual(fake.list_calls, 2)
-        self.assertGreaterEqual(runtime.agent_index_ttl_seconds, 60.0)
+        self.assertGreaterEqual(runtime.agent_index_ttl_seconds, 600.0)
+
+    def test_empty_agent_index_is_cached_without_repeated_sql_scans(self):
+        runtime = self.make_engine()
+        runtime.experiments = SimpleNamespace(
+            watches=lambda aid: set(),
+            cancel=lambda *args, **kwargs: None,
+        )
+        fake = CountingStore([])
+
+        with patch.object(engine_module, "STORE", fake):
+            runtime._active_agents_for_changes({"binary_sensor.kitchen_motion"})
+            runtime._active_agents_for_changes({"binary_sensor.kitchen_motion"})
+            runtime._active_agents_for_changes({"binary_sensor.kitchen_motion"})
+
+        self.assertEqual(fake.list_calls, 1)
+        self.assertGreaterEqual(runtime.agent_index_ttl_seconds, 600.0)
 
     def test_process_target_uses_routed_agent_snapshot_without_second_config_read(self):
         runtime = self.make_engine()
@@ -272,6 +288,19 @@ class AgentHotPathTests(unittest.TestCase):
         self.assertNotIn("configs = core.STORE.list_agent_configs()", source)
         self.assertIn('"ram_persistence_buffers"', source)
         self.assertIn('"provenance_queue"', source)
+
+    def test_direct_agent_sql_writers_invalidate_routing_cache(self):
+        for name in (
+            "device_agents.py",
+            "teaching_rl.py",
+            "cold_start_drift.py",
+            "agent_candidate_atomic_promote.py",
+            "agent_candidate_conservative_correct.py",
+            "observation_contract.py",
+        ):
+            source = (ROOT / "adaptive_ai/src" / name).read_text(encoding="utf-8")
+            if "UPDATE agents" in source or "DELETE FROM agents" in source:
+                self.assertIn("touch_agent_index()", source, name)
 
     def test_micro_sd_temporaries_are_ram_first_and_coarsely_batched(self):
         storage = (ROOT / "adaptive_ai/src/storage.py").read_text(encoding="utf-8")

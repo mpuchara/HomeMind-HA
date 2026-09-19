@@ -825,6 +825,7 @@ class AdaptationService:
                                lifecycle_state='live',retired_ts=NULL,updated_ts=? WHERE generation_id=?""",
                             (aid, now, previous["generation_id"]),
                         )
+            self.store.touch_agent_index()
             self.engine.models.pop(aid, None)
             self.engine.runtime.pop(aid, None)
             if current_mode != "control" and old_mode == "control":
@@ -834,6 +835,7 @@ class AdaptationService:
                 except Exception:
                     with self.store.lock, self.store.conn() as c:
                         c.execute("UPDATE agents SET mode='shadow' WHERE id=?", (aid,))
+                    self.store.touch_agent_index()
                     raise
         return True
 

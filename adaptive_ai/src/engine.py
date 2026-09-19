@@ -123,9 +123,9 @@ class Engine(threading.Thread):
         # Realtime routing cache. Event dispatch must not hit SQLite or recompute every
         # agent's dependency set on each HA state_changed event.
         self.agent_index_at = 0.0
-        # Normal invalidation is revision-driven. A 60 s fallback catches legacy/direct
-        # SQL mutations that bypass Store helpers without reintroducing 5 s all-agent scans.
-        self.agent_index_ttl_seconds = 60.0
+        # Normal invalidation is revision-driven. A 10 minute safety fallback catches
+        # truly external/direct DB edits without turning agent-table scans into periodic I/O.
+        self.agent_index_ttl_seconds = 600.0
         self.agent_index_revision = -1
         self.agent_configs = {}
         self.active_agents_by_target = {}
@@ -642,7 +642,7 @@ class Engine(threading.Thread):
         with self.lock:
             if (
                 not force
-                and self.agent_configs
+                and float(self.agent_index_at or 0.0) > 0.0
                 and int(self.agent_index_revision) == store_revision
                 and now - float(self.agent_index_at or 0.0) < self.agent_index_ttl_seconds
             ):

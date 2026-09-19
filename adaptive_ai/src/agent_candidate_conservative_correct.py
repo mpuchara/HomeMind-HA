@@ -105,6 +105,7 @@ def _copy_parent_snapshot(manager, parent_id, candidate_id):
         ).fetchone():
             c.execute("DELETE FROM teaching_rl_jobs WHERE agent_id=?", (str(candidate_id),))
 
+    store.touch_agent_index()
     manager.engine.models.pop(str(candidate_id), None)
     manager.engine.runtime.pop(str(candidate_id), None)
     return manager.store.get_agent_config(str(candidate_id))

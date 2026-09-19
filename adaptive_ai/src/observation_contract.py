@@ -1235,6 +1235,8 @@ def _migrate_models(core):
                        training_progress=0,training_updated_at=? WHERE id=?""",
                       (iso_now(), agent["id"]))
         changed.append(agent["id"])
+    if changed or repaired:
+        store.touch_agent_index()
     if engine is not None:
         engine.models.clear()
         if repaired:
