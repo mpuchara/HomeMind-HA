@@ -99,6 +99,32 @@ class ProvenanceJournalTests(unittest.TestCase):
         self.assertEqual(self.journal.decision('known')['action_probability'], .25)
         self.assertEqual(self.journal.decision('known')['contract_version'], CONTRACT_VERSION)
 
+    def test_shadow_decisions_can_be_persisted_as_one_final_status_batch(self):
+        rows = [
+            {
+                "decision_id": f"shadow-{i}",
+                "created_time": 10.0 + i,
+                "agent_id": "a",
+                "model_version": 12,
+                "model_revision": "r1",
+                "schema_version": 12,
+                "reward_version": 1,
+                "feature_manifest": {"features": {"0": float(i)}},
+                "allowed_actions": [0.0, 1.0],
+                "chosen_action": float(i % 2),
+                "model_desired": float(i % 2),
+                "dispatch_status": "SHADOW",
+                "dispatch_reason": "observed only",
+            }
+            for i in range(3)
+        ]
+        self.assertEqual(self.journal.record_decisions_batch(rows), 3)
+        for i in range(3):
+            decision = self.journal.decision(f"shadow-{i}")
+            self.assertEqual(decision["dispatch_status"], "SHADOW")
+            self.assertEqual(decision["dispatch_reason"], "observed only")
+        self.assertEqual(self.journal.record_decisions_batch(rows), 0)
+
     def test_manual_experience_survives_journal_restart(self):
         st = state('light.kitchen', 'off') | {
             'context': {'id': 'manual-ctx', 'parent_id': None, 'user_id': 'human'}
@@ -147,6 +173,34 @@ class ProvenanceRuntimeIntegrationTests(unittest.TestCase):
         f.e.flush_archive()
         f.e.process_agent(f.a, f.e.state_map, {'light.kitchen'})
         return intent
+
+    def test_shadow_provenance_is_deferred_off_the_executor_hot_path(self):
+        f = self.fixture
+        f.store.update_agent(f.a["id"], {"mode": "shadow"})
+        shadow = f.store.get_agent_config(f.a["id"])
+        f.e.agent_configs = {f.a["id"]: dict(shadow)}
+
+        original_single = f.e.provenance.record_decision
+        original_batch = f.e.provenance.record_decisions_batch
+        single = Mock(side_effect=AssertionError("Shadow must not synchronously insert provenance"))
+        batch = Mock(return_value=1)
+        f.e.provenance.record_decision = single
+        f.e.provenance.record_decisions_batch = batch
+        try:
+            result = f.e.executor.submit(f.intent(), {0: 1.0}, 1)
+            self.assertEqual(result["status"], "SHADOW")
+            single.assert_not_called()
+            snapshot = f.e.provenance_deferred_snapshot()
+            self.assertGreaterEqual(snapshot["queued"], 1)
+            f.store._flush_provenance_decisions(f.a["id"])
+            batch.assert_called()
+            payloads = batch.call_args.args[0]
+            self.assertTrue(payloads)
+            self.assertEqual(payloads[-1]["dispatch_status"], "SHADOW")
+            self.assertEqual(payloads[-1]["agent_id"], f.a["id"])
+        finally:
+            f.e.provenance.record_decision = original_single
+            f.e.provenance.record_decisions_batch = original_batch
 
     def test_full_decision_dispatch_ack_outcome_relationship(self):
         f = self.fixture
