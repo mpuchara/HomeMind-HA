@@ -1,3 +1,14 @@
+# 0.14.42 — 2026-09-19
+
+- Fix clean-install discovery completeness: the classifier uses the configured 10-day activity window, so the first low-memory scan now backfills the older part of that same window instead of importing only the most recent 24 hours.
+- Keep the deep scan Raspberry-Pi friendly: state/value targets use minimal no-attribute Recorder responses in 24-hour windows; only attribute-only targets such as HVAC setpoints, cover position and humidity require bounded full-state history.
+- Repair existing 0.14.41 installations automatically with one post-ready `deep_history_reconcile` pass when the durable full-window marker is missing. Later restarts stay quiet.
+- Fix Recorder circuit-breaker data loss: discovery now waits cooperatively through a Recorder backoff and retries the same chunk instead of treating skipped chunks as successful zero-row reads.
+- Fix the post-discovery agent-list refresh by using a per-discovery revision request key, bypassing the intentional 3-second `api/agents` polling cache.
+- Add discovery reason diagnostics for inactive targets and expose whether the full discovery window has been completed.
+- Preserve manual device selection: newly discovered agents remain WAITING/PAUSED and no training starts until the user explicitly presses **Train**.
+- Preserve model, reward, qualification, Candidate, Teach/Correct and physical-control semantics.
+
 # 0.14.41 — 2026-09-19
 
 - Restore exactly one automatic low-memory controllable-device discovery pass on a genuinely clean installation, after HTTP/realtime startup is ready. Established installs with existing agents remain quiet and periodic Recorder maintenance stays disabled.
