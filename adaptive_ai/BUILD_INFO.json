@@ -1,10 +1,10 @@
 {
-  "version": "0.14.30",
+  "version": "0.14.31",
   "release_date": "2026-09-19",
-  "base_version": "0.14.29",
+  "base_version": "0.14.30",
   "base_commit": "6d1631ae11e5d269f6160df654cf2a4a5ff8b7df",
-  "release_status": "release-0.14.30-http-first-inference-gate",
-  "tests_passed": 894,
+  "release_status": "release-0.14.31-event-driven-inference-runtime",
+  "tests_passed": 899,
   "profile": "rpi4-low-memory-automatic-initial-training",
   "manual_agent_training": false,
   "max_concurrent_training_jobs": 1,
@@ -39,8 +39,8 @@
   "release_017_lifeline": "installed after release_016_guard and before core.main; read-side availability and training scheduling only, no model/label/history/generation mutation",
   "migration": "additive startup repair only; models, raw archive, feedback, Candidate lineage, TrialRecords, Teach labels, settings and rollback state remain preserved",
   "physical_control": "unchanged; repaired agents return to Shadow and Control still requires qualified state plus all existing guards",
-  "pi4": "0.14.30 addresses blank/very slow Ingress at add-on start by gating the first all-agent inference burst and capping inference concurrency; on-device verification remains required",
-  "ci_status": "0.14.30 startup inference gate and bounded inference worker pool validated in GitHub Actions run 35428266370; F24 quality metrics unchanged",
+  "pi4": "0.14.31 removes the 1 Hz all-agent inference loop and whole-home presence fan-out; expected steady CPU should now be dominated by actual HA events and the separately throttled ~20% historical worker",
+  "ci_status": "0.14.31 event-driven inference scheduler and local dependency fan-out validated in GitHub Actions run 35430438483; F24 quality metrics unchanged",
   "training_slice_budget": "adaptive-ai-index workers call a shared CooperativeTrainingBudget; expensive temporal tracker loops yield between entities/events and finalization is no longer outside the throttle",
   "finalization_lifeline": "HEAVY_JOBS remains owned through final gc.collect(), so /api/status and /api/agents stay on lightweight lifeline reads until the worker is actually finished",
   "finalization_progress": "post-replay UI now exposes bounded stages: replay complete, policy serialization, benchmark save, qualification, checkpoint complete",
@@ -83,7 +83,7 @@
   "product_benchmark_topology_contract": "sensor_moved changes the future Entity Registry area mapping for the same entity_id and the changed mapping is passed into every evaluated runtime",
   "product_benchmark_manual_override_contract": "manual_change emits explicit target provenance with context.user_id; fast targets now delegate to the authoritative Engine manual-hold path. F24 v2 measures zero manual_override_violations and runtime_manual_hold_ticks_mean=115 across seeds 11,23,37 without changing benchmark thresholds or scenario logic",
   "product_benchmark_report_artifact": "GitHub Actions uploads product-benchmark-f24-py311/product-benchmark-f24.json for the final 3-seed composed-runtime run",
-  "product_benchmark_unmet_criteria_status": "GitHub Actions run 35428266370 on unchanged F24 v2 leaves only needed_light_not_worse_than_fixed_by_more_than_2pp unmet",
+  "product_benchmark_unmet_criteria_status": "GitHub Actions run 35430438483 on unchanged F24 v2 leaves only needed_light_not_worse_than_fixed_by_more_than_2pp unmet",
   "product_benchmark_summary": {
     "seeds": [
       11,
@@ -112,5 +112,11 @@
   "fast_light_off_confirmation": "historical_policy_bootstrap OFF from an already-ON light must remain continuously recommended for 6 s; ON stays immediate and manual/scoped-instruction/preference/experiment OFF bypasses confirmation",
   "startup_inference_gate": "background Engine inference is closed during runtime composition and opens only after startup.ready; first proactive inference is deferred 3 s to preserve Ingress responsiveness",
   "realtime_inference_workers": "device-control ThreadPoolExecutor is capped at min(4, os.cpu_count()) instead of 8 to avoid Python/GIL scheduler starvation on Raspberry Pi",
-  "initial_snapshot_inference": "initial REST snapshot is context/history warm-up, not a realtime transition; it no longer marks every entity dirty and therefore does not force a startup all-agent event burst"
+  "initial_snapshot_inference": "initial REST snapshot is context/history warm-up, not a realtime transition; it no longer marks every entity dirty and therefore does not force a startup all-agent event burst",
+  "event_driven_inference": "HA state changes trigger relevant agents immediately; the 1 s engine tick is timer scheduling only and no longer runs every eligible agent",
+  "inference_idle_heartbeat": "fast targets refresh at 10 s while idle, slower targets at 30 s; exact OFF-confirmation, ACK, outcome, retry and manual-hold deadlines pre-empt the heartbeat",
+  "inference_event_fanout": "events wake target/schema/explicit-input/same-area RoomBelief dependencies only; a presence sensor in another room no longer wakes every agent in the house",
+  "empty_wakeup_contract": "exactly one complete post-startup inference pass; later empty wakeups and unchanged REST resyncs never mean process-all",
+  "manual_hold_cpu": "while an explicit manual hold is active, periodic policy recomputation is suppressed until hold expiry unless an earlier lifecycle deadline exists",
+  "inference_scheduler_observability": "status exposes event_passes, timer_passes, idle_skips, initial_full_passes and last_timer_targets"
 }
