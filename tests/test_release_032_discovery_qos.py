@@ -86,6 +86,11 @@ class DiscoveryQoSTests(unittest.TestCase):
         self.assertIn("threshold_override=1", source)
         self.assertIn("self.bootstrap_and_train(threshold_override=threshold_override)", source)
 
+    def test_training_queue_discovery_bridge_preserves_discovery_options(self):
+        source = (ROOT/'adaptive_ai/src/training_queue.py').read_text(encoding='utf-8')
+        self.assertIn("def priority_cycle(current, controllable, end_ts, *args, **kwargs):", source)
+        self.assertIn("original_cycle(current, controllable, end_ts, *args, **kwargs)", source)
+
     def test_post_recorder_cycle_does_not_refresh_full_archive_stats(self):
         source = inspect.getsource(HistoryManager._manual_lightweight_cycle)
         self.assertNotIn("self.refresh_archive_cache()", source)
