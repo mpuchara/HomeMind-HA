@@ -105,9 +105,9 @@ class HistoryManager(threading.Thread):
                 "discovery_job_active": bool(self.discovery_job_active),
                 "discovery_job_started_at": self.discovery_job_started_at,
                 "discovery_classified": bool(self.discovery_classified),
-                "discovery_deep_history_complete": bool(self.discovery_deep_history_complete),
-                "discovery_reason_counts": dict(self.discovery_reason_counts),
-                "discovery_inactive_examples": list(self.discovery_inactive_examples),
+                "discovery_deep_history_complete": bool(getattr(self, "discovery_deep_history_complete", False)),
+                "discovery_reason_counts": dict(getattr(self, "discovery_reason_counts", {}) or {}),
+                "discovery_inactive_examples": list(getattr(self, "discovery_inactive_examples", []) or []),
             }
         return d
 
