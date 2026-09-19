@@ -134,6 +134,12 @@ class Release038PiDegradationTests(unittest.TestCase):
         self.assertIn("adaptiveAiTimeoutMs:3500", app)
         self.assertIn("const earlyAgents=wasReady?api('api/agents'):null", app)
 
+    def test_visible_diagnostics_expose_cpu_scheduler_and_drift_runtime(self):
+        home = (ROOT / "adaptive_ai" / "src" / "static" / "home.js").read_text(encoding="utf-8")
+        self.assertIn("cpu_percent_recent", home)
+        self.assertIn("scheduler.event_passes", home)
+        self.assertIn("drift.max_run_ms", home)
+
 
 if __name__ == "__main__":
     unittest.main()
