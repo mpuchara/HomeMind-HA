@@ -307,6 +307,7 @@ class AgentCandidateManager(threading.Thread):
                 (parent["id"], candidate["id"], generation, "queued", "feedback",
                  now, json.dumps(_blank_comparison()), now),
             )
+        refresh_candidate_ids_cache(self.store)
         self.engine.models.pop(candidate["id"], None)
         self.engine.runtime.pop(candidate["id"], None)
         return self._candidate_row(parent["id"])
@@ -512,6 +513,7 @@ class AgentCandidateManager(threading.Thread):
                 if c.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (table,)).fetchone():
                     c.execute(f"DELETE FROM {table} WHERE agent_id=?", (candidate_id,))
             c.execute("DELETE FROM agent_candidates WHERE candidate_id=?", (candidate_id,))
+        refresh_candidate_ids_cache(self.store)
         self.store.delete_agent(candidate_id)
         self.runtime.pop(str(row["parent_agent_id"]), None)
 
