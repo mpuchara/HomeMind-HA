@@ -149,7 +149,7 @@
           const budget=duty?`CPU budget ${duty}%${slice?` · max slice ${slice} ms`:''}${replayBatch?` · replay batch ${replayBatch}`:''}`:'Pi-safe CPU budget';
           const observedText=observed?` · longest slice ${observed} ms${overruns?` · ${overruns} overrun${overruns===1?'':'s'}`:''}`:'';
           const timing=panel.querySelector('.history-timing span');
-          if(timing)timing.textContent=`${timing.textContent||''} ${budget}${observedText}.`.trim();
+          if(timing)timing.textContent=`${timing.textContent||''} ${budget}${observedText}. Training yields between bounded work slices so Ingress and realtime control keep CPU priority.`.trim();
         }
       }
       return result;
