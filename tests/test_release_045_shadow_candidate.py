@@ -43,6 +43,8 @@ class Release045ShadowCandidateTests(unittest.TestCase):
         self.assertNotIn(".executor.", passive)
         self.assertNotIn("ActionIntent", passive)
         self.assertNotIn(".service(", passive)
+        self.assertNotIn(".store.event(", passive)
+        self.assertIn('root_rt["passive_observations"]', passive)
 
 
 if __name__ == "__main__":
