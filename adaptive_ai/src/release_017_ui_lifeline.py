@@ -152,7 +152,10 @@ def install(runtime):
 
     def status_payload(handler_self):
         nonlocal rich_status
-        if not core.runtime_available():
+        startup = core.startup_snapshot()
+        if not startup.get("ready") or not core.runtime_available():
+            # Keep the earlier startup guard authoritative until Engine and its locks are
+            # fully composed. Never touch a partial Engine from the hot operational path.
             payload = previous_status_payload(handler_self)
             payload["status_read_mode"] = "startup"
             payload["ui_lifeline"] = snapshot()
