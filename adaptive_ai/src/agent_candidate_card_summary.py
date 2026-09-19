@@ -120,10 +120,13 @@ def decorate_candidate_status(store, result, *, now=None):
 def live_candidate_snapshots(manager):
     """Fast UI-only snapshots without rebuilding Candidate metrics/status.
 
-    Current is read directly from the websocket-backed engine state. Desired values come
-    only from Candidate Shadow decisions that actually ran and were persisted, never from
-    policy replay. The query is read-only and does not touch Executor or learning state.
+    The active Candidate Shadow runtime owns current decision tiles in RAM. SQLite is only
+    a restart/backfill source inside that runtime, never the normal 1 s UI polling path.
+    No policy replay, Executor call or learning mutation happens here.
     """
+    hot = getattr(manager, "candidate_live_runtime_snapshots", None)
+    if callable(hot):
+        return list(hot() or [])
     now = time.time()
     with manager.store.conn() as c:
         rows = [dict(r) for r in c.execute(
@@ -222,6 +225,6 @@ def install(manager):
     handler.do_GET = do_get
     manager._candidate_card_summary_installed = True
     manager.candidate_card_decision_contract = (
-        "current_plus_same_observed_event_direct_parent_desired_plus_candidate_desired"
+        "ram_first_current_plus_same_observed_event_direct_parent_desired_plus_candidate_desired"
     )
     return manager
