@@ -152,12 +152,12 @@ def _predict_candidate(manager, generation, state_map, event_ts):
     agent_id = generation.get("agent_id")
     if not agent_id:
         return None
-    agent = manager.store.get_agent_config(str(agent_id))
-    if not agent or manager.store.get_model(str(agent_id)) is None:
-        return None
     try:
         policy = manager.engine.models.get(str(agent_id))
         if policy is None:
+            agent = manager.store.get_agent_config(str(agent_id))
+            if not agent or manager.store.get_model(str(agent_id)) is None:
+                return None
             policy = manager.engine.policy(agent)
         features, _, _ = policy.features(state_map, manager.engine.temporal_history, at_ts=event_ts)
         result = policy.predict(features)
@@ -378,6 +378,64 @@ def _rebuild_summary(manager, edge):
     return _persist_summary(manager, edge, summary)
 
 
+def _apply_pair_to_summary(manager, edge, pair):
+    """Update comparison summary from one newly inserted paired outcome in O(1).
+
+    _rebuild_summary remains available for migration/recovery, but live outcome handling
+    must never rescan the complete pair table as evidence grows.
+    """
+    existing = _comparison_row(
+        manager.store, edge["parent_generation_id"], edge["child_generation_id"]
+    )
+    summary = {
+        **_blank_summary(),
+        **_json((existing or {}).get("summary_json"), _blank_summary()),
+    }
+    p_ok = bool(pair["parent_correct"])
+    c_ok = bool(pair["child_correct"])
+    outcome = float(pair["outcome"])
+    summary["samples"] = int(summary.get("samples") or 0) + 1
+    summary["live_correct"] = int(summary.get("live_correct") or 0) + int(p_ok)
+    summary["candidate_correct"] = int(summary.get("candidate_correct") or 0) + int(c_ok)
+    summary["parent_correct"] = int(summary.get("parent_correct") or 0) + int(p_ok)
+    summary["child_correct"] = int(summary.get("child_correct") or 0) + int(c_ok)
+    if c_ok and not p_ok:
+        summary["candidate_wins"] = int(summary.get("candidate_wins") or 0) + 1
+        summary["child_wins"] = int(summary.get("child_wins") or 0) + 1
+    elif p_ok and not c_ok:
+        summary["live_wins"] = int(summary.get("live_wins") or 0) + 1
+        summary["parent_wins"] = int(summary.get("parent_wins") or 0) + 1
+    elif p_ok and c_ok:
+        summary["both_correct"] = int(summary.get("both_correct") or 0) + 1
+    else:
+        summary["both_wrong"] = int(summary.get("both_wrong") or 0) + 1
+
+    key = str(float(outcome))
+    per_action = dict(summary.get("per_action") or {})
+    slot = {
+        "samples": 0, "live_correct": 0, "candidate_correct": 0,
+        **dict(per_action.get(key) or {}),
+    }
+    slot["samples"] = int(slot.get("samples") or 0) + 1
+    slot["live_correct"] = int(slot.get("live_correct") or 0) + int(p_ok)
+    slot["candidate_correct"] = int(slot.get("candidate_correct") or 0) + int(c_ok)
+    per_action[key] = slot
+    summary["per_action"] = per_action
+
+    parent_lead = pair.get("parent_lead_seconds")
+    child_lead = pair.get("child_lead_seconds")
+    if parent_lead is not None or child_lead is not None:
+        if outcome >= .5:
+            summary["on_events"] = int(summary.get("on_events") or 0) + 1
+            summary["live_on_lead_sum"] = float(summary.get("live_on_lead_sum") or 0.0) + float(parent_lead or 0.0)
+            summary["candidate_on_lead_sum"] = float(summary.get("candidate_on_lead_sum") or 0.0) + float(child_lead or 0.0)
+        else:
+            summary["off_events"] = int(summary.get("off_events") or 0) + 1
+            summary["live_off_lead_sum"] = float(summary.get("live_off_lead_sum") or 0.0) + float(parent_lead or 0.0)
+            summary["candidate_off_lead_sum"] = float(summary.get("candidate_off_lead_sum") or 0.0) + float(child_lead or 0.0)
+    return _persist_summary(manager, edge, summary)
+
+
 def install(manager):
     if getattr(manager, "_candidate_shadow_runtime_installed", False):
         return manager
@@ -393,8 +451,31 @@ def install(manager):
     shadow_runtime = {}
 
     def _root_runtime(root_id):
-        return shadow_runtime.setdefault(str(root_id), {"previous_current": None, "bundle": None, "last_persist": 0.0,
-                                                       "persisted": {}, "generation_state": {}})
+        return shadow_runtime.setdefault(str(root_id), {
+            "previous_current": None,
+            "bundle": None,
+            "last_persist": 0.0,
+            "persisted": {},
+            "generation_state": {},
+            "generation_cache_at": 0.0,
+            "shadow_generations": None,
+            "root_generation": None,
+        })
+
+    def _cached_generations(root_id):
+        root_rt = _root_runtime(root_id)
+        now = time.monotonic()
+        if (
+            root_rt.get("shadow_generations") is not None
+            and now - float(root_rt.get("generation_cache_at") or 0.0) < 2.0
+        ):
+            return root_rt.get("root_generation"), root_rt.get("shadow_generations") or []
+        generations = _shadow_generations(manager.store, root_id)
+        root_generation = _root_generation(manager.store, root_id) if generations else None
+        root_rt["generation_cache_at"] = now
+        root_rt["shadow_generations"] = generations
+        root_rt["root_generation"] = root_generation
+        return root_generation, generations
 
     def _decorate_result(root_rt, result, event_ts, current):
         state = root_rt["generation_state"].setdefault(result["generation_id"], {})
@@ -410,8 +491,11 @@ def install(manager):
         return result
 
     def _bundle(root_agent, state_map):
-        root_gen = _root_generation(manager.store, root_agent["id"])
-        if not root_gen:
+        root_gen, shadow_generations = _cached_generations(root_agent["id"])
+        # No Candidate means no A/B observation work at all. Live runtime telemetry is
+        # already stored by Engine; candidate_generation_decisions exist only to compare
+        # an actual alternative policy against its parent.
+        if not root_gen or not shadow_generations:
             return None
         current = target_value((state_map or {}).get(root_agent["target_entity"]), root_agent["target_property"])
         try:
@@ -427,7 +511,7 @@ def install(manager):
         observed_root = _root_observation(manager, root_agent, root_gen)
         if observed_root is not None:
             results[root_gen["generation_id"]] = _decorate_result(root_rt, observed_root, event_ts, current)
-        for generation in _shadow_generations(manager.store, root_agent["id"]):
+        for generation in shadow_generations:
             observed = _predict_candidate(manager, generation, state_map, event_ts)
             if observed is not None:
                 results[generation["generation_id"]] = _decorate_result(root_rt, observed, event_ts, current)
@@ -591,7 +675,17 @@ def install(manager):
             )
             inserted = c.total_changes > before
         if inserted:
-            _rebuild_summary(manager, edge)
+            _apply_pair_to_summary(
+                manager,
+                edge,
+                {
+                    "parent_correct": int(p_ok),
+                    "child_correct": int(c_ok),
+                    "outcome": float(outcome),
+                    "parent_lead_seconds": parent_lead,
+                    "child_lead_seconds": child_lead,
+                },
+            )
         return inserted
 
     def generation_history(ref, start, end):
