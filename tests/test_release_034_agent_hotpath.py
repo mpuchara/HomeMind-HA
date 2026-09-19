@@ -143,6 +143,33 @@ class AgentHotPathTests(unittest.TestCase):
         self.assertEqual(result["status"], "SHADOW")
         self.assertEqual(runtime.runtime[configured["id"]]["decision_state"], "shadow")
 
+    def test_final_observation_wrapper_keeps_sql_off_agent_hot_path(self):
+        source = (
+            ROOT / "adaptive_ai/src/observation_contract.py"
+        ).read_text(encoding="utf-8")
+        submit = source.split("original_submit = engine.executor.submit", 1)[1].split(
+            "original_process_agent = engine.process_agent", 1
+        )[0]
+        process = source.split("original_process_agent = engine.process_agent", 1)[1].split(
+            "migrated = _migrate_models(core)", 1
+        )[0]
+        self.assertNotIn("store.get_agent_config", submit)
+        self.assertNotIn("journal.open_window(", submit)
+        self.assertIn("queue_window(", submit)
+        self.assertNotIn("engine.provenance.event", process)
+        self.assertNotIn("engine.policy(agent)", process)
+        self.assertIn("queue_window(", process)
+
+    def test_provenance_wrapper_uses_in_memory_target_origin(self):
+        source = (
+            ROOT / "adaptive_ai/src/provenance_runtime.py"
+        ).read_text(encoding="utf-8")
+        process = source.split("original_process_agent = engine.process_agent", 1)[1].split(
+            "# --- Experiment idempotency", 1
+        )[0]
+        self.assertNotIn("journal.event(event_id)", process)
+        self.assertIn("event_origin", process)
+
     def test_hot_status_includes_realtime_telemetry_snapshot(self):
         source = (
             ROOT / "adaptive_ai/src/release_017_ui_lifeline.py"

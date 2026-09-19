@@ -5,6 +5,7 @@ import time
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import Mock
 
 from support import agent, state
 from provenance import CONTRACT_VERSION, ProvenanceJournal, UNKNOWN
@@ -182,10 +183,14 @@ class ProvenanceRuntimeIntegrationTests(unittest.TestCase):
 
         original_single = f.e.provenance.record_decision
         original_batch = f.e.provenance.record_decisions_batch
+        original_get_agent = f.store.get_agent_config
         single = Mock(side_effect=AssertionError("Shadow must not synchronously insert provenance"))
         batch = Mock(return_value=1)
         f.e.provenance.record_decision = single
         f.e.provenance.record_decisions_batch = batch
+        f.store.get_agent_config = Mock(
+            side_effect=AssertionError("Shadow intent decoration must not reread agent config")
+        )
         try:
             result = f.e.executor.submit(f.intent(), {0: 1.0}, 1)
             self.assertEqual(result["status"], "SHADOW")
@@ -199,8 +204,24 @@ class ProvenanceRuntimeIntegrationTests(unittest.TestCase):
             self.assertEqual(payloads[-1]["dispatch_status"], "SHADOW")
             self.assertEqual(payloads[-1]["agent_id"], f.a["id"])
         finally:
+            f.store.get_agent_config = original_get_agent
             f.e.provenance.record_decision = original_single
             f.e.provenance.record_decisions_batch = original_batch
+
+    def test_process_agent_reuses_in_memory_event_origin_without_select(self):
+        f = self.fixture
+        event_id = "hot-target-event"
+        f.e._provenance_latest_events[f.a["target_entity"]] = (
+            time.time(), event_id, UNKNOWN
+        )
+        original_event = f.e.provenance.event
+        f.e.provenance.event = Mock(
+            side_effect=AssertionError("target-event inference must not reread provenance")
+        )
+        try:
+            f.e.process_agent(f.a, f.e.state_map, {f.a["target_entity"]})
+        finally:
+            f.e.provenance.event = original_event
 
     def test_full_decision_dispatch_ack_outcome_relationship(self):
         f = self.fixture

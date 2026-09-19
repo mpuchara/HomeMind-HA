@@ -13,6 +13,7 @@ import hashlib
 import json
 import math
 import time
+import threading
 
 import context as context_module
 import history as history_module
@@ -788,35 +789,69 @@ class FeatureJournal:
             self.prune(entity_id=entity_id)
         return event_key
 
+    def open_windows_batch(self, rows):
+        """Persist evidence-window requests in one bounded writer transaction."""
+        prepared = []
+        for raw in rows or ():
+            entities = sorted(set(str(e) for e in (raw.get("entities") or ()) if e))
+            if not entities:
+                continue
+            anchor = float(raw.get("anchor_time"))
+            created = float(self.clock())
+            before = float(raw.get("before", WINDOW_BEFORE_SECONDS))
+            after = float(raw.get("after", WINDOW_AFTER_SECONDS))
+            prepared.append({
+                "window_id": str(raw.get("window_id")),
+                "agent_id": str(raw.get("agent_id")),
+                "entities": entities,
+                "anchor": anchor,
+                "start": anchor - before,
+                "end": anchor + after,
+                "kind": str(raw.get("kind") or "decision"),
+                "created": created,
+                "protected_until": created + self.window_retention_days * 86400.0,
+            })
+        if not prepared:
+            return 0
+        with self.store.lock, self.store.conn() as c:
+            for row in prepared:
+                c.execute("""INSERT OR IGNORE INTO feature_windows
+                    (window_id,contract_version,agent_id,anchor_time,start_time,end_time,kind,created_time,protected_until)
+                    VALUES(?,?,?,?,?,?,?,?,?)""",
+                    (row["window_id"], CONTRACT_VERSION, row["agent_id"], row["anchor"],
+                     row["start"], row["end"], row["kind"], row["created"],
+                     row["protected_until"]))
+                c.executemany(
+                    "INSERT OR IGNORE INTO feature_window_entities(window_id,entity_id) VALUES(?,?)",
+                    [(row["window_id"], eid) for eid in row["entities"]],
+                )
+                placeholders = ",".join("?" for _ in row["entities"])
+                c.execute(
+                    f"""UPDATE feature_observation_events SET protected_until=MAX(protected_until,?)
+                        WHERE entity_id IN ({placeholders}) AND event_time>=? AND event_time<=?""",
+                    [row["protected_until"], *row["entities"], row["start"], row["end"]],
+                )
+            for agent_id in sorted(set(row["agent_id"] for row in prepared)):
+                stale = c.execute(
+                    """SELECT window_id FROM feature_windows WHERE agent_id=?
+                       ORDER BY anchor_time DESC LIMIT -1 OFFSET ?""",
+                    (agent_id, self.max_windows_per_agent),
+                ).fetchall()
+                if stale:
+                    ids = [r[0] for r in stale]
+                    marks = ",".join("?" for _ in ids)
+                    c.execute(f"DELETE FROM feature_window_entities WHERE window_id IN ({marks})", ids)
+                    c.execute(f"DELETE FROM feature_windows WHERE window_id IN ({marks})", ids)
+        return len(prepared)
+
     def open_window(self, window_id, agent_id, entities, anchor_time, kind,
                     before=WINDOW_BEFORE_SECONDS, after=WINDOW_AFTER_SECONDS):
-        entities = sorted(set(str(e) for e in entities if e))
-        if not entities:
-            return None
-        anchor, created = float(anchor_time), float(self.clock())
-        protected_until = created + self.window_retention_days * 86400.0
-        start, end = anchor - float(before), anchor + float(after)
-        with self.store.lock, self.store.conn() as c:
-            c.execute("""INSERT OR IGNORE INTO feature_windows
-                (window_id,contract_version,agent_id,anchor_time,start_time,end_time,kind,created_time,protected_until)
-                VALUES(?,?,?,?,?,?,?,?,?)""",
-                (str(window_id), CONTRACT_VERSION, str(agent_id), anchor, start, end,
-                 str(kind), created, protected_until))
-            c.executemany("INSERT OR IGNORE INTO feature_window_entities(window_id,entity_id) VALUES(?,?)",
-                          [(str(window_id), eid) for eid in entities])
-            placeholders = ",".join("?" for _ in entities)
-            c.execute(f"""UPDATE feature_observation_events SET protected_until=MAX(protected_until,?)
-                        WHERE entity_id IN ({placeholders}) AND event_time>=? AND event_time<=?""",
-                      [protected_until, *entities, start, end])
-            stale = c.execute("""SELECT window_id FROM feature_windows WHERE agent_id=?
-                               ORDER BY anchor_time DESC LIMIT -1 OFFSET ?""",
-                              (str(agent_id), self.max_windows_per_agent)).fetchall()
-            if stale:
-                ids = [r[0] for r in stale]
-                marks = ",".join("?" for _ in ids)
-                c.execute(f"DELETE FROM feature_window_entities WHERE window_id IN ({marks})", ids)
-                c.execute(f"DELETE FROM feature_windows WHERE window_id IN ({marks})", ids)
-        return str(window_id)
+        row = {
+            "window_id": str(window_id), "agent_id": str(agent_id),
+            "entities": list(entities or ()), "anchor_time": float(anchor_time),
+            "kind": str(kind), "before": float(before), "after": float(after),
+        }
+        return str(window_id) if self.open_windows_batch([row]) else None
 
     @staticmethod
     def normalized_row(row):
@@ -1171,6 +1206,81 @@ def install(core):
     engine._observation_contract_installed = True
     engine._observation_watch_cache = (0.0, set())
 
+    # Evidence windows protect the high-resolution samples around decisions/corrections,
+    # but their SQLite maintenance is audit work, not part of event->intent. Queue those
+    # windows and persist them in bounded batches on one low-frequency writer thread.
+    window_lock = threading.RLock()
+    window_event = threading.Event()
+    window_rows = deque()
+    window_stats = {"queued": 0, "flushed": 0, "flushes": 0, "max_queue": 0, "errors": 0}
+
+    def queue_window(window_id, agent_id, entities, anchor_time, kind):
+        row = {
+            "window_id": str(window_id), "agent_id": str(agent_id),
+            "entities": tuple(entities or ()), "anchor_time": float(anchor_time),
+            "kind": str(kind),
+        }
+        with window_lock:
+            window_rows.append(row)
+            window_stats["queued"] += 1
+            window_stats["max_queue"] = max(window_stats["max_queue"], len(window_rows))
+        window_event.set()
+        return row["window_id"]
+
+    def flush_windows(limit=64):
+        batch = []
+        with window_lock:
+            while window_rows and len(batch) < max(1, int(limit)):
+                batch.append(window_rows.popleft())
+        if not batch:
+            return 0
+        try:
+            written = journal.open_windows_batch(batch)
+        except Exception:
+            with window_lock:
+                for row in reversed(batch):
+                    window_rows.appendleft(row)
+                window_stats["errors"] += 1
+            raise
+        with window_lock:
+            window_stats["flushed"] += len(batch)
+            window_stats["flushes"] += 1
+        return written
+
+    def window_snapshot():
+        with window_lock:
+            return {**window_stats, "pending": len(window_rows)}
+
+    def window_writer():
+        while not engine.stop_event.is_set():
+            window_event.wait(0.25)
+            window_event.clear()
+            try:
+                while flush_windows():
+                    pass
+            except Exception as exc:
+                try:
+                    store.event(
+                        None, "warning", "feature_window_batch_flush_failed",
+                        f"Deferred feature-window flush failed: {type(exc).__name__}: {exc}",
+                        None,
+                    )
+                except Exception:
+                    pass
+                time.sleep(0.1)
+        try:
+            while flush_windows():
+                pass
+        except Exception:
+            pass
+
+    engine.feature_window_deferred_snapshot = window_snapshot
+    threading.Thread(
+        target=window_writer,
+        name="adaptive-ai-feature-window-writer",
+        daemon=True,
+    ).start()
+
     def watched():
         ts, values = engine._observation_watch_cache
         now = now_ts()
@@ -1222,30 +1332,32 @@ def install(core):
 
     original_submit = engine.executor.submit
     def submit(intent, features=None, action_index=None):
-        agent = store.get_agent_config(intent.agent_id)
+        with engine.lock:
+            agent = dict(getattr(engine, "agent_configs", {}).get(intent.agent_id) or {})
         policy = engine.models.get(intent.agent_id)
         if agent and policy and is_fast_reactive_agent(agent):
-            journal.open_window("decision:" + str(intent.intent_id), intent.agent_id,
-                                policy.schema.entities, intent.created_at, "decision")
+            queue_window("decision:" + str(intent.intent_id), intent.agent_id,
+                         policy.schema.entities, intent.created_at, "decision")
         return original_submit(intent, features, action_index)
     engine.executor.submit = submit
 
     original_process_agent = engine.process_agent
     def process_agent(agent, state_map, changed_entities=None):
+        correction = None
         if agent.get("target_entity") in set(changed_entities or ()) and is_fast_reactive_agent(agent):
             latest = getattr(engine, "_provenance_latest_events", {}).get(agent["target_entity"])
-            if latest and getattr(engine, "provenance", None):
-                event = engine.provenance.event(latest[1]) or {}
-                if event.get("origin") in {"user", "user_intent"}:
-                    policy = engine.models.get(agent["id"])
-                    if policy is None:
-                        with suppress(Exception):
-                            policy = engine.policy(agent)
-                    if policy is not None:
-                        journal.open_window("correction:" + str(latest[1]) + ":" + str(agent["id"]),
-                                            agent["id"], policy.schema.entities,
-                                            float(event.get("event_time") or now_ts()), "correction")
-        return original_process_agent(agent, state_map, changed_entities)
+            origin = str(latest[2] if latest and len(latest) > 2 else "unknown")
+            if latest and origin in {"user", "user_intent"}:
+                correction = (latest[1], float(latest[0]))
+        result = original_process_agent(agent, state_map, changed_entities)
+        if correction:
+            policy = engine.models.get(agent["id"])
+            if policy is not None:
+                queue_window(
+                    "correction:" + str(correction[0]) + ":" + str(agent["id"]),
+                    agent["id"], policy.schema.entities, correction[1], "correction",
+                )
+        return result
     engine.process_agent = process_agent
 
     migrated = _migrate_models(core)

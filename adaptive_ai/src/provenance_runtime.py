@@ -226,7 +226,9 @@ def install(core):
         # suppresses the duplicate.
         if journal.event_processed(event_id):
             return None
-        engine._provenance_latest_events[entity_id] = (event_time, event_id)
+        # Keep origin beside the durable event id so downstream inference wrappers never
+        # need a provenance SELECT merely to classify the target event.
+        engine._provenance_latest_events[entity_id] = (event_time, event_id, origin)
         previous_event = getattr(_TLS, "event_id", None)
         previous_origin = getattr(_TLS, "event_origin", None)
         _TLS.event_id, _TLS.event_origin = event_id, origin
@@ -254,7 +256,10 @@ def install(core):
                     entity_id, state, event_time=event_time, received_time=now_ts(),
                     source="ha_poll", origin=origin,
                 )
-                engine._provenance_latest_events[entity_id] = (event_time, event_id)
+            else:
+                event_id = known.get("event_id")
+                origin = str(known.get("origin") or UNKNOWN)
+            engine._provenance_latest_events[entity_id] = (event_time, event_id, origin)
         return original_queue_archive(state, force=force)
 
     engine._queue_archive_state = queue_archive_state
@@ -304,10 +309,10 @@ def install(core):
     original_submit = engine.executor.submit
 
     def decision_payload(intent, features):
+        # process_agent has already materialized the policy for any live inference.
+        # Provenance is observational here; never reopen agent configuration from SQLite
+        # simply to decorate a Shadow intent.
         policy = engine.models.get(intent.agent_id)
-        if policy is None:
-            agent = store.get_agent_config(intent.agent_id)
-            policy = engine.policy(agent) if agent else None
         schema_export = cached_schema(intent.agent_id, policy)
         generation = cached_generation(intent.agent_id)
         rt = engine.runtime.get(intent.agent_id) or {}
@@ -451,14 +456,16 @@ def install(core):
         before_pending = rt.get("pending")
         before_ack = (before_pending or {}).get("acknowledged_ts")
         event_id = None
+        event_origin = UNKNOWN
         if agent.get("target_entity") in set(changed_entities or ()):
             row = engine._provenance_latest_events.get(agent["target_entity"])
-            event_id = row[1] if row else None
+            if row:
+                event_id = row[1]
+                event_origin = str(row[2] if len(row) > 2 else UNKNOWN)
         old_event = getattr(_TLS, "event_id", None)
         old_origin = getattr(_TLS, "event_origin", None)
         if event_id:
-            event = journal.event(event_id) or {}
-            _TLS.event_id, _TLS.event_origin = event_id, event.get("origin") or UNKNOWN
+            _TLS.event_id, _TLS.event_origin = event_id, event_origin
         try:
             result = original_process_agent(agent, state_map, changed_entities)
         finally:
@@ -471,22 +478,22 @@ def install(core):
                 before_pending.get("decision_id"), event_id=event_id,
                 ack_time=before_pending.get("acknowledged_ts"),
             )
-        if event_id:
-            event = journal.event(event_id) or {}
-            if event.get("origin") in {"user", "user_intent"}:
-                # Existing manual-learning code remains authoritative. This row only
-                # supplies durable provenance and an idempotency identity for audit/replay.
-                for row in store.list_feedback(aid, limit=4):
-                    if "manual demonstration" not in str(row.get("reason") or ""):
-                        continue
-                    journal.record_experience(
-                        experience_key=f"manual:{event_id}:{aid}:{row['id']}",
-                        agent_id=aid, source="manual_demonstration", origin=event.get("origin") or UNKNOWN,
-                        source_event_id=event_id, action_index=row.get("action_index"),
-                        action_value=row.get("action_value"), reward=row.get("reward"),
-                        features=row.get("features"), metadata={"feedback_id": row.get("id"), "user_id": row.get("user_id")},
-                    )
-                    break
+        if event_id and event_origin in {"user", "user_intent"}:
+            # Existing manual-learning code remains authoritative. This row only
+            # supplies durable provenance and an idempotency identity for audit/replay.
+            # This rare explicit-user branch may write audit data, but the common target
+            # event path no longer performs a provenance SELECT before or after inference.
+            for row in store.list_feedback(aid, limit=4):
+                if "manual demonstration" not in str(row.get("reason") or ""):
+                    continue
+                journal.record_experience(
+                    experience_key=f"manual:{event_id}:{aid}:{row['id']}",
+                    agent_id=aid, source="manual_demonstration", origin=event_origin,
+                    source_event_id=event_id, action_index=row.get("action_index"),
+                    action_value=row.get("action_value"), reward=row.get("reward"),
+                    features=row.get("features"), metadata={"feedback_id": row.get("id"), "user_id": row.get("user_id")},
+                )
+                break
         return result
 
     engine.process_agent = process_agent
