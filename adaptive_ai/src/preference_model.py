@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 import math
+import threading
 
 from settings import OPTIONS
 from teaching import distance, signature
@@ -56,6 +57,17 @@ class LightingPreferenceModel:
 
     def __init__(self, store):
         self.store = store
+        self._cache_lock = threading.RLock()
+        self._rows_cache = {}
+
+    def invalidate(self, *agent_ids):
+        with self._cache_lock:
+            if not agent_ids:
+                self._rows_cache.clear()
+                return
+            for agent_id in agent_ids:
+                if agent_id:
+                    self._rows_cache.pop(str(agent_id), None)
 
     @staticmethod
     def supports(agent):
@@ -65,24 +77,46 @@ class LightingPreferenceModel:
         )
 
     def _rows(self, agent_id):
-        """Return durable active facts for a live/root agent without reinterpretation."""
+        """Return cached durable preference facts.
+
+        Manual feedback is sparse compared with realtime inference. The journal invalidates
+        this cache synchronously on record/status/undo, so the hot path never polls SQLite.
+        """
+        key = str(agent_id)
+        with self._cache_lock:
+            cached = self._rows_cache.get(key)
+            if cached is not None:
+                return cached
         with self.store.conn() as c:
             table = c.execute(
                 "SELECT 1 FROM sqlite_master WHERE type='table' AND name='manual_feedback_journal'"
             ).fetchone()
             if not table:
-                return []
-            rows = c.execute(
-                """SELECT * FROM manual_feedback_journal
-                   WHERE (agent_id=? OR root_agent_id=?)
-                     AND undone_ts IS NULL
-                   ORDER BY created_ts,feedback_id""",
-                (str(agent_id), str(agent_id)),
-            ).fetchall()
-        return [dict(row) for row in rows]
+                rows = []
+            else:
+                rows = [
+                    dict(row) for row in c.execute(
+                        """SELECT * FROM manual_feedback_journal
+                           WHERE (agent_id=? OR root_agent_id=?)
+                             AND undone_ts IS NULL
+                           ORDER BY created_ts,feedback_id""",
+                        (key, key),
+                    ).fetchall()
+                ]
+        for row in rows:
+            try:
+                parsed = json.loads(row.get("context_signature_json") or "{}")
+            except Exception:
+                parsed = None
+            row["_parsed_signature"] = parsed if isinstance(parsed, dict) and parsed else None
+        with self._cache_lock:
+            self._rows_cache[key] = rows
+        return rows
 
     @staticmethod
     def _parse_signature(row):
+        if "_parsed_signature" in row:
+            return row.get("_parsed_signature")
         try:
             value = json.loads(row.get("context_signature_json") or "{}")
         except Exception:
@@ -219,6 +253,10 @@ class LightingPreferenceModel:
 
     def predict(self, agent, policy, states, temporal, timestamp, *, episode_id=None):
         if not self.supports(agent):
+            return self.evaluate(agent, getattr(policy, "actions", ()), {}, episode_id=episode_id)
+        # Most agents have no explicit preference facts. Avoid a second full context
+        # signature/temporal-feature pass in that overwhelmingly common case.
+        if not self._rows(agent.get("id")):
             return self.evaluate(agent, getattr(policy, "actions", ()), {}, episode_id=episode_id)
         current = signature(policy, states, temporal, timestamp)
         return self.evaluate(
