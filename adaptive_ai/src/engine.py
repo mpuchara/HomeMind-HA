@@ -577,6 +577,29 @@ class Engine(threading.Thread):
     def take_control(self, agent, refresh=False):
         return self.executor.take_control(agent, refresh)
 
+    def event_dependencies(self, agent, policy=None):
+        """Entities whose change can materially alter this agent's next decision.
+
+        Policy schema already carries selected local/upstream predictors. RoomBelief's
+        additive home features also depend on occupancy sources in the target's own area.
+        Critically, we do *not* add every admitted presence source in the whole house.
+        """
+        deps = {str(agent.get("target_entity") or "")}
+        if policy is not None:
+            deps.update(str(eid) for eid in (getattr(policy.schema, "entities", ()) or ()))
+        area = self.context.area_for(agent.get("target_entity"))
+        if area:
+            deps.update(
+                str(eid)
+                for eid in getattr(self.context.home, "area_sources", {}).get(area, ())
+            )
+        try:
+            deps.update(str(eid) for eid in self.experiments.watches(agent["id"]))
+        except Exception:
+            pass
+        deps.discard("")
+        return deps
+
     def process(self, state_map, changed_entities=None):
         changed = set(changed_entities or ())
         if changed:
@@ -593,7 +616,7 @@ class Engine(threading.Thread):
                 continue
             if changed:
                 cached = self.models.get(agent["id"])
-                if cached is not None and agent["target_entity"] not in changed and not (changed & (set(cached.schema.entities) | self.context.admitted | self.experiments.watches(agent['id']))):
+                if cached is not None and not (changed & self.event_dependencies(agent, cached)):
                     continue
             groups.setdefault(agent["target_entity"], []).append(agent)
         for target, agents in groups.items():
