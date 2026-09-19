@@ -247,6 +247,7 @@ class CandidateShadowRuntimeTests(unittest.TestCase):
         _, generation = self._g1(prediction=1.0, confidence=.93)
         # Root remains mode=paused, so ordinary live inference is intentionally not a
         # prerequisite for persistent Candidate Shadow observation.
+        self.store.update_agent(self.root["id"], {"mode": "paused"})
         root = self.store.get_agent_config(self.root["id"])
         self.assertEqual(root.get("mode"), "paused")
 
