@@ -57,7 +57,7 @@ jobs:
       - run: docker build --build-arg BUILD_VERSION=${{ steps.version.outputs.version }} -t homemind:${{ steps.version.outputs.version }} adaptive_ai
       - run: python tools/smoke_image.py homemind:${{ steps.version.outputs.version }}
   package:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'pull_request' && github.head_ref == 'package-0.14.44')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
