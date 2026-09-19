@@ -337,12 +337,30 @@ def install(runtime):
 
         def fetch_with_circuit_breaker(history_self, *args, **kwargs):
             if HEAVY_JOBS.owner == "discovery":
-                with state_lock:
-                    if (
-                        time.monotonic()
-                        < state["recorder_backoff_until_monotonic"]
-                    ):
-                        return 0
+                # Backoff must throttle Recorder, not silently drop discovery coverage.
+                # Returning 0 here made the caller count a skipped chunk as completed,
+                # so one timeout could erase roughly two minutes of target history from
+                # classification. Wait cooperatively, then retry the same resilient
+                # request/split path. Realtime HA processing stays independent.
+                while not history_self.stop_event.is_set():
+                    with state_lock:
+                        remaining = (
+                            state["recorder_backoff_until_monotonic"]
+                            - time.monotonic()
+                        )
+                    if remaining <= 0:
+                        break
+                    cancel = getattr(history_self, "job_cancel_event", None)
+                    if cancel is not None and cancel.is_set():
+                        raise InterruptedError("History discovery cancelled during Recorder backoff")
+                    history_self.set_status(
+                        message=f"Recorder cooling down · retry in {max(1, int(remaining))} s",
+                        phase_detail="Discovery coverage is paused, not skipped",
+                        eta_source="Recorder circuit breaker",
+                    )
+                    history_self.stop_event.wait(min(1.0, max(0.05, remaining)))
+                if history_self.stop_event.is_set():
+                    raise InterruptedError("History discovery stopped during Recorder backoff")
             return original_fetch(history_self, *args, **kwargs)
 
         history_module.HistoryManager._fetch_history_resilient = fetch_with_circuit_breaker
