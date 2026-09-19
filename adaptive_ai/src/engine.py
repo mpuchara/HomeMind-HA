@@ -115,7 +115,9 @@ class Engine(threading.Thread):
             "timer_passes": 0,
             "idle_skips": 0,
             "last_timer_targets": 0,
+            "initial_full_passes": 0,
         }
+        self.initial_inference_pending = True
         self.models = {}
         self.context_relevance = {}
         self.last_state_count = 0
@@ -529,11 +531,18 @@ class Engine(threading.Thread):
                             with self.lock:
                                 self.dirty_entities.update(changed_entities)
                         continue
-                    if event_wakeup:
+                    if event_wakeup and changed_entities:
                         with self.lock:
                             self.inference_scheduler["event_passes"] += 1
-                        # An empty changed set is the intentional one-time startup pass.
                         self.process(state_map, changed_entities)
+                    elif self.initial_inference_pending:
+                        # Exactly one complete inference pass warms all qualified agents
+                        # after startup. Later empty wakeups (REST resync, queue/lifecycle
+                        # nudges) must never regain the old "process every agent" meaning.
+                        self.initial_inference_pending = False
+                        with self.lock:
+                            self.inference_scheduler["initial_full_passes"] += 1
+                        self.process(state_map, set())
                     else:
                         due_targets = self._due_inference_targets()
                         if due_targets:
@@ -585,6 +594,11 @@ class Engine(threading.Thread):
         Critically, we do *not* add every admitted presence source in the whole house.
         """
         deps = {str(agent.get("target_entity") or "")}
+        configured_inputs = agent.get("input_entities") or ()
+        deps.update(
+            str(eid) for eid in configured_inputs
+            if isinstance(eid, str) and eid and eid != "*"
+        )
         if policy is not None:
             deps.update(str(eid) for eid in (getattr(policy.schema, "entities", ()) or ()))
         area = self.context.area_for(agent.get("target_entity"))
@@ -616,7 +630,7 @@ class Engine(threading.Thread):
                 continue
             if changed:
                 cached = self.models.get(agent["id"])
-                if cached is not None and not (changed & self.event_dependencies(agent, cached)):
+                if not (changed & self.event_dependencies(agent, cached)):
                     continue
             groups.setdefault(agent["target_entity"], []).append(agent)
         for target, agents in groups.items():
