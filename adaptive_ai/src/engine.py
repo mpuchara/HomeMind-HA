@@ -120,6 +120,17 @@ class Engine(threading.Thread):
         self.initial_inference_pending = True
         self.models = {}
         self.context_relevance = {}
+        # Realtime routing cache. Event dispatch must not hit SQLite or recompute every
+        # agent's dependency set on each HA state_changed event.
+        self.agent_index_at = 0.0
+        self.agent_index_ttl_seconds = 5.0
+        self.agent_configs = {}
+        self.active_agents_by_target = {}
+        self.dependency_agents = {}
+        # A pass-level immutable revision snapshot is shared by all agents dispatched
+        # from one coalesced event pass. Thread-local binding preserves the existing
+        # process_agent(agent, states, changed) public signature used by extensions.
+        self._inference_tls = threading.local()
         self.last_state_count = 0
         self.last_poll = None
         self.error = None
@@ -139,11 +150,10 @@ class Engine(threading.Thread):
         self.entity_revisions = {}
         self.dirty_entities = set()
         self.last_trigger_entity = None
-        # CPU-heavy policy inference runs in Python and does not scale linearly with
-        # thread count. Eight workers can starve the HTTP/Ingress thread on Raspberry Pi
-        # during the initial all-agent pass. Keep enough parallelism for independent
-        # targets while leaving scheduler headroom for UI and HA event handling.
-        self.control_worker_count = min(4, max(1, int(os.cpu_count() or 1)))
+        # Policy inference is predominantly Python CPU work. More worker threads increase
+        # GIL contention and can starve Ingress on Raspberry Pi. Two workers retain limited
+        # overlap for SQLite/I/O while bounding CPU contention; single-core hosts stay at 1.
+        self.control_worker_count = min(2, max(1, int(os.cpu_count() or 1)))
         self.control_workers = ThreadPoolExecutor(
             max_workers=self.control_worker_count, thread_name_prefix="device-control"
         )
@@ -468,8 +478,10 @@ class Engine(threading.Thread):
         """
         now = float(now_ts() if timestamp is None else timestamp)
         due = set()
+        self._refresh_agent_index()
         with self.lock:
             runtime = list(self.runtime.items())
+            configs = dict(self.agent_configs)
         for aid, rt in runtime:
             try:
                 deadline = float(rt.get("next_periodic_inference_ts") or 0.0)
@@ -477,8 +489,8 @@ class Engine(threading.Thread):
                 deadline = 0.0
             if deadline <= 0.0 or deadline > now:
                 continue
-            agent = STORE.get_agent_config(aid)
-            if not agent or not agent.get("enabled") or agent.get("mode") == "paused":
+            agent = configs.get(str(aid))
+            if not agent:
                 rt["next_periodic_inference_ts"] = 0.0
                 continue
             due.add(str(agent.get("target_entity") or ""))
@@ -581,10 +593,72 @@ class Engine(threading.Thread):
             registry = dict(self.entity_registry)
         model = MultiHorizonPolicy(agent, state_map, registry, hint_entities, STORE.get_model(aid), self.context_relevance.get(aid), context_engine=self.context)
         self.models[aid] = model
+        # The policy schema is part of event routing. Refresh the index before the next
+        # event instead of rebuilding dependencies inside the current inference.
+        self.agent_index_at = 0.0
         return model
 
     def take_control(self, agent, refresh=False):
         return self.executor.take_control(agent, refresh)
+
+    def _refresh_agent_index(self, force=False):
+        """Refresh live agent configs and entity->agent routing outside the hot event path."""
+        now = time.monotonic()
+        with self.lock:
+            if (
+                not force
+                and self.agent_configs
+                and now - float(self.agent_index_at or 0.0) < self.agent_index_ttl_seconds
+            ):
+                return
+            previous_active = set(self.agent_configs)
+
+        configs = STORE.list_agent_configs()
+        active = {}
+        by_target = {}
+        dependency_agents = {}
+        for agent in configs:
+            aid = str(agent.get("id") or "")
+            if (
+                not aid
+                or not agent.get("enabled")
+                or agent.get("mode") == "paused"
+                or agent.get("training_state") != "qualified"
+            ):
+                continue
+            active[aid] = agent
+            target = str(agent.get("target_entity") or "")
+            if target:
+                by_target.setdefault(target, []).append(aid)
+            policy = self.models.get(aid)
+            for eid in self.event_dependencies(agent, policy):
+                dependency_agents.setdefault(str(eid), set()).add(aid)
+
+        removed = previous_active - set(active)
+        with self.lock:
+            self.agent_configs = active
+            self.active_agents_by_target = by_target
+            self.dependency_agents = dependency_agents
+            self.agent_index_at = now
+        for aid in removed:
+            try:
+                self.experiments.cancel(aid, "mode, training or availability changed")
+            except Exception:
+                pass
+
+    def _active_agents_for_changes(self, changed):
+        self._refresh_agent_index()
+        with self.lock:
+            configs = dict(self.agent_configs)
+            dependency_agents = {
+                eid: set(ids) for eid, ids in self.dependency_agents.items()
+            }
+        if not changed:
+            return list(configs.values())
+        ids = set()
+        for eid in changed:
+            ids.update(dependency_agents.get(str(eid), ()))
+        return [configs[aid] for aid in ids if aid in configs]
 
     def event_dependencies(self, agent, policy=None):
         """Entities whose change can materially alter this agent's next decision.
@@ -617,23 +691,24 @@ class Engine(threading.Thread):
     def process(self, state_map, changed_entities=None):
         changed = set(changed_entities or ())
         if changed:
-            # Extend the event's strict-priority window from the actual inference pass,
-            # after websocket debounce. This prevents a slow multi-target pass from
-            # handing CPU back to replay halfway through the decisions it was woken to make.
             TRAINING_BUDGET.request_interactive_window(
                 1.0, reason="realtime_inference"
             )
+
+        agents = self._active_agents_for_changes(changed)
         groups = {}
-        for agent in STORE.list_agent_configs():
-            if not agent["enabled"] or agent["mode"] == "paused" or agent.get("training_state") != "qualified":
-                self.experiments.cancel(agent['id'], 'mode, training or availability changed')
-                continue
-            if changed:
-                cached = self.models.get(agent["id"])
-                if not (changed & self.event_dependencies(agent, cached)):
-                    continue
+        for agent in agents:
             groups.setdefault(agent["target_entity"], []).append(agent)
-        for target, agents in groups.items():
+
+        # One immutable revision snapshot per coalesced pass. Every worker shares it;
+        # Executor will reject an intent if any dependency changes before dispatch.
+        with self.lock:
+            pass_revision = self.state_revision
+            revision_snapshot = dict(self.entity_revisions)
+            context_revision = self.context.home.revision
+        snapshot = (state_map, pass_revision, revision_snapshot, context_revision)
+
+        for target, target_agents in groups.items():
             active = self.in_flight.get(target)
             if active is not None and not active.done():
                 if changed and target not in self.resubmit_targets:
@@ -645,27 +720,42 @@ class Engine(threading.Thread):
                         self.wake_event.set()
                     active.add_done_callback(retry_completed)
                 continue
-            self.in_flight[target] = self.control_workers.submit(self.process_target, agents, changed)
+            self.in_flight[target] = self.control_workers.submit(
+                self.process_target, target_agents, changed, snapshot
+            )
         for target in list(self.in_flight):
             if target not in groups and self.in_flight[target].done():
                 del self.in_flight[target]
 
-    def process_target(self, agents, changed_entities=None):
-        with self.lock:
-            revision = self.state_revision
-            states = dict(self.state_map)
-        for agent in agents:
-            if self.stop_event.is_set():
-                return
-            try:
-                latest = STORE.get_agent_config(agent["id"])
-                if latest and latest["enabled"] and latest["mode"] != "paused" and latest.get("training_state") == "qualified":
-                    if changed_entities:
-                        self.process_agent(latest, states, changed_entities)
-                    else:
-                        self.process_agent(latest, states)
-            except Exception as exc:
-                STORE.event(agent["id"], "error", "agent_error", str(exc), {"trace": traceback.format_exc(limit=4)})
+    def process_target(self, agents, changed_entities=None, snapshot=None):
+        if snapshot is None:
+            with self.lock:
+                states = dict(self.state_map)
+                revision = self.state_revision
+                revisions = dict(self.entity_revisions)
+                context_revision = self.context.home.revision
+        else:
+            states, revision, revisions, context_revision = snapshot
+
+        self._inference_tls.entity_revisions = revisions
+        self._inference_tls.context_revision = context_revision
+        self._inference_tls.state_revision = revision
+        try:
+            for agent in agents:
+                if self.stop_event.is_set():
+                    return
+                try:
+                    # Agent snapshots come from the routing cache. Control safety is still
+                    # revalidated from durable config inside Executor before any HA call.
+                    self.process_agent(agent, states, changed_entities if changed_entities else None)
+                except Exception as exc:
+                    STORE.event(agent["id"], "error", "agent_error", str(exc), {"trace": traceback.format_exc(limit=4)})
+        finally:
+            for name in ("entity_revisions", "context_revision", "state_revision"):
+                try:
+                    delattr(self._inference_tls, name)
+                except AttributeError:
+                    pass
         if self.state_revision != revision:
             self.wake_event.set()
 
@@ -861,21 +951,38 @@ class Engine(threading.Thread):
             rt["decision_reason"] = "Agent is paused"
             return
         inference_started = time.perf_counter()
-        with self.lock:
-            context_revision = self.context.home.revision
-            state_map = dict(self.state_map)
-            target_revision = self.entity_revisions.get(agent['target_entity'], 0)
-            input_revisions = dict(self.entity_revisions)
+        snapshot_revisions = getattr(self._inference_tls, "entity_revisions", None)
+        snapshot_context_revision = getattr(self._inference_tls, "context_revision", None)
+        if snapshot_revisions is None:
+            with self.lock:
+                context_revision = self.context.home.revision
+                target_revision = self.entity_revisions.get(agent['target_entity'], 0)
+        else:
+            context_revision = (
+                self.context.home.revision
+                if snapshot_context_revision is None
+                else snapshot_context_revision
+            )
+            target_revision = snapshot_revisions.get(agent['target_entity'], 0)
         min_inference_gap = max(0.05, float(OPTIONS.get("realtime_inference_debounce_ms", 75)) / 1000.0)
         if not changed_entities and now_ts() - rt["last_inference_ts"] < min_inference_gap:
             return
         rt["last_inference_ts"] = now_ts()
 
-        hint_entities, automation_infos = AUTOMATION_KNOWLEDGE.hints_for_target(agent["target_entity"])
         policy = self.policy(agent)
         features, labels, context_meta = policy.features(state_map, self.temporal_history, at_ts=now_ts())
         context_meta.update(policy.selection_meta or {})
-        context_meta["automation_hint_entities"] = len(hint_entities)
+        automation_scan_marker = getattr(AUTOMATION_KNOWLEDGE, "last_scan", None)
+        if rt.get("_automation_scan_marker") != automation_scan_marker:
+            hint_entities, automation_infos = AUTOMATION_KNOWLEDGE.hints_for_target(agent["target_entity"])
+            rt["_automation_scan_marker"] = automation_scan_marker
+            rt["_automation_hint_entities"] = len(hint_entities)
+            rt["automation_priors"] = [
+                {"entity_id": x.get("entity_id"), "name": x.get("name"), "enabled": bool(x.get("enabled")),
+                 "context_count": len(x.get("context_entities") or [])}
+                for x in automation_infos[:8]
+            ]
+        context_meta["automation_hint_entities"] = int(rt.get("_automation_hint_entities") or 0)
         context_meta["whole_home_entities"] = len(state_map)
         context_meta["trigger_entities"] = sorted(set(changed_entities or ()))[:8]
         context_meta["primary_local_sensors"] = list((policy.selection_meta or {}).get("primary_local_sensors") or [])
@@ -884,12 +991,6 @@ class Engine(threading.Thread):
         context_meta["causal_presence_scores"] = dict((policy.selection_meta or {}).get("causal_presence_scores") or {})
         context_meta["upstream_sensors"] = list((policy.selection_meta or {}).get("upstream_sensors") or [])
         rt["context_meta"] = context_meta
-        rt["automation_priors"] = [
-            {"entity_id": x.get("entity_id"), "name": x.get("name"), "enabled": bool(x.get("enabled")),
-             "context_count": len(x.get("context_entities") or [])}
-            for x in automation_infos[:8]
-        ]
-
         teaching_revision = self.teaching.revision(aid)
         chosen, confidence, arms, horizon, support, novelty = policy.predict(features)
         composer = self.decision_composer
@@ -1015,7 +1116,9 @@ class Engine(threading.Thread):
                 f"Historical policy bootstrap desires {chosen['value']}; confidence {confidence:.0%}, support {support:.0%}, novelty {novelty:.0%}"),
             experiment_token=trial['token'] if trial else '',
             contributors=tuple((x['feature'], x['contribution']) for x in rt['top_context']),
-            context_dependencies=tuple((eid, input_revisions.get(eid, 0)) for eid in sorted(set(policy.schema.entities) | set(trial['snapshot'] if trial else ()))))
+            context_dependencies=self._intent_dependencies(
+                policy, trial, snapshot_revisions
+            ))
         rt['last_intent'] = intent.export()
         rt['behavior_summary'] = self.behavior_summary(agent, rt)
         TELEMETRY.observe('inference', (time.perf_counter()-inference_started)*1000)
@@ -1024,6 +1127,16 @@ class Engine(threading.Thread):
             TELEMETRY.observe('event_to_intent', (time.perf_counter()-received)*1000)
         self._schedule_next_inference(agent, rt)
         return self.executor.submit(intent, features, chosen['index'])
+
+    def _intent_dependencies(self, policy, trial, snapshot_revisions=None):
+        entities = sorted(
+            set(policy.schema.entities)
+            | set((trial or {}).get("snapshot") or ())
+        )
+        if snapshot_revisions is not None:
+            return tuple((eid, snapshot_revisions.get(eid, 0)) for eid in entities)
+        with self.lock:
+            return tuple((eid, self.entity_revisions.get(eid, 0)) for eid in entities)
 
     def behavior_summary(self, agent, rt):
         forecast = rt.get('context_meta', {}).get('home_forecast', {})
