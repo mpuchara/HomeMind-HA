@@ -3,7 +3,7 @@
 Date: 2026-09-19  
 Branch: `fix-f24-needed-light-photometric-leakage`  
 Base: `6d1631ae11e5d269f6160df654cf2a4a5ff8b7df`  
-Release candidate: `0.14.36`  
+Release candidate: `0.14.37`  
 Benchmark contract: F24 v2  
 Seeds: 11, 23, 37  
 Replicas per scenario/split: 1
@@ -113,9 +113,9 @@ The OFF confirmation never weakens manual priority: once the user physically tur
 
 ## CI verification
 
-GitHub Actions run `35442243133` validates the 0.14.36 Raspberry Pi UI/Candidate read-path fixes on the unchanged F24 v2 contract:
-- Python 3.11: 950 tests, all passing;
-- Python 3.13: 950 tests, all passing;
+GitHub Actions run `35443577449` validates the 0.14.37 Candidate/UI event-feed isolation fixes on the unchanged F24 v2 contract:
+- Python 3.11: 955 tests, all passing;
+- Python 3.13: 955 tests, all passing;
 - compileall: passing;
 - JS syntax checks: passing;
 - Stage 17 history-cost smoke: passing;
