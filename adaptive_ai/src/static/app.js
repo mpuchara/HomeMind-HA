@@ -199,7 +199,12 @@ function renderAgents(){
   bindAgentDetails();
 }
 function renderEvents(events){$('#events').innerHTML=events.length?events.map(e=>`<div class="event"><time>${esc(e.created_at)}</time><div><strong>${esc(e.message)}</strong><span class="kind">${esc(e.kind)}</span></div></div>`).join(''):'<div class="empty">No activity yet.</div>';}
-async function setMode(id,mode){if(mode==='control'&&!confirm('Control wyłączy automatyzacje sterujące tą encją i zatrzyma ich trwające akcje. Wyłącza całe automatyzacje, także te obsługujące kilka urządzeń. Shadow nie włączy ich ponownie. Włączyć Control?'))return;try{await api(`api/agents/${id}`,{method:'PATCH',body:JSON.stringify({mode})});await load();}catch(e){alert('Nie udało się zmienić trybu: '+e.message);await load();}}
+async function setMode(id,mode){
+  if(mode==='control'&&!confirm('Control wyłączy automatyzacje sterujące tą encją i zatrzyma ich trwające akcje. Wyłącza całe automatyzacje, także te obsługujące kilka urządzeń. Shadow nie włączy ich ponownie. Włączyć Control?'))return;
+  try{await api(`api/agents/${id}`,{method:'PATCH',body:JSON.stringify({mode})});}
+  catch(e){alert('Nie udało się zmienić trybu: '+e.message);return;}
+  try{await load();}catch(e){console.error('Mode changed successfully; UI refresh will retry automatically',e);}
+}
 async function verifyControl(id){if(!confirm('This sends the device its CURRENT value again through the same Home Assistant service path used by Control. It should not intentionally change the setting. Continue?'))return;try{const r=await api(`api/agents/${id}/verify-control`,{method:'POST',body:'{}'});alert(`Control path OK: ${r.service}`);await load();}catch(e){alert('Control verification failed: '+e.message);await load();}}
 async function trainAgent(id){
   if(!confirm('Start training this agent now? Low-memory mode trains only one agent at a time; all other agents stay idle.'))return;

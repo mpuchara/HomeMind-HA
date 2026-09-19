@@ -89,12 +89,15 @@ def decorate_candidate_status(store, result, *, now=None):
         return result
 
     parent_generation_id = generation["parent_generation_id"]
+    child_event_id = str(child.get("event_id") or "")
     parent_decision = _decision_for_event(
-        store, parent_generation_id, child.get("event_id")
+        store, parent_generation_id, child_event_id
     )
-    if parent_decision is None:
-        # A pre-upgrade database may lack a matching event row.  Falling back to a fresh
-        # observed parent row is still better than replaying today's parent policy.
+    if parent_decision is None and not child_event_id.startswith("candidate-passive:"):
+        # A pre-upgrade database may lack a matching event row. Falling back to a fresh
+        # observed parent row is acceptable only for legacy shared events. A passive
+        # Candidate-only observation must keep Parent Desired unknown rather than pairing
+        # it with an unrelated stale Parent prediction.
         parent_decision = _latest_decision(store, parent_generation_id)
     if (
         not parent_decision

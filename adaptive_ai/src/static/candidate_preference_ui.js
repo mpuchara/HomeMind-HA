@@ -12,6 +12,7 @@
     .find(el=>cardRef(el)===String(ref));
 
   const ensureMetric=(root,key,label,value)=>{
+    if(!root)return;
     let node=root.querySelector(`[data-pref-metric="${key}"]`);
     if(!node){
       node=document.createElement('div');
@@ -19,8 +20,13 @@
       node.innerHTML='<span></span><b></b>';
       root.appendChild(node);
     }
-    node.querySelector('span').textContent=label;
-    node.querySelector('b').textContent=value;
+    let labelNode=node.querySelector('span'),valueNode=node.querySelector('b');
+    // Other Candidate decorators may replace/prune metric descendants during the same
+    // refresh. Repair the tiny metric shell instead of dereferencing a transient null.
+    if(!labelNode){labelNode=document.createElement('span');node.prepend(labelNode);}
+    if(!valueNode){valueNode=document.createElement('b');node.appendChild(valueNode);}
+    labelNode.textContent=label;
+    valueNode.textContent=value;
   };
 
   const decisionValue=(c,v)=>{

@@ -1,5 +1,6 @@
 import tempfile
 import time
+import threading
 import unittest
 from contextlib import contextmanager
 from pathlib import Path
@@ -127,7 +128,26 @@ class CandidateShadowRuntimeTests(unittest.TestCase):
             process_agent=lambda *args, **kwargs: None,
             own_command_echo=lambda *args, **kwargs: False,
             wake_event=SimpleNamespace(set=lambda: None),
+            lock=threading.RLock(), state_revision=0, state_map=self._states(),
+            _inference_tls=threading.local(),
+            context=SimpleNamespace(
+                area_for=lambda _entity: None,
+                home=SimpleNamespace(area_sources={}),
+            ),
         )
+        def on_state_changed(data):
+            entity_id = data.get("entity_id")
+            if not entity_id:
+                return None
+            with self.engine.lock:
+                self.engine.state_revision += 1
+                new_state = data.get("new_state")
+                if new_state is None:
+                    self.engine.state_map.pop(entity_id, None)
+                else:
+                    self.engine.state_map[entity_id] = new_state
+            return None
+        self.engine.on_state_changed = on_state_changed
         self.engine.policy = lambda agent: DummyPolicy(self.store, agent)
         self.core = SimpleNamespace(
             STORE=self.store, ENGINE=self.engine, Handler=FakeHandler,
@@ -222,6 +242,43 @@ class CandidateShadowRuntimeTests(unittest.TestCase):
         self.assertAlmostEqual(card["candidate_confidence"], .93)
         self.assertEqual(card["shadow_model_revision"], "g1-rev")
         self.assertEqual(card["shadow_schema_revision"], "10")
+
+    def test_passive_state_changed_observer_keeps_candidate_shadow_alive_when_parent_is_paused(self):
+        _, generation = self._g1(prediction=1.0, confidence=.93)
+        # Root remains mode=paused, so ordinary live inference is intentionally not a
+        # prerequisite for persistent Candidate Shadow observation.
+        self.store.update_agent(self.root["id"], {"mode": "paused"})
+        root = self.store.get_agent_config(self.root["id"])
+        self.assertEqual(root.get("mode"), "paused")
+
+        new_state = {
+            "entity_id": "light.shadow", "state": "on", "attributes": {},
+            "context": {}, "last_updated": "2026-09-19T20:00:00+00:00",
+        }
+        self.engine.on_state_changed({"entity_id": "light.shadow", "new_state": new_state})
+        observed = self.manager.drain_candidate_shadow_events(force=True, max_roots=8)
+        self.assertEqual(observed, 1)
+
+        with self.store.conn() as db:
+            child = dict(db.execute(
+                """SELECT * FROM candidate_generation_decisions
+                   WHERE generation_id=? ORDER BY ts DESC LIMIT 1""",
+                (generation["generation_id"],),
+            ).fetchone())
+            parent_count = db.execute(
+                """SELECT COUNT(*) FROM candidate_generation_decisions
+                   WHERE event_id=? AND generation_id=?""",
+                (child["event_id"], f"root:{self.root['id']}"),
+            ).fetchone()[0]
+        self.assertTrue(str(child["event_id"]).startswith("candidate-passive:"))
+        self.assertEqual(child["current"], 1.0)
+        self.assertEqual(child["desired"], 1.0)
+        self.assertEqual(parent_count, 0)
+        card = self.manager.status(self.root["id"])
+        self.assertTrue(card["shadow_active"])
+        self.assertEqual(card["candidate_desired"], 1.0)
+        self.executor.service.assert_not_called()
+        self.executor.release_control.assert_not_called()
 
     def test_candidate_shadow_never_dispatches_home_assistant_service(self):
         self._g1(prediction=1.0)

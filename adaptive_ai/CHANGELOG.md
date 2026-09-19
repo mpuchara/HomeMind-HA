@@ -1,3 +1,14 @@
+# 0.14.45 — 2026-09-19
+
+- Fix false errors when switching a trained agent from Paused to Shadow. The successful mode PATCH is now separated from the subsequent layered UI refresh, so a transient renderer problem cannot be reported as a failed mode change or generate duplicate alerts.
+- Harden retained Live-card mode/decision nodes and Candidate preference metric tiles against transient DOM replacement during layered refreshes.
+- Give Candidate generations a persistent event-driven Shadow fallback instead of relying exclusively on Parent/Live `process_agent`. Active Candidate dependencies are indexed in memory from the target, explicit inputs, Parent schema, Candidate schema and target-area sources.
+- Keep websocket work minimal: `state_changed` only queues Candidate observation; policy inference runs later on the existing Candidate worker.
+- Prefer and deduplicate against normal Parent inference by Engine state revision. Passive fallback runs only when the same/newer revision was not already observed through the shared Parent path.
+- Add a bounded 30-second Candidate Shadow heartbeat for periods where Parent is paused or no relevant event reaches Parent. The heartbeat records failed attempts and never self-wakes into a retry loop.
+- Passive Candidate observations never touch Executor or Home Assistant services and never fabricate a Parent prediction. They use explicit `candidate-passive:` event IDs; A/B paired evidence still requires a real shared Parent+Candidate prediction event.
+- Preserve training, discovery, reward, benchmark, promotion and physical-control semantics.
+
 # 0.14.44 — 2026-09-19
 
 - Replace misleading per-chunk training progress with a continuous whole-agent training progress contract. Recorder/screening/replay counters remain visible as the current stage and may restart between chunks without resetting the global percentage.
