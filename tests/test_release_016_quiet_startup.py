@@ -27,7 +27,7 @@ core = entry.core
 assert core._release_016_guard_installed is True
 contract = core.release_016_resource_guard_contract
 assert contract['startup'] == 'saved_agents_and_realtime_then_fresh_install_discovery'
-assert contract['automatic_background_discovery'] == 'fresh_install_once_then_explicit_rescan'
+assert contract['automatic_background_discovery'] == 'fresh_install_once_plus_one_time_deep_reconciliation_then_explicit_rescan'
 assert contract['background_archive_cpu'] == '20pct_default_duty_cycle_when_explicit'
 assert contract['recorder_timeout'] == '120s_circuit_breaker_no_recursive_burst'
 snapshot = core.RELEASE_016_RESOURCE_GUARD()
@@ -42,7 +42,9 @@ assert snapshot['automation_scan_workers'] == 1
         self.assertIn('Saved agents + realtime only; no Recorder/API backfill during startup', source)
         self.assertIn('INITIAL_DISCOVERY_META_KEY = "initial_discovery_complete"', source)
         self.assertIn('_initial_discovery_needed(store)', source)
-        self.assertIn('threshold_override=1, reason="fresh_install"', source)
+        self.assertIn('reason = "fresh_install" if initial_needed else "deep_history_reconcile"', source)
+        self.assertIn('DEEP_DISCOVERY_META_KEY = "discovery_deep_history_complete"', source)
+        self.assertIn('deep_reconcile_needed = bool(marker) and not bool(deep_marker)', source)
         self.assertIn('core.startup_snapshot().get("ready")', source)
         # The History thread still never runs a synchronous/periodic Recorder bootstrap.
         # Fresh-install work goes through the async single-flight request instead.
