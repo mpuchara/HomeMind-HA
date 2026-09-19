@@ -470,6 +470,13 @@ def policy_features(self, state_map, temporal, at_ts=None):
 
 
 def teaching_signature(policy, states, temporal, timestamp):
+    """Build a Teach signature from the same versioned v12 observation contract.
+
+    The feature vector itself is shared with live/replay through policy.features.
+    Persist explicit schema/policy metadata as part of the Teaching signature so labels
+    from an older feature contract are never silently compared as if they belonged to the
+    current representation.
+    """
     if not list(policy.schema.entities):
         return None
     features, labels, meta = policy.features(states, temporal, at_ts=timestamp)
@@ -477,6 +484,14 @@ def teaching_signature(policy, states, temporal, timestamp):
         return None
     result = {" / ".join(labels[i]): float(features.get(i, 0.0))
               for i in sorted(labels) if i > 0 and i < policy.dims}
+    result["meta:home_known"] = 1.0 if meta.get("home_known") else 0.0
+    result["meta:feature_schema_version"] = float(
+        getattr(policy.schema, "VERSION", SCHEMA_VERSION) or 0
+    )
+    result["meta:policy_version"] = float(
+        getattr(policy, "VERSION", POLICY_VERSION) or 0
+    )
+    result["meta:signature_contract"] = 3.0
     if policy.agent.get("target_property") == "option_index":
         options = (states.get(policy.agent["target_entity"], {}).get("attributes") or {}).get("options")
         if not options:

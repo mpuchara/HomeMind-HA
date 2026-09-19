@@ -74,6 +74,8 @@ New events that fall into an already open window receive the same protection. Re
 
 `MultiHorizonPolicy.features`, historical `SQLiteTemporalTracker` and `Teaching.point_context/signature` use the same schema v12 extractor. Historical replay merges sparse `entity_history` with the bounded high-resolution buffer for selected features and observes both event-time and received-time cutoffs.
 
+Teach signatures also persist `meta:feature_schema_version`, `meta:policy_version`, `meta:home_known` and a signature-contract marker. This keeps an old Teaching label from being silently interpreted as if it belonged to a newer feature representation. The brief early-v12 labels that were already created without these metadata remain valid because their feature values were already produced by schema v12; no old label is rewritten.
+
 The feature metadata exposes reconstruction status rather than silently substituting a fictitious lag.
 
 ## Regression coverage
@@ -86,6 +88,7 @@ Acceptance tests cover:
 - arbitrary categories are non-ordinal,
 - `home:known` is explicit,
 - live and replay vectors are identical on a millisecond sequence,
+- Teach produces the same signature from that live/replay timeline and carries explicit schema/policy versions,
 - a delayed sample is not visible before its received time,
 - out-of-order samples rejected by the live temporal contract are not eligible for the high-resolution journal,
 - sparse fast numeric context is marked non-reconstructable,
