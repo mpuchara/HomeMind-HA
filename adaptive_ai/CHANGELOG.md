@@ -1,3 +1,11 @@
+# 0.14.41 — 2026-09-19
+
+- Restore exactly one automatic low-memory controllable-device discovery pass on a genuinely clean installation, after HTTP/realtime startup is ready. Established installs with existing agents remain quiet and periodic Recorder maintenance stays disabled.
+- Restore the pre-async-Rescan activity threshold override of 1 through the full async discovery path, including the TrainingQueue discovery-priority wrapper.
+- Separate discovery from training: auto-discovered agents remain WAITING/PAUSED and are never placed into the initial-training queue. The user explicitly chooses which device to train with **Train**.
+- Refresh the agent list immediately after a completed discovery run so newly detected devices appear without waiting for a later polling cycle.
+- Preserve one-heavy-job resource protection, explicit Train/Resume/Rebuild/Teach queueing, existing model/reward/qualification semantics and physical-control guards.
+
 # 0.14.27 — 2026-09-18
 
 - Make Correct history genuinely observed-only for live generations. The Correct chart and point inspector now read the recorded `decision_history` plus the target entity's observed state history directly; they no longer invoke Teach-RL policy replay merely to draw the chart.

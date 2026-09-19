@@ -3,6 +3,7 @@ let lastHistory={};
 let lastAgents=[];
 let lastStatus={};
 let loadInFlight=false;
+let lastDiscoveryAgentRefresh=0;
 window.__adaptiveAiRuntimeReady=null; // unknown until status answers; server gates half-built runtime
 const openAgentDetails=new Set(JSON.parse(localStorage.getItem('adaptiveAiOpenAgentDetails')||'[]').map(String));
 const $=s=>document.querySelector(s);
@@ -59,11 +60,16 @@ async function load(){
     $('#connection').textContent='App API error: '+e.message;
     if(!wasReady)return;
   }
+  const completedDiscoveryRun=(!lastHistory?.discovery_job_active&&lastHistory?.discovery_classified)?Number(lastHistory?.last_run||0):0;
+  const refreshAfterDiscovery=completedDiscoveryRun>0&&completedDiscoveryRun!==lastDiscoveryAgentRefresh;
+  if(refreshAfterDiscovery&&earlyAgents)earlyAgents.catch(()=>null);
+  const agentsRequest=refreshAfterDiscovery?api('api/agents'):(earlyAgents||api('api/agents'));
   const [agentsResult,eventsResult]=await Promise.allSettled([
-    earlyAgents||api('api/agents'),
+    agentsRequest,
     earlyEvents||api('api/events?limit=60'),
   ]);
   if(agentsResult.status==='fulfilled'){
+    if(refreshAfterDiscovery)lastDiscoveryAgentRefresh=completedDiscoveryRun;
     lastAgents=agentsResult.value;
     window.__adaptiveAiAgents=lastAgents;
     window.dispatchEvent(new CustomEvent('adaptive-ai:agents',{detail:lastAgents}));
@@ -92,7 +98,7 @@ function renderHistory(h,status={}){
     ['context_refresh','Sensors','Refresh all eligible sensors'],
     ['rebuilding','Learn','Screen + replay historical behaviour'],
     ['benchmarking','Validate','Held-out behaviour benchmark'],
-    ['ready','Ready','Qualified agents enter Shadow'],
+    ['ready','Ready','Choose devices to train'],
   ];
   const phaseAliases={manual_ready:'fast_targets',automation_scan:'fast_targets',discovering:'fast_targets',enriching_targets:'fast_targets',ready_enriching:'fast_context',enriching_context:'fast_context',importing:'fast_context',fast_training:'rebuilding',training:'rebuilding'};
   const canonical=phaseAliases[phase]||phase;
@@ -138,7 +144,7 @@ function sortedFilteredAgents(){
 function noAgentsMessage(h){
   if(discoveryPending(h))return `Recorder discovery is still running (${discoveryProgressText(h)}). Activity classification has not run yet, so 0 agents is not a final result.`;
   if(h?.phase==='ready')return 'No active controllable target met the discovery criteria. Try Rescan devices; config/diagnostic entities are intentionally ignored.';
-  return 'Discovery is preparing target activity classification. Auto-discovered agents enter the initial-training FIFO after classification.';
+  return 'Discovery is preparing target activity classification. Detected agents will stay idle until you choose which ones to Train.';
 }
 function persistOpenAgentDetails(){localStorage.setItem('adaptiveAiOpenAgentDetails',JSON.stringify([...openAgentDetails]));}
 function bindAgentDetails(){document.querySelectorAll('.agent-details[data-agent-id]').forEach(d=>d.addEventListener('toggle',()=>{const id=String(d.dataset.agentId);if(d.open)openAgentDetails.add(id);else openAgentDetails.delete(id);persistOpenAgentDetails();}));}
@@ -157,7 +163,7 @@ function renderAgents(){
     const trainProgress=Math.round(Number(a.training_progress||0)*100);
     const neverTrained=training==='waiting'||training==='needs_retrain'||(paused&&benchmark==null&&!a.training_cursor_ts);
     const tq=a.training_queue||null, initialQueued=neverTrained&&a.auto_created&&tq&&['queued','active'].includes(String(tq.state||''));
-    const decisionReason=training==='needs_retrain'?'NEEDS_RETRAIN: policy or feature schema changed; a rebuild is required.':initialQueued?(tq.state==='active'?'Initial historical training is starting now.':`Initial historical training is queued at position ${Number(tq.position||0)}. One heavy job runs at a time.`):neverTrained?(a.auto_created?'Initial training is waiting for FIFO admission.':'Training has not started. Press Train to build the first policy.'):paused?`Training paused. Behaviour confidence ${benchmark==null?'—':pct(benchmark)} (${benchmarkSamples} samples). Resume continues from the saved cursor.`:indexing?`Training this agent ${trainProgress}% — other agents remain idle to protect Home Assistant resources.`:(rt.decision_reason||'Waiting for inference');
+    const decisionReason=training==='needs_retrain'?'NEEDS_RETRAIN: policy or feature schema changed; a rebuild is required.':initialQueued?(tq.state==='active'?'Historical training is starting now.':`Training is queued at position ${Number(tq.position||0)}. One heavy job runs at a time.`):neverTrained?(a.auto_created?'Discovered and waiting. Choose this device and press Train to build its first policy.':'Training has not started. Press Train to build the first policy.'):paused?`Training paused. Behaviour confidence ${benchmark==null?'—':pct(benchmark)} (${benchmarkSamples} samples). Resume continues from the saved cursor.`:indexing?`Training this agent ${trainProgress}% — other agents remain idle to protect Home Assistant resources.`:(rt.decision_reason||'Waiting for inference');
     const service=rt.last_service?`${rt.last_service_ok===false?'✕':'✓'} ${esc(rt.last_service)}`:'No service call sent yet';
     return `<article class="agent card ${paused?'paused-agent':''} ${indexing?'training-agent':''}">
       <div class="agent-head"><div class="agent-title"><h3>${esc(a.name)} ${badge}</h3><div class="target">${esc(a.target_entity)} · ${esc(a.target_property)}</div></div><span class="mode ${esc(a.mode)}">${esc(a.mode).toUpperCase()}</span></div>

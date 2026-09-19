@@ -20,7 +20,10 @@ class OperationalFirstRuntimeTests(unittest.TestCase):
         started = threading.Event()
         release = threading.Event()
 
-        def fake_bootstrap():
+        seen = []
+
+        def fake_bootstrap(threshold_override=None):
+            seen.append(threshold_override)
             started.set()
             release.wait(2.0)
 
@@ -29,6 +32,7 @@ class OperationalFirstRuntimeTests(unittest.TestCase):
 
         self.assertTrue(manager.request_discovery_rescan())
         self.assertTrue(started.wait(1.0))
+        self.assertEqual(seen, [1])
         self.assertTrue(manager.discovery_job_active)
         self.assertFalse(manager.request_discovery_rescan())
 
@@ -38,11 +42,13 @@ class OperationalFirstRuntimeTests(unittest.TestCase):
             time.sleep(0.01)
         self.assertFalse(manager.discovery_job_active)
 
-    def test_quiet_start_never_schedules_periodic_recorder_bootstrap(self):
+    def test_quiet_start_has_one_fresh_install_discovery_not_periodic_bootstrap(self):
         source = inspect.getsource(release_016_guard.install)
         self.assertNotIn("original_bootstrap(history_self)", source)
         self.assertIn("request_discovery_rescan", source)
-        self.assertIn("Operational-first runtime", source)
+        self.assertIn('reason="fresh_install"', source)
+        self.assertIn("INITIAL_DISCOVERY_META_KEY", source)
+        self.assertIn("There is no", source)
 
     def test_rescan_route_is_async_and_does_not_run_discovery_in_http_handler(self):
         source = (ROOT / "adaptive_ai/src/main.py").read_text(encoding="utf-8")
@@ -51,6 +57,7 @@ class OperationalFirstRuntimeTests(unittest.TestCase):
         block = source[source.index(marker):]
         block = block[:block.index('if path.startswith("/api/agents/") and path.endswith("/train")')]
         self.assertIn("request_discovery_rescan", block)
+        self.assertIn('threshold_override=1, reason="manual"', block)
         self.assertNotIn("auto_discover_agents", block)
         self.assertNotIn("AUTOMATION_KNOWLEDGE.scan", block)
         self.assertIn("202", block)

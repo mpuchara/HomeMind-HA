@@ -412,12 +412,14 @@ class HistoryManager(threading.Thread):
             if phase_detail is not None:
                 self.phase_detail = str(phase_detail)
 
-    def request_discovery_rescan(self):
-        """Run Recorder/discovery only after an explicit user request.
+    def request_discovery_rescan(self, *, threshold_override=1, reason="manual"):
+        """Run the bounded Recorder/discovery job outside the caller thread.
 
-        Normal startup and idle runtime never start this heavy path automatically.
-        The job remains serialized by the existing HEAVY_JOBS discovery slot and the
-        TrainingQueue priority bridge.
+        Fresh installs and explicit Rescan share this path so they cannot diverge in
+        classification semantics.  Ordinary restarts stay quiet: release_016_guard
+        schedules this automatically only while the durable initial-discovery marker is
+        absent.  The job remains serialized by the existing HEAVY_JOBS discovery slot
+        and the TrainingQueue priority bridge.
         """
         with self.discovery_job_lock:
             if self.discovery_job_active:
@@ -427,7 +429,7 @@ class HistoryManager(threading.Thread):
 
         def worker():
             try:
-                self.bootstrap_and_train()
+                self.bootstrap_and_train(threshold_override=threshold_override)
             except Exception as exc:
                 self.error = f"{type(exc).__name__}: {exc}"
                 self.set_status("error", message=self.error)
@@ -441,7 +443,7 @@ class HistoryManager(threading.Thread):
 
         threading.Thread(
             target=worker,
-            name="adaptive-ai-manual-discovery",
+            name="adaptive-ai-discovery",
             daemon=True,
         ).start()
         return True
@@ -639,7 +641,7 @@ class HistoryManager(threading.Thread):
                 pool.shutdown(wait=False, cancel_futures=True)
         return inserted
 
-    def _manual_lightweight_cycle(self, current, controllable, end_ts):
+    def _manual_lightweight_cycle(self, current, controllable, end_ts, threshold_override=None):
         start_ts = end_ts - float(OPTIONS["history_bootstrap_days"]) * 86400.0
         last = parse_ts(STORE.meta_get("manual_discovery_refresh"))
         if last:
@@ -649,7 +651,7 @@ class HistoryManager(threading.Thread):
         self.set_status(
             "manual_ready", 0.10,
             "Low-memory discovery: refreshing controllable-device history only",
-            phase_detail="Cold-start agents train automatically through the single-job FIFO; whole-home context stays idle",
+            phase_detail="Discovery only; detected agents remain waiting until you choose Train",
         )
         if controllable and end_ts > refresh_start:
             self._import_section(
@@ -670,10 +672,16 @@ class HistoryManager(threading.Thread):
             eta_source="single-pass local archive scan",
             phase_detail="Activity classification is now running; agents may appear after this pass",
         )
-        created = self.auto_discover_agents(current, start_ts)
+        created = self.auto_discover_agents(
+            current, start_ts, threshold_override=threshold_override
+        )
         self.auto_created += created
         with self.lock:
             self.discovery_classified = True
+        # A completed classification is the durable cold-start boundary even when it
+        # legitimately creates zero agents.  This prevents every normal restart from
+        # paying Recorder/discovery cost again for an empty or inactive home.
+        STORE.meta_set("initial_discovery_complete", iso_from_ts(end_ts))
         # Populate diagnostics from current state only; this does not import context history.
         self._eligible_rebuild_context()
         STORE.meta_set("manual_discovery_refresh", iso_from_ts(end_ts))
@@ -686,13 +694,13 @@ class HistoryManager(threading.Thread):
         ])
         self.set_status(
             "ready", 1.0,
-            f"Low-memory mode ready · {q} trained / {waiting} waiting or queued",
+            f"Discovery ready · {q} trained / {waiting} waiting for manual selection",
             stage_eta_seconds=0, work_done=0, work_total=0, work_unit="agents",
             eta_source="idle",
-            phase_detail="Initial training is queued automatically; only one heavy training job runs at a time",
+            phase_detail="Choose which discovered devices to train; no agent starts automatically",
         )
 
-    def bootstrap_and_train(self):
+    def bootstrap_and_train(self, threshold_override=None):
         with self.engine.lock:
             current = dict(self.engine.state_map)
         if not current:
@@ -729,7 +737,10 @@ class HistoryManager(threading.Thread):
 
         if HEAVY_JOBS.acquire('discovery'):
             try:
-                self._manual_lightweight_cycle(current, controllable, end_ts)
+                self._manual_lightweight_cycle(
+                    current, controllable, end_ts,
+                    threshold_override=threshold_override,
+                )
             finally:
                 HEAVY_JOBS.release('discovery')
 

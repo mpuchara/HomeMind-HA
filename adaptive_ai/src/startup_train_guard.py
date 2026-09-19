@@ -22,67 +22,27 @@ from __future__ import annotations
 import time
 
 
-COLD_START_STATES = {"waiting", "paused", "needs_retrain"}
-
-
 def _install_initial_training_bridge(history, queue, store):
-    """Queue the first real model for auto-discovered agents, never a Candidate.
+    """Keep discovery and training deliberately separate.
 
-    Candidate generations are meaningful only after a persisted Live/base policy exists.
-    Discovery may therefore create many WAITING agents, but their first historical build
-    is admitted through the existing single-heavy-job priority queue.  This keeps Raspberry Pi
-    resource bounds intact while removing the cold-start dead end where only Candidate
-    cards could appear.
-
-    The bridge also repairs existing auto-created WAITING/PAUSED agents from previous
-    releases. TrainingQueue deduplication makes repeated discovery/rescan calls harmless.
+    Auto-discovery creates WAITING agents only.  It must never enqueue a first model,
+    because the user chooses which discovered devices are worth training.  The function
+    name is retained as a compatibility hook for the composed startup stack, but it now
+    installs no discovery wrapper and performs no queue admission.
     """
     if getattr(history, "_initial_training_bridge_installed", False):
         return history
 
-    original_discover = history.auto_discover_agents
-
-    def discover_and_queue_initial(*args, **kwargs):
-        created = original_discover(*args, **kwargs)
-        enqueued = []
-        for agent in store.list_agent_configs():
-            aid = str(agent.get("id") or "")
-            if (
-                not aid
-                or not agent.get("enabled")
-                or not agent.get("auto_created")
-                or str(agent.get("training_state") or "") not in COLD_START_STATES
-                or store.get_model(aid) is not None
-            ):
-                continue
-            try:
-                status = queue.enqueue(aid, rebuild=True, reason="initial_training")
-                if isinstance(status, dict):
-                    enqueued.append({
-                        "agent_id": aid,
-                        "state": status.get("state"),
-                        "position": status.get("position"),
-                    })
-            except Exception as exc:
-                store.event(
-                    aid, "error", "initial_training_queue_failed",
-                    f"Could not queue initial agent training: {type(exc).__name__}: {exc}",
-                    {"error": str(exc)},
-                )
-        history.initial_training_enqueued = enqueued
-        if enqueued:
-            store.event(
-                None, "info", "initial_training_queued",
-                f"Queued initial historical training for {len(enqueued)} auto-discovered agent(s)",
-                {"agents": enqueued, "resource_policy": "single_heavy_job_priority_queue"},
-            )
-        return created
-
-    history.auto_discover_agents = discover_and_queue_initial
     history._initial_training_bridge_installed = True
     history.initial_training_enqueued = []
+    store.event(
+        None,
+        "info",
+        "manual_initial_training_ready",
+        "Auto-discovered agents remain waiting until Train is pressed explicitly",
+        {"resource_policy": "manual_agent_selection"},
+    )
     return history
-
 
 def install(runtime):
     core = runtime.core
@@ -145,7 +105,7 @@ def install(runtime):
         # Teach-RL owns a context-selection preflight and remains worker-driven. Plain
         # Train/Rebuild/Resume can safely claim an idle slot immediately because the
         # HistoryManager itself performs the expensive replay in its own worker thread.
-        if str(reason) not in ("teach_rl", "initial_training") and isinstance(result, dict) and result.get("state") == "queued":
+        if str(reason) != "teach_rl" and isinstance(result, dict) and result.get("state") == "queued":
             try:
                 if HEAVY_JOBS.owner is None and not self._history_active_ids():
                     self._try_start_head()
@@ -241,9 +201,9 @@ def install(runtime):
     core.startup_train_guard_contract = {
         "status_until_ready": "lightweight_only",
         "training_queue_order": "before_history_discovery",
-        "training_queue_priority_order": "interactive_then_user_then_initial_fifo_within_priority",
+        "training_queue_priority_order": "interactive_then_explicit_user_fifo",
         "explicit_train_idle_slot": "immediate_admission_attempt",
-        "initial_auto_agent_training": "first_model_in_place_via_single_heavy_job_fifo",
+        "initial_auto_agent_training": "disabled_manual_device_selection_required",
         "candidate_before_base_model": "forbidden_by_candidate_manager",
         "worker_failure": "recover_and_continue",
         "internal_runtime_available_semantics": "preserved_for_extension_installers",
