@@ -34,7 +34,7 @@ DEFAULT_OPTIONS = {
     "poll_seconds": 30,
     "proactive_tick_seconds": 1,
     # The 1 s engine tick is a lightweight deadline scheduler, not a global inference loop.
-    "fast_idle_inference_interval_seconds": 10,
+    "fast_idle_inference_interval_seconds": 30,
     "idle_inference_interval_seconds": 30,
     "realtime_inference_debounce_ms": 25,
     "prediction_lead_seconds": 1,  # reactive default: act ~1s before the historical/manual action
