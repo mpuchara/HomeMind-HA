@@ -37,6 +37,14 @@
   };
   const activeCandidateFor=id=>document.querySelector(`.candidate-agent[data-candidate-parent="${CSS.escape(String(id))}"]`);
   const setText=(node,value)=>{if(node&&node.textContent!==value)node.textContent=value;};
+  const TRAINING_REASON_LABELS={
+    autonomous_continuation:'Autonomous Candidate training',
+    teach_rl:'Candidate correction training',
+    manual_rebuild:'Candidate rebuild',
+    training:'Agent training',
+    resume_training:'Agent training',
+    full_rebuild:'Agent rebuild',
+  };
 
   async function autonomous(ref,button){
     const old=button?.textContent||'Autonomous learn';
@@ -140,6 +148,8 @@
       if(active){
         const panel=document.querySelector('#taskPanel');
         if(panel){
+          const reason=String(active.reason||'training');
+          const reasonLabel=TRAINING_REASON_LABELS[reason]||'Background training';
           const lp=status.low_power_runtime||{};
           const duty=Math.round(Number(lp.training_cpu_duty_cycle||0)*100);
           const slice=Math.round(Number(lp.max_continuous_work_ms||0));
@@ -149,7 +159,7 @@
           const budget=duty?`CPU budget ${duty}%${slice?` · max slice ${slice} ms`:''}${replayBatch?` · replay batch ${replayBatch}`:''}`:'Pi-safe CPU budget';
           const observedText=observed?` · longest slice ${observed} ms${overruns?` · ${overruns} overrun${overruns===1?'':'s'}`:''}`:'';
           const timing=panel.querySelector('.history-timing span');
-          if(timing)timing.textContent=`${timing.textContent||''} ${budget}${observedText}. Training yields between bounded work slices so Ingress and realtime control keep CPU priority.`.trim();
+          if(timing)timing.textContent=`${timing.textContent||''} ${reasonLabel} · ${budget}${observedText}. Training yields between bounded work slices so Ingress and realtime control keep CPU priority.`.trim();
         }
       }
       return result;
