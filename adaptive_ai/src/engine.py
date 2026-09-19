@@ -101,6 +101,12 @@ class Engine(threading.Thread):
         super().__init__(name="adaptive-ai-engine")
         self.stop_event = threading.Event()
         self.wake_event = threading.Event()
+        # Startup gate: initial HA snapshot/registry work may touch thousands of states.
+        # Do not let the first all-agent inference burst compete with Ingress before the
+        # runtime has finished composing and the UI readiness endpoint is available.
+        # Direct process/process_agent calls remain unchanged; only the background loop
+        # waits for initialize_runtime() to explicitly open the gate.
+        self.inference_enabled = threading.Event()
         self.runtime = {}
         self.models = {}
         self.context_relevance = {}
@@ -368,6 +374,15 @@ class Engine(threading.Thread):
                     if event_wakeup:
                         self.dirty_entities.clear()
                 if state_map:
+                    if not self.inference_enabled.is_set():
+                        # Keep ingest/archive/context warm during construction, but avoid
+                        # the expensive first all-agent prediction pass until HTTP/runtime
+                        # startup is fully ready. Dirty entities stay accumulated and are
+                        # consumed by the wake issued when the gate opens.
+                        if changed_entities:
+                            with self.lock:
+                                self.dirty_entities.update(changed_entities)
+                        continue
                     self.process(state_map, changed_entities if event_wakeup else None)
             except Exception as exc:
                 msg = f"{type(exc).__name__}: {exc}"
