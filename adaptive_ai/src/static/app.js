@@ -192,7 +192,21 @@ function renderAgents(){
 function renderEvents(events){$('#events').innerHTML=events.length?events.map(e=>`<div class="event"><time>${esc(e.created_at)}</time><div><strong>${esc(e.message)}</strong><span class="kind">${esc(e.kind)}</span></div></div>`).join(''):'<div class="empty">No activity yet.</div>';}
 async function setMode(id,mode){if(mode==='control'&&!confirm('Control wyłączy automatyzacje sterujące tą encją i zatrzyma ich trwające akcje. Wyłącza całe automatyzacje, także te obsługujące kilka urządzeń. Shadow nie włączy ich ponownie. Włączyć Control?'))return;try{await api(`api/agents/${id}`,{method:'PATCH',body:JSON.stringify({mode})});await load();}catch(e){alert('Nie udało się zmienić trybu: '+e.message);await load();}}
 async function verifyControl(id){if(!confirm('This sends the device its CURRENT value again through the same Home Assistant service path used by Control. It should not intentionally change the setting. Continue?'))return;try{const r=await api(`api/agents/${id}/verify-control`,{method:'POST',body:'{}'});alert(`Control path OK: ${r.service}`);await load();}catch(e){alert('Control verification failed: '+e.message);await load();}}
-async function trainAgent(id){if(!confirm('Start training this agent now? Low-memory mode trains only one agent at a time; all other agents stay idle.'))return;try{await api(`api/agents/${id}/train`,{method:'POST',body:'{}'});await load();}catch(e){alert('Train failed: '+e.message);await load();}}
+async function trainAgent(id){
+  if(!confirm('Start training this agent now? Low-memory mode trains only one agent at a time; all other agents stay idle.'))return;
+  try{
+    await api(`api/agents/${id}/train`,{method:'POST',body:'{}'});
+  }catch(e){
+    alert('Train failed: '+e.message);
+    try{await load();}catch(_){}
+    return;
+  }
+  // Queue admission succeeded. A later renderer/refresh problem must never be reported
+  // as a failed Train request, because that encourages duplicate clicks/jobs.
+  try{await load();}catch(e){
+    console.error('Training was accepted; UI refresh will retry automatically',e);
+  }
+}
 async function resumeLearning(id){if(!confirm('Resume learning from the saved historical cursor? Existing model and benchmark are preserved.'))return;try{await api(`api/agents/${id}/resume`,{method:'POST',body:'{}'});await load();}catch(e){alert('Resume failed: '+e.message);await load();}}
 async function resetLearning(id){if(!confirm('FULL REBUILD: clear this agent model, benchmark and saved cursor, then index all locally archived history from the beginning? Use this after adding/changing sensors.'))return;await api(`api/agents/${id}/learning`,{method:'DELETE'});load();}
 async function removeAgent(id){if(!confirm('Delete this agent and its learned policy? Auto-discovery may recreate it if the device remains active.'))return;await api(`api/agents/${id}`,{method:'DELETE'});load();}
