@@ -1,10 +1,10 @@
 {
-  "version": "0.14.29",
+  "version": "0.14.30",
   "release_date": "2026-09-19",
-  "base_version": "0.14.28",
+  "base_version": "0.14.29",
   "base_commit": "6d1631ae11e5d269f6160df654cf2a4a5ff8b7df",
-  "release_status": "release-0.14.29-fast-light-off-confirmation",
-  "tests_passed": 891,
+  "release_status": "release-0.14.30-http-first-inference-gate",
+  "tests_passed": 894,
   "profile": "rpi4-low-memory-automatic-initial-training",
   "manual_agent_training": false,
   "max_concurrent_training_jobs": 1,
@@ -25,8 +25,8 @@
   "confidence_final_min_independent_episodes": 12,
   "confidence_final_min_per_action": 4,
   "confidence_semantics": "presence probability, forecast uncertainty, expected action utility, data coverage, empirical policy quality, preference alignment and decision strength remain distinct runtime quantities",
-  "startup": "http-first; runtime/database work remains in the background initializer",
-  "startup_ingress": "saved agents and realtime become usable before automatic Recorder maintenance; first History cycle does no Recorder or automation-config backfill; automatic heavy maintenance has a minimum 60s grace",
+  "startup": "http-first; initial HA snapshot/context ingestion completes before the background inference gate opens",
+  "startup_ingress": "HTTP/runtime readiness gets a 3 s head start before the first proactive all-agent inference pass; realtime changes observed during the grace remain dirty and are processed afterwards",
   "ui_polling": "polling_guard coalesces duplicate GETs; candidate-live also suppresses requests when no Candidate exists; mutations bypass all read brokers",
   "training_cpu_budget": "explicit historical Train/Rebuild targets 20% cooperative duty cycle with a 50 ms continuous-work slice; legacy shipped defaults 25%/75 ms migrate automatically",
   "training_cpu_budget_note": "application-level cooperative wall-clock budget, not a Linux cgroup hard quota; an individual blocking SQLite call can exceed the target before the next checkpoint, and real Raspberry Pi verification remains required",
@@ -39,8 +39,8 @@
   "release_017_lifeline": "installed after release_016_guard and before core.main; read-side availability and training scheduling only, no model/label/history/generation mutation",
   "migration": "additive startup repair only; models, raw archive, feedback, Candidate lineage, TrialRecords, Teach labels, settings and rollback state remain preserved",
   "physical_control": "unchanged; repaired agents return to Shadow and Control still requires qualified state plus all existing guards",
-  "pi4": "0.14.18 targets the observed ~94% CPU spike and second-open blank Ingress UI at the transition from REPLAY COMPLETE to model/benchmark finalization; on-device verification is still required",
-  "ci_status": "fast-light feature-contract v2 plus 6 s statistical OFF confirmation validated in GitHub Actions run 35404551525; release-head validation follows metadata/version update",
+  "pi4": "0.14.30 addresses blank/very slow Ingress at add-on start by gating the first all-agent inference burst and capping inference concurrency; on-device verification remains required",
+  "ci_status": "0.14.30 startup inference gate and bounded inference worker pool validated in GitHub Actions run 35428266370; F24 quality metrics unchanged",
   "training_slice_budget": "adaptive-ai-index workers call a shared CooperativeTrainingBudget; expensive temporal tracker loops yield between entities/events and finalization is no longer outside the throttle",
   "finalization_lifeline": "HEAVY_JOBS remains owned through final gc.collect(), so /api/status and /api/agents stay on lightweight lifeline reads until the worker is actually finished",
   "finalization_progress": "post-replay UI now exposes bounded stages: replay complete, policy serialization, benchmark save, qualification, checkpoint complete",
@@ -83,7 +83,7 @@
   "product_benchmark_topology_contract": "sensor_moved changes the future Entity Registry area mapping for the same entity_id and the changed mapping is passed into every evaluated runtime",
   "product_benchmark_manual_override_contract": "manual_change emits explicit target provenance with context.user_id; fast targets now delegate to the authoritative Engine manual-hold path. F24 v2 measures zero manual_override_violations and runtime_manual_hold_ticks_mean=115 across seeds 11,23,37 without changing benchmark thresholds or scenario logic",
   "product_benchmark_report_artifact": "GitHub Actions uploads product-benchmark-f24-py311/product-benchmark-f24.json for the final 3-seed composed-runtime run",
-  "product_benchmark_unmet_criteria_status": "GitHub Actions run 35404551525 on unchanged F24 v2 leaves only needed_light_not_worse_than_fixed_by_more_than_2pp unmet",
+  "product_benchmark_unmet_criteria_status": "GitHub Actions run 35428266370 on unchanged F24 v2 leaves only needed_light_not_worse_than_fixed_by_more_than_2pp unmet",
   "product_benchmark_summary": {
     "seeds": [
       11,
@@ -98,7 +98,7 @@
     "production_premature_off_events_mean": 1.6666666666666667,
     "production_chatter_events_mean": 1.3333333333333333,
     "production_corrections_per_100_episodes_mean": 127.77777777777779,
-    "production_inference_mean_ms_host": 70.51318541805605,
+    "production_inference_mean_ms_host": 74.26183682638896,
     "runtime_manual_hold_ticks_mean": 115,
     "manual_override_violations_mean": 0
   },
@@ -109,5 +109,8 @@
   "feature_contract_compatibility": "persisted schema v12 models without feature_contract_version remain contract v1; fresh/rebuilt models use v2, so existing vectors are never reinterpreted",
   "fast_light_photometric_contract": "v2 removes own-action lux leakage: when a light is ON, illuminance uses a causal pre-action ambient baseline when available; unresolved startup ON remains unknown",
   "fast_light_health_feature_contract": "v2 centres nominal fast-light validity/transport-quality metadata so repeated healthy columns do not accumulate OFF class-frequency bias",
-  "fast_light_off_confirmation": "historical_policy_bootstrap OFF from an already-ON light must remain continuously recommended for 6 s; ON stays immediate and manual/scoped-instruction/preference/experiment OFF bypasses confirmation"
+  "fast_light_off_confirmation": "historical_policy_bootstrap OFF from an already-ON light must remain continuously recommended for 6 s; ON stays immediate and manual/scoped-instruction/preference/experiment OFF bypasses confirmation",
+  "startup_inference_gate": "background Engine inference is closed during runtime composition and opens only after startup.ready; first proactive inference is deferred 3 s to preserve Ingress responsiveness",
+  "realtime_inference_workers": "device-control ThreadPoolExecutor is capped at min(4, os.cpu_count()) instead of 8 to avoid Python/GIL scheduler starvation on Raspberry Pi",
+  "initial_snapshot_inference": "initial REST snapshot is context/history warm-up, not a realtime transition; it no longer marks every entity dirty and therefore does not force a startup all-agent event burst"
 }
