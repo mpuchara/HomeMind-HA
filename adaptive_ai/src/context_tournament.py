@@ -493,6 +493,11 @@ class ContextTournament:
                         aid, challenger, sample, actual_idx, action_count, now
                     )
                     scored += 1
+            # Residual learning is durable model state, not disposable telemetry. Preserve
+            # the restart contract while collapsing N challenger writes into one SQLite
+            # transaction per observed target transition.
+            if scored:
+                self._flush_shadow_models()
 
         predictions = {}
         for challenger in challengers:
