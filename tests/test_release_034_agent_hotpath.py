@@ -222,7 +222,7 @@ class AgentHotPathTests(unittest.TestCase):
         self.assertNotIn("journal.record(", on_state)
         self.assertIn("queue_observation(", refresh)
         self.assertNotIn("journal.record(", refresh)
-        self.assertIn("engine.agent_configs", watched)
+        self.assertIn('getattr(engine, "agent_configs", {})', watched)
         self.assertIn("record_batch", source)
         self.assertIn("adaptive-ai-feature-journal-writer", source)
 
