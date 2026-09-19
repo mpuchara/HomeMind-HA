@@ -12,6 +12,7 @@ Architecture boundary:
 The diagnostics layer only observes persisted Tournament state after the fact.
 """
 import json
+import threading
 import time
 
 from settings import OPTIONS, parse_ts
