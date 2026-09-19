@@ -150,6 +150,11 @@ class ManualFeedbackJournal:
 
     def _decision_link(self, agent_id, selected_ts, decision_id=None, episode_id=None):
         """Resolve exact/nearby provenance without inventing historical attribution."""
+        # Shadow decision provenance is batched off the realtime path. Manual feedback is
+        # an interactive durability boundary, so flush this agent before linking.
+        flush = getattr(self.store, "_flush_provenance_decisions", None)
+        if callable(flush):
+            flush(str(agent_id))
         selected_ts = float(selected_ts)
         with self.store.conn() as c:
             if not _table_exists(c, "provenance_decisions"):
