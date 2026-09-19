@@ -214,12 +214,14 @@ def install(runtime):
                 marker = store.meta_get(INITIAL_DISCOVERY_META_KEY, "")
                 with state_lock:
                     state["initial_discovery_completed"] = bool(marker)
-                if (
-                    core.startup_snapshot().get("ready")
-                    and not marker
-                    and _initial_discovery_needed(store)
-                    and not history_self.discovery_job_active
-                ):
+                initial_needed = not marker and _initial_discovery_needed(store)
+                if initial_needed and not core.startup_snapshot().get("ready"):
+                    # History starts during runtime construction, just before the public
+                    # ready flag flips. Do not turn that tiny ordering gap into a 60 s
+                    # apparent cold-start stall.
+                    history_self.stop_event.wait(0.25)
+                    continue
+                if initial_needed and not history_self.discovery_job_active:
                     request = getattr(history_self, "request_discovery_rescan", None)
                     if callable(request) and request(
                         threshold_override=1, reason="fresh_install"
