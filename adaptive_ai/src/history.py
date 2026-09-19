@@ -66,6 +66,9 @@ class HistoryManager(threading.Thread):
         self.temporal_replay_stats = {}
         self.job_cancel_event = None
         self.agent_jobs_lock = threading.RLock()
+        self.discovery_job_lock = threading.RLock()
+        self.discovery_job_active = False
+        self.discovery_job_started_at = None
         if bool(OPTIONS.get("manual_agent_training", True)):
             paused = STORE.pause_stale_training_agents()
             if paused:
@@ -92,6 +95,8 @@ class HistoryManager(threading.Thread):
                 "training_rows_per_second": self.training_rows_per_second,
                 "history_rows_per_second": self.history_rows_per_second,
                 "temporal_replay": dict(self.temporal_replay_stats),
+                "discovery_job_active": bool(self.discovery_job_active),
+                "discovery_job_started_at": self.discovery_job_started_at,
             }
         return d
 
@@ -400,6 +405,40 @@ class HistoryManager(threading.Thread):
                 self.eta_source = str(eta_source)
             if phase_detail is not None:
                 self.phase_detail = str(phase_detail)
+
+    def request_discovery_rescan(self):
+        """Run Recorder/discovery only after an explicit user request.
+
+        Normal startup and idle runtime never start this heavy path automatically.
+        The job remains serialized by the existing HEAVY_JOBS discovery slot and the
+        TrainingQueue priority bridge.
+        """
+        with self.discovery_job_lock:
+            if self.discovery_job_active:
+                return False
+            self.discovery_job_active = True
+            self.discovery_job_started_at = now_ts()
+
+        def worker():
+            try:
+                self.bootstrap_and_train()
+            except Exception as exc:
+                self.error = f"{type(exc).__name__}: {exc}"
+                self.set_status("error", message=self.error)
+                STORE.event(
+                    None, "error", "manual_discovery_error", self.error,
+                    {"trace": traceback.format_exc(limit=6)},
+                )
+            finally:
+                with self.discovery_job_lock:
+                    self.discovery_job_active = False
+
+        threading.Thread(
+            target=worker,
+            name="adaptive-ai-manual-discovery",
+            daemon=True,
+        ).start()
+        return True
 
     def run(self):
         while not self.stop_event.is_set():
