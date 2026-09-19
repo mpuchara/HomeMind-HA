@@ -26,9 +26,9 @@ import trial_queue_main as entry
 core = entry.core
 assert core._release_016_guard_installed is True
 contract = core.release_016_resource_guard_contract
-assert contract['startup'] == 'saved_agents_and_realtime_before_recorder'
-assert contract['first_background_pass'] == 'automation_scan_suppressed'
-assert contract['background_archive_cpu'] == '20pct_default_duty_cycle'
+assert contract['startup'] == 'saved_agents_and_realtime_only'
+assert contract['automatic_background_discovery'] == 'disabled_explicit_rescan_only'
+assert contract['background_archive_cpu'] == '20pct_default_duty_cycle_when_explicit'
 assert contract['recorder_timeout'] == '120s_circuit_breaker_no_recursive_burst'
 snapshot = core.RELEASE_016_RESOURCE_GUARD()
 assert snapshot['background_grace_seconds'] >= 60
@@ -36,14 +36,13 @@ assert snapshot['background_cpu_duty_cycle'] == 0.20
 assert snapshot['automation_scan_workers'] == 1
 ''')
 
-    def test_history_first_cycle_is_local_only_before_heavy_grace(self):
+    def test_history_first_cycle_remains_local_only_until_explicit_rescan(self):
         source = (ROOT/'adaptive_ai/src/release_016_guard.py').read_text(encoding='utf-8')
         self.assertIn('def quiet_start(history_self)', source)
         self.assertIn('Saved agents + realtime only; no Recorder/API backfill during startup', source)
-        self.assertIn('history_self.stop_event.wait(state["background_grace_seconds"])', source)
-        self.assertIn('core.OPTIONS["automation_scan_enabled"] = False', source)
-        self.assertLess(source.index('quiet_done = quiet_start(history_self)'),
-                        source.index('original_bootstrap(history_self)'))
+        self.assertIn('request_discovery_rescan', source)
+        self.assertIn('Operational-first runtime', source)
+        self.assertNotIn('original_bootstrap(history_self)', source)
 
     def test_background_archive_and_recorder_have_separate_circuit_breakers(self):
         source = (ROOT/'adaptive_ai/src/release_016_guard.py').read_text(encoding='utf-8')

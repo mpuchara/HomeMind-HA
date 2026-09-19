@@ -173,6 +173,7 @@ class Teaching:
         self.last_record = {}
         self.dropped_records = 0
         self.last_prune = 0
+        self.last_flush = time.monotonic()
         self.history_slots = threading.BoundedSemaphore(1)
         self.feedback_journal = None
         self.candidate_feedback_listener = None
@@ -531,21 +532,29 @@ class Teaching:
                 self.dropped_records += 1
             self.buffer.append((aid, timestamp, current, desired))
 
-    def flush(self):
+    def flush(self, force=True):
+        now = time.monotonic()
+        if not force and len(self.buffer) < 256 and now - self.last_flush < 5.0:
+            return 0
         if not self.lock.acquire(blocking=False):
-            return
+            return 0
         try:
+            if not self.buffer:
+                self.last_flush = now
+                return 0
             if not self.store.lock.acquire(blocking=False):
-                return
+                return 0
             try:
                 batch = list(self.buffer)
-                if batch:
-                    with self.store.conn() as c:
-                        c.executemany("INSERT OR REPLACE INTO decision_history VALUES(?,?,?,?)", batch)
-                        if time.time() - self.last_prune > 3600:
-                            c.execute("DELETE FROM decision_history WHERE ts<?", (time.time() - 31 * 86400,))
-                            self.last_prune = time.time()
-                    self.buffer.clear()
+                with self.store.conn() as c:
+                    c.executemany("INSERT OR REPLACE INTO decision_history VALUES(?,?,?,?)", batch)
+                    if time.time() - self.last_prune > 3600:
+                        c.execute("DELETE FROM decision_history WHERE ts<?", (time.time() - 31 * 86400,))
+                        self.last_prune = time.time()
+                for _ in range(min(len(batch), len(self.buffer))):
+                    self.buffer.popleft()
+                self.last_flush = time.monotonic()
+                return len(batch)
             finally:
                 self.store.lock.release()
         finally:

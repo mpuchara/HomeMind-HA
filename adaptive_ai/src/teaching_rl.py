@@ -204,6 +204,7 @@ class RLTeaching:
         raw = json.dumps(list(inputs or ["*"]), separators=(",", ":"))
         with self.store.lock, self.store.conn() as c:
             c.execute("UPDATE agents SET input_entities=? WHERE id=?", (raw, str(agent_id)))
+        self.store.touch_agent_index()
 
     def _recover_interrupted_jobs(self):
         """Queue state is in-memory; restore temporary selectors after a restart."""

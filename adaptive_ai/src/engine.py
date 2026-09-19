@@ -1,6 +1,7 @@
 from concurrent.futures import ThreadPoolExecutor
 import json
 import math
+import os
 from control import same_value
 import threading
 import time
@@ -17,6 +18,7 @@ from executor import Executor
 from intent import ActionIntent
 from experiments import Experiments
 from telemetry import TELEMETRY, HEAVY_JOBS
+from fast_runtime import fast_light_on_assist_action, is_fast_target, stabilize_fast_light_power_decision
 from training_budget import TRAINING_BUDGET
 
 class HAEventStream(threading.Thread):
@@ -39,7 +41,13 @@ class HAEventStream(threading.Thread):
         backoff = 2.0
         while not self.stop_event.is_set():
             try:
-                with ws_connect("ws://supervisor/core/websocket", open_timeout=10, close_timeout=5) as ws:
+                with ws_connect(
+                    "ws://supervisor/core/websocket",
+                    open_timeout=10,
+                    close_timeout=5,
+                    ping_interval=20,
+                    ping_timeout=20,
+                ) as ws:
                     hello = json.loads(ws.recv())
                     if hello.get("type") == "auth_required":
                         ws.send(json.dumps({"type": "auth", "access_token": HA_TOKEN}))
@@ -87,6 +95,11 @@ class HAEventStream(threading.Thread):
             except Exception as exc:
                 self.engine.ws_connected = False
                 self.engine.ws_error = f"{type(exc).__name__}: {exc}"
+                # Realtime loss is the one case where a full REST snapshot should become
+                # urgent. Healthy websocket operation uses the much slower safety resync.
+                with self.engine.lock:
+                    self.engine.last_full_poll = 0.0
+                self.engine.wake_event.set()
                 if not self.stop_event.is_set():
                     time.sleep(backoff)
                     backoff = min(30.0, backoff * 1.7)
@@ -100,9 +113,45 @@ class Engine(threading.Thread):
         super().__init__(name="adaptive-ai-engine")
         self.stop_event = threading.Event()
         self.wake_event = threading.Event()
+        # Startup gate: initial HA snapshot/registry work may touch thousands of states.
+        # Do not let the first all-agent inference burst compete with Ingress before the
+        # runtime has finished composing and the UI readiness endpoint is available.
+        # Direct process/process_agent calls remain unchanged; only the background loop
+        # waits for initialize_runtime() to explicitly open the gate.
+        self.inference_enabled = threading.Event()
+        self.startup_inference_not_before = 0.0
         self.runtime = {}
+        self.inference_scheduler = {
+            "event_passes": 0,
+            "timer_passes": 0,
+            "idle_skips": 0,
+            "last_timer_targets": 0,
+            "initial_full_passes": 0,
+        }
+        self.initial_inference_pending = True
         self.models = {}
         self.context_relevance = {}
+        # Realtime routing cache. Event dispatch must not hit SQLite or recompute every
+        # agent's dependency set on each HA state_changed event.
+        self.agent_index_at = 0.0
+        # Normal invalidation is revision-driven. A 10 minute safety fallback catches
+        # truly external/direct DB edits without turning agent-table scans into periodic I/O.
+        self.agent_index_ttl_seconds = 600.0
+        self.agent_index_revision = -1
+        # Keep the complete configured-agent snapshot separate from the inference routing
+        # subset. UI/status needs paused/waiting agents too; event dispatch must only see
+        # policies that are currently eligible to infer.
+        self.all_agent_configs = {}
+        self.agent_configs = {}
+        self.active_agents_by_target = {}
+        self.dependency_agents = {}
+        # A pass-level immutable revision snapshot is shared by all agents dispatched
+        # from one coalesced event pass. Thread-local binding preserves the existing
+        # process_agent(agent, states, changed) public signature used by extensions.
+        self._inference_tls = threading.local()
+        # Runtime extensions may broaden observation-only inference eligibility, but they
+        # must not replace the scheduler. Control qualification remains in Executor.
+        self.inference_eligible = self._default_inference_eligible
         self.last_state_count = 0
         self.last_poll = None
         self.error = None
@@ -116,18 +165,39 @@ class Engine(threading.Thread):
         self.archive_seen = {}
         self.archive_last_ts = {}
         self.pending_archive = []
+        self.archive_flush_interval_seconds = 5.0
+        self.archive_flush_batch_rows = 128
+        self.last_archive_flush = time.monotonic()
         self.command_echoes = {}
         self.command_contexts = {}
         self.state_revision = 0
         self.entity_revisions = {}
         self.dirty_entities = set()
         self.last_trigger_entity = None
-        self.control_workers = ThreadPoolExecutor(max_workers=8, thread_name_prefix="device-control")
+        # Policy inference is predominantly Python CPU work. More worker threads increase
+        # GIL contention and can starve Ingress on Raspberry Pi. Two workers retain limited
+        # overlap for SQLite/I/O while bounding CPU contention; single-core hosts stay at 1.
+        self.control_worker_count = min(2, max(1, int(os.cpu_count() or 1)))
+        self.control_workers = ThreadPoolExecutor(
+            max_workers=self.control_worker_count, thread_name_prefix="device-control"
+        )
         self.poll_worker = ThreadPoolExecutor(max_workers=1, thread_name_prefix="ha-poll")
         self.in_flight = {}
         self.resubmit_targets = set()
         self.poll_future = None
         self.last_full_poll = 0.0
+        # REST /states health is tracked separately from generic HAClient requests.
+        # A failed history/automation/config request must never make the UI claim that
+        # Home Assistant itself is disconnected.
+        self.last_state_sync_ok = None
+        self.last_state_sync_error = "No successful state snapshot yet"
+        self.state_resync_stats = {
+            "runs": 0,
+            "failures": 0,
+            "last_changed_entities": 0,
+            "last_duration_ms": 0.0,
+            "max_duration_ms": 0.0,
+        }
         self.last_ws_event = None
         self.ws_connected = False
         self.ws_error = None
@@ -155,15 +225,26 @@ class Engine(threading.Thread):
             ws_error = self.ws_error
             registry_count = len(self.entity_registry)
             last_ws_event = self.last_ws_event
+            last_state_sync_ok = self.last_state_sync_ok
+            last_state_sync_error = self.last_state_sync_error
+            state_resync_stats = dict(self.state_resync_stats)
+            inference_scheduler = dict(self.inference_scheduler)
         agents = STORE.list_agents()
         confidences = [runtime_conf.get(a["id"]) for a in agents]
         confidences = [x for x in confidences if x is not None]
         history = self.history_manager.status() if self.history_manager is not None else {"phase": "starting", "archive": {"n": 0, "days": 0, "entities": 0}}
         return {
             "version": APP_VERSION,
-            "ha_connected": HA.last_error is None and HA.last_ok is not None,
-            "ha_last_ok": HA.last_ok,
-            "ha_error": HA.last_error,
+            "ha_connected": bool(
+                ws_connected
+                or (last_state_sync_ok is not None and last_state_sync_error is None)
+            ),
+            "ha_last_ok": last_state_sync_ok,
+            "ha_error": (
+                None
+                if ws_connected or (last_state_sync_ok is not None and last_state_sync_error is None)
+                else (last_state_sync_error or ws_error)
+            ),
             "engine_error": engine_error,
             "last_poll": last_poll,
             "state_count": state_count,
@@ -174,6 +255,16 @@ class Engine(threading.Thread):
             "feedback_count": sum(int(a.get("feedback_count") or 0) for a in agents),
             "historical_experience_count": sum(int(a.get("historical_count") or 0) for a in agents),
             "realtime": {"connected": ws_connected, "error": ws_error, "registry_entries": registry_count, "last_event": last_ws_event},
+            "state_resync": {
+                **state_resync_stats,
+                "last_ok": last_state_sync_ok,
+                "error": last_state_sync_error,
+            },
+            "inference_scheduler": {
+                **inference_scheduler,
+                "fast_idle_seconds": float(OPTIONS.get("fast_idle_inference_interval_seconds", 10)),
+                "default_idle_seconds": float(OPTIONS.get("idle_inference_interval_seconds", 30)),
+            },
             "automation_knowledge": AUTOMATION_KNOWLEDGE.status(),
             "history": history,
             "home_intelligence": self.context.diagnostics(),
@@ -290,17 +381,49 @@ class Engine(threading.Thread):
             self.archive_seen[entity_id] = fingerprint
             self.archive_last_ts[entity_id] = now
 
-    def flush_archive(self):
+    def flush_archive(self, force=True):
+        """Persist live history in coarse batches instead of one WAL txn per tick."""
+        now = time.monotonic()
         with self.lock:
+            pending = len(self.pending_archive)
+            if not pending:
+                self.last_archive_flush = now
+                return 0
+            if (not force and pending < self.archive_flush_batch_rows
+                    and now - self.last_archive_flush < self.archive_flush_interval_seconds):
+                return 0
             rows = self.pending_archive
             self.pending_archive = []
-        if rows:
-            STORE.archive_batch(rows)
+        try:
+            written = STORE.archive_batch(rows)
+        except Exception:
+            with self.lock:
+                self.pending_archive = rows + self.pending_archive
+            raise
+        self.last_archive_flush = time.monotonic()
+        return int(written or 0)
 
     def refresh_states(self):
+        """Reconcile a REST snapshot without replaying the whole home on every resync.
+
+        Websocket state_changed is authoritative for the realtime path. REST is startup,
+        outage fallback and a low-frequency safety reconciliation. Periodic snapshots may
+        contain hundreds of entities, so only actual differences are fed through context,
+        temporal history and archive persistence after the initial bootstrap.
+        """
+        started = time.perf_counter()
         with self.lock:
             poll_revision = self.state_revision
-        states = HA.states()
+        try:
+            states = HA.states()
+        except Exception as exc:
+            with self.lock:
+                self.last_state_sync_error = f"{type(exc).__name__}: {exc}"
+                self.state_resync_stats["failures"] = int(
+                    self.state_resync_stats.get("failures") or 0
+                ) + 1
+            raise
+
         state_map = {s["entity_id"]: s for s in (states or [])}
         with self.lock:
             # A REST request may finish after newer websocket events. Never rewind them.
@@ -314,29 +437,187 @@ class Engine(threading.Thread):
             for eid, revision in self.entity_revisions.items():
                 if revision > poll_revision and eid not in self.state_map:
                     state_map.pop(eid, None)
-            initial = not self.state_map
-            self.context.configure(state_map)
-            for eid in set(self.state_map) | set(state_map):
-                if self.state_map.get(eid) != state_map.get(eid):
-                    self.state_revision += 1
-                    self.entity_revisions[eid] = self.state_revision
-                    self.context.observe(eid, state_map.get(eid), now_ts(), learn=not initial)
+
+            previous = self.state_map
+            initial = not previous
+            changed_eids = {
+                eid for eid in set(previous) | set(state_map)
+                if previous.get(eid) != state_map.get(eid)
+            }
+            # Registry websocket updates already reconfigure topology. A routine /states
+            # reconciliation must not rebuild the full source map unless entity membership
+            # actually changed (or this is the initial bootstrap).
+            topology_changed = initial or set(previous) != set(state_map)
+            if topology_changed:
+                self.context.configure(state_map)
+
+            event_ts = now_ts()
+            for eid in changed_eids:
+                self.state_revision += 1
+                self.entity_revisions[eid] = self.state_revision
+                self.context.observe(eid, state_map.get(eid), event_ts, learn=not initial)
+                # The initial REST snapshot is not a realtime transition. Marking
+                # thousands of startup entities dirty causes an immediate all-agent
+                # burst and defeats HTTP-first startup. A proactive pass after the
+                # startup grace covers the same current state.
+                if not initial:
                     self.dirty_entities.add(eid)
+
             self.state_map = state_map
             if initial:
                 self.context.home.arrivals.clear()
                 self.context.home.pending = None
+            sync_now = now_ts()
             self.last_state_count = len(state_map)
-            self.last_poll = now_ts()
-            self.last_full_poll = self.last_poll
+            self.last_poll = sync_now
+            self.last_full_poll = sync_now
+            self.last_state_sync_ok = sync_now
+            self.last_state_sync_error = None
             self.error = None
-        for st in state_map.values():
+
+        # Initial bootstrap needs every current entity once. Later safety/fallback polls
+        # touch only the changed suffix instead of rebuilding temporal/archive state for
+        # the whole Home Assistant installation.
+        process_eids = set(state_map) if initial else changed_eids
+        for eid in process_eids:
+            st = state_map.get(eid)
+            if st is None:
+                continue
             ts = parse_ts(st.get("last_updated") or st.get("last_changed")) or now_ts()
-            self.temporal_history.add(st.get("entity_id"), ts, self._temporal_state(st))
+            self.temporal_history.add(eid, ts, self._temporal_state(st))
             self._queue_archive_state(st)
-        self.flush_archive()
-        self.wake_event.set()
+        self.flush_archive(force=False)
+        if initial or changed_eids:
+            self.wake_event.set()
+
+        elapsed_ms = (time.perf_counter() - started) * 1000.0
+        with self.lock:
+            stats = self.state_resync_stats
+            stats["runs"] = int(stats.get("runs") or 0) + 1
+            stats["last_changed_entities"] = len(changed_eids)
+            stats["last_duration_ms"] = elapsed_ms
+            stats["max_duration_ms"] = max(
+                float(stats.get("max_duration_ms") or 0.0), elapsed_ms
+            )
         return state_map
+
+    def _schedule_next_inference(self, agent, rt, timestamp=None):
+        """Schedule only the next time-dependent inference; HA events remain immediate.
+
+        The 1 s engine tick is a cheap timer wheel, not a global inference cadence.
+        Fast targets need a modest heartbeat for time-decaying presence/context, while
+        slower plant targets can refresh less frequently. Exact runtime deadlines always
+        pre-empt the heartbeat.
+        """
+        now = float(now_ts() if timestamp is None else timestamp)
+        fast = is_fast_target(agent)
+        idle = float(OPTIONS.get(
+            "fast_idle_inference_interval_seconds" if fast
+            else "idle_inference_interval_seconds",
+            10.0 if fast else 30.0,
+        ))
+        idle = max(2.0 if fast else 10.0, idle)
+        due = now + idle
+
+        # During an explicit manual hold the learned policy cannot act, so repeatedly
+        # recomputing it is pure CPU waste. Wake at hold expiry unless another lifecycle
+        # deadline below must be observed earlier.
+        try:
+            hold_until = float(rt.get("manual_override_until") or 0.0)
+        except (TypeError, ValueError):
+            hold_until = 0.0
+        if hold_until > now:
+            due = hold_until
+
+        # Fast-light statistical OFF confirmation must complete close to its exact 6 s
+        # deadline even if no HA entity changes in the meantime.
+        if rt.get("fast_off_confirmation_active"):
+            try:
+                since = float(rt.get("fast_off_candidate_since"))
+                required = float(rt.get("fast_off_confirmation_required") or 0.0)
+                if required > 0:
+                    due = min(due, since + required)
+            except (TypeError, ValueError):
+                pass
+
+        pending = rt.get("pending")
+        if isinstance(pending, dict):
+            try:
+                started = float(pending.get("started_ts") or now)
+                acknowledged = pending.get("acknowledged_ts")
+                timing = timing_for(agent)
+                if acknowledged is None:
+                    due = min(due, started + max(0.05, float(timing.acknowledgement)))
+                else:
+                    due = min(
+                        due,
+                        float(acknowledged)
+                        + max(float(timing.settling), float(OPTIONS["reward_window_seconds"])),
+                    )
+                if pending.get("anticipated"):
+                    due = min(
+                        due,
+                        started
+                        + max(1.0, float(pending.get("horizon") or 1.0))
+                        + max(0.0, float(timing.settling)),
+                    )
+            except (TypeError, ValueError):
+                pass
+
+        for outcome in rt.get("outcomes") or ():
+            try:
+                outcome_due = (
+                    float(outcome["started_ts"])
+                    + max(1.0, float(outcome.get("horizon") or 1.0))
+                    + 1.0
+                )
+                due = min(due, outcome_due)
+            except (KeyError, TypeError, ValueError):
+                continue
+
+        try:
+            retry_after = float(rt.get("retry_after") or 0.0)
+            if retry_after > now:
+                due = min(due, retry_after)
+        except (TypeError, ValueError):
+            pass
+
+        # Never spin on a deadline already in the past. A short floor gives the current
+        # worker enough time to publish runtime state before a follow-up is admitted.
+        rt["next_periodic_inference_ts"] = max(now + 0.05, float(due))
+        return rt["next_periodic_inference_ts"]
+
+    def _due_inference_targets(self, timestamp=None):
+        """Return target entities whose in-memory timer deadline has arrived.
+
+        This is intentionally SQLite-free so the 1 s scheduler tick remains negligible.
+        Agents that have not run yet are handled by the initial startup pass or an HA
+        event; every successful inference schedules its next heartbeat/deadline.
+        """
+        now = float(now_ts() if timestamp is None else timestamp)
+        due = set()
+        self._refresh_agent_index()
+        with self.lock:
+            runtime = list(self.runtime.items())
+        for aid, rt in runtime:
+            try:
+                deadline = float(rt.get("next_periodic_inference_ts") or 0.0)
+            except (TypeError, ValueError):
+                deadline = 0.0
+            if deadline <= 0.0 or deadline > now:
+                continue
+            with self.lock:
+                agent = self.agent_configs.get(str(aid))
+            if not agent:
+                rt["next_periodic_inference_ts"] = 0.0
+                continue
+            due.add(str(agent.get("target_entity") or ""))
+            # Claim the deadline before scheduling. process_agent will publish the real
+            # next deadline after inference; this prevents a busy worker from being
+            # re-enqueued on every 1 s tick.
+            rt["next_periodic_inference_ts"] = now + 60.0
+        due.discard("")
+        return due
 
     def run(self):
         print(f"Adaptive AI {APP_VERSION} starting; HA={HA_BASE_URL}", flush=True)
@@ -354,11 +635,20 @@ class Engine(threading.Thread):
                 # Coalesce bursts (motion + lux + light state etc.) into one inference pass.
                 self.stop_event.wait(debounce)
             try:
-                if now_ts() - self.last_full_poll >= float(OPTIONS["poll_seconds"]) and (self.poll_future is None or self.poll_future.done()):
+                # A healthy websocket already delivers every state_changed event. The
+                # full /states snapshot is only a low-frequency safety resync in that
+                # mode; when realtime is down, fall back to the ordinary REST cadence.
+                resync_seconds = float(
+                    OPTIONS.get("realtime_resync_seconds", 300)
+                    if self.ws_connected
+                    else OPTIONS.get("realtime_fallback_poll_seconds", 10)
+                )
+                if (now_ts() - self.last_full_poll >= max(5.0, resync_seconds)
+                        and (self.poll_future is None or self.poll_future.done())):
                     self.last_full_poll = now_ts()
                     self.poll_future = self.poll_worker.submit(self.refresh_states)
-                self.flush_archive()
-                self.teaching.flush()
+                self.flush_archive(force=False)
+                self.teaching.flush(force=False)
                 self.context.home.expire(now_ts())
                 self.context.save()
                 with self.lock:
@@ -367,7 +657,44 @@ class Engine(threading.Thread):
                     if event_wakeup:
                         self.dirty_entities.clear()
                 if state_map:
-                    self.process(state_map, changed_entities if event_wakeup else None)
+                    gate_open = self.inference_enabled.is_set()
+                    startup_grace = time.monotonic() < float(
+                        self.startup_inference_not_before or 0.0
+                    )
+                    if not gate_open or startup_grace:
+                        # Keep ingest/archive/context warm during construction, but avoid
+                        # the expensive first all-agent prediction pass until HTTP/runtime
+                        # startup is fully ready and Ingress has a short grace window.
+                        # Genuine realtime changes are retained and consumed afterwards.
+                        if changed_entities:
+                            with self.lock:
+                                self.dirty_entities.update(changed_entities)
+                        continue
+                    if event_wakeup and changed_entities:
+                        with self.lock:
+                            self.inference_scheduler["event_passes"] += 1
+                        self.process(state_map, changed_entities)
+                    elif self.initial_inference_pending:
+                        # Exactly one complete inference pass warms all qualified agents
+                        # after startup. Later empty wakeups (REST resync, queue/lifecycle
+                        # nudges) must never regain the old "process every agent" meaning.
+                        self.initial_inference_pending = False
+                        with self.lock:
+                            self.inference_scheduler["initial_full_passes"] += 1
+                        self.process(state_map, set())
+                    else:
+                        due_targets = self._due_inference_targets()
+                        if due_targets:
+                            with self.lock:
+                                self.inference_scheduler["timer_passes"] += 1
+                                self.inference_scheduler["last_timer_targets"] = len(due_targets)
+                            # Reuse the normal dependency-aware event scheduler by marking
+                            # only due target entities. No HA state is fabricated or fed to
+                            # RoomBelief; these IDs are scheduling hints only.
+                            self.process(state_map, due_targets)
+                        else:
+                            with self.lock:
+                                self.inference_scheduler["idle_skips"] += 1
             except Exception as exc:
                 msg = f"{type(exc).__name__}: {exc}"
                 with self.lock:
@@ -379,7 +706,7 @@ class Engine(threading.Thread):
         # changes and commits them in batches.
         for st in state_map.values():
             self._queue_archive_state(st)
-        self.flush_archive()
+        self.flush_archive(force=True)
 
     def policy(self, agent):
         aid = agent["id"]
@@ -393,31 +720,145 @@ class Engine(threading.Thread):
             registry = dict(self.entity_registry)
         model = MultiHorizonPolicy(agent, state_map, registry, hint_entities, STORE.get_model(aid), self.context_relevance.get(aid), context_engine=self.context)
         self.models[aid] = model
+        # The policy schema is part of event routing. Refresh the index before the next
+        # event instead of rebuilding dependencies inside the current inference.
+        self.agent_index_at = 0.0
+        self.agent_index_revision = -1
         return model
 
     def take_control(self, agent, refresh=False):
         return self.executor.take_control(agent, refresh)
 
+    @staticmethod
+    def _default_inference_eligible(agent):
+        return bool(
+            agent
+            and agent.get("enabled")
+            and str(agent.get("mode") or "paused") != "paused"
+            and str(agent.get("training_state") or "") == "qualified"
+        )
+
+    def _refresh_agent_index(self, force=False):
+        """Refresh live agent configs and entity->agent routing outside the hot event path."""
+        now = time.monotonic()
+        store_revision = int(getattr(STORE, "_agent_index_revision", 0))
+        with self.lock:
+            if (
+                not force
+                and float(self.agent_index_at or 0.0) > 0.0
+                and int(self.agent_index_revision) == store_revision
+                and now - float(self.agent_index_at or 0.0) < self.agent_index_ttl_seconds
+            ):
+                return
+            previous_active = set(self.agent_configs)
+
+        if callable(getattr(STORE, "list_agent_configs", None)):
+            configs = STORE.list_agent_configs()
+        else:
+            with self.lock:
+                known_ids = set(self.runtime) | set(self.models)
+            configs = [
+                row for row in (
+                    STORE.get_agent_config(aid) for aid in known_ids
+                ) if row
+            ]
+        all_configs = {}
+        active = {}
+        by_target = {}
+        dependency_agents = {}
+        for agent in configs:
+            aid = str(agent.get("id") or "")
+            if not aid:
+                continue
+            all_configs[aid] = agent
+            if not self.inference_eligible(agent):
+                continue
+            active[aid] = agent
+            target = str(agent.get("target_entity") or "")
+            if target:
+                by_target.setdefault(target, []).append(aid)
+            policy = self.models.get(aid)
+            for eid in self.event_dependencies(agent, policy):
+                dependency_agents.setdefault(str(eid), set()).add(aid)
+
+        removed = previous_active - set(active)
+        with self.lock:
+            self.all_agent_configs = all_configs
+            self.agent_configs = active
+            self.active_agents_by_target = by_target
+            self.dependency_agents = dependency_agents
+            self.agent_index_at = now
+            self.agent_index_revision = store_revision
+        for aid in removed:
+            try:
+                self.experiments.cancel(aid, "mode, training or availability changed")
+            except Exception:
+                pass
+
+    def _active_agents_for_changes(self, changed):
+        self._refresh_agent_index()
+        with self.lock:
+            if not changed:
+                return list(self.agent_configs.values())
+            ids = set()
+            for eid in changed:
+                ids.update(self.dependency_agents.get(str(eid), ()))
+            return [
+                self.agent_configs[aid]
+                for aid in ids
+                if aid in self.agent_configs
+            ]
+
+    def event_dependencies(self, agent, policy=None):
+        """Entities whose change can materially alter this agent's next decision.
+
+        Policy schema already carries selected local/upstream predictors. RoomBelief's
+        additive home features also depend on occupancy sources in the target's own area.
+        Critically, we do *not* add every admitted presence source in the whole house.
+        """
+        deps = {str(agent.get("target_entity") or "")}
+        configured_inputs = agent.get("input_entities") or ()
+        deps.update(
+            str(eid) for eid in configured_inputs
+            if isinstance(eid, str) and eid and eid != "*"
+        )
+        if policy is not None:
+            deps.update(str(eid) for eid in (getattr(policy.schema, "entities", ()) or ()))
+        area = self.context.area_for(agent.get("target_entity"))
+        if area:
+            deps.update(
+                str(eid)
+                for eid in getattr(self.context.home, "area_sources", {}).get(area, ())
+            )
+        try:
+            deps.update(str(eid) for eid in self.experiments.watches(agent["id"]))
+        except Exception:
+            pass
+        deps.discard("")
+        return deps
+
     def process(self, state_map, changed_entities=None):
         changed = set(changed_entities or ())
         if changed:
-            # Extend the event's strict-priority window from the actual inference pass,
-            # after websocket debounce. This prevents a slow multi-target pass from
-            # handing CPU back to replay halfway through the decisions it was woken to make.
             TRAINING_BUDGET.request_interactive_window(
                 1.0, reason="realtime_inference"
             )
+
+        agents = self._active_agents_for_changes(changed)
         groups = {}
-        for agent in STORE.list_agent_configs():
-            if not agent["enabled"] or agent["mode"] == "paused" or agent.get("training_state") != "qualified":
-                self.experiments.cancel(agent['id'], 'mode, training or availability changed')
-                continue
-            if changed:
-                cached = self.models.get(agent["id"])
-                if cached is not None and agent["target_entity"] not in changed and not (changed & (set(cached.schema.entities) | self.context.admitted | self.experiments.watches(agent['id']))):
-                    continue
+        for agent in agents:
             groups.setdefault(agent["target_entity"], []).append(agent)
-        for target, agents in groups.items():
+
+        # One atomically consistent state+revision snapshot per coalesced pass. Every
+        # worker shares it; Executor rejects an intent if any dependency changes later.
+        with self.lock:
+            pass_states = dict(self.state_map) if self.state_map else dict(state_map or {})
+            pass_revision = self.state_revision
+            revision_snapshot = dict(self.entity_revisions)
+            context_revision = self.context.home.revision
+        snapshot = (pass_states, pass_revision, revision_snapshot, context_revision)
+
+        for target, target_agents in groups.items():
             active = self.in_flight.get(target)
             if active is not None and not active.done():
                 if changed and target not in self.resubmit_targets:
@@ -429,27 +870,42 @@ class Engine(threading.Thread):
                         self.wake_event.set()
                     active.add_done_callback(retry_completed)
                 continue
-            self.in_flight[target] = self.control_workers.submit(self.process_target, agents, changed)
+            self.in_flight[target] = self.control_workers.submit(
+                self.process_target, target_agents, changed, snapshot
+            )
         for target in list(self.in_flight):
             if target not in groups and self.in_flight[target].done():
                 del self.in_flight[target]
 
-    def process_target(self, agents, changed_entities=None):
-        with self.lock:
-            revision = self.state_revision
-            states = dict(self.state_map)
-        for agent in agents:
-            if self.stop_event.is_set():
-                return
-            try:
-                latest = STORE.get_agent_config(agent["id"])
-                if latest and latest["enabled"] and latest["mode"] != "paused" and latest.get("training_state") == "qualified":
-                    if changed_entities:
-                        self.process_agent(latest, states, changed_entities)
-                    else:
-                        self.process_agent(latest, states)
-            except Exception as exc:
-                STORE.event(agent["id"], "error", "agent_error", str(exc), {"trace": traceback.format_exc(limit=4)})
+    def process_target(self, agents, changed_entities=None, snapshot=None):
+        if snapshot is None:
+            with self.lock:
+                states = dict(self.state_map)
+                revision = self.state_revision
+                revisions = dict(self.entity_revisions)
+                context_revision = self.context.home.revision
+        else:
+            states, revision, revisions, context_revision = snapshot
+
+        self._inference_tls.entity_revisions = revisions
+        self._inference_tls.context_revision = context_revision
+        self._inference_tls.state_revision = revision
+        try:
+            for agent in agents:
+                if self.stop_event.is_set():
+                    return
+                try:
+                    # Agent snapshots come from the routing cache. Control safety is still
+                    # revalidated from durable config inside Executor before any HA call.
+                    self.process_agent(agent, states, changed_entities if changed_entities else None)
+                except Exception as exc:
+                    STORE.event(agent["id"], "error", "agent_error", str(exc), {"trace": traceback.format_exc(limit=4)})
+        finally:
+            for name in ("entity_revisions", "context_revision", "state_revision"):
+                try:
+                    delattr(self._inference_tls, name)
+                except AttributeError:
+                    pass
         if self.state_revision != revision:
             self.wake_event.set()
 
@@ -645,21 +1101,38 @@ class Engine(threading.Thread):
             rt["decision_reason"] = "Agent is paused"
             return
         inference_started = time.perf_counter()
-        with self.lock:
-            context_revision = self.context.home.revision
-            state_map = dict(self.state_map)
-            target_revision = self.entity_revisions.get(agent['target_entity'], 0)
-            input_revisions = dict(self.entity_revisions)
+        snapshot_revisions = getattr(self._inference_tls, "entity_revisions", None)
+        snapshot_context_revision = getattr(self._inference_tls, "context_revision", None)
+        if snapshot_revisions is None:
+            with self.lock:
+                context_revision = self.context.home.revision
+                target_revision = self.entity_revisions.get(agent['target_entity'], 0)
+        else:
+            context_revision = (
+                self.context.home.revision
+                if snapshot_context_revision is None
+                else snapshot_context_revision
+            )
+            target_revision = snapshot_revisions.get(agent['target_entity'], 0)
         min_inference_gap = max(0.05, float(OPTIONS.get("realtime_inference_debounce_ms", 75)) / 1000.0)
         if not changed_entities and now_ts() - rt["last_inference_ts"] < min_inference_gap:
             return
         rt["last_inference_ts"] = now_ts()
 
-        hint_entities, automation_infos = AUTOMATION_KNOWLEDGE.hints_for_target(agent["target_entity"])
         policy = self.policy(agent)
         features, labels, context_meta = policy.features(state_map, self.temporal_history, at_ts=now_ts())
         context_meta.update(policy.selection_meta or {})
-        context_meta["automation_hint_entities"] = len(hint_entities)
+        automation_scan_marker = getattr(AUTOMATION_KNOWLEDGE, "last_scan", None)
+        if rt.get("_automation_scan_marker") != automation_scan_marker:
+            hint_entities, automation_infos = AUTOMATION_KNOWLEDGE.hints_for_target(agent["target_entity"])
+            rt["_automation_scan_marker"] = automation_scan_marker
+            rt["_automation_hint_entities"] = len(hint_entities)
+            rt["automation_priors"] = [
+                {"entity_id": x.get("entity_id"), "name": x.get("name"), "enabled": bool(x.get("enabled")),
+                 "context_count": len(x.get("context_entities") or [])}
+                for x in automation_infos[:8]
+            ]
+        context_meta["automation_hint_entities"] = int(rt.get("_automation_hint_entities") or 0)
         context_meta["whole_home_entities"] = len(state_map)
         context_meta["trigger_entities"] = sorted(set(changed_entities or ()))[:8]
         context_meta["primary_local_sensors"] = list((policy.selection_meta or {}).get("primary_local_sensors") or [])
@@ -668,12 +1141,6 @@ class Engine(threading.Thread):
         context_meta["causal_presence_scores"] = dict((policy.selection_meta or {}).get("causal_presence_scores") or {})
         context_meta["upstream_sensors"] = list((policy.selection_meta or {}).get("upstream_sensors") or [])
         rt["context_meta"] = context_meta
-        rt["automation_priors"] = [
-            {"entity_id": x.get("entity_id"), "name": x.get("name"), "enabled": bool(x.get("enabled")),
-             "context_count": len(x.get("context_entities") or [])}
-            for x in automation_infos[:8]
-        ]
-
         teaching_revision = self.teaching.revision(aid)
         chosen, confidence, arms, horizon, support, novelty = policy.predict(features)
         composer = self.decision_composer
@@ -713,6 +1180,52 @@ class Engine(threading.Thread):
                 chosen = dict(chosen, value=trial['value'], index=trial['index'])
                 support, novelty = trial['support'], trial['novelty']
                 decision_source = "experiment"
+        raw_prediction = float(chosen["value"])
+        forecast = context_meta.get('home_forecast', {})
+        assist_idx = fast_light_on_assist_action(
+            agent, current, raw_prediction, decision_source, arms, forecast
+        )
+        rt["raw_policy_prediction"] = raw_prediction
+        rt["fast_on_assist_active"] = assist_idx is not None
+        if assist_idx is not None:
+            selected_arm = next(
+                (arm for arm in arms if int(arm.get("index", -1)) == int(assist_idx)),
+                None,
+            )
+            if selected_arm is not None:
+                chosen = {**chosen, **selected_arm}
+                head = policy.heads[int(horizon)]
+                structural = head.structural_confidence(arms, int(assist_idx))
+                calibration = head.calibration(int(assist_idx))
+                confidence = min(float(structural), float(calibration["ceiling"]))
+                chosen["structural_confidence"] = structural
+                chosen["validation_accuracy"] = calibration["accuracy"]
+                chosen["validation_lower_bound"] = calibration["ceiling"]
+                chosen["validation_samples"] = calibration["samples"]
+                support = float(selected_arm.get("support", support))
+                novelty = float(selected_arm.get("novelty", novelty))
+                chosen = dict(
+                    chosen,
+                    value=float(policy.actions[int(assist_idx)]),
+                    index=int(assist_idx),
+                )
+
+        stabilized_value, off_confirmation = stabilize_fast_light_power_decision(
+            agent, rt, current, float(chosen["value"]), decision_source, now_ts()
+        )
+        if off_confirmation:
+            current_idx = min(
+                range(len(policy.actions)),
+                key=lambda i: abs(float(policy.actions[i]) - float(stabilized_value)),
+            )
+            selected_arm = next(
+                (arm for arm in arms if int(arm.get("index", -1)) == int(current_idx)),
+                None,
+            )
+            if selected_arm is not None:
+                chosen = {**chosen, **selected_arm}
+            chosen = dict(chosen, value=float(stabilized_value), index=int(current_idx))
+
         rt['teaching_id'] = teaching['id'] if teaching else None
         rt['decision_source'] = decision_source
         rt['preference_model'] = preference
@@ -735,7 +1248,6 @@ class Engine(threading.Thread):
         rt["top_context"] = self.top_context(policy, horizon, chosen["index"], features, labels)
 
         intent_horizon = horizon
-        forecast = context_meta.get('home_forecast', {})
         if chosen['value'] >= .5 and agent['target_property'] == 'power' and forecast.get('occupancy_now', 0) < .5:
             intent_horizon = next((h for h in (1,3,5) if forecast.get(f'occupancy_in_{h}s', 0) >= .5), horizon)
         preference_count = int((preference or {}).get('independent_evidence_count') or 0)
@@ -754,14 +1266,27 @@ class Engine(threading.Thread):
                 f"Historical policy bootstrap desires {chosen['value']}; confidence {confidence:.0%}, support {support:.0%}, novelty {novelty:.0%}"),
             experiment_token=trial['token'] if trial else '',
             contributors=tuple((x['feature'], x['contribution']) for x in rt['top_context']),
-            context_dependencies=tuple((eid, input_revisions.get(eid, 0)) for eid in sorted(set(policy.schema.entities) | set(trial['snapshot'] if trial else ()))))
+            context_dependencies=self._intent_dependencies(
+                policy, trial, snapshot_revisions
+            ))
         rt['last_intent'] = intent.export()
         rt['behavior_summary'] = self.behavior_summary(agent, rt)
         TELEMETRY.observe('inference', (time.perf_counter()-inference_started)*1000)
         received = getattr(self, 'last_event_received', None)
         if changed_entities and received:
             TELEMETRY.observe('event_to_intent', (time.perf_counter()-received)*1000)
+        self._schedule_next_inference(agent, rt)
         return self.executor.submit(intent, features, chosen['index'])
+
+    def _intent_dependencies(self, policy, trial, snapshot_revisions=None):
+        entities = sorted(
+            set(policy.schema.entities)
+            | set((trial or {}).get("snapshot") or ())
+        )
+        if snapshot_revisions is not None:
+            return tuple((eid, snapshot_revisions.get(eid, 0)) for eid in entities)
+        with self.lock:
+            return tuple((eid, self.entity_revisions.get(eid, 0)) for eid in entities)
 
     def behavior_summary(self, agent, rt):
         forecast = rt.get('context_meta', {}).get('home_forecast', {})
@@ -806,6 +1331,11 @@ class Engine(threading.Thread):
             "experiments": experiment_status,
             "baseline_prediction": rt.get('baseline_prediction'),
             "last_prediction": rt.get("last_prediction"),
+            "raw_policy_prediction": rt.get("raw_policy_prediction"),
+            "fast_off_confirmation_active": bool(rt.get("fast_off_confirmation_active")),
+            "fast_off_confirmation_elapsed": float(rt.get("fast_off_confirmation_elapsed") or 0.0),
+            "fast_off_confirmation_required": float(rt.get("fast_off_confirmation_required") or 0.0),
+            "fast_on_assist_active": bool(rt.get("fast_on_assist_active")),
             "teaching_id": rt.get("teaching_id"),
             "decision_source": rt.get("decision_source") or "historical_policy_bootstrap",
             "preference_model": rt.get("preference_model"),

@@ -13,6 +13,7 @@ import hashlib
 import json
 import math
 import time
+import threading
 
 import context as context_module
 import history as history_module
@@ -31,6 +32,12 @@ from training_budget import TRAINING_BUDGET
 SCHEMA_VERSION = 12
 POLICY_VERSION = 11
 CONTRACT_VERSION = 1
+# Feature semantics are versioned per persisted schema. Contract 1 is the exact v12
+# representation already stored in released models. Fresh/rebuilt models use contract 2,
+# which removes fast-light photometric own-action leakage without reinterpreting old
+# vectors or forcing a global model migration.
+LEGACY_FEATURE_CONTRACT_VERSION = 1
+FEATURE_CONTRACT_VERSION = 2
 HOME_FEATURE_NAMES = tuple(LEGACY_HOME_FEATURE_NAMES) + ("known",)
 HOME_TAIL = len(HOME_FEATURE_NAMES)
 
@@ -302,14 +309,20 @@ def _source_quality(state, obs, fast_profile):
 class FeatureSchemaV12:
     VERSION = SCHEMA_VERSION
 
-    def __init__(self, dims, entities):
+    def __init__(self, dims, entities, feature_contract_version=FEATURE_CONTRACT_VERSION):
         self.dims = int(dims)
+        self.feature_contract_version = int(feature_contract_version)
+        if self.feature_contract_version not in (
+            LEGACY_FEATURE_CONTRACT_VERSION, FEATURE_CONTRACT_VERSION
+        ):
+            raise ValueError("unsupported feature contract version")
         max_entities = max(1, (self.dims - 5 - HOME_TAIL) // ENTITY_WIDTH)
         self.entities = list(entities)[:max_entities]
 
     def export(self):
         return {"version": self.VERSION, "dims": self.dims, "entities": list(self.entities),
-                "entity_features": list(ENTITY_FEATURES), "home_features": list(HOME_FEATURE_NAMES)}
+                "entity_features": list(ENTITY_FEATURES), "home_features": list(HOME_FEATURE_NAMES),
+                "feature_contract_version": self.feature_contract_version}
 
     @classmethod
     def from_export(cls, raw, dims):
@@ -320,7 +333,17 @@ class FeatureSchemaV12:
             return None
         if list(raw.get("home_features") or []) != list(HOME_FEATURE_NAMES):
             return None
-        return cls(dims, raw.get("entities") or [])
+        # Released v12 schemas predate this field. They stay contract 1 forever unless a
+        # new model generation is explicitly rebuilt; saving/loading them never changes
+        # the meaning of their existing weight columns.
+        feature_contract = int(raw.get(
+            "feature_contract_version", LEGACY_FEATURE_CONTRACT_VERSION
+        ))
+        if feature_contract not in (
+            LEGACY_FEATURE_CONTRACT_VERSION, FEATURE_CONTRACT_VERSION
+        ):
+            return None
+        return cls(dims, raw.get("entities") or [], feature_contract_version=feature_contract)
 
     def labels(self):
         labels = {0: ["bias"], 1: ["time:hour_sin"], 2: ["time:hour_cos"],
@@ -360,6 +383,132 @@ def _lag_state(entity_id, current, temporal, query_ts, at_ts):
     return None, None
 
 
+def _is_illuminance_state(state):
+    attrs = _attrs(state)
+    unit = _normalized_unit(state)
+    dc = str(attrs.get("device_class") or "").strip().lower()
+    eid = str((state or {}).get("entity_id") or "").lower()
+    return unit in ("lx", "lux") or dc == "illuminance" or "illuminance" in eid or "lux" in eid
+
+
+def _target_power_at(agent, state_map, temporal, query_ts, knowledge_ts):
+    if not agent:
+        return None
+    target = str(agent.get("target_entity") or "")
+    if not target:
+        return None
+    _, target_state = _sample_before(temporal, target, query_ts, knowledge_ts)
+    if target_state is None and abs(float(query_ts) - float(knowledge_ts)) <= 1e-9:
+        target_state = (state_map or {}).get(target)
+    try:
+        value = context_module.target_value(target_state, "power")
+    except Exception:
+        return None
+    if value is None or not math.isfinite(float(value)):
+        return None
+    return 1.0 if float(value) >= .5 else 0.0
+
+
+def _current_on_run_start(agent, temporal, query_ts, knowledge_ts):
+    """First ON sample of the current causal ON run, or None when it cannot be proven."""
+    target = str((agent or {}).get("target_entity") or "")
+    rows = []
+    for ts, state in _samples(temporal, target):
+        ts = float(ts)
+        if not _eligible_sample(state, ts, query_ts, knowledge_ts):
+            continue
+        try:
+            value = context_module.target_value(state, "power")
+        except Exception:
+            value = None
+        if value is None:
+            continue
+        rows.append((ts, 1.0 if float(value) >= .5 else 0.0))
+    if not rows or rows[-1][1] < .5:
+        return None
+    start = rows[-1][0]
+    saw_off = False
+    for ts, value in reversed(rows[:-1]):
+        if value < .5:
+            saw_off = True
+            break
+        start = ts
+    # If history starts with the lamp already ON there is no causal pre-action baseline.
+    return start if saw_off else None
+
+
+def _last_valid_illuminance_before(entity_id, temporal, query_ts, knowledge_ts):
+    for ts, state in reversed(_samples(temporal, entity_id)):
+        ts = float(ts)
+        if not _eligible_sample(state, ts, query_ts, knowledge_ts):
+            continue
+        obs = observation_value(state)
+        if (obs.get("valid") and obs.get("canonical_unit") == "lx"
+                and obs.get("physical_value") is not None):
+            return ts, state
+    return None, None
+
+
+def _darkness_observation(state):
+    obs = observation_value(state)
+    if not (obs.get("valid") and obs.get("canonical_unit") == "lx"
+            and obs.get("physical_value") is not None):
+        return {"valid": 0.0, "value": 0.0, "physical_value": None,
+                "category": (0.0, 0.0, 0.0), "kind": "missing",
+                "canonical_unit": "lx"}
+    ambient_lux = max(0.0, float(obs["physical_value"]))
+    # Log-scale physical illuminance without embedding a policy/benchmark darkness
+    # threshold. The important contract change is causal: emitted lamp light is removed.
+    # Log compression simply gives indoor low-light ranges useful numeric resolution.
+    normalized = clamp(math.log1p(ambient_lux) / math.log1p(1000.0), 0.0, 1.0)
+    return {**obs, "value": normalized,
+            "physical_value": ambient_lux, "photometric_mode": "ambient_pre_action_v2"}
+
+
+def _feature_observation(schema, entity_id, state, agent, state_map, temporal,
+                         query_ts, knowledge_ts):
+    """Return one feature observation under the persisted model's semantic contract."""
+    legacy = observation_value(state)
+    feature_contract = int(getattr(
+        schema, "feature_contract_version", LEGACY_FEATURE_CONTRACT_VERSION
+    ))
+    fast_light = bool(
+        agent and is_fast_reactive_agent(agent)
+        and str(agent.get("target_entity") or "").split(".", 1)[0] == "light"
+        and str(agent.get("target_property") or "") == "power"
+    )
+    if feature_contract < FEATURE_CONTRACT_VERSION or not fast_light or not _is_illuminance_state(state):
+        return legacy, None
+
+    target_power = _target_power_at(agent, state_map, temporal, query_ts, knowledge_ts)
+    if target_power is None:
+        return _darkness_observation(None), {
+            "mode": "ambient_pre_action_v2", "source": "target_power_unknown"
+        }
+    if target_power < .5:
+        return _darkness_observation(state), {
+            "mode": "ambient_pre_action_v2", "source": "current_light_off"
+        }
+
+    on_start = _current_on_run_start(agent, temporal, query_ts, knowledge_ts)
+    if on_start is None:
+        return _darkness_observation(None), {
+            "mode": "ambient_pre_action_v2", "source": "unresolved_light_on"
+        }
+    _, baseline = _last_valid_illuminance_before(
+        entity_id, temporal, float(on_start) - 1e-6, knowledge_ts
+    )
+    if baseline is None:
+        return _darkness_observation(None), {
+            "mode": "ambient_pre_action_v2", "source": "pre_action_baseline_missing",
+            "on_start": float(on_start),
+        }
+    return _darkness_observation(baseline), {
+        "mode": "ambient_pre_action_v2", "source": "pre_action_baseline",
+        "on_start": float(on_start),
+    }
+
+
 def build_observation_features(schema, state_map, temporal, at_ts=None, agent=None, excluded_entities=None):
     from datetime import datetime
     at_ts = float(at_ts if at_ts is not None else now_ts())
@@ -367,6 +516,9 @@ def build_observation_features(schema, state_map, temporal, at_ts=None, agent=No
     hour = dt.hour + dt.minute / 60.0 + dt.second / 3600.0 + dt.microsecond / 3_600_000_000.0
     dow = dt.weekday()
     fast_profile = bool(agent and is_fast_reactive_agent(agent))
+    feature_contract = int(getattr(
+        schema, "feature_contract_version", LEGACY_FEATURE_CONTRACT_VERSION
+    ))
     clock_weight = clamp(float(OPTIONS.get("fast_clock_context_weight", 0.15)), 0.0, 1.0) if fast_profile else 1.0
     vec = {0: 1.0, 1: clock_weight * math.sin(2 * math.pi * hour / 24),
            2: clock_weight * math.cos(2 * math.pi * hour / 24),
@@ -391,21 +543,30 @@ def build_observation_features(schema, state_map, temporal, at_ts=None, agent=No
         if idx >= limit:
             break
         current_ts, current = (None, None) if eid in excluded else _resolve_current_state(eid, state_map, temporal, at_ts)
-        obs = observation_value(current)
+        obs, photometric = _feature_observation(
+            schema, eid, current, agent, state_map, temporal, at_ts, at_ts
+        )
         if obs["valid"]:
             usable += 1
         received = _latest_communication(temporal, eid, at_ts, current=current)
         event_ts = _sample_event_time(current, fallback=current_ts) if current is not None else None
         event_age = None if event_ts is None else max(0.0, at_ts - event_ts)
         communication_age = None if received is None else max(0.0, at_ts - received)
-        edge_ts = _last_edge_time(temporal, eid, at_ts, current) if current is not None else None
+        # Lux edges produced by the controlled lamp are downstream effects, not causal
+        # context. Contract 2 therefore neutralizes this one timing slot; contract 1
+        # retains the exact historical representation for persisted old models.
+        edge_ts = (None if photometric is not None else
+                   (_last_edge_time(temporal, eid, at_ts, current) if current is not None else None))
         edge_age = None if edge_ts is None else max(0.0, at_ts - edge_ts)
         quality, reporting_mode = _source_quality(current, obs, fast_profile)
         lag_values = []
         lag_coverage = []
         for lag in lags:
-            _, previous = _lag_state(eid, current, temporal, at_ts - lag, at_ts)
-            pobs = observation_value(previous)
+            query_ts = at_ts - lag
+            _, previous = _lag_state(eid, current, temporal, query_ts, at_ts)
+            pobs, _ = _feature_observation(
+                schema, eid, previous, agent, state_map, temporal, query_ts, at_ts
+            )
             covered = bool(previous is not None and pobs["valid"])
             lag_coverage.append(covered)
             if obs["valid"] and pobs["valid"] and obs["kind"] != "category" and pobs["kind"] != "category":
@@ -424,9 +585,40 @@ def build_observation_features(schema, state_map, temporal, at_ts=None, agent=No
             reasons.append(f"{eid}:value_unavailable")
         if received is None:
             reasons.append(f"{eid}:communication_time_unknown")
-        values = (float(obs["value"]), float(obs["valid"]), _age_feature(communication_age),
-                  _age_feature(event_age), float(quality), float(lag_values[0]),
-                  float(lag_values[1]), float(lag_values[2]), _age_feature(edge_age),
+        fast_light_v2 = bool(
+            feature_contract >= FEATURE_CONTRACT_VERSION and fast_profile and agent
+            and str(agent.get("target_entity") or "").split(".", 1)[0] == "light"
+            and str(agent.get("target_property") or "") == "power"
+        )
+        if fast_light_v2:
+            # Contract 1 encoded nominal transport metadata as repeated positive
+            # predictors for every entity. In a diagonal per-action model those nearly
+            # constant columns accumulate a class-frequency bias (normally toward OFF).
+            # Contract 2 centers nominal health at zero; only actual degradation/missing
+            # evidence occupies these slots. Unknown transport timestamps are neutral,
+            # not equivalent to "maximally stale".
+            valid_feature = 0.0 if obs["valid"] else -1.0
+            communication_feature = (
+                0.0 if received is None else _age_feature(communication_age)
+            )
+            event_feature = 0.0 if not obs["valid"] else _age_feature(event_age)
+            if not obs["valid"]:
+                quality_feature = -1.0
+            elif received is None and reporting_mode in ("stateful_sparse", "sparse_numeric"):
+                quality_feature = 0.0
+            else:
+                quality_feature = float(quality) - 1.0
+            edge_feature = 0.0 if edge_ts is None else _age_feature(edge_age)
+        else:
+            valid_feature = float(obs["valid"])
+            communication_feature = _age_feature(communication_age)
+            event_feature = _age_feature(event_age)
+            quality_feature = float(quality)
+            edge_feature = _age_feature(edge_age)
+
+        values = (float(obs["value"]), valid_feature, communication_feature,
+                  event_feature, quality_feature, float(lag_values[0]),
+                  float(lag_values[1]), float(lag_values[2]), edge_feature,
                   float(obs["category"][0]), float(obs["category"][1]), float(obs["category"][2]))
         for value in values:
             if idx >= limit:
@@ -439,8 +631,9 @@ def build_observation_features(schema, state_map, temporal, at_ts=None, agent=No
                             "received_time": received, "communication_age_seconds": communication_age,
                             "event_age_seconds": event_age, "time_since_edge_seconds": edge_age,
                             "quality": quality, "reporting_mode": reporting_mode,
-                            "lag_seconds": list(lags), "lag_coverage": lag_coverage}
-    return vec, labels, {"feature_contract_version": CONTRACT_VERSION,
+                            "lag_seconds": list(lags), "lag_coverage": lag_coverage,
+                            "photometric": photometric}
+    return vec, labels, {"feature_contract_version": feature_contract,
                          "schema_version": SCHEMA_VERSION,
                          "usable_entities": usable, "selected_entities": len(schema.entities),
                          "dimensions": schema.dims,
@@ -565,66 +758,161 @@ class FeatureJournal:
             (str(entity_id), float(event_time), float(event_time))).fetchone()
         return float(row[0] or 0.0) if row else 0.0
 
-    def record(self, entity_id, state, *, event_time, received_time, source, event_key=None, quality=1.0):
+    def _prepare_record(self, entity_id, state, *, event_time, received_time,
+                        source, event_key=None, quality=1.0):
         if not entity_id or state is None:
             return None
         event_time, received_time = float(event_time), float(received_time)
         context = (state or {}).get("context") or {}
         if event_key is None:
             if source == "ha_state_changed":
-                event_key = stable_event_id(entity_id, event_time, context.get("id"), context.get("parent_id"), state)
+                event_key = stable_event_id(
+                    entity_id, event_time, context.get("id"), context.get("parent_id"), state
+                )
             else:
-                raw = f"{entity_id}|{event_time:.9f}|{received_time:.9f}|{source}|{state.get('state')}"
+                raw = (
+                    f"{entity_id}|{event_time:.9f}|{received_time:.9f}|"
+                    f"{source}|{state.get('state')}"
+                )
                 event_key = "obs:" + hashlib.sha256(raw.encode("utf-8")).hexdigest()[:32]
-        attrs = json.dumps(self._compact_attributes(state), separators=(",", ":"), ensure_ascii=False)
+        return {
+            "event_key": str(event_key),
+            "entity_id": str(entity_id),
+            "event_time": event_time,
+            "received_time": received_time,
+            "state": None if state.get("state") is None else str(state.get("state")),
+            "attributes_json": json.dumps(
+                self._compact_attributes(state), separators=(",", ":"), ensure_ascii=False
+            ),
+            "last_changed": state.get("last_changed"),
+            "last_updated": state.get("last_updated"),
+            "source": str(source),
+            "quality": clamp(float(quality), 0.0, 1.0),
+        }
+
+    def record_batch(self, records):
+        """Persist multiple high-resolution observations in one writer transaction."""
+        prepared = []
+        for raw in records or ():
+            if raw is None:
+                continue
+            if "attributes_json" in raw and "event_key" in raw:
+                prepared.append(dict(raw))
+                continue
+            item = self._prepare_record(
+                raw.get("entity_id"), raw.get("state"),
+                event_time=raw.get("event_time"),
+                received_time=raw.get("received_time"),
+                source=raw.get("source") or "ha_state_changed",
+                event_key=raw.get("event_key"),
+                quality=raw.get("quality", 1.0),
+            )
+            if item is not None:
+                prepared.append(item)
+        if not prepared:
+            return []
+
         with self.store.lock, self.store.conn() as c:
-            protected = self._protection(c, entity_id, event_time)
-            c.execute("""INSERT INTO feature_observation_events
-                (event_key,contract_version,entity_id,event_time,received_time,state,attributes_json,
-                 last_changed,last_updated,source,quality,protected_until)
-                VALUES(?,?,?,?,?,?,?,?,?,?,?,?)
-                ON CONFLICT(event_key) DO UPDATE SET
-                  received_time=MIN(feature_observation_events.received_time,excluded.received_time),
-                  protected_until=MAX(feature_observation_events.protected_until,excluded.protected_until),
-                  quality=MAX(feature_observation_events.quality,excluded.quality)""",
-                (event_key, CONTRACT_VERSION, str(entity_id), event_time, received_time,
-                 None if state.get("state") is None else str(state.get("state")), attrs,
-                 state.get("last_changed"), state.get("last_updated"), str(source),
-                 clamp(float(quality), 0.0, 1.0), protected))
-        self._writes += 1
-        if self._writes % 128 == 0:
-            self.prune(entity_id=entity_id)
-        return event_key
+            for row in prepared:
+                protected = self._protection(c, row["entity_id"], row["event_time"])
+                c.execute(
+                    """INSERT INTO feature_observation_events
+                       (event_key,contract_version,entity_id,event_time,received_time,state,
+                        attributes_json,last_changed,last_updated,source,quality,protected_until)
+                       VALUES(?,?,?,?,?,?,?,?,?,?,?,?)
+                       ON CONFLICT(event_key) DO UPDATE SET
+                         received_time=MIN(feature_observation_events.received_time,excluded.received_time),
+                         protected_until=MAX(feature_observation_events.protected_until,excluded.protected_until),
+                         quality=MAX(feature_observation_events.quality,excluded.quality)""",
+                    (
+                        row["event_key"], CONTRACT_VERSION, row["entity_id"],
+                        row["event_time"], row["received_time"], row["state"],
+                        row["attributes_json"], row.get("last_changed"), row.get("last_updated"),
+                        row["source"], row["quality"], protected,
+                    ),
+                )
+            previous_writes = self._writes
+            self._writes += len(prepared)
+            should_prune = self._writes // 128 > previous_writes // 128
+
+        if should_prune:
+            self.prune(entity_id=prepared[-1]["entity_id"])
+        return [row["event_key"] for row in prepared]
+
+    def record(self, entity_id, state, *, event_time, received_time, source,
+               event_key=None, quality=1.0):
+        prepared = self._prepare_record(
+            entity_id, state, event_time=event_time, received_time=received_time,
+            source=source, event_key=event_key, quality=quality,
+        )
+        if prepared is None:
+            return None
+        keys = self.record_batch([prepared])
+        return keys[0] if keys else None
+
+    def open_windows_batch(self, rows):
+        """Persist evidence-window requests in one bounded writer transaction."""
+        prepared = []
+        for raw in rows or ():
+            entities = sorted(set(str(e) for e in (raw.get("entities") or ()) if e))
+            if not entities:
+                continue
+            anchor = float(raw.get("anchor_time"))
+            created = float(self.clock())
+            before = float(raw.get("before", WINDOW_BEFORE_SECONDS))
+            after = float(raw.get("after", WINDOW_AFTER_SECONDS))
+            prepared.append({
+                "window_id": str(raw.get("window_id")),
+                "agent_id": str(raw.get("agent_id")),
+                "entities": entities,
+                "anchor": anchor,
+                "start": anchor - before,
+                "end": anchor + after,
+                "kind": str(raw.get("kind") or "decision"),
+                "created": created,
+                "protected_until": created + self.window_retention_days * 86400.0,
+            })
+        if not prepared:
+            return 0
+        with self.store.lock, self.store.conn() as c:
+            for row in prepared:
+                c.execute("""INSERT OR IGNORE INTO feature_windows
+                    (window_id,contract_version,agent_id,anchor_time,start_time,end_time,kind,created_time,protected_until)
+                    VALUES(?,?,?,?,?,?,?,?,?)""",
+                    (row["window_id"], CONTRACT_VERSION, row["agent_id"], row["anchor"],
+                     row["start"], row["end"], row["kind"], row["created"],
+                     row["protected_until"]))
+                c.executemany(
+                    "INSERT OR IGNORE INTO feature_window_entities(window_id,entity_id) VALUES(?,?)",
+                    [(row["window_id"], eid) for eid in row["entities"]],
+                )
+                placeholders = ",".join("?" for _ in row["entities"])
+                c.execute(
+                    f"""UPDATE feature_observation_events SET protected_until=MAX(protected_until,?)
+                        WHERE entity_id IN ({placeholders}) AND event_time>=? AND event_time<=?""",
+                    [row["protected_until"], *row["entities"], row["start"], row["end"]],
+                )
+            for agent_id in sorted(set(row["agent_id"] for row in prepared)):
+                stale = c.execute(
+                    """SELECT window_id FROM feature_windows WHERE agent_id=?
+                       ORDER BY anchor_time DESC LIMIT -1 OFFSET ?""",
+                    (agent_id, self.max_windows_per_agent),
+                ).fetchall()
+                if stale:
+                    ids = [r[0] for r in stale]
+                    marks = ",".join("?" for _ in ids)
+                    c.execute(f"DELETE FROM feature_window_entities WHERE window_id IN ({marks})", ids)
+                    c.execute(f"DELETE FROM feature_windows WHERE window_id IN ({marks})", ids)
+        return len(prepared)
 
     def open_window(self, window_id, agent_id, entities, anchor_time, kind,
                     before=WINDOW_BEFORE_SECONDS, after=WINDOW_AFTER_SECONDS):
-        entities = sorted(set(str(e) for e in entities if e))
-        if not entities:
-            return None
-        anchor, created = float(anchor_time), float(self.clock())
-        protected_until = created + self.window_retention_days * 86400.0
-        start, end = anchor - float(before), anchor + float(after)
-        with self.store.lock, self.store.conn() as c:
-            c.execute("""INSERT OR IGNORE INTO feature_windows
-                (window_id,contract_version,agent_id,anchor_time,start_time,end_time,kind,created_time,protected_until)
-                VALUES(?,?,?,?,?,?,?,?,?)""",
-                (str(window_id), CONTRACT_VERSION, str(agent_id), anchor, start, end,
-                 str(kind), created, protected_until))
-            c.executemany("INSERT OR IGNORE INTO feature_window_entities(window_id,entity_id) VALUES(?,?)",
-                          [(str(window_id), eid) for eid in entities])
-            placeholders = ",".join("?" for _ in entities)
-            c.execute(f"""UPDATE feature_observation_events SET protected_until=MAX(protected_until,?)
-                        WHERE entity_id IN ({placeholders}) AND event_time>=? AND event_time<=?""",
-                      [protected_until, *entities, start, end])
-            stale = c.execute("""SELECT window_id FROM feature_windows WHERE agent_id=?
-                               ORDER BY anchor_time DESC LIMIT -1 OFFSET ?""",
-                              (str(agent_id), self.max_windows_per_agent)).fetchall()
-            if stale:
-                ids = [r[0] for r in stale]
-                marks = ",".join("?" for _ in ids)
-                c.execute(f"DELETE FROM feature_window_entities WHERE window_id IN ({marks})", ids)
-                c.execute(f"DELETE FROM feature_windows WHERE window_id IN ({marks})", ids)
-        return str(window_id)
+        row = {
+            "window_id": str(window_id), "agent_id": str(agent_id),
+            "entities": list(entities or ()), "anchor_time": float(anchor_time),
+            "kind": str(kind), "before": float(before), "after": float(after),
+        }
+        return str(window_id) if self.open_windows_batch([row]) else None
 
     @staticmethod
     def normalized_row(row):
@@ -838,11 +1126,19 @@ class ObservationSQLiteTemporalTracker(replay_module.SQLiteTemporalTracker):
             TRAINING_BUDGET.checkpoint("temporal_edge_scan")
 
 def _watched_fast_entities(engine, store):
+    """Resolve high-resolution watched entities from the already-built agent index."""
+    with engine.lock:
+        agents = list((getattr(engine, "agent_configs", {}) or {}).values())
+        models = dict(getattr(engine, "models", {}) or {})
+    if not agents:
+        # Startup fallback before the first routing-index build. This is not the steady
+        # event path; once agent_configs exists, no second all-agent config scan is done.
+        agents = store.list_agent_configs()
     entities = set()
-    for agent in store.list_agent_configs():
+    for agent in agents:
         if not agent.get("enabled") or not is_fast_reactive_agent(agent):
             continue
-        policy = engine.models.get(agent["id"])
+        policy = models.get(agent["id"])
         if policy is not None:
             entities.update(policy.schema.entities)
         else:
@@ -939,6 +1235,8 @@ def _migrate_models(core):
                        training_progress=0,training_updated_at=? WHERE id=?""",
                       (iso_now(), agent["id"]))
         changed.append(agent["id"])
+    if changed or repaired:
+        store.touch_agent_index()
     if engine is not None:
         engine.models.clear()
         if repaired:
@@ -977,14 +1275,166 @@ def install(core):
     journal = FeatureJournal(store)
     engine.feature_journal = journal
     engine._observation_contract_installed = True
-    engine._observation_watch_cache = (0.0, set())
+    engine._observation_watch_cache = (None, set())
+
+    # Feature observations and evidence-window maintenance are audit/replay data, not
+    # part of event->intent. Persist both through one bounded background writer.
+    journal_lock = threading.RLock()
+    journal_event = threading.Event()
+    observation_rows = deque()
+    window_rows = deque()
+    observation_limit = 8192
+    window_limit = 4096
+    observation_stats = {
+        "queued": 0, "flushed": 0, "flushes": 0, "max_queue": 0,
+        "overflow_sync": 0, "errors": 0,
+    }
+    window_stats = {
+        "queued": 0, "flushed": 0, "flushes": 0, "max_queue": 0,
+        "overflow_sync": 0, "errors": 0,
+    }
+
+    def queue_observation(entity_id, state, *, event_time, received_time, source,
+                          event_key=None, quality=1.0):
+        prepared = journal._prepare_record(
+            entity_id, state, event_time=event_time, received_time=received_time,
+            source=source, event_key=event_key, quality=quality,
+        )
+        if prepared is None:
+            return None
+        overflow = False
+        with journal_lock:
+            if len(observation_rows) >= observation_limit:
+                overflow = True
+                observation_stats["overflow_sync"] += 1
+            else:
+                observation_rows.append(prepared)
+                observation_stats["queued"] += 1
+                observation_stats["max_queue"] = max(
+                    observation_stats["max_queue"], len(observation_rows)
+                )
+                if len(observation_rows) >= 128:
+                    journal_event.set()
+        if overflow:
+            # Preserve evidence rather than silently dropping it. This deliberately
+            # reintroduces backpressure only after >8k queued records, an observable
+            # overload state rather than an unbounded memory leak.
+            keys = journal.record_batch([prepared])
+            return keys[0] if keys else None
+        return prepared["event_key"]
+
+    def queue_window(window_id, agent_id, entities, anchor_time, kind):
+        row = {
+            "window_id": str(window_id), "agent_id": str(agent_id),
+            "entities": tuple(entities or ()), "anchor_time": float(anchor_time),
+            "kind": str(kind),
+        }
+        overflow = False
+        with journal_lock:
+            if len(window_rows) >= window_limit:
+                overflow = True
+                window_stats["overflow_sync"] += 1
+            else:
+                window_rows.append(row)
+                window_stats["queued"] += 1
+                window_stats["max_queue"] = max(window_stats["max_queue"], len(window_rows))
+                if len(window_rows) >= 64:
+                    journal_event.set()
+        if overflow:
+            journal.open_windows_batch([row])
+        return row["window_id"]
+
+    def flush_observations(limit=512):
+        batch = []
+        with journal_lock:
+            while observation_rows and len(batch) < max(1, int(limit)):
+                batch.append(observation_rows.popleft())
+        if not batch:
+            return 0
+        try:
+            journal.record_batch(batch)
+        except Exception:
+            with journal_lock:
+                for row in reversed(batch):
+                    observation_rows.appendleft(row)
+                observation_stats["errors"] += 1
+            raise
+        with journal_lock:
+            observation_stats["flushed"] += len(batch)
+            observation_stats["flushes"] += 1
+        return len(batch)
+
+    def flush_windows(limit=128):
+        batch = []
+        with journal_lock:
+            while window_rows and len(batch) < max(1, int(limit)):
+                batch.append(window_rows.popleft())
+        if not batch:
+            return 0
+        try:
+            written = journal.open_windows_batch(batch)
+        except Exception:
+            with journal_lock:
+                for row in reversed(batch):
+                    window_rows.appendleft(row)
+                window_stats["errors"] += 1
+            raise
+        with journal_lock:
+            window_stats["flushed"] += len(batch)
+            window_stats["flushes"] += 1
+        return written
+
+    def journal_snapshot():
+        with journal_lock:
+            return {
+                "observations": {**observation_stats, "pending": len(observation_rows)},
+                "windows": {**window_stats, "pending": len(window_rows)},
+            }
+
+    def journal_writer():
+        while not engine.stop_event.is_set():
+            # Replay/audit evidence can tolerate short RAM residency. Sparse sensors
+            # would otherwise cause one tiny WAL transaction per event, so coalesce for
+            # up to 2 seconds; large queues still wake the writer immediately.
+            journal_event.wait(2.0)
+            journal_event.clear()
+            try:
+                while True:
+                    observations = flush_observations()
+                    windows = flush_windows()
+                    if not observations and not windows:
+                        break
+            except Exception as exc:
+                try:
+                    store.event(
+                        None, "warning", "feature_journal_batch_flush_failed",
+                        f"Deferred feature-journal flush failed: {type(exc).__name__}: {exc}",
+                        None,
+                    )
+                except Exception:
+                    pass
+                time.sleep(0.1)
+        try:
+            while flush_observations() or flush_windows():
+                pass
+        except Exception:
+            pass
+
+    engine.feature_window_deferred_snapshot = journal_snapshot
+    engine.feature_observation_deferred_snapshot = journal_snapshot
+    threading.Thread(
+        target=journal_writer,
+        name="adaptive-ai-feature-journal-writer",
+        daemon=True,
+    ).start()
 
     def watched():
-        ts, values = engine._observation_watch_cache
-        now = now_ts()
-        if now - ts >= 2.0:
+        marker, values = engine._observation_watch_cache
+        with engine.lock:
+            current_marker = float(getattr(engine, "agent_index_at", 0.0) or 0.0)
+        if marker != current_marker:
             values = _watched_fast_entities(engine, store)
-            engine._observation_watch_cache = (now, values)
+            engine._observation_watch_cache = (current_marker, values)
         return values
 
     original_on_state_changed = engine.on_state_changed
@@ -1003,8 +1453,10 @@ def install(core):
             accepted = register_live_sample(engine.temporal_history, entity_id, state, event_time,
                                             received, "ha_state_changed")
         if accepted and entity_id in watched():
-            journal.record(entity_id, state, event_time=event_time, received_time=received,
-                           source="ha_state_changed")
+            queue_observation(
+                entity_id, state, event_time=event_time, received_time=received,
+                source="ha_state_changed",
+            )
         return result
     engine.on_state_changed = on_state_changed
 
@@ -1018,11 +1470,13 @@ def install(core):
             if not state:
                 continue
             event_time = parse_ts(state.get("last_updated") or state.get("last_changed")) or received
-            journal.record(entity_id, state, event_time=event_time, received_time=received,
-                           source="ha_poll_confirmation",
-                           event_key=("poll:" + hashlib.sha256(
-                               f"{entity_id}|{event_time:.9f}|{received:.3f}".encode("utf-8")
-                           ).hexdigest()[:32]))
+            queue_observation(
+                entity_id, state, event_time=event_time, received_time=received,
+                source="ha_poll_confirmation",
+                event_key=("poll:" + hashlib.sha256(
+                    f"{entity_id}|{event_time:.9f}|{received:.3f}".encode("utf-8")
+                ).hexdigest()[:32]),
+            )
             register_live_sample(engine.temporal_history, entity_id, state, event_time, received,
                                  "ha_poll_confirmation")
         return states
@@ -1030,30 +1484,32 @@ def install(core):
 
     original_submit = engine.executor.submit
     def submit(intent, features=None, action_index=None):
-        agent = store.get_agent_config(intent.agent_id)
+        with engine.lock:
+            agent = dict(getattr(engine, "agent_configs", {}).get(intent.agent_id) or {})
         policy = engine.models.get(intent.agent_id)
         if agent and policy and is_fast_reactive_agent(agent):
-            journal.open_window("decision:" + str(intent.intent_id), intent.agent_id,
-                                policy.schema.entities, intent.created_at, "decision")
+            queue_window("decision:" + str(intent.intent_id), intent.agent_id,
+                         policy.schema.entities, intent.created_at, "decision")
         return original_submit(intent, features, action_index)
     engine.executor.submit = submit
 
     original_process_agent = engine.process_agent
     def process_agent(agent, state_map, changed_entities=None):
+        correction = None
         if agent.get("target_entity") in set(changed_entities or ()) and is_fast_reactive_agent(agent):
             latest = getattr(engine, "_provenance_latest_events", {}).get(agent["target_entity"])
-            if latest and getattr(engine, "provenance", None):
-                event = engine.provenance.event(latest[1]) or {}
-                if event.get("origin") in {"user", "user_intent"}:
-                    policy = engine.models.get(agent["id"])
-                    if policy is None:
-                        with suppress(Exception):
-                            policy = engine.policy(agent)
-                    if policy is not None:
-                        journal.open_window("correction:" + str(latest[1]) + ":" + str(agent["id"]),
-                                            agent["id"], policy.schema.entities,
-                                            float(event.get("event_time") or now_ts()), "correction")
-        return original_process_agent(agent, state_map, changed_entities)
+            origin = str(latest[2] if latest and len(latest) > 2 else "unknown")
+            if latest and origin in {"user", "user_intent"}:
+                correction = (latest[1], float(latest[0]))
+        result = original_process_agent(agent, state_map, changed_entities)
+        if correction:
+            policy = engine.models.get(agent["id"])
+            if policy is not None:
+                queue_window(
+                    "correction:" + str(correction[0]) + ":" + str(agent["id"]),
+                    agent["id"], policy.schema.entities, correction[1], "correction",
+                )
+        return result
     engine.process_agent = process_agent
 
     migrated = _migrate_models(core)

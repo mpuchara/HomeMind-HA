@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from contextlib import contextmanager
 import threading
+import time
 
 from provenance import ProvenanceJournal, UNKNOWN
 from rewards import RewardEngine
@@ -87,6 +88,139 @@ def install(core):
     engine._provenance_latest_events = {}
     engine._provenance_contract_installed = True
 
+    # Shadow provenance is audit data, not part of the physical safety boundary. Buffer
+    # it and write one transaction per batch so SQLite latency never sits in event->intent.
+    deferred_lock = threading.RLock()
+    deferred_event = threading.Event()
+    deferred_rows = []
+    deferred_stats = {
+        "queued": 0,
+        "flushed": 0,
+        "flushes": 0,
+        "max_queue": 0,
+    }
+    event_stats = {"flushed": 0, "flushes": 0, "errors": 0}
+    generation_cache = {}
+    schema_cache = {}
+
+    def cached_generation(agent_id):
+        aid = str(agent_id)
+        revision = int(getattr(store, "_provenance_generation_revision", 0))
+        cached = generation_cache.get(aid)
+        if cached is not None and int(cached[0]) == revision:
+            return cached[1]
+        generation = journal.generation_for_agent(aid)
+        generation_cache[aid] = (revision, generation)
+        return generation
+
+    def cached_schema(agent_id, policy):
+        if policy is None:
+            return {}
+        key = (str(agent_id), str(getattr(policy, "model_revision", "")))
+        cached = schema_cache.get(key)
+        if cached is not None:
+            return cached
+        exported = policy.schema.export()
+        # Keep only the current revision for one agent.
+        for old in [item for item in schema_cache if item[0] == key[0] and item != key]:
+            schema_cache.pop(old, None)
+        schema_cache[key] = exported
+        return exported
+
+    def flush_deferred(agent_id=None):
+        aid = None if agent_id is None else str(agent_id)
+        with deferred_lock:
+            if not deferred_rows:
+                return 0
+            if aid is None:
+                batch = list(deferred_rows)
+                deferred_rows.clear()
+            else:
+                batch = [row for row in deferred_rows if str(row.get("agent_id")) == aid]
+                if not batch:
+                    return 0
+                deferred_rows[:] = [
+                    row for row in deferred_rows if str(row.get("agent_id")) != aid
+                ]
+        inserted = journal.record_decisions_batch(batch)
+        with deferred_lock:
+            deferred_stats["flushed"] += len(batch)
+            deferred_stats["flushes"] += 1
+        return inserted
+
+    def queue_deferred(row):
+        with deferred_lock:
+            deferred_rows.append(dict(row))
+            deferred_stats["queued"] += 1
+            deferred_stats["max_queue"] = max(
+                int(deferred_stats["max_queue"]), len(deferred_rows)
+            )
+            wake = len(deferred_rows) >= 32
+        if wake:
+            deferred_event.set()
+
+    def deferred_snapshot():
+        with deferred_lock:
+            decision = {**deferred_stats, "pending": len(deferred_rows)}
+        return {
+            **decision,
+            "decisions": decision,
+            "events": {
+                **event_stats,
+                "pending": journal.pending_event_count(),
+                "dropped": int(getattr(journal, "_dropped_pending_events", 0) or 0),
+            },
+        }
+
+    def flush_event_provenance():
+        total = 0
+        while journal.pending_event_count():
+            written = journal.flush_events_batch(512)
+            if not written:
+                break
+            total += int(written)
+        if total:
+            event_stats["flushed"] += total
+            event_stats["flushes"] += 1
+        return total
+
+    def provenance_writer():
+        while not engine.stop_event.is_set():
+            # Sparse event streams otherwise degenerate into one SQLite transaction per
+            # event. Keep observational provenance in RAM for up to 2 seconds; large
+            # Shadow decision batches still wake this writer early.
+            deferred_event.wait(2.0)
+            deferred_event.clear()
+            try:
+                flush_event_provenance()
+                flush_deferred()
+            except Exception as exc:
+                event_stats["errors"] += 1
+                try:
+                    store.event(
+                        None, "warning", "provenance_batch_flush_failed",
+                        f"Deferred provenance flush failed: {type(exc).__name__}: {exc}",
+                        None,
+                    )
+                except Exception:
+                    pass
+                time.sleep(0.1)
+        try:
+            flush_event_provenance()
+            flush_deferred()
+        except Exception:
+            pass
+
+    # Manual feedback and explicit provenance reads can force durability before lookup.
+    store._flush_provenance_decisions = flush_deferred
+    store._flush_provenance_events = flush_event_provenance
+    engine.provenance_deferred_snapshot = deferred_snapshot
+    threading.Thread(
+        target=provenance_writer,
+        name="adaptive-ai-provenance-writer",
+        daemon=True,
+    ).start()
+
     @contextmanager
     def command_origin(origin):
         previous = getattr(_TLS, "command_origin", None)
@@ -116,12 +250,14 @@ def install(core):
             entity_id, state, event_time=event_time, received_time=received,
             source="ha_state_changed", origin=origin,
         )
-        # Exactly-once at the learning boundary, but crash-safe: an event inserted before
-        # a crash is retried while processed_time is NULL. Only a completed prior handler
-        # suppresses the duplicate.
+        # Duplicate suppression is RAM-first for current events and warmed from recent
+        # durable rows at startup. Event provenance itself is batch-durable; the physical
+        # Control boundary remains synchronous in decision/command persistence below.
         if journal.event_processed(event_id):
             return None
-        engine._provenance_latest_events[entity_id] = (event_time, event_id)
+        # Keep origin beside the durable event id so downstream inference wrappers never
+        # need a provenance SELECT merely to classify the target event.
+        engine._provenance_latest_events[entity_id] = (event_time, event_id, origin)
         previous_event = getattr(_TLS, "event_id", None)
         previous_origin = getattr(_TLS, "event_origin", None)
         _TLS.event_id, _TLS.event_origin = event_id, origin
@@ -149,7 +285,10 @@ def install(core):
                     entity_id, state, event_time=event_time, received_time=now_ts(),
                     source="ha_poll", origin=origin,
                 )
-                engine._provenance_latest_events[entity_id] = (event_time, event_id)
+            else:
+                event_id = known.get("event_id")
+                origin = str(known.get("origin") or UNKNOWN)
+            engine._provenance_latest_events[entity_id] = (event_time, event_id, origin)
         return original_queue_archive(state, force=force)
 
     engine._queue_archive_state = queue_archive_state
@@ -198,46 +337,60 @@ def install(core):
     # --- Decision contract --------------------------------------------------
     original_submit = engine.executor.submit
 
-    def submit(intent, features=None, action_index=None):
-        features = features or {}
+    def decision_payload(intent, features):
+        # process_agent has already materialized the policy for any live inference.
+        # Provenance is observational here; never reopen agent configuration from SQLite
+        # simply to decorate a Shadow intent.
         policy = engine.models.get(intent.agent_id)
-        if policy is None:
-            agent = store.get_agent_config(intent.agent_id)
-            policy = engine.policy(agent) if agent else None
-        schema_export = policy.schema.export() if policy is not None else {}
-        generation = journal.generation_for_agent(intent.agent_id)
+        schema_export = cached_schema(intent.agent_id, policy)
+        generation = cached_generation(intent.agent_id)
         rt = engine.runtime.get(intent.agent_id) or {}
         experiment_id = _experiment_id(engine, intent)
-        manifest = {
-            "schema": schema_export,
-            "features": {str(k): float(v) for k, v in features.items()},
-            "policy_head": int(intent.policy_head),
-            "context_revision": int(intent.context_revision),
-            "target_revision": int(intent.target_revision),
-            "context_dependencies": [list(x) for x in intent.context_dependencies],
+        return {
+            "decision_id": intent.intent_id,
+            "created_time": intent.created_at,
+            "agent_id": intent.agent_id,
+            "generation_id": (generation or {}).get("generation_id"),
+            "trigger_event_id": _latest_trigger(engine, intent.agent_id),
+            "model_version": intent.policy_version,
+            "model_revision": intent.model_revision,
+            "schema_version": schema_export.get("version"),
+            "schema_revision": (
+                (getattr(policy, "selection_meta", {}) or {}).get("schema_revision")
+                if policy else None
+            ),
+            "reward_version": RewardEngine.VERSION,
+            "feature_manifest": {
+                "schema": schema_export,
+                "features": {str(k): float(v) for k, v in (features or {}).items()},
+                "policy_head": int(intent.policy_head),
+                "context_revision": int(intent.context_revision),
+                "target_revision": int(intent.target_revision),
+                "context_dependencies": [list(x) for x in intent.context_dependencies],
+            },
+            "allowed_actions": list(getattr(policy, "actions", []) or []),
+            "chosen_action": intent.desired_value,
+            "model_desired": rt.get("baseline_prediction", intent.desired_value),
+            "teaching_id": intent.teaching_id or None,
+            "teaching_desired": intent.desired_value if intent.teaching_id else None,
+            "experiment_id": experiment_id,
+            "episode_id": None,
+            "action_probability": None,
         }
-        journal.record_decision(
-            decision_id=intent.intent_id,
-            created_time=intent.created_at,
-            agent_id=intent.agent_id,
-            generation_id=(generation or {}).get("generation_id"),
-            trigger_event_id=_latest_trigger(engine, intent.agent_id),
-            model_version=intent.policy_version,
-            model_revision=intent.model_revision,
-            schema_version=schema_export.get("version"),
-            schema_revision=(getattr(policy, "selection_meta", {}) or {}).get("schema_revision") if policy else None,
-            reward_version=RewardEngine.VERSION,
-            feature_manifest=manifest,
-            allowed_actions=list(getattr(policy, "actions", []) or []),
-            chosen_action=intent.desired_value,
-            model_desired=rt.get("baseline_prediction", intent.desired_value),
-            teaching_id=intent.teaching_id or None,
-            teaching_desired=intent.desired_value if intent.teaching_id else None,
-            experiment_id=experiment_id,
-            # Production LinUCB exposes no true action propensity. NULL is truthful; do
-            # not manufacture a probability from confidence or the action score.
-            action_probability=None,
-        )
+
+    def submit(intent, features=None, action_index=None):
+        features = features or {}
+        with engine.lock:
+            hot_agent = dict(getattr(engine, "agent_configs", {}).get(intent.agent_id) or {})
+        defer_shadow = hot_agent.get("mode") == "shadow"
+        payload = decision_payload(intent, features)
+
+        # Control and uncertain routing remain synchronous because provenance must exist
+        # before any possible physical dispatch. Only positively identified Shadow uses
+        # the deferred audit path.
+        if not defer_shadow:
+            journal.record_decision(**payload)
+
         old_decision = getattr(_TLS, "decision_id", None)
         old_command = getattr(_TLS, "command_id", None)
         _TLS.decision_id, _TLS.command_id = intent.intent_id, None
@@ -248,12 +401,21 @@ def install(core):
             if leftover:
                 journal.fail_command(leftover)
             _TLS.decision_id, _TLS.command_id = old_decision, old_command
-        journal.mark_decision_status(intent.intent_id, result.get("status"), result.get("reason"))
+
+        if defer_shadow:
+            payload["dispatch_status"] = result.get("status")
+            payload["dispatch_reason"] = result.get("reason")
+            queue_deferred(payload)
+        else:
+            journal.mark_decision_status(
+                intent.intent_id, result.get("status"), result.get("reason")
+            )
+
         pending = (engine.runtime.get(intent.agent_id) or {}).get("pending")
         if result.get("status") == "ACCEPTED" and pending:
             pending["decision_id"] = intent.intent_id
             pending["episode_id"] = intent.intent_id
-            pending["experiment_id"] = experiment_id
+            pending["experiment_id"] = payload.get("experiment_id")
         return result
 
     engine.executor.submit = submit
@@ -323,14 +485,16 @@ def install(core):
         before_pending = rt.get("pending")
         before_ack = (before_pending or {}).get("acknowledged_ts")
         event_id = None
+        event_origin = UNKNOWN
         if agent.get("target_entity") in set(changed_entities or ()):
             row = engine._provenance_latest_events.get(agent["target_entity"])
-            event_id = row[1] if row else None
+            if row:
+                event_id = row[1]
+                event_origin = str(row[2] if len(row) > 2 else UNKNOWN)
         old_event = getattr(_TLS, "event_id", None)
         old_origin = getattr(_TLS, "event_origin", None)
         if event_id:
-            event = journal.event(event_id) or {}
-            _TLS.event_id, _TLS.event_origin = event_id, event.get("origin") or UNKNOWN
+            _TLS.event_id, _TLS.event_origin = event_id, event_origin
         try:
             result = original_process_agent(agent, state_map, changed_entities)
         finally:
@@ -343,22 +507,22 @@ def install(core):
                 before_pending.get("decision_id"), event_id=event_id,
                 ack_time=before_pending.get("acknowledged_ts"),
             )
-        if event_id:
-            event = journal.event(event_id) or {}
-            if event.get("origin") in {"user", "user_intent"}:
-                # Existing manual-learning code remains authoritative. This row only
-                # supplies durable provenance and an idempotency identity for audit/replay.
-                for row in store.list_feedback(aid, limit=4):
-                    if "manual demonstration" not in str(row.get("reason") or ""):
-                        continue
-                    journal.record_experience(
-                        experience_key=f"manual:{event_id}:{aid}:{row['id']}",
-                        agent_id=aid, source="manual_demonstration", origin=event.get("origin") or UNKNOWN,
-                        source_event_id=event_id, action_index=row.get("action_index"),
-                        action_value=row.get("action_value"), reward=row.get("reward"),
-                        features=row.get("features"), metadata={"feedback_id": row.get("id"), "user_id": row.get("user_id")},
-                    )
-                    break
+        if event_id and event_origin in {"user", "user_intent"}:
+            # Existing manual-learning code remains authoritative. This row only
+            # supplies durable provenance and an idempotency identity for audit/replay.
+            # This rare explicit-user branch may write audit data, but the common target
+            # event path no longer performs a provenance SELECT before or after inference.
+            for row in store.list_feedback(aid, limit=4):
+                if "manual demonstration" not in str(row.get("reason") or ""):
+                    continue
+                journal.record_experience(
+                    experience_key=f"manual:{event_id}:{aid}:{row['id']}",
+                    agent_id=aid, source="manual_demonstration", origin=event_origin,
+                    source_event_id=event_id, action_index=row.get("action_index"),
+                    action_value=row.get("action_value"), reward=row.get("reward"),
+                    features=row.get("features"), metadata={"feedback_id": row.get("id"), "user_id": row.get("user_id")},
+                )
+                break
         return result
 
     engine.process_agent = process_agent
@@ -428,6 +592,11 @@ def install(core):
         ids = sorted(set(str(x) for x in (entity_ids or []) if x))
         if not ids:
             return {}
+        # Replay is a cold/background persistence boundary. Flush current RAM provenance
+        # once here so the indexed SQL join sees events acknowledged moments earlier,
+        # without reintroducing per-event writes into the live path.
+        if journal.pending_event_count():
+            flush_event_provenance()
         placeholders = ",".join("?" for _ in ids)
         params = [float(start_ts), float(end_ts)] + ids
         with store.conn() as c:

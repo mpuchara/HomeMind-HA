@@ -68,7 +68,26 @@ class ManualFeedbackJournal:
     def __init__(self, store, clock=time.time):
         self.store = store
         self.clock = clock
+        self._listeners = []
+        if not hasattr(self.store, "_manual_feedback_revisions"):
+            self.store._manual_feedback_revisions = {}
         self._migrate()
+
+    def add_listener(self, callback):
+        if callable(callback) and callback not in self._listeners:
+            self._listeners.append(callback)
+
+    def _notify(self, *agent_ids):
+        ids = tuple(str(x) for x in agent_ids if x)
+        revisions = getattr(self.store, "_manual_feedback_revisions", None)
+        if isinstance(revisions, dict):
+            for agent_id in ids:
+                revisions[agent_id] = int(revisions.get(agent_id, 0)) + 1
+        for callback in tuple(self._listeners):
+            try:
+                callback(*ids)
+            except Exception:
+                pass
 
     def _migrate(self):
         with self.store.lock, self.store.conn() as c:
@@ -131,6 +150,11 @@ class ManualFeedbackJournal:
 
     def _decision_link(self, agent_id, selected_ts, decision_id=None, episode_id=None):
         """Resolve exact/nearby provenance without inventing historical attribution."""
+        # Shadow decision provenance is batched off the realtime path. Manual feedback is
+        # an interactive durability boundary, so flush this agent before linking.
+        flush = getattr(self.store, "_flush_provenance_decisions", None)
+        if callable(flush):
+            flush(str(agent_id))
         selected_ts = float(selected_ts)
         with self.store.conn() as c:
             if not _table_exists(c, "provenance_decisions"):
@@ -314,7 +338,10 @@ class ManualFeedbackJournal:
                     f"conflict_json=? WHERE feedback_id IN ({placeholders}) AND undone_ts IS NULL",
                     (_json(sorted(set(conflicts + [feedback_id]))), *conflicts),
                 )
-        return self.get(feedback_id)
+        row = self.get(feedback_id)
+        if row:
+            self._notify(row.get("agent_id"), row.get("root_agent_id"))
+        return row
 
     def get(self, feedback_id):
         with self.store.conn() as c:
@@ -358,7 +385,10 @@ class ManualFeedbackJournal:
                    learning_effect_json=?,undo_status=COALESCE(?,undo_status) WHERE feedback_id=?""",
                 (str(status), _json(immediate), _json(learning), undo_status, str(feedback_id)),
             )
-        return self.get(feedback_id)
+        row = self.get(feedback_id)
+        if row:
+            self._notify(row.get("agent_id"), row.get("root_agent_id"))
+        return row
 
     def link(self, feedback_id, effect_kind, ref_type, ref_id, *, status="applied", metadata=None):
         now = float(self.clock())

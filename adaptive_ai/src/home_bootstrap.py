@@ -128,6 +128,9 @@ class HomeBootstrap:
                             "ON CONFLICT(key) DO UPDATE SET value=excluded.value",
                             (ContextEngine.ROOM_MODEL_KEY, raw),
                         )
+                    with self.store.lock:
+                        if hasattr(self.store, "_meta_cache"):
+                            self.store._meta_cache[ContextEngine.ROOM_MODEL_KEY] = raw
                     current = self.context.home
                     current.graph, current.dwell = model.graph, model.dwell
                     current.calibration = model.calibration
@@ -138,6 +141,9 @@ class HomeBootstrap:
                     self.context.bootstrap_delta = None
                     self.context.room_checkpoint_source = ContextEngine.ROOM_MODEL_KEY
                     self.context.last_save = time.time()
+                    self.context._last_saved_room_model_raw = json.dumps(
+                        model.export(), separators=(',', ':'), sort_keys=True
+                    )
             self.status.update(state='READY', progress=1, rows=rows, eta_seconds=0,
                                rows_per_second=rows / max(.001, time.monotonic() - started))
         except InterruptedError as exc:

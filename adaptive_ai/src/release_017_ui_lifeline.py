@@ -20,7 +20,7 @@ def install(runtime):
         return getattr(core, "RELEASE_017_UI_LIFELINE", None)
 
     import queue_main as queue_runtime
-    from telemetry import HEAVY_JOBS
+    from telemetry import HEAVY_JOBS, TELEMETRY
     from training_queue import TrainingQueue
 
     cache_lock = threading.RLock()
@@ -31,6 +31,8 @@ def install(runtime):
         "agent_lifeline_reads": 0,
         "status_lifeline_reads": 0,
         "queue_label_reads": 0,
+        "home_diag_cache_at": 0.0,
+        "home_diag_refreshes": 0,
     }
     rich_agents = {}
     rich_status = {}
@@ -58,12 +60,54 @@ def install(runtime):
     # Queue status previously performed COUNT/AVG history scans merely to resolve every
     # queued agent's display name. The config-only lookup is sufficient and O(1)-ish.
     def cheap_agent_label(queue_self, agent_id):
-        agent = queue_self.store.get_agent_config(agent_id)
+        core.ENGINE._refresh_agent_index()
+        with core.ENGINE.lock:
+            agent = dict(getattr(core.ENGINE, "all_agent_configs", {}).get(str(agent_id)) or {})
+        if not agent:
+            agent = queue_self.store.get_agent_config(agent_id)
         with cache_lock:
             state["queue_label_reads"] += 1
         return (agent or {}).get("name") or agent_id
 
     TrainingQueue._agent_label = cheap_agent_label
+
+    def hot_configs():
+        # Revision-driven refresh performs no SQLite read while agent config is unchanged.
+        # The complete config cache is intentionally distinct from the inference-routing
+        # subset so PAUSED / WAITING / NEEDS_RETRAIN cards never disappear from the UI.
+        core.ENGINE._refresh_agent_index()
+        with core.ENGINE.lock:
+            return [dict(row) for row in core.ENGINE.all_agent_configs.values()]
+
+    home_cache = {"home_intelligence": {}, "home_bootstrap": {}}
+
+    def hot_home_diagnostics():
+        # Home Intelligence diagnostics are in-memory but not free: they summarize areas,
+        # sources and adaptive-presence capability. Refresh them at most once per 5 s so
+        # the panel stays truthful without competing with event -> intent on Raspberry Pi.
+        now = time.monotonic()
+        with cache_lock:
+            cached_at = float(state.get("home_diag_cache_at") or 0.0)
+            if cached_at > 0.0 and now - cached_at < 5.0:
+                return (
+                    dict(home_cache.get("home_intelligence") or {}),
+                    dict(home_cache.get("home_bootstrap") or {}),
+                )
+        try:
+            intelligence = core.ENGINE.context.diagnostics()
+        except Exception as exc:
+            intelligence = {"diagnostics_error": f"{type(exc).__name__}: {exc}"}
+        bootstrap = (
+            dict(core.ENGINE.home_bootstrap.status)
+            if getattr(core.ENGINE, "home_bootstrap", None) is not None
+            else {}
+        )
+        with cache_lock:
+            home_cache["home_intelligence"] = dict(intelligence or {})
+            home_cache["home_bootstrap"] = dict(bootstrap or {})
+            state["home_diag_cache_at"] = now
+            state["home_diag_refreshes"] = int(state.get("home_diag_refreshes") or 0) + 1
+        return dict(intelligence or {}), dict(bootstrap or {})
 
     def snapshot():
         with cache_lock:
@@ -74,23 +118,21 @@ def install(runtime):
 
     def hot_agent_payloads(handler_self):
         nonlocal rich_agents
-        if not heavy_active():
-            agents = original_agent_payloads(handler_self)
-            with cache_lock:
-                rich_agents = {a["id"]: dict(a) for a in agents}
-                state["rich_agent_cache_at"] = time.time()
-            return agents
-
-        # Training lifeline: avoid rich history aggregates and runtime diagnostics.
+        # Operational UI path is always lightweight. Rich COUNT/AVG history aggregates
+        # are not allowed on the 4 s polling path, even when no heavy job is active.
+        # Detailed historical diagnostics remain available through explicit endpoints.
+        # Avoid rich history aggregates and runtime diagnostics.
         # diagnostics. Start from the last rich card and overlay only current cheap data.
         from context import target_value
 
-        configs = core.STORE.list_agent_configs()
+        configs = hot_configs()
         with core.ENGINE.lock:
             states = dict(core.ENGINE.state_map)
             hot_runtime = {
                 aid: dict(value) for aid, value in core.ENGINE.runtime.items()
             }
+            realtime_connected = bool(core.ENGINE.ws_connected)
+            realtime_error = core.ENGINE.ws_error
         with cache_lock:
             cached = {aid: dict(value) for aid, value in rich_agents.items()}
             state["agent_lifeline_reads"] += 1
@@ -135,6 +177,8 @@ def install(runtime):
                 else None
             )
             runtime_payload["training_state"] = config.get("training_state") or "training"
+            runtime_payload["realtime_connected"] = realtime_connected
+            runtime_payload["realtime_error"] = realtime_error
             runtime_payload["benchmark_score"] = config.get("benchmark_score")
             runtime_payload["benchmark_samples"] = int(
                 config.get("benchmark_samples") or 0
@@ -148,7 +192,7 @@ def install(runtime):
             agent.setdefault("control_lease", None)
             agent["training_queue"] = queue.status_for(aid) if queue else None
             agent["runtime"] = runtime_payload
-            agent["_ui_read_mode"] = "training_lifeline"
+            agent["_ui_read_mode"] = "operational_hot"
             out.append(agent)
         return out
 
@@ -156,24 +200,18 @@ def install(runtime):
 
     def status_payload(handler_self):
         nonlocal rich_status
-        if not core.runtime_available() or not heavy_active():
+        startup = core.startup_snapshot()
+        if not startup.get("ready") or not core.runtime_available():
+            # Keep the earlier startup guard authoritative until Engine and its locks are
+            # fully composed. Never touch a partial Engine from the hot operational path.
             payload = previous_status_payload(handler_self)
-            if core.runtime_available():
-                with cache_lock:
-                    rich_status = dict(payload)
-                    state["rich_status_cache_at"] = time.time()
-            payload["status_read_mode"] = (
-                "normal" if core.runtime_available() else "startup"
-            )
-            low_power = getattr(core, "LOW_POWER_RUNTIME", None)
-            if callable(low_power):
-                payload["low_power_runtime"] = low_power()
+            payload["status_read_mode"] = "startup"
             payload["ui_lifeline"] = snapshot()
             return payload
 
-        # Do not call Engine.status() here: it performs list_agents() aggregate history
-        # queries. The lifeline intentionally exposes only cheap current state plus the
-        # most recent rich snapshot until historical work yields the heavy slot.
+        # Operational status must remain O(number of agents + in-memory runtime).
+        # Engine.status()/STORE.list_agents() perform history aggregates and are never
+        # called from the periodic UI path.
         with cache_lock:
             payload = dict(rich_status)
             state["status_lifeline_reads"] += 1
@@ -189,7 +227,13 @@ def install(runtime):
             ws_error = core.ENGINE.ws_error
             registry_count = len(core.ENGINE.entity_registry)
             last_ws_event = core.ENGINE.last_ws_event
-        configs = core.STORE.list_agent_configs()
+            last_state_sync_ok = getattr(core.ENGINE, "last_state_sync_ok", None)
+            last_state_sync_error = getattr(core.ENGINE, "last_state_sync_error", None)
+            state_resync_stats = dict(getattr(core.ENGINE, "state_resync_stats", {}) or {})
+            active_inference_agent_count = len(core.ENGINE.agent_configs)
+            inference_scheduler = dict(core.ENGINE.inference_scheduler)
+        configs = hot_configs()
+        home_intelligence, home_bootstrap = hot_home_diagnostics()
         queue = queue_object()
         startup = core.startup_snapshot()
 
@@ -200,6 +244,7 @@ def install(runtime):
                 "last_poll": last_poll,
                 "state_count": state_count,
                 "agent_count": len(configs),
+                "active_inference_agent_count": active_inference_agent_count,
                 "average_confidence": (
                     sum(float(x) for x in confidences) / len(confidences)
                     if confidences
@@ -210,6 +255,12 @@ def install(runtime):
                     "error": ws_error,
                     "registry_entries": registry_count,
                     "last_event": last_ws_event,
+                },
+                "inference_scheduler": inference_scheduler,
+                "state_resync": {
+                    **state_resync_stats,
+                    "last_ok": last_state_sync_ok,
+                    "error": last_state_sync_error,
                 },
                 "history": (
                     core.HISTORY.status()
@@ -224,17 +275,28 @@ def install(runtime):
                 ),
                 "startup": startup,
                 "options": core.OPTIONS,
-                "status_read_mode": "training_lifeline",
+                "telemetry": TELEMETRY.snapshot(),
+                "status_read_mode": "operational_hot",
             }
         )
-        payload.setdefault("ha_connected", bool(ws_connected))
-        payload.setdefault("ha_error", ws_error)
+        # HA reachability and realtime delivery are separate. Use only the dedicated
+        # /states reconciliation health for REST fallback. HAClient.last_error is shared
+        # by unrelated history/config/service calls and previously produced false
+        # "HA disconnected" banners even while the core state API was healthy.
+        ha_rest_connected = bool(
+            last_state_sync_ok is not None and last_state_sync_error is None
+        )
+        payload["ha_connected"] = bool(ws_connected or ha_rest_connected)
+        payload["ha_rest_connected"] = ha_rest_connected
+        payload["ha_error"] = (
+            None if ws_connected or ha_rest_connected
+            else (last_state_sync_error or ws_error)
+        )
         payload.setdefault("feedback_count", 0)
         payload.setdefault("historical_experience_count", 0)
         payload.setdefault("automation_knowledge", {})
-        payload.setdefault("home_intelligence", {})
-        payload.setdefault("home_bootstrap", {})
-        payload.setdefault("telemetry", {})
+        payload["home_intelligence"] = home_intelligence
+        payload["home_bootstrap"] = home_bootstrap
 
         low_power = getattr(core, "LOW_POWER_RUNTIME", None)
         if callable(low_power):
@@ -242,14 +304,52 @@ def install(runtime):
         release_016 = getattr(core, "RELEASE_016_RESOURCE_GUARD", None)
         if callable(release_016):
             payload["resource_guard"] = release_016()
+        feature_journal = getattr(core.ENGINE, "feature_observation_deferred_snapshot", None)
+        if callable(feature_journal):
+            payload["feature_journal"] = feature_journal()
+        provenance_queue = getattr(core.ENGINE, "provenance_deferred_snapshot", None)
+        if callable(provenance_queue):
+            payload["provenance_queue"] = provenance_queue()
+        adaptation = getattr(
+            getattr(core.ENGINE, "agent_candidates", None),
+            "adaptation_service",
+            None,
+        )
+        adaptation_snapshot = getattr(adaptation, "observer_snapshot", None)
+        if callable(adaptation_snapshot):
+            payload["drift_observer"] = adaptation_snapshot()
+        # These are advisory backlog gauges only. Never wait for persistence/training
+        # locks merely to render /api/status: a long microSD transaction must not turn a
+        # harmless queue-length read into a 12 s UI timeout. CPython deque/list length and
+        # integer reads are atomic enough for intentionally approximate diagnostics.
+        archive_pending = len(getattr(core.ENGINE, "pending_archive", ()) or ())
+        teaching = getattr(core.ENGINE, "teaching", None)
+        decision_history_pending = (
+            len(getattr(teaching, "buffer", ()) or ()) if teaching is not None else 0
+        )
+        diagnostic_events_pending = len(getattr(core.STORE, "_event_buffer", ()) or ())
+        diagnostic_events_dropped = int(
+            getattr(core.STORE, "_event_buffer_dropped", 0) or 0
+        )
+        tournament = getattr(core.ENGINE, "context_tournament", None)
+        shadow_snapshot = getattr(tournament, "shadow_persistence_snapshot", None)
+        fast_snapshot = getattr(tournament, "fast_light_persistence_snapshot", None)
+        payload["ram_persistence_buffers"] = {
+            "archive_pending": archive_pending,
+            "decision_history_pending": decision_history_pending,
+            "diagnostic_events_pending": diagnostic_events_pending,
+            "diagnostic_events_dropped": diagnostic_events_dropped,
+            "context_shadow": shadow_snapshot() if callable(shadow_snapshot) else {},
+            "fast_light": fast_snapshot() if callable(fast_snapshot) else {},
+        }
         payload["ui_lifeline"] = snapshot()
         return payload
 
     core.Handler.status_payload = status_payload
     core.RELEASE_017_UI_LIFELINE = snapshot
     core.release_017_ui_lifeline_contract = {
-        "status_during_training": "cached_rich_plus_hot_state_without_engine_status",
-        "agents_during_training": "config_plus_cached_rich_without_history_aggregates",
+        "status_periodic": "always_hot_state_without_engine_status_or_history_aggregates",
+        "agents_periodic": "config_plus_hot_runtime_without_history_aggregates",
         "queue_labels": "config_only",
         "mutations": "unchanged",
         "learning": "unchanged",

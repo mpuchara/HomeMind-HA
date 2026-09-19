@@ -11,6 +11,7 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import threading
 import time
 from collections import Counter
 
@@ -226,6 +227,19 @@ class AdaptationService:
         self.store = manager.store
         self.engine = manager.engine
         self._in_observe = set()
+        # Drift detection is deliberately off the realtime inference worker. The old
+        # implementation ran SQLite episode ingestion + drift scans synchronously after
+        # every live inference; as evidence accumulated this became an O(history) hot path
+        # and could starve the HA websocket/UI on Raspberry Pi.
+        self._observer_lock = threading.RLock()
+        self._observer_event = threading.Event()
+        self._observer_pending = {}
+        self._observer_last_run = {}
+        self._observer_thread = None
+        self._observer_stats = {
+            "scheduled": 0, "coalesced": 0, "runs": 0, "errors": 0,
+            "pending_high_water": 0, "last_run_ms": 0.0, "max_run_ms": 0.0,
+        }
         ensure_tables(self.store)
 
     def _state(self, agent_id):
@@ -426,8 +440,15 @@ class AdaptationService:
             )
         return bool(cur.rowcount)
 
-    def ingest_episode_evaluator(self, agent_id):
+    def ingest_episode_evaluator(self, agent_id, limit=128):
+        """Import only episode rows not already seen, in one bounded transaction.
+
+        Previously every inference selected the complete episode history and attempted one
+        INSERT OR IGNORE transaction per historical row. Runtime cost therefore increased
+        monotonically with uptime. The observer now consumes only the missing suffix.
+        """
         aid = str(agent_id)
+        limit = max(1, min(512, int(limit or 128)))
         with self.store.conn() as c:
             if not (_table_exists(c, "episode_evaluator_episodes")
                     and _table_exists(c, "episode_evaluator_policy_results")):
@@ -436,26 +457,45 @@ class AdaptationService:
                 """SELECT e.episode_id,e.end_ts,e.context_json,r.metrics_json
                    FROM episode_evaluator_episodes e
                    JOIN episode_evaluator_policy_results r ON r.episode_id=e.episode_id
+                   LEFT JOIN adaptation_episode_observations a
+                     ON a.agent_id=e.agent_id AND a.episode_id=e.episode_id
                    WHERE e.agent_id=? AND r.role='live' AND r.executed=1
-                   ORDER BY e.end_ts,e.episode_id""", (aid,),
+                     AND a.episode_id IS NULL
+                   ORDER BY e.end_ts,e.episode_id
+                   LIMIT ?""",
+                (aid, limit),
             ).fetchall()
-        added = 0
+        if not rows:
+            return 0
+
+        packed = []
         last_ts = None
+        created = time.time()
         for raw in rows:
             row = dict(raw)
             metrics = _json(row.get("metrics_json"), {})
             quality, cost = _quality_from_metrics(metrics)
             context = _json(row.get("context_json"), {})
             ts = float(row["end_ts"])
-            if self.record_episode(
-                aid, row["episode_id"], ts, quality=quality, cost=cost,
-                harmful=bool(metrics.get("harmful")),
-                correction_count=int(metrics.get("manual_correction_count") or 0),
-                context_bucket=_context_bucket(context, ts), source="episode_evaluator_live",
-            ):
-                added += 1
-                last_ts = ts
-        if last_ts is not None:
+            hour = (ts % 86400.0) / 3600.0
+            packed.append((
+                aid, str(row["episode_id"]), ts, _finite(quality), _finite(cost),
+                int(bool(metrics.get("harmful"))),
+                int(metrics.get("manual_correction_count") or 0),
+                hour, _context_bucket(context, ts), "episode_evaluator_live", created,
+            ))
+            last_ts = ts
+
+        with self.store.lock, self.store.conn() as c:
+            before = c.total_changes
+            c.executemany(
+                """INSERT OR IGNORE INTO adaptation_episode_observations
+                   (agent_id,episode_id,ts,quality,cost,harmful,correction_count,activity_hour,
+                    context_bucket,source,created_ts) VALUES(?,?,?,?,?,?,?,?,?,?,?)""",
+                packed,
+            )
+            added = int(c.total_changes - before)
+        if added and last_ts is not None:
             self._update_state(aid, last_episode_ts=last_ts)
         return added
 
@@ -505,22 +545,45 @@ class AdaptationService:
             "preference_latest_ts": latest,
         }
 
-    def _episode_rows(self, agent_id):
+    def _episode_rows(self, agent_id, *, limit=None, after_ts=None, quality_only=False):
+        where = ["agent_id=?"]
+        values = [str(agent_id)]
+        if after_ts is not None:
+            where.append("ts>?")
+            values.append(float(after_ts))
+        if quality_only:
+            where.append("quality IS NOT NULL")
+        sql = (
+            "SELECT * FROM adaptation_episode_observations WHERE "
+            + " AND ".join(where)
+            + " ORDER BY ts DESC,episode_id DESC"
+        )
+        if limit is not None:
+            sql += " LIMIT ?"
+            values.append(max(1, int(limit)))
         with self.store.conn() as c:
-            return [dict(row) for row in c.execute(
-                "SELECT * FROM adaptation_episode_observations WHERE agent_id=? ORDER BY ts,episode_id",
-                (str(agent_id),),
-            ).fetchall()]
+            rows = [dict(row) for row in c.execute(sql, values).fetchall()]
+        rows.reverse()
+        return rows
 
-    def _env_rows(self, agent_id):
+    def _env_rows(self, agent_id, *, limit=None):
+        sql = (
+            "SELECT * FROM adaptation_environment_snapshots "
+            "WHERE agent_id=? ORDER BY ts DESC,id DESC"
+        )
+        values = [str(agent_id)]
+        if limit is not None:
+            sql += " LIMIT ?"
+            values.append(max(1, int(limit)))
         with self.store.conn() as c:
-            return [dict(row) for row in c.execute(
-                "SELECT * FROM adaptation_environment_snapshots WHERE agent_id=? ORDER BY ts,id",
-                (str(agent_id),),
-            ).fetchall()]
+            rows = [dict(row) for row in c.execute(sql, values).fetchall()]
+        rows.reverse()
+        return rows
 
     def _episode_shift(self, agent_id):
-        rows = [row for row in self._episode_rows(agent_id) if row.get("quality") is not None]
+        rows = self._episode_rows(
+            agent_id, limit=BASELINE_EPISODES + RECENT_EPISODES, quality_only=True
+        )
         if len(rows) < BASELINE_EPISODES + RECENT_EPISODES:
             return {"ready": False, "episodes": len(rows), "required": BASELINE_EPISODES + RECENT_EPISODES}
         baseline = rows[-(BASELINE_EPISODES + RECENT_EPISODES):-RECENT_EPISODES]
@@ -547,7 +610,7 @@ class AdaptationService:
         }
 
     def _environment_shift(self, agent_id):
-        rows = self._env_rows(agent_id)
+        rows = self._env_rows(agent_id, limit=ENV_STABLE_SNAPSHOTS * 2)
         if len(rows) < ENV_STABLE_SNAPSHOTS * 2:
             return {"ready": False, "snapshots": len(rows)}
         previous = rows[-ENV_STABLE_SNAPSHOTS * 2:-ENV_STABLE_SNAPSHOTS]
@@ -742,10 +805,12 @@ class AdaptationService:
         return True
 
     def _post_promotion_rows(self, agent_id, promoted_ts):
-        return [
-            row for row in self._episode_rows(agent_id)
-            if row.get("quality") is not None and float(row.get("ts") or 0.0) > float(promoted_ts or 0.0)
-        ]
+        return self._episode_rows(
+            agent_id,
+            limit=POST_PROMOTION_EPISODES,
+            after_ts=float(promoted_ts or 0.0),
+            quality_only=True,
+        )
 
     def _restore_backup(self, agent_id, backup_id):
         aid = str(agent_id)
@@ -825,6 +890,7 @@ class AdaptationService:
                                lifecycle_state='live',retired_ts=NULL,updated_ts=? WHERE generation_id=?""",
                             (aid, now, previous["generation_id"]),
                         )
+            self.store.touch_agent_index()
             self.engine.models.pop(aid, None)
             self.engine.runtime.pop(aid, None)
             if current_mode != "control" and old_mode == "control":
@@ -834,6 +900,7 @@ class AdaptationService:
                 except Exception:
                     with self.store.lock, self.store.conn() as c:
                         c.execute("UPDATE agents SET mode='shadow' WHERE id=?", (aid,))
+                    self.store.touch_agent_index()
                     raise
         return True
 
@@ -893,17 +960,16 @@ class AdaptationService:
                 self._update_state(aid, last_observe_ts=now)
             self._post_promotion_monitor(aid)
             state = self._state(aid)
-            if state.get("status") not in ("candidate_active", "promoted_monitoring"):
-                detection = self.detect(aid)
-                if detection.get("detected"):
-                    self._start_adaptation(aid, detection)
-            return self.status(aid)
+            detection = self.detect(aid)
+            if (state.get("status") not in ("candidate_active", "promoted_monitoring")
+                    and detection.get("detected")):
+                self._start_adaptation(aid, detection)
+            return self._status_payload(aid, detection)
         finally:
             self._in_observe.discard(aid)
 
-    def status(self, agent_id):
+    def _status_payload(self, agent_id, detection):
         state = self._state(agent_id)
-        detection = self.detect(agent_id)
         anchors = self.regression_anchors(agent_id)
         return {
             "contract_version": CONTRACT_VERSION,
@@ -926,6 +992,93 @@ class AdaptationService:
                 "rollback_backup_id": state.get("rollback_backup_id"),
             },
         }
+
+    def status(self, agent_id):
+        return self._status_payload(str(agent_id), self.detect(agent_id))
+
+    def schedule_observe(self, agent):
+        """O(1) realtime hook: coalesce drift work for the background observer."""
+        aid = str((agent or {}).get("id") or "")
+        if not aid:
+            return False
+        # Direct/synthetic process_agent calls intentionally do not start runtime worker
+        # threads. In production Engine is alive before it can deliver realtime inference.
+        is_alive = getattr(self.engine, "is_alive", None)
+        if callable(is_alive) and not is_alive():
+            return False
+        self.start_observer()
+        with self._observer_lock:
+            existed = aid in self._observer_pending
+            self._observer_pending[aid] = dict(agent)
+            self._observer_stats["scheduled"] += 1
+            self._observer_stats["coalesced"] += int(existed)
+            self._observer_stats["pending_high_water"] = max(
+                int(self._observer_stats["pending_high_water"]),
+                len(self._observer_pending),
+            )
+        # One pending item is enough to wake the observer. Re-signalling the Event after
+        # every inference while the same agent is still inside its 30 s throttle window
+        # creates a pointless wake/clear loop under active sensor traffic.
+        if not existed:
+            self._observer_event.set()
+        return True
+
+    def observer_snapshot(self):
+        with self._observer_lock:
+            return {
+                **self._observer_stats,
+                "pending": len(self._observer_pending),
+                "thread_alive": bool(self._observer_thread and self._observer_thread.is_alive()),
+            }
+
+    def _observer_loop(self):
+        stop_event = getattr(self.engine, "stop_event", None)
+        while stop_event is None or not stop_event.is_set():
+            self._observer_event.wait(1.0)
+            self._observer_event.clear()
+            now = time.time()
+            with self._observer_lock:
+                due = [
+                    (aid, agent)
+                    for aid, agent in self._observer_pending.items()
+                    if now - float(self._observer_last_run.get(aid) or 0.0)
+                    >= OBSERVE_THROTTLE_SECONDS
+                ]
+                for aid, _ in due:
+                    self._observer_pending.pop(aid, None)
+                    self._observer_last_run[aid] = now
+            for aid, agent in due:
+                started = time.perf_counter()
+                try:
+                    with self.engine.lock:
+                        states = dict(getattr(self.engine, "state_map", {}) or {})
+                    self.observe_live(agent, states, now=now)
+                    elapsed = (time.perf_counter() - started) * 1000.0
+                    with self._observer_lock:
+                        self._observer_stats["runs"] += 1
+                        self._observer_stats["last_run_ms"] = elapsed
+                        self._observer_stats["max_run_ms"] = max(
+                            float(self._observer_stats["max_run_ms"]), elapsed
+                        )
+                except Exception as exc:
+                    with self._observer_lock:
+                        self._observer_stats["errors"] += 1
+                    self.store.event(
+                        aid, "warning", "controlled_drift_monitor_gap",
+                        "Background drift monitor could not evaluate this runtime observation",
+                        {"error": f"{type(exc).__name__}: {exc}"},
+                    )
+
+    def start_observer(self):
+        if self._observer_thread is not None and self._observer_thread.is_alive():
+            return self._observer_thread
+        self._observer_thread = threading.Thread(
+            target=self._observer_loop,
+            name="adaptive-ai-drift-observer",
+            daemon=True,
+        )
+        self._observer_thread.start()
+        return self._observer_thread
 
 
 def contract_descriptor():
@@ -961,14 +1114,10 @@ def install(manager):
 
     def after_live_process(agent, state_map):
         result = original_after(agent, state_map)
-        try:
-            service.observe_live(agent, state_map)
-        except Exception as exc:
-            manager.store.event(
-                agent.get("id"), "warning", "controlled_drift_monitor_gap",
-                "Drift monitor could not evaluate this runtime observation",
-                {"error": f"{type(exc).__name__}: {exc}"},
-            )
+        # Drift/adaptation diagnostics are not part of the decision deadline. Coalesce
+        # them for the background observer instead of performing SQLite scans in the
+        # realtime inference worker.
+        service.schedule_observe(agent)
         return result
 
     def promote(parent_id, target_mode=None):

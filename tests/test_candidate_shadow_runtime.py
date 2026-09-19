@@ -10,6 +10,7 @@ import storage
 from agent_candidates import AgentCandidateManager, ensure_tables, install_store_overlay
 from agent_candidate_conservative_correct import install as install_conservative_correct
 from agent_candidate_lineage import install as install_lineage
+import agent_candidate_shadow_runtime as shadow_runtime_module
 from agent_candidate_shadow_runtime import install as install_shadow_runtime
 
 
@@ -177,6 +178,38 @@ class CandidateShadowRuntimeTests(unittest.TestCase):
         self.engine.runtime[self.root["id"]] = {"last_prediction": 0.0, "last_confidence": .82}
         return self.manager.after_live_process(self.root, states)
 
+    def test_no_candidate_means_no_candidate_shadow_bundle_or_decision_write(self):
+        bundle = self._run_shadow()
+        self.assertIsNone(bundle)
+        with self.store.conn() as c:
+            count = c.execute("SELECT COUNT(*) FROM candidate_generation_decisions").fetchone()[0]
+        self.assertEqual(count, 0)
+
+    def test_active_candidate_parent_index_tracks_create_and_discard(self):
+        self.assertFalse(self.manager.candidate_hot_active(self.root["id"]))
+        queued = self.manager.enqueue(self.root["id"], "teach")
+        self.assertIsNotNone(queued.get("candidate_id"))
+        self.assertTrue(self.manager.candidate_hot_active(self.root["id"]))
+        self.manager.discard(self.root["id"])
+        self.assertFalse(self.manager.candidate_hot_active(self.root["id"]))
+
+    def test_no_candidate_generation_cache_is_event_invalidated_not_polled(self):
+        original = shadow_runtime_module._shadow_generations
+        calls = []
+        def counted(store, root_id):
+            calls.append(str(root_id))
+            return original(store, root_id)
+        shadow_runtime_module._shadow_generations = counted
+        try:
+            self.assertIsNone(self._run_shadow())
+            self.assertIsNone(self._run_shadow())
+            self.assertEqual(calls, [str(self.root["id"])])
+            self.manager.invalidate_candidate_shadow_cache()
+            self.assertIsNone(self._run_shadow())
+            self.assertEqual(calls, [str(self.root["id"]), str(self.root["id"])])
+        finally:
+            shadow_runtime_module._shadow_generations = original
+
     def test_candidate_shadow_inference_runs_after_training_and_exposes_card_values(self):
         status, generation = self._g1(prediction=1.0, confidence=.93)
         bundle = self._run_shadow()
@@ -259,7 +292,14 @@ class CandidateShadowRuntimeTests(unittest.TestCase):
 
         # The one future ON transition is evaluated against both predictions from the same
         # stored prediction event. Root G0 predicted OFF, G1 predicted ON.
-        self.manager.before_live_process(self.root, self._states(light="on"))
+        original_rebuild = shadow_runtime_module._rebuild_summary
+        shadow_runtime_module._rebuild_summary = lambda *a, **k: (_ for _ in ()).throw(
+            AssertionError("live paired outcomes must update summary incrementally")
+        )
+        try:
+            self.manager.before_live_process(self.root, self._states(light="on"))
+        finally:
+            shadow_runtime_module._rebuild_summary = original_rebuild
         comparison = self.manager.generation_comparison(g1["generation_id"])
         self.assertEqual(comparison["pairs"], 1)
         self.assertEqual(comparison["summary"]["child_wins"], 1)

@@ -55,6 +55,8 @@ def prepare_engine_extensions():
     # the decision-composition contract; the final entrypoint only supplies the light-power
     # preference model backed by Stage-06 durable feedback facts.
     preference = LightingPreferenceModel(core.STORE)
+    if callable(getattr(feedback, "add_listener", None)):
+        feedback.add_listener(preference.invalidate)
     core.ENGINE.preference_model = preference
     core.ENGINE.decision_composer = PreferenceDecisionComposer(core.ENGINE, preference)
 

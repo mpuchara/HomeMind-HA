@@ -732,7 +732,7 @@ def install(manager):
     def comparison_summary(row, parent=None, candidate=None):
         base = original_summary(row, parent, candidate)
         parent_agent = parent or manager.store.get_agent_config(row.get("parent_agent_id"))
-        candidate_agent = candidate or manager.store.get_agent(row.get("candidate_id"))
+        candidate_agent = candidate or manager.store.get_agent_config(row.get("candidate_id"))
         if not parent_agent or not candidate_agent:
             out = dict(base or {})
             out["confidence_contract"] = contract_descriptor()
@@ -751,7 +751,7 @@ def install(manager):
             row = manager._candidate_row(parent_id)
         if row:
             parent = manager.store.get_agent_config(row.get("parent_agent_id"))
-            candidate = manager.store.get_agent(row.get("candidate_id"))
+            candidate = manager.store.get_agent_config(row.get("candidate_id"))
             summary = manager._comparison_summary(row, parent, candidate)
             out["comparison"] = summary
             out["confidence_contract"] = summary.get("confidence_contract")

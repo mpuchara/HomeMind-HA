@@ -32,12 +32,12 @@ setImmediate(()=>{
         result = subprocess.run(['node', '-e', script], cwd=ROOT, capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
-    def test_live_card_loop_keeps_full_snapshot_at_250ms(self):
+    def test_live_card_loop_uses_one_second_ui_snapshot(self):
         text = (ROOT / 'adaptive_ai/src/static/manual_feedback.js').read_text(encoding='utf-8')
         self.assertIn('for(const item of data.agents)liveValues.set(String(item.id),{...item});', text)
         self.assertNotIn('last_prediction_label:null', text)
         self.assertIn("tileText(card,'current',currentValue(a));", text)
         self.assertIn("tileText(card,'desired',prediction(a));", text)
         self.assertIn("tileText(card,'confidence',liveConfidence(a));", text)
-        self.assertIn('setTimeout(liveLoop,250)', text)
+        self.assertIn('setTimeout(liveLoop,1000)', text)
         self.assertIn("document.addEventListener('visibilitychange'", text)

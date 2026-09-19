@@ -37,8 +37,8 @@ core = entry.core
 assert core._release_016_guard_installed is True
 assert core._release_017_ui_lifeline_installed is True
 contract = core.release_017_ui_lifeline_contract
-assert contract['status_during_training'] == 'cached_rich_plus_hot_state_without_engine_status'
-assert contract['agents_during_training'] == 'config_plus_cached_rich_without_history_aggregates'
+assert contract['status_periodic'] == 'always_hot_state_without_engine_status_or_history_aggregates'
+assert contract['agents_periodic'] == 'config_plus_hot_runtime_without_history_aggregates'
 assert contract['queue_labels'] == 'config_only'
 assert contract['physical_control'] == 'unchanged'
 '''
@@ -64,18 +64,22 @@ assert _budget_pause(2.0, 0.25, 2.0) == 2.0
         self.assertIn('core.OPTIONS["training_cpu_duty_cycle"] = DEFAULT_TRAINING_DUTY_CYCLE', source)
         self.assertIn('effective_training_duty_cycle', budget_source)
 
-    def test_status_lifeline_never_calls_rich_engine_status_while_heavy(self):
+    def test_periodic_status_never_calls_rich_engine_status(self):
         source = (ROOT / "adaptive_ai/src/release_017_ui_lifeline.py").read_text(encoding="utf-8")
-        self.assertIn("if not core.runtime_available() or not heavy_active():", source)
+        self.assertIn('if not startup.get("ready") or not core.runtime_available():', source)
         self.assertIn("payload = previous_status_payload(handler_self)", source)
-        self.assertIn("# Do not call Engine.status() here", source)
-        self.assertIn('"status_read_mode": "training_lifeline"', source)
-        self.assertIn("configs = core.STORE.list_agent_configs()", source)
+        self.assertIn("Operational status must remain O(number of agents + in-memory runtime)", source)
+        self.assertIn('"status_read_mode": "operational_hot"', source)
+        self.assertIn("def hot_configs():", source)
+        self.assertIn("core.ENGINE._refresh_agent_index()", source)
+        self.assertIn("core.ENGINE.all_agent_configs.values()", source)
+        self.assertNotIn("configs = core.STORE.list_agent_configs()", source)
         self.assertNotIn("core.ENGINE.status()", source)
 
     def test_agent_lifeline_uses_config_and_cached_runtime_not_history_aggregates(self):
         source = (ROOT / "adaptive_ai/src/release_017_ui_lifeline.py").read_text(encoding="utf-8")
-        self.assertIn("configs = core.STORE.list_agent_configs()", source)
+        self.assertIn("configs = hot_configs()", source)
+        self.assertNotIn("configs = core.STORE.list_agent_configs()", source)
         self.assertIn("cached = {aid: dict(value) for aid, value in rich_agents.items()}", source)
         self.assertIn("TrainingQueue._agent_label = cheap_agent_label", source)
         self.assertIn("queue_self.store.get_agent_config(agent_id)", source)

@@ -14,10 +14,10 @@ class CandidateLiveRefreshContractTests(unittest.TestCase):
         self.assertIn('"candidate_desired": row.get("child_desired") if fresh else None', text)
         self.assertIn('manager.live_snapshots = lambda: live_candidate_snapshots(manager)', text)
 
-    def test_candidate_decision_tiles_have_250ms_lightweight_refresh(self):
+    def test_candidate_decision_tiles_have_one_second_lightweight_refresh(self):
         text = (ROOT / "adaptive_ai/src/static/candidate_preference_ui.js").read_text(encoding="utf-8")
         self.assertIn("fetch('api/candidate-live'", text)
-        self.assertIn('setTimeout(liveLoop,250)', text)
+        self.assertIn('setTimeout(liveLoop,1000)', text)
         self.assertIn('Fast refresh changes text only', text)
         self.assertIn('ensureDecisionStrip(card,merged)', text)
 

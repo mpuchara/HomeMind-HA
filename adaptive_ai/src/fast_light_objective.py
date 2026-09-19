@@ -349,8 +349,14 @@ def install(service):
     engine = service.engine
     store = service.store
     lock = threading.RLock()
+    persistence_lock = threading.RLock()
+    persistence_event = threading.Event()
     active_runtime = {}
     pair_runtime = {}
+    benchmark_cache = {}
+    dirty_benchmarks = {}
+    dirty_models = {}
+    persistence_stats = {"queued": 0, "flushed_metrics": 0, "flushed_models": 0, "flushes": 0, "errors": 0}
 
     with store.lock, store.conn() as c:
         c.execute(
@@ -362,29 +368,118 @@ def install(service):
         )
 
     def load_benchmark(agent_id):
+        aid = str(agent_id)
+        with lock:
+            cached = benchmark_cache.get(aid)
+            if cached is not None:
+                return dict(cached)
         with store.conn() as c:
             row = c.execute(
                 "SELECT metrics_json FROM fast_light_timing_metrics WHERE agent_id=?",
-                (str(agent_id),),
+                (aid,),
             ).fetchone()
         if not row:
-            return _blank_benchmark()
-        try:
-            raw = json.loads(row["metrics_json"] or "{}")
-        except Exception:
-            raw = {}
-        return {**_blank_benchmark(), **(raw if isinstance(raw, dict) else {})}
+            metrics = _blank_benchmark()
+        else:
+            try:
+                raw = json.loads(row["metrics_json"] or "{}")
+            except Exception:
+                raw = {}
+            metrics = {**_blank_benchmark(), **(raw if isinstance(raw, dict) else {})}
+        with lock:
+            benchmark_cache[aid] = dict(metrics)
+        return dict(metrics)
 
-    def save_benchmark(agent_id, metrics):
-        raw = json.dumps(metrics, separators=(",", ":"), sort_keys=True)
-        with store.lock, store.conn() as c:
-            c.execute(
-                """INSERT INTO fast_light_timing_metrics(agent_id,metrics_json,updated_ts)
-                   VALUES(?,?,?)
-                   ON CONFLICT(agent_id) DO UPDATE SET
-                     metrics_json=excluded.metrics_json,updated_ts=excluded.updated_ts""",
-                (str(agent_id), raw, time.time()),
-            )
+    def queue_benchmark(agent_id, metrics):
+        aid = str(agent_id)
+        snapshot = dict(metrics)
+        with lock:
+            benchmark_cache[aid] = snapshot
+        with persistence_lock:
+            dirty_benchmarks[aid] = snapshot
+            persistence_stats["queued"] += 1
+            wake = len(dirty_benchmarks) + len(dirty_models) >= 32
+        if wake:
+            persistence_event.set()
+
+    def queue_model_checkpoint(agent, policy):
+        aid = str(agent["id"])
+        with persistence_lock:
+            dirty_models[aid] = id(policy)
+            persistence_stats["queued"] += 1
+            wake = len(dirty_benchmarks) + len(dirty_models) >= 32
+        if wake:
+            persistence_event.set()
+
+    def flush_persistence():
+        with persistence_lock:
+            metrics_batch = dict(dirty_benchmarks)
+            model_batch = dict(dirty_models)
+            dirty_benchmarks.clear()
+            dirty_models.clear()
+        if not metrics_batch and not model_batch:
+            return 0
+        try:
+            if metrics_batch:
+                now = time.time()
+                packed = [
+                    (aid, json.dumps(metrics, separators=(",", ":"), sort_keys=True), now)
+                    for aid, metrics in metrics_batch.items()
+                ]
+                with store.lock, store.conn() as c:
+                    c.executemany(
+                        """INSERT INTO fast_light_timing_metrics(agent_id,metrics_json,updated_ts)
+                           VALUES(?,?,?)
+                           ON CONFLICT(agent_id) DO UPDATE SET
+                             metrics_json=excluded.metrics_json,updated_ts=excluded.updated_ts""",
+                        packed,
+                    )
+            model_rows = []
+            for aid, expected_identity in model_batch.items():
+                policy = engine.models.get(aid)
+                if policy is not None and id(policy) == expected_identity:
+                    model_rows.append((aid, policy.serialize()))
+            if model_rows:
+                store.save_models_batch(model_rows)
+            with persistence_lock:
+                persistence_stats["flushed_metrics"] += len(metrics_batch)
+                persistence_stats["flushed_models"] += len(model_rows)
+                persistence_stats["flushes"] += 1
+            return len(metrics_batch) + len(model_rows)
+        except Exception:
+            with persistence_lock:
+                for aid, metrics in metrics_batch.items():
+                    dirty_benchmarks.setdefault(aid, metrics)
+                for aid, identity in model_batch.items():
+                    dirty_models.setdefault(aid, identity)
+                persistence_stats["errors"] += 1
+            raise
+
+    def persistence_writer():
+        while not engine.stop_event.is_set():
+            persistence_event.wait(5.0)
+            persistence_event.clear()
+            try:
+                flush_persistence()
+            except Exception as exc:
+                try:
+                    store.event(None, "warning", "fast_light_persistence_failed",
+                                f"Deferred fast-light persistence failed: {type(exc).__name__}: {exc}", None)
+                except Exception:
+                    pass
+                time.sleep(0.1)
+        try:
+            flush_persistence()
+        except Exception:
+            pass
+
+    def persistence_snapshot():
+        with persistence_lock:
+            return {
+                **persistence_stats,
+                "pending_metrics": len(dirty_benchmarks),
+                "pending_models": len(dirty_models),
+            }
 
     def benchmark_for(agent_id):
         aid = str(agent_id)
@@ -404,7 +499,7 @@ def install(service):
 
     def persist_active_metrics(aid, state):
         state["metrics"]["last_event_ts"] = time.time()
-        save_benchmark(aid, state["metrics"])
+        queue_benchmark(aid, state["metrics"])
 
     def learn_weight_only(agent, candidate, reward):
         if candidate is None or not candidate.get("features"):
@@ -420,7 +515,7 @@ def install(service):
         # not a structural model change. Keeping model_revision stable prevents Sensor
         # Tournament future-only epochs from being reset after every timing sample.
         policy.heads[horizon].update(action_idx, candidate["features"], reward)
-        store.save_model(agent["id"], policy.serialize())
+        queue_model_checkpoint(agent, policy)
 
     def reward_candidate(agent, state, candidate, *, success=False, false_timing=False,
                          premature_off=False, retrigger=False, resolved_ts=None):
@@ -765,6 +860,12 @@ def install(service):
             payload["fast_light_objective"] = benchmark_for(agent["id"])
         return payload
 
+    threading.Thread(
+        target=persistence_writer,
+        name="adaptive-ai-fast-light-writer",
+        daemon=True,
+    ).start()
+    service.fast_light_persistence_snapshot = persistence_snapshot
     service.observe_shadow = observe_with_fast_timing
     service.shadow_status = status_with_fast_timing
     engine.runtime_for = runtime_with_fast_timing
