@@ -74,14 +74,10 @@ def install(runtime):
 
     def hot_agent_payloads(handler_self):
         nonlocal rich_agents
-        if not heavy_active():
-            agents = original_agent_payloads(handler_self)
-            with cache_lock:
-                rich_agents = {a["id"]: dict(a) for a in agents}
-                state["rich_agent_cache_at"] = time.time()
-            return agents
-
-        # Training lifeline: avoid rich history aggregates and runtime diagnostics.
+        # Operational UI path is always lightweight. Rich COUNT/AVG history aggregates
+        # are not allowed on the 4 s polling path, even when no heavy job is active.
+        # Detailed historical diagnostics remain available through explicit endpoints.
+        # Avoid rich history aggregates and runtime diagnostics.
         # diagnostics. Start from the last rich card and overlay only current cheap data.
         from context import target_value
 
@@ -148,7 +144,7 @@ def install(runtime):
             agent.setdefault("control_lease", None)
             agent["training_queue"] = queue.status_for(aid) if queue else None
             agent["runtime"] = runtime_payload
-            agent["_ui_read_mode"] = "training_lifeline"
+            agent["_ui_read_mode"] = "operational_hot"
             out.append(agent)
         return out
 
@@ -156,24 +152,15 @@ def install(runtime):
 
     def status_payload(handler_self):
         nonlocal rich_status
-        if not core.runtime_available() or not heavy_active():
+        if not core.runtime_available():
             payload = previous_status_payload(handler_self)
-            if core.runtime_available():
-                with cache_lock:
-                    rich_status = dict(payload)
-                    state["rich_status_cache_at"] = time.time()
-            payload["status_read_mode"] = (
-                "normal" if core.runtime_available() else "startup"
-            )
-            low_power = getattr(core, "LOW_POWER_RUNTIME", None)
-            if callable(low_power):
-                payload["low_power_runtime"] = low_power()
+            payload["status_read_mode"] = "startup"
             payload["ui_lifeline"] = snapshot()
             return payload
 
-        # Do not call Engine.status() here: it performs list_agents() aggregate history
-        # queries. The lifeline intentionally exposes only cheap current state plus the
-        # most recent rich snapshot until historical work yields the heavy slot.
+        # Operational status must remain O(number of agents + in-memory runtime).
+        # Engine.status()/STORE.list_agents() perform history aggregates and are never
+        # called from the periodic UI path.
         with cache_lock:
             payload = dict(rich_status)
             state["status_lifeline_reads"] += 1
@@ -224,7 +211,7 @@ def install(runtime):
                 ),
                 "startup": startup,
                 "options": core.OPTIONS,
-                "status_read_mode": "training_lifeline",
+                "status_read_mode": "operational_hot",
             }
         )
         payload.setdefault("ha_connected", bool(ws_connected))
@@ -248,8 +235,8 @@ def install(runtime):
     core.Handler.status_payload = status_payload
     core.RELEASE_017_UI_LIFELINE = snapshot
     core.release_017_ui_lifeline_contract = {
-        "status_during_training": "cached_rich_plus_hot_state_without_engine_status",
-        "agents_during_training": "config_plus_cached_rich_without_history_aggregates",
+        "status_periodic": "always_hot_state_without_engine_status_or_history_aggregates",
+        "agents_periodic": "config_plus_hot_runtime_without_history_aggregates",
         "queue_labels": "config_only",
         "mutations": "unchanged",
         "learning": "unchanged",
