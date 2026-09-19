@@ -452,6 +452,8 @@ def install(manager):
     active_candidate_parents = set()
     candidate_dependency_roots = {}
     passive_pending = {}
+    latest_generation_runtime = {}
+    active_edge_cache = {}
     original_on_state_changed = getattr(manager.engine, "on_state_changed", None)
 
     def _refresh_active_candidate_parents():
@@ -470,6 +472,12 @@ def install(manager):
         return len(active_candidate_parents)
 
     def _schema_entities(agent_id):
+        # Active policies already live in Engine.models. Only lifecycle/cache rebuilds
+        # fall back to SQLite for a model that has not been materialized yet.
+        policy = manager.engine.models.get(str(agent_id))
+        if policy is not None:
+            schema = getattr(policy, "schema", None)
+            return {str(eid) for eid in (getattr(schema, "entities", ()) or ()) if eid}
         try:
             raw = manager.store.get_model(str(agent_id)) or {}
         except Exception:
@@ -477,10 +485,20 @@ def install(manager):
         schema = dict(raw.get("schema") or {}) if isinstance(raw, dict) else {}
         return {str(eid) for eid in (schema.get("entities") or ()) if eid}
 
+    def _root_config(root_id):
+        root_id = str(root_id)
+        # Engine.all_agent_configs is revision-invalidated RAM state. Candidate passive
+        # observation must not open SQLite on every HA event merely to recover the root.
+        with manager.engine.lock:
+            row = dict(getattr(manager.engine, "all_agent_configs", {}).get(root_id) or {})
+        if row:
+            return row
+        return manager.store.get_agent_config(root_id)
+
     def _rebuild_candidate_dependency_index():
         mapping = {}
         for root_id in tuple(active_candidate_parents):
-            root = manager.store.get_agent_config(str(root_id))
+            root = _root_config(root_id)
             if not root:
                 continue
             deps = {str(root.get("target_entity") or "")}
@@ -541,6 +559,14 @@ def install(manager):
         ) + 1
         _refresh_active_candidate_parents()
         _rebuild_candidate_dependency_index()
+        try:
+            from agent_candidates import refresh_candidate_ids_cache
+            refresh_candidate_ids_cache(manager.store)
+        except Exception:
+            pass
+        with manager.lock:
+            active_edge_cache.clear()
+            latest_generation_runtime.clear()
         for runtime in shadow_runtime.values():
             runtime["generation_cache_at"] = 0.0
             runtime["shadow_generations"] = None
@@ -599,10 +625,27 @@ def install(manager):
             observed = _predict_candidate(manager, generation, state_map, event_ts)
             if observed is not None:
                 results[generation["generation_id"]] = _decorate_result(root_rt, observed, event_ts, current)
-        return {
+        bundle = {
             "root_agent_id": str(root_agent["id"]), "event_id": event_id, "ts": event_ts,
             "current": current, "results": results,
         }
+        # Current Candidate decision tiles are operational state, not historical queries.
+        # Publish every inference to RAM even when the durable 30 s history heartbeat
+        # decides that no SQLite row needs to be written.
+        with manager.lock:
+            for gid, result in results.items():
+                latest_generation_runtime[str(gid)] = {
+                    "root_agent_id": str(root_agent["id"]),
+                    "generation_id": str(gid),
+                    "event_id": str(event_id),
+                    "ts": float(event_ts),
+                    "current": float(current),
+                    "desired": float(result["desired"]),
+                    "confidence": result.get("confidence"),
+                    "model_revision": result.get("model_revision"),
+                    "schema_revision": result.get("schema_revision"),
+                }
+        return bundle
 
     def _persist_bundle(bundle, force=False):
         if not bundle:
@@ -692,6 +735,17 @@ def install(manager):
         _persist_bundle(bundle, force=False)
         return bundle
 
+    def _cached_active_edge(root_id):
+        root_id = str(root_id)
+        with manager.lock:
+            if root_id in active_edge_cache:
+                value = active_edge_cache[root_id]
+                return dict(value) if value else None
+        value = _active_comparison_edge(manager, root_id)
+        with manager.lock:
+            active_edge_cache[root_id] = dict(value) if value else None
+        return dict(value) if value else None
+
     def before_live_process(agent, state_map):
         root_rt = _root_runtime(agent["id"])
         previous_current = root_rt.get("previous_current")
@@ -711,7 +765,7 @@ def install(manager):
                 return None
         except Exception:
             pass
-        edge = _active_comparison_edge(manager, agent["id"])
+        edge = _cached_active_edge(agent["id"])
         bundle = root_rt.get("bundle")
         if not edge or not bundle:
             return None
@@ -840,18 +894,79 @@ def install(manager):
         }
 
     def _latest_shadow(generation_id):
+        gid = str(generation_id)
+        with manager.lock:
+            hot = dict(latest_generation_runtime.get(gid) or {})
+        if hot and time.time() - float(hot.get("ts") or 0.0) <= DECISION_STALE_SECONDS:
+            return hot
+        # Restart compatibility: one cold read warms the RAM snapshot until realtime
+        # Candidate inference resumes. Normal polling never returns to SQLite afterwards.
         with manager.store.conn() as c:
             row = c.execute(
                 """SELECT * FROM candidate_generation_decisions
                    WHERE generation_id=? ORDER BY ts DESC LIMIT 1""",
-                (str(generation_id),),
+                (gid,),
             ).fetchone()
         if not row:
             return None
         row = dict(row)
         if time.time() - float(row["ts"]) > DECISION_STALE_SECONDS:
             return None
+        with manager.lock:
+            latest_generation_runtime[gid] = dict(row)
         return row
+
+    def candidate_live_runtime_snapshots():
+        """Return Candidate decision tiles from RAM on the normal polling path."""
+        now = time.time()
+        with manager.engine.lock:
+            state_map = dict(manager.engine.state_map)
+            roots_hot = {
+                str(k): dict(v) for k, v in getattr(manager.engine, "all_agent_configs", {}).items()
+            }
+        snapshots = []
+        for root_id in tuple(active_candidate_parents):
+            root = roots_hot.get(str(root_id)) or _root_config(root_id)
+            if not root:
+                continue
+            current = target_value(state_map.get(root.get("target_entity")), root.get("target_property"))
+            try:
+                current = None if current is None else float(current)
+                if current is not None and not math.isfinite(current):
+                    current = None
+            except (TypeError, ValueError):
+                current = None
+            root_gen, generations = _cached_generations(root_id)
+            root_gid = str((root_gen or {}).get("generation_id") or "")
+            with manager.lock:
+                parent_hot = dict(latest_generation_runtime.get(root_gid) or {}) if root_gid else {}
+                generation_hot = {
+                    str(g.get("generation_id")): dict(latest_generation_runtime.get(str(g.get("generation_id"))) or {})
+                    for g in generations
+                }
+            for generation in generations:
+                gid = str(generation.get("generation_id") or "")
+                child = generation_hot.get(gid) or {}
+                fresh = bool(child and now - float(child.get("ts") or 0.0) <= DECISION_STALE_SECONDS)
+                same_event_parent = (
+                    parent_hot
+                    if fresh and parent_hot and parent_hot.get("event_id") == child.get("event_id")
+                    else {}
+                )
+                snapshots.append({
+                    "generation_id": gid,
+                    "candidate_id": generation.get("agent_id"),
+                    "root_agent_id": str(root_id),
+                    "target_property": root.get("target_property"),
+                    "shadow_current": current,
+                    "parent_desired": same_event_parent.get("desired") if fresh else None,
+                    "candidate_desired": child.get("desired") if fresh else None,
+                    "candidate_confidence": child.get("confidence") if fresh else None,
+                    "shadow_timestamp": float(child.get("ts")) if fresh else None,
+                    "live_snapshot_ts": now,
+                    "read_source": "ram_candidate_runtime",
+                })
+        return snapshots
 
     def _decorate_status(result):
         if not result:
@@ -903,7 +1018,7 @@ def install(manager):
         if int(root_rt.get("last_candidate_observed_revision") or 0) >= int(revision or 0):
             return False
         root_rt["last_candidate_attempt_monotonic"] = time.monotonic()
-        root = manager.store.get_agent_config(root_id)
+        root = _root_config(root_id)
         if not root:
             return False
         with manager.engine.lock:
@@ -1020,6 +1135,8 @@ def install(manager):
     manager.before_live_process = before_live_process
     manager.after_live_process = after_live_process
     manager.drain_candidate_shadow_events = drain_candidate_shadow_events
+    manager.candidate_live_runtime_snapshots = candidate_live_runtime_snapshots
+    manager.candidate_latest_runtime = lambda generation_id: _latest_shadow(generation_id)
     manager.candidate_dependency_roots = candidate_dependency_roots
     manager.rebuild_candidate_dependency_index = _rebuild_candidate_dependency_index
     if callable(original_on_state_changed):
@@ -1036,6 +1153,7 @@ def install(manager):
     manager._candidate_shadow_runtime_installed = True
     manager.candidate_shadow_contract = "observed_generation_predictions_no_executor_plus_passive_event_fallback"
     manager.candidate_event_contract = "state_changed_dependency_index_to_candidate_worker_with_parent_path_dedup"
+    manager.candidate_hot_read_contract = "current_generation_snapshots_and_active_ab_edge_are_ram_first"
     manager.candidate_decision_history_contract = "observed_only_no_policy_replay_gaps_preserved"
     manager.candidate_pair_contract = "same_prediction_event_same_future_outcome"
     return manager
