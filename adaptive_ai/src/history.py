@@ -69,6 +69,9 @@ class HistoryManager(threading.Thread):
         self.discovery_job_lock = threading.RLock()
         self.discovery_job_active = False
         self.discovery_job_started_at = None
+        self.discovery_reason_counts = {}
+        self.discovery_inactive_examples = []
+        self.discovery_deep_history_complete = bool(STORE.meta_get("discovery_deep_history_complete"))
         # "active=0" is not a meaningful result while Recorder discovery is still
         # collecting target history. Expose whether the activity classifier has run so
         # the UI can distinguish "pending" from a real zero-device result.
@@ -102,6 +105,9 @@ class HistoryManager(threading.Thread):
                 "discovery_job_active": bool(self.discovery_job_active),
                 "discovery_job_started_at": self.discovery_job_started_at,
                 "discovery_classified": bool(self.discovery_classified),
+                "discovery_deep_history_complete": bool(self.discovery_deep_history_complete),
+                "discovery_reason_counts": dict(self.discovery_reason_counts),
+                "discovery_inactive_examples": list(self.discovery_inactive_examples),
             }
         return d
 
@@ -648,16 +654,70 @@ class HistoryManager(threading.Thread):
             refresh_start = max(end_ts - 2 * 3600.0, float(last) - 300.0)
         else:
             refresh_start = max(start_ts, end_ts - max(6.0, float(OPTIONS.get("manual_discovery_hours", 24))) * 3600.0)
+
+        # Discovery classifies activity across history_bootstrap_days (10 d by default).
+        # The previous low-memory path imported only the last 24 h on a clean database,
+        # so targets used on days 2..10 were impossible to discover even though the
+        # classifier advertised a 10-day window. Backfill that older slice exactly once.
+        #
+        # Most actuator activity is encoded in the entity state. Fetch those targets with
+        # minimal/no-attribute Recorder responses and 24 h windows. Only targets whose
+        # action is attribute-only (HVAC setpoint, cover position, humidity, etc.) need the
+        # more expensive full-attribute history. Selected-agent Train later refreshes its
+        # own full training-quality history as before.
+        deep_marker = STORE.meta_get("discovery_deep_history_complete")
+        deep_needed = not deep_marker and refresh_start > start_ts + 1.0
+        recent_progress_lo = 0.10
+        if deep_needed and controllable:
+            state_props = {"power", "value", "option_index"}
+            state_targets = []
+            attribute_only_targets = []
+            for eid in controllable:
+                options = target_options_for_state(current.get(eid) or {})
+                if any(str(opt.get("property")) in state_props for opt in options):
+                    state_targets.append(eid)
+                else:
+                    attribute_only_targets.append(eid)
+
+            if state_targets:
+                self.set_status(
+                    "manual_ready", 0.10,
+                    "Deep discovery: checking older controllable-device activity",
+                    phase_detail="One-time low-bandwidth scan fills the full discovery window; no training starts",
+                )
+                self._import_section(
+                    state_targets, start_ts, refresh_start, batch_size=32, minimal=True, no_attributes=True,
+                    source="ha_history_discovery_coarse", progress_lo=0.10, progress_hi=0.30,
+                    label="Deep target activity discovery", max_hours=24, parallel_requests=1,
+                    inter_chunk_pause_ms=int(OPTIONS.get("history_background_pause_ms", 500)),
+                )
+            if attribute_only_targets:
+                self.set_status(
+                    "manual_ready", 0.30,
+                    "Deep discovery: checking older setpoint/position activity",
+                    phase_detail="Attribute-only targets use a bounded full-state scan; no training starts",
+                )
+                self._import_section(
+                    attribute_only_targets, start_ts, refresh_start, batch_size=8, minimal=False, no_attributes=False,
+                    source="ha_history_full", progress_lo=0.30, progress_hi=0.42,
+                    label="Deep attribute target discovery", max_hours=24, parallel_requests=1,
+                    inter_chunk_pause_ms=int(OPTIONS.get("history_background_pause_ms", 500)),
+                )
+            STORE.meta_set("discovery_deep_history_complete", iso_from_ts(end_ts))
+            with self.lock:
+                self.discovery_deep_history_complete = True
+            recent_progress_lo = 0.42
+
         self.set_status(
-            "manual_ready", 0.10,
-            "Low-memory discovery: refreshing controllable-device history only",
+            "manual_ready", recent_progress_lo,
+            "Low-memory discovery: refreshing recent controllable-device history",
             phase_detail="Discovery only; detected agents remain waiting until you choose Train",
         )
         if controllable and end_ts > refresh_start:
             self._import_section(
                 controllable, refresh_start, end_ts, batch_size=8, minimal=False, no_attributes=False,
-                source="ha_history_full", progress_lo=0.10, progress_hi=0.65,
-                label="Lightweight target discovery", max_hours=3, parallel_requests=1,
+                source="ha_history_full", progress_lo=recent_progress_lo, progress_hi=0.75,
+                label="Recent target discovery", max_hours=3, parallel_requests=1,
                 inter_chunk_pause_ms=int(OPTIONS.get("history_background_pause_ms", 500)),
             )
         # Do not run full-table archive_stats() here. At this exact point the Recorder
@@ -666,7 +726,7 @@ class HistoryManager(threading.Thread):
         # the HA websocket. Archive diagnostics are cached and may refresh during explicit
         # heavy work, but they are never a prerequisite for discovering/serving agents.
         self.set_status(
-            "manual_ready", 0.66,
+            "manual_ready", 0.76,
             "Classifying controllable targets from imported Recorder history",
             work_done=0, work_total=max(1, len(controllable)), work_unit="targets",
             eta_source="single-pass local archive scan",
@@ -804,15 +864,31 @@ class HistoryManager(threading.Thread):
             for opt in opts:
                 prop = str(opt["property"])
                 value = target_value(archived, prop)
+                # Coarse deep discovery deliberately omits attributes. Select/input_select
+                # still encode their controlled value directly in state, so count option
+                # transitions by their stable string label when the options attribute is
+                # absent. The live state still supplies the option list used by the agent.
+                if value is None and prop == "option_index":
+                    raw_state = str(row.get("state") or "")
+                    if raw_state.lower() not in ("", "unknown", "unavailable"):
+                        value = raw_state
                 if value is None:
                     continue
-                try:
-                    value = float(value)
-                except (TypeError, ValueError):
-                    continue
+                if not isinstance(value, str):
+                    try:
+                        value = float(value)
+                    except (TypeError, ValueError):
+                        continue
                 stat = summary[eid][prop]
                 previous = stat["last_value"]
-                if previous is None or abs(value - float(previous)) > 1e-6:
+                if previous is None:
+                    changed = True
+                else:
+                    try:
+                        changed = abs(float(value) - float(previous)) > 1e-6
+                    except (TypeError, ValueError):
+                        changed = str(value) != str(previous)
+                if changed:
                     stat["samples"] += 1
                     stat["last_value"] = value
                     stat["last_ts"] = float(row["ts"])
@@ -830,6 +906,14 @@ class HistoryManager(threading.Thread):
         filtered_config = 0
         inactive = 0
         created = 0
+        reason_counts = {
+            "active": 0,
+            "registry_filtered": 0,
+            "no_transition": 0,
+            "below_threshold": 0,
+            "stale_transition": 0,
+        }
+        inactive_examples = []
         max_agents = max(1, int(OPTIONS.get("max_auto_agents", 250)))
         # Remove only stale auto-created agents that the Entity Registry now identifies
         # as configuration/diagnostic/hidden/disabled. Manual agents are never touched.
@@ -865,6 +949,7 @@ class HistoryManager(threading.Thread):
             reg = self.engine.registry_entry(entity_id) or {}
             if reg.get("disabled_by") is not None or reg.get("hidden_by") is not None or reg.get("entity_category") in ("config", "diagnostic"):
                 filtered_config += 1
+                reason_counts["registry_filtered"] += 1
                 continue
             eligible += 1
             candidates = []
@@ -891,8 +976,25 @@ class HistoryManager(threading.Thread):
             score, last_ts, opt, _ = candidates[0]
             if score < effective_threshold or last_ts < recent_cutoff:
                 inactive += 1
+                if score <= 0:
+                    reason = "no_transition"
+                elif score < effective_threshold:
+                    reason = "below_threshold"
+                else:
+                    reason = "stale_transition"
+                reason_counts[reason] += 1
+                if len(inactive_examples) < 24:
+                    inactive_examples.append({
+                        "entity_id": entity_id,
+                        "property": opt["property"],
+                        "transitions": int(score),
+                        "threshold": int(effective_threshold),
+                        "last_transition_ts": float(last_ts or 0.0),
+                        "reason": reason,
+                    })
                 continue
             active += 1
+            reason_counts["active"] += 1
             if entity_id in existing_entities or len(existing_entities) >= max_agents:
                 continue
             attrs = state.get("attributes") or {}
@@ -915,6 +1017,8 @@ class HistoryManager(threading.Thread):
             self.discovery_eligible = eligible
             self.discovery_filtered_config = filtered_config
             self.discovery_inactive = inactive
+            self.discovery_reason_counts = reason_counts
+            self.discovery_inactive_examples = inactive_examples
         return created
 
     def train_from_archive(self, start_ts, end_ts, **kwargs):
