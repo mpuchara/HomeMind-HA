@@ -920,15 +920,12 @@ def install(manager):
         root_rt["last_candidate_observed_revision"] = max(int(revision or 0), current_revision)
         root_rt["last_candidate_observed_monotonic"] = time.monotonic()
         root_rt["last_passive_bundle"] = bundle
-        manager.store.event(
-            root_id, "info", "candidate_shadow_passive_observation",
-            "Candidate Shadow observed a state revision independently of Parent inference",
-            {
-                "revision": int(root_rt["last_candidate_observed_revision"]),
-                "generations": len(bundle.get("results") or {}),
-                "event_id": event_id,
-            },
-        )
+        # This is hot observability, not an audit event. Persisting one SQLite event per
+        # 30 s heartbeat would create thousands of rows/day with multiple Candidates.
+        # Keep bounded counters in RAM; errors still use the existing durable event path.
+        root_rt["passive_observations"] = int(root_rt.get("passive_observations") or 0) + 1
+        root_rt["last_passive_event_id"] = event_id
+        root_rt["last_passive_generation_count"] = len(bundle.get("results") or {})
         return True
 
     def drain_candidate_shadow_events(*, force=False, max_roots=2):
