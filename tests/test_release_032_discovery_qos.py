@@ -76,6 +76,16 @@ class DiscoveryQoSTests(unittest.TestCase):
         self.assertIn("_discovery_usage_summary", source)
         self.assertNotIn("self.usage_for(", source)
 
+    def test_manual_lightweight_cycle_forwards_discovery_threshold_override(self):
+        source = inspect.getsource(HistoryManager._manual_lightweight_cycle)
+        self.assertIn("threshold_override=None", source)
+        self.assertIn("threshold_override=threshold_override", source)
+
+    def test_discovery_request_forwards_threshold_to_bootstrap(self):
+        source = inspect.getsource(HistoryManager.request_discovery_rescan)
+        self.assertIn("threshold_override=1", source)
+        self.assertIn("self.bootstrap_and_train(threshold_override=threshold_override)", source)
+
     def test_post_recorder_cycle_does_not_refresh_full_archive_stats(self):
         source = inspect.getsource(HistoryManager._manual_lightweight_cycle)
         self.assertNotIn("self.refresh_archive_cache()", source)
