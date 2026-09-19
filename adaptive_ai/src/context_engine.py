@@ -23,6 +23,7 @@ class ContextEngine:
         self.mapping_error = None
         self.registry_revision = 0
         self.last_save = 0
+        self._last_saved_room_model_raw = None
         self.bootstrap_cutoff = 0
         self.bootstrap_delta = None
         self.bootstrap_started = 0
@@ -45,6 +46,8 @@ class ContextEngine:
                     self.room_checkpoint_source = key
                     break
         self.home = RoomBeliefModel(options.get('home_model_half_life_days', 45), raw)
+        if isinstance(raw, dict):
+            self._last_saved_room_model_raw = json.dumps(raw, separators=(',', ':'), sort_keys=True)
 
     def configure(self, states, entities=None, devices=None, areas=None):
         with self.lock:
@@ -239,11 +242,16 @@ class ContextEngine:
     def save(self, force=False):
         with self.lock:
             now = time.time()
-            if self.store and (force or now - self.last_save >= 60):
-                self.store.meta_set(self.ROOM_MODEL_KEY,
-                                    json.dumps(self.home.export(), separators=(',', ':')))
+            if not self.store or (not force and now - self.last_save < 60):
+                return False
+            raw = json.dumps(self.home.export(), separators=(',', ':'), sort_keys=True)
+            changed = raw != self._last_saved_room_model_raw
+            if changed:
+                self.store.meta_set(self.ROOM_MODEL_KEY, raw)
+                self._last_saved_room_model_raw = raw
                 self.room_checkpoint_source = self.ROOM_MODEL_KEY
-                self.last_save = now
+            self.last_save = now
+            return changed
 
     def diagnostics(self):
         with self.lock:

@@ -70,12 +70,16 @@ assert _budget_pause(2.0, 0.25, 2.0) == 2.0
         self.assertIn("payload = previous_status_payload(handler_self)", source)
         self.assertIn("Operational status must remain O(number of agents + in-memory runtime)", source)
         self.assertIn('"status_read_mode": "operational_hot"', source)
-        self.assertIn("configs = core.STORE.list_agent_configs()", source)
+        self.assertIn("def hot_configs():", source)
+        self.assertIn("core.ENGINE._refresh_agent_index()", source)
+        self.assertIn("core.ENGINE.agent_configs.values()", source)
+        self.assertNotIn("configs = core.STORE.list_agent_configs()", source)
         self.assertNotIn("core.ENGINE.status()", source)
 
     def test_agent_lifeline_uses_config_and_cached_runtime_not_history_aggregates(self):
         source = (ROOT / "adaptive_ai/src/release_017_ui_lifeline.py").read_text(encoding="utf-8")
-        self.assertIn("configs = core.STORE.list_agent_configs()", source)
+        self.assertIn("configs = hot_configs()", source)
+        self.assertNotIn("configs = core.STORE.list_agent_configs()", source)
         self.assertIn("cached = {aid: dict(value) for aid, value in rich_agents.items()}", source)
         self.assertIn("TrainingQueue._agent_label = cheap_agent_label", source)
         self.assertIn("queue_self.store.get_agent_config(agent_id)", source)

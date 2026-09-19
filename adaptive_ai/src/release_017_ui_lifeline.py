@@ -58,12 +58,22 @@ def install(runtime):
     # Queue status previously performed COUNT/AVG history scans merely to resolve every
     # queued agent's display name. The config-only lookup is sufficient and O(1)-ish.
     def cheap_agent_label(queue_self, agent_id):
-        agent = queue_self.store.get_agent_config(agent_id)
+        core.ENGINE._refresh_agent_index()
+        with core.ENGINE.lock:
+            agent = dict(getattr(core.ENGINE, "agent_configs", {}).get(str(agent_id)) or {})
+        if not agent:
+            agent = queue_self.store.get_agent_config(agent_id)
         with cache_lock:
             state["queue_label_reads"] += 1
         return (agent or {}).get("name") or agent_id
 
     TrainingQueue._agent_label = cheap_agent_label
+
+    def hot_configs():
+        # Revision-driven refresh performs no SQLite read while agent config is unchanged.
+        core.ENGINE._refresh_agent_index()
+        with core.ENGINE.lock:
+            return [dict(row) for row in core.ENGINE.agent_configs.values()]
 
     def snapshot():
         with cache_lock:
@@ -81,7 +91,7 @@ def install(runtime):
         # diagnostics. Start from the last rich card and overlay only current cheap data.
         from context import target_value
 
-        configs = core.STORE.list_agent_configs()
+        configs = hot_configs()
         with core.ENGINE.lock:
             states = dict(core.ENGINE.state_map)
             hot_runtime = {
@@ -179,7 +189,7 @@ def install(runtime):
             ws_error = core.ENGINE.ws_error
             registry_count = len(core.ENGINE.entity_registry)
             last_ws_event = core.ENGINE.last_ws_event
-        configs = core.STORE.list_agent_configs()
+        configs = hot_configs()
         queue = queue_object()
         startup = core.startup_snapshot()
 
@@ -235,6 +245,27 @@ def install(runtime):
         feature_journal = getattr(core.ENGINE, "feature_observation_deferred_snapshot", None)
         if callable(feature_journal):
             payload["feature_journal"] = feature_journal()
+        provenance_queue = getattr(core.ENGINE, "provenance_deferred_snapshot", None)
+        if callable(provenance_queue):
+            payload["provenance_queue"] = provenance_queue()
+        with core.ENGINE.lock:
+            archive_pending = len(getattr(core.ENGINE, "pending_archive", ()) or ())
+        teaching = getattr(core.ENGINE, "teaching", None)
+        teaching_lock = getattr(teaching, "lock", None)
+        if teaching is not None and teaching_lock is not None:
+            with teaching_lock:
+                decision_history_pending = len(getattr(teaching, "buffer", ()) or ())
+        else:
+            decision_history_pending = 0
+        with core.STORE.lock:
+            diagnostic_events_pending = len(getattr(core.STORE, "_event_buffer", ()) or ())
+            diagnostic_events_dropped = int(getattr(core.STORE, "_event_buffer_dropped", 0) or 0)
+        payload["ram_persistence_buffers"] = {
+            "archive_pending": archive_pending,
+            "decision_history_pending": decision_history_pending,
+            "diagnostic_events_pending": diagnostic_events_pending,
+            "diagnostic_events_dropped": diagnostic_events_dropped,
+        }
         payload["ui_lifeline"] = snapshot()
         return payload
 

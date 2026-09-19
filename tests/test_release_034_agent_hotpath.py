@@ -262,6 +262,33 @@ class AgentHotPathTests(unittest.TestCase):
         ).read_text(encoding="utf-8")
         self.assertIn('"telemetry": TELEMETRY.snapshot()', source)
 
+    def test_periodic_ui_agent_reads_are_revision_cached_in_ram(self):
+        source = (
+            ROOT / "adaptive_ai/src/release_017_ui_lifeline.py"
+        ).read_text(encoding="utf-8")
+        self.assertIn("def hot_configs():", source)
+        self.assertIn("core.ENGINE._refresh_agent_index()", source)
+        self.assertIn("core.ENGINE.agent_configs.values()", source)
+        self.assertNotIn("configs = core.STORE.list_agent_configs()", source)
+        self.assertIn('"ram_persistence_buffers"', source)
+        self.assertIn('"provenance_queue"', source)
+
+    def test_micro_sd_temporaries_are_ram_first_and_coarsely_batched(self):
+        storage = (ROOT / "adaptive_ai/src/storage.py").read_text(encoding="utf-8")
+        engine = (ROOT / "adaptive_ai/src/engine.py").read_text(encoding="utf-8")
+        teaching = (ROOT / "adaptive_ai/src/teaching.py").read_text(encoding="utf-8")
+        provenance = (ROOT / "adaptive_ai/src/provenance.py").read_text(encoding="utf-8")
+        self.assertIn('PRAGMA temp_store=MEMORY', storage)
+        self.assertIn('PRAGMA cache_size=-16384', storage)
+        self.assertIn('self._event_recent = deque(maxlen=5000)', storage)
+        self.assertIn('return self._meta_cache.get(key, default)', storage)
+        self.assertIn('self.flush_archive(force=False)', engine)
+        self.assertIn('self.teaching.flush(force=False)', engine)
+        self.assertIn('now - self.last_flush < 5.0', teaching)
+        event_section = provenance.split("def record_event(", 1)[1].split("def generation_for_agent", 1)[0]
+        self.assertNotIn("self.store.conn()", event_section.split("def event(", 1)[0])
+        self.assertIn("flush_events_batch", provenance)
+
 
 if __name__ == "__main__":
     unittest.main()

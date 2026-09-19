@@ -639,6 +639,15 @@ def shutdown_runtime():
             except Exception:
                 traceback.print_exc()
             ENGINE.context.save(force=True)
+            try:
+                ENGINE.teaching.flush(force=True)
+                ENGINE.flush_archive(force=True)
+                flush_provenance = getattr(STORE, "_flush_provenance_events", None)
+                if callable(flush_provenance):
+                    flush_provenance()
+                STORE.flush_events()
+            except Exception:
+                traceback.print_exc()
             if ENGINE.home_bootstrap:
                 ENGINE.home_bootstrap.cancel()
             ENGINE.stop_event.set()

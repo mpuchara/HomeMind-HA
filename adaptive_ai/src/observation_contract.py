@@ -1311,7 +1311,7 @@ def install(core):
                 observation_stats["max_queue"] = max(
                     observation_stats["max_queue"], len(observation_rows)
                 )
-                if len(observation_rows) >= 64:
+                if len(observation_rows) >= 128:
                     journal_event.set()
         if overflow:
             # Preserve evidence rather than silently dropping it. This deliberately
@@ -1336,13 +1336,13 @@ def install(core):
                 window_rows.append(row)
                 window_stats["queued"] += 1
                 window_stats["max_queue"] = max(window_stats["max_queue"], len(window_rows))
-                if len(window_rows) >= 32:
+                if len(window_rows) >= 64:
                     journal_event.set()
         if overflow:
             journal.open_windows_batch([row])
         return row["window_id"]
 
-    def flush_observations(limit=256):
+    def flush_observations(limit=512):
         batch = []
         with journal_lock:
             while observation_rows and len(batch) < max(1, int(limit)):
@@ -1362,7 +1362,7 @@ def install(core):
             observation_stats["flushes"] += 1
         return len(batch)
 
-    def flush_windows(limit=64):
+    def flush_windows(limit=128):
         batch = []
         with journal_lock:
             while window_rows and len(batch) < max(1, int(limit)):
@@ -1391,7 +1391,9 @@ def install(core):
 
     def journal_writer():
         while not engine.stop_event.is_set():
-            journal_event.wait(0.1)
+            # Replay/audit evidence can tolerate sub-second durability. Coalescing here
+            # removes a large number of tiny WAL commits on microSD.
+            journal_event.wait(0.5)
             journal_event.clear()
             try:
                 while True:
