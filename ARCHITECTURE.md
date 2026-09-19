@@ -111,3 +111,12 @@ Automatic target discovery is maintenance, not a reason to monopolize the interp
 ### Operational-first steady state (0.14.33)
 
 The normal steady-state contract is saved policies + realtime HA events + ActionIntent/Executor. Recorder backfill, automatic target discovery and historical rebuilds are maintenance operations, not implicit background duties of every process start. HistoryManager starts in a local-only ready state and remains idle until an explicit discovery request. `POST /api/discovery/rescan` schedules the existing discovery pipeline on a background worker and returns immediately. Periodic UI reads use config-only agent rows plus hot in-memory runtime and do not call aggregate history readers. This recovery boundary preserves all persisted evidence and model lineage while removing heavy work from the availability path. Physical dispatch semantics are unchanged: only Executor owns HA service calls; Shadow/Candidate remain non-controlling.
+
+
+### Agent hot path (0.14.34)
+
+Realtime inference is dependency-indexed and RAM-first. A coalesced HA event pass takes one immutable state/revision snapshot and routes only to affected agents; runtime extensions may broaden eligibility but may not replace the core scheduler. Common Shadow inference avoids durable agent-config validation, while Control still reloads and validates durable configuration at the physical dispatch boundary.
+
+Observation-only persistence is explicitly outside `event -> intent`: Shadow provenance, feature observations and evidence-window maintenance use bounded deferred queues and batch SQLite transactions. Active command provenance is hydrated once at startup and matched from memory. Candidate generation discovery, including the empty-Candidate state, is invalidation-driven. Preference facts use in-memory revision invalidation. Inactive Teach rebenchmark performs no durable config read.
+
+The hot status path exposes recent telemetry plus deferred-journal backlog without invoking full Engine.status/history aggregates. These changes preserve model/reward/qualification semantics and are intended to stop latency from increasing simply because more agents exist or because the process has been alive longer.
