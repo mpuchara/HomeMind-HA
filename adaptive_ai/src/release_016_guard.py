@@ -162,13 +162,15 @@ def install(runtime):
             return True
 
         def quiet_run(history_self):
+            # Operational-first runtime: saved agents + realtime are the normal steady
+            # state. Recorder/discovery is intentionally *not* a periodic background task.
+            # Heavy discovery runs only through the explicit Rescan API, which uses
+            # HistoryManager.request_discovery_rescan().
             quiet_done = False
-            first_heavy = True
             while not history_self.stop_event.is_set():
                 if not history_self.engine.state_map:
                     history_self.stop_event.wait(1.0)
                     continue
-
                 if not quiet_done:
                     try:
                         quiet_done = quiet_start(history_self)
@@ -186,35 +188,10 @@ def install(runtime):
                     if not quiet_done:
                         history_self.stop_event.wait(1.0)
                         continue
-                    if history_self.stop_event.wait(state["background_grace_seconds"]):
-                        return
-
-                try:
-                    # Cached mappings are enough for the first maintenance pass. Do not
-                    # overlap automation-config API calls with its Recorder traffic.
-                    old_scan = core.OPTIONS.get("automation_scan_enabled", True)
-                    if first_heavy:
-                        core.OPTIONS["automation_scan_enabled"] = False
-                    try:
-                        original_bootstrap(history_self)
-                    finally:
-                        if first_heavy:
-                            core.OPTIONS["automation_scan_enabled"] = old_scan
-                    first_heavy = False
-                    history_self.error = None
-                except Exception as exc:
-                    history_self.error = f"{type(exc).__name__}: {exc}"
-                    history_self.set_status("error", message=history_self.error)
-                    store.event(
-                        None,
-                        "error",
-                        "history_manager_error",
-                        history_self.error,
-                        {"trace": traceback.format_exc(limit=6)},
-                    )
-
-                mins = max(5, int(core.OPTIONS["history_maintenance_minutes"]))
-                history_self.stop_event.wait(mins * 60)
+                # Realtime ingestion keeps the local archive current. Missing Recorder
+                # backfill and auto-discovery are user-requested maintenance, never an
+                # automatic cost paid by every restart.
+                history_self.stop_event.wait(60.0)
 
         history_module.HistoryManager.run = quiet_run
 
