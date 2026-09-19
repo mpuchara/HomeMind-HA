@@ -120,10 +120,12 @@ class Release024SourceContractTests(unittest.TestCase):
         self.assertIn("screen_agents = [", source)
         self.assertIn('"*" in set(a.get("input_entities") or ["*"])', source)
         self.assertIn("if screening_required else ()", source)
-        self.assertIn("archive_change_iter", source)
+        self.assertIn("STORE.archive_iter(", source)
+        self.assertIn("screening_last_signature", source)
         self.assertIn("persisted feature schema reused", source)
         self.assertIn('TRAINING_BUDGET.checkpoint("context_screen_target_edge")', source)
-        self.assertIn('TRAINING_BUDGET.checkpoint("context_screen_change_batch", force=True)', source)
+        self.assertIn('TRAINING_BUDGET.checkpoint("context_screen_change_row")', source)
+        self.assertIn("streaming indexed history scan", source)
 
     def test_training_hot_paths_use_config_only_agent_reads(self):
         source = self.source("history.py")
