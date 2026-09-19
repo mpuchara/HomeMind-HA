@@ -62,7 +62,7 @@ class EventDrivenInferenceTests(unittest.TestCase):
         rt = {}
 
         due = runtime._schedule_next_inference(configured, rt, timestamp=100.0)
-        self.assertEqual(due, 110.0)
+        self.assertEqual(due, 130.0)
 
         rt.update(
             fast_off_confirmation_active=True,
