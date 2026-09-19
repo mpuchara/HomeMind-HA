@@ -1,10 +1,14 @@
 import json
+import tempfile
 import unittest
+from pathlib import Path
 
 from context_engine import ContextEngine
 from home_sources import select_sources
 from home_state import RoomBeliefModel
+from replay import SQLiteTemporalTracker
 from settings import DEFAULT_OPTIONS
+from storage import Store
 from support import state
 
 
@@ -111,12 +115,96 @@ class RoomBeliefTests(unittest.TestCase):
         self.assertGreater(m.graph[('entry',)]['outcomes'][''][6], 0)
         self.assertEqual(m.diagnostics(40)['edges'], 0)
 
+    def test_same_event_confirmation_updates_transport_not_state_age_or_movement(self):
+        m = RoomBeliefModel()
+        m.observe('radar', 'room', 1.0, 1, evidence=RADAR, event_ts=1, received_ts=1)
+        m.observe('radar', 'room', None, 2, evidence=RADAR, event_ts=2, received_ts=2)
+        m.observe('radar', 'room', 1.0, 10, evidence=RADAR, event_ts=5, received_ts=10)
+        before_hypotheses = list(m.hypotheses)
+        before_arrivals = list(m.arrivals)
+
+        changed = m.observe(
+            'radar', 'room', 1.0, 11, evidence=RADAR, event_ts=5, received_ts=11
+        )
+        self.assertFalse(changed)
+        self.assertEqual(m.hypotheses, before_hypotheses)
+        self.assertEqual(list(m.arrivals), before_arrivals)
+        evidence = m.forecast('room', 11)['evidence_sources'][0]
+        self.assertAlmostEqual(evidence['communication_reliability'], .75)
+        self.assertAlmostEqual(evidence['communication_age_seconds'], 0.0)
+        self.assertAlmostEqual(evidence['event_age_seconds'], 6.0)
+        self.assertAlmostEqual(evidence['evidence_age_seconds'], 6.0)
+
+    def test_live_and_replay_share_receive_time_for_delayed_room_event(self):
+        with tempfile.TemporaryDirectory() as temp:
+            store = Store(Path(temp) / 'room-causal.db')
+            sensor = 'binary_sensor.room_presence'
+            target = 'light.room'
+            sensor_off = state(sensor, 'off', device_class='occupancy')
+            sensor_on = state(sensor, 'on', device_class='occupancy')
+            target_state = state(target, 'off')
+            registry = {
+                sensor: {'area_id': 'room', 'device_id': 'presence'},
+                target: {'area_id': 'room', 'device_id': 'light'},
+            }
+
+            live = ContextEngine(DEFAULT_OPTIONS)
+            live.configure({sensor: sensor_off, target: target_state}, entities=registry)
+            live.observe(sensor, sensor_off, 100.0, event_ts=100.0, received_ts=100.0)
+            live_before = live.forecast(target, 110.0)
+            live.observe(sensor, sensor_on, 112.0, event_ts=105.0, received_ts=112.0)
+            live_after = live.forecast(target, 113.0)
+
+            store.archive_batch([
+                (sensor, 100.0, 'off', {'device_class': 'occupancy'}, None, 'live', 100.0),
+                (sensor, 105.0, 'on', {'device_class': 'occupancy'}, None, 'live', 112.0),
+            ])
+            replay_context = ContextEngine(DEFAULT_OPTIONS)
+            replay_context.configure(
+                {sensor: sensor_on, target: target_state}, entities=registry
+            )
+            tracker = SQLiteTemporalTracker(
+                store, {sensor}, replay_context, 90.0, 120.0
+            )
+            try:
+                tracker.advance(110.0)
+                replay_before = tracker.history.home_context.forecast(target, 110.0)
+                tracker.advance(113.0)
+                replay_after = tracker.history.home_context.forecast(target, 113.0)
+            finally:
+                tracker.close()
+
+            self.assertAlmostEqual(
+                replay_before['occupancy_now'], live_before['occupancy_now'], places=12
+            )
+            self.assertAlmostEqual(
+                replay_after['occupancy_now'], live_after['occupancy_now'], places=12
+            )
+            self.assertLess(replay_before['occupancy_now'], .5)
+            self.assertGreater(replay_after['occupancy_now'], .5)
+            evidence = replay_after['evidence_sources'][0]
+            self.assertAlmostEqual(evidence['event_age_seconds'], 8.0)
+            self.assertAlmostEqual(evidence['communication_age_seconds'], 1.0)
+
+    def test_legacy_archive_receive_time_stays_unknown_in_storage(self):
+        with tempfile.TemporaryDirectory() as temp:
+            store = Store(Path(temp) / 'legacy-receive.db')
+            store.archive_batch([
+                ('binary_sensor.old', 10.0, 'on', {}, None, 'ha_history_minimal')
+            ])
+            with store.conn() as c:
+                row = c.execute(
+                    "SELECT ts,received_ts FROM entity_history WHERE entity_id='binary_sensor.old'"
+                ).fetchone()
+            self.assertEqual(row['ts'], 10.0)
+            self.assertIsNone(row['received_ts'])
     def test_checkpoint_is_versioned_and_never_restores_live_on(self):
         m = RoomBeliefModel()
         m.observe('radar', 'room', 1.0, 10, evidence=RADAR)
         m._record(('hall',), 'kitchen', 2, 10, 3)
         raw = json.loads(json.dumps(m.export()))
         self.assertEqual(raw['version'], 2)
+        self.assertEqual(raw['time_contract_version'], 2)
         restored = RoomBeliefModel(raw=raw)
         self.assertEqual(restored.graph, m.graph)
         self.assertEqual(restored.values, {})
@@ -131,6 +219,8 @@ class RoomBeliefTests(unittest.TestCase):
         m = RoomBeliefModel(raw=raw)
         self.assertEqual(m.migrated_from, 1)
         self.assertEqual(m.export()['version'], 2)
+        self.assertEqual(m.time_contract_loaded, 1)
+        self.assertEqual(m.export()['time_contract_version'], 2)
         self.assertEqual(m.graph[('hall',)]['outcomes']['kitchen'][2], 2)
 
     def test_calibration_accepts_only_independent_labels_and_does_not_train_state(self):

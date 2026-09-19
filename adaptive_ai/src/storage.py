@@ -124,6 +124,11 @@ class Store:
             self._ensure_column(c, "agents", "training_progress", "REAL NOT NULL DEFAULT 0")
             self._ensure_column(c, "agents", "training_updated_at", "TEXT")
             self._ensure_column(c, "rl_feedback", "source", "TEXT NOT NULL DEFAULT 'live'")
+            # Stage 08 causal replay distinguishes HA event time from local receive time.
+            # Legacy/Recorder-imported rows keep NULL here: their receive time is unknown
+            # and replay falls back to event time without fabricating provenance.
+            self._ensure_column(c, "entity_history", "received_ts", "REAL")
+            c.execute("CREATE INDEX IF NOT EXISTS idx_entity_history_received_ts ON entity_history(received_ts)")
             c.execute("UPDATE agents SET mode='shadow' WHERE mode='learn'")
             # v0.7.8 lifecycle migration: dormant becomes PAUSED, candidate becomes TRAINING.
             c.execute("UPDATE agents SET training_state='paused', mode='paused' WHERE training_state='dormant'")
@@ -479,16 +484,34 @@ class Store:
     def archive_batch(self, rows):
         if not rows:
             return 0
-        packed = [
-            (entity_id, float(ts), None if state is None else str(state),
-             json.dumps(attrs or {}, separators=(",", ":"), ensure_ascii=False), user_id, source)
-            for entity_id, ts, state, attrs, user_id, source in rows
-        ]
+
+        def pack(row):
+            if len(row) == 6:
+                entity_id, ts, state, attrs, user_id, source = row
+                received_ts = None
+            elif len(row) == 7:
+                entity_id, ts, state, attrs, user_id, source, received_ts = row
+            else:
+                raise ValueError("archive row must contain 6 legacy fields or 7 fields with received_ts")
+            received_ts = float(received_ts) if received_ts is not None else None
+            return (
+                entity_id, float(ts), received_ts, None if state is None else str(state),
+                json.dumps(attrs or {}, separators=(",", ":"), ensure_ascii=False),
+                user_id, source,
+            )
+
+        packed = [pack(row) for row in rows]
         with self.lock, self.conn() as c:
             c.executemany(
-                """INSERT INTO entity_history(entity_id,ts,state,attributes_json,context_user_id,source)
-                   VALUES(?,?,?,?,?,?)
+                """INSERT INTO entity_history
+                   (entity_id,ts,received_ts,state,attributes_json,context_user_id,source)
+                   VALUES(?,?,?,?,?,?,?)
                    ON CONFLICT(entity_id,ts) DO UPDATE SET
+                     received_ts=CASE
+                       WHEN entity_history.source='live' THEN entity_history.received_ts
+                       WHEN excluded.source='live' THEN excluded.received_ts
+                       ELSE COALESCE(entity_history.received_ts, excluded.received_ts)
+                     END,
                      state=excluded.state,
                      attributes_json=CASE WHEN excluded.attributes_json!='{}' THEN excluded.attributes_json ELSE entity_history.attributes_json END,
                      context_user_id=COALESCE(excluded.context_user_id, entity_history.context_user_id),
@@ -554,9 +577,9 @@ class Store:
             where.append("entity_id IN (%s)" % ",".join("?" for _ in ids)); vals.extend(ids)
         predicate = (" WHERE " + " AND ".join(where)) if where else ""
         sql = f"""
-            SELECT id,entity_id,ts,state,attributes_json,context_user_id,source
+            SELECT id,entity_id,ts,received_ts,state,attributes_json,context_user_id,source
             FROM (
-                SELECT id,entity_id,ts,state,attributes_json,context_user_id,source,
+                SELECT id,entity_id,ts,received_ts,state,attributes_json,context_user_id,source,
                        LAG(id) OVER (PARTITION BY entity_id ORDER BY ts,id) AS previous_id,
                        LAG(state) OVER (PARTITION BY entity_id ORDER BY ts,id) AS previous_state,
                        LAG(attributes_json) OVER (PARTITION BY entity_id ORDER BY ts,id) AS previous_attributes_json

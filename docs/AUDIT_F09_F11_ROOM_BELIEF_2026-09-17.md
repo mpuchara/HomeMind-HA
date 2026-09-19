@@ -8,7 +8,7 @@ Baza implementacji: Stage 07 / PR #66.
 
 Runtime pozostaje:
 
-`run.sh -> preference_queue_main.py -> fast_queue_main.py -> queue_main.py -> Engine -> ContextEngine`
+`run.sh -> trial_queue_main.py -> preference_queue_main.py -> fast_queue_main.py -> queue_main.py -> main.py -> Engine -> ContextEngine`
 
 Stage 08 zmienia kontrakt wewnątrz `ContextEngine`: `RoomBeliefModel v2` zastępuje pojedynczą
 trajektorię `SharedHomeStateModel`. Nie zmienia `ActionIntent`, `Executor`, trybu Shadow ani
@@ -66,12 +66,14 @@ pozostają wsparciem aktywności.
 
 ## Wiarygodność komunikacji vs wiek stanu
 
+Time contract v2 przechowuje dwa zegary: `event_ts` (czas faktycznej zmiany w HA) i `received_ts` (czas, od którego informacja była dostępna lokalnie). Hipotezy ruchu i causal availability idą po `received_ts`, natomiast świeżość niezmienionego stanu po `event_ts/state_since_ts`. Opóźniony pakiet nie cofa więc bieżącej trajektorii domu i jednocześnie nie wygląda jak świeża obecność.
+
 Model przechowuje osobno:
 
 - `communication_reliability` — spada do 0 przy `unavailable`; po reconnect zaczyna od
-  0.60 i rośnie po kolejnych odebranych próbkach,
-- `evidence_age_seconds` / `evidence_freshness` — określa, ile bieżącej obecności dowodzi
-  niezmieniony dodatni stan.
+  0.60 i rośnie po kolejnych zaakceptowanych potwierdzeniach,
+- `communication_age_seconds` — wiek ostatniego odebranego potwierdzenia,
+- `event_age_seconds` oraz `evidence_age_seconds` / `evidence_freshness` — wiek faktycznego zdarzenia i niezmienionego stanu.
 
 Samo to, że stan długo się nie zmienił, nie oznacza awarii komunikacji. Jednocześnie stary
 `ON` nie może utrzymywać pokoju zajętego bez końca. PIR wygasa szybko; radar occupancy ma
@@ -112,18 +114,18 @@ wysoką niepewność zamiast sztucznego potwierdzenia braku osoby.
 
 ## Causal as-of
 
-Każde źródło ma monotoniczny timestamp. Pakiet z `ts <= last_source_ts` jest odrzucany i
-nie przewija belief do tyłu.
+Każde źródło ma monotoniczny `event_ts`. Starszy event jest odrzucany. Ten sam event może zostać przyjęty jako późniejsze potwierdzenie transportu tylko wtedy, gdy treść jest identyczna i `received_ts` rośnie; nie tworzy to nowego wejścia, wyjścia ani hipotezy ruchu. Globalny model ruchu przesuwa się wyłącznie po causal `received_ts`, więc opóźniona paczka nie przewija belief do tyłu.
 
 Replay:
 
 1. ładuje ostatni checkpoint sprzed początku okna,
 2. seeduje stan `as-of t-30 s` bez uczenia przejść,
 3. resetuje wyłącznie syntetyczną trajektorię ruchu,
-4. odtwarza zdarzenia `t-30 < event_ts <= t` w porządku `ts,id`,
-5. przekazuje te same `evidence_metadata` co live.
+4. odtwarza wyłącznie zdarzenia spełniające `event_ts <= t` oraz `received_ts <= t`, w kolejności causal `received_ts,event_ts,id`,
+5. zdarzenie z dawnym `event_ts`, ale odebrane dopiero po początku okna, staje się widoczne dopiero od własnego `received_ts`,
+6. przekazuje te same `evidence_metadata` co live.
 
-Dane po `t` nie mogą wejść do forecastu.
+Dane po `t` ani pakiety jeszcze nieodebrane do `t` nie mogą wejść do forecastu. Dla starych importów Recorder `received_ts` pozostaje `NULL`; replay jawnie używa wtedy `event_ts` jako fallbacku, zamiast fabrykować dokładny czas odbioru.
 
 ## Checkpoint i migracja
 
@@ -139,8 +141,9 @@ pozostaje nietknięty jako rollback/read fallback. `ContextEngine` najpierw czyt
 jeżeli go nie ma, ładuje v1 przez jawną migrację `RoomBeliefModel.LEGACY_VERSION=1`.
 Eksport po migracji ma zawsze `version=2`.
 
-`home_checkpoints` nie wymaga zmiany schematu tabeli — pole `model` zawiera teraz
-wersjonowany JSON v2. Historyczny checkpoint v1 nadal jest czytelny.
+`home_checkpoints` nie wymaga zmiany schematu tabeli — pole `model` zawiera wersjonowany JSON v2 oraz addytywne `time_contract_version=2`. Historyczny checkpoint v1/v2 bez tego pola nadal jest czytelny i jest oznaczany jako time-contract v1.
+
+Lokalne `entity_history` dostaje addytywną kolumnę `received_ts`. Nowe live rows zapisują oba czasy. Stare/Recorder-imported rows pozostają z `received_ts=NULL`, co zachowuje nieznane pochodzenie czasu odbioru.
 
 Checkpoint nie zawiera:
 
@@ -170,7 +173,8 @@ niezależnej etykiety i dopiero potem wywoływać ten kontrakt.
 - zablokowany ON PIR i długotrwały ON radaru,
 - raw radar activity / szum bez automatycznego occupancy,
 - `unavailable`, reconnect i odbudowę communication reliability,
-- opóźniony pakiet,
+- opóźniony pakiet oraz zgodność live/replay względem `received_ts`,
+- potwierdzenie tego samego eventu poprawiające transport bez resetowania wieku stanu,
 - rozwidlenie trasy kitchen/bedroom,
 - brak kolejnego wejścia,
 - restart bez przywrócenia live ON,

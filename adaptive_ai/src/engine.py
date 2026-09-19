@@ -215,6 +215,7 @@ class Engine(threading.Thread):
         new_state = data.get("new_state")
         if not entity_id:
             return
+        received_ts = now_ts()
         with self.lock:
             old_state = self.state_map.get(entity_id)
             if old_state == new_state:
@@ -240,12 +241,17 @@ class Engine(threading.Thread):
             TRAINING_BUDGET.request_interactive_window(
                 0.75, reason="ha_state_changed"
             )
-            self.context.observe(entity_id, new_state, now_ts())
+            event_ts = parse_ts((new_state or {}).get("last_updated") or
+                                (new_state or {}).get("last_changed")) or received_ts
+            self.context.observe(
+                entity_id, new_state, received_ts,
+                event_ts=event_ts, received_ts=received_ts,
+            )
         HA.last_ok = now_ts(); HA.last_error = None
         if new_state is not None:
-            ts = parse_ts(new_state.get("last_updated") or new_state.get("last_changed")) or now_ts()
+            ts = parse_ts(new_state.get("last_updated") or new_state.get("last_changed")) or received_ts
             self.temporal_history.add(entity_id, ts, self._temporal_state(new_state))
-            self._queue_archive_state(new_state)
+            self._queue_archive_state(new_state, received_ts=received_ts)
         # A state transition can be the precursor to an action; wake inference now instead
         # of waiting for a whole-state REST poll.
         self.wake_event.set()
@@ -270,11 +276,11 @@ class Engine(threading.Thread):
             "last_changed": st.get("last_changed"), "last_updated": st.get("last_updated"),
         }
 
-    def _queue_archive_state(self, st, force=False):
+    def _queue_archive_state(self, st, force=False, received_ts=None):
         entity_id = st.get("entity_id")
         if not entity_id:
             return
-        now = now_ts()
+        now = float(received_ts if received_ts is not None else now_ts())
         compact_attrs = self._compact_attrs(st)
         fingerprint = json.dumps([st.get("state"), compact_attrs], sort_keys=True, separators=(",", ":"), default=str)
         with self.lock:
@@ -286,7 +292,7 @@ class Engine(threading.Thread):
                 return
             ts = parse_ts(st.get("last_updated") or st.get("last_changed")) or now
             user_id = (st.get("context") or {}).get("user_id")
-            self.pending_archive.append((entity_id, ts, st.get("state"), compact_attrs, user_id, "live"))
+            self.pending_archive.append((entity_id, ts, st.get("state"), compact_attrs, user_id, "live", now))
             self.archive_seen[entity_id] = fingerprint
             self.archive_last_ts[entity_id] = now
 
@@ -316,11 +322,20 @@ class Engine(threading.Thread):
                     state_map.pop(eid, None)
             initial = not self.state_map
             self.context.configure(state_map)
-            for eid in set(self.state_map) | set(state_map):
-                if self.state_map.get(eid) != state_map.get(eid):
+            poll_received_ts = now_ts()
+            previous_state_map = dict(self.state_map)
+            for eid in set(previous_state_map) | set(state_map):
+                changed = previous_state_map.get(eid) != state_map.get(eid)
+                current_state = state_map.get(eid)
+                event_ts = parse_ts((current_state or {}).get("last_updated") or
+                                    (current_state or {}).get("last_changed")) or poll_received_ts
+                if changed:
                     self.state_revision += 1
                     self.entity_revisions[eid] = self.state_revision
-                    self.context.observe(eid, state_map.get(eid), now_ts(), learn=not initial)
+                    self.context.observe(
+                        eid, current_state, poll_received_ts, learn=not initial,
+                        event_ts=event_ts, received_ts=poll_received_ts,
+                    )
                     self.dirty_entities.add(eid)
             self.state_map = state_map
             if initial:
@@ -331,9 +346,9 @@ class Engine(threading.Thread):
             self.last_full_poll = self.last_poll
             self.error = None
         for st in state_map.values():
-            ts = parse_ts(st.get("last_updated") or st.get("last_changed")) or now_ts()
+            ts = parse_ts(st.get("last_updated") or st.get("last_changed")) or poll_received_ts
             self.temporal_history.add(st.get("entity_id"), ts, self._temporal_state(st))
-            self._queue_archive_state(st)
+            self._queue_archive_state(st, received_ts=poll_received_ts)
         self.flush_archive()
         self.wake_event.set()
         return state_map
