@@ -26,8 +26,8 @@ import trial_queue_main as entry
 core = entry.core
 assert core._release_016_guard_installed is True
 contract = core.release_016_resource_guard_contract
-assert contract['startup'] == 'saved_agents_and_realtime_only'
-assert contract['automatic_background_discovery'] == 'disabled_explicit_rescan_only'
+assert contract['startup'] == 'saved_agents_and_realtime_then_fresh_install_discovery'
+assert contract['automatic_background_discovery'] == 'fresh_install_once_then_explicit_rescan'
 assert contract['background_archive_cpu'] == '20pct_default_duty_cycle_when_explicit'
 assert contract['recorder_timeout'] == '120s_circuit_breaker_no_recursive_burst'
 snapshot = core.RELEASE_016_RESOURCE_GUARD()
@@ -36,12 +36,16 @@ assert snapshot['background_cpu_duty_cycle'] == 0.20
 assert snapshot['automation_scan_workers'] == 1
 ''')
 
-    def test_history_first_cycle_remains_local_only_until_explicit_rescan(self):
+    def test_history_first_cycle_stays_quiet_but_fresh_install_gets_one_async_discovery(self):
         source = (ROOT/'adaptive_ai/src/release_016_guard.py').read_text(encoding='utf-8')
         self.assertIn('def quiet_start(history_self)', source)
         self.assertIn('Saved agents + realtime only; no Recorder/API backfill during startup', source)
-        self.assertIn('request_discovery_rescan', source)
-        self.assertIn('Operational-first runtime', source)
+        self.assertIn('INITIAL_DISCOVERY_META_KEY = "initial_discovery_complete"', source)
+        self.assertIn('_initial_discovery_needed(store)', source)
+        self.assertIn('threshold_override=1, reason="fresh_install"', source)
+        self.assertIn('core.startup_snapshot().get("ready")', source)
+        # The History thread still never runs a synchronous/periodic Recorder bootstrap.
+        # Fresh-install work goes through the async single-flight request instead.
         self.assertNotIn('original_bootstrap(history_self)', source)
 
     def test_background_archive_and_recorder_have_separate_circuit_breakers(self):
