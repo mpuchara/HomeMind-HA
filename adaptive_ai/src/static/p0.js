@@ -159,10 +159,14 @@
     const [tone,title,detail]=r.experiments?.active?.kind==='probe' ? ['acted','Eksperyment w toku','Pewność dotyczy zwykłej predykcji. Trwa obserwacja niewielkiej zmiany nastawy.'] : human(a), box=el.querySelector('[data-p0=decision]'); box.className=`decision ${tone}`; text(el,'state',title); text(el,'detail',detail);
     el.classList.toggle('paused-agent',['paused','waiting','needs_retrain'].includes(training)); el.classList.toggle('training-agent',training==='training');
     const toggle=el.querySelector('[data-a=mode]');
-    toggle.textContent=a.mode==='control'?'Control → Shadow':a.mode==='shadow'?'Shadow → Control':'Paused → Shadow';
-    toggle.setAttribute('aria-checked',String(a.mode==='control'));
-    toggle.disabled=a.mode==='shadow'&&!controlReady(a);
-    toggle.title=a.mode!=='shadow'?'Przełącz na Shadow':controlBlockReason(a);
+    // Later UI layers (generation workflow) intentionally own/replace the action row.
+    // Never assume the original P0 mode button still exists on a retained card.
+    if(toggle){
+      toggle.textContent=a.mode==='control'?'Control → Shadow':a.mode==='shadow'?'Shadow → Control':'Paused → Shadow';
+      toggle.setAttribute('aria-checked',String(a.mode==='control'));
+      toggle.disabled=a.mode==='shadow'&&!controlReady(a);
+      toggle.title=a.mode!=='shadow'?'Przełącz na Shadow':controlBlockReason(a);
+    }
     if(r.teaching_id){text(el,'state','Decyzja z nauki użytkownika');text(el,'detail',`Korekta #${r.teaching_id} pasuje do kontekstu. Pewność dotyczy modelu bazowego.`);}
 
   };

@@ -1,3 +1,10 @@
+# 0.14.43 — 2026-09-19
+
+- Fix the false `Train failed: Cannot set properties of null (setting 'textContent')` alert after a successful manual Train queue admission.
+- Make the retained-card P0 renderer tolerate the Generation Workflow layer replacing the original action row. Missing legacy mode controls are now treated as intentional ownership by the newer UI layer.
+- Separate Train HTTP admission from the subsequent UI refresh. A renderer/refresh exception after a successful POST is logged for automatic retry instead of being reported as a failed Train request.
+- Preserve TrainingQueue, discovery, model, Candidate, Teach/Correct and physical-control semantics.
+
 # 0.14.42 — 2026-09-19
 
 - Fix clean-install discovery completeness: the classifier uses the configured 10-day activity window, so the first low-memory scan now backfills the older part of that same window instead of importing only the most recent 24 hours.
