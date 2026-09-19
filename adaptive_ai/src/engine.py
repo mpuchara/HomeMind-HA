@@ -613,7 +613,16 @@ class Engine(threading.Thread):
                 return
             previous_active = set(self.agent_configs)
 
-        configs = STORE.list_agent_configs()
+        if callable(getattr(STORE, "list_agent_configs", None)):
+            configs = STORE.list_agent_configs()
+        else:
+            with self.lock:
+                known_ids = set(self.runtime) | set(self.models)
+            configs = [
+                row for row in (
+                    STORE.get_agent_config(aid) for aid in known_ids
+                ) if row
+            ]
         active = {}
         by_target = {}
         dependency_agents = {}
@@ -700,13 +709,14 @@ class Engine(threading.Thread):
         for agent in agents:
             groups.setdefault(agent["target_entity"], []).append(agent)
 
-        # One immutable revision snapshot per coalesced pass. Every worker shares it;
-        # Executor will reject an intent if any dependency changes before dispatch.
+        # One atomically consistent state+revision snapshot per coalesced pass. Every
+        # worker shares it; Executor rejects an intent if any dependency changes later.
         with self.lock:
+            pass_states = dict(self.state_map) if self.state_map else dict(state_map or {})
             pass_revision = self.state_revision
             revision_snapshot = dict(self.entity_revisions)
             context_revision = self.context.home.revision
-        snapshot = (state_map, pass_revision, revision_snapshot, context_revision)
+        snapshot = (pass_states, pass_revision, revision_snapshot, context_revision)
 
         for target, target_agents in groups.items():
             active = self.in_flight.get(target)
