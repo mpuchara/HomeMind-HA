@@ -31,6 +31,8 @@ def install(runtime):
         "agent_lifeline_reads": 0,
         "status_lifeline_reads": 0,
         "queue_label_reads": 0,
+        "home_diag_cache_at": 0.0,
+        "home_diag_refreshes": 0,
     }
     rich_agents = {}
     rich_status = {}
@@ -60,7 +62,7 @@ def install(runtime):
     def cheap_agent_label(queue_self, agent_id):
         core.ENGINE._refresh_agent_index()
         with core.ENGINE.lock:
-            agent = dict(getattr(core.ENGINE, "agent_configs", {}).get(str(agent_id)) or {})
+            agent = dict(getattr(core.ENGINE, "all_agent_configs", {}).get(str(agent_id)) or {})
         if not agent:
             agent = queue_self.store.get_agent_config(agent_id)
         with cache_lock:
@@ -71,9 +73,41 @@ def install(runtime):
 
     def hot_configs():
         # Revision-driven refresh performs no SQLite read while agent config is unchanged.
+        # The complete config cache is intentionally distinct from the inference-routing
+        # subset so PAUSED / WAITING / NEEDS_RETRAIN cards never disappear from the UI.
         core.ENGINE._refresh_agent_index()
         with core.ENGINE.lock:
-            return [dict(row) for row in core.ENGINE.agent_configs.values()]
+            return [dict(row) for row in core.ENGINE.all_agent_configs.values()]
+
+    home_cache = {"home_intelligence": {}, "home_bootstrap": {}}
+
+    def hot_home_diagnostics():
+        # Home Intelligence diagnostics are in-memory but not free: they summarize areas,
+        # sources and adaptive-presence capability. Refresh them at most once per 5 s so
+        # the panel stays truthful without competing with event -> intent on Raspberry Pi.
+        now = time.monotonic()
+        with cache_lock:
+            cached_at = float(state.get("home_diag_cache_at") or 0.0)
+            if cached_at > 0.0 and now - cached_at < 5.0:
+                return (
+                    dict(home_cache.get("home_intelligence") or {}),
+                    dict(home_cache.get("home_bootstrap") or {}),
+                )
+        try:
+            intelligence = core.ENGINE.context.diagnostics()
+        except Exception as exc:
+            intelligence = {"diagnostics_error": f"{type(exc).__name__}: {exc}"}
+        bootstrap = (
+            dict(core.ENGINE.home_bootstrap.status)
+            if getattr(core.ENGINE, "home_bootstrap", None) is not None
+            else {}
+        )
+        with cache_lock:
+            home_cache["home_intelligence"] = dict(intelligence or {})
+            home_cache["home_bootstrap"] = dict(bootstrap or {})
+            state["home_diag_cache_at"] = now
+            state["home_diag_refreshes"] = int(state.get("home_diag_refreshes") or 0) + 1
+        return dict(intelligence or {}), dict(bootstrap or {})
 
     def snapshot():
         with cache_lock:
@@ -189,7 +223,9 @@ def install(runtime):
             ws_error = core.ENGINE.ws_error
             registry_count = len(core.ENGINE.entity_registry)
             last_ws_event = core.ENGINE.last_ws_event
+            active_inference_agent_count = len(core.ENGINE.agent_configs)
         configs = hot_configs()
+        home_intelligence, home_bootstrap = hot_home_diagnostics()
         queue = queue_object()
         startup = core.startup_snapshot()
 
@@ -200,6 +236,7 @@ def install(runtime):
                 "last_poll": last_poll,
                 "state_count": state_count,
                 "agent_count": len(configs),
+                "active_inference_agent_count": active_inference_agent_count,
                 "average_confidence": (
                     sum(float(x) for x in confidences) / len(confidences)
                     if confidences
@@ -233,8 +270,8 @@ def install(runtime):
         payload.setdefault("feedback_count", 0)
         payload.setdefault("historical_experience_count", 0)
         payload.setdefault("automation_knowledge", {})
-        payload.setdefault("home_intelligence", {})
-        payload.setdefault("home_bootstrap", {})
+        payload["home_intelligence"] = home_intelligence
+        payload["home_bootstrap"] = home_bootstrap
 
         low_power = getattr(core, "LOW_POWER_RUNTIME", None)
         if callable(low_power):

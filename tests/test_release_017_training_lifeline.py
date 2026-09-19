@@ -72,7 +72,7 @@ assert _budget_pause(2.0, 0.25, 2.0) == 2.0
         self.assertIn('"status_read_mode": "operational_hot"', source)
         self.assertIn("def hot_configs():", source)
         self.assertIn("core.ENGINE._refresh_agent_index()", source)
-        self.assertIn("core.ENGINE.agent_configs.values()", source)
+        self.assertIn("core.ENGINE.all_agent_configs.values()", source)
         self.assertNotIn("configs = core.STORE.list_agent_configs()", source)
         self.assertNotIn("core.ENGINE.status()", source)
 

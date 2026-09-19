@@ -535,7 +535,7 @@ class AgentCandidateManager(threading.Thread):
             "off_lead_gain_seconds": None if live_off is None or cand_off is None else cand_off - live_off,
         })
         parent = parent or self.store.get_agent_config(row["parent_agent_id"])
-        candidate = candidate or self.store.get_agent(row["candidate_id"])
+        candidate = candidate or self.store.get_agent_config(row["candidate_id"])
         min_samples = 40
         per_action_ok = True
         if parent and str(parent.get("target_property")) == "power":
@@ -552,12 +552,12 @@ class AgentCandidateManager(threading.Thread):
         out["fresh_feedback_revision"] = fresh
         return out
 
-    def status(self, parent_id):
-        row = self._candidate_row(parent_id)
+    def _status_from_row(self, row):
+        """Build a Candidate card from one already-fetched edge without history aggregates."""
         if not row:
             return None
         parent = self.store.get_agent_config(row["parent_agent_id"])
-        candidate = self.store.get_agent(row["candidate_id"])
+        candidate = self.store.get_agent_config(row["candidate_id"])
         comparison = self._comparison_summary(row, parent, candidate)
         queue = self._queue()
         q = queue.status_for(row["candidate_id"]) if queue is not None else None
@@ -588,8 +588,16 @@ class AgentCandidateManager(threading.Thread):
             "promotable": bool(comparison.get("promotable")),
         }
 
+    def status(self, parent_id):
+        return self._status_from_row(self._candidate_row(parent_id))
+
     def list_status(self):
-        return [self.status(r["parent_agent_id"]) for r in self._all_rows() if self.status(r["parent_agent_id"]) is not None]
+        out = []
+        for row in self._all_rows():
+            status = self._status_from_row(row)
+            if status is not None:
+                out.append(status)
+        return out
 
     @staticmethod
     def _nearest_binary(value):

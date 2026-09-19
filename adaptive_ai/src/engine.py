@@ -127,6 +127,10 @@ class Engine(threading.Thread):
         # truly external/direct DB edits without turning agent-table scans into periodic I/O.
         self.agent_index_ttl_seconds = 600.0
         self.agent_index_revision = -1
+        # Keep the complete configured-agent snapshot separate from the inference routing
+        # subset. UI/status needs paused/waiting agents too; event dispatch must only see
+        # policies that are currently eligible to infer.
+        self.all_agent_configs = {}
         self.agent_configs = {}
         self.active_agents_by_target = {}
         self.dependency_agents = {}
@@ -659,12 +663,16 @@ class Engine(threading.Thread):
                     STORE.get_agent_config(aid) for aid in known_ids
                 ) if row
             ]
+        all_configs = {}
         active = {}
         by_target = {}
         dependency_agents = {}
         for agent in configs:
             aid = str(agent.get("id") or "")
-            if not aid or not self.inference_eligible(agent):
+            if not aid:
+                continue
+            all_configs[aid] = agent
+            if not self.inference_eligible(agent):
                 continue
             active[aid] = agent
             target = str(agent.get("target_entity") or "")
@@ -676,6 +684,7 @@ class Engine(threading.Thread):
 
         removed = previous_active - set(active)
         with self.lock:
+            self.all_agent_configs = all_configs
             self.agent_configs = active
             self.active_agents_by_target = by_target
             self.dependency_agents = dependency_agents
