@@ -144,3 +144,12 @@ The operational agent cache is split into two explicit views. `all_agent_configs
 Candidate card/status reads are config-only. Rendering a Candidate, confidence gates or promotion-validation metadata must not execute `COUNT/AVG` scans over `rl_feedback` or `historical_experiences`, and `list_status()` evaluates each Candidate edge exactly once. Candidate lifecycle polling uses the same 4 s cadence as the main UI.
 
 Home Intelligence in `/api/status` again reports the actual in-memory ContextEngine/HomeBootstrap state. Its richer diagnostic snapshot is cached for 5 s; queue/backlog gauges are advisory and do not wait for persistence locks. These are read-side/QoS changes only and do not alter learning, Candidate durability, promotion semantics or the ActionIntent -> Executor physical-control boundary.
+
+
+### UI read isolation and Candidate polling recovery (0.14.37)
+
+Candidate lifecycle polling remains a 4 s read-only loop, but 0.14.37 fixes a packaging/source regression in which literal `\\n` characters were written inside a JavaScript `//` comment and therefore commented out the polling loop while still passing syntax checks. The loop is now explicitly executable and covered by a source regression test.
+
+The operational UI treats agent cards and Recent activity as independent reads. `/api/agents` and `/api/events` are consumed with independent success/failure handling, so a slow event feed can no longer prevent fresh Desired/confidence/runtime values from reaching agent cards.
+
+Diagnostic events have a dedicated RAM lock separate from the Store transaction lock. `/api/events` reads only the RAM rings under that lock; opportunistic persistence never waits for an unrelated history/model transaction. HA reachability and realtime WebSocket delivery are also reported as separate states. None of these changes alter policy learning, Candidate durability, promotion, ActionIntent construction or Executor safety.
