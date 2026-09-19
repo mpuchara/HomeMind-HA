@@ -4,7 +4,7 @@
   "base_version": "0.14.37",
   "base_commit": "4aa6027395545030a8f1a7bc88310b5294fb8edb",
   "release_status": "release-0.14.38-pi-realtime-degradation-fix",
-  "tests_passed": 955,
+  "tests_passed": 966,
   "profile": "rpi4-low-memory-automatic-initial-training",
   "manual_agent_training": false,
   "max_concurrent_training_jobs": 1,
@@ -40,7 +40,7 @@
   "migration": "no destructive migration; existing agents, models, feedback, raw archive, historical experiences, candidate lineage, rollback and generation state preserved",
   "physical_control": "unchanged; repaired agents return to Shadow and Control still requires qualified state plus all existing guards",
   "pi4": "0.14.38 targets the long-soak Raspberry Pi failure: drift analysis is coalesced on a throttled background observer, REST /states reconciliation is delta-only after bootstrap, websocket outage fallback reconciles every 10 s, and HA core-state health is tracked separately from unrelated REST errors.",
-  "ci_status": "Final 0.14.38 validation pending on release head.",
+  "ci_status": "0.14.38 runtime head 768f519e8bfc33c69facda47e43c896f7af6ba2c passed full Validate HomeMind run 35447229441 on Python 3.11/3.13, image smoke, JS/compile, Stage 17/18 and simulations.",
   "training_slice_budget": "adaptive-ai-index workers call a shared CooperativeTrainingBudget; expensive temporal tracker loops yield between entities/events and finalization is no longer outside the throttle",
   "finalization_lifeline": "HEAVY_JOBS remains owned through final gc.collect(), so /api/status and /api/agents stay on lightweight lifeline reads until the worker is actually finished",
   "finalization_progress": "post-replay UI now exposes bounded stages: replay complete, policy serialization, benchmark save, qualification, checkpoint complete",
@@ -160,5 +160,6 @@
   "ha_state_resync": "Healthy realtime keeps a 300 s safety snapshot; after bootstrap only changed entities update context, temporal history and archive. WebSocket loss switches temporarily to a 10 s delta-only REST fallback.",
   "ha_health_contract": "HA connected means either an authenticated realtime websocket or a successful dedicated /states snapshot. History, automation-config or service-call failures do not redefine core HA reachability.",
   "drift_observer_runtime": "Controlled-drift episode ingestion/detection runs outside device-control inference, reads only unseen EpisodeEvaluator suffixes in bounded batches, uses bounded detection windows and does not re-signal an already pending agent inside the 30 s throttle.",
-  "pi_degradation_diagnostics": "Home Intelligence exposes recent process CPU, inference/event scheduler counters, drift observer run/pending/max duration and state-resync changed-count/last/max duration."
+  "pi_degradation_diagnostics": "Home Intelligence exposes recent process CPU, inference/event scheduler counters, drift observer run/pending/max duration and state-resync changed-count/last/max duration.",
+  "validation_run": 35447229441
 }
