@@ -462,12 +462,20 @@ def install(manager):
             "root_generation": None,
         })
 
+    def invalidate_generation_cache(*_args, **_kwargs):
+        # Candidate lineage mutations are rare. Invalidate all root caches immediately
+        # instead of polling SQLite from every realtime inference.
+        for runtime in shadow_runtime.values():
+            runtime["generation_cache_at"] = 0.0
+            runtime["shadow_generations"] = None
+            runtime["root_generation"] = None
+
     def _cached_generations(root_id):
         root_rt = _root_runtime(root_id)
         now = time.monotonic()
         if (
             root_rt.get("shadow_generations") is not None
-            and now - float(root_rt.get("generation_cache_at") or 0.0) < 2.0
+            and now - float(root_rt.get("generation_cache_at") or 0.0) < 30.0
         ):
             return root_rt.get("root_generation"), root_rt.get("shadow_generations") or []
         generations = _shadow_generations(manager.store, root_id)
@@ -590,10 +598,7 @@ def install(manager):
     def after_live_process(agent, state_map):
         # This extension is authoritative for Candidate Shadow runtime; the older Candidate
         # wrapper is intentionally not called, avoiding duplicate policy inference and
-        # duplicate A/B samples. Root Live has already run before this hook executes.
-        root_gen = _root_generation(manager.store, agent["id"])
-        if not root_gen:
-            return None
+        # duplicate A/B samples. _bundle() is the only generation lookup on this path.
         root_rt = _root_runtime(agent["id"])
         previous_bundle = root_rt.get("bundle")
         bundle = _bundle(agent, state_map)
@@ -606,9 +611,6 @@ def install(manager):
         return bundle
 
     def before_live_process(agent, state_map):
-        root_gen = _root_generation(manager.store, agent["id"])
-        if not root_gen:
-            return None
         root_rt = _root_runtime(agent["id"])
         previous_current = root_rt.get("previous_current")
         if previous_current is None:
@@ -825,6 +827,22 @@ def install(manager):
             except (TypeError, ValueError) as exc:
                 return http.send_json(404, {"error": str(exc)})
         return original_get(http)
+
+    # Keep generation discovery event-invalidated. This avoids both stale Candidate
+    # visibility and a generation-table query on every live inference.
+    for method_name in (
+        "enqueue", "spawn_child", "discard", "promote",
+        "_create_candidate", "_delete_candidate", "_finish_build_if_ready",
+    ):
+        original = getattr(manager, method_name, None)
+        if not callable(original):
+            continue
+        def wrapped(*args, __original=original, **kwargs):
+            result = __original(*args, **kwargs)
+            invalidate_generation_cache()
+            return result
+        setattr(manager, method_name, wrapped)
+    manager.invalidate_candidate_shadow_cache = invalidate_generation_cache
 
     manager.before_live_process = before_live_process
     manager.after_live_process = after_live_process
