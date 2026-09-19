@@ -142,3 +142,14 @@ Po restarcie dodatek uruchamia zapisanych agentów i realtime Home Assistant bez
 W zwykłej pracy event z Home Assistant uruchamia tylko agentów zależnych od zmienionej encji. Konfiguracje agentów, zależności, preference facts, Candidate lineage bez aktywnego Candidate, provenance aktywnych komend oraz pochodzenie bieżącego eventu są trzymane w RAM i jawnie unieważniane przy zmianach. Shadow nie wykonuje durable walidacji Control, a feature observations, Shadow provenance i evidence windows są zapisywane poza ścieżką event -> intent przez ograniczone kolejki i batch write do SQLite. Control zachowuje pełną walidację przed fizycznym HA service call.
 
 W statusie runtime dostępny jest ponownie recent `event -> intent p95` oraz backlog odroczonego feature journal. Dla testu na Raspberry Pi ważne jest obserwowanie, czy p95 i backlog pozostają stabilne po kilkudziesięciu minutach pracy wielu agentów; wersja 0.14.34 jest pierwszym buildem po tej przebudowie i wymaga realnego soak testu przed uznaniem PR za gotowy do merge.
+
+
+### RAM-first dla instalacji na karcie microSD od 0.14.35
+
+W Raspberry Pi baza dodatku zwykle znajduje się na karcie microSD, dlatego 0.14.35 ogranicza małe, częste operacje SQLite. Dane tymczasowe i łatwe do odtworzenia są buforowane w RAM i zapisywane większymi paczkami: bieżące eventy diagnostyczne, provenance eventów HA, feature observations/evidence windows, decision history oraz live archive. Cykliczne `/api/status`, `/api/agents` i `/api/events` korzystają z pamięci RAM zamiast wykonywać regularne odczyty tabel przy każdym pollingu.
+
+Konfiguracja agentów i routing są unieważniane zmianą revision, także gdy lista agentów jest pusta. Pełny skan tabeli agentów pozostaje tylko awaryjnym fallbackiem co 10 minut dla zewnętrznych zmian wykonanych bez API Store. SQLite używa `temp_store=MEMORY`, większego cache stron i mmap, jeśli platforma go obsługuje.
+
+Trwałe granice bezpieczeństwa nie zostały przeniesione do RAM. Modele, konfiguracja, explicit feedback oraz ścieżka Control/command pozostają trwałe, a Control nadal odczytuje i waliduje konfigurację przed fizycznym service call. Przy twardej utracie zasilania można utracić jedynie ostatnią krótką porcję danych obserwacyjnych/diagnostycznych oczekujących na batch flush, nie stan wymagany do bezpiecznego sterowania.
+
+W teście Raspberry Pi obserwuj `event -> intent p95`, `feature_journal.pending`, `provenance_queue.events.pending` oraz `ram_persistence_buffers`. Kolejki mogą chwilowo rosnąć, ale przy stabilnej pracy powinny okresowo wracać w okolice zera, a p95 nie powinno narastać wraz z czasem działania.

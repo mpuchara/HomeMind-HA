@@ -120,3 +120,18 @@ Realtime inference is dependency-indexed and RAM-first. A coalesced HA event pas
 Observation-only persistence is explicitly outside `event -> intent`: Shadow provenance, feature observations and evidence-window maintenance use bounded deferred queues and batch SQLite transactions. Active command provenance is hydrated once at startup and matched from memory. Candidate generation discovery, including the empty-Candidate state, is invalidation-driven. Preference facts use in-memory revision invalidation. Inactive Teach rebenchmark performs no durable config read.
 
 The hot status path exposes recent telemetry plus deferred-journal backlog without invoking full Engine.status/history aggregates. These changes preserve model/reward/qualification semantics and are intended to stop latency from increasing simply because more agents exist or because the process has been alive longer.
+
+
+### microSD-aware RAM-first persistence (0.14.35)
+
+Raspberry Pi installations commonly run the add-on database from microSD, where many tiny synchronous transactions are disproportionately expensive. Transient operational state is therefore RAM-first and bounded. SQLite remains the durable source for models, configuration, explicit feedback, Control/command safety state and replay history, but ordinary realtime work no longer performs avoidable one-row reads/writes.
+
+- SQLite temporary work uses `temp_store=MEMORY`, a ~16 MiB page cache and up to 64 MiB mmap when supported.
+- Current diagnostic events are served from a bounded RAM ring and persisted in coarse batches. `/api/events` warms once at startup and does not poll SQLite afterwards.
+- Current HA event provenance is classified, deduplicated and marked processed in RAM; a background writer persists batches. Historical replay explicitly flushes this buffer before durable joins.
+- Feature observations/evidence windows coalesce for up to 2 seconds and persist in larger batches.
+- Decision history and live entity archive use bounded 5-second/row-count batching rather than a transaction per engine tick.
+- Agent configuration/routing is revision-invalidated in RAM, including the valid zero-agent case. Supported direct agent mutations bump the revision; the full-table safety refresh is only a 10-minute fallback for unsupported external DB edits.
+- `/api/status` exposes RAM persistence backlogs so a Raspberry Pi soak test can detect a writer that falls behind instead of hiding growing queues.
+
+These changes do not move physical safety state to volatile memory. Control still performs fresh durable configuration validation before dispatch, and ActionIntent -> Executor remains the sole physical command boundary.
