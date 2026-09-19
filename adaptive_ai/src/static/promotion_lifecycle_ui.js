@@ -41,10 +41,16 @@
     try{
       const r=await fetch(`api/agents/${encodeURIComponent(id)}`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({mode})});
       if(!r.ok)throw new Error(await r.text());
-      if(typeof window.load==='function')await window.load();else if(typeof load==='function')await load();
     }catch(e){
       alert('Nie udało się zmienić trybu: '+e.message);
+      return;
+    }
+    // The mode mutation already succeeded. A later renderer exception must never be
+    // reported as a failed mode change or trigger a second misleading alert.
+    try{
       if(typeof window.load==='function')await window.load();else if(typeof load==='function')await load();
+    }catch(e){
+      console.error('Mode changed successfully; UI refresh will retry automatically',e);
     }
   };
 
