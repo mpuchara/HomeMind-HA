@@ -1008,69 +1008,98 @@ class HistoryManager(threading.Thread):
         edge_limit = max(8, min(2048, 32768 // max(1, len(behaviour_candidates | fast_targets))))
         fast_edge_rows = {eid: deque(maxlen=edge_limit) for eid in (behaviour_candidates | fast_targets)}
 
-        # Fast behavioural scoring intentionally keeps the bounded raw sensor rows,
-        # while generic precursor screening only needs effective per-entity changes.
-        # Split the two streams so chatty unchanged Recorder rows never enter Python's
-        # broad whole-home screening loop.
-        if screening_required and fast_edge_rows:
-            for edge_row in STORE.archive_iter(
-                start_ts=start_ts,
-                end_ts=selection_end,
-                entity_ids=set(fast_edge_rows),
-                chunk_size=512,
-            ):
-                if float(edge_row["ts"]) >= selection_end:
-                    break
-                fast_edge_rows[edge_row["entity_id"]].append(edge_row)
-
+        # One chronological streaming pass now serves both consumers:
+        #   1. raw bounded rows for fast occupancy/activity driver scoring;
+        #   2. effective state/attribute changes for generic precursor screening.
+        #
+        # The previous implementation first scanned fast-edge history and then executed a
+        # SQLite LAG()/PARTITION window query for the whole screening interval. On Pi the
+        # window query could spend a long time building temp B-trees before yielding its
+        # first row, leaving the UI at 0% and holding the only HEAVY_JOBS slot. Streaming
+        # by the existing ts index starts yielding immediately and stays cooperative.
         screening_rows = (
-            STORE.archive_change_iter(start_ts=start_ts, end_ts=selection_end, chunk_size=2000)
+            STORE.archive_iter(start_ts=start_ts, end_ts=selection_end, chunk_size=512)
             if screening_required else ()
         )
         screening_checkpoint_rows = max(
             8, min(128, int(OPTIONS.get("training_archive_batch_rows", 16)))
         )
+        screening_status_rows = max(128, screening_checkpoint_rows * 8)
         screening_rows_done = 0
+        screening_last_signature = {}
+        screening_progress_end = (
+            float(progress_lo) + (float(progress_hi) - float(progress_lo)) * 0.20
+            if progress_enabled else None
+        )
         for row in screening_rows:
             ts = float(row["ts"]); eid = row["entity_id"]
             if ts >= selection_end:
                 break
-            activity_counts[eid] = activity_counts.get(eid, 0) + 1
-            for agent in screen_target_map.get(eid, []):
-                st = archived_state(row)
-                val = target_value(st, agent["target_property"])
-                if val is None:
-                    continue
-                prev = last_target_value.get(agent["id"])
-                changed = prev is None or abs(float(val) - float(prev)) > max(0.01, float(agent["deadband"]) * 0.05)
-                if changed:
-                    target_action_counts[agent["id"]] += 1
-                    scores = relevance_raw[agent["id"]]
-                    for ceid, cts in recent_change.items():
-                        if ceid == eid:
-                            continue
-                        age = ts - cts
-                        if is_fast_reactive_agent(agent):
-                            agent_window = float(OPTIONS.get("fast_precursor_on_seconds", 8) if float(val) >= 0.5 else OPTIONS.get("fast_precursor_off_seconds", 120))
-                        else:
-                            agent_window = precursor_window
-                        if 0.0 <= age <= agent_window:
-                            # Fast lights use a much sharper precursor kernel: a kitchen
-                            # sensor one minute old should not outrank the dedicated stair
-                            # sensor that just changed. Slow plants keep the broad window.
-                            tau = float(OPTIONS.get("fast_recent_change_seconds", 3)) if is_fast_reactive_agent(agent) else max(30.0, precursor_window / 2.0)
-                            scores[ceid] = scores.get(ceid, 0.0) + math.exp(-age / max(0.5, tau))
-                    # This fan-out can touch hundreds of context entities for one target
-                    # edge. Yield before another target edge even if archive_iter has not
-                    # yet reached its forced batch checkpoint.
-                    TRAINING_BUDGET.checkpoint("context_screen_target_edge")
-                    last_target_value[agent["id"]] = float(val)
-            recent_change[eid] = ts
+
             screening_rows_done += 1
-            if screening_rows_done % screening_checkpoint_rows == 0:
-                TRAINING_BUDGET.checkpoint("context_screen_change_batch", force=True)
-            else:
-                TRAINING_BUDGET.checkpoint("context_screen_change_row")
+            if eid in fast_edge_rows:
+                fast_edge_rows[eid].append(row)
+
+            signature = (row.get("state"), row.get("attributes_json"))
+            previous_signature = screening_last_signature.get(eid)
+            screening_last_signature[eid] = signature
+            effective_change = (
+                previous_signature is None or signature != previous_signature
+            )
+
+            if effective_change:
+                activity_counts[eid] = activity_counts.get(eid, 0) + 1
+                for agent in screen_target_map.get(eid, []):
+                    st = archived_state(row)
+                    val = target_value(st, agent["target_property"])
+                    if val is None:
+                        continue
+                    prev = last_target_value.get(agent["id"])
+                    changed = prev is None or abs(float(val) - float(prev)) > max(0.01, float(agent["deadband"]) * 0.05)
+                    if changed:
+                        target_action_counts[agent["id"]] += 1
+                        scores = relevance_raw[agent["id"]]
+                        for ceid, cts in recent_change.items():
+                            if ceid == eid:
+                                continue
+                            age = ts - cts
+                            if is_fast_reactive_agent(agent):
+                                agent_window = float(OPTIONS.get("fast_precursor_on_seconds", 8) if float(val) >= 0.5 else OPTIONS.get("fast_precursor_off_seconds", 120))
+                            else:
+                                agent_window = precursor_window
+                            if 0.0 <= age <= agent_window:
+                                # Fast lights use a much sharper precursor kernel: a kitchen
+                                # sensor one minute old should not outrank the dedicated stair
+                                # sensor that just changed. Slow plants keep the broad window.
+                                tau = float(OPTIONS.get("fast_recent_change_seconds", 3)) if is_fast_reactive_agent(agent) else max(30.0, precursor_window / 2.0)
+                                scores[ceid] = scores.get(ceid, 0.0) + math.exp(-age / max(0.5, tau))
+                        # One target edge can fan out across hundreds of recent context
+                        # entities. Keep a checkpoint inside that one expensive row.
+                        TRAINING_BUDGET.checkpoint("context_screen_target_edge")
+                        last_target_value[agent["id"]] = float(val)
+                recent_change[eid] = ts
+
+            if progress_enabled and (
+                screening_rows_done == 1
+                or screening_rows_done % screening_status_rows == 0
+            ):
+                frac = min(1.0, screening_rows_done / max(1, archive_row_count))
+                self.set_status(
+                    progress=float(progress_lo) + (
+                        float(screening_progress_end) - float(progress_lo)
+                    ) * frac,
+                    message=f"{progress_label}: screening context candidates",
+                    work_done=screening_rows_done,
+                    work_total=archive_row_count,
+                    work_unit="history rows",
+                    eta_source="streaming indexed history scan",
+                    phase_detail="Finding causal precursors and behavioural drivers",
+                )
+
+            # archive_iter is additionally wrapped by the low-power runtime on Pi; this
+            # cheap checkpoint catches one unusually expensive consumer row without
+            # adding a second forced sleep every batch.
+            TRAINING_BUDGET.checkpoint("context_screen_change_row")
 
         if screening_required:
             TRAINING_BUDGET.checkpoint("context_screen_complete", force=True)
