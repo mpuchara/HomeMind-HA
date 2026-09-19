@@ -3,7 +3,7 @@
 Date: 2026-09-19  
 Branch: `fix-f24-needed-light-photometric-leakage`  
 Base: `6d1631ae11e5d269f6160df654cf2a4a5ff8b7df`  
-Release candidate: `0.14.31`  
+Release candidate: `0.14.32`  
 Benchmark contract: F24 v2  
 Seeds: 11, 23, 37  
 Replicas per scenario/split: 1
@@ -113,9 +113,9 @@ The OFF confirmation never weakens manual priority: once the user physically tur
 
 ## CI verification
 
-GitHub Actions run `35430438483` validates the 0.14.31 event-driven runtime changes on the unchanged F24 v2 contract:
-- Python 3.11: 899 tests, all passing;
-- Python 3.13: 899 tests, all passing;
+GitHub Actions run `35431620733` validates the 0.14.32 post-Recorder discovery QoS changes on the unchanged F24 v2 contract:
+- Python 3.11: 902 tests, all passing;
+- Python 3.13: 902 tests, all passing;
 - compileall: passing;
 - JS syntax checks: passing;
 - Stage 17 history-cost smoke: passing;
