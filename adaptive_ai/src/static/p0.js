@@ -166,8 +166,8 @@
   const update = (el,a) => {
     const r=a.runtime||{}, training=a.training_state||r.training_state||'paused', qualified=training==='qualified', conf=qualified&&r.last_prediction!=null?Number(r.last_confidence||0):Number(a.benchmark_score??r.last_confidence??0);
     text(el,'name',a.name); text(el,'badge',(a.auto_created?'AUTO · ':'')+training.toUpperCase()); text(el,'target',`${a.target_entity} · ${a.target_property}`); text(el,'mode',a.mode.toUpperCase()); text(el,'current',currentValue(a)); text(el,'desired',prediction(a)); text(el,'confidence',pct(conf)); text(el,'driver',driver(a)?`Sensor: ${driver(a)}`:'Sensor: learning context'); text(el,'latency',latency(a)); text(el,'training',training==='training'?`training ${Math.round(Number(a.training_progress||0)*100)}%`:training);
-    el.querySelector('[data-p0=mode]').className=`mode ${a.mode}`;
-    const [tone,title,detail]=r.experiments?.active?.kind==='probe' ? ['acted','Eksperyment w toku','Pewność dotyczy zwykłej predykcji. Trwa obserwacja niewielkiej zmiany nastawy.'] : human(a), box=el.querySelector('[data-p0=decision]'); box.className=`decision ${tone}`; text(el,'state',title); text(el,'detail',detail);
+    const modeNode=el.querySelector('[data-p0=mode]');if(modeNode)modeNode.className=`mode ${a.mode}`;
+    const [tone,title,detail]=r.experiments?.active?.kind==='probe' ? ['acted','Eksperyment w toku','Pewność dotyczy zwykłej predykcji. Trwa obserwacja niewielkiej zmiany nastawy.'] : human(a), box=el.querySelector('[data-p0=decision]'); if(box)box.className=`decision ${tone}`; text(el,'state',title); text(el,'detail',detail);
     el.classList.toggle('paused-agent',['paused','waiting','needs_retrain'].includes(training)); el.classList.toggle('training-agent',training==='training');
     const toggle=el.querySelector('[data-a=mode]');
     // Later UI layers (generation workflow) intentionally own/replace the action row.
