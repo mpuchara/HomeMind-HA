@@ -34,7 +34,7 @@ async function load(){
     window.__adaptiveAiRuntimeReady=Boolean(status.startup?.ready);
     const c=$('#connection');
     const rt=status.realtime||{};
-    c.textContent=status.ha_connected?`HA connected · ${status.state_count} entities${rt.connected?' · realtime':''}`:`HA disconnected · ${status.ha_error||status.engine_error||'unknown error'}`;
+    c.textContent=status.ha_connected?`HA connected · ${status.state_count} entities${rt.connected?' · realtime':' · REST fallback'}`:`HA disconnected · ${status.ha_error||status.engine_error||'unknown error'}`;
     c.className='pill'+(status.ha_connected?' good':'');
     lastHistory=status.history||{};renderOverview(status);renderHistory(lastHistory,status);renderHome(status);
     // HTTP is intentionally available before runtime composition. Do not fan out to
