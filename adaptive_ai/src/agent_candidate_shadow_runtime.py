@@ -475,15 +475,14 @@ def install(manager):
 
     def _cached_generations(root_id):
         root_rt = _root_runtime(root_id)
-        now = time.monotonic()
-        if (
-            root_rt.get("shadow_generations") is not None
-            and now - float(root_rt.get("generation_cache_at") or 0.0) < 30.0
-        ):
+        # Candidate lineage mutations are already wrapped below and invalidate this cache
+        # synchronously. Do not poll the generation tables every 30 s for every ordinary
+        # live agent merely to rediscover the common empty-Candidate state.
+        if root_rt.get("shadow_generations") is not None:
             return root_rt.get("root_generation"), root_rt.get("shadow_generations") or []
         generations = _shadow_generations(manager.store, root_id)
         root_generation = _root_generation(manager.store, root_id) if generations else None
-        root_rt["generation_cache_at"] = now
+        root_rt["generation_cache_at"] = time.monotonic()
         root_rt["shadow_generations"] = generations
         root_rt["root_generation"] = root_generation
         return root_generation, generations

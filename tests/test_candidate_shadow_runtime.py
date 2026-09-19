@@ -185,6 +185,23 @@ class CandidateShadowRuntimeTests(unittest.TestCase):
             count = c.execute("SELECT COUNT(*) FROM candidate_generation_decisions").fetchone()[0]
         self.assertEqual(count, 0)
 
+    def test_no_candidate_generation_cache_is_event_invalidated_not_polled(self):
+        original = shadow_runtime_module._shadow_generations
+        calls = []
+        def counted(store, root_id):
+            calls.append(str(root_id))
+            return original(store, root_id)
+        shadow_runtime_module._shadow_generations = counted
+        try:
+            self.assertIsNone(self._run_shadow())
+            self.assertIsNone(self._run_shadow())
+            self.assertEqual(calls, [str(self.root["id"])])
+            self.manager.invalidate_candidate_shadow_cache()
+            self.assertIsNone(self._run_shadow())
+            self.assertEqual(calls, [str(self.root["id"]), str(self.root["id"])])
+        finally:
+            shadow_runtime_module._shadow_generations = original
+
     def test_candidate_shadow_inference_runs_after_training_and_exposes_card_values(self):
         status, generation = self._g1(prediction=1.0, confidence=.93)
         bundle = self._run_shadow()

@@ -183,6 +183,17 @@ class AgentHotPathTests(unittest.TestCase):
         self.assertLess(before.index("if not self.active(agent)"), before.index("self.store.get_agent_config"))
         self.assertLess(after.index("if not self.active(agent)"), after.index("self.store.get_agent_config"))
 
+    def test_candidate_empty_lineage_cache_is_invalidation_driven(self):
+        source = (
+            ROOT / "adaptive_ai/src/agent_candidate_shadow_runtime.py"
+        ).read_text(encoding="utf-8")
+        cached = source.split("def _cached_generations(root_id):", 1)[1].split(
+            "def _decorate_result", 1
+        )[0]
+        self.assertNotIn("< 30.0", cached)
+        self.assertIn('root_rt.get("shadow_generations") is not None', cached)
+        self.assertIn("invalidate_generation_cache", source)
+
     def test_hot_status_includes_realtime_telemetry_snapshot(self):
         source = (
             ROOT / "adaptive_ai/src/release_017_ui_lifeline.py"
