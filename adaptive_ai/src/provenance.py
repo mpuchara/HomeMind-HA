@@ -284,7 +284,52 @@ class ProvenanceJournal:
             )
         return str(decision_id)
 
+    def record_decisions_batch(self, rows):
+        """Persist observation-only decisions in one transaction.
+
+        Rows already contain their final dispatch_status/reason, so Shadow provenance
+        avoids the old INSERT + UPDATE pair for every inference.
+        """
+        prepared = []
+        for raw in rows or ():
+            row = dict(raw or {})
+            probability = _finite(row.get("action_probability"))
+            if probability is not None and not 0.0 <= probability <= 1.0:
+                probability = None
+            prepared.append((
+                str(row["decision_id"]), CONTRACT_VERSION, float(row["created_time"]),
+                str(row["agent_id"]), row.get("generation_id"), row.get("trigger_event_id"),
+                row.get("model_version"), row.get("model_revision"),
+                row.get("schema_version"), row.get("schema_revision"), row.get("reward_version"),
+                _json(row.get("feature_manifest") or {}),
+                _json(list(row.get("allowed_actions") or [])),
+                _finite(row.get("chosen_action")), _finite(row.get("model_desired")),
+                int(row["teaching_id"]) if row.get("teaching_id") else None,
+                _finite(row.get("teaching_desired")), row.get("experiment_id"),
+                row.get("episode_id"), probability,
+                None if row.get("dispatch_status") is None else str(row.get("dispatch_status")),
+                None if row.get("dispatch_reason") is None else str(row.get("dispatch_reason")),
+            ))
+        if not prepared:
+            return 0
+        with self.store.lock, self.store.conn() as c:
+            before = c.total_changes
+            c.executemany(
+                """INSERT OR IGNORE INTO provenance_decisions
+                   (decision_id,contract_version,created_time,agent_id,generation_id,trigger_event_id,
+                    model_version,model_revision,schema_version,schema_revision,reward_version,
+                    feature_manifest_json,allowed_actions_json,chosen_action,model_desired,
+                    teaching_id,teaching_desired,experiment_id,episode_id,action_probability,
+                    dispatch_status,dispatch_reason)
+                   VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                prepared,
+            )
+            return int(c.total_changes - before)
+
     def decision(self, decision_id):
+        flush = getattr(self.store, "_flush_provenance_decisions", None)
+        if callable(flush):
+            flush()
         with self.store.conn() as c:
             row = c.execute("SELECT * FROM provenance_decisions WHERE decision_id=?", (str(decision_id),)).fetchone()
         if not row:
