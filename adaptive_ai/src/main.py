@@ -156,6 +156,10 @@ def initialize_runtime():
         # This prevents the initial all-agent prediction burst from starving Ingress.
         inference_gate = getattr(ENGINE, "inference_enabled", None)
         if inference_gate is not None:
+            # Give Ingress/static/status requests a deterministic head start before the
+            # first all-agent proactive inference pass. Realtime state is already being
+            # ingested and dirty transitions are retained by Engine during this grace.
+            ENGINE.startup_inference_not_before = time.monotonic() + 3.0
             inference_gate.set()
             ENGINE.wake_event.set()
         print("Adaptive AI runtime initialized", flush=True)
