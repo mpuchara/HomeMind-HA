@@ -2,9 +2,9 @@
   "version": "0.14.34",
   "release_date": "2026-09-19",
   "base_version": "0.14.33",
-  "base_commit": "e2d08de56b897a593fa82352cb4141722e2b5de4",
+  "base_commit": "ad960b62d4734d28d16585d729c26f5ab6d40fbf",
   "release_status": "release-0.14.34-agent-hotpath-rebuild",
-  "tests_passed": 929,
+  "tests_passed": 932,
   "profile": "rpi4-low-memory-automatic-initial-training",
   "manual_agent_training": false,
   "max_concurrent_training_jobs": 1,
@@ -40,7 +40,7 @@
   "migration": "no destructive migration; existing agents, models, feedback, raw archive, historical experiences, candidate lineage, rollback and generation state preserved",
   "physical_control": "unchanged; repaired agents return to Shadow and Control still requires qualified state plus all existing guards",
   "pi4": "0.14.34 moves agent steady-state work off SQLite-heavy realtime paths; final validation still requires a real Raspberry Pi soak test with many active agents.",
-  "ci_status": "0.14.34 hot-path runtime pre-release validated in GitHub Actions run 35436651094; 929 tests pass on Python 3.11/3.13, image smoke is green, and unchanged F24 v2 behavior metrics remain stable.",
+  "ci_status": "0.14.34 agent hot-path runtime validated in GitHub Actions run 35437620477; 932 tests pass on Python 3.11/3.13, compileall/JS checks/image smoke/source-entrypoint smoke are green, and unchanged F24 v2 behavior metrics remain stable.",
   "training_slice_budget": "adaptive-ai-index workers call a shared CooperativeTrainingBudget; expensive temporal tracker loops yield between entities/events and finalization is no longer outside the throttle",
   "finalization_lifeline": "HEAVY_JOBS remains owned through final gc.collect(), so /api/status and /api/agents stay on lightweight lifeline reads until the worker is actually finished",
   "finalization_progress": "post-replay UI now exposes bounded stages: replay complete, policy serialization, benchmark save, qualification, checkpoint complete",
@@ -82,8 +82,8 @@
   "stage5_performance_scope": "Correct read path, Room Belief replay caching, realtime priority and latency observability; learning/control semantics unchanged",
   "product_benchmark_topology_contract": "sensor_moved changes the future Entity Registry area mapping for the same entity_id and the changed mapping is passed into every evaluated runtime",
   "product_benchmark_manual_override_contract": "manual_change emits explicit target provenance with context.user_id; fast targets now delegate to the authoritative Engine manual-hold path. F24 v2 measures zero manual_override_violations and runtime_manual_hold_ticks_mean=115 across seeds 11,23,37 without changing benchmark thresholds or scenario logic",
-  "product_benchmark_report_artifact": "GitHub Actions run 35436651094 uploads product-benchmark-f24-py311/product-benchmark-f24.json for the unchanged 3-seed composed-runtime run",
-  "product_benchmark_unmet_criteria_status": "GitHub Actions run 35436651094 on unchanged F24 v2 leaves only needed_light_not_worse_than_fixed_by_more_than_2pp unmet",
+  "product_benchmark_report_artifact": "GitHub Actions run 35437620477 uploads product-benchmark-f24-py311/product-benchmark-f24.json for the unchanged 3-seed composed-runtime run",
+  "product_benchmark_unmet_criteria_status": "GitHub Actions run 35437620477 on unchanged F24 v2 leaves only needed_light_not_worse_than_fixed_by_more_than_2pp unmet",
   "product_benchmark_summary": {
     "seeds": [
       11,
@@ -98,9 +98,10 @@
     "production_premature_off_events_mean": 1.6666666666666667,
     "production_chatter_events_mean": 1.3333333333333333,
     "production_corrections_per_100_episodes_mean": 127.77777777777779,
-    "production_inference_mean_ms_host": 58.77509985416672,
+    "production_inference_mean_ms_host": 61.74405519768492,
     "runtime_manual_hold_ticks_mean": 115,
-    "manual_override_violations_mean": 0
+    "manual_override_violations_mean": 0,
+    "production_inference_p95_ms_host": 128.51158700001028
   },
   "product_benchmark_control_qualification": "all 3 seeds pass the unchanged 78% per-action Wilson lower-bound gate; lowest per-action lower bound is 82.52% for seeds 11,23,37",
   "product_benchmark_report": "BENCHMARK_PRODUCT_F24.md",
@@ -136,5 +137,6 @@
   "provenance_hot_path": "Shadow decision provenance and feature evidence windows are deferred/batched; target-event origin and active command echo evidence are served from RAM after startup hydration.",
   "feature_observation_hot_path": "high-resolution feature observations are queued in bounded RAM and persisted in batches outside HA event->intent; queue backlog is exposed in hot status and bounded under SQLite stalls.",
   "teach_rebenchmark_hot_path": "inactive Teach rebenchmark short-circuits before durable config reads; SQLite refresh is limited to the short active post-Teach qualification lifecycle.",
-  "paused_shadow_scheduler": "paused Shadow extends inference eligibility only and no longer replaces Engine.process/process_target, preserving the optimized scheduler."
+  "paused_shadow_scheduler": "paused Shadow extends inference eligibility only and no longer replaces Engine.process/process_target, preserving the optimized scheduler.",
+  "runtime_validated_commit": "c98ff33e466848b8d4b5e04d94f4ef16f2c25b99"
 }
