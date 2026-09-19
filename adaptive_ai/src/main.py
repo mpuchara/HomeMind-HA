@@ -437,24 +437,24 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send_json(202, {'ok': True})
             if path == "/api/discovery/rescan":
                 with ENGINE.lock:
-                    current = dict(ENGINE.state_map)
-                    registry = dict(ENGINE.entity_registry)
-                if not current or HISTORY is None:
+                    current_ready = bool(ENGINE.state_map)
+                if not current_ready or HISTORY is None:
                     return self.send_json(409, {"error": "Home Assistant state/history engine not ready"})
-                AUTOMATION_KNOWLEDGE.scan(current, registry)
-                start_ts = now_ts() - float(OPTIONS["history_bootstrap_days"]) * 86400.0
-                created = HISTORY.auto_discover_agents(current, start_ts, threshold_override=1)
-                initial_training = list(getattr(HISTORY, "initial_training_enqueued", []) or [])
-                training_started = sum(1 for row in initial_training if row.get("state") == "active")
-                return self.send_json(200, {
+                request = getattr(HISTORY, "request_discovery_rescan", None)
+                if not callable(request):
+                    return self.send_json(409, {"error": "Background discovery service is not ready"})
+                if not request():
+                    return self.send_json(409, {
+                        "error": "Discovery is already running",
+                        "history": HISTORY.status(),
+                    })
+                return self.send_json(202, {
                     "ok": True,
-                    "created": created,
-                    "training_started": training_started,
-                    "training_queued": len(initial_training),
-                    "manual_training": False,
-                    "training_mode": "automatic_initial_fifo",
+                    "state": "running",
+                    "message": "Recorder/discovery started in the background",
+                    "manual_training": True,
+                    "training_mode": "explicit_after_discovery",
                     "history": HISTORY.status(),
-                    "automation_knowledge": AUTOMATION_KNOWLEDGE.status(),
                 })
             if path.startswith("/api/agents/") and path.endswith("/train"):
                 agent_id = path.split("/")[3]
