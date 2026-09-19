@@ -57,6 +57,13 @@ class Release036UiCandidateRegressionTests(unittest.TestCase):
         self.assertNotIn("manager.store.get_agent(row.get", install)
         self.assertIn("manager.store.get_agent_config(row.get", install)
 
+    def test_late_promotion_and_confidence_wrappers_do_not_reintroduce_aggregate_reads(self):
+        for name in ("promotion_validation.py", "confidence_contract.py"):
+            source = self.source(name)
+            install = source.split("def install(manager", 1)[1]
+            self.assertNotIn("manager.store.get_agent(row.get", install, name)
+            self.assertIn("manager.store.get_agent_config(row.get", install, name)
+
 
 if __name__ == "__main__":
     unittest.main()

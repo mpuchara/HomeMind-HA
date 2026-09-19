@@ -253,7 +253,7 @@ def install(manager, *, clock, repository=None):
     def comparison_summary(row, parent=None, candidate=None):
         base = original_summary(row, parent, candidate)
         parent_agent = parent or manager.store.get_agent_config(row.get("parent_agent_id"))
-        candidate_agent = candidate or manager.store.get_agent(row.get("candidate_id"))
+        candidate_agent = candidate or manager.store.get_agent_config(row.get("candidate_id"))
         return service.decorate_summary(row, parent_agent, candidate_agent, base)
 
     manager._comparison_summary = comparison_summary
