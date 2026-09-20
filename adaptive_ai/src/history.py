@@ -128,10 +128,10 @@ class HistoryManager(threading.Thread):
                     now_ts() - self.training_job_started_at
                     if self.training_job_started_at is not None else None
                 ),
-                "training_schema_cache_entries": len(self.training_schema_cache),
-                "training_schema_cache_hits": int(self.training_schema_cache_hits),
-                "training_schema_cache_misses": int(self.training_schema_cache_misses),
-                "training_replay_cache": dict(self.training_replay_cache_status),
+                "training_schema_cache_entries": len(getattr(self, "training_schema_cache", {}) or {}),
+                "training_schema_cache_hits": int(getattr(self, "training_schema_cache_hits", 0) or 0),
+                "training_schema_cache_misses": int(getattr(self, "training_schema_cache_misses", 0) or 0),
+                "training_replay_cache": dict(getattr(self, "training_replay_cache_status", {}) or {}),
                 "training_stage_progress": (
                     (self.work_done / self.work_total) if self.work_total else None
                 ),
