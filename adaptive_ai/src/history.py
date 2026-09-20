@@ -1388,7 +1388,7 @@ class HistoryManager(threading.Thread):
                     ) * frac,
                     message=f"{progress_label}: screening context candidates",
                     work_done=screening_rows_done,
-                    work_total=archive_row_count,
+                    work_total=screening_row_count,
                     work_unit="history rows",
                     eta_source="streaming indexed history scan",
                     phase_detail="Finding causal precursors and behavioural drivers",
