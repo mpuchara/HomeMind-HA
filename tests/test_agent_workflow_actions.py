@@ -11,6 +11,7 @@ import storage
 from agent_candidates import AgentCandidateManager, ensure_tables, install_store_overlay
 from agent_candidate_conservative_correct import install as install_conservative_correct
 from agent_candidate_lineage import install as install_lineage
+from agent_candidate_lineage_guards import install as install_lineage_guards
 from agent_workflow_actions import install as install_workflow
 from manual_context_learning import install as install_manual_context_learning
 from teaching_rl import fingerprint as rl_fingerprint
@@ -287,6 +288,39 @@ class AgentWorkflowActionTests(unittest.TestCase):
         g2 = self.manager.lineage_status(result["child_generation_id"])
         self.assertEqual(g2["parent_generation_id"], g1["generation_id"])
         self.assertEqual(self.model(g1["agent_id"]), before)
+
+    def test_live_correct_rebases_to_deep_active_tip_without_candidate_id_keyerror(self):
+        g1 = self.make_g1()
+        g2_result = self.manager.workflow_autonomous(g1["generation_id"])
+        g2 = self.manager.lineage_status(g2_result["child_generation_id"])
+        g2_agent = self.store.get_agent_config(g2["agent_id"])
+        g2_before = self.model(g2["agent_id"])
+        root_before = self.model(self.root["id"])
+
+        # Production installs this guard before generation workflow actions. Before the
+        # regression fix, Root Correct reached manager.enqueue(), the guard returned a
+        # spawn_child lineage status (generation_id/agent_id, no candidate_id), and the
+        # workflow crashed with KeyError('candidate_id').
+        self.manager = install_lineage_guards(self.manager)
+        self.add_correct_label(self.root)
+
+        result = self.manager.workflow_correct_commit(self.root["id"])
+        g3 = self.manager.lineage_status(result["child_generation_id"])
+
+        self.assertEqual(g3["parent_generation_id"], g2["generation_id"])
+        self.assertEqual(result["effective_parent_generation_id"], g2["generation_id"])
+        self.assertTrue(result["rebased_to_active_tip"])
+        self.assertGreaterEqual(result["correct_labels_merged_to_parent"], 1)
+        self.assertEqual(self.model(self.root["id"]), root_before)
+        self.assertEqual(self.model(g2["agent_id"]), g2_before)
+
+        with self.store.conn() as c:
+            copied = c.execute(
+                """SELECT COUNT(*) FROM teaching_rl_labels
+                   WHERE agent_id=? AND undone_ts IS NULL AND fingerprint=?""",
+                (str(g2_agent["id"]), rl_fingerprint(g2_agent)),
+            ).fetchone()[0]
+        self.assertGreaterEqual(copied, 1)
 
     def test_candidate_change_decision_creates_grandchild_without_dispatch_and_preserves_g1(self):
         g1 = self.make_g1()

@@ -21,6 +21,7 @@ from manual_feedback import UI_USER_ID, _manual_value
 from teaching_rl import fingerprint as rl_fingerprint
 
 from agent_candidate_lineage import (
+    _active_tip,
     _ensure_root,
     _generation_children,
     _refresh_generation_metadata,
@@ -144,6 +145,90 @@ def _preflight_child(manager, parent_generation, *, allow_coalesce):
     if not allow_coalesce:
         raise ValueError("Autonomous requires a parent generation without an existing child")
     return child
+
+
+def _effective_correct_parent(manager, selected_generation):
+    """Resolve where new Correct feedback belongs on a single active lineage.
+
+    Root Live feedback may continue updating G1 while G1 is still the leaf. Once G2+
+    exists, the immutable lineage must advance from the current Candidate tip instead of
+    trying to recreate a child from a pruned/root edge.
+    """
+    if selected_generation.get("generation_type") != "live":
+        tip = _active_tip(manager.store, selected_generation["root_agent_id"])
+        if tip and str(tip.get("generation_id")) != str(selected_generation.get("generation_id")):
+            raise ValueError(
+                "This Candidate generation is no longer the active correction edge; "
+                "use the current Candidate generation"
+            )
+        return selected_generation
+
+    tip = _active_tip(manager.store, selected_generation["root_agent_id"])
+    if tip and int(tip.get("generation_number") or 0) >= 2:
+        return tip
+    return selected_generation
+
+
+def _merge_correct_labels(manager, source_agent, target_agent):
+    """Merge active historical Correct labels without mutating either parent policy.
+
+    This is needed when a Correct entered from the Root Live card advances from a deep
+    Candidate tip. The selected historical label lives on Root Live, while the next child
+    is trained from the current tip. Copying the explicit labels to that tip preserves the
+    user's instruction and lets the existing Candidate sync path remain authoritative.
+    """
+    if str(source_agent["id"]) == str(target_agent["id"]):
+        return 0
+
+    source_fp = str(rl_fingerprint(source_agent))
+    target_fp = str(rl_fingerprint(target_agent))
+    with manager.store.conn() as c:
+        rows = [dict(r) for r in c.execute(
+            """SELECT created_ts,sample_ts,desired,previous_desired
+               FROM teaching_rl_labels
+               WHERE agent_id=? AND undone_ts IS NULL AND fingerprint=?
+               ORDER BY sample_ts,created_ts,id""",
+            (str(source_agent["id"]), source_fp),
+        ).fetchall()]
+    if not rows:
+        return 0
+
+    merged = 0
+    with manager.store.lock, manager.store.conn() as c:
+        for row in rows:
+            existing = c.execute(
+                """SELECT id,created_ts FROM teaching_rl_labels
+                   WHERE agent_id=? AND undone_ts IS NULL AND fingerprint=?
+                     AND ABS(sample_ts-?)<0.001 AND ABS(desired-?)<0.000001
+                   ORDER BY created_ts DESC,id DESC LIMIT 1""",
+                (
+                    str(target_agent["id"]), target_fp, float(row["sample_ts"]),
+                    float(row["desired"]),
+                ),
+            ).fetchone()
+            if existing:
+                if float(row["created_ts"]) > float(existing["created_ts"] or 0.0):
+                    c.execute(
+                        """UPDATE teaching_rl_labels
+                           SET created_ts=?,previous_desired=? WHERE id=?""",
+                        (
+                            float(row["created_ts"]), row.get("previous_desired"),
+                            int(existing["id"]),
+                        ),
+                    )
+                continue
+            c.execute(
+                """INSERT INTO teaching_rl_labels
+                   (agent_id,created_ts,sample_ts,desired,previous_desired,fingerprint,undone_ts)
+                   VALUES(?,?,?,?,?,?,NULL)""",
+                (
+                    str(target_agent["id"]), float(row["created_ts"]),
+                    float(row["sample_ts"]), float(row["desired"]),
+                    row.get("previous_desired"), target_fp,
+                ),
+            )
+            merged += 1
+    return merged
 
 
 def _edge_for(manager, parent_generation, child_generation):
@@ -501,19 +586,33 @@ def install(manager):
         )
 
     def workflow_correct_commit(ref):
-        generation, agent = _resolve_generation(manager, ref)
-        _preflight_child(manager, generation, allow_coalesce=True)
+        selected_generation, selected_agent = _resolve_generation(manager, ref)
         with manager.store.conn() as c:
             count = int(c.execute(
                 """SELECT COUNT(*) FROM teaching_rl_labels
                    WHERE agent_id=? AND undone_ts IS NULL AND fingerprint=?""",
-                (str(agent["id"]), rl_fingerprint(agent)),
+                (str(selected_agent["id"]), rl_fingerprint(selected_agent)),
             ).fetchone()[0])
         if count <= 0:
             raise ValueError("Add at least one Correct point before creating the child Candidate")
-        return _create_or_coalesce_child(
-            manager, generation, CORRECT_REASON, "correct", allow_coalesce=True
+
+        parent_generation = _effective_correct_parent(manager, selected_generation)
+        parent_agent = manager.store.get_agent_config(str(parent_generation.get("agent_id") or ""))
+        if not parent_agent:
+            raise ValueError("Active correction parent is unavailable")
+        _preflight_child(manager, parent_generation, allow_coalesce=True)
+
+        merged_labels = _merge_correct_labels(manager, selected_agent, parent_agent)
+        result = _create_or_coalesce_child(
+            manager, parent_generation, CORRECT_REASON, "correct", allow_coalesce=True
         )
+        result["selected_generation_id"] = selected_generation["generation_id"]
+        result["effective_parent_generation_id"] = parent_generation["generation_id"]
+        result["correct_labels_merged_to_parent"] = int(merged_labels)
+        result["rebased_to_active_tip"] = (
+            str(selected_generation["generation_id"]) != str(parent_generation["generation_id"])
+        )
+        return result
 
     def workflow_change_decision(ref, desired_value=None):
         generation, agent = _resolve_generation(manager, ref)
