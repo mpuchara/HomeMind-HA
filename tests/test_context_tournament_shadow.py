@@ -1,12 +1,16 @@
 import tempfile
 import threading
 import unittest
+import json
+from unittest.mock import patch
 from pathlib import Path
 from types import SimpleNamespace
 
 from support import *
 from context_tournament import ContextTournament, install
 from storage import Store
+from context_tournament_quality import install_sensor_quality
+import context_tournament_promotion as promotion
 
 
 class FakeEngine:
@@ -101,6 +105,57 @@ class ContextTournamentShadowTests(unittest.TestCase):
         self.assertEqual(self.service.state(self.agent['id'])['active_features'], before)
         self.assertFalse(hasattr(self.service, 'submit'))
         self.assertFalse(hasattr(self.service, 'execute'))
+
+    def test_sensor_quality_persists_updates_and_shadow_continues_after_restart(self):
+        # The quality extension patches a module-level promotion hook; isolate it.
+        with patch.object(promotion, '_choose_schema_after_promotion',
+                          promotion._choose_schema_after_promotion):
+            install_sensor_quality(self.service)
+            with patch('context_tournament_quality.time.time', return_value=200000.0):
+                self.assertEqual(self._process('off'), 'production-result')
+            with self.store.conn() as c:
+                rows = c.execute('SELECT * FROM context_tournament_sensor_quality').fetchall()
+            self.assertEqual(len(rows), 2)
+            for row in rows:
+                self.assertEqual(row['opportunities'], 1)
+                self.assertEqual(row['available_count'], 1)
+                self.assertEqual(row['first_observed_ts'], 200000.0)
+                self.assertEqual(json.loads(row['failure_timestamps_json']), [])
+
+            self.states[self.challenger] = st(self.challenger, 'unknown')
+            with patch('context_tournament_quality.time.time', return_value=200010.0):
+                self.engine.process_agent(self.agent, self.states, {self.challenger})
+            with self.store.conn() as c:
+                row = c.execute('SELECT * FROM context_tournament_sensor_quality WHERE entity_id=?',
+                                (self.challenger,)).fetchone()
+            self.assertEqual(row['opportunities'], 2)
+            self.assertEqual(row['available_count'], 1)
+            self.assertEqual(row['unknown_count'], 1)
+            self.assertEqual(row['event_count'], 1)
+            self.assertEqual(row['last_observed_ts'], 200000.0)
+            self.assertEqual(row['last_event_ts'], 200010.0)
+            self.assertEqual(row['updated_ts'], 200010.0)
+            self.assertEqual(json.loads(row['failure_timestamps_json']), [200010.0])
+
+            restarted = ContextTournament(self.store, self.engine)
+            install_sensor_quality(restarted)
+            self.states[self.challenger] = st(self.challenger, 'unavailable')
+            with patch('context_tournament_quality.time.time', return_value=200020.0):
+                restarted.observe_shadow(self.agent, self.states, {self.challenger})
+            stats = restarted.sensor_quality(self.agent['id'], self.challenger, 200020.0)
+            self.assertEqual(stats['opportunities'], 3)
+            self.assertAlmostEqual(stats['availability'], 1 / 3)
+            self.assertAlmostEqual(stats['unknown_rate'], 1 / 3)
+            self.assertAlmostEqual(stats['unavailable_rate'], 1 / 3)
+            self.assertEqual(stats['event_count'], 2)
+            self.assertEqual(stats['recent_failures'], 2)
+
+            self.states[self.challenger] = st(self.challenger, 'on')
+            self._process('off')
+            self._process('on')
+            status = self.service.shadow_status(self.agent)
+            self.assertEqual(status['challengers'][0]['samples'], 1)
+            self.assertEqual(self.policy.schema.entities, [self.active])
 
     def test_challenger_predicts_in_shadow_and_learns_prequentially(self):
         # First prediction has no challenger evidence, so shadow conservatively equals
