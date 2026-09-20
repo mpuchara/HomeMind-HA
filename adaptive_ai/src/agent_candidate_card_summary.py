@@ -3,11 +3,11 @@
 The Candidate card should show the same decision vocabulary as a Live agent: physical
 Current, direct-parent Desired, Candidate Desired and Candidate model Confidence.
 
-Card tiles are operational observability, not A/B evidence. Parent and Candidate decisions
-therefore keep their own freshness clocks: a Candidate-only passive heartbeat must not erase
-a still-fresh direct-parent Desired just because their event ids differ. Paired comparison and
-promotion evidence remain same-event-only in the Shadow runtime. No policy is replayed and
-no physical action is dispatched.
+Card tiles are operational observability, not A/B evidence. They show the last actually
+observed Parent and Candidate decisions even after the freshness window expires. Freshness
+is exposed separately as metadata. Paired comparison and promotion evidence remain
+same-event-only in the Shadow runtime. No policy is replayed and no physical action is
+dispatched.
 """
 from __future__ import annotations
 
@@ -95,20 +95,20 @@ def decorate_candidate_status(store, result, *, now=None):
         parent_decision
         and now - float(parent_decision.get("ts") or 0.0) <= DECISION_STALE_SECONDS
     )
-    if not parent_fresh:
-        result["parent_desired"] = None
-        result["parent_confidence"] = None
-        result["parent_shadow_timestamp"] = None
-        result["parent_decision_paired"] = False
-        result["parent_generation_id"] = parent_generation_id
-        return result
-
-    result["parent_desired"] = parent_decision.get("desired")
-    result["parent_confidence"] = parent_decision.get("confidence")
-    result["parent_shadow_timestamp"] = parent_decision.get("ts")
+    result["parent_desired"] = (
+        parent_decision.get("desired") if parent_decision else None
+    )
+    result["parent_confidence"] = (
+        parent_decision.get("confidence") if parent_decision else None
+    )
+    result["parent_shadow_timestamp"] = (
+        parent_decision.get("ts") if parent_decision else None
+    )
+    result["parent_decision_fresh"] = parent_fresh
     result["parent_generation_id"] = parent_generation_id
     result["parent_decision_paired"] = bool(
-        child_fresh
+        child
+        and parent_decision
         and str(parent_decision.get("event_id") or "")
         == str(child.get("event_id") or "")
     )
@@ -182,17 +182,19 @@ def live_candidate_snapshots(manager):
             "root_agent_id": root_id,
             "target_property": root.get("target_property"),
             "shadow_current": current,
-            "parent_desired": row.get("parent_desired") if parent_fresh else None,
-            "parent_confidence": row.get("parent_confidence") if parent_fresh else None,
-            "parent_shadow_timestamp": float(parent_ts) if parent_fresh else None,
+            "parent_desired": row.get("parent_desired"),
+            "parent_confidence": row.get("parent_confidence"),
+            "parent_shadow_timestamp": float(parent_ts) if parent_ts is not None else None,
+            "parent_decision_fresh": parent_fresh,
             "parent_decision_paired": bool(
-                child_fresh
-                and parent_fresh
+                child_ts is not None
+                and parent_ts is not None
                 and row.get("child_event_id") == row.get("parent_event_id")
             ),
-            "candidate_desired": row.get("child_desired") if child_fresh else None,
-            "candidate_confidence": row.get("child_confidence") if child_fresh else None,
-            "shadow_timestamp": float(child_ts) if child_fresh else None,
+            "candidate_desired": row.get("child_desired"),
+            "candidate_confidence": row.get("child_confidence"),
+            "candidate_decision_fresh": child_fresh,
+            "shadow_timestamp": float(child_ts) if child_ts is not None else None,
             "live_snapshot_ts": now,
         })
     return snapshots
@@ -238,7 +240,7 @@ def install(manager):
     handler.do_GET = do_get
     manager._candidate_card_summary_installed = True
     manager.candidate_card_decision_contract = (
-        "ram_first_current_plus_independently_fresh_parent_and_candidate_desired_"
-        "with_same_event_pairing_metadata"
+        "ram_first_current_plus_last_observed_parent_and_candidate_desired_"
+        "with_separate_freshness_and_same_event_pairing_metadata"
     )
     return manager
