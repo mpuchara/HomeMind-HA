@@ -267,6 +267,26 @@ class CandidateShadowRuntimeTests(unittest.TestCase):
         finally:
             self.store.conn = original_conn
 
+    def test_card_keeps_last_parent_and_candidate_decisions_after_freshness_expires(self):
+        _, generation = self._g1(prediction=1.0, confidence=.93)
+        bundle = self._run_shadow()
+        self.assertIsNotNone(bundle)
+        future = float(bundle["ts"]) + shadow_runtime_module.DECISION_STALE_SECONDS + 10.0
+        with patch.object(shadow_runtime_module.time, "time", return_value=future):
+            snapshots = self.manager.candidate_live_runtime_snapshots()
+            row = next(x for x in snapshots if x["generation_id"] == generation["generation_id"])
+            self.assertEqual(row["parent_desired"], 0.0)
+            self.assertEqual(row["candidate_desired"], 1.0)
+            self.assertAlmostEqual(row["candidate_confidence"], .93)
+            self.assertFalse(row["parent_decision_fresh"])
+            self.assertFalse(row["candidate_decision_fresh"])
+
+            card = self.manager.status(self.root["id"])
+            self.assertFalse(card["shadow_active"])
+            self.assertFalse(card["candidate_decision_fresh"])
+            self.assertEqual(card["candidate_desired"], 1.0)
+            self.assertAlmostEqual(card["candidate_confidence"], .93)
+
     def test_passive_candidate_refresh_does_not_blank_fresh_parent_card_decision(self):
         _, generation = self._g1(prediction=1.0, confidence=.93)
         shared = self._run_shadow()
