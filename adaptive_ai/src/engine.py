@@ -718,7 +718,12 @@ class Engine(threading.Thread):
         with self.lock:
             state_map = dict(self.state_map)
             registry = dict(self.entity_registry)
-        model = MultiHorizonPolicy(agent, state_map, registry, hint_entities, STORE.get_model(aid), self.context_relevance.get(aid), context_engine=self.context)
+        raw_model = STORE.get_model(aid)
+        if raw_model is None and self.history_manager is not None:
+            seed_getter = getattr(self.history_manager, "training_schema_seed", None)
+            if callable(seed_getter):
+                raw_model = seed_getter(aid, agent)
+        model = MultiHorizonPolicy(agent, state_map, registry, hint_entities, raw_model, self.context_relevance.get(aid), context_engine=self.context)
         self.models[aid] = model
         # The policy schema is part of event routing. Refresh the index before the next
         # event instead of rebuilding dependencies inside the current inference.
