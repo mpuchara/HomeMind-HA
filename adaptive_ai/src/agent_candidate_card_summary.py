@@ -1,10 +1,13 @@
 """Compact Candidate-card decision summary.
 
 The Candidate card should show the same decision vocabulary as a Live agent: physical
-Current, direct-parent Desired, Candidate Desired and Candidate model Confidence.  The
-Shadow runtime persists every retained generation under one event id, so the parent value
-shown here is taken from the *same observed Shadow event* as the Candidate whenever
-possible.  No policy is replayed and no physical action is dispatched.
+Current, direct-parent Desired, Candidate Desired and Candidate model Confidence.
+
+Card tiles are operational observability, not A/B evidence. Parent and Candidate decisions
+therefore keep their own freshness clocks: a Candidate-only passive heartbeat must not erase
+a still-fresh direct-parent Desired just because their event ids differ. Paired comparison and
+promotion evidence remain same-event-only in the Shadow runtime. No policy is replayed and
+no physical action is dispatched.
 """
 from __future__ import annotations
 
@@ -82,38 +85,33 @@ def decorate_candidate_status(store, result, *, now=None):
         return result
 
     child = _latest_decision(store, generation["generation_id"])
-    if not child or now - float(child.get("ts") or 0.0) > DECISION_STALE_SECONDS:
-        result["parent_desired"] = None
-        result["parent_confidence"] = None
-        result["parent_shadow_timestamp"] = None
-        return result
+    child_fresh = bool(
+        child and now - float(child.get("ts") or 0.0) <= DECISION_STALE_SECONDS
+    )
 
     parent_generation_id = generation["parent_generation_id"]
-    child_event_id = str(child.get("event_id") or "")
-    parent_decision = _decision_for_event(
-        store, parent_generation_id, child_event_id
+    parent_decision = _latest_decision(store, parent_generation_id)
+    parent_fresh = bool(
+        parent_decision
+        and now - float(parent_decision.get("ts") or 0.0) <= DECISION_STALE_SECONDS
     )
-    if parent_decision is None and not child_event_id.startswith("candidate-passive:"):
-        # A pre-upgrade database may lack a matching event row. Falling back to a fresh
-        # observed parent row is acceptable only for legacy shared events. A passive
-        # Candidate-only observation must keep Parent Desired unknown rather than pairing
-        # it with an unrelated stale Parent prediction.
-        parent_decision = _latest_decision(store, parent_generation_id)
-    if (
-        not parent_decision
-        or now - float(parent_decision.get("ts") or 0.0) > DECISION_STALE_SECONDS
-        or abs(float(parent_decision.get("ts") or 0.0) - float(child.get("ts") or 0.0))
-        > DECISION_STALE_SECONDS
-    ):
+    if not parent_fresh:
         result["parent_desired"] = None
         result["parent_confidence"] = None
         result["parent_shadow_timestamp"] = None
+        result["parent_decision_paired"] = False
+        result["parent_generation_id"] = parent_generation_id
         return result
 
     result["parent_desired"] = parent_decision.get("desired")
     result["parent_confidence"] = parent_decision.get("confidence")
     result["parent_shadow_timestamp"] = parent_decision.get("ts")
     result["parent_generation_id"] = parent_generation_id
+    result["parent_decision_paired"] = bool(
+        child_fresh
+        and str(parent_decision.get("event_id") or "")
+        == str(child.get("event_id") or "")
+    )
     return result
 
 
