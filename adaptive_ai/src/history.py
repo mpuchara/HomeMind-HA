@@ -314,7 +314,7 @@ class HistoryManager(threading.Thread):
                 [target], start_ts, end_ts, batch_size=1, minimal=False, no_attributes=False,
                 source="ha_history_full", progress_lo=self.progress, progress_hi=self.progress,
                 label=f"Agent {agent['id']} · target history", max_hours=6, parallel_requests=1,
-                inter_chunk_pause_ms=int(OPTIONS.get("history_background_pause_ms", 250)),
+                inter_chunk_pause_ms=int(OPTIONS.get("agent_training_pause_ms", 0)),
             )
             if context_ids:
                 with self.engine.lock:
@@ -326,14 +326,14 @@ class HistoryManager(threading.Thread):
                         fast_ids, start_ts, end_ts, batch_size=30, minimal=True, no_attributes=True,
                         source="ha_history_fast_context", progress_lo=self.progress, progress_hi=self.progress,
                         label=f"Agent {agent['id']} · high-resolution behavioural context", max_hours=6, parallel_requests=1,
-                        inter_chunk_pause_ms=int(OPTIONS.get("history_background_pause_ms", 250)),
+                        inter_chunk_pause_ms=int(OPTIONS.get("agent_training_pause_ms", 0)),
                     )
                 if regular_ids:
                     self._import_section(
                         regular_ids, start_ts, end_ts, batch_size=50, minimal=True, no_attributes=True,
                         source="ha_history_minimal", progress_lo=self.progress, progress_hi=self.progress,
                         label=f"Agent {agent['id']} · context history", max_hours=12, parallel_requests=1,
-                        inter_chunk_pause_ms=int(OPTIONS.get("history_background_pause_ms", 250)),
+                        inter_chunk_pause_ms=int(OPTIONS.get("agent_training_pause_ms", 0)),
                     )
             self.refresh_archive_cache()
         except Exception as exc:
@@ -399,7 +399,7 @@ class HistoryManager(threading.Thread):
                         f"Historical indexing checkpoint {((cursor-start_ts)/max(1.0,target_end-start_ts)):.0%}",
                         {"cursor_ts": cursor, "end_ts": target_end, "final": final})
             if not final:
-                pause_ms = max(0.0, float(OPTIONS.get("history_background_pause_ms", 0) or 0))
+                pause_ms = max(0.0, float(OPTIONS.get("agent_training_pause_ms", 0) or 0))
                 if pause_ms:
                     self.stop_event.wait(pause_ms / 1000.0)
 
