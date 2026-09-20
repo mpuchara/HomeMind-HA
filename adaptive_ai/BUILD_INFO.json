@@ -1,10 +1,10 @@
 {
-  "version": "0.14.53",
+  "version": "0.14.54",
   "release_date": "2026-09-20",
-  "base_version": "0.14.52",
-  "base_commit": "676554e89d4012f491279cee2de51b8a4ffa5654",
-  "release_status": "release-0.14.53-tournament-stable-revision",
-  "tests_passed": 1018,
+  "base_version": "0.14.53",
+  "base_commit": "9fcdd9e5ac1fcacf87751df3176bb92ecdc5494c",
+  "release_status": "release-0.14.54-stable-online-tournament",
+  "tests_passed": 1020,
   "profile": "rpi4-low-memory-complete-discovery-manual-agent-selection",
   "manual_agent_training": true,
   "max_concurrent_training_jobs": 1,
@@ -40,7 +40,7 @@
   "migration": "no destructive migration; existing agents, models, feedback, raw archive, historical experiences, candidate lineage, rollback and generation state preserved",
   "physical_control": "unchanged; repaired agents return to Shadow and Control still requires qualified state plus all existing guards",
   "pi4": "0.14.38 targets the long-soak Raspberry Pi failure: drift analysis is coalesced on a throttled background observer, REST /states reconciliation is delta-only after bootstrap, websocket outage fallback reconciles every 10 s, and HA core-state health is tracked separately from unrelated REST errors.",
-  "ci_status": "0.14.53 release-head validation pending on Python 3.11 and 3.13.",
+  "ci_status": "0.14.54 release-head validation pending on Python 3.11 and 3.13.",
   "training_slice_budget": "adaptive-ai-index workers call a shared CooperativeTrainingBudget; expensive temporal tracker loops yield between entities/events and finalization is no longer outside the throttle",
   "finalization_lifeline": "HEAVY_JOBS remains owned through final gc.collect(), so /api/status and /api/agents stay on lightweight lifeline reads until the worker is actually finished",
   "finalization_progress": "post-replay UI now exposes bounded stages: replay complete, policy serialization, benchmark save, qualification, checkpoint complete",
@@ -208,5 +208,6 @@
   "training_replay_ram_cache": "Onset and persistence temporal trackers share a per-job bounded LRU for exact repeated small history queries; default cap 8192 rows and 1024 rows per entry.",
   "indexed_incremental_replay": "FeatureJournal forward replay now uses disjoint event_time and received_time range scans with an entity+received_time index; exact causal top-64 semantics are preserved while empty increments avoid walking old retained history.",
   "sensor_quality_sql_fix": "Includes PR #130 fix: context_tournament_sensor_quality INSERT now has 12 placeholders for 12 columns, restoring durable shadow quality updates.",
-  "context_tournament_revision": "Context Tournament compares a dedicated learned tournament_revision rather than provenance model_revision. Lazy 60 s policy decay still rotates model_revision but no longer resets future-only challenger epochs or emits repeated context_challenger_started bursts. Real RL updates rotate both revisions and still invalidate old challenger proof."
+  "context_tournament_revision": "Context Tournament uses a stable tournament_revision for the installed champion. Lazy decay and ordinary online policy.update learning rotate model_revision only, preserving paired future-only challenger evidence. Fresh Train/Rebuild/replacement policies receive a new tournament_revision; active-schema changes and challenger reselection still reset proof.",
+  "context_challenger_event_diagnostics": "context_challenger_started now includes evaluation_reason and evaluation_champion_revision so any future epoch reset is directly attributable from Recent activity/API event payload."
 }
