@@ -4,7 +4,7 @@
   "base_version": "0.14.51",
   "base_commit": "f3a5a7fc52f43b76884e6af6ff1acb2af01d06af",
   "release_status": "release-0.14.52-indexed-replay",
-  "tests_passed": 1012,
+  "tests_passed": 1013,
   "profile": "rpi4-low-memory-complete-discovery-manual-agent-selection",
   "manual_agent_training": true,
   "max_concurrent_training_jobs": 1,
