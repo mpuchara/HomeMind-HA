@@ -1,3 +1,11 @@
+# 0.14.54 — 2026-09-20
+
+- Fix the remaining `context_challenger_started` storm after 0.14.53: ordinary online `policy.update()` no longer rotates `tournament_revision`.
+- Online rewards, manual demonstrations and other incremental weight learning still rotate `model_revision` and are persisted normally, but paired future-only Context Tournament evidence is not discarded.
+- A genuinely fresh Train/Rebuild/replacement policy still gets a new `tournament_revision`; active schema changes and challenger reselection still invalidate old proof.
+- `context_challenger_started` now reports `evaluation_reason` and `evaluation_champion_revision` for immediate diagnosis of any future reset.
+- Add regressions proving online learning and lazy decay preserve challenger samples, while a fresh policy instance receives a distinct Tournament identity.
+
 # 0.14.53 — 2026-09-20
 
 - Fix repeated `context_challenger_started` bursts caused by deterministic lazy policy decay rotating the same `model_revision` that Sensor Tournament used as its future-only epoch identity.
