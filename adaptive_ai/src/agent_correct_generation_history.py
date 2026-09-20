@@ -193,6 +193,10 @@ def build_correct_history(manager, ref, start, end, legacy_history):
     parent_history = manager.generation_history(parent["generation_id"], start, end)
     child_points = list(child_history.get("points") or [])
     parent_points = list(parent_history.get("points") or [])
+    # Current is physical target history, not Candidate observation history. Candidate
+    # inference may legitimately have gaps; the real device state must remain visible
+    # across those gaps so Correct can still anchor the user's correction in time.
+    current_points = _current_rows(manager, agent, start, end)
     payload.update({
         "chart_mode": "candidate_vs_parent",
         "parent_generation_id": parent["generation_id"],
@@ -200,7 +204,7 @@ def build_correct_history(manager, ref, start, end, legacy_history):
         "parent_generation_type": parent["generation_type"],
         "series_order": ["current", "parent_desired", "candidate_desired", "correct"],
         "series": {
-            "current": {"label": "Current", "points": _values(child_points, "current")},
+            "current": {"label": "Current", "points": _values(current_points, "current")},
             "parent_desired": {"label": _generation_label(parent), "points": _values(parent_points, "desired")},
             "candidate_desired": {"label": _generation_label(generation), "points": _values(child_points, "desired")},
         },
