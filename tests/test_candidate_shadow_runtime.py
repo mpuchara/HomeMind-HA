@@ -5,7 +5,7 @@ import unittest
 from contextlib import contextmanager
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 import storage
 from agent_candidates import AgentCandidateManager, ensure_tables, install_store_overlay
@@ -301,6 +301,40 @@ class CandidateShadowRuntimeTests(unittest.TestCase):
         card = self.manager.status(self.root["id"])
         self.assertTrue(card["shadow_active"])
         self.assertEqual(card["candidate_desired"], 1.0)
+        self.executor.service.assert_not_called()
+        self.executor.release_control.assert_not_called()
+
+    def test_passive_heartbeat_reobserves_same_revision_after_30_seconds(self):
+        _, generation = self._g1(prediction=1.0, confidence=.93)
+        self._run_shadow()
+        revision = self.engine.state_revision
+        with self.store.conn() as db:
+            before = db.execute(
+                "SELECT COUNT(*) FROM candidate_generation_decisions WHERE generation_id=?",
+                (generation["generation_id"],),
+            ).fetchone()[0]
+
+        # A quiet home keeps the same state_revision. The 30 s heartbeat must still run
+        # Candidate inference again; revision dedupe is only for duplicate state_changed.
+        base = shadow_runtime_module.time.monotonic()
+        with patch.object(
+            shadow_runtime_module.time, "monotonic",
+            return_value=base + shadow_runtime_module.DECISION_HEARTBEAT_SECONDS + 1.0,
+        ):
+            observed = self.manager.drain_candidate_shadow_events(max_roots=8)
+            immediate = self.manager.drain_candidate_shadow_events(max_roots=8)
+
+        self.assertEqual(observed, 1)
+        self.assertEqual(immediate, 0)
+        self.assertEqual(self.engine.state_revision, revision)
+        with self.store.conn() as db:
+            rows = [dict(row) for row in db.execute(
+                """SELECT * FROM candidate_generation_decisions
+                   WHERE generation_id=? ORDER BY ts""",
+                (generation["generation_id"],),
+            ).fetchall()]
+        self.assertEqual(len(rows), before + 1)
+        self.assertTrue(str(rows[-1]["event_id"]).startswith("candidate-passive:"))
         self.executor.service.assert_not_called()
         self.executor.release_control.assert_not_called()
 
