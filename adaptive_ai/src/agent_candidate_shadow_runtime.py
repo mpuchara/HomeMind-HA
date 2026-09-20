@@ -912,13 +912,18 @@ def install(manager):
         }
 
     def _latest_shadow(generation_id):
+        """Return the last actually observed decision, even when it is no longer fresh.
+
+        Candidate card tiles are a last-known-state display. Freshness is reported
+        separately and must never erase the last real decision from the UI.
+        """
         gid = str(generation_id)
         with manager.lock:
             hot = dict(latest_generation_runtime.get(gid) or {})
-        if hot and time.time() - float(hot.get("ts") or 0.0) <= DECISION_STALE_SECONDS:
+        if hot:
             return hot
-        # Restart compatibility: one cold read warms the RAM snapshot until realtime
-        # Candidate inference resumes. Normal polling never returns to SQLite afterwards.
+        # Restart compatibility: one cold read restores the last observed decision to RAM.
+        # Normal 1 s polling remains RAM-only after this warm-up.
         with manager.store.conn() as c:
             row = c.execute(
                 """SELECT * FROM candidate_generation_decisions
@@ -928,8 +933,6 @@ def install(manager):
         if not row:
             return None
         row = dict(row)
-        if time.time() - float(row["ts"]) > DECISION_STALE_SECONDS:
-            return None
         with manager.lock:
             latest_generation_runtime[gid] = dict(row)
         return row
@@ -963,23 +966,19 @@ def install(manager):
                 current = None
             root_gen, generations = _cached_generations(root_id)
             root_gid = str((root_gen or {}).get("generation_id") or "")
-            with manager.lock:
-                parent_hot = dict(latest_generation_runtime.get(root_gid) or {}) if root_gid else {}
-                generation_hot = {
-                    str(g.get("generation_id")): dict(latest_generation_runtime.get(str(g.get("generation_id"))) or {})
-                    for g in generations
-                }
+            parent_hot = _latest_shadow(root_gid) if root_gid else None
+            parent_hot = dict(parent_hot or {})
             parent_fresh = bool(
                 parent_hot
                 and now - float(parent_hot.get("ts") or 0.0) <= DECISION_STALE_SECONDS
             )
             for generation in generations:
                 gid = str(generation.get("generation_id") or "")
-                child = generation_hot.get(gid) or {}
+                child = dict(_latest_shadow(gid) or {})
                 fresh = bool(child and now - float(child.get("ts") or 0.0) <= DECISION_STALE_SECONDS)
                 paired = bool(
-                    fresh
-                    and parent_fresh
+                    parent_hot
+                    and child
                     and parent_hot.get("event_id") == child.get("event_id")
                 )
                 snapshots.append({
@@ -988,19 +987,17 @@ def install(manager):
                     "root_agent_id": str(root_id),
                     "target_property": root.get("target_property"),
                     "shadow_current": current,
-                    # Card tiles are operational observability, not paired A/B evidence.
-                    # A Candidate-only passive heartbeat must not erase a still-fresh
-                    # direct-parent Desired merely because the two observations have
-                    # different event ids. Pair scoring remains same-event-only elsewhere.
-                    "parent_desired": parent_hot.get("desired") if parent_fresh else None,
-                    "parent_confidence": parent_hot.get("confidence") if parent_fresh else None,
-                    "parent_shadow_timestamp": (
-                        float(parent_hot.get("ts")) if parent_fresh else None
-                    ),
+                    # Cards intentionally show the last actually observed decisions.
+                    # Freshness is metadata only; it never blanks a real last decision.
+                    "parent_desired": parent_hot.get("desired") if parent_hot else None,
+                    "parent_confidence": parent_hot.get("confidence") if parent_hot else None,
+                    "parent_shadow_timestamp": float(parent_hot.get("ts")) if parent_hot else None,
+                    "parent_decision_fresh": parent_fresh,
                     "parent_decision_paired": paired,
-                    "candidate_desired": child.get("desired") if fresh else None,
-                    "candidate_confidence": child.get("confidence") if fresh else None,
-                    "shadow_timestamp": float(child.get("ts")) if fresh else None,
+                    "candidate_desired": child.get("desired") if child else None,
+                    "candidate_confidence": child.get("confidence") if child else None,
+                    "candidate_decision_fresh": fresh,
+                    "shadow_timestamp": float(child.get("ts")) if child else None,
                     "live_snapshot_ts": now,
                     "read_source": "ram_candidate_runtime",
                 })
@@ -1011,11 +1008,16 @@ def install(manager):
             return result
         gid = result.get("generation_id")
         latest = _latest_shadow(gid) if gid else None
-        result["shadow_active"] = latest is not None
+        latest_fresh = bool(
+            latest
+            and time.time() - float(latest.get("ts") or 0.0) <= DECISION_STALE_SECONDS
+        )
+        result["shadow_active"] = latest_fresh
         result["shadow_timestamp"] = latest.get("ts") if latest else None
         result["shadow_current"] = latest.get("current") if latest else None
         result["candidate_desired"] = latest.get("desired") if latest else None
         result["candidate_confidence"] = latest.get("confidence") if latest else None
+        result["candidate_decision_fresh"] = latest_fresh
         result["shadow_model_revision"] = latest.get("model_revision") if latest else None
         result["shadow_schema_revision"] = latest.get("schema_revision") if latest else None
         if gid:
