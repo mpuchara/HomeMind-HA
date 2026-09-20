@@ -67,6 +67,7 @@ options:
   agent_training_chunk_hours: 6
   agent_training_overlap_hours: 6
   agent_training_history_days: 7
+  agent_training_pause_ms: 0
   min_historical_support: 0.20
   max_context_novelty: 0.85
   confidence_validation_fraction: 0.20
@@ -87,7 +88,7 @@ options:
   history_fast_target_hours: 6
   history_parallel_requests: 1
   history_context_import_interval_seconds: 60
-  history_background_pause_ms: 0
+  history_background_pause_ms: 1500
   history_background_start_delay_seconds: 60
   background_cpu_duty_cycle: 0.20
   process_nice: 10
@@ -161,6 +162,7 @@ schema:
   agent_training_chunk_hours: "int(6,168)"
   agent_training_overlap_hours: "int(0,48)"
   agent_training_history_days: "float(1,30)"
+  agent_training_pause_ms: "int(0,3000)"
   min_historical_support: "float(0.0,1.0)"
   max_context_novelty: "float(0.0,1.0)"
   confidence_validation_fraction: "float(0.05,0.40)"
