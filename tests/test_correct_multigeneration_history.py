@@ -141,6 +141,23 @@ class CorrectGenerationHistoryTests(unittest.TestCase):
         self.assertEqual(result["series"]["current"]["points"][-1]["value"], 1.0)
         legacy.assert_not_called()
 
+    def test_candidate_current_comes_from_physical_history_even_when_candidate_has_no_rows(self):
+        with self.store.lock, self.store.conn() as c:
+            c.execute(
+                "DELETE FROM candidate_generation_decisions WHERE generation_id=?",
+                (self.g2["generation_id"],),
+            )
+        result = build_correct_history(
+            self.manager, self.g2["generation_id"], self.ts - 10, self.ts + 2,
+            Mock(side_effect=AssertionError("Candidate history must not replay policy")),
+        )
+        current = result["series"]["current"]["points"]
+        candidate = result["series"]["candidate_desired"]["points"]
+        self.assertTrue(current)
+        self.assertEqual(current[0]["value"], 0.0)
+        self.assertEqual(current[-1]["value"], 1.0)
+        self.assertEqual(candidate, [])
+
     def test_candidate_g1_compares_only_live_g0_to_candidate_g1(self):
         result = build_correct_history(
             self.manager, self.g1["generation_id"], self.ts - 1, self.ts + 1,
