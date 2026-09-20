@@ -1,3 +1,14 @@
+# 0.14.48 — 2026-09-20
+
+- Fix the remaining Correct chart Current regression. Recorder state is now projected across the selected range: the last state at/before `Od` is drawn from `Od`, and the last known state is extended to `Do`.
+- Do not apply Candidate/Desired's stale-decision timeout to physical Current. A device that stays OFF or ON for ten minutes now renders a continuous Current line instead of two disconnected invisible points.
+- Make normal Rebuild reuse the previous feature schema and selection metadata in RAM before learned heads are cleared. Policy weights are still rebuilt from scratch; only expensive sensor-selection work is retained.
+- Scope the schema cache to the agent's active explicit training job so global model invalidation cannot accidentally resurrect an old schema.
+- When first-time feature screening is genuinely required, stream only policy-admissible context entities plus the target instead of every archived entity.
+- Add a bounded per-training replay LRU shared by onset and persistence temporal cursors. Repeated exact small history queries can now be served from RAM; the cache is capped at 8192 rows by default and disappears with the job.
+- Keep the 0.14.47 seven-day training window, 55% cooperative duty cycle, 35 ms maximum uninterrupted work slice and realtime preemption unchanged.
+- Preserve durable raw history, feedback, model checkpoints, benchmark/evidence and Candidate safety semantics.
+
 # 0.14.47 — 2026-09-20
 
 - Restore the Correct chart's physical Current history. Candidate charts now read Current directly from target entity_history instead of deriving it from Candidate observation rows, so gaps in Candidate inference no longer erase the real device-state curve.
