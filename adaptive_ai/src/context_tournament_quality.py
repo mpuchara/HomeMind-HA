@@ -248,7 +248,7 @@ def install_sensor_quality(service):
                    (agent_id,entity_id,opportunities,available_count,unknown_count,
                     unavailable_count,event_count,first_observed_ts,last_observed_ts,
                     last_event_ts,failure_timestamps_json,updated_ts)
-                   VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)
+                   VALUES(?,?,?,?,?,?,?,?,?,?,?,?)
                    ON CONFLICT(agent_id,entity_id) DO UPDATE SET
                      opportunities=excluded.opportunities,
                      available_count=excluded.available_count,
