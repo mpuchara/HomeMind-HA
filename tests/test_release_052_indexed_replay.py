@@ -129,7 +129,7 @@ class Release052IndexedReplayTests(unittest.TestCase):
         try:
             plan = tracker.conn.execute(
                 """EXPLAIN QUERY PLAN
-                   SELECT event_key FROM feature_observation_events
+                   SELECT event_key FROM feature_observation_events INDEXED BY idx_feature_obs_entity_received_time
                    WHERE entity_id=? AND received_time>? AND received_time<=?
                      AND event_time<=?
                    ORDER BY event_time DESC,received_time DESC,event_key DESC LIMIT ?""",
