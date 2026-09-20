@@ -1235,6 +1235,7 @@ class HistoryManager(threading.Thread):
         archive_row_count = STORE.archive_count(start_ts=start_ts, end_ts=end_ts)
         if archive_row_count <= 0:
             return 0
+        screening_row_count = archive_row_count
         progress_enabled = progress_lo is not None and progress_hi is not None and float(progress_hi) > float(progress_lo)
         progress_label = progress_label or "Historical policy rebuild"
         if progress_enabled:
@@ -1246,7 +1247,7 @@ class HistoryManager(threading.Thread):
                     f"{progress_label}: reusing persisted feature schema"
                 ),
                 work_done=0,
-                work_total=archive_row_count if screening_required else 0,
+                work_total=screening_row_count if screening_required else 0,
                 work_unit="history rows" if screening_required else "schema cache",
                 eta_source="measured replay throughput" if screening_required else "persisted schema",
                 phase_detail=(
@@ -1280,11 +1281,22 @@ class HistoryManager(threading.Thread):
         excluded_electrical, _ = electrical_context_exclusions(discovery_states, discovery_registry)
         discovery_excluded = excluded_control | excluded_electrical
         fast_agents = [a for a in screen_agents if is_fast_reactive_agent(a)]
-        behaviour_candidates = {
+        context_candidates = {
             eid for eid, st in discovery_states.items()
             if is_context_candidate_entity(eid, st, discovery_excluded)
-            and (entity_capability_tags(eid, st) & {"occupancy", "activity"})
         }
+        behaviour_candidates = {
+            eid for eid in context_candidates
+            if entity_capability_tags(eid, discovery_states.get(eid) or {}) & {"occupancy", "activity"}
+        }
+        screening_entities = set(context_candidates) | set(screen_target_map)
+        if screening_required:
+            screening_row_count = max(
+                1, STORE.archive_count(
+                    start_ts=start_ts, end_ts=selection_end,
+                    entity_ids=screening_entities,
+                )
+            )
         fast_targets = {a["target_entity"] for a in fast_agents}
         edge_limit = max(8, min(2048, 32768 // max(1, len(behaviour_candidates | fast_targets))))
         fast_edge_rows = {eid: deque(maxlen=edge_limit) for eid in (behaviour_candidates | fast_targets)}
@@ -1299,7 +1311,10 @@ class HistoryManager(threading.Thread):
         # first row, leaving the UI at 0% and holding the only HEAVY_JOBS slot. Streaming
         # by the existing ts index starts yielding immediately and stays cooperative.
         screening_rows = (
-            STORE.archive_iter(start_ts=start_ts, end_ts=selection_end, chunk_size=512)
+            STORE.archive_iter(
+                start_ts=start_ts, end_ts=selection_end,
+                entity_ids=screening_entities, chunk_size=512,
+            )
             if screening_required else ()
         )
         screening_checkpoint_rows = max(
@@ -1364,7 +1379,7 @@ class HistoryManager(threading.Thread):
                 screening_rows_done == 1
                 or screening_rows_done % screening_status_rows == 0
             ):
-                frac = min(1.0, screening_rows_done / max(1, archive_row_count))
+                frac = min(1.0, screening_rows_done / max(1, screening_row_count))
                 self.set_status(
                     progress=float(progress_lo) + (
                         float(screening_progress_end) - float(progress_lo)
