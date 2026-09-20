@@ -233,6 +233,8 @@ class CorrectGenerationUiContractTests(unittest.TestCase):
         self.assertIn("series.parent_desired.label||'Parent Desired'", source)
         self.assertIn("series.candidate_desired.label||'Candidate Desired'", source)
         self.assertIn("Correct points", source)
+        self.assertIn("const path=(points,expire=true)", source)
+        self.assertIn("const currentPath=path(series.current.points,false)", source)
         self.assertNotIn("policy.predict", source)
 
     def test_candidate_card_keeps_comparison_minimal_and_moves_full_stats_to_details(self):
