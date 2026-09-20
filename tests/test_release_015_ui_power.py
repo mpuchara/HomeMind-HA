@@ -81,7 +81,7 @@ class Release015UiPowerTests(unittest.TestCase):
             threading.current_thread().name = old_name
 
         self.assertEqual(core.OPTIONS['agent_training_chunk_hours'], 6)
-        self.assertEqual(core.OPTIONS['history_background_pause_ms'], 1500)
+        self.assertEqual(core.OPTIONS['history_background_pause_ms'], 0)
         self.assertGreaterEqual(manager.poll_seconds, 3.0)
         manager._maintenance()
         manager._maintenance()
