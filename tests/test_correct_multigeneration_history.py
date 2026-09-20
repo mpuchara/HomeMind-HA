@@ -141,6 +141,22 @@ class CorrectGenerationHistoryTests(unittest.TestCase):
         self.assertEqual(result["series"]["current"]["points"][-1]["value"], 1.0)
         legacy.assert_not_called()
 
+    def test_current_projects_stable_state_across_visible_range(self):
+        # Both physical transitions are before the visible range. Recorder therefore has
+        # only a seed, but the chart must still show a horizontal Current line.
+        start = self.ts + 1.0
+        end = self.ts + 10.0
+        result = build_correct_history(
+            self.manager, self.g2["generation_id"], start, end,
+            Mock(side_effect=AssertionError("Candidate history must not replay policy")),
+        )
+        current = result["series"]["current"]["points"]
+        self.assertEqual(len(current), 2)
+        self.assertAlmostEqual(current[0]["ts"], start)
+        self.assertAlmostEqual(current[-1]["ts"], end)
+        self.assertEqual(current[0]["value"], 1.0)
+        self.assertEqual(current[-1]["value"], 1.0)
+
     def test_candidate_current_comes_from_physical_history_even_when_candidate_has_no_rows(self):
         with self.store.lock, self.store.conn() as c:
             c.execute(
