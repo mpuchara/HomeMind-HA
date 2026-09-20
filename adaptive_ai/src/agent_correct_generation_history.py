@@ -47,26 +47,48 @@ def _active_labels(manager, agent):
 
 
 def _current_rows(manager, agent, start, end):
-    """Observed target-state curve only; never replay policy/context for Correct UI."""
+    """Observed physical target-state curve projected across the selected chart range.
+
+    Recorder stores state changes, not a sample for every second. A seed row can therefore
+    be older than the visible range even though its value is still the real Current at
+    `start`. Project that seed onto the left edge and extend the last known value to the
+    right edge so a stable OFF/ON interval remains visible instead of disappearing.
+    """
     entity_id = str(agent["target_entity"])
+    start = float(start); end = float(end)
     with manager.store.conn() as c:
         seed = c.execute(
             "SELECT * FROM entity_history WHERE entity_id=? AND ts<=? "
             "ORDER BY ts DESC,id DESC LIMIT 1",
-            (entity_id, float(start)),
+            (entity_id, start),
         ).fetchone()
-        rows = [dict(seed)] if seed else []
-        rows.extend(
+        rows = [
             dict(row) for row in c.execute(
                 "SELECT * FROM entity_history WHERE entity_id=? AND ts>? AND ts<=? "
                 "ORDER BY ts,id",
-                (entity_id, float(start), float(end)),
+                (entity_id, start, end),
             ).fetchall()
-        )
+        ]
+
     out = []
+    last_value = None
+    if seed:
+        last_value = target_value(archived_state(dict(seed)), agent["target_property"])
+        if last_value is not None:
+            out.append({"ts": start, "current": last_value, "projected": True})
     for row in rows:
         value = target_value(archived_state(row), agent["target_property"])
-        out.append({"ts": float(row["ts"]), "current": value})
+        if value is None:
+            continue
+        last_value = value
+        point = {"ts": float(row["ts"]), "current": value}
+        if out and abs(float(out[-1]["ts"]) - float(point["ts"])) < 1e-6:
+            out[-1] = point
+        else:
+            out.append(point)
+    if last_value is not None and end >= start:
+        if not out or abs(float(out[-1]["ts"]) - end) > 1e-6:
+            out.append({"ts": end, "current": last_value, "projected": True})
     return out
 
 
