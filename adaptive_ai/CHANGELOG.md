@@ -1,3 +1,12 @@
+# 0.14.53 — 2026-09-20
+
+- Fix repeated `context_challenger_started` bursts caused by deterministic lazy policy decay rotating the same `model_revision` that Sensor Tournament used as its future-only epoch identity.
+- Add a separate persisted `tournament_revision`: real RL learning rotates both model and Tournament revisions, while the 60-second lazy decay rotates only provenance `model_revision`.
+- Context Tournament now resets challenger proof only for a real learned champion revision change, active-schema change or challenger reselection; ordinary time decay no longer discards collected challenger evidence.
+- Preserve backward compatibility: models without `tournament_revision` fall back to their existing `model_revision` on first load.
+- Add regressions proving lazy decay keeps the challenger epoch/samples while a real learned policy update still invalidates old proof.
+- Fast-light timing learning remains weight-only and does not rotate either Tournament epoch identity or physical-control semantics.
+
 # 0.14.52 — 2026-09-20
 
 - Speed up historical training replay without changing rewards, labels or policy semantics: incremental FeatureJournal reads now use two disjoint indexed ranges instead of an `event_time OR received_time` predicate that could scan old history on every empty step.

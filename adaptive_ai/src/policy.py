@@ -237,6 +237,13 @@ class MultiHorizonPolicy(PolicyBackend):
         self.lock = threading.RLock()
         self.context_engine = context_engine
         self.model_revision = (model or {}).get("model_revision") or str(uuid.uuid4())
+        # Context Tournament needs a stable champion identity across deterministic
+        # lazy-decay steps. A real learned-weight update rotates both revisions; decay
+        # rotates only model_revision because it changes the time-materialized weights
+        # without creating a new learning epoch.
+        self.tournament_revision = (
+            (model or {}).get("tournament_revision") or self.model_revision
+        )
         self.dims = int(OPTIONS.get("feature_dimensions", 128))
         self.actions = action_values(agent)
         self.alpha = float(OPTIONS.get("rl_alpha", 0.65))
@@ -306,7 +313,9 @@ class MultiHorizonPolicy(PolicyBackend):
     def update(self, horizon, action_idx, features, reward, sample_ts=None):
         with self.lock:
             self.heads[int(horizon)].update(action_idx, features, reward, sample_ts)
-            self.model_revision = str(uuid.uuid4())
+            revision = str(uuid.uuid4())
+            self.model_revision = revision
+            self.tournament_revision = revision
 
     def update_all(self, action_idx, features_by_horizon, reward):
         for h, features in features_by_horizon.items():
@@ -314,7 +323,8 @@ class MultiHorizonPolicy(PolicyBackend):
                 self.heads[int(h)].update(action_idx, features, reward)
 
     def export(self):
-        return {"model_revision": self.model_revision, "version": self.VERSION, "dims": self.dims, "actions": self.actions, "horizons": self.horizons,
+        return {"model_revision": self.model_revision, "tournament_revision": self.tournament_revision,
+                "version": self.VERSION, "dims": self.dims, "actions": self.actions, "horizons": self.horizons,
                 "schema": self.schema.export(), "selection_meta": self.selection_meta,
                 "heads": {str(h): head.export() for h, head in self.heads.items()}}
 
@@ -344,7 +354,9 @@ class MultiHorizonPolicy(PolicyBackend):
 
     def diagnostics(self):
         return {'backend': 'diagonal_linucb', 'policy_version': self.VERSION,
-                'model_revision': self.model_revision, 'effective_updates': self.total_updates,
+                'model_revision': self.model_revision,
+                'tournament_revision': self.tournament_revision,
+                'effective_updates': self.total_updates,
                 'policy_half_life_days': OPTIONS.get('policy_half_life_days', 30)}
 
     def inference_export(self):
@@ -352,7 +364,9 @@ class MultiHorizonPolicy(PolicyBackend):
         with self.lock:
             self.decay()
             return {'format': 'homemind-inference-v1', 'policy_version': self.VERSION,
-                    'model_revision': self.model_revision, 'schema': self.schema.export(),
+                    'model_revision': self.model_revision,
+                    'tournament_revision': self.tournament_revision,
+                    'schema': self.schema.export(),
                     'home_feature_names': list(FEATURE_NAMES), 'actions': self.actions,
                     'heads': {str(h): {'theta': [[b/a for a,b in zip(aa,bb)] for aa,bb in zip(head.a,head.b)],
                         'inverse_a': [[1/a for a in aa] for aa in head.a],

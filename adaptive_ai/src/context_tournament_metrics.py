@@ -107,7 +107,9 @@ def install_metrics(service):
     The extension wraps only shadow bookkeeping. It never creates an ActionIntent, never
     invokes Executor/HA services and never changes feature schema. Challenger proof is
     reset when a sensor enters the tournament, when the active schema changes, or when a
-    different champion model revision becomes authoritative.
+    different learned champion revision becomes authoritative. Deterministic lazy
+    decay may change model_revision for provenance, but does not invalidate a paired
+    future-only Tournament epoch.
     """
     if getattr(service, "_incremental_metrics_installed", False):
         return service
@@ -144,7 +146,12 @@ def install_metrics(service):
         candidate = policy
         if candidate is None:
             candidate = (getattr(service.engine, "models", {}) or {}).get(aid)
-        revision = getattr(candidate, "model_revision", None) if candidate is not None else None
+        revision = None
+        if candidate is not None:
+            revision = getattr(candidate, "tournament_revision", None)
+            if revision is None:
+                # Backward-compatible fallback for policies serialized before 0.14.53.
+                revision = getattr(candidate, "model_revision", None)
         if revision is not None:
             revision = str(revision)
             with lock:

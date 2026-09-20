@@ -120,6 +120,7 @@ class ContextTournamentMetricIntegrationTests(unittest.TestCase):
         self.policy = SimpleNamespace(
             schema=SimpleNamespace(entities=[self.active]),
             model_revision='champion-1',
+            tournament_revision='champion-1',
         )
         self.engine = FakeEngine(self.states, {self.challenger: .95}, self.policy)
         self.service = ContextTournament(self.store, self.engine)
@@ -223,6 +224,7 @@ class ContextTournamentMetricIntegrationTests(unittest.TestCase):
         new_policy = SimpleNamespace(
             schema=SimpleNamespace(entities=[self.active]),
             model_revision='champion-2',
+            tournament_revision='champion-2',
         )
         self.engine.models[self.agent['id']] = new_policy
         self.service.sync_agent(self.agent, policy=new_policy, feature_scores={self.challenger: .95})
@@ -230,6 +232,28 @@ class ContextTournamentMetricIntegrationTests(unittest.TestCase):
         self.assertEqual(row['samples'], 0)
         self.assertEqual(row['evaluation_champion_revision'], 'champion-2')
         self.assertEqual(row['evaluation_reason'], 'champion_model_changed')
+
+    def test_decay_only_model_revision_change_keeps_challenger_epoch(self):
+        self.service.observe_shadow(self.agent, dict(self.states), {self.challenger})
+        model = self.service._load_shadow_model(self.agent['id'], self.challenger, 2)
+        model['samples'] = 18
+        started = model['evaluation_started_ts']
+        self.service._save_shadow_model(self.agent['id'], self.challenger, model)
+
+        decayed_policy = SimpleNamespace(
+            schema=SimpleNamespace(entities=[self.active]),
+            model_revision='champion-1-decayed',
+            tournament_revision='champion-1',
+        )
+        self.engine.models[self.agent['id']] = decayed_policy
+        self.service.sync_agent(
+            self.agent, policy=decayed_policy,
+            feature_scores={self.challenger: .95}
+        )
+        row = self.service.shadow_status(self.agent)['challengers'][0]
+        self.assertEqual(row['samples'], 18)
+        self.assertEqual(row['evaluation_started_ts'], started)
+        self.assertEqual(row['evaluation_champion_revision'], 'champion-1')
 
     def test_metrics_extension_stays_non_controlling(self):
         self.service.observe_shadow(self.agent, dict(self.states), {self.challenger})

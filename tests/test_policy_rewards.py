@@ -87,6 +87,24 @@ class PolicyTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError,'NEEDS_RETRAIN'):
             MultiHorizonPolicy.deserialize({'version':9},agent=agent(),state_map={},registry={},hint_entities=set())
 
+    def test_policy_decay_rotates_model_revision_but_keeps_tournament_revision(self):
+        p=MultiHorizonPolicy(agent(),{}, {},set())
+        model_before=p.model_revision
+        tournament_before=p.tournament_revision
+        now=max(h.last_decay_ts for h in p.heads.values())+61
+        p.decay(now)
+        self.assertNotEqual(p.model_revision,model_before)
+        self.assertEqual(p.tournament_revision,tournament_before)
+        exported=p.serialize()
+        self.assertEqual(exported['tournament_revision'],tournament_before)
+
+    def test_policy_learning_rotates_tournament_revision(self):
+        p=MultiHorizonPolicy(agent(),{}, {},set())
+        before=p.tournament_revision
+        p.update(1,1,{0:1},1)
+        self.assertNotEqual(p.tournament_revision,before)
+        self.assertEqual(p.tournament_revision,p.model_revision)
+
     def test_inference_export_distinct_from_training(self):
         p=MultiHorizonPolicy(agent(),{}, {},set())
         p.update(1,1,{0:1},1)
