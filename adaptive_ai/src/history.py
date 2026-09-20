@@ -13,6 +13,7 @@ from context import (archived_state, balanced_presence_driver_score, controllabl
 from telemetry import HEAVY_JOBS, rss_mb
 from replay import SQLiteTemporalTracker, DeferredUpdates, BoundedUsage
 from training_budget import TRAINING_BUDGET
+from policy import MultiHorizonPolicy
 
 class HistoryManager(threading.Thread):
     """Bootstraps HA Recorder history, keeps a longer local archive, discovers active targets,
@@ -72,6 +73,12 @@ class HistoryManager(threading.Thread):
         self.training_job_started_at = None
         self.training_job_start_progress = 0.0
         self.training_overall_eta_seconds = None
+        # Rebuild resets learned heads, not the expensive sensor-selection result.
+        # Keep a tiny schema-only seed in RAM so repeated training does not rescan the
+        # whole house archive merely because rl_models was intentionally cleared.
+        self.training_schema_cache = {}
+        self.training_schema_cache_hits = 0
+        self.training_schema_cache_misses = 0
         self.job_cancel_event = None
         self.agent_jobs_lock = threading.RLock()
         self.discovery_job_lock = threading.RLock()
@@ -120,6 +127,9 @@ class HistoryManager(threading.Thread):
                     now_ts() - self.training_job_started_at
                     if self.training_job_started_at is not None else None
                 ),
+                "training_schema_cache_entries": len(self.training_schema_cache),
+                "training_schema_cache_hits": int(self.training_schema_cache_hits),
+                "training_schema_cache_misses": int(self.training_schema_cache_misses),
                 "training_stage_progress": (
                     (self.work_done / self.work_total) if self.work_total else None
                 ),
@@ -158,6 +168,56 @@ class HistoryManager(threading.Thread):
         start_ts = max(earliest, end_ts - days * 86400.0)
         return start_ts, end_ts
 
+    @staticmethod
+    def _training_input_fingerprint(agent):
+        return tuple(sorted(str(x) for x in (agent.get("input_entities") or ("*",))))
+
+    def _remember_training_schema(self, agent, raw_model=None):
+        raw = raw_model
+        if raw is None:
+            raw = STORE.get_model(agent["id"])
+        if raw is None:
+            policy = self.engine.models.get(agent["id"])
+            if policy is not None:
+                try:
+                    raw = policy.serialize()
+                except Exception:
+                    raw = None
+        if not isinstance(raw, dict):
+            return None
+        if int(raw.get("version") or 0) != int(MultiHorizonPolicy.VERSION):
+            return None
+        schema = raw.get("schema")
+        if not isinstance(schema, dict):
+            return None
+        seed = {
+            "version": int(raw.get("version")),
+            "dims": int(raw.get("dims") or OPTIONS.get("feature_dimensions", 128)),
+            "actions": list(raw.get("actions") or []),
+            "horizons": list(raw.get("horizons") or []),
+            "schema": dict(schema),
+            "selection_meta": dict(raw.get("selection_meta") or {}),
+            # Empty heads are deliberate: Rebuild relearns policy values from scratch.
+            "heads": {},
+        }
+        self.training_schema_cache[str(agent["id"])] = {
+            "model": seed,
+            "input_fingerprint": self._training_input_fingerprint(agent),
+            "captured_at": now_ts(),
+        }
+        return seed
+
+    def training_schema_seed(self, agent_id, agent=None):
+        item = self.training_schema_cache.get(str(agent_id))
+        if not item:
+            self.training_schema_cache_misses += 1
+            return None
+        if agent is not None and item.get("input_fingerprint") != self._training_input_fingerprint(agent):
+            self.training_schema_cache_misses += 1
+            return None
+        self.training_schema_cache_hits += 1
+        return item.get("model")
+
     def _start_agent_job(self, agent_id, rebuild=False):
         agent = STORE.get_agent_config(agent_id)
         if not agent:
@@ -175,6 +235,10 @@ class HistoryManager(threading.Thread):
         try:
             with self.engine.executor.target_lock(agent["target_entity"]):
                 if rebuild:
+                    # Capture schema/input selection before deleting learned weights.
+                    # Rebuild still starts with empty RL heads; only the expensive,
+                    # repeatedly reusable feature-selection result survives in RAM.
+                    self._remember_training_schema(agent)
                     STORE.clear_learning(agent_id)
                     self.engine.models.pop(agent_id, None)
                     self.engine.runtime.pop(agent_id, None)
@@ -304,10 +368,18 @@ class HistoryManager(threading.Thread):
         if end_ts <= start_ts:
             return
         target = agent["target_entity"]
-        if rebuild:
+        seed = self.training_schema_seed(agent["id"], agent) if rebuild else None
+        if rebuild and seed:
+            # The schema has already survived the previous pass in RAM. Recorder refresh
+            # only the selected entities instead of downloading every eligible HA sensor.
+            context_ids = [
+                eid for eid in ((seed.get("schema") or {}).get("entities") or [])
+                if eid != target
+            ]
+        elif rebuild:
             context_ids = [eid for eid in self._eligible_rebuild_context() if eid != target]
         else:
-            model = STORE.get_model(agent["id"]) or {}
+            model = STORE.get_model(agent["id"]) or self.training_schema_seed(agent["id"], agent) or {}
             context_ids = [eid for eid in ((model.get("schema") or {}).get("entities") or []) if eid != target]
         try:
             self._import_section(
@@ -1146,7 +1218,10 @@ class HistoryManager(threading.Thread):
         # Once a model checkpoint exists, its explicit schema is authoritative for later
         # chunks/resume. Likewise, an explicitly selected input list (Teach/Correct or a
         # manual agent) does not need another whole-home precursor scan.
-        saved_models = {a["id"]: STORE.get_model(a["id"]) for a in agents}
+        saved_models = {
+            a["id"]: (STORE.get_model(a["id"]) or self.training_schema_seed(a["id"], a))
+            for a in agents
+        }
         screen_agents = [
             a for a in agents
             if saved_models.get(a["id"]) is None
@@ -1863,6 +1938,7 @@ class HistoryManager(threading.Thread):
             TRAINING_BUDGET.checkpoint("after_policy_serialize")
             exported['_benchmark_counts'] = benchmark_stats.get(agent['id'], {})
             STORE.save_model(agent["id"], exported)
+            self._remember_training_schema(agent, exported)
             TRAINING_BUDGET.checkpoint("after_model_save")
 
         if progress_enabled:
