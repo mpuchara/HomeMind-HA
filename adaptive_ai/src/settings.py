@@ -107,6 +107,8 @@ DEFAULT_OPTIONS = {
     "training_cpu_duty_cycle": 0.55,
     "training_archive_batch_rows": 16,
     "training_experience_batch_rows": 64,
+    "training_replay_ram_cache_rows": 8192,
+    "training_replay_ram_cache_entry_rows": 1024,
     "training_throttle_max_sleep_seconds": 0.50,
     "training_max_continuous_work_ms": 35,
     "manual_agent_training": True,
