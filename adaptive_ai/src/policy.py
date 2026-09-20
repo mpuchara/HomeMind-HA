@@ -313,9 +313,11 @@ class MultiHorizonPolicy(PolicyBackend):
     def update(self, horizon, action_idx, features, reward, sample_ts=None):
         with self.lock:
             self.heads[int(horizon)].update(action_idx, features, reward, sample_ts)
-            revision = str(uuid.uuid4())
-            self.model_revision = revision
-            self.tournament_revision = revision
+            # Online feedback changes the live model provenance but not the identity of
+            # the champion being evaluated by Context Tournament. Prequential paired
+            # evidence remains valid while the active policy learns online. A fresh
+            # Train/Rebuild policy instance receives a new tournament_revision.
+            self.model_revision = str(uuid.uuid4())
 
     def update_all(self, action_idx, features_by_horizon, reward):
         for h, features in features_by_horizon.items():
