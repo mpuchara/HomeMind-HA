@@ -5,6 +5,10 @@
   let busy=false,liveBusy=false;
   const latestByRef=new Map();
   const DECISION_FIELDS=['parent_desired','candidate_desired','candidate_confidence','shadow_timestamp','target_property'];
+  const LAST_DECISION_FIELDS=[
+    'parent_desired','parent_confidence','parent_shadow_timestamp',
+    'candidate_desired','candidate_confidence','shadow_timestamp','target_property',
+  ];
 
   const refOf=c=>String(c?.generation_id||c?.candidate_id||'');
   const cardRef=card=>String(card?.dataset?.candidateRef||card?.dataset?.generationId||'');
@@ -173,6 +177,12 @@
     if(!ref)return null;
     const previous=latestByRef.get(ref)||{};
     const merged={...previous,...c};
+    // The card is a last-known-decision display. A sparse/status payload may omit a
+    // decision while the generation is still the same; never turn a real observed value
+    // back into "—". Freshness flags still update independently.
+    for(const key of LAST_DECISION_FIELDS){
+      if((c[key]==null||c[key]==='')&&previous[key]!=null)merged[key]=previous[key];
+    }
     if(live){
       merged._liveSnapshotTs=Number(c.live_snapshot_ts||Date.now()/1000);
     }else if(previous._liveSnapshotTs&&Date.now()/1000-previous._liveSnapshotTs<2){
