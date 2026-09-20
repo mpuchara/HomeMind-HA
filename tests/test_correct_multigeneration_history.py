@@ -234,6 +234,11 @@ class CorrectGenerationUiContractTests(unittest.TestCase):
         self.assertIn("series.candidate_desired.label||'Candidate Desired'", source)
         self.assertIn("Correct points", source)
         self.assertIn("const path=(points,expire=true)", source)
+        self.assertIn("last+stale", source)
+        self.assertIn('stroke-dasharray="3 5"', source)
+        self.assertIn('stroke-dasharray="9 5"', source)
+        self.assertIn("Parent ${parentPoints}", source)
+        self.assertIn("Candidate ${candidatePoints}", source)
         self.assertIn("const currentPath=path(series.current.points,false)", source)
         self.assertNotIn("policy.predict", source)
 
