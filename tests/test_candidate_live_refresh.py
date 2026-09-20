@@ -10,8 +10,10 @@ class CandidateLiveRefreshContractTests(unittest.TestCase):
         self.assertIn('def live_candidate_snapshots(manager):', text)
         self.assertIn('path == "/api/candidate-live"', text)
         self.assertIn('state_map = dict(manager.engine.state_map)', text)
-        self.assertIn('"parent_desired": row.get("parent_desired") if parent_fresh else None', text)
-        self.assertIn('"candidate_desired": row.get("child_desired") if child_fresh else None', text)
+        self.assertIn('"parent_desired": row.get("parent_desired")', text)
+        self.assertIn('"candidate_desired": row.get("child_desired")', text)
+        self.assertIn('"parent_decision_fresh": parent_fresh', text)
+        self.assertIn('"candidate_decision_fresh": child_fresh', text)
         self.assertIn('"parent_decision_paired": bool(', text)
         self.assertIn('manager.live_snapshots = lambda: live_candidate_snapshots(manager)', text)
 
@@ -27,6 +29,8 @@ class CandidateLiveRefreshContractTests(unittest.TestCase):
         self.assertIn('previous._liveSnapshotTs', text)
         self.assertIn('merged.shadow_current=previous.shadow_current', text)
         self.assertIn('previousDecisionTs>incomingDecisionTs', text)
+        self.assertIn('LAST_DECISION_FIELDS', text)
+        self.assertIn("if((c[key]==null||c[key]==='')&&previous[key]!=null)", text)
 
     def test_current_chart_trace_is_rendered_last_with_outline(self):
         text = (ROOT / "adaptive_ai/src/static/agent_workflow_ui.js").read_text(encoding="utf-8")
