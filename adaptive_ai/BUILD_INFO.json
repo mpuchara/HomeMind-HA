@@ -4,7 +4,7 @@
   "base_version": "0.14.53",
   "base_commit": "9fcdd9e5ac1fcacf87751df3176bb92ecdc5494c",
   "release_status": "release-0.14.54-stable-online-tournament",
-  "tests_passed": 1020,
+  "tests_passed": 1021,
   "profile": "rpi4-low-memory-complete-discovery-manual-agent-selection",
   "manual_agent_training": true,
   "max_concurrent_training_jobs": 1,
