@@ -5,6 +5,10 @@
   let busy=false,liveBusy=false;
   const latestByRef=new Map();
   const DECISION_FIELDS=['parent_desired','candidate_desired','candidate_confidence','shadow_timestamp','target_property'];
+  const LAST_DECISION_FIELDS=[
+    'parent_desired','parent_confidence','parent_shadow_timestamp',
+    'candidate_desired','candidate_confidence','shadow_timestamp','target_property',
+  ];
 
   const refOf=c=>String(c?.generation_id||c?.candidate_id||'');
   const cardRef=card=>String(card?.dataset?.candidateRef||card?.dataset?.generationId||'');
@@ -12,6 +16,7 @@
     .find(el=>cardRef(el)===String(ref));
 
   const ensureMetric=(root,key,label,value)=>{
+    if(!root)return;
     let node=root.querySelector(`[data-pref-metric="${key}"]`);
     if(!node){
       node=document.createElement('div');
@@ -19,8 +24,13 @@
       node.innerHTML='<span></span><b></b>';
       root.appendChild(node);
     }
-    node.querySelector('span').textContent=label;
-    node.querySelector('b').textContent=value;
+    let labelNode=node.querySelector('span'),valueNode=node.querySelector('b');
+    // Other Candidate decorators may replace/prune metric descendants during the same
+    // refresh. Repair the tiny metric shell instead of dereferencing a transient null.
+    if(!labelNode){labelNode=document.createElement('span');node.prepend(labelNode);}
+    if(!valueNode){valueNode=document.createElement('b');node.appendChild(valueNode);}
+    labelNode.textContent=label;
+    valueNode.textContent=value;
   };
 
   const decisionValue=(c,v)=>{
@@ -167,6 +177,12 @@
     if(!ref)return null;
     const previous=latestByRef.get(ref)||{};
     const merged={...previous,...c};
+    // The card is a last-known-decision display. A sparse/status payload may omit a
+    // decision while the generation is still the same; never turn a real observed value
+    // back into "—". Freshness flags still update independently.
+    for(const key of LAST_DECISION_FIELDS){
+      if((c[key]==null||c[key]==='')&&previous[key]!=null)merged[key]=previous[key];
+    }
     if(live){
       merged._liveSnapshotTs=Number(c.live_snapshot_ts||Date.now()/1000);
     }else if(previous._liveSnapshotTs&&Date.now()/1000-previous._liveSnapshotTs<2){
@@ -213,7 +229,7 @@
 
   async function liveLoop(){
     await refreshLive();
-    setTimeout(liveLoop,250);
+    setTimeout(liveLoop,1000);
   }
 
   function hydrateAddedNode(node){
@@ -229,24 +245,19 @@
     return missing;
   }
 
-  async function refresh(){
-    if(busy||document.hidden)return;
-    busy=true;
-    try{
-      const response=await fetch('api/candidates',{cache:'no-store'});
-      if(!response.ok)return;
-      const data=await response.json();
-      const liveRefs=new Set();
-      for(const candidate of data.candidates||[]){
-        const ref=refOf(candidate);
-        if(ref)liveRefs.add(ref);
-        decorate(candidate);
-      }
-      for(const ref of [...latestByRef.keys()])if(!liveRefs.has(ref))latestByRef.delete(ref);
-    }catch(_e){
-    }finally{
-      busy=false;
+  function applyCandidates(items){
+    const liveRefs=new Set();
+    for(const candidate of items||[]){
+      const ref=refOf(candidate);
+      if(ref)liveRefs.add(ref);
+      decorate(candidate);
     }
+    for(const ref of [...latestByRef.keys()])if(!liveRefs.has(ref))latestByRef.delete(ref);
+  }
+
+  function refresh(){
+    if(document.hidden)return;
+    applyCandidates(window.__adaptiveAiCandidates||[]);
   }
 
   ensureStyles();
@@ -263,8 +274,10 @@
       queueMicrotask(()=>{queued=false;refresh();});
     }).observe(root,{childList:true});
   }
+  window.addEventListener('adaptive-ai:candidates',event=>{
+    applyCandidates(event.detail||[]);
+  });
   document.addEventListener('visibilitychange',()=>{if(!document.hidden){refreshLive();refresh();}});
-  setInterval(refresh,1500);
   liveLoop();
   refresh();
 })();

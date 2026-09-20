@@ -5,6 +5,7 @@ import time
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import Mock
 
 from support import agent, state
 from provenance import CONTRACT_VERSION, ProvenanceJournal, UNKNOWN
@@ -48,6 +49,30 @@ class ProvenanceJournalTests(unittest.TestCase):
         self.assertIsNotNone(match)
         self.assertEqual(match['decision_id'], 'decision-1')
         self.assertEqual(match['command_origin'], 'own_command')
+
+    def test_restart_command_match_uses_hydrated_memory_cache_without_sql(self):
+        a = agent()
+        command_id = self.journal.reserve_command(a, 1.0, decision_id='decision-cache')
+        response = [state('light.kitchen', 'on') | {
+            'context': {'id': 'ctx-cache', 'parent_id': None}
+        }]
+        self.journal.dispatch_command(command_id, response=response)
+
+        fresh = ProvenanceJournal(Store(self.path), clock=lambda: self.now)
+        original_conn = fresh.store.conn
+        fresh.store.conn = Mock(
+            side_effect=AssertionError("live command echo matching must not query SQLite")
+        )
+        try:
+            matched = fresh.match_command_state(
+                state('light.kitchen', 'on') | {
+                    'context': {'id': 'ctx-cache', 'parent_id': None}
+                }
+            )
+        finally:
+            fresh.store.conn = original_conn
+        self.assertIsNotNone(matched)
+        self.assertEqual(matched['decision_id'], 'decision-cache')
 
     def test_duplicate_event_and_experience_are_idempotent(self):
         st = state('binary_sensor.pir', 'on') | {
@@ -99,6 +124,32 @@ class ProvenanceJournalTests(unittest.TestCase):
         self.assertEqual(self.journal.decision('known')['action_probability'], .25)
         self.assertEqual(self.journal.decision('known')['contract_version'], CONTRACT_VERSION)
 
+    def test_shadow_decisions_can_be_persisted_as_one_final_status_batch(self):
+        rows = [
+            {
+                "decision_id": f"shadow-{i}",
+                "created_time": 10.0 + i,
+                "agent_id": "a",
+                "model_version": 12,
+                "model_revision": "r1",
+                "schema_version": 12,
+                "reward_version": 1,
+                "feature_manifest": {"features": {"0": float(i)}},
+                "allowed_actions": [0.0, 1.0],
+                "chosen_action": float(i % 2),
+                "model_desired": float(i % 2),
+                "dispatch_status": "SHADOW",
+                "dispatch_reason": "observed only",
+            }
+            for i in range(3)
+        ]
+        self.assertEqual(self.journal.record_decisions_batch(rows), 3)
+        for i in range(3):
+            decision = self.journal.decision(f"shadow-{i}")
+            self.assertEqual(decision["dispatch_status"], "SHADOW")
+            self.assertEqual(decision["dispatch_reason"], "observed only")
+        self.assertEqual(self.journal.record_decisions_batch(rows), 0)
+
     def test_manual_experience_survives_journal_restart(self):
         st = state('light.kitchen', 'off') | {
             'context': {'id': 'manual-ctx', 'parent_id': None, 'user_id': 'human'}
@@ -147,6 +198,54 @@ class ProvenanceRuntimeIntegrationTests(unittest.TestCase):
         f.e.flush_archive()
         f.e.process_agent(f.a, f.e.state_map, {'light.kitchen'})
         return intent
+
+    def test_shadow_provenance_is_deferred_off_the_executor_hot_path(self):
+        f = self.fixture
+        f.store.update_agent(f.a["id"], {"mode": "shadow"})
+        shadow = f.store.get_agent_config(f.a["id"])
+        f.e.agent_configs = {f.a["id"]: dict(shadow)}
+
+        original_single = f.e.provenance.record_decision
+        original_batch = f.e.provenance.record_decisions_batch
+        original_get_agent = f.store.get_agent_config
+        single = Mock(side_effect=AssertionError("Shadow must not synchronously insert provenance"))
+        batch = Mock(return_value=1)
+        f.e.provenance.record_decision = single
+        f.e.provenance.record_decisions_batch = batch
+        f.store.get_agent_config = Mock(
+            side_effect=AssertionError("Shadow intent decoration must not reread agent config")
+        )
+        try:
+            result = f.e.executor.submit(f.intent(), {0: 1.0}, 1)
+            self.assertEqual(result["status"], "SHADOW")
+            single.assert_not_called()
+            snapshot = f.e.provenance_deferred_snapshot()
+            self.assertGreaterEqual(snapshot["queued"], 1)
+            f.store._flush_provenance_decisions(f.a["id"])
+            batch.assert_called()
+            payloads = batch.call_args.args[0]
+            self.assertTrue(payloads)
+            self.assertEqual(payloads[-1]["dispatch_status"], "SHADOW")
+            self.assertEqual(payloads[-1]["agent_id"], f.a["id"])
+        finally:
+            f.store.get_agent_config = original_get_agent
+            f.e.provenance.record_decision = original_single
+            f.e.provenance.record_decisions_batch = original_batch
+
+    def test_process_agent_reuses_in_memory_event_origin_without_select(self):
+        f = self.fixture
+        event_id = "hot-target-event"
+        f.e._provenance_latest_events[f.a["target_entity"]] = (
+            time.time(), event_id, UNKNOWN
+        )
+        original_event = f.e.provenance.event
+        f.e.provenance.event = Mock(
+            side_effect=AssertionError("target-event inference must not reread provenance")
+        )
+        try:
+            f.e.process_agent(f.a, f.e.state_map, {f.a["target_entity"]})
+        finally:
+            f.e.provenance.event = original_event
 
     def test_full_decision_dispatch_ack_outcome_relationship(self):
         f = self.fixture

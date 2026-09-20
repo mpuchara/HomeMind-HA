@@ -42,6 +42,7 @@ function renderHome(status){
   const sourcesOpen=sourcePanel?.open||false, sourceScroll=sourcePanel?.querySelector('.home-source-table')?.scrollTop||0;
   const h=status.home_intelligence||{}, b=status.home_bootstrap||{}, t=status.telemetry||{};
   const inf=t.metrics?.inference||{}, latency=t.metrics?.event_to_intent||{};
+  const drift=status.drift_observer||{}, scheduler=status.inference_scheduler||{}, resync=status.state_resync||{};
   const inferenceP95=inf.recent_p95_ms, eventP95=latency.recent_p95_ms;
   const running=['IMPORTING','TRAINING'].includes(b.state), names=h.area_names||{};
   const paths=(h.top_transitions||[]).slice(0,5);
@@ -49,11 +50,12 @@ function renderHome(status){
     '<div class="home-metrics">'+[
       [num(h.areas),'observed areas'],[num(h.edges),'transitions'],[num(h.updates),'online / bootstrap updates'],
       [num(h.unmapped_sources),'sources without area'],[t.rss_mb==null?'—':num(t.rss_mb,1)+' MB','RSS'],
+      [t.cpu_percent_recent==null?'—':num(t.cpu_percent_recent,1)+'%','CPU · recent'],
       [inferenceP95==null?'—':num(inferenceP95,2)+' ms','inference p95 · last 60 s'],
       [eventP95==null?'—':num(eventP95,2)+' ms','event → intent p95 · last 60 s']
     ].map(([v,label])=>'<div><b>'+v+'</b><span>'+label+'</span></div>').join('')+'</div>'+
     '<div class="home-transitions">'+(paths.length?paths.map(p=>'<span>'+p.path.map(id=>esc(names[id]||id)).join(' → ')+' <b>'+pct(p.probability)+'</b></span>').join(''):'No observed area-to-area transitions yet. Existing mapped presence/activity sensors learn the live map automatically as state changes arrive.')+'</div>'+
-    '<div class="history-meta"><span>Graph half-life '+num(h.half_life_days)+' days</span><span>Policy half-life '+num(status.options?.policy_half_life_days||30)+' days</span><span>Heavy job: '+esc(status.heavy_job||'idle')+'</span><span>Inference count '+num(inf.count)+'</span></div>'+
+    '<div class="history-meta"><span>Graph half-life '+num(h.half_life_days)+' days</span><span>Policy half-life '+num(status.options?.policy_half_life_days||30)+' days</span><span>Heavy job: '+esc(status.heavy_job||'idle')+'</span><span>Inference count '+num(inf.count)+'</span><span>Event/timer passes '+num(scheduler.event_passes||0)+' / '+num(scheduler.timer_passes||0)+'</span><span>Drift observer '+num(drift.runs||0)+' runs · '+num(drift.pending||0)+' pending · max '+num(drift.max_run_ms||0,1)+' ms</span><span>State resync '+num(resync.last_changed_entities||0)+' changed · '+num(resync.last_duration_ms||0,1)+' ms · max '+num(resync.max_duration_ms||0,1)+' ms</span></div>'+
     (running?'<div class="bar history-bar"><i style="width:'+Math.round((b.progress||0)*100)+'%"></i></div><p>'+num(b.rows)+' rows · '+num(b.rows_per_second)+' rows/s · '+esc(duration(b.eta_seconds)||'ETA pending')+'</p>':'')+
     (b.error?'<p role="alert">'+esc(b.error)+'</p><p class="muted">Bootstrap failed; the current live model continues running.</p>':'')+
     homeSources(h,names)+

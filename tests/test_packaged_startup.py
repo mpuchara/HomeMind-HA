@@ -75,11 +75,27 @@ assert 'adaptive-ai-training-queue' in order
 with main.STORE.conn() as db:
     assert db.execute("SELECT name FROM sqlite_master WHERE name='manual_context_feedback'").fetchone()
 assert main.APP_VERSION == engine.APP_VERSION == settings.APP_VERSION
+assert main.ENGINE.inference_enabled.is_set()
+assert main.ENGINE.startup_inference_not_before > 0
+assert main.ENGINE.control_worker_count <= 4
 from pathlib import Path
 assert ('version: "'+main.APP_VERSION+'"') in Path('adaptive_ai/config.yaml').read_text()
 vacuum = {'entity_id':'vacuum.test','state':'docked','attributes':{'supported_features':8192|16}}
 assert executor.target_call('vacuum.test', 'power', 1, vacuum)[1] == 'start'
 server.server_close.assert_called_once()
+''')
+
+    def test_engine_background_inference_gate_starts_closed_and_worker_pool_is_bounded(self):
+        self.run_isolated('''
+from engine import Engine
+engine = Engine()
+try:
+    assert not engine.inference_enabled.is_set()
+    assert engine.startup_inference_not_before == 0.0
+    assert 1 <= engine.control_worker_count <= 4
+finally:
+    engine.control_workers.shutdown(wait=False, cancel_futures=True)
+    engine.poll_worker.shutdown(wait=False, cancel_futures=True)
 ''')
 
     def test_extension_failure_is_reported_by_status_instead_of_killing_http(self):

@@ -193,8 +193,14 @@
       if(seq!==requestSeq||!dialog.open)return;
       data=out;renderLegend();draw();
       const current=(out.series?.current?.points||[]).length,labels=(out.labels||[]).length;
+      const parentPoints=(out.series?.parent_desired?.points||[]).length;
+      const candidatePoints=(out.series?.candidate_desired?.points||[]).length;
+      const livePoints=(out.series?.live_desired?.points||[]).length;
       const childGaps=(out.gaps||[]).length,parentGaps=(out.parent_gaps||[]).length,gaps=childGaps+parentGaps;
-      dialog.querySelector('[data-status]').textContent=`${current} obserwacji · ${labels} Correct points${gaps?` · ${gaps} luk runtime`:''}. Direct parent comparison; policy replay wyłączony.`;
+      const observed=out.chart_mode==='candidate_vs_parent'
+        ? `Current ${current} · Parent ${parentPoints} · Candidate ${candidatePoints}`
+        : `Current ${current} · Live Desired ${livePoints}`;
+      dialog.querySelector('[data-status]').textContent=`${observed} · ${labels} Correct points${gaps?` · ${gaps} luk runtime`:''}. Direct parent comparison; policy replay wyłączony.`;
       dialog.querySelector('[data-undo]').disabled=!labels;
     }catch(e){if(seq===requestSeq)error(e);}
   }
@@ -256,13 +262,13 @@
     const hi=Math.max(Number(subject.max_value),...(values.length?values:[Number(subject.max_value)]));
     const span=Math.max(1e-6,hi-lo),start=Number(data.start??range.start),end=Number(data.end??range.end),width=Math.max(1,end-start),stale=Number(data.stale_after_seconds||95);
     const x=t=>50+930*(Number(t)-start)/width,y=v=>300-255*(Number(v)-lo)/span;
-    const path=points=>{let d='',active=false,last=0;for(const p of (points||[]).slice().sort((a,b)=>Number(a.ts)-Number(b.ts))){const v=p.value,ts=Number(p.ts);if(v==null||!Number.isFinite(Number(v))||(last&&ts-last>stale))active=false;if(v!=null&&Number.isFinite(Number(v))){d+=active?` H${x(ts)} V${y(v)}`:` M${x(ts)},${y(v)}`;active=true;last=ts;}}return d;};
+    const path=(points,expire=true)=>{let d='',active=false,last=0;for(const p of (points||[]).slice().sort((a,b)=>Number(a.ts)-Number(b.ts))){const v=p.value,ts=Number(p.ts),valid=v!=null&&Number.isFinite(Number(v));if(!valid){active=false;continue;}if(expire&&active&&last&&ts-last>stale){const cutoff=Math.min(end,last+stale);if(cutoff>last)d+=` H${x(cutoff)}`;active=false;}d+=active?` H${x(ts)} V${y(v)}`:` M${x(ts)},${y(v)}`;active=true;last=ts;}if(expire&&active&&last){const cutoff=Math.min(end,last+stale);if(cutoff>last)d+=` H${x(cutoff)}`;}return d;};
     const rendered=[];
     if(series.live_desired)rendered.push(`<path data-series="live_desired" d="${path(series.live_desired.points)}" fill="none" stroke="${COLORS.candidate}" stroke-width="2" stroke-dasharray="8 6" stroke-linecap="round" opacity="0.95"/>`);
-    if(series.parent_desired)rendered.push(`<path data-series="parent_desired" d="${path(series.parent_desired.points)}" fill="none" stroke="${COLORS.parent}" stroke-width="2" stroke-dasharray="8 6" stroke-linecap="round" opacity="0.95"/>`);
-    if(series.candidate_desired)rendered.push(`<path data-series="candidate_desired" d="${path(series.candidate_desired.points)}" fill="none" stroke="${COLORS.candidate}" stroke-width="2" stroke-dasharray="8 6" stroke-linecap="round" opacity="0.95"/>`);
+    if(series.parent_desired)rendered.push(`<path data-series="parent_desired" d="${path(series.parent_desired.points)}" fill="none" stroke="${COLORS.parent}" stroke-width="3" stroke-dasharray="3 5" stroke-linecap="round" opacity="0.9"/>`);
+    if(series.candidate_desired)rendered.push(`<path data-series="candidate_desired" d="${path(series.candidate_desired.points)}" fill="none" stroke="${COLORS.candidate}" stroke-width="2" stroke-dasharray="9 5" stroke-dashoffset="2" stroke-linecap="round" opacity="0.98"/>`);
     if(series.current){
-      const currentPath=path(series.current.points);
+      const currentPath=path(series.current.points,false);
       rendered.push(`<path data-series="current-outline" d="${currentPath}" fill="none" stroke="#04111f" stroke-width="6" stroke-linejoin="round" stroke-linecap="round" opacity="0.92"/>`);
       rendered.push(`<path data-series="current" d="${currentPath}" fill="none" stroke="${COLORS.current}" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>`);
     }
@@ -283,7 +289,7 @@
 
   function liveLearningState(a){
     const rt=a.runtime||{};
-    const training=rt.training_state||a.training_state||'paused';
+    const training=a.training_state||rt.training_state||'paused';
     const paused=['paused','waiting','needs_retrain'].includes(training);
     const indexing=training==='training';
     const neverTrained=training==='waiting'||training==='needs_retrain'||(paused&&a.benchmark_score==null&&!a.training_cursor_ts);
@@ -318,7 +324,9 @@
     }
 
     const resume=state.paused?'<button class="ghost resume" data-wf="resume">Resume training</button>':'';
-    actions.innerHTML=`${resume}<button class="ghost" data-wf="auto">Autonomous</button><button class="primary" data-wf="correct">Correct</button><button class="ghost" data-wf="explore" disabled title="Explore będzie aktywowane przez warstwę Explore">Explore</button><button class="ghost" data-wf="change">Change decision</button><button class="ghost" data-wf="settings">Settings</button>`;
+    const shadow=a.mode==='paused'?'<button class="primary" data-wf="shadow">Start Shadow</button>':a.mode==='shadow'?'<button class="ghost" data-wf="shadow">Pause Shadow</button>':'';
+    actions.innerHTML=`${shadow}${resume}<button class="ghost" data-wf="auto">Autonomous</button><button class="primary" data-wf="correct">Correct</button><button class="ghost" data-wf="explore" disabled title="Explore będzie aktywowane przez warstwę Explore">Explore</button><button class="ghost" data-wf="change">Change decision</button><button class="ghost" data-wf="settings">Settings</button>`;
+    if(actions.querySelector('[data-wf=shadow]'))actions.querySelector('[data-wf=shadow]').onclick=()=>window.setMode?.(a.id,a.mode==='shadow'?'paused':'shadow');
     if(state.paused)actions.querySelector('[data-wf=resume]').onclick=()=>window.resumeLearning?.(a.id);
     actions.querySelector('[data-wf=auto]').onclick=e=>workflowAutonomous(a.id,e.currentTarget);
     actions.querySelector('[data-wf=correct]').onclick=()=>openWorkflowCorrect(a.id);

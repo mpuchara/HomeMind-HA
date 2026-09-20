@@ -37,6 +37,14 @@
   };
   const activeCandidateFor=id=>document.querySelector(`.candidate-agent[data-candidate-parent="${CSS.escape(String(id))}"]`);
   const setText=(node,value)=>{if(node&&node.textContent!==value)node.textContent=value;};
+  const TRAINING_REASON_LABELS={
+    autonomous_continuation:'Autonomous Candidate training',
+    teach_rl:'Candidate correction training',
+    manual_rebuild:'Candidate rebuild',
+    training:'Agent training',
+    resume_training:'Agent training',
+    full_rebuild:'Agent rebuild',
+  };
 
   async function autonomous(ref,button){
     const old=button?.textContent||'Autonomous learn';
@@ -74,9 +82,28 @@
   }
 
   function decorate(){
+    const agents=(()=>{try{return Array.isArray(lastAgents)?lastAgents:[];}catch(_){return [];}})();
     document.querySelectorAll('#agents > .agent:not(.candidate-agent)').forEach(card=>{
       const id=String(card.dataset.agentId||'');if(!id)return;
       const actions=card.querySelector('.actions');if(!actions)return;
+      const agent=agents.find(x=>String(x.id)===id);
+      if(agent){
+        const training=String(agent.training_state||agent.runtime?.training_state||'paused');
+        const neverTrained=training==='waiting'||training==='needs_retrain'||(training==='paused'&&agent.benchmark_score==null&&!agent.training_cursor_ts);
+        const settings=actions.querySelector('[data-wf="settings"]')||null;
+        if(!neverTrained&&training!=='training'&&agent.mode==='paused'&&!actions.querySelector('[data-wf="shadow"]')){
+          const shadow=document.createElement('button');
+          shadow.type='button';shadow.className='primary';shadow.dataset.wf='shadow';shadow.textContent='Start Shadow';
+          shadow.onclick=()=>window.setMode?.(id,'shadow');
+          actions.insertBefore(shadow,actions.firstChild);
+        }
+        if(training==='paused'&&!neverTrained&&!actions.querySelector('[data-wf="resume"], .resume')){
+          const resume=document.createElement('button');
+          resume.type='button';resume.className='ghost resume';resume.dataset.wf='resume';resume.textContent='Resume training';
+          resume.onclick=()=>window.resumeLearning?.(id);
+          actions.insertBefore(resume,settings);
+        }
+      }
       const auto=actions.querySelector('[data-wf="auto"]');
       const candidate=activeCandidateFor(id);
       if(auto){
@@ -122,16 +149,7 @@
         const panel=document.querySelector('#taskPanel');
         if(panel){
           const reason=String(active.reason||'training');
-          const labels={
-            autonomous_continuation:'Autonomous Candidate training',
-            teach_rl:'Candidate correction training',
-            manual_rebuild:'Candidate rebuild',
-            training:'Agent training',
-            resume_training:'Agent training',
-            full_rebuild:'Agent rebuild',
-          };
-          const title=labels[reason]||'Background training';
-          const elapsed=active.started_at?Math.max(0,Date.now()/1000-Number(active.started_at)):0;
+          const reasonLabel=TRAINING_REASON_LABELS[reason]||'Background training';
           const lp=status.low_power_runtime||{};
           const duty=Math.round(Number(lp.training_cpu_duty_cycle||0)*100);
           const slice=Math.round(Number(lp.max_continuous_work_ms||0));
@@ -139,8 +157,9 @@
           const overruns=Number(lp.slice_overruns||0);
           const replayBatch=Math.round(Number(lp.experience_batch_rows||0));
           const budget=duty?`CPU budget ${duty}%${slice?` · max slice ${slice} ms`:''}${replayBatch?` · replay batch ${replayBatch}`:''}`:'Pi-safe CPU budget';
-          const observedText=observed?` Longest measured slice ${observed} ms${overruns?` · ${overruns} overrun${overruns===1?'':'s'}`:''}.`:'';
-          panel.innerHTML=`<div class="history-head"><div><b>${esc(title)}</b><span>${esc(active.name||active.agent_id||'agent')} · ${esc(reason)}</span></div><div class="history-percent"><strong>ACTIVE</strong><small>${Math.round(elapsed)} s</small></div></div><div class="history-timing"><b>${esc(budget)}</b><span>Training yields between bounded work slices so Ingress and realtime control keep CPU priority.${esc(observedText)}</span></div>`;
+          const observedText=observed?` · longest slice ${observed} ms${overruns?` · ${overruns} overrun${overruns===1?'':'s'}`:''}`:'';
+          const timing=panel.querySelector('.history-timing span');
+          if(timing)timing.textContent=`${timing.textContent||''} ${reasonLabel} · ${budget}${observedText}. Training yields between bounded work slices so Ingress and realtime control keep CPU priority.`.trim();
         }
       }
       return result;

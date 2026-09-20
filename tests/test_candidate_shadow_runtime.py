@@ -1,15 +1,17 @@
 import tempfile
 import time
+import threading
 import unittest
 from contextlib import contextmanager
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 import storage
 from agent_candidates import AgentCandidateManager, ensure_tables, install_store_overlay
 from agent_candidate_conservative_correct import install as install_conservative_correct
 from agent_candidate_lineage import install as install_lineage
+import agent_candidate_shadow_runtime as shadow_runtime_module
 from agent_candidate_shadow_runtime import install as install_shadow_runtime
 
 
@@ -126,7 +128,27 @@ class CandidateShadowRuntimeTests(unittest.TestCase):
             process_agent=lambda *args, **kwargs: None,
             own_command_echo=lambda *args, **kwargs: False,
             wake_event=SimpleNamespace(set=lambda: None),
+            lock=threading.RLock(), state_revision=0, state_map=self._states(),
+            all_agent_configs={str(self.root["id"]): dict(self.root)},
+            _inference_tls=threading.local(),
+            context=SimpleNamespace(
+                area_for=lambda _entity: None,
+                home=SimpleNamespace(area_sources={}),
+            ),
         )
+        def on_state_changed(data):
+            entity_id = data.get("entity_id")
+            if not entity_id:
+                return None
+            with self.engine.lock:
+                self.engine.state_revision += 1
+                new_state = data.get("new_state")
+                if new_state is None:
+                    self.engine.state_map.pop(entity_id, None)
+                else:
+                    self.engine.state_map[entity_id] = new_state
+            return None
+        self.engine.on_state_changed = on_state_changed
         self.engine.policy = lambda agent: DummyPolicy(self.store, agent)
         self.core = SimpleNamespace(
             STORE=self.store, ENGINE=self.engine, Handler=FakeHandler,
@@ -177,6 +199,38 @@ class CandidateShadowRuntimeTests(unittest.TestCase):
         self.engine.runtime[self.root["id"]] = {"last_prediction": 0.0, "last_confidence": .82}
         return self.manager.after_live_process(self.root, states)
 
+    def test_no_candidate_means_no_candidate_shadow_bundle_or_decision_write(self):
+        bundle = self._run_shadow()
+        self.assertIsNone(bundle)
+        with self.store.conn() as c:
+            count = c.execute("SELECT COUNT(*) FROM candidate_generation_decisions").fetchone()[0]
+        self.assertEqual(count, 0)
+
+    def test_active_candidate_parent_index_tracks_create_and_discard(self):
+        self.assertFalse(self.manager.candidate_hot_active(self.root["id"]))
+        queued = self.manager.enqueue(self.root["id"], "teach")
+        self.assertIsNotNone(queued.get("candidate_id"))
+        self.assertTrue(self.manager.candidate_hot_active(self.root["id"]))
+        self.manager.discard(self.root["id"])
+        self.assertFalse(self.manager.candidate_hot_active(self.root["id"]))
+
+    def test_no_candidate_generation_cache_is_event_invalidated_not_polled(self):
+        original = shadow_runtime_module._shadow_generations
+        calls = []
+        def counted(store, root_id):
+            calls.append(str(root_id))
+            return original(store, root_id)
+        shadow_runtime_module._shadow_generations = counted
+        try:
+            self.assertIsNone(self._run_shadow())
+            self.assertIsNone(self._run_shadow())
+            self.assertEqual(calls, [str(self.root["id"])])
+            self.manager.invalidate_candidate_shadow_cache()
+            self.assertIsNone(self._run_shadow())
+            self.assertEqual(calls, [str(self.root["id"]), str(self.root["id"])])
+        finally:
+            shadow_runtime_module._shadow_generations = original
+
     def test_candidate_shadow_inference_runs_after_training_and_exposes_card_values(self):
         status, generation = self._g1(prediction=1.0, confidence=.93)
         bundle = self._run_shadow()
@@ -189,6 +243,189 @@ class CandidateShadowRuntimeTests(unittest.TestCase):
         self.assertAlmostEqual(card["candidate_confidence"], .93)
         self.assertEqual(card["shadow_model_revision"], "g1-rev")
         self.assertEqual(card["shadow_schema_revision"], "10")
+
+    def test_candidate_live_tiles_are_served_from_ram_after_inference(self):
+        _, generation = self._g1(prediction=1.0, confidence=.93)
+        bundle = self._run_shadow()
+        self.assertIsNotNone(bundle)
+        snapshots = self.manager.candidate_live_runtime_snapshots()
+        row = next(x for x in snapshots if x["generation_id"] == generation["generation_id"])
+        self.assertEqual(row["read_source"], "ram_candidate_runtime")
+        self.assertEqual(row["shadow_current"], 0.0)
+        self.assertEqual(row["parent_desired"], 0.0)
+        self.assertEqual(row["candidate_desired"], 1.0)
+        self.assertAlmostEqual(row["candidate_confidence"], .93)
+
+        # Once the generation/root caches are warm, the 1 s Candidate tile path is RAM-only.
+        original_conn = self.store.conn
+        self.store.conn = lambda: (_ for _ in ()).throw(
+            AssertionError("Candidate live tile refresh touched SQLite")
+        )
+        try:
+            hot = self.manager.candidate_live_runtime_snapshots()
+            self.assertEqual(hot[0]["read_source"], "ram_candidate_runtime")
+        finally:
+            self.store.conn = original_conn
+
+    def test_card_keeps_last_parent_and_candidate_decisions_after_freshness_expires(self):
+        _, generation = self._g1(prediction=1.0, confidence=.93)
+        bundle = self._run_shadow()
+        self.assertIsNotNone(bundle)
+        future = float(bundle["ts"]) + shadow_runtime_module.DECISION_STALE_SECONDS + 10.0
+        with patch.object(shadow_runtime_module.time, "time", return_value=future):
+            snapshots = self.manager.candidate_live_runtime_snapshots()
+            row = next(x for x in snapshots if x["generation_id"] == generation["generation_id"])
+            self.assertEqual(row["parent_desired"], 0.0)
+            self.assertEqual(row["candidate_desired"], 1.0)
+            self.assertAlmostEqual(row["candidate_confidence"], .93)
+            self.assertFalse(row["parent_decision_fresh"])
+            self.assertFalse(row["candidate_decision_fresh"])
+
+            card = self.manager.status(self.root["id"])
+            self.assertFalse(card["shadow_active"])
+            self.assertFalse(card["candidate_decision_fresh"])
+            self.assertEqual(card["candidate_desired"], 1.0)
+            self.assertAlmostEqual(card["candidate_confidence"], .93)
+
+    def test_passive_candidate_refresh_does_not_blank_fresh_parent_card_decision(self):
+        _, generation = self._g1(prediction=1.0, confidence=.93)
+        shared = self._run_shadow()
+        self.assertIsNotNone(shared)
+
+        before = self.manager.candidate_live_runtime_snapshots()
+        row = next(x for x in before if x["generation_id"] == generation["generation_id"])
+        self.assertEqual(row["parent_desired"], 0.0)
+        self.assertEqual(row["candidate_desired"], 1.0)
+        self.assertTrue(row["parent_decision_paired"])
+
+        # Candidate fallback runs independently on a later HA revision. This refreshes
+        # Candidate Desired, but must not make the still-fresh Parent Desired disappear.
+        new_state = {
+            "entity_id": "binary_sensor.presence", "state": "on", "attributes": {},
+            "last_updated": "2026-09-20T12:00:00+00:00",
+        }
+        self.engine.on_state_changed({
+            "entity_id": "binary_sensor.presence", "new_state": new_state
+        })
+        observed = self.manager.drain_candidate_shadow_events(force=True, max_roots=8)
+        self.assertEqual(observed, 1)
+
+        after = self.manager.candidate_live_runtime_snapshots()
+        row = next(x for x in after if x["generation_id"] == generation["generation_id"])
+        self.assertEqual(row["parent_desired"], 0.0)
+        self.assertEqual(row["candidate_desired"], 1.0)
+        self.assertFalse(row["parent_decision_paired"])
+        self.assertIsNotNone(row["parent_shadow_timestamp"])
+        self.executor.service.assert_not_called()
+        self.executor.release_control.assert_not_called()
+
+    def test_passive_state_changed_observer_keeps_candidate_shadow_alive_when_parent_is_paused(self):
+        _, generation = self._g1(prediction=1.0, confidence=.93)
+        # Root remains mode=paused, so ordinary live inference is intentionally not a
+        # prerequisite for persistent Candidate Shadow observation.
+        self.store.update_agent(self.root["id"], {"mode": "paused"})
+        root = self.store.get_agent_config(self.root["id"])
+        self.assertEqual(root.get("mode"), "paused")
+
+        new_state = {
+            "entity_id": "light.shadow", "state": "on", "attributes": {},
+            "context": {}, "last_updated": "2026-09-19T20:00:00+00:00",
+        }
+        self.engine.on_state_changed({"entity_id": "light.shadow", "new_state": new_state})
+        observed = self.manager.drain_candidate_shadow_events(force=True, max_roots=8)
+        self.assertEqual(observed, 1)
+
+        with self.store.conn() as db:
+            child = dict(db.execute(
+                """SELECT * FROM candidate_generation_decisions
+                   WHERE generation_id=? ORDER BY ts DESC LIMIT 1""",
+                (generation["generation_id"],),
+            ).fetchone())
+            parent_count = db.execute(
+                """SELECT COUNT(*) FROM candidate_generation_decisions
+                   WHERE event_id=? AND generation_id=?""",
+                (child["event_id"], f"root:{self.root['id']}"),
+            ).fetchone()[0]
+        self.assertTrue(str(child["event_id"]).startswith("candidate-passive:"))
+        self.assertEqual(child["current"], 1.0)
+        self.assertEqual(child["desired"], 1.0)
+        self.assertEqual(parent_count, 0)
+        card = self.manager.status(self.root["id"])
+        self.assertTrue(card["shadow_active"])
+        self.assertEqual(card["candidate_desired"], 1.0)
+        self.executor.service.assert_not_called()
+        self.executor.release_control.assert_not_called()
+
+    def test_passive_heartbeat_reobserves_same_revision_after_30_seconds(self):
+        _, generation = self._g1(prediction=1.0, confidence=.93)
+        self._run_shadow()
+        revision = self.engine.state_revision
+        with self.store.conn() as db:
+            before = db.execute(
+                "SELECT COUNT(*) FROM candidate_generation_decisions WHERE generation_id=?",
+                (generation["generation_id"],),
+            ).fetchone()[0]
+
+        # A quiet home keeps the same state_revision. The 30 s heartbeat must still run
+        # Candidate inference again; revision dedupe is only for duplicate state_changed.
+        base = shadow_runtime_module.time.monotonic()
+        with patch.object(
+            shadow_runtime_module.time, "monotonic",
+            return_value=base + shadow_runtime_module.DECISION_HEARTBEAT_SECONDS + 1.0,
+        ):
+            observed = self.manager.drain_candidate_shadow_events(max_roots=8)
+            immediate = self.manager.drain_candidate_shadow_events(max_roots=8)
+
+        self.assertEqual(observed, 1)
+        self.assertEqual(immediate, 0)
+        self.assertEqual(self.engine.state_revision, revision)
+        with self.store.conn() as db:
+            rows = [dict(row) for row in db.execute(
+                """SELECT * FROM candidate_generation_decisions
+                   WHERE generation_id=? ORDER BY ts""",
+                (generation["generation_id"],),
+            ).fetchall()]
+        self.assertEqual(len(rows), before + 1)
+        self.assertTrue(str(rows[-1]["event_id"]).startswith("candidate-passive:"))
+        self.executor.service.assert_not_called()
+        self.executor.release_control.assert_not_called()
+
+    def test_gen3_passive_events_route_through_live_root(self):
+        g1_status, g1 = self._g1(prediction=0.0, confidence=.8)
+        g2 = self.manager.spawn_child(g1["generation_id"], "candidate_correct")
+        g2_model = self.store.get_model(g2["agent_id"])
+        g2_model["prediction"] = 1.0
+        g2_model["confidence"] = .9
+        g2_model["model_revision"] = "g2-rev"
+        self.store.save_model(g2["agent_id"], g2_model)
+        self.engine.models.pop(g2["agent_id"], None)
+        self._mark_trained(g1_status["candidate_id"], g2["agent_id"], g2["generation_id"])
+
+        g3 = self.manager.spawn_child(g2["generation_id"], "candidate_correct")
+        g3_model = self.store.get_model(g3["agent_id"])
+        g3_model["prediction"] = 1.0
+        g3_model["confidence"] = .95
+        g3_model["model_revision"] = "g3-rev"
+        self.store.save_model(g3["agent_id"], g3_model)
+        self.engine.models.pop(g3["agent_id"], None)
+        self._mark_trained(g2["agent_id"], g3["agent_id"], g3["generation_id"])
+        self.manager.invalidate_candidate_shadow_cache()
+
+        self.assertTrue(self.manager.candidate_hot_active(self.root["id"]))
+        self.assertFalse(self.manager.candidate_hot_active(g2["agent_id"]))
+
+        new_state = {
+            "entity_id": "light.shadow", "state": "on", "attributes": {},
+            "context": {}, "last_updated": "2026-09-20T09:00:00+00:00",
+        }
+        self.engine.on_state_changed({"entity_id": "light.shadow", "new_state": new_state})
+        observed = self.manager.drain_candidate_shadow_events(force=True, max_roots=8)
+        self.assertEqual(observed, 1)
+        hot = self.manager.candidate_latest_runtime(g3["generation_id"])
+        self.assertIsNotNone(hot)
+        self.assertEqual(hot["current"], 1.0)
+        self.assertEqual(hot["desired"], 1.0)
+        self.executor.service.assert_not_called()
 
     def test_candidate_shadow_never_dispatches_home_assistant_service(self):
         self._g1(prediction=1.0)
@@ -259,7 +496,14 @@ class CandidateShadowRuntimeTests(unittest.TestCase):
 
         # The one future ON transition is evaluated against both predictions from the same
         # stored prediction event. Root G0 predicted OFF, G1 predicted ON.
-        self.manager.before_live_process(self.root, self._states(light="on"))
+        original_rebuild = shadow_runtime_module._rebuild_summary
+        shadow_runtime_module._rebuild_summary = lambda *a, **k: (_ for _ in ()).throw(
+            AssertionError("live paired outcomes must update summary incrementally")
+        )
+        try:
+            self.manager.before_live_process(self.root, self._states(light="on"))
+        finally:
+            shadow_runtime_module._rebuild_summary = original_rebuild
         comparison = self.manager.generation_comparison(g1["generation_id"])
         self.assertEqual(comparison["pairs"], 1)
         self.assertEqual(comparison["summary"]["child_wins"], 1)

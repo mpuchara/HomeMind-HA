@@ -20,6 +20,8 @@ class AgentLiveCardRefreshTests(unittest.TestCase):
         engine = SimpleNamespace(
             lock=threading.RLock(),
             state_map={'light.kitchen': state('light.kitchen', 'on')},
+            all_agent_configs={'live-a': configured},
+            _refresh_agent_index=lambda: None,
             runtime={
                 'live-a': {
                     'last_prediction': 0.0,
@@ -57,6 +59,8 @@ class AgentLiveCardRefreshTests(unittest.TestCase):
             state_map={
                 'select.mode': state('select.mode', 'eco', options=['off', 'eco', 'boost'])
             },
+            all_agent_configs={'select-a': configured},
+            _refresh_agent_index=lambda: None,
             runtime={'select-a': {'last_prediction': 2.0, 'last_confidence': 0.91}},
         )
         core = SimpleNamespace(STORE=_Store([configured]), ENGINE=engine)

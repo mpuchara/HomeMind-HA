@@ -80,7 +80,7 @@ Status i diagnostyka korzystają z cursorów, sufficient statistics i bounded ba
 
 `tools/benchmark_product_runtime.py` definiuje deterministyczny świat z ukrytą prawdziwą obecnością oraz ukrytą potrzebą światła, osobnymi od obserwacji. Oficjalny executable to `tools/run_product_runtime_benchmark.py`: przed generowaniem train/validation instaluje ten sam finalny `RuntimeCompositionRoot`, którego używa shipped `trial_queue_main.py`, a każdy seed uruchamia w świeżym procesie. Dzięki temu Observation Contract, preference/episode/provenance, Tournament, Candidate, TrialKnowledge, confidence/drift, DeviceAgent, promotion validation i Stage17 performance composition są takie jak w produkcyjnym rootcie, bez przenoszenia globalnego stanu installerów między syntetycznymi domami.
 
-Sensory mają opóźnienia, noise, missingness i różne reprezentacje; akcja lampy wpływa na obserwowany lux. W scenariuszu `sensor_moved` ten sam `entity_id` zmienia w future test przypisanie obszaru w Entity Registry i nowe mapowanie jest podawane do ocenianego runtime, zamiast jedynie zmieniać dane sensora. `manual_change` emituje jawne zdarzenie targetu z `context.user_id`; dla światła produkcyjny timing zachowuje domyślny manual hold, a `fast_runtime` skraca wyłącznie timing akcji/ACK/settling i nie osłabia priorytetu ręcznej zmiany. Syntetyczny efektywny target nie może zostać nadpisany przez Shadow proxy podczas aktywnego hold. Benchmark-only clock bridge zapewnia wspólny event-time dla `Engine` i `Executor`, aby syntetyczny historyczny timestamp nie wygaszał intentu względem zegara runnera. Nie zmienia to produkcyjnego TTL ani progów.
+Sensory mają opóźnienia, noise, missingness i różne reprezentacje; akcja lampy wpływa na obserwowany lux. W scenariuszu `sensor_moved` ten sam `entity_id` zmienia w future test przypisanie obszaru w Entity Registry i nowe mapowanie jest podawane do ocenianego runtime, zamiast jedynie zmieniać dane sensora. `manual_change` emituje jawne zdarzenie targetu z `context.user_id`; dla światła produkcyjny timing zachowuje domyślny manual hold, a `fast_runtime` skraca wyłącznie timing akcji/ACK/settling i nie osłabia priorytetu ręcznej zmiany. Dla `light.power` dodatkowo obowiązuje asymetryczna stabilizacja: ON pozostaje natychmiastowe, natomiast wyłącznie statystyczny `historical_policy_bootstrap` OFF z już włączonej lampy musi utrzymać się przez 6 s. Ręczny OFF, scoped instruction, explicit preference i experiment omijają ten filtr. Observation Contract v2 usuwa także own-action lux leakage i centruje nominalne metadane zdrowia transportu; stare zapisane schematy bez markera pozostają kontraktem v1 i nie są reinterpretowane. Syntetyczny efektywny target nie może zostać nadpisany przez Shadow proxy podczas aktywnego hold. Benchmark-only clock bridge zapewnia wspólny event-time dla `Engine` i `Executor`, aby syntetyczny historyczny timestamp nie wygaszał intentu względem zegara runnera. Nie zmienia to produkcyjnego TTL ani progów.
 
 Benchmark rozdziela:
 
@@ -95,3 +95,61 @@ Porównywane są: stała automatyzacja, bieżący produkcyjny runtime w Shadow, 
 Benchmark **nie** obniża kwalifikacji, nie wstawia gotowego `benchmark_score` i nie promuje backendu. Niespełnione kryteria są prawidłowym wynikiem. Wynik syntetyczny/CI nie zastępuje fizycznego M&V. CI zapisuje pełny raport jako artefakt `product-benchmark-f24-py311/product-benchmark-f24.json`, aby lista kryteriów i przedziały niepewności były audytowalne poza logiem joba. Zwięzły raport porównawczy z bieżącego kontraktu v2 jest utrzymywany w `BENCHMARK_PRODUCT_F24.md`.
 
 CI dodatkowo uruchamia dokładny source entrypoint oraz obraz i sprawdza, że PID 1 obrazu startuje przez `/app/run.sh`, który kończy w `trial_queue_main.py`. Dzięki temu benchmark jakości i test uruchomienia dotyczą tego samego stosu kompozycji.
+
+### Startup inference QoS (0.14.30)
+
+HTTP/Ingress binds before runtime initialization. The background Engine keeps inference gated while the runtime composition, realtime stream, history manager and control reconciliation are being assembled. After `startup.ready`, proactive inference receives a 3 s grace so the initial UI/static/status reads can complete first. The initial REST snapshot warms state/context but is not treated as a realtime dirty burst. Device-control inference concurrency is capped at `min(4, os.cpu_count())`; realtime HA changes observed during the gate remain queued as dirty context and are processed after the gate opens. This scheduling contract does not change policy thresholds, model data, ActionIntent semantics or Executor ownership.
+
+### Event-driven inference scheduler (0.14.31)
+
+The engine's 1 s loop is a lightweight timer wheel, not a global inference cadence. HA state changes trigger dependency-filtered inference immediately. Every completed inference records its next in-memory deadline: 10 s idle heartbeat for fast targets, 30 s for slower targets, or an earlier exact lifecycle deadline such as fast-light OFF confirmation, ACK/outcome observation, retry or manual-hold expiry. During manual hold the ordinary heartbeat is suppressed. The event dependency set is target + persisted/active policy inputs + explicit configured inputs + RoomBelief sources in the target area + active experiment watches; global `context.admitted` is deliberately excluded so a presence event in one room cannot wake every agent. Candidate Shadow remains attached to root inference, so it automatically inherits the same event-driven reduction. Historical/Candidate rebuilds remain serialized through TrainingQueue and the cooperative training CPU budget.
+
+### Post-Recorder discovery QoS (0.14.32)
+
+Automatic target discovery is maintenance, not a reason to monopolize the interpreter. After Recorder target-history chunks finish, the runtime no longer calls full-table `archive_stats()` on the critical path and no longer runs `usage_for()` independently for every target/property. Discovery computes the same first-sample-plus->1e-6-transition semantics through one bounded multi-entity `archive_iter` stream. This lets the existing Raspberry-Pi background archive throttle measure downstream Python work across the whole pass instead of resetting for many short iterators. Existing-agent reads on quiet startup/discovery are config-only. WebSocket keepalive timeouts are treated as starvation diagnostics; transport timeouts are not increased to conceal CPU/GIL pressure.
+
+### Operational-first steady state (0.14.33)
+
+The normal steady-state contract is saved policies + realtime HA events + ActionIntent/Executor. Recorder backfill, automatic target discovery and historical rebuilds are maintenance operations, not implicit background duties of every process start. HistoryManager starts in a local-only ready state and remains idle until an explicit discovery request. `POST /api/discovery/rescan` schedules the existing discovery pipeline on a background worker and returns immediately. Periodic UI reads use config-only agent rows plus hot in-memory runtime and do not call aggregate history readers. This recovery boundary preserves all persisted evidence and model lineage while removing heavy work from the availability path. Physical dispatch semantics are unchanged: only Executor owns HA service calls; Shadow/Candidate remain non-controlling.
+
+
+### Agent hot path (0.14.34)
+
+Realtime inference is dependency-indexed and RAM-first. A coalesced HA event pass takes one immutable state/revision snapshot and routes only to affected agents; runtime extensions may broaden eligibility but may not replace the core scheduler. Common Shadow inference avoids durable agent-config validation, while Control still reloads and validates durable configuration at the physical dispatch boundary.
+
+Observation-only persistence is explicitly outside `event -> intent`: Shadow provenance, feature observations and evidence-window maintenance use bounded deferred queues and batch SQLite transactions. Active command provenance is hydrated once at startup and matched from memory. Candidate generation discovery, including the empty-Candidate state, is invalidation-driven. Preference facts use in-memory revision invalidation. Inactive Teach rebenchmark performs no durable config read.
+
+The hot status path exposes recent telemetry plus deferred-journal backlog without invoking full Engine.status/history aggregates. These changes preserve model/reward/qualification semantics and are intended to stop latency from increasing simply because more agents exist or because the process has been alive longer.
+
+
+### microSD-aware RAM-first persistence (0.14.35)
+
+Raspberry Pi installations commonly run the add-on database from microSD, where many tiny synchronous transactions are disproportionately expensive. Transient operational state is therefore RAM-first and bounded. SQLite remains the durable source for models, configuration, explicit feedback, Control/command safety state and replay history, but ordinary realtime work no longer performs avoidable one-row reads/writes.
+
+- SQLite temporary work uses `temp_store=MEMORY`, a ~16 MiB page cache and up to 64 MiB mmap when supported.
+- Current diagnostic events are served from a bounded RAM ring and persisted in coarse batches. `/api/events` warms once at startup and does not poll SQLite afterwards.
+- Current HA event provenance is classified, deduplicated and marked processed in RAM; a background writer persists batches. Historical replay explicitly flushes this buffer before durable joins.
+- Feature observations/evidence windows coalesce for up to 2 seconds and persist in larger batches.
+- Decision history and live entity archive use bounded 5-second/row-count batching rather than a transaction per engine tick.
+- Agent configuration/routing is revision-invalidated in RAM, including the valid zero-agent case. Supported direct agent mutations bump the revision; the full-table safety refresh is only a 10-minute fallback for unsupported external DB edits.
+- `/api/status` exposes RAM persistence backlogs so a Raspberry Pi soak test can detect a writer that falls behind instead of hiding growing queues.
+
+These changes do not move physical safety state to volatile memory. Control still performs fresh durable configuration validation before dispatch, and ActionIntent -> Executor remains the sole physical command boundary.
+
+
+### Raspberry Pi UI/Candidate restart regression guard (0.14.36)
+
+The operational agent cache is split into two explicit views. `all_agent_configs` contains every configured agent for UI/lifecycle reporting, including PAUSED, WAITING and NEEDS_RETRAIN states. `agent_configs` remains the smaller inference-eligible routing set used by the event scheduler. This prevents performance optimization from making non-running agents disappear from the product.
+
+Candidate card/status reads are config-only. Rendering a Candidate, confidence gates or promotion-validation metadata must not execute `COUNT/AVG` scans over `rl_feedback` or `historical_experiences`, and `list_status()` evaluates each Candidate edge exactly once. Candidate lifecycle polling uses the same 4 s cadence as the main UI.
+
+Home Intelligence in `/api/status` again reports the actual in-memory ContextEngine/HomeBootstrap state. Its richer diagnostic snapshot is cached for 5 s; queue/backlog gauges are advisory and do not wait for persistence locks. These are read-side/QoS changes only and do not alter learning, Candidate durability, promotion semantics or the ActionIntent -> Executor physical-control boundary.
+
+
+### UI read isolation and Candidate polling recovery (0.14.37)
+
+Candidate lifecycle polling remains a 4 s read-only loop, but 0.14.37 fixes a packaging/source regression in which literal `\\n` characters were written inside a JavaScript `//` comment and therefore commented out the polling loop while still passing syntax checks. The loop is now explicitly executable and covered by a source regression test.
+
+The operational UI treats agent cards and Recent activity as independent reads. `/api/agents` and `/api/events` are consumed with independent success/failure handling, so a slow event feed can no longer prevent fresh Desired/confidence/runtime values from reaching agent cards.
+
+Diagnostic events have a dedicated RAM lock separate from the Store transaction lock. `/api/events` reads only the RAM rings under that lock; opportunistic persistence never waits for an unrelated history/model transaction. HA reachability and realtime WebSocket delivery are also reported as separate states. None of these changes alter policy learning, Candidate durability, promotion, ActionIntent construction or Executor safety.

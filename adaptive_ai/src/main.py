@@ -151,6 +151,17 @@ def initialize_runtime():
             STORE.event(None, "error", "control_startup_reconcile_failed", str(exc), None)
 
         set_startup("ready", 7, "Adaptive AI runtime is ready", ready=True)
+        # Open the background inference gate only after all runtime extensions, realtime
+        # state handling, history manager and ownership reconciliation are composed.
+        # This prevents the initial all-agent prediction burst from starving Ingress.
+        inference_gate = getattr(ENGINE, "inference_enabled", None)
+        if inference_gate is not None:
+            # Give Ingress/static/status requests a deterministic head start before the
+            # first all-agent proactive inference pass. Realtime state is already being
+            # ingested and dirty transitions are retained by Engine during this grace.
+            ENGINE.startup_inference_not_before = time.monotonic() + 3.0
+            inference_gate.set()
+            ENGINE.wake_event.set()
         print("Adaptive AI runtime initialized", flush=True)
     except Exception as exc:
         traceback.print_exc()
@@ -426,24 +437,30 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send_json(202, {'ok': True})
             if path == "/api/discovery/rescan":
                 with ENGINE.lock:
-                    current = dict(ENGINE.state_map)
-                    registry = dict(ENGINE.entity_registry)
-                if not current or HISTORY is None:
+                    current_ready = bool(ENGINE.state_map)
+                if not current_ready or HISTORY is None:
                     return self.send_json(409, {"error": "Home Assistant state/history engine not ready"})
-                AUTOMATION_KNOWLEDGE.scan(current, registry)
-                start_ts = now_ts() - float(OPTIONS["history_bootstrap_days"]) * 86400.0
-                created = HISTORY.auto_discover_agents(current, start_ts, threshold_override=1)
-                initial_training = list(getattr(HISTORY, "initial_training_enqueued", []) or [])
-                training_started = sum(1 for row in initial_training if row.get("state") == "active")
-                return self.send_json(200, {
+                request = getattr(HISTORY, "request_discovery_rescan", None)
+                if not callable(request):
+                    return self.send_json(409, {"error": "Background discovery service is not ready"})
+                if not request(threshold_override=1, reason="manual"):
+                    # Rescan is an idempotent "ensure discovery is running" operation.
+                    # Repeated UI clicks must not surface a technical conflict while the
+                    # first Recorder scan is making progress.
+                    return self.send_json(202, {
+                        "ok": True,
+                        "state": "running",
+                        "already_running": True,
+                        "message": "Recorder/discovery is already running",
+                        "history": HISTORY.status(),
+                    })
+                return self.send_json(202, {
                     "ok": True,
-                    "created": created,
-                    "training_started": training_started,
-                    "training_queued": len(initial_training),
-                    "manual_training": False,
-                    "training_mode": "automatic_initial_fifo",
+                    "state": "running",
+                    "message": "Recorder/discovery started in the background",
+                    "manual_training": True,
+                    "training_mode": "explicit_after_discovery",
                     "history": HISTORY.status(),
-                    "automation_knowledge": AUTOMATION_KNOWLEDGE.status(),
                 })
             if path.startswith("/api/agents/") and path.endswith("/train"):
                 agent_id = path.split("/")[3]
@@ -628,6 +645,15 @@ def shutdown_runtime():
             except Exception:
                 traceback.print_exc()
             ENGINE.context.save(force=True)
+            try:
+                ENGINE.teaching.flush(force=True)
+                ENGINE.flush_archive(force=True)
+                flush_provenance = getattr(STORE, "_flush_provenance_events", None)
+                if callable(flush_provenance):
+                    flush_provenance()
+                STORE.flush_events()
+            except Exception:
+                traceback.print_exc()
             if ENGINE.home_bootstrap:
                 ENGINE.home_bootstrap.cancel()
             ENGINE.stop_event.set()

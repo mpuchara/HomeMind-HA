@@ -475,7 +475,7 @@ def install(manager):
     def comparison_summary(row, parent=None, candidate=None):
         out = original_summary(row, parent, candidate)
         parent_agent = parent or manager.store.get_agent_config(row.get("parent_agent_id"))
-        candidate_agent = candidate or manager.store.get_agent(row.get("candidate_id"))
+        candidate_agent = candidate or manager.store.get_agent_config(row.get("candidate_id"))
         if not parent_agent or not is_fast_target(parent_agent) or str(parent_agent.get("target_property")) != "power":
             return out
 
@@ -516,7 +516,7 @@ def install(manager):
             row = manager._candidate_row(parent_id)
         if row:
             parent = manager.store.get_agent_config(row.get("parent_agent_id"))
-            candidate = manager.store.get_agent(row.get("candidate_id"))
+            candidate = manager.store.get_agent_config(row.get("candidate_id"))
             summary = manager._comparison_summary(row, parent, candidate)
             result["comparison"] = summary
             result["preference_confidence"] = summary.get("preference_confidence")

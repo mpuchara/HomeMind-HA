@@ -1,5 +1,5 @@
 name: "Adaptive AI"
-version: "0.14.28"
+version: "0.14.52"
 slug: "adaptive_ai"
 description: >-
   History-first local reinforcement-learning policies for Home Assistant. Imports
@@ -23,6 +23,8 @@ options:
   entity_area_mapping: "{}"
   intent_ttl_seconds: 2
   poll_seconds: 30
+  realtime_resync_seconds: 300
+  realtime_fallback_poll_seconds: 10
   proactive_tick_seconds: 1
   realtime_inference_debounce_ms: 25
   prediction_lead_seconds: 1
@@ -64,6 +66,8 @@ options:
   agent_candidate_backup_hours: 24
   agent_training_chunk_hours: 6
   agent_training_overlap_hours: 6
+  agent_training_history_days: 7
+  agent_training_pause_ms: 0
   min_historical_support: 0.20
   max_context_novelty: 0.85
   confidence_validation_fraction: 0.20
@@ -88,11 +92,13 @@ options:
   history_background_start_delay_seconds: 60
   background_cpu_duty_cycle: 0.20
   process_nice: 10
-  training_cpu_duty_cycle: 0.20
+  training_cpu_duty_cycle: 0.55
   training_archive_batch_rows: 16
   training_experience_batch_rows: 64
-  training_throttle_max_sleep_seconds: 2.0
-  training_max_continuous_work_ms: 50
+  training_replay_ram_cache_rows: 8192
+  training_replay_ram_cache_entry_rows: 1024
+  training_throttle_max_sleep_seconds: 0.50
+  training_max_continuous_work_ms: 35
   manual_agent_training: true
   max_concurrent_training_jobs: 1
   manual_discovery_hours: 24
@@ -114,6 +120,8 @@ schema:
   entity_area_mapping: "str"
   intent_ttl_seconds: "float(0.1,10.0)"
   poll_seconds: "int(5,120)"
+  realtime_resync_seconds: "int(60,3600)"
+  realtime_fallback_poll_seconds: "int(5,60)"
   proactive_tick_seconds: "int(1,10)"
   realtime_inference_debounce_ms: "int(10,2000)"
   prediction_lead_seconds: "int(0,300)"
@@ -155,6 +163,8 @@ schema:
   agent_candidate_backup_hours: "int(1,168)"
   agent_training_chunk_hours: "int(6,168)"
   agent_training_overlap_hours: "int(0,48)"
+  agent_training_history_days: "float(1,30)"
+  agent_training_pause_ms: "int(0,3000)"
   min_historical_support: "float(0.0,1.0)"
   max_context_novelty: "float(0.0,1.0)"
   confidence_validation_fraction: "float(0.05,0.40)"
@@ -182,6 +192,8 @@ schema:
   training_cpu_duty_cycle: "float(0.15,0.70)"
   training_archive_batch_rows: "int(8,128)"
   training_experience_batch_rows: "int(8,512)"
+  training_replay_ram_cache_rows: "int(0,65536)"
+  training_replay_ram_cache_entry_rows: "int(64,4096)"
   training_throttle_max_sleep_seconds: "float(0.25,5.0)"
   training_max_continuous_work_ms: "int(25,500)"
   manual_agent_training: "bool"

@@ -1,10 +1,13 @@
 """Compact Candidate-card decision summary.
 
 The Candidate card should show the same decision vocabulary as a Live agent: physical
-Current, direct-parent Desired, Candidate Desired and Candidate model Confidence.  The
-Shadow runtime persists every retained generation under one event id, so the parent value
-shown here is taken from the *same observed Shadow event* as the Candidate whenever
-possible.  No policy is replayed and no physical action is dispatched.
+Current, direct-parent Desired, Candidate Desired and Candidate model Confidence.
+
+Card tiles are operational observability, not A/B evidence. They show the last actually
+observed Parent and Candidate decisions even after the freshness window expires. Freshness
+is exposed separately as metadata. Paired comparison and promotion evidence remain
+same-event-only in the Shadow runtime. No policy is replayed and no physical action is
+dispatched.
 """
 from __future__ import annotations
 
@@ -82,51 +85,53 @@ def decorate_candidate_status(store, result, *, now=None):
         return result
 
     child = _latest_decision(store, generation["generation_id"])
-    if not child or now - float(child.get("ts") or 0.0) > DECISION_STALE_SECONDS:
-        result["parent_desired"] = None
-        result["parent_confidence"] = None
-        result["parent_shadow_timestamp"] = None
-        return result
+    child_fresh = bool(
+        child and now - float(child.get("ts") or 0.0) <= DECISION_STALE_SECONDS
+    )
 
     parent_generation_id = generation["parent_generation_id"]
-    parent_decision = _decision_for_event(
-        store, parent_generation_id, child.get("event_id")
+    parent_decision = _latest_decision(store, parent_generation_id)
+    parent_fresh = bool(
+        parent_decision
+        and now - float(parent_decision.get("ts") or 0.0) <= DECISION_STALE_SECONDS
     )
-    if parent_decision is None:
-        # A pre-upgrade database may lack a matching event row.  Falling back to a fresh
-        # observed parent row is still better than replaying today's parent policy.
-        parent_decision = _latest_decision(store, parent_generation_id)
-    if (
-        not parent_decision
-        or now - float(parent_decision.get("ts") or 0.0) > DECISION_STALE_SECONDS
-        or abs(float(parent_decision.get("ts") or 0.0) - float(child.get("ts") or 0.0))
-        > DECISION_STALE_SECONDS
-    ):
-        result["parent_desired"] = None
-        result["parent_confidence"] = None
-        result["parent_shadow_timestamp"] = None
-        return result
-
-    result["parent_desired"] = parent_decision.get("desired")
-    result["parent_confidence"] = parent_decision.get("confidence")
-    result["parent_shadow_timestamp"] = parent_decision.get("ts")
+    result["parent_desired"] = (
+        parent_decision.get("desired") if parent_decision else None
+    )
+    result["parent_confidence"] = (
+        parent_decision.get("confidence") if parent_decision else None
+    )
+    result["parent_shadow_timestamp"] = (
+        parent_decision.get("ts") if parent_decision else None
+    )
+    result["parent_decision_fresh"] = parent_fresh
     result["parent_generation_id"] = parent_generation_id
+    result["parent_decision_paired"] = bool(
+        child
+        and parent_decision
+        and str(parent_decision.get("event_id") or "")
+        == str(child.get("event_id") or "")
+    )
     return result
 
 
 def live_candidate_snapshots(manager):
     """Fast UI-only snapshots without rebuilding Candidate metrics/status.
 
-    Current is read directly from the websocket-backed engine state. Desired values come
-    only from Candidate Shadow decisions that actually ran and were persisted, never from
-    policy replay. The query is read-only and does not touch Executor or learning state.
+    The active Candidate Shadow runtime owns current decision tiles in RAM. SQLite is only
+    a restart/backfill source inside that runtime, never the normal 1 s UI polling path.
+    No policy replay, Executor call or learning mutation happens here.
     """
+    hot = getattr(manager, "candidate_live_runtime_snapshots", None)
+    if callable(hot):
+        return list(hot() or [])
     now = time.time()
     with manager.store.conn() as c:
         rows = [dict(r) for r in c.execute(
             """SELECT g.generation_id,g.parent_generation_id,g.root_agent_id,g.agent_id,
                       child.ts AS child_ts,child.event_id AS child_event_id,
                       child.desired AS child_desired,child.confidence AS child_confidence,
+                      parent.ts AS parent_ts,parent.event_id AS parent_event_id,
                       parent.desired AS parent_desired,parent.confidence AS parent_confidence
                FROM agent_candidate_generations g
                LEFT JOIN candidate_generation_decisions child
@@ -135,7 +140,8 @@ def live_candidate_snapshots(manager):
                               WHERE d.generation_id=g.generation_id)
                LEFT JOIN candidate_generation_decisions parent
                  ON parent.generation_id=g.parent_generation_id
-                AND parent.event_id=child.event_id
+                AND parent.ts=(SELECT MAX(p.ts) FROM candidate_generation_decisions p
+                               WHERE p.generation_id=g.parent_generation_id)
                WHERE g.generation_type='candidate' AND g.agent_id IS NOT NULL
                  AND g.lifecycle_state NOT IN ('discarded','pruned','promoted')
                ORDER BY g.root_agent_id,g.generation_number,g.created_ts"""
@@ -163,17 +169,32 @@ def live_candidate_snapshots(manager):
         except (TypeError, ValueError):
             current = None
         child_ts = row.get("child_ts")
-        fresh = child_ts is not None and now - float(child_ts) <= DECISION_STALE_SECONDS
+        child_fresh = (
+            child_ts is not None and now - float(child_ts) <= DECISION_STALE_SECONDS
+        )
+        parent_ts = row.get("parent_ts")
+        parent_fresh = (
+            parent_ts is not None and now - float(parent_ts) <= DECISION_STALE_SECONDS
+        )
         snapshots.append({
             "generation_id": row.get("generation_id"),
             "candidate_id": row.get("agent_id"),
             "root_agent_id": root_id,
             "target_property": root.get("target_property"),
             "shadow_current": current,
-            "parent_desired": row.get("parent_desired") if fresh else None,
-            "candidate_desired": row.get("child_desired") if fresh else None,
-            "candidate_confidence": row.get("child_confidence") if fresh else None,
-            "shadow_timestamp": float(child_ts) if fresh else None,
+            "parent_desired": row.get("parent_desired"),
+            "parent_confidence": row.get("parent_confidence"),
+            "parent_shadow_timestamp": float(parent_ts) if parent_ts is not None else None,
+            "parent_decision_fresh": parent_fresh,
+            "parent_decision_paired": bool(
+                child_ts is not None
+                and parent_ts is not None
+                and row.get("child_event_id") == row.get("parent_event_id")
+            ),
+            "candidate_desired": row.get("child_desired"),
+            "candidate_confidence": row.get("child_confidence"),
+            "candidate_decision_fresh": child_fresh,
+            "shadow_timestamp": float(child_ts) if child_ts is not None else None,
             "live_snapshot_ts": now,
         })
     return snapshots
@@ -219,6 +240,7 @@ def install(manager):
     handler.do_GET = do_get
     manager._candidate_card_summary_installed = True
     manager.candidate_card_decision_contract = (
-        "current_plus_same_observed_event_direct_parent_desired_plus_candidate_desired"
+        "ram_first_current_plus_last_observed_parent_and_candidate_desired_"
+        "with_separate_freshness_and_same_event_pairing_metadata"
     )
     return manager

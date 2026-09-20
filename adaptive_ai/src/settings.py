@@ -15,7 +15,7 @@ try:
 except Exception:
     ws_connect = None
 
-APP_VERSION = "0.14.28"
+APP_VERSION = "0.14.52"
 HISTORY_BOOTSTRAP_REVISION = "target-attrs-v2"
 TRAINING_REVISION = "shared-home-intents-v18"
 DATA_DIR = Path(os.environ.get("ADAPTIVE_AI_DATA", "/data"))
@@ -32,7 +32,16 @@ DEFAULT_OPTIONS = {
     "entity_area_mapping": "{}",
     "intent_ttl_seconds": 2,
     "poll_seconds": 30,
+    # With a healthy state_changed websocket, /states is only a consistency resync.
+    # Avoid rebuilding 700+ entity context every 30 s on Raspberry Pi.
+    "realtime_resync_seconds": 300,
+    # If realtime is unavailable, keep Current usable without restoring the old 30 s lag.
+    # Delta-only reconciliation makes this temporary fallback cheap enough for Pi 4.
+    "realtime_fallback_poll_seconds": 10,
     "proactive_tick_seconds": 1,
+    # The 1 s engine tick is a lightweight deadline scheduler, not a global inference loop.
+    "fast_idle_inference_interval_seconds": 30,
+    "idle_inference_interval_seconds": 30,
     "realtime_inference_debounce_ms": 25,
     "prediction_lead_seconds": 1,  # reactive default: act ~1s before the historical/manual action
     "prediction_horizons_seconds": "1",
@@ -69,6 +78,8 @@ DEFAULT_OPTIONS = {
     "candidate_benchmark_min_samples": 12,
     "agent_training_chunk_hours": 6,
     "agent_training_overlap_hours": 6,
+    "agent_training_history_days": 7,
+    "agent_training_pause_ms": 0,
     "min_historical_support": 0.20,
     "max_context_novelty": 0.85,
     "confidence_validation_fraction": 0.20,
@@ -93,11 +104,13 @@ DEFAULT_OPTIONS = {
     "history_background_start_delay_seconds": 60,
     "background_cpu_duty_cycle": 0.20,
     "process_nice": 10,
-    "training_cpu_duty_cycle": 0.20,
+    "training_cpu_duty_cycle": 0.55,
     "training_archive_batch_rows": 16,
     "training_experience_batch_rows": 64,
-    "training_throttle_max_sleep_seconds": 2.0,
-    "training_max_continuous_work_ms": 50,
+    "training_replay_ram_cache_rows": 8192,
+    "training_replay_ram_cache_entry_rows": 1024,
+    "training_throttle_max_sleep_seconds": 0.50,
+    "training_max_continuous_work_ms": 35,
     "manual_agent_training": True,
     "max_concurrent_training_jobs": 1,
     "manual_discovery_hours": 24,
@@ -281,10 +294,12 @@ def load_options():
                 options["history_background_start_delay_seconds"] = 60
             # 0.14.27: migrate only defaults shipped by earlier releases.
             # Explicit custom budgets stay untouched.
-            if data.get("training_cpu_duty_cycle") in (0.55, 0.25):
-                options["training_cpu_duty_cycle"] = 0.20
-            if data.get("training_max_continuous_work_ms") == 75:
-                options["training_max_continuous_work_ms"] = 50
+            if data.get("training_cpu_duty_cycle") in (0.20, 0.25):
+                options["training_cpu_duty_cycle"] = 0.55
+            if data.get("training_max_continuous_work_ms") in (75, 50):
+                options["training_max_continuous_work_ms"] = 35
+            if data.get("training_throttle_max_sleep_seconds") == 2.0:
+                options["training_throttle_max_sleep_seconds"] = 0.50
     except Exception as exc:
         print(f"[options] Failed to read options: {exc}", flush=True)
     # 0.9 never starts heavy replay implicitly, including installations with the

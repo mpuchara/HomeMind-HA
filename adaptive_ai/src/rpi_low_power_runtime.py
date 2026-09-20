@@ -22,9 +22,9 @@ from training_budget import TRAINING_BUDGET
 CONTRACT_VERSION = 4
 DEFAULT_ARCHIVE_BATCH_ROWS = 16
 DEFAULT_EXPERIENCE_BATCH_ROWS = 64
-DEFAULT_TRAINING_DUTY_CYCLE = 0.20
-DEFAULT_MAX_THROTTLE_SLEEP_SECONDS = 2.0
-DEFAULT_MAX_CONTINUOUS_WORK_MS = 50
+DEFAULT_TRAINING_DUTY_CYCLE = 0.55
+DEFAULT_MAX_THROTTLE_SLEEP_SECONDS = 0.50
+DEFAULT_MAX_CONTINUOUS_WORK_MS = 35
 DEFAULT_CANDIDATE_IDLE_POLL_SECONDS = 3.0
 MAINTENANCE_INTERVAL_SECONDS = 60.0
 
@@ -52,7 +52,7 @@ def install(core, manager):
     if int(core.OPTIONS.get("history_background_pause_ms", 500) or 0) == 500:
         core.OPTIONS["history_background_pause_ms"] = 1500
     current_duty = float(core.OPTIONS.get("training_cpu_duty_cycle", 0.55) or 0.55)
-    if current_duty in (0.55, 0.25):
+    if current_duty in (0.20, 0.25):
         core.OPTIONS["training_cpu_duty_cycle"] = DEFAULT_TRAINING_DUTY_CYCLE
     core.OPTIONS.setdefault("training_cpu_duty_cycle", DEFAULT_TRAINING_DUTY_CYCLE)
     core.OPTIONS.setdefault("training_archive_batch_rows", DEFAULT_ARCHIVE_BATCH_ROWS)
@@ -60,7 +60,7 @@ def install(core, manager):
     core.OPTIONS.setdefault(
         "training_throttle_max_sleep_seconds", DEFAULT_MAX_THROTTLE_SLEEP_SECONDS
     )
-    if float(core.OPTIONS.get("training_max_continuous_work_ms", 75) or 75) == 75.0:
+    if float(core.OPTIONS.get("training_max_continuous_work_ms", 75) or 75) in (75.0, 50.0):
         core.OPTIONS["training_max_continuous_work_ms"] = DEFAULT_MAX_CONTINUOUS_WORK_MS
     core.OPTIONS.setdefault(
         "training_max_continuous_work_ms", DEFAULT_MAX_CONTINUOUS_WORK_MS

@@ -13,8 +13,6 @@ This extension keeps Control strict:
 The Executor remains untouched. Shadow decisions still flow through the normal
 Policy -> ActionIntent -> Executor path, where mode='shadow' prevents HA service calls.
 """
-import traceback
-
 
 def paused_shadow_eligible(agent, store, engine=None):
     """Return True only when an existing paused policy may safely infer in Shadow."""
@@ -48,7 +46,7 @@ def inference_eligible(agent, store, engine=None):
 
 
 def install(core):
-    """Patch only runtime scheduling/UI diagnostics; never Control qualification/Executor."""
+    """Extend eligibility only; the core Engine remains the single runtime scheduler."""
     if getattr(core, "_PAUSED_SHADOW_INFERENCE_INSTALLED", False):
         return False
     if not core.runtime_available() or core.ENGINE is None or core.STORE is None:
@@ -58,72 +56,14 @@ def install(core):
     store = core.STORE
     original_runtime_for = engine.runtime_for
 
-    def process(state_map, changed_entities=None):
-        changed = set(changed_entities or ())
-        groups = {}
-        for agent in store.list_agent_configs():
-            if not inference_eligible(agent, store, engine):
-                engine.experiments.cancel(agent['id'], 'mode, training or availability changed')
-                continue
-            if changed:
-                cached = engine.models.get(agent["id"])
-                if (
-                    cached is not None
-                    and agent["target_entity"] not in changed
-                    and not (
-                        changed
-                        & (
-                            set(cached.schema.entities)
-                            | engine.context.admitted
-                            | engine.experiments.watches(agent['id'])
-                        )
-                    )
-                ):
-                    continue
-            groups.setdefault(agent["target_entity"], []).append(agent)
-
-        for target, agents in groups.items():
-            active = engine.in_flight.get(target)
-            if active is not None and not active.done():
-                if changed and target not in engine.resubmit_targets:
-                    engine.resubmit_targets.add(target)
-
-                    def retry_completed(_future, entity=target):
-                        with engine.lock:
-                            engine.resubmit_targets.discard(entity)
-                            engine.dirty_entities.add(entity)
-                        engine.wake_event.set()
-
-                    active.add_done_callback(retry_completed)
-                continue
-            engine.in_flight[target] = engine.control_workers.submit(
-                engine.process_target, agents, changed
-            )
-        for target in list(engine.in_flight):
-            if target not in groups and engine.in_flight[target].done():
-                del engine.in_flight[target]
-
-    def process_target(agents, changed_entities=None):
-        with engine.lock:
-            revision = engine.state_revision
-            states = dict(engine.state_map)
-        for agent in agents:
-            if engine.stop_event.is_set():
-                return
-            try:
-                latest = store.get_agent_config(agent["id"])
-                if inference_eligible(latest, store, engine):
-                    if changed_entities:
-                        engine.process_agent(latest, states, changed_entities)
-                    else:
-                        engine.process_agent(latest, states)
-            except Exception as exc:
-                store.event(
-                    agent["id"], "error", "agent_error", str(exc),
-                    {"trace": traceback.format_exc(limit=4)},
-                )
-        if engine.state_revision != revision:
-            engine.wake_event.set()
+    # Do not patch Engine.process/process_target. The core scheduler owns event indexing,
+    # pass-level snapshots and bounded workers; replacing it here previously reintroduced
+    # all-agent scans and per-agent SQLite reads on every HA event.
+    engine.inference_eligible = lambda agent: inference_eligible(agent, store, engine)
+    if hasattr(engine, "agent_index_at"):
+        engine.agent_index_at = 0.0
+    if hasattr(engine, "agent_index_revision"):
+        engine.agent_index_revision = -1
 
     def runtime_for(agent):
         payload = original_runtime_for(agent)
@@ -131,8 +71,6 @@ def install(core):
         payload["inference_eligible"] = inference_eligible(agent, store, engine)
         return payload
 
-    engine.process = process
-    engine.process_target = process_target
     engine.runtime_for = runtime_for
     core._PAUSED_SHADOW_INFERENCE_INSTALLED = True
     return True

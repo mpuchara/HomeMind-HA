@@ -31,6 +31,10 @@
       window.applyLiveValues();
       if(!lastAgents.length&&data.configs?.length){
         lastAgents=data.configs.map(a=>({...a,control_qualification:{passed:false,reason:'Ładuję kwalifikację agenta…'}}));
+        window.__adaptiveAiAgents=lastAgents;
+        if(typeof window.dispatchEvent==='function'&&typeof CustomEvent==='function'){
+          window.dispatchEvent(new CustomEvent('adaptive-ai:agents',{detail:lastAgents}));
+        }
         renderAgents();
       }
       // Fast path changes only the three decision tiles. Lifecycle, diagnostics and
@@ -44,7 +48,7 @@
     }catch(_){/* Heavy diagnostics keep their own connection indicator; next lightweight poll retries. */}
     finally{clearTimeout(timer);liveBusy=false;}
   }
-  async function liveLoop(){await refreshLive();setTimeout(liveLoop,250);}
+  async function liveLoop(){await refreshLive();setTimeout(liveLoop,1000);}
   document.addEventListener('visibilitychange',()=>{if(!document.hidden)refreshLive();});
   liveLoop();
 

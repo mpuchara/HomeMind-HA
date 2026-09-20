@@ -124,19 +124,13 @@ assert contract['training_queue_order'] == 'before_history_discovery'
 assert contract['explicit_train_idle_slot'] == 'immediate_admission_attempt'
 ''')
 
-    def test_auto_discovered_waiting_agents_are_queued_for_initial_training(self):
+    def test_auto_discovered_agents_remain_waiting_for_manual_selection(self):
         self.run_isolated(r'''
 from startup_train_guard import _install_initial_training_bridge
 
 class Store:
     def __init__(self):
-        self.rows = []
-        self.models = {}
         self.events = []
-    def list_agent_configs(self):
-        return [dict(x) for x in self.rows]
-    def get_model(self, agent_id):
-        return self.models.get(agent_id)
     def event(self, *args):
         self.events.append(args)
 
@@ -145,29 +139,17 @@ class Queue:
         self.calls = []
     def enqueue(self, agent_id, rebuild=False, reason="training"):
         self.calls.append((agent_id, rebuild, reason))
-        return {"state":"queued","position":len(self.calls)}
+        raise AssertionError("discovery must not enqueue training")
 
 class History:
-    def __init__(self, store):
-        self.store = store
-    def auto_discover_agents(self, *args, **kwargs):
-        if not self.store.rows:
-            self.store.rows.append({
-                "id":"fresh","enabled":True,"auto_created":True,
-                "training_state":"waiting",
-            })
-            return 1
-        return 0
+    pass
 
-store=Store(); queue=Queue(); history=History(store)
+store=Store(); queue=Queue(); history=History()
 _install_initial_training_bridge(history, queue, store)
-assert history.auto_discover_agents({}, 0) == 1
-assert queue.calls == [("fresh", True, "initial_training")], queue.calls
-# Repeated rescans must not create duplicate effective queue work; production
-# TrainingQueue deduplicates by agent_id, and the bridge keeps the same reason.
-assert history.auto_discover_agents({}, 0) == 0
-assert queue.calls[-1] == ("fresh", True, "initial_training")
-assert history.initial_training_enqueued[-1]["agent_id"] == "fresh"
+assert queue.calls == [], queue.calls
+assert history.initial_training_enqueued == []
+assert history._initial_training_bridge_installed is True
+assert any(row[2] == "manual_initial_training_ready" for row in store.events), store.events
 ''')
 
     def test_frontend_fetch_guard_bounds_startup_reads_without_aborting_mutations(self):

@@ -102,6 +102,14 @@ class CustomPromotionUiContractTests(unittest.TestCase):
         custom = text.index("candidates = install_candidate_user_promotion(candidates)")
         self.assertLess(atomic, custom)
 
+    def test_observation_wrapper_short_circuits_before_candidate_sql(self):
+        text = (ROOT / "adaptive_ai/src/agent_candidate_user_promotion.py").read_text(encoding="utf-8")
+        block = text.split("def _observation_call(fn, agent, state_map):", 1)[1].split(
+            "def before_live_process", 1
+        )[0]
+        self.assertIn("candidate_hot_active", block)
+        self.assertLess(block.index("candidate_hot_active"), block.index("_active_observation_row"))
+
     def test_offline_gate_stays_standard_blocker_but_not_observation_blocker(self):
         text = (ROOT / "adaptive_ai/src/agent_candidate_user_promotion.py").read_text(encoding="utf-8")
         self.assertIn("passed_for_observation_only", text)

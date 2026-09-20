@@ -4,7 +4,7 @@ Ten dokument opisuje bieżący produkt. Starsze wersje instrukcji pozostają w r
 
 ## Główny ekran
 
-Aplikacja uruchamia interfejs HTTP przed cięższą inicjalizacją runtime. Status startu pokazuje, czy gotowe są baza, Engine, realtime Home Assistant, historia i workery. Normalnie stan HA jest odbierany przez WebSocket; REST pozostaje ścieżką resynchronizacji/fallbacku.
+Aplikacja uruchamia interfejs HTTP przed cięższą inicjalizacją runtime. Status startu pokazuje, czy gotowe są baza, Engine, realtime Home Assistant, historia i workery. Normalnie stan HA jest odbierany przez WebSocket; REST pozostaje ścieżką resynchronizacji/fallbacku. Od 0.14.30 pierwszy pełny przebieg inference nie startuje w trakcie składania runtime: po `startup.ready` Ingress dostaje 3 s zapasu, a pula workerów inference jest ograniczona do maksymalnie 4. Initial REST snapshot służy do rozgrzania stanu i nie jest traktowany jako tysiące realtime transition. Od 0.14.31 runtime jest faktycznie event-driven: 1-sekundowy tick tylko sprawdza lekkie deadline'y, nie uruchamia wszystkich agentów. Fast target ma awaryjny heartbeat 10 s, pozostałe 30 s, a zwykły event HA uruchamia tylko agentów zależnych od targetu, ich aktywnego schema, jawnych wejść lub źródeł obecności z tego samego obszaru. Od 0.14.32 końcówka background discovery po imporcie Recorder nie wykonuje pełnych statystyk całego archiwum ani osobnych skanów historii dla każdego targetu/właściwości. Klasyfikacja aktywności targetów korzysta z jednego ograniczonego strumienia lokalnego archiwum, dzięki czemu istniejący throttle CPU faktycznie obejmuje całą pracę.
 
 ## Karta Live
 
@@ -120,7 +120,7 @@ ACK potwierdza wykonanie transportowe, a nie komfort. Replay automatyzacji nie j
 
 ## Benchmark produktu F24
 
-Repo zawiera deterministyczny benchmark produktu z ukrytą obecnością i ukrytą potrzebą światła. Obserwacje mają delay, noise, missingness, różne formaty oraz sprzężenie `light -> lux`. Scenariusze obejmują m.in. jednego/dwóch domowników, rozwidlenie, bezruch, brak przyjścia, quick return, dzień/noc, ręczną zmianę, fałszywy/przeniesiony sensor i zmianę zwyczaju. Przeniesiony sensor naprawdę zmienia w future test swoje przypisanie obszaru w Entity Registry. Ręczna zmiana jest zdarzeniem targetu z pochodzeniem użytkownika (`context.user_id`), dzięki czemu benchmark może odróżnić manual hold od zwykłej zmiany hidden truth. Szybkie targety (np. światła) zachowują krótki timing akcji, ale korzystają z tego samego manual hold co pozostałe urządzenia.
+Repo zawiera deterministyczny benchmark produktu z ukrytą obecnością i ukrytą potrzebą światła. Obserwacje mają delay, noise, missingness, różne formaty oraz sprzężenie `light -> lux`. Scenariusze obejmują m.in. jednego/dwóch domowników, rozwidlenie, bezruch, brak przyjścia, quick return, dzień/noc, ręczną zmianę, fałszywy/przeniesiony sensor i zmianę zwyczaju. Przeniesiony sensor naprawdę zmienia w future test swoje przypisanie obszaru w Entity Registry. Ręczna zmiana jest zdarzeniem targetu z pochodzeniem użytkownika (`context.user_id`), dzięki czemu benchmark może odróżnić manual hold od zwykłej zmiany hidden truth. Szybkie targety (np. światła) zachowują krótki timing akcji, ale korzystają z tego samego manual hold co pozostałe urządzenia. Dla `light.power` historyczna polityka nie może zgasić już włączonej lampy po pojedynczym krótkim flipie predykcji: statystyczny OFF musi utrzymać się ciągle przez 6 s. ON pozostaje natychmiastowe. Ręczny OFF oraz jawne instrukcje/preferencje nie są przez to opóźniane.
 
 Oficjalne uruchomienie:
 
@@ -131,3 +131,77 @@ python tools/run_product_runtime_benchmark.py --seeds 11,23,37 --replicas 1
 Executable instaluje finalny `RuntimeCompositionRoot` przed treningiem i uruchamia każdy seed w świeżym procesie. Porównywane są stała automatyzacja, bieżący runtime, full-ridge Shadow oraz ostrożny fallback na oddzielnych train/validation/future danych. Wynik zawiera średnie, 95% przedziały niepewności i jawną listę `unmet_criteria`.
 
 Benchmark nie promuje modelu i nie obniża progów. Brak poprawy lub niespełnione kryteria są prawidłowym wynikiem. Wynik syntetyczny nie zastępuje testu na realnym Home Assistant ani fizycznego M&V. W CI raport z trzech seedów jest zachowywany jako artefakt `product-benchmark-f24-py311`; zawiera metryki, 95% przedziały niepewności i `unmet_criteria`. Czytelne podsumowanie aktualnego przebiegu znajduje się w `BENCHMARK_PRODUCT_F24.md`.
+
+### Tryb operational-first od 0.14.33
+
+Po restarcie dodatek uruchamia zapisanych agentów i realtime Home Assistant bez automatycznego importu Recorder, auto-discovery ani okresowego historycznego maintenance. `Rescan devices` jest jawną akcją użytkownika i uruchamia discovery w osobnym workerze; request HTTP wraca od razu. Cykliczne odczyty UI używają tylko konfiguracji agentów i bieżącego stanu runtime, bez COUNT/AVG po tabelach historii. Dzięki temu system może pracować stale bez uruchamiania ciężkich zadań. Train/Resume/Rebuild/Correct/Candidate nadal korzystają z istniejącej kolejki ciężkich zadań i nie zmieniają własności fizycznego sterowania.
+
+
+### Odciążony runtime agentów od 0.14.34
+
+W zwykłej pracy event z Home Assistant uruchamia tylko agentów zależnych od zmienionej encji. Konfiguracje agentów, zależności, preference facts, Candidate lineage bez aktywnego Candidate, provenance aktywnych komend oraz pochodzenie bieżącego eventu są trzymane w RAM i jawnie unieważniane przy zmianach. Shadow nie wykonuje durable walidacji Control, a feature observations, Shadow provenance i evidence windows są zapisywane poza ścieżką event -> intent przez ograniczone kolejki i batch write do SQLite. Control zachowuje pełną walidację przed fizycznym HA service call.
+
+W statusie runtime dostępny jest ponownie recent `event -> intent p95` oraz backlog odroczonego feature journal. Dla testu na Raspberry Pi ważne jest obserwowanie, czy p95 i backlog pozostają stabilne po kilkudziesięciu minutach pracy wielu agentów; wersja 0.14.34 jest pierwszym buildem po tej przebudowie i wymaga realnego soak testu przed uznaniem PR za gotowy do merge.
+
+
+### RAM-first dla instalacji na karcie microSD od 0.14.35
+
+W Raspberry Pi baza dodatku zwykle znajduje się na karcie microSD, dlatego 0.14.35 ogranicza małe, częste operacje SQLite. Dane tymczasowe i łatwe do odtworzenia są buforowane w RAM i zapisywane większymi paczkami: bieżące eventy diagnostyczne, provenance eventów HA, feature observations/evidence windows, decision history oraz live archive. Cykliczne `/api/status`, `/api/agents` i `/api/events` korzystają z pamięci RAM zamiast wykonywać regularne odczyty tabel przy każdym pollingu.
+
+Konfiguracja agentów i routing są unieważniane zmianą revision, także gdy lista agentów jest pusta. Pełny skan tabeli agentów pozostaje tylko awaryjnym fallbackiem co 10 minut dla zewnętrznych zmian wykonanych bez API Store. SQLite używa `temp_store=MEMORY`, większego cache stron i mmap, jeśli platforma go obsługuje.
+
+Trwałe granice bezpieczeństwa nie zostały przeniesione do RAM. Modele, konfiguracja, explicit feedback oraz ścieżka Control/command pozostają trwałe, a Control nadal odczytuje i waliduje konfigurację przed fizycznym service call. Przy twardej utracie zasilania można utracić jedynie ostatnią krótką porcję danych obserwacyjnych/diagnostycznych oczekujących na batch flush, nie stan wymagany do bezpiecznego sterowania.
+
+W teście Raspberry Pi obserwuj `event -> intent p95`, `feature_journal.pending`, `provenance_queue.events.pending` oraz `ram_persistence_buffers`. Kolejki mogą chwilowo rosnąć, ale przy stabilnej pracy powinny okresowo wracać w okolice zera, a p95 nie powinno narastać wraz z czasem działania.
+
+
+W 0.14.35 także Sensor Tournament shadow oraz fast-light timing nie utrwalają już każdej pojedynczej próbki osobną transakcją. Bieżące residual models, timing metrics i weight-only checkpoints pozostają w RAM i są deduplikowane, a writer zapisuje najnowszy stan paczką co maksymalnie kilka sekund. Diagnostyka wieku schematu jest odczytywana z cache i dotyka SQLite tylko po zmianie revision/signature.
+
+
+### Poprawki Raspberry Pi po pierwszym soak teście - 0.14.36
+
+0.14.36 naprawia regresje widoczne po optymalizacji 0.14.35. Lista agentów w UI korzysta teraz z pełnej pamięci konfiguracji, dlatego agenci PAUSED, WAITING i NEEDS_RETRAIN nie znikają tylko dlatego, że nie są aktualnie dopuszczeni do inferencji. Osobny, mniejszy indeks nadal obsługuje wyłącznie routing realtime.
+
+Widok Candidate po restarcie nie wykonuje już zbiorczych COUNT/AVG po dużej historii uczenia tylko po to, aby narysować kartę. Status Candidate, confidence i promotion validation korzystają z konfiguracji oraz trwałego podsumowania porównania, a każdy Candidate jest oceniany raz na odświeżenie. Polling Candidate został zmniejszony z 1,5 s do 4 s.
+
+Panel Home Intelligence ponownie pokazuje rzeczywisty stan modelu trajektorii zamiast zer pochodzących z pustego payloadu lifeline. Diagnostyka jest liczona z RAM i cache'owana przez 5 s. Liczniki buforów RAM w `/api/status` nie czekają na blokady zapisu SQLite, więc wolna transakcja na microSD nie powinna blokować samego odczytu statusu.
+
+
+### Poprawki po drugim teście Raspberry Pi - 0.14.37
+
+0.14.37 naprawia trzy problemy widoczne w 0.14.36. Po pierwsze, Candidate nie był widoczny, ponieważ podczas poprzedniej poprawki do pliku JavaScript trafiły dosłowne znaki `\\n` wewnątrz komentarza `//`. Kod pozostawał poprawny składniowo, ale pętla odświeżania Candidate była w praktyce zakomentowana. W 0.14.37 Candidate ponownie odświeża się co 4 s.
+
+Po drugie, lista agentów i Recent activity nie są już jednym wspólnym punktem awarii. Jeżeli odczyt eventów jest opóźniony, udany odczyt agentów nadal aktualizuje Current, Desired, confidence i status runtime. Sam feed eventów ma osobną blokadę RAM i nie czeka na długą transakcję SQLite/microSD.
+
+Po trzecie, UI rozróżnia teraz połączenie z Home Assistant od połączenia realtime. Zdrowy REST przy chwilowym reconnect WebSocket jest pokazywany jako HA connected / REST fallback, a karty agentów dostają rzeczywisty bieżący stan WebSocket zamiast domyślnego fałszywego REST fallback.
+
+
+### Poprawki po trzecim teście Raspberry Pi - 0.14.38
+
+0.14.38 usuwa pracę, która narastała lub uruchamiała się okresowo poza właściwą ścieżką sterowania. Monitor driftu nie wykonuje już odczytów EpisodeEvaluator i analizy zmian synchronicznie po inferencji agenta. Zdarzenia jedynie zaznaczają agenta do obserwacji, a osobny, koaleskowany worker wykonuje tę analizę najwyżej raz na 30 sekund na agenta i pobiera wyłącznie brakujący, ograniczony suffix epizodów.
+
+Pełny REST-owy snapshot /states pozostaje zabezpieczeniem przy zdrowym websocketcie co 300 sekund, ale po starcie nie przebudowuje już kontekstu, historii czasowej i archiwum dla wszystkich encji. Przetwarzane są tylko encje faktycznie zmienione. Jeżeli websocket realtime zerwie się, Adaptive AI przechodzi tymczasowo na 10-sekundowy, delta-only fallback REST, dzięki czemu Current nadal może się aktualizować bez powrotu do ciężkiego globalnego pollingu.
+
+Stan połączenia z Home Assistant jest teraz liczony z dwóch niezależnych sygnałów: websocket realtime oraz dedykowany sukces /states. Błąd pobrania historii, konfiguracji automatyzacji albo innego wywołania HA nie oznacza już fałszywie, że rdzeń Home Assistant jest odłączony.
+
+Panel Home Intelligence pokazuje dodatkowo koszt pełnego resyncu (liczbę zmienionych encji oraz ostatni/maksymalny czas), ostatnie zużycie CPU, liczniki schedulerów i czas obserwatora driftu. Przy kolejnym soak teście szczególnie obserwuj, czy po 5 minutach State resync ma niewielką liczbę zmian i czy CPU po jego zakończeniu wraca do poziomu wyjściowego.
+
+
+### Czysta instalacja i discovery - 0.14.39
+
+W 0.14.38 świeża instalacja mogła przez kilka minut pokazywać 0 agentów oraz 0 aktywnych urządzeń mimo poprawnie działającego skanu Recorder. Był to mylący status: klasyfikacja aktywności urządzeń wykonywała się dopiero po zakończeniu ograniczonego importu historii, a wartość 0 była wyświetlana jeszcze przed uruchomieniem klasyfikatora.
+
+0.14.39 rozróżnia teraz wynik „0 aktywnych” od stanu „klasyfikacja jeszcze nie została wykonana”. W trakcie skanu UI pokazuje bieżące chunky Recorder oraz komunikat, że activity classification jest pending. Przycisk Rescan devices pozostaje zablokowany do zakończenia bieżącego skanu, a ponowne wywołanie API discovery jest idempotentne i zwraca aktualny stan zadania zamiast błędu 409.
+
+Nie dodano klasyfikowania całego archiwum po każdym chunku. Byłoby to kuszące dla szybszego pojawiania się kart, ale ponownie zwiększyłoby liczbę odczytów SQLite i obciążenie Raspberry Pi. Klasyfikacja nadal wykonuje jeden ograniczony przebieg po zakończeniu importu targetów.
+
+
+### Trening zatrzymany na 0% - 0.14.40
+
+Na świeżej instalacji z wieloma aktywnymi encjami pierwszy automatyczny trening mógł pozostać na etapie „screening context candidates” przy 0%. Kolejka zachowywała się wtedy poprawnie: aktywny agent nadal trzymał pojedynczy slot HEAVY_JOBS, więc następne agenty czekały. Problemem był brak postępu samego workera.
+
+Wykryto dwie przyczyny. Po pierwsze, każda zmiana stanu z Home Assistant odnawiała krótkie okno pierwszeństwa realtime. Przy częstych sensorach deadline był odnawiany szybciej niż trening dostawał CPU, przez co worker mógł być głodzony praktycznie bez końca. Od 0.14.40 pojedynczy burst realtime ma maksymalnie 1,25 s, po czym następuje 0,10 s cooldown, w którym worker może wykonać swój normalny krótki, ograniczony budżetem fragment pracy.
+
+Po drugie, feature screening wykonywał osobny pre-pass historii dla szybkich driverów, a następnie SQLite LAG/PARTITION dla całego przedziału. Na Raspberry Pi zapytanie okienkowe mogło długo przygotowywać wynik zanim oddało pierwszy rekord, więc UI pozostawało na 0%. Od 0.14.40 oba cele realizuje jeden chronologiczny strumień z istniejącego indeksu czasu. Surowe rekordy potrzebne do fast-driver scoring trafiają do ograniczonego bufora, a ten sam przebieg wyznacza effective changes dla precursor screeningu.
+
+Postęp screeningu jest aktualizowany od początku przebiegu. Po zakończeniu aktywnego treningu mechanizm kolejki pozostaje bez zmian: agent kończy jako Shadow/qualified albo Paused, slot HEAVY_JOBS jest zwalniany i następny oczekujący agent startuje automatycznie.

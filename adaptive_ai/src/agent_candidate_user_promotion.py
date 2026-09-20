@@ -295,7 +295,11 @@ def install(manager):
         return out
 
     def _observation_call(fn, agent, state_map):
-        row = _active_observation_row(manager, str(agent.get("id") or ""))
+        aid = str(agent.get("id") or "")
+        hot_active = getattr(manager, "candidate_hot_active", None)
+        if callable(hot_active) and not hot_active(aid):
+            return fn(agent, state_map)
+        row = _active_observation_row(manager, aid)
         if not row:
             return fn(agent, state_map)
         gate = _json(row.get("offline_gate_json"), {})

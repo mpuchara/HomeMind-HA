@@ -20,6 +20,17 @@ BACKGROUND_DUTY_CYCLE = 0.20
 BACKGROUND_BATCH_ROWS = 128
 BACKGROUND_MIN_GRACE_SECONDS = 60.0
 RECORDER_BACKOFF_SECONDS = 120.0
+INITIAL_DISCOVERY_META_KEY = "initial_discovery_complete"
+DEEP_DISCOVERY_META_KEY = "discovery_deep_history_complete"
+
+
+def _initial_discovery_needed(store):
+    """True only before the first completed classification on an empty install."""
+    if store.meta_get(INITIAL_DISCOVERY_META_KEY, ""):
+        return False
+    # Existing agent configuration proves this is an upgrade/restart, not a clean
+    # installation.  Do not surprise an established system with Recorder work.
+    return not bool(store.list_agent_configs())
 
 
 def _clamp(value, low, high):
@@ -47,6 +58,10 @@ def install(runtime):
         "recorder_backoff_until_monotonic": 0.0,
         "recorder_timeout_count": 0,
         "automation_scan_workers": 1,
+        "initial_discovery_scheduled": False,
+        "initial_discovery_completed": False,
+        "deep_discovery_reconciliation_scheduled": False,
+        "deep_discovery_reconciliation_completed": False,
     }
     state_lock = threading.RLock()
     core.OPTIONS["history_background_start_delay_seconds"] = state["background_grace_seconds"]
@@ -103,7 +118,16 @@ def install(runtime):
                 if history_module.target_options_for_state(st)
             ]
             history_self.discovered_controllable = len(controllable)
-            existing = [a for a in store.list_agents() if a.get("enabled")]
+            all_existing = store.list_agent_configs()
+            existing = [a for a in all_existing if a.get("enabled")]
+            # Upgrades that already contain agent configuration are not fresh installs.
+            # Persist the boundary once so future restarts do not need to infer it.
+            initial_marker = store.meta_get(INITIAL_DISCOVERY_META_KEY, "")
+            if not initial_marker and all_existing:
+                initial_marker = history_module.iso_from_ts(history_module.now_ts())
+                store.meta_set(INITIAL_DISCOVERY_META_KEY, initial_marker)
+            with state_lock:
+                state["initial_discovery_completed"] = bool(initial_marker)
             history_self.discovered_active = len(
                 [a for a in existing if a.get("target_entity") in current]
             )
@@ -157,18 +181,21 @@ def install(runtime):
                 {
                     "existing_agents": len(existing),
                     "controllable_now": len(controllable),
+                    "initial_discovery_completed": bool(initial_marker),
                 },
             )
             return True
 
         def quiet_run(history_self):
+            # Operational-first runtime remains the steady state.  The sole exception is
+            # a genuinely empty installation: once HTTP/realtime startup is ready, launch
+            # one bounded discovery pass through the same async/single-flight path as the
+            # Rescan button.  A durable completion marker keeps all later restarts quiet.
             quiet_done = False
-            first_heavy = True
             while not history_self.stop_event.is_set():
                 if not history_self.engine.state_map:
                     history_self.stop_event.wait(1.0)
                     continue
-
                 if not quiet_done:
                     try:
                         quiet_done = quiet_start(history_self)
@@ -186,35 +213,53 @@ def install(runtime):
                     if not quiet_done:
                         history_self.stop_event.wait(1.0)
                         continue
-                    if history_self.stop_event.wait(state["background_grace_seconds"]):
-                        return
 
-                try:
-                    # Cached mappings are enough for the first maintenance pass. Do not
-                    # overlap automation-config API calls with its Recorder traffic.
-                    old_scan = core.OPTIONS.get("automation_scan_enabled", True)
-                    if first_heavy:
-                        core.OPTIONS["automation_scan_enabled"] = False
-                    try:
-                        original_bootstrap(history_self)
-                    finally:
-                        if first_heavy:
-                            core.OPTIONS["automation_scan_enabled"] = old_scan
-                    first_heavy = False
-                    history_self.error = None
-                except Exception as exc:
-                    history_self.error = f"{type(exc).__name__}: {exc}"
-                    history_self.set_status("error", message=history_self.error)
-                    store.event(
-                        None,
-                        "error",
-                        "history_manager_error",
-                        history_self.error,
-                        {"trace": traceback.format_exc(limit=6)},
-                    )
+                marker = store.meta_get(INITIAL_DISCOVERY_META_KEY, "")
+                deep_marker = store.meta_get(DEEP_DISCOVERY_META_KEY, "")
+                with state_lock:
+                    state["initial_discovery_completed"] = bool(marker)
+                    state["deep_discovery_reconciliation_completed"] = bool(deep_marker)
+                initial_needed = not marker and _initial_discovery_needed(store)
+                # 0.14.41 and older low-memory installs can already have agents and an
+                # initial-discovery marker while their local archive only covers the last
+                # 24 h of the 10-day classifier window. Reconcile that mismatch exactly
+                # once after runtime readiness; the discovery cycle persists deep_marker.
+                deep_reconcile_needed = bool(marker) and not bool(deep_marker)
+                discovery_needed = initial_needed or deep_reconcile_needed
+                if discovery_needed and not core.startup_snapshot().get("ready"):
+                    # History starts during runtime construction, just before the public
+                    # ready flag flips. Do not turn that tiny ordering gap into a 60 s
+                    # apparent cold-start stall.
+                    history_self.stop_event.wait(0.25)
+                    continue
+                if discovery_needed and not history_self.discovery_job_active:
+                    request = getattr(history_self, "request_discovery_rescan", None)
+                    reason = "fresh_install" if initial_needed else "deep_history_reconcile"
+                    if callable(request) and request(
+                        threshold_override=1, reason=reason
+                    ):
+                        with state_lock:
+                            if initial_needed:
+                                state["initial_discovery_scheduled"] = True
+                            else:
+                                state["deep_discovery_reconciliation_scheduled"] = True
+                        store.event(
+                            None,
+                            "info",
+                            "initial_discovery_started" if initial_needed else "deep_discovery_reconciliation_started",
+                            (
+                                "Fresh install: started one-time controllable-device discovery"
+                                if initial_needed
+                                else "Upgrade: reconciling the full controllable-device discovery window once"
+                            ),
+                            {"threshold_override": 1, "reason": reason},
+                        )
 
-                mins = max(5, int(core.OPTIONS["history_maintenance_minutes"]))
-                history_self.stop_event.wait(mins * 60)
+                # Realtime ingestion keeps the local archive current. There is no
+                # periodic Recorder maintenance here. A failed one-time discovery or
+                # deep-window reconciliation may retry after the bounded delay until its
+                # durable marker is written; later restarts remain quiet.
+                history_self.stop_event.wait(60.0)
 
         history_module.HistoryManager.run = quiet_run
 
@@ -292,12 +337,30 @@ def install(runtime):
 
         def fetch_with_circuit_breaker(history_self, *args, **kwargs):
             if HEAVY_JOBS.owner == "discovery":
-                with state_lock:
-                    if (
-                        time.monotonic()
-                        < state["recorder_backoff_until_monotonic"]
-                    ):
-                        return 0
+                # Backoff must throttle Recorder, not silently drop discovery coverage.
+                # Returning 0 here made the caller count a skipped chunk as completed,
+                # so one timeout could erase roughly two minutes of target history from
+                # classification. Wait cooperatively, then retry the same resilient
+                # request/split path. Realtime HA processing stays independent.
+                while not history_self.stop_event.is_set():
+                    with state_lock:
+                        remaining = (
+                            state["recorder_backoff_until_monotonic"]
+                            - time.monotonic()
+                        )
+                    if remaining <= 0:
+                        break
+                    cancel = getattr(history_self, "job_cancel_event", None)
+                    if cancel is not None and cancel.is_set():
+                        raise InterruptedError("History discovery cancelled during Recorder backoff")
+                    history_self.set_status(
+                        message=f"Recorder cooling down · retry in {max(1, int(remaining))} s",
+                        phase_detail="Discovery coverage is paused, not skipped",
+                        eta_source="Recorder circuit breaker",
+                    )
+                    history_self.stop_event.wait(min(1.0, max(0.05, remaining)))
+                if history_self.stop_event.is_set():
+                    raise InterruptedError("History discovery stopped during Recorder backoff")
             return original_fetch(history_self, *args, **kwargs)
 
         history_module.HistoryManager._fetch_history_resilient = fetch_with_circuit_breaker
@@ -343,9 +406,9 @@ def install(runtime):
     core.initialize_runtime = initialize_runtime
     core.RELEASE_016_RESOURCE_GUARD = snapshot
     core.release_016_resource_guard_contract = {
-        "startup": "saved_agents_and_realtime_before_recorder",
-        "first_background_pass": "automation_scan_suppressed",
-        "background_archive_cpu": "20pct_default_duty_cycle",
+        "startup": "saved_agents_and_realtime_then_fresh_install_discovery",
+        "automatic_background_discovery": "fresh_install_once_plus_one_time_deep_reconciliation_then_explicit_rescan",
+        "background_archive_cpu": "20pct_default_duty_cycle_when_explicit",
         "recorder_timeout": "120s_circuit_breaker_no_recursive_burst",
         "automation_config_reads": "serialized_and_last_scan_persisted",
         "entrypoint_import": "no_runtime_or_database_imports",

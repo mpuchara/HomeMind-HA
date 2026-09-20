@@ -1,3 +1,117 @@
+# 0.14.52 — 2026-09-20
+
+- Speed up historical training replay without changing rewards, labels or policy semantics: incremental FeatureJournal reads now use two disjoint indexed ranges instead of an `event_time OR received_time` predicate that could scan old history on every empty step.
+- Add an `(entity_id, received_time, event_time)` index for late-packet replay; ordinary event-time increments continue to use the existing entity/event-time index.
+- Preserve the previous exact per-entity newest-64 ordering after merging the two causal branches, including late and out-of-order observations.
+- Add regression coverage comparing the new split-range result to the legacy OR query and verifying SQLite chooses the received-time index.
+- Include the open PR #130 Sensor Tournament fix: quality persistence now supplies 12 values for 12 columns, with restart/shadow regression coverage.
+- Keep the 7-day manual training window, bounded RAM replay cache, Candidate lineage, Correct history and physical-control guards unchanged.
+
+# 0.14.51 — 2026-09-20
+
+- Make Candidate decision tiles last-known-state displays: `Desired`, `Candidate Desired` and Candidate confidence remain available until a newer real decision replaces them.
+- Keep the existing 95-second freshness window as metadata only. Freshness no longer turns an observed decision back into `—` on the card.
+- Preserve `shadow_active` as a freshness signal, separate from the last observed Candidate decision shown to the user.
+- On restart, warm the latest Parent/Candidate decision once from durable decision history and keep subsequent 1-second card polling RAM-first.
+- Harden the browser cache so sparse/heavy Candidate status payloads cannot erase a non-null last decision for the same generation.
+- Keep paired A/B evidence, promotion gates, Correct history gap semantics and Candidate Executor isolation unchanged.
+
+# 0.14.50 — 2026-09-20
+
+- Fix intermittent Candidate-card `Desired` disappearing while `Candidate Desired` stays visible.
+- Treat Parent Desired and Candidate Desired as two independently observed operational values, each with the existing 95-second freshness limit.
+- Candidate-only passive/heartbeat observations no longer clear a still-fresh Parent Desired solely because their event ID differs from the Parent's last observation.
+- Expose `parent_decision_paired` so diagnostics can distinguish an independently fresh display pair from a true same-event A/B pair.
+- Keep paired future A/B evidence, comparison scoring, promotion gates and Candidate Executor isolation strictly same-event-only; no evidence semantics are relaxed.
+- Preserve the 0.14.49 Candidate heartbeat, Correct chart fixes, seven-day training window and RAM-first hot paths.
+
+# 0.14.49 — 2026-09-20
+
+- Fix the quiet-home Candidate Shadow heartbeat. The intended 30-second refresh can now observe the same Home Assistant state revision again; revision dedupe still suppresses duplicate event-driven requests.
+- Keep sparse Parent/Candidate Desired visible in Correct for the existing 95-second observed-decision validity window. A single real Shadow observation now draws a horizontal state segment instead of an invisible zero-length SVG move.
+- Preserve genuine runtime gaps after the stale cutoff. No historical Desired is synthesized and policy replay remains disabled.
+- Give direct Parent and Candidate Desired different dash patterns so identical G2/G3 decisions do not completely cover one another.
+- Show separate Current, Parent and Candidate point counts in the Correct status line to make missing-generation telemetry immediately visible during debugging.
+- Preserve Current history, seven-day training, RAM replay cache, reward/model/promotion semantics, Candidate Executor isolation and physical-control guards from 0.14.48.
+
+# 0.14.48 — 2026-09-20
+
+- Fix the remaining Correct chart Current regression. Recorder state is now projected across the selected range: the last state at/before `Od` is drawn from `Od`, and the last known state is extended to `Do`.
+- Do not apply Candidate/Desired's stale-decision timeout to physical Current. A device that stays OFF or ON for ten minutes now renders a continuous Current line instead of two disconnected invisible points.
+- Make normal Rebuild reuse the previous feature schema and selection metadata in RAM before learned heads are cleared. Policy weights are still rebuilt from scratch; only expensive sensor-selection work is retained.
+- Scope the schema cache to the agent's active explicit training job so global model invalidation cannot accidentally resurrect an old schema.
+- When first-time feature screening is genuinely required, stream only policy-admissible context entities plus the target instead of every archived entity.
+- Add a bounded per-training replay LRU shared by onset and persistence temporal cursors. Repeated exact small history queries can now be served from RAM; the cache is capped at 8192 rows by default and disappears with the job.
+- Keep the 0.14.47 seven-day training window, 55% cooperative duty cycle, 35 ms maximum uninterrupted work slice and realtime preemption unchanged.
+- Preserve durable raw history, feedback, model checkpoints, benchmark/evidence and Candidate safety semantics.
+
+# 0.14.47 — 2026-09-20
+
+- Restore the Correct chart's physical Current history. Candidate charts now read Current directly from target entity_history instead of deriving it from Candidate observation rows, so gaps in Candidate inference no longer erase the real device-state curve.
+- Fix Gen 2+ / Gen 3+ Candidate realtime routing. Active Candidate observers are indexed by durable lineage root_agent_id rather than agent_candidates.parent_agent_id, which becomes a Candidate surrogate after Gen 1.
+- Limit explicit Train/Rebuild to a rolling seven-day history window anchored to current time. Older archive remains durable but no longer multiplies every interactive retrain.
+- Clamp interrupted legacy 10+ day training windows forward into the new seven-day window on Resume.
+- Remove fixed inter-chunk pauses from explicit selected-agent training with a dedicated agent_training_pause_ms=0 option. Discovery and background Recorder work keep the existing 1500 ms safety pause.
+- Increase explicit training cooperative duty from 20% to 55%, reduce maximum uninterrupted Python work from 50 ms to 35 ms, and cap throttle sleeps at 0.5 s. Fresh HA state_changed events still request strict realtime priority.
+- Preserve one-heavy-job FIFO, Candidate Executor isolation, durable history/evidence, and all 0.14.46 RAM-first hot-read behavior.
+
+# 0.14.46 — 2026-09-19
+
+- Move the 1 s Candidate live-card path to RAM. Current comes from the websocket-backed Engine state map; Candidate/Parent Desired, confidence and timestamp come from the in-memory generation runtime. SQLite is now only a cold restart/backfill source for these tiles.
+- Keep the latest observed decision snapshot for every active Candidate generation in RAM on every inference, even when the existing durable 30 s history heartbeat does not need to write another row.
+- Cache the active direct Parent/Candidate A/B edge in RAM so target transitions do not execute a SQLite lookup before outcome evaluation. Lifecycle mutations invalidate the cache synchronously.
+- Cache hidden Candidate IDs, including retained lineage surrogates, in RAM. Normal live-agent enumeration and candidate-membership checks no longer query Candidate tables repeatedly.
+- Prefer Engine.all_agent_configs for passive Candidate root configuration and Engine.models for already-materialized policy schema reads.
+- Preserve persistence boundaries: models, training state, user feedback, promotion state, decision history and paired future evidence remain durable. Active RL policies were already resident in Engine.models, so this release deliberately avoids a second mutable model cache.
+- Preserve Executor/HA isolation for Candidate Shadow and all 0.14.45 event-driven fallback semantics.
+
+# 0.14.45 — 2026-09-19
+
+- Fix false errors when switching a trained agent from Paused to Shadow. The successful mode PATCH is now separated from the subsequent layered UI refresh, so a transient renderer problem cannot be reported as a failed mode change or generate duplicate alerts.
+- Harden retained Live-card mode/decision nodes and Candidate preference metric tiles against transient DOM replacement during layered refreshes.
+- Give Candidate generations a persistent event-driven Shadow fallback instead of relying exclusively on Parent/Live `process_agent`. Active Candidate dependencies are indexed in memory from the target, explicit inputs, Parent schema, Candidate schema and target-area sources.
+- Keep websocket work minimal: `state_changed` only queues Candidate observation; policy inference runs later on the existing Candidate worker.
+- Prefer and deduplicate against normal Parent inference by Engine state revision. Passive fallback runs only when the same/newer revision was not already observed through the shared Parent path.
+- Add a bounded 30-second Candidate Shadow heartbeat for periods where Parent is paused or no relevant event reaches Parent. The heartbeat records failed attempts and never self-wakes into a retry loop.
+- Passive Candidate observations never touch Executor or Home Assistant services and never fabricate a Parent prediction. They use explicit `candidate-passive:` event IDs; A/B paired evidence still requires a real shared Parent+Candidate prediction event.
+- Preserve training, discovery, reward, benchmark, promotion and physical-control semantics.
+
+# 0.14.44 — 2026-09-19
+
+- Replace misleading per-chunk training progress with a continuous whole-agent training progress contract. Recorder/screening/replay counters remain visible as the current stage and may restart between chunks without resetting the global percentage.
+- Add a whole-training ETA derived from real wall-clock end-to-end progress, including Recorder waits, Raspberry-Pi cooperative throttling and completed replay chunks. Current-stage ETA and rows/s remain separate diagnostics.
+- Overlay the in-memory global training progress onto the active agent card without adding periodic SQLite writes.
+- Add a monotonic TrainingQueue lifecycle revision. Completion of one agent and start of the next forces a fresh cache-bypassing agent-list read, so cards cannot remain stuck on stale TRAINING state.
+- Restore lifecycle actions hidden by the Generation Workflow action row: a trained `mode=paused` agent gets **Start Shadow**, an active Shadow can be paused, and `training_state=paused` gets **Resume training**.
+- Keep the 20% Pi-safe training CPU duty cycle and 50 ms continuous-work slice unchanged. Long training is reported truthfully rather than accelerated at the cost of Home Assistant/UI responsiveness.
+- Preserve discovery, model, reward, benchmark, Candidate, Teach/Correct and physical-control semantics.
+
+# 0.14.43 — 2026-09-19
+
+- Fix the false `Train failed: Cannot set properties of null (setting 'textContent')` alert after a successful manual Train queue admission.
+- Make the retained-card P0 renderer tolerate the Generation Workflow layer replacing the original action row. Missing legacy mode controls are now treated as intentional ownership by the newer UI layer.
+- Separate Train HTTP admission from the subsequent UI refresh. A renderer/refresh exception after a successful POST is logged for automatic retry instead of being reported as a failed Train request.
+- Preserve TrainingQueue, discovery, model, Candidate, Teach/Correct and physical-control semantics.
+
+# 0.14.42 — 2026-09-19
+
+- Fix clean-install discovery completeness: the classifier uses the configured 10-day activity window, so the first low-memory scan now backfills the older part of that same window instead of importing only the most recent 24 hours.
+- Keep the deep scan Raspberry-Pi friendly: state/value targets use minimal no-attribute Recorder responses in 24-hour windows; only attribute-only targets such as HVAC setpoints, cover position and humidity require bounded full-state history.
+- Repair existing 0.14.41 installations automatically with one post-ready `deep_history_reconcile` pass when the durable full-window marker is missing. Later restarts stay quiet.
+- Fix Recorder circuit-breaker data loss: discovery now waits cooperatively through a Recorder backoff and retries the same chunk instead of treating skipped chunks as successful zero-row reads.
+- Fix the post-discovery agent-list refresh by using a per-discovery revision request key, bypassing the intentional 3-second `api/agents` polling cache.
+- Add discovery reason diagnostics for inactive targets and expose whether the full discovery window has been completed.
+- Preserve manual device selection: newly discovered agents remain WAITING/PAUSED and no training starts until the user explicitly presses **Train**.
+- Preserve model, reward, qualification, Candidate, Teach/Correct and physical-control semantics.
+
+# 0.14.41 — 2026-09-19
+
+- Restore exactly one automatic low-memory controllable-device discovery pass on a genuinely clean installation, after HTTP/realtime startup is ready. Established installs with existing agents remain quiet and periodic Recorder maintenance stays disabled.
+- Restore the pre-async-Rescan activity threshold override of 1 through the full async discovery path, including the TrainingQueue discovery-priority wrapper.
+- Separate discovery from training: auto-discovered agents remain WAITING/PAUSED and are never placed into the initial-training queue. The user explicitly chooses which device to train with **Train**.
+- Refresh the agent list immediately after a completed discovery run so newly detected devices appear without waiting for a later polling cycle.
+- Preserve one-heavy-job resource protection, explicit Train/Resume/Rebuild/Teach queueing, existing model/reward/qualification semantics and physical-control guards.
+
 # 0.14.27 — 2026-09-18
 
 - Make Correct history genuinely observed-only for live generations. The Correct chart and point inspector now read the recorded `decision_history` plus the target entity's observed state history directly; they no longer invoke Teach-RL policy replay merely to draw the chart.

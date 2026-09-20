@@ -2,8 +2,8 @@
   const pct=v=>v==null?'—':`${(Number(v)*100).toFixed(1)}%`;
   const n1=v=>v==null?'—':Number(v).toFixed(1);
   const signed=v=>v==null?'—':`${Number(v)>=0?'+':''}${Number(v).toFixed(3)}`;
-  let cachedCandidates=[];
-  let cachedAgents=[];
+  let cachedCandidates=window.__adaptiveAiCandidates||[];
+  let cachedAgents=window.__adaptiveAiAgents||[];
 
   function renameLegacyLabels(){
     for(const span of document.querySelectorAll('.agent-primary span,.candidate-decision-strip span,.candidate-compare-details span,.candidate-compare-minimal span')){
@@ -111,21 +111,20 @@
     }
   }
 
-  async function refresh(){
-    if(window.__adaptiveAiRuntimeReady===false){decorateAll();return;}
-    try{
-      const [agents,candidates]=await Promise.all([
-        fetch('api/agents',{cache:'no-store'}),
-        fetch('api/candidates',{cache:'no-store'}),
-      ]);
-      if(agents.ok)cachedAgents=await agents.json();
-      if(candidates.ok){
-        const data=await candidates.json();
-        cachedCandidates=data.candidates||[];
-      }
-    }catch(_e){}
+  function refresh(){
+    cachedAgents=window.__adaptiveAiAgents||cachedAgents;
+    cachedCandidates=window.__adaptiveAiCandidates||cachedCandidates;
     decorateAll();
   }
+
+  window.addEventListener('adaptive-ai:agents',event=>{
+    cachedAgents=event.detail||[];
+    decorateAll();
+  });
+  window.addEventListener('adaptive-ai:candidates',event=>{
+    cachedCandidates=event.detail||[];
+    decorateAll();
+  });
 
   // Observe only replacement of top-level agent cards. Observing the entire body with
   // subtree=true creates a self-triggering loop because confidence decoration itself
@@ -140,6 +139,5 @@
       queueMicrotask(()=>{queued=false;decorateAll();});
     }).observe(root,{childList:true});
   }
-  setInterval(refresh,2000);
   refresh();
 })();

@@ -10,6 +10,8 @@ from context import TemporalHistory
 from observation_contract import (
     FeatureJournal,
     FeatureSchemaV12,
+    FEATURE_CONTRACT_VERSION,
+    LEGACY_FEATURE_CONTRACT_VERSION,
     HOME_FEATURE_NAMES,
     HOME_TAIL,
     ObservationSQLiteTemporalTracker,
@@ -75,8 +77,11 @@ class ObservationFeatureTests(unittest.TestCase):
         valid_idx = label_index(labels, ":valid")
         self.assertEqual(vu.get(value_idx, 0.0), 0.0)
         self.assertEqual(vz.get(value_idx, 0.0), 0.0)
-        self.assertEqual(vu.get(valid_idx, 0.0), 0.0)
-        self.assertEqual(vz.get(valid_idx, 0.0), 1.0)
+        # v2 centers nominal validity at zero and encodes missingness as negative;
+        # the two states remain distinguishable without adding a repeated +1 column to
+        # every healthy fast-light sensor.
+        self.assertEqual(vu.get(valid_idx, 0.0), -1.0)
+        self.assertEqual(vz.get(valid_idx, 0.0), 0.0)
         self.assertNotEqual(vu, vz)
 
     def test_celsius_and_fahrenheit_are_equivalent(self):
@@ -121,6 +126,138 @@ class ObservationFeatureTests(unittest.TestCase):
         self.assertEqual(a["kind"], "category")
         self.assertEqual(b["kind"], "category")
         self.assertNotEqual(a["category"], b["category"])
+
+    def test_fast_light_v2_nominal_transport_metadata_is_neutral(self):
+        history = TemporalHistory()
+        st = sensor_state("sensor.test", "on", 100.0, device_class="occupancy")
+        # Raw snapshot path deliberately has no received-time metadata, matching callers
+        # that have a valid HA state but not a transport timestamp.
+        history.add(st["entity_id"], 100.0, dict(st))
+        vector, labels, _ = build_observation_features(
+            self.schema, {"sensor.test": st}, history, 100.0, self.a
+        )
+        self.assertEqual(vector.get(label_index(labels, ":valid"), 0.0), 0.0)
+        self.assertEqual(vector.get(label_index(labels, ":communication_age"), 0.0), 0.0)
+        self.assertEqual(vector.get(label_index(labels, ":quality"), 0.0), 0.0)
+
+        legacy = FeatureSchemaV12(
+            128, ["sensor.test"],
+            feature_contract_version=LEGACY_FEATURE_CONTRACT_VERSION,
+        )
+        legacy_vector, legacy_labels, _ = build_observation_features(
+            legacy, {"sensor.test": st}, history, 100.0, self.a
+        )
+        self.assertEqual(legacy_vector.get(label_index(legacy_labels, ":valid"), 0.0), 1.0)
+        self.assertEqual(
+            legacy_vector.get(label_index(legacy_labels, ":communication_age"), 0.0), 1.0
+        )
+        self.assertGreater(
+            legacy_vector.get(label_index(legacy_labels, ":quality"), 0.0), 0.0
+        )
+
+    def test_feature_contract_is_versioned_without_reinterpreting_legacy_schema(self):
+        fresh = FeatureSchemaV12(128, ["sensor.test"])
+        self.assertEqual(fresh.feature_contract_version, FEATURE_CONTRACT_VERSION)
+        raw = fresh.export()
+        raw.pop("feature_contract_version")
+        legacy = FeatureSchemaV12.from_export(raw, 128)
+        self.assertIsNotNone(legacy)
+        self.assertEqual(
+            legacy.feature_contract_version, LEGACY_FEATURE_CONTRACT_VERSION
+        )
+        self.assertEqual(
+            legacy.export()["feature_contract_version"],
+            LEGACY_FEATURE_CONTRACT_VERSION,
+        )
+
+    def _photometric_pair(self, ambient, emitted):
+        history = TemporalHistory(maxlen=96)
+        schema = FeatureSchemaV12(128, ["sensor.room_lux"])
+        a = agent(target_entity="light.kitchen", target_property="power")
+
+        light_off = sensor_state("light.kitchen", "off", 99.0, last_changed=90.0)
+        lux_off = sensor_state(
+            "sensor.room_lux", ambient, 99.0, unit="lx",
+            device_class="illuminance", last_changed=99.0,
+        )
+        add_live(history, light_off, 99.0, 99.01)
+        add_live(history, lux_off, 99.0, 99.01)
+        off_vector, labels, off_meta = build_observation_features(
+            schema,
+            {"light.kitchen": light_off, "sensor.room_lux": lux_off},
+            history, 99.02, a,
+        )
+
+        light_on = sensor_state("light.kitchen", "on", 100.0, last_changed=100.0)
+        lux_on = sensor_state(
+            "sensor.room_lux", ambient + emitted, 100.0, unit="lx",
+            device_class="illuminance", last_changed=100.0,
+        )
+        add_live(history, light_on, 100.0, 100.01)
+        add_live(history, lux_on, 100.0, 100.01)
+        on_vector, _, on_meta = build_observation_features(
+            schema,
+            {"light.kitchen": light_on, "sensor.room_lux": lux_on},
+            history, 100.02, a,
+        )
+        return off_vector, on_vector, labels, off_meta, on_meta
+
+    def test_fast_light_lux_uses_pre_action_ambient_v2(self):
+        off_vector, on_vector, labels, off_meta, on_meta = self._photometric_pair(
+            12.0, 185.0
+        )
+        value_idx = label_index(labels, ":value")
+        self.assertAlmostEqual(
+            off_vector.get(value_idx, 0.0),
+            on_vector.get(value_idx, 0.0),
+            places=12,
+        )
+        self.assertGreater(on_vector.get(value_idx, 0.0), 0.25)
+        self.assertLess(on_vector.get(value_idx, 0.0), 0.5)
+        self.assertEqual(
+            off_meta["entity_observations"]["sensor.room_lux"]["photometric"]["source"],
+            "current_light_off",
+        )
+        self.assertEqual(
+            on_meta["entity_observations"]["sensor.room_lux"]["photometric"]["source"],
+            "pre_action_baseline",
+        )
+        self.assertEqual(on_meta["feature_contract_version"], FEATURE_CONTRACT_VERSION)
+
+    def test_fast_light_daylight_is_invariant_to_own_light_v2(self):
+        off_vector, on_vector, labels, _, _ = self._photometric_pair(220.0, 185.0)
+        value_idx = label_index(labels, ":value")
+        self.assertAlmostEqual(
+            off_vector.get(value_idx, 0.0),
+            on_vector.get(value_idx, 0.0),
+            places=12,
+        )
+        self.assertGreater(on_vector.get(value_idx, 0.0), 0.7)
+
+    def test_fast_light_startup_on_without_pre_action_lux_is_unknown_v2(self):
+        history = TemporalHistory(maxlen=96)
+        schema = FeatureSchemaV12(128, ["sensor.room_lux"])
+        a = agent(target_entity="light.kitchen", target_property="power")
+        light_on = sensor_state("light.kitchen", "on", 100.0, last_changed=90.0)
+        lux_on = sensor_state(
+            "sensor.room_lux", 200.0, 100.0, unit="lx",
+            device_class="illuminance", last_changed=90.0,
+        )
+        add_live(history, light_on, 100.0, 100.01)
+        add_live(history, lux_on, 100.0, 100.01)
+
+        vector, labels, meta = build_observation_features(
+            schema,
+            {"light.kitchen": light_on, "sensor.room_lux": lux_on},
+            history, 100.02, a,
+        )
+
+        self.assertEqual(vector.get(label_index(labels, ":valid"), 0.0), -1.0)
+        self.assertEqual(
+            meta["entity_observations"]["sensor.room_lux"]["photometric"]["source"],
+            "unresolved_light_on",
+        )
+        self.assertFalse(meta["reconstruction_complete"])
 
     def test_home_known_is_an_explicit_tail_feature(self):
         history = TemporalHistory()
@@ -227,6 +364,38 @@ class ObservationReplayParityTests(unittest.TestCase):
         finally:
             tracker.close()
         self.assertAlmostEqual(value["physical_value"], 30.0)
+
+    def test_record_batch_preserves_single_record_contract_and_deduplication(self):
+        first = sensor_state("sensor.fast", 10, 900.0, unit="%")
+        second = sensor_state("sensor.fast", 20, 901.0, unit="%")
+        keys = self.journal.record_batch([
+            {
+                "entity_id": "sensor.fast", "state": first,
+                "event_time": 900.0, "received_time": 900.1,
+                "source": "ha_state_changed",
+            },
+            {
+                "entity_id": "sensor.fast", "state": second,
+                "event_time": 901.0, "received_time": 901.1,
+                "source": "ha_state_changed",
+            },
+        ])
+        self.assertEqual(len(keys), 2)
+        # Replaying the same HA event must keep the stable event identity and earliest
+        # receipt time, exactly like the former one-row writer.
+        again = self.journal.record(
+            "sensor.fast", second, event_time=901.0, received_time=902.0,
+            source="ha_state_changed",
+        )
+        self.assertEqual(again, keys[1])
+        with self.store.conn() as c:
+            rows = c.execute(
+                """SELECT event_key,event_time,received_time,state
+                   FROM feature_observation_events ORDER BY event_time"""
+            ).fetchall()
+        self.assertEqual(len(rows), 2)
+        self.assertEqual(float(rows[1]["received_time"]), 901.1)
+        self.assertEqual(rows[1]["state"], "20")
 
     def test_buffer_is_bounded_per_entity(self):
         tiny = FeatureJournal(

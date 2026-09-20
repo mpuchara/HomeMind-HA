@@ -448,6 +448,7 @@ def install(manager):
                                 "generation": generation_number,
                                 "target_mode": mode,
                             })
+                    manager.store.touch_agent_index()
                     committed = True
 
                     if current_mode == "control" and mode == "control":

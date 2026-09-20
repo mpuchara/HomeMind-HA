@@ -69,6 +69,7 @@ class TrainingQueue(threading.Thread):
         self.pending = {}
         self.active = None
         self._queue_sequence = 0
+        self.revision = 0
         self._training_priority = threading.Event()
         self._discovery_preempted = False
         self._install_discovery_priority_bridge()
@@ -120,13 +121,13 @@ class TrainingQueue(threading.Thread):
         """
         original_cycle = getattr(self.history, "_manual_lightweight_cycle", None)
         if callable(original_cycle) and not getattr(self.history, "_training_priority_cycle_bridge", False):
-            def priority_cycle(current, controllable, end_ts):
+            def priority_cycle(current, controllable, end_ts, *args, **kwargs):
                 if self._training_priority.is_set():
                     self._mark_discovery_preempted()
                     self._set_discovery_deferred_status()
                     return None
                 try:
-                    return original_cycle(current, controllable, end_ts)
+                    return original_cycle(current, controllable, end_ts, *args, **kwargs)
                 except _YieldDiscovery:
                     self._set_discovery_deferred_status()
                     return None
@@ -225,6 +226,10 @@ class TrainingQueue(threading.Thread):
         except Exception:
             # The caller records a dedicated cleanup failure event.
             raise
+
+    def _bump_revision_locked(self):
+        self.revision += 1
+        return self.revision
 
     def _resort_jobs_locked(self):
         self.jobs = deque(sorted(
@@ -338,6 +343,7 @@ class TrainingQueue(threading.Thread):
             self.jobs.append(job)
             self.pending[agent_id] = job
             self._resort_jobs_locked()
+            self._bump_revision_locked()
             position = next(
                 (index + 1 for index, queued in enumerate(self.jobs)
                  if queued["agent_id"] == agent_id),
@@ -365,6 +371,7 @@ class TrainingQueue(threading.Thread):
             if not job:
                 return False
             self.jobs = deque(x for x in self.jobs if x["agent_id"] != agent_id)
+            self._bump_revision_locked()
             self.store.event(agent_id, "info", "training_queue_cancelled",
                              "Queued training request cancelled", None)
             self.cv.notify_all()
@@ -427,6 +434,7 @@ class TrainingQueue(threading.Thread):
                 })
             return {
                 "active": active, "queued": queued, "queued_count": len(queued),
+                "revision": int(self.revision),
                 "heavy_job": HEAVY_JOBS.owner,
                 "explicit_training_priority": self._training_priority.is_set(),
             }
@@ -437,6 +445,7 @@ class TrainingQueue(threading.Thread):
                 return None
             job = self.jobs.popleft()
             self.pending.pop(job["agent_id"], None)
+            self._bump_revision_locked()
             self.store.event(job["agent_id"], "warning", event_code, message, detail)
             self.cv.notify_all()
         self._release_training_priority_if_idle()
@@ -499,6 +508,7 @@ class TrainingQueue(threading.Thread):
             self.pending.pop(job["agent_id"], None)
             job = {**job, "started_at": time.time()}
             self.active = job
+            self._bump_revision_locked()
             if service is not None:
                 service.mark_training(job["agent_id"])
             self.store.event(job["agent_id"], "info", "training_queue_started",
@@ -535,6 +545,7 @@ class TrainingQueue(threading.Thread):
         with self.cv:
             if self.active and self.active["agent_id"] == job["agent_id"]:
                 self.active = None
+                self._bump_revision_locked()
                 self.cv.notify_all()
         self.store.event(job["agent_id"], "info", "training_queue_finished",
                          "Training slot released; next queued job may start",

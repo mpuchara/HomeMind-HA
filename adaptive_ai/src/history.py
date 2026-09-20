@@ -11,8 +11,9 @@ from storage import STORE
 from ha import HA, AUTOMATION_KNOWLEDGE
 from context import (archived_state, balanced_presence_driver_score, controllable_context_exclusions, default_action_interval, electrical_context_exclusions, entity_capability_tags, historical_reward, is_context_candidate_entity, is_esphome_sensor_entity, is_fast_reactive_agent, numeric_activity_driver_score, occupancy_state_bool, target_options_for_state, target_value, transition_edges)
 from telemetry import HEAVY_JOBS, rss_mb
-from replay import SQLiteTemporalTracker, DeferredUpdates, BoundedUsage
+from replay import SQLiteTemporalTracker, DeferredUpdates, BoundedUsage, ReplayQueryCache
 from training_budget import TRAINING_BUDGET
+from policy import MultiHorizonPolicy
 
 class HistoryManager(threading.Thread):
     """Bootstraps HA Recorder history, keeps a longer local archive, discovers active targets,
@@ -64,8 +65,33 @@ class HistoryManager(threading.Thread):
         self.training_rows_per_second = 0.0
         self.history_rows_per_second = 0.0
         self.temporal_replay_stats = {}
+        # Explicit per-agent training has a global pass progress/ETA contract separate
+        # from the current Recorder/replay stage counters. The stage work may reset for
+        # every 6 h chunk; these fields never do until the whole selected agent finishes.
+        self.training_job_agent_id = None
+        self.training_job_name = None
+        self.training_job_started_at = None
+        self.training_job_start_progress = 0.0
+        self.training_overall_eta_seconds = None
+        # Rebuild resets learned heads, not the expensive sensor-selection result.
+        # Keep a tiny schema-only seed in RAM so repeated training does not rescan the
+        # whole house archive merely because rl_models was intentionally cleared.
+        self.training_schema_cache = {}
+        self.training_schema_cache_hits = 0
+        self.training_schema_cache_misses = 0
+        self.training_replay_cache_status = {}
         self.job_cancel_event = None
         self.agent_jobs_lock = threading.RLock()
+        self.discovery_job_lock = threading.RLock()
+        self.discovery_job_active = False
+        self.discovery_job_started_at = None
+        self.discovery_reason_counts = {}
+        self.discovery_inactive_examples = []
+        self.discovery_deep_history_complete = bool(STORE.meta_get("discovery_deep_history_complete"))
+        # "active=0" is not a meaningful result while Recorder discovery is still
+        # collecting target history. Expose whether the activity classifier has run so
+        # the UI can distinguish "pending" from a real zero-device result.
+        self.discovery_classified = False
         if bool(OPTIONS.get("manual_agent_training", True)):
             paused = STORE.pause_stale_training_agents()
             if paused:
@@ -91,7 +117,32 @@ class HistoryManager(threading.Thread):
                 "archive": dict(self.archive_cache),
                 "training_rows_per_second": self.training_rows_per_second,
                 "history_rows_per_second": self.history_rows_per_second,
+                "training_job_agent_id": self.training_job_agent_id,
+                "training_job_name": self.training_job_name,
+                "training_job_started_at": self.training_job_started_at,
+                "training_overall_progress": (
+                    self.progress if self.training_job_agent_id is not None else None
+                ),
+                "training_overall_eta_seconds": self.training_overall_eta_seconds,
+                "training_elapsed_seconds": (
+                    now_ts() - self.training_job_started_at
+                    if self.training_job_started_at is not None else None
+                ),
+                "training_schema_cache_entries": len(getattr(self, "training_schema_cache", {}) or {}),
+                "training_schema_cache_hits": int(getattr(self, "training_schema_cache_hits", 0) or 0),
+                "training_schema_cache_misses": int(getattr(self, "training_schema_cache_misses", 0) or 0),
+                "training_replay_cache": dict(getattr(self, "training_replay_cache_status", {}) or {}),
+                "training_stage_progress": (
+                    (self.work_done / self.work_total) if self.work_total else None
+                ),
+                "training_stage_eta_seconds": self.stage_eta_seconds,
                 "temporal_replay": dict(self.temporal_replay_stats),
+                "discovery_job_active": bool(self.discovery_job_active),
+                "discovery_job_started_at": self.discovery_job_started_at,
+                "discovery_classified": bool(self.discovery_classified),
+                "discovery_deep_history_complete": bool(getattr(self, "discovery_deep_history_complete", False)),
+                "discovery_reason_counts": dict(getattr(self, "discovery_reason_counts", {}) or {}),
+                "discovery_inactive_examples": list(getattr(self, "discovery_inactive_examples", []) or []),
             }
         return d
 
@@ -110,9 +161,71 @@ class HistoryManager(threading.Thread):
 
     def _training_bounds(self):
         stats = STORE.archive_stats()
-        end_ts = float(stats.get("max_ts") or now_ts())
-        start_ts = float(stats.get("min_ts") or (end_ts - float(OPTIONS["history_bootstrap_days"]) * 86400.0))
+        end_ts = max(float(stats.get("max_ts") or 0.0), now_ts())
+        earliest = float(stats.get("min_ts") or end_ts)
+        # Explicit agent training intentionally uses a recent rolling window rather than
+        # replaying the entire local archive. Older history remains durable for diagnostics
+        # and future offline analysis, but does not multiply every interactive retrain.
+        days = max(1.0, min(30.0, float(OPTIONS.get("agent_training_history_days", 7) or 7)))
+        start_ts = max(earliest, end_ts - days * 86400.0)
         return start_ts, end_ts
+
+    @staticmethod
+    def _training_input_fingerprint(agent):
+        return tuple(sorted(str(x) for x in (agent.get("input_entities") or ("*",))))
+
+    def _remember_training_schema(self, agent, raw_model=None):
+        raw = raw_model
+        if raw is None:
+            raw = STORE.get_model(agent["id"])
+        if raw is None:
+            policy = self.engine.models.get(agent["id"])
+            if policy is not None:
+                try:
+                    raw = policy.serialize()
+                except Exception:
+                    raw = None
+        if not isinstance(raw, dict):
+            return None
+        if int(raw.get("version") or 0) != int(MultiHorizonPolicy.VERSION):
+            return None
+        schema = raw.get("schema")
+        if not isinstance(schema, dict):
+            return None
+        seed = {
+            "version": int(raw.get("version")),
+            "dims": int(raw.get("dims") or OPTIONS.get("feature_dimensions", 128)),
+            "actions": list(raw.get("actions") or []),
+            "horizons": list(raw.get("horizons") or []),
+            "schema": dict(schema),
+            "selection_meta": dict(raw.get("selection_meta") or {}),
+            # Empty heads are deliberate: Rebuild relearns policy values from scratch.
+            "heads": {},
+        }
+        self.training_schema_cache[str(agent["id"])] = {
+            "model": seed,
+            "input_fingerprint": self._training_input_fingerprint(agent),
+            "captured_at": now_ts(),
+        }
+        return seed
+
+    def training_schema_seed(self, agent_id, agent=None):
+        aid = str(agent_id)
+        lock = getattr(self, "agent_jobs_lock", None)
+        if lock is not None:
+            with lock:
+                active = aid in set(getattr(self, "agent_jobs", set()) or set())
+            if not active:
+                return None
+        item = self.training_schema_cache.get(aid)
+        if not item:
+            self.training_schema_cache_misses += 1
+            return None
+        if agent is not None and item.get("input_fingerprint") != self._training_input_fingerprint(agent):
+            self.training_schema_cache_misses += 1
+            return None
+        self.training_schema_cache_hits += 1
+        return item.get("model")
 
     def _start_agent_job(self, agent_id, rebuild=False):
         agent = STORE.get_agent_config(agent_id)
@@ -131,6 +244,10 @@ class HistoryManager(threading.Thread):
         try:
             with self.engine.executor.target_lock(agent["target_entity"]):
                 if rebuild:
+                    # Capture schema/input selection before deleting learned weights.
+                    # Rebuild still starts with empty RL heads; only the expensive,
+                    # repeatedly reusable feature-selection result survives in RAM.
+                    self._remember_training_schema(agent)
                     STORE.clear_learning(agent_id)
                     self.engine.models.pop(agent_id, None)
                     self.engine.runtime.pop(agent_id, None)
@@ -141,6 +258,29 @@ class HistoryManager(threading.Thread):
                         samples=agent.get("benchmark_samples") or 0, source=agent.get("benchmark_source"),
                         detail=agent.get("benchmark_detail") or {},
                     )
+            started_at = now_ts()
+            start_progress = 0.0 if rebuild else clamp(float(agent.get("training_progress") or 0.0), 0.0, 1.0)
+            with self.lock:
+                self.phase = "training"
+                self.phase_started_at = started_at
+                self.cycle_started_at = started_at
+                self.progress = start_progress
+                self._progress_samples = [(started_at, start_progress)]
+                self.progress_rate_per_min = None
+                self.eta_seconds = None
+                self.stage_eta_seconds = None
+                self.work_done = 0
+                self.work_total = 0
+                self.work_unit = None
+                self.eta_source = "measuring end-to-end training rate"
+                self.phase_detail = "Preparing Recorder history for the selected agent"
+                self.message = f"Training {agent['name']}: preparing history"
+                self.training_rows_per_second = 0.0
+                self.training_job_agent_id = agent_id
+                self.training_job_name = agent.get("name") or agent_id
+                self.training_job_started_at = started_at
+                self.training_job_start_progress = start_progress
+                self.training_overall_eta_seconds = None
         except Exception:
             with self.agent_jobs_lock:
                 self.agent_jobs.discard(agent_id)
@@ -167,6 +307,27 @@ class HistoryManager(threading.Thread):
                     with self.agent_jobs_lock:
                         self.agent_jobs.discard(agent_id)
                     HEAVY_JOBS.release("agent:" + agent_id)
+                    final_agent = STORE.get_agent_config(agent_id)
+                    final_progress = clamp(float((final_agent or {}).get("training_progress") or self.progress or 0.0), 0.0, 1.0)
+                    final_state = str((final_agent or {}).get("training_state") or "paused")
+                    with self.lock:
+                        self.progress = final_progress
+                        self.phase = "ready"
+                        self.phase_started_at = now_ts()
+                        self.message = f"Training finished: {self.training_job_name or agent_id}"
+                        self.phase_detail = f"Agent training finished in state {final_state}"
+                        self.stage_eta_seconds = None
+                        self.eta_seconds = None
+                        self.training_overall_eta_seconds = None
+                        self.work_done = 0
+                        self.work_total = 0
+                        self.work_unit = None
+                        self.eta_source = "complete"
+                        self.training_rows_per_second = 0.0
+                        self.training_job_agent_id = None
+                        self.training_job_name = None
+                        self.training_job_started_at = None
+                        self.training_job_start_progress = final_progress
 
         threading.Thread(target=worker, name=f"adaptive-ai-index-{agent_id}", daemon=True).start()
         return True
@@ -216,17 +377,25 @@ class HistoryManager(threading.Thread):
         if end_ts <= start_ts:
             return
         target = agent["target_entity"]
-        if rebuild:
+        seed = self.training_schema_seed(agent["id"], agent) if rebuild else None
+        if rebuild and seed:
+            # The schema has already survived the previous pass in RAM. Recorder refresh
+            # only the selected entities instead of downloading every eligible HA sensor.
+            context_ids = [
+                eid for eid in ((seed.get("schema") or {}).get("entities") or [])
+                if eid != target
+            ]
+        elif rebuild:
             context_ids = [eid for eid in self._eligible_rebuild_context() if eid != target]
         else:
-            model = STORE.get_model(agent["id"]) or {}
+            model = STORE.get_model(agent["id"]) or self.training_schema_seed(agent["id"], agent) or {}
             context_ids = [eid for eid in ((model.get("schema") or {}).get("entities") or []) if eid != target]
         try:
             self._import_section(
                 [target], start_ts, end_ts, batch_size=1, minimal=False, no_attributes=False,
                 source="ha_history_full", progress_lo=self.progress, progress_hi=self.progress,
                 label=f"Agent {agent['id']} · target history", max_hours=6, parallel_requests=1,
-                inter_chunk_pause_ms=int(OPTIONS.get("history_background_pause_ms", 250)),
+                inter_chunk_pause_ms=int(OPTIONS.get("agent_training_pause_ms", 0)),
             )
             if context_ids:
                 with self.engine.lock:
@@ -238,14 +407,14 @@ class HistoryManager(threading.Thread):
                         fast_ids, start_ts, end_ts, batch_size=30, minimal=True, no_attributes=True,
                         source="ha_history_fast_context", progress_lo=self.progress, progress_hi=self.progress,
                         label=f"Agent {agent['id']} · high-resolution behavioural context", max_hours=6, parallel_requests=1,
-                        inter_chunk_pause_ms=int(OPTIONS.get("history_background_pause_ms", 250)),
+                        inter_chunk_pause_ms=int(OPTIONS.get("agent_training_pause_ms", 0)),
                     )
                 if regular_ids:
                     self._import_section(
                         regular_ids, start_ts, end_ts, batch_size=50, minimal=True, no_attributes=True,
                         source="ha_history_minimal", progress_lo=self.progress, progress_hi=self.progress,
                         label=f"Agent {agent['id']} · context history", max_hours=12, parallel_requests=1,
-                        inter_chunk_pause_ms=int(OPTIONS.get("history_background_pause_ms", 250)),
+                        inter_chunk_pause_ms=int(OPTIONS.get("agent_training_pause_ms", 0)),
                     )
             self.refresh_archive_cache()
         except Exception as exc:
@@ -258,7 +427,10 @@ class HistoryManager(threading.Thread):
         if not agent:
             return
         archive_start, archive_end = self._training_bounds()
-        start_ts = archive_start if rebuild or agent.get("training_window_start_ts") is None else float(agent["training_window_start_ts"])
+        persisted_start = agent.get("training_window_start_ts")
+        # Upgrade-safe clamp: an interrupted 10+ day job resumes inside the new rolling
+        # window instead of dragging the obsolete older portion forward forever.
+        start_ts = archive_start if rebuild or persisted_start is None else max(archive_start, float(persisted_start))
         cursor = start_ts if rebuild or agent.get("training_cursor_ts") is None else max(start_ts, float(agent["training_cursor_ts"]))
         # Explicit Resume/Rebuild reaches current Recorder time, not merely the previous
         # local archive maximum. Resume backfills only selected features; Rebuild scans
@@ -308,7 +480,9 @@ class HistoryManager(threading.Thread):
                         f"Historical indexing checkpoint {((cursor-start_ts)/max(1.0,target_end-start_ts)):.0%}",
                         {"cursor_ts": cursor, "end_ts": target_end, "final": final})
             if not final:
-                self.stop_event.wait(max(0.0, float(OPTIONS.get("history_background_pause_ms", 250))) / 1000.0)
+                pause_ms = max(0.0, float(OPTIONS.get("agent_training_pause_ms", 0) or 0))
+                if pause_ms:
+                    self.stop_event.wait(pause_ms / 1000.0)
 
     def request_agent_rebuild(self, agent_id):
         return self._start_agent_job(agent_id, rebuild=True)
@@ -333,6 +507,7 @@ class HistoryManager(threading.Thread):
             self._progress_samples = []
             self.chunk_done = 0
             self.chunk_total = 0
+            self.discovery_classified = False
 
     def refresh_archive_cache(self):
         # Called by the history thread only, never synchronously from the UI.
@@ -382,6 +557,20 @@ class HistoryManager(threading.Thread):
                         eta = clamp(eta, 0.0, 24 * 3600.0)
                         self.eta_seconds = eta if self.eta_seconds is None else (0.72 * self.eta_seconds + 0.28 * eta)
                         self.progress_rate_per_min = rate * 60.0
+                # Global ETA is based on real wall-clock throughput for the complete
+                # selected-agent pass, not on a local chunk counter. It therefore
+                # includes Recorder waits, Pi-safe throttling and every completed chunk.
+                if self.training_job_agent_id is not None and self.training_job_started_at is not None:
+                    start_p = clamp(float(self.training_job_start_progress or 0.0), 0.0, 0.999999)
+                    effective = (p - start_p) / max(1e-9, 1.0 - start_p)
+                    elapsed = max(0.0, now - float(self.training_job_started_at))
+                    if effective >= 0.005 and elapsed >= 5.0:
+                        raw_eta = elapsed * max(0.0, 1.0 - effective) / max(effective, 1e-9)
+                        raw_eta = clamp(raw_eta, 0.0, 24 * 3600.0)
+                        self.training_overall_eta_seconds = (
+                            raw_eta if self.training_overall_eta_seconds is None
+                            else 0.78 * self.training_overall_eta_seconds + 0.22 * raw_eta
+                        )
             if message is not None:
                 self.message = message
             if chunk_done is not None:
@@ -400,6 +589,42 @@ class HistoryManager(threading.Thread):
                 self.eta_source = str(eta_source)
             if phase_detail is not None:
                 self.phase_detail = str(phase_detail)
+
+    def request_discovery_rescan(self, *, threshold_override=1, reason="manual"):
+        """Run the bounded Recorder/discovery job outside the caller thread.
+
+        Fresh installs and explicit Rescan share this path so they cannot diverge in
+        classification semantics.  Ordinary restarts stay quiet: release_016_guard
+        schedules this automatically only while the durable initial-discovery marker is
+        absent.  The job remains serialized by the existing HEAVY_JOBS discovery slot
+        and the TrainingQueue priority bridge.
+        """
+        with self.discovery_job_lock:
+            if self.discovery_job_active:
+                return False
+            self.discovery_job_active = True
+            self.discovery_job_started_at = now_ts()
+
+        def worker():
+            try:
+                self.bootstrap_and_train(threshold_override=threshold_override)
+            except Exception as exc:
+                self.error = f"{type(exc).__name__}: {exc}"
+                self.set_status("error", message=self.error)
+                STORE.event(
+                    None, "error", "manual_discovery_error", self.error,
+                    {"trace": traceback.format_exc(limit=6)},
+                )
+            finally:
+                with self.discovery_job_lock:
+                    self.discovery_job_active = False
+
+        threading.Thread(
+            target=worker,
+            name="adaptive-ai-discovery",
+            daemon=True,
+        ).start()
+        return True
 
     def run(self):
         while not self.stop_event.is_set():
@@ -594,28 +819,101 @@ class HistoryManager(threading.Thread):
                 pool.shutdown(wait=False, cancel_futures=True)
         return inserted
 
-    def _manual_lightweight_cycle(self, current, controllable, end_ts):
+    def _manual_lightweight_cycle(self, current, controllable, end_ts, threshold_override=None):
         start_ts = end_ts - float(OPTIONS["history_bootstrap_days"]) * 86400.0
         last = parse_ts(STORE.meta_get("manual_discovery_refresh"))
         if last:
             refresh_start = max(end_ts - 2 * 3600.0, float(last) - 300.0)
         else:
             refresh_start = max(start_ts, end_ts - max(6.0, float(OPTIONS.get("manual_discovery_hours", 24))) * 3600.0)
+
+        # Discovery classifies activity across history_bootstrap_days (10 d by default).
+        # The previous low-memory path imported only the last 24 h on a clean database,
+        # so targets used on days 2..10 were impossible to discover even though the
+        # classifier advertised a 10-day window. Backfill that older slice exactly once.
+        #
+        # Most actuator activity is encoded in the entity state. Fetch those targets with
+        # minimal/no-attribute Recorder responses and 24 h windows. Only targets whose
+        # action is attribute-only (HVAC setpoint, cover position, humidity, etc.) need the
+        # more expensive full-attribute history. Selected-agent Train later refreshes its
+        # own full training-quality history as before.
+        deep_marker = STORE.meta_get("discovery_deep_history_complete")
+        deep_needed = not deep_marker and refresh_start > start_ts + 1.0
+        recent_progress_lo = 0.10
+        if deep_needed and controllable:
+            state_props = {"power", "value", "option_index"}
+            state_targets = []
+            attribute_only_targets = []
+            for eid in controllable:
+                options = target_options_for_state(current.get(eid) or {})
+                if any(str(opt.get("property")) in state_props for opt in options):
+                    state_targets.append(eid)
+                else:
+                    attribute_only_targets.append(eid)
+
+            if state_targets:
+                self.set_status(
+                    "manual_ready", 0.10,
+                    "Deep discovery: checking older controllable-device activity",
+                    phase_detail="One-time low-bandwidth scan fills the full discovery window; no training starts",
+                )
+                self._import_section(
+                    state_targets, start_ts, refresh_start, batch_size=32, minimal=True, no_attributes=True,
+                    source="ha_history_discovery_coarse", progress_lo=0.10, progress_hi=0.30,
+                    label="Deep target activity discovery", max_hours=24, parallel_requests=1,
+                    inter_chunk_pause_ms=int(OPTIONS.get("history_background_pause_ms", 500)),
+                )
+            if attribute_only_targets:
+                self.set_status(
+                    "manual_ready", 0.30,
+                    "Deep discovery: checking older setpoint/position activity",
+                    phase_detail="Attribute-only targets use a bounded full-state scan; no training starts",
+                )
+                self._import_section(
+                    attribute_only_targets, start_ts, refresh_start, batch_size=8, minimal=False, no_attributes=False,
+                    source="ha_history_full", progress_lo=0.30, progress_hi=0.42,
+                    label="Deep attribute target discovery", max_hours=24, parallel_requests=1,
+                    inter_chunk_pause_ms=int(OPTIONS.get("history_background_pause_ms", 500)),
+                )
+            STORE.meta_set("discovery_deep_history_complete", iso_from_ts(end_ts))
+            with self.lock:
+                self.discovery_deep_history_complete = True
+            recent_progress_lo = 0.42
+
         self.set_status(
-            "manual_ready", 0.10,
-            "Low-memory discovery: refreshing controllable-device history only",
-            phase_detail="Cold-start agents train automatically through the single-job FIFO; whole-home context stays idle",
+            "manual_ready", recent_progress_lo,
+            "Low-memory discovery: refreshing recent controllable-device history",
+            phase_detail="Discovery only; detected agents remain waiting until you choose Train",
         )
         if controllable and end_ts > refresh_start:
             self._import_section(
                 controllable, refresh_start, end_ts, batch_size=8, minimal=False, no_attributes=False,
-                source="ha_history_full", progress_lo=0.10, progress_hi=0.65,
-                label="Lightweight target discovery", max_hours=3, parallel_requests=1,
+                source="ha_history_full", progress_lo=recent_progress_lo, progress_hi=0.75,
+                label="Recent target discovery", max_hours=3, parallel_requests=1,
                 inter_chunk_pause_ms=int(OPTIONS.get("history_background_pause_ms", 500)),
             )
-        self.refresh_archive_cache()
-        created = self.auto_discover_agents(current, start_ts)
+        # Do not run full-table archive_stats() here. At this exact point the Recorder
+        # import has just written the hottest pages in entity_history; COUNT(DISTINCT) and
+        # GROUP BY source used to stall Raspberry Pi for long enough to starve Ingress and
+        # the HA websocket. Archive diagnostics are cached and may refresh during explicit
+        # heavy work, but they are never a prerequisite for discovering/serving agents.
+        self.set_status(
+            "manual_ready", 0.76,
+            "Classifying controllable targets from imported Recorder history",
+            work_done=0, work_total=max(1, len(controllable)), work_unit="targets",
+            eta_source="single-pass local archive scan",
+            phase_detail="Activity classification is now running; agents may appear after this pass",
+        )
+        created = self.auto_discover_agents(
+            current, start_ts, threshold_override=threshold_override
+        )
         self.auto_created += created
+        with self.lock:
+            self.discovery_classified = True
+        # A completed classification is the durable cold-start boundary even when it
+        # legitimately creates zero agents.  This prevents every normal restart from
+        # paying Recorder/discovery cost again for an empty or inactive home.
+        STORE.meta_set("initial_discovery_complete", iso_from_ts(end_ts))
         # Populate diagnostics from current state only; this does not import context history.
         self._eligible_rebuild_context()
         STORE.meta_set("manual_discovery_refresh", iso_from_ts(end_ts))
@@ -623,18 +921,18 @@ class HistoryManager(threading.Thread):
         self.last_run = now_ts()
         q = len(STORE.qualified_agents())
         waiting = len([
-            a for a in STORE.list_agents()
+            a for a in STORE.list_agent_configs()
             if a.get("enabled") and a.get("training_state") in ("waiting", "paused", "needs_retrain")
         ])
         self.set_status(
             "ready", 1.0,
-            f"Low-memory mode ready · {q} trained / {waiting} waiting or queued",
+            f"Discovery ready · {q} trained / {waiting} waiting for manual selection",
             stage_eta_seconds=0, work_done=0, work_total=0, work_unit="agents",
             eta_source="idle",
-            phase_detail="Initial training is queued automatically; only one heavy training job runs at a time",
+            phase_detail="Choose which discovered devices to train; no agent starts automatically",
         )
 
-    def bootstrap_and_train(self):
+    def bootstrap_and_train(self, threshold_override=None):
         with self.engine.lock:
             current = dict(self.engine.state_map)
         if not current:
@@ -671,7 +969,10 @@ class HistoryManager(threading.Thread):
 
         if HEAVY_JOBS.acquire('discovery'):
             try:
-                self._manual_lightweight_cycle(current, controllable, end_ts)
+                self._manual_lightweight_cycle(
+                    current, controllable, end_ts,
+                    threshold_override=threshold_override,
+                )
             finally:
                 HEAVY_JOBS.release('discovery')
 
@@ -693,6 +994,81 @@ class HistoryManager(threading.Thread):
                 last = float(v)
         return values
 
+    def _discovery_usage_summary(self, current, start_ts):
+        """Return usage_for-equivalent change counts in one bounded archive stream.
+
+        Previous discovery opened one archive iterator for every property of every
+        controllable entity. Small iterators repeatedly reset the Raspberry-Pi background
+        throttle and created an N-query/N-scan CPU burst immediately after Recorder import.
+        This pass preserves usage_for's exact change semantics (>1e-6), but streams all
+        controllable targets together so the shared archive throttle can actually yield.
+        """
+        specs = {}
+        for entity_id, state in current.items():
+            opts = target_options_for_state(state)
+            if opts:
+                specs[str(entity_id)] = tuple(opts)
+        if not specs:
+            return {}
+
+        summary = {
+            eid: {
+                str(opt["property"]): {
+                    "samples": 0,
+                    "last_value": None,
+                    "last_ts": 0.0,
+                }
+                for opt in opts
+            }
+            for eid, opts in specs.items()
+        }
+        rows = 0
+        for row in STORE.archive_iter(
+            start_ts=start_ts,
+            entity_ids=specs.keys(),
+            chunk_size=512,
+        ):
+            eid = str(row["entity_id"])
+            opts = specs.get(eid)
+            if not opts:
+                continue
+            archived = archived_state(row)
+            for opt in opts:
+                prop = str(opt["property"])
+                value = target_value(archived, prop)
+                # Coarse deep discovery deliberately omits attributes. Select/input_select
+                # still encode their controlled value directly in state, so count option
+                # transitions by their stable string label when the options attribute is
+                # absent. The live state still supplies the option list used by the agent.
+                if value is None and prop == "option_index":
+                    raw_state = str(row.get("state") or "")
+                    if raw_state.lower() not in ("", "unknown", "unavailable"):
+                        value = raw_state
+                if value is None:
+                    continue
+                if not isinstance(value, str):
+                    try:
+                        value = float(value)
+                    except (TypeError, ValueError):
+                        continue
+                stat = summary[eid][prop]
+                previous = stat["last_value"]
+                if previous is None:
+                    changed = True
+                else:
+                    try:
+                        changed = abs(float(value) - float(previous)) > 1e-6
+                    except (TypeError, ValueError):
+                        changed = str(value) != str(previous)
+                if changed:
+                    stat["samples"] += 1
+                    stat["last_value"] = value
+                    stat["last_ts"] = float(row["ts"])
+            rows += 1
+
+        self.discovery_usage_rows = rows
+        return summary
+
     def auto_discover_agents(self, current, start_ts, threshold_override=None, update_active=True):
         threshold = int(threshold_override if threshold_override is not None else OPTIONS["auto_agent_min_changes"])
         recent_days = max(float(OPTIONS["auto_agent_recent_days"]), min(30.0, float(OPTIONS["history_bootstrap_days"])))
@@ -702,10 +1078,18 @@ class HistoryManager(threading.Thread):
         filtered_config = 0
         inactive = 0
         created = 0
+        reason_counts = {
+            "active": 0,
+            "registry_filtered": 0,
+            "no_transition": 0,
+            "below_threshold": 0,
+            "stale_transition": 0,
+        }
+        inactive_examples = []
         max_agents = max(1, int(OPTIONS.get("max_auto_agents", 250)))
         # Remove only stale auto-created agents that the Entity Registry now identifies
         # as configuration/diagnostic/hidden/disabled. Manual agents are never touched.
-        existing = STORE.list_agents()
+        existing = STORE.list_agent_configs()
         cleaned = 0
         for old_agent in list(existing):
             if not old_agent.get("auto_created"):
@@ -725,10 +1109,11 @@ class HistoryManager(threading.Thread):
             STORE.event(None, "info", "auto_agent_cleanup",
                         f"Paused {cleaned} auto-agent(s) for config/diagnostic/hidden entities; data retained",
                         {"removed": cleaned})
-        existing = STORE.list_agents()
+        existing = STORE.list_agent_configs()
         # One primary policy per physical/logical controllable entity. Manual agents also
         # suppress auto-creation for that entity so discovery cannot create duplicates.
         existing_entities = {a["target_entity"] for a in existing}
+        usage_summary = self._discovery_usage_summary(current, start_ts)
         for entity_id, state in current.items():
             opts = target_options_for_state(state)
             if not opts:
@@ -736,14 +1121,17 @@ class HistoryManager(threading.Thread):
             reg = self.engine.registry_entry(entity_id) or {}
             if reg.get("disabled_by") is not None or reg.get("hidden_by") is not None or reg.get("entity_category") in ("config", "diagnostic"):
                 filtered_config += 1
+                reason_counts["registry_filtered"] += 1
                 continue
             eligible += 1
             candidates = []
+            entity_usage = usage_summary.get(str(entity_id), {})
             for opt in opts:
-                changes = self.usage_for(entity_id, opt["property"], start_ts)
-                last_ts = changes[-1][0]["ts"] if changes else 0
-                score = max(0, len(changes) - 1)
-                candidates.append((score, last_ts, opt, changes))
+                stat = entity_usage.get(str(opt["property"])) or {}
+                samples = int(stat.get("samples") or 0)
+                last_ts = float(stat.get("last_ts") or 0.0)
+                score = max(0, samples - 1)
+                candidates.append((score, last_ts, opt, None))
             # Existing automations that act on this target are evidence that a device is
             # intentionally controlled, so one observed historical transition is enough
             # to include it in Shadow. It is still trained only from rewards.
@@ -760,8 +1148,25 @@ class HistoryManager(threading.Thread):
             score, last_ts, opt, _ = candidates[0]
             if score < effective_threshold or last_ts < recent_cutoff:
                 inactive += 1
+                if score <= 0:
+                    reason = "no_transition"
+                elif score < effective_threshold:
+                    reason = "below_threshold"
+                else:
+                    reason = "stale_transition"
+                reason_counts[reason] += 1
+                if len(inactive_examples) < 24:
+                    inactive_examples.append({
+                        "entity_id": entity_id,
+                        "property": opt["property"],
+                        "transitions": int(score),
+                        "threshold": int(effective_threshold),
+                        "last_transition_ts": float(last_ts or 0.0),
+                        "reason": reason,
+                    })
                 continue
             active += 1
+            reason_counts["active"] += 1
             if entity_id in existing_entities or len(existing_entities) >= max_agents:
                 continue
             attrs = state.get("attributes") or {}
@@ -784,6 +1189,8 @@ class HistoryManager(threading.Thread):
             self.discovery_eligible = eligible
             self.discovery_filtered_config = filtered_config
             self.discovery_inactive = inactive
+            self.discovery_reason_counts = reason_counts
+            self.discovery_inactive_examples = inactive_examples
         return created
 
     def train_from_archive(self, start_ts, end_ts, **kwargs):
@@ -820,7 +1227,10 @@ class HistoryManager(threading.Thread):
         # Once a model checkpoint exists, its explicit schema is authoritative for later
         # chunks/resume. Likewise, an explicitly selected input list (Teach/Correct or a
         # manual agent) does not need another whole-home precursor scan.
-        saved_models = {a["id"]: STORE.get_model(a["id"]) for a in agents}
+        saved_models = {
+            a["id"]: (STORE.get_model(a["id"]) or self.training_schema_seed(a["id"], a))
+            for a in agents
+        }
         screen_agents = [
             a for a in agents
             if saved_models.get(a["id"]) is None
@@ -834,6 +1244,7 @@ class HistoryManager(threading.Thread):
         archive_row_count = STORE.archive_count(start_ts=start_ts, end_ts=end_ts)
         if archive_row_count <= 0:
             return 0
+        screening_row_count = archive_row_count
         progress_enabled = progress_lo is not None and progress_hi is not None and float(progress_hi) > float(progress_lo)
         progress_label = progress_label or "Historical policy rebuild"
         if progress_enabled:
@@ -845,7 +1256,7 @@ class HistoryManager(threading.Thread):
                     f"{progress_label}: reusing persisted feature schema"
                 ),
                 work_done=0,
-                work_total=archive_row_count if screening_required else 0,
+                work_total=screening_row_count if screening_required else 0,
                 work_unit="history rows" if screening_required else "schema cache",
                 eta_source="measured replay throughput" if screening_required else "persisted schema",
                 phase_detail=(
@@ -879,78 +1290,121 @@ class HistoryManager(threading.Thread):
         excluded_electrical, _ = electrical_context_exclusions(discovery_states, discovery_registry)
         discovery_excluded = excluded_control | excluded_electrical
         fast_agents = [a for a in screen_agents if is_fast_reactive_agent(a)]
-        behaviour_candidates = {
+        context_candidates = {
             eid for eid, st in discovery_states.items()
             if is_context_candidate_entity(eid, st, discovery_excluded)
-            and (entity_capability_tags(eid, st) & {"occupancy", "activity"})
         }
+        behaviour_candidates = {
+            eid for eid in context_candidates
+            if entity_capability_tags(eid, discovery_states.get(eid) or {}) & {"occupancy", "activity"}
+        }
+        screening_entities = set(context_candidates) | set(screen_target_map)
+        if screening_required:
+            screening_row_count = max(
+                1, STORE.archive_count(
+                    start_ts=start_ts, end_ts=selection_end,
+                    entity_ids=screening_entities,
+                )
+            )
         fast_targets = {a["target_entity"] for a in fast_agents}
         edge_limit = max(8, min(2048, 32768 // max(1, len(behaviour_candidates | fast_targets))))
         fast_edge_rows = {eid: deque(maxlen=edge_limit) for eid in (behaviour_candidates | fast_targets)}
 
-        # Fast behavioural scoring intentionally keeps the bounded raw sensor rows,
-        # while generic precursor screening only needs effective per-entity changes.
-        # Split the two streams so chatty unchanged Recorder rows never enter Python's
-        # broad whole-home screening loop.
-        if screening_required and fast_edge_rows:
-            for edge_row in STORE.archive_iter(
-                start_ts=start_ts,
-                end_ts=selection_end,
-                entity_ids=set(fast_edge_rows),
-                chunk_size=512,
-            ):
-                if float(edge_row["ts"]) >= selection_end:
-                    break
-                fast_edge_rows[edge_row["entity_id"]].append(edge_row)
-
+        # One chronological streaming pass now serves both consumers:
+        #   1. raw bounded rows for fast occupancy/activity driver scoring;
+        #   2. effective state/attribute changes for generic precursor screening.
+        #
+        # The previous implementation first scanned fast-edge history and then executed a
+        # SQLite LAG()/PARTITION window query for the whole screening interval. On Pi the
+        # window query could spend a long time building temp B-trees before yielding its
+        # first row, leaving the UI at 0% and holding the only HEAVY_JOBS slot. Streaming
+        # by the existing ts index starts yielding immediately and stays cooperative.
         screening_rows = (
-            STORE.archive_change_iter(start_ts=start_ts, end_ts=selection_end, chunk_size=2000)
+            STORE.archive_iter(
+                start_ts=start_ts, end_ts=selection_end,
+                entity_ids=screening_entities, chunk_size=512,
+            )
             if screening_required else ()
         )
         screening_checkpoint_rows = max(
             8, min(128, int(OPTIONS.get("training_archive_batch_rows", 16)))
         )
+        screening_status_rows = max(128, screening_checkpoint_rows * 8)
         screening_rows_done = 0
+        screening_last_signature = {}
+        screening_progress_end = (
+            float(progress_lo) + (float(progress_hi) - float(progress_lo)) * 0.20
+            if progress_enabled else None
+        )
         for row in screening_rows:
             ts = float(row["ts"]); eid = row["entity_id"]
             if ts >= selection_end:
                 break
-            activity_counts[eid] = activity_counts.get(eid, 0) + 1
-            for agent in screen_target_map.get(eid, []):
-                st = archived_state(row)
-                val = target_value(st, agent["target_property"])
-                if val is None:
-                    continue
-                prev = last_target_value.get(agent["id"])
-                changed = prev is None or abs(float(val) - float(prev)) > max(0.01, float(agent["deadband"]) * 0.05)
-                if changed:
-                    target_action_counts[agent["id"]] += 1
-                    scores = relevance_raw[agent["id"]]
-                    for ceid, cts in recent_change.items():
-                        if ceid == eid:
-                            continue
-                        age = ts - cts
-                        if is_fast_reactive_agent(agent):
-                            agent_window = float(OPTIONS.get("fast_precursor_on_seconds", 8) if float(val) >= 0.5 else OPTIONS.get("fast_precursor_off_seconds", 120))
-                        else:
-                            agent_window = precursor_window
-                        if 0.0 <= age <= agent_window:
-                            # Fast lights use a much sharper precursor kernel: a kitchen
-                            # sensor one minute old should not outrank the dedicated stair
-                            # sensor that just changed. Slow plants keep the broad window.
-                            tau = float(OPTIONS.get("fast_recent_change_seconds", 3)) if is_fast_reactive_agent(agent) else max(30.0, precursor_window / 2.0)
-                            scores[ceid] = scores.get(ceid, 0.0) + math.exp(-age / max(0.5, tau))
-                    # This fan-out can touch hundreds of context entities for one target
-                    # edge. Yield before another target edge even if archive_iter has not
-                    # yet reached its forced batch checkpoint.
-                    TRAINING_BUDGET.checkpoint("context_screen_target_edge")
-                    last_target_value[agent["id"]] = float(val)
-            recent_change[eid] = ts
+
             screening_rows_done += 1
-            if screening_rows_done % screening_checkpoint_rows == 0:
-                TRAINING_BUDGET.checkpoint("context_screen_change_batch", force=True)
-            else:
-                TRAINING_BUDGET.checkpoint("context_screen_change_row")
+            if eid in fast_edge_rows:
+                fast_edge_rows[eid].append(row)
+
+            signature = (row.get("state"), row.get("attributes_json"))
+            previous_signature = screening_last_signature.get(eid)
+            screening_last_signature[eid] = signature
+            effective_change = (
+                previous_signature is None or signature != previous_signature
+            )
+
+            if effective_change:
+                activity_counts[eid] = activity_counts.get(eid, 0) + 1
+                for agent in screen_target_map.get(eid, []):
+                    st = archived_state(row)
+                    val = target_value(st, agent["target_property"])
+                    if val is None:
+                        continue
+                    prev = last_target_value.get(agent["id"])
+                    changed = prev is None or abs(float(val) - float(prev)) > max(0.01, float(agent["deadband"]) * 0.05)
+                    if changed:
+                        target_action_counts[agent["id"]] += 1
+                        scores = relevance_raw[agent["id"]]
+                        for ceid, cts in recent_change.items():
+                            if ceid == eid:
+                                continue
+                            age = ts - cts
+                            if is_fast_reactive_agent(agent):
+                                agent_window = float(OPTIONS.get("fast_precursor_on_seconds", 8) if float(val) >= 0.5 else OPTIONS.get("fast_precursor_off_seconds", 120))
+                            else:
+                                agent_window = precursor_window
+                            if 0.0 <= age <= agent_window:
+                                # Fast lights use a much sharper precursor kernel: a kitchen
+                                # sensor one minute old should not outrank the dedicated stair
+                                # sensor that just changed. Slow plants keep the broad window.
+                                tau = float(OPTIONS.get("fast_recent_change_seconds", 3)) if is_fast_reactive_agent(agent) else max(30.0, precursor_window / 2.0)
+                                scores[ceid] = scores.get(ceid, 0.0) + math.exp(-age / max(0.5, tau))
+                        # One target edge can fan out across hundreds of recent context
+                        # entities. Keep a checkpoint inside that one expensive row.
+                        TRAINING_BUDGET.checkpoint("context_screen_target_edge")
+                        last_target_value[agent["id"]] = float(val)
+                recent_change[eid] = ts
+
+            if progress_enabled and (
+                screening_rows_done == 1
+                or screening_rows_done % screening_status_rows == 0
+            ):
+                frac = min(1.0, screening_rows_done / max(1, screening_row_count))
+                self.set_status(
+                    progress=float(progress_lo) + (
+                        float(screening_progress_end) - float(progress_lo)
+                    ) * frac,
+                    message=f"{progress_label}: screening context candidates",
+                    work_done=screening_rows_done,
+                    work_total=screening_row_count,
+                    work_unit="history rows",
+                    eta_source="streaming indexed history scan",
+                    phase_detail="Finding causal precursors and behavioural drivers",
+                )
+
+            # archive_iter is additionally wrapped by the low-power runtime on Pi; this
+            # cheap checkpoint catches one unusually expensive consumer row without
+            # adding a second forced sleep every batch.
+            TRAINING_BUDGET.checkpoint("context_screen_change_row")
 
         if screening_required:
             TRAINING_BUDGET.checkpoint("context_screen_complete", force=True)
@@ -1068,11 +1522,17 @@ class HistoryManager(threading.Thread):
         # dwell was immediately followed by a rewind to the next action's precursor.
         # Incremental cursors stay forward-moving far more often when these roles do not
         # fight over one timestamp.
+        replay_query_cache = ReplayQueryCache(
+            max_rows=int(OPTIONS.get("training_replay_ram_cache_rows", 8192) or 0),
+            max_entry_rows=int(OPTIONS.get("training_replay_ram_cache_entry_rows", 1024) or 1024),
+        )
         timeline = SQLiteTemporalTracker(
-            STORE, watched_entities, self.engine.context, start_ts, end_ts
+            STORE, watched_entities, self.engine.context, start_ts, end_ts,
+            query_cache=replay_query_cache,
         )
         persistence_timeline = SQLiteTemporalTracker(
-            STORE, watched_entities, self.engine.context, start_ts, end_ts
+            STORE, watched_entities, self.engine.context, start_ts, end_ts,
+            query_cache=replay_query_cache,
         )
         pending = {}
         last_value = {}
@@ -1508,6 +1968,7 @@ class HistoryManager(threading.Thread):
             TRAINING_BUDGET.checkpoint("after_policy_serialize")
             exported['_benchmark_counts'] = benchmark_stats.get(agent['id'], {})
             STORE.save_model(agent["id"], exported)
+            self._remember_training_schema(agent, exported)
             TRAINING_BUDGET.checkpoint("after_model_save")
 
         if progress_enabled:
@@ -1618,6 +2079,7 @@ class HistoryManager(threading.Thread):
             )
         heldout_updates.close()
         _publish_temporal_replay_stats()
+        self.training_replay_cache_status = replay_query_cache.status()
         timeline.close()
         persistence_timeline.close()
         TRAINING_BUDGET.checkpoint("finalization_complete", force=True)

@@ -115,19 +115,19 @@ assert slept == []
         self.assertIn("self.get_agent_config(agent_id)", body)
         self.assertNotIn("self.get_agent(agent_id)", body)
 
-    def test_release_exposes_50ms_pi_slice_control(self):
+    def test_release_exposes_short_realtime_slice_control(self):
         config = (ROOT / "adaptive_ai/config.yaml").read_text(encoding="utf-8")
         settings = (ROOT / "adaptive_ai/src/settings.py").read_text(encoding="utf-8")
         runtime = (ROOT / "adaptive_ai/src/rpi_low_power_runtime.py").read_text(encoding="utf-8")
         self.assertRegex(config, r'version: "0\.14\.\d+"')
         self.assertRegex(settings, r'APP_VERSION = "0\.14\.\d+"')
-        self.assertIn("training_max_continuous_work_ms: 50", config)
+        self.assertIn("training_max_continuous_work_ms: 35", config)
         self.assertIn('training_max_continuous_work_ms: "int(25,500)"', config)
-        self.assertIn('"training_max_continuous_work_ms": 50', settings)
-        self.assertIn("DEFAULT_MAX_CONTINUOUS_WORK_MS = 50", runtime)
-        self.assertIn("DEFAULT_TRAINING_DUTY_CYCLE = 0.20", runtime)
-        self.assertIn("training_cpu_duty_cycle: 0.20", config)
-        self.assertIn('"training_cpu_duty_cycle": 0.20', settings)
+        self.assertIn('"training_max_continuous_work_ms": 35', settings)
+        self.assertIn("DEFAULT_MAX_CONTINUOUS_WORK_MS = 35", runtime)
+        self.assertIn("DEFAULT_TRAINING_DUTY_CYCLE = 0.55", runtime)
+        self.assertIn("training_cpu_duty_cycle: 0.55", config)
+        self.assertIn('"training_cpu_duty_cycle": 0.55', settings)
         self.assertIn("TRAINING_BUDGET.configure(", runtime)
         self.assertIn('TRAINING_BUDGET.checkpoint("archive_iter_row")', runtime)
 

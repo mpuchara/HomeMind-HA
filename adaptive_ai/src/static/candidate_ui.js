@@ -147,9 +147,12 @@
     busy=true;
     try{
       const data=await api('api/candidates');
+      const candidates=data.candidates||[];
+      window.__adaptiveAiCandidates=candidates;
+      window.dispatchEvent(new CustomEvent('adaptive-ai:candidates',{detail:candidates}));
       const root=document.getElementById('agents');if(!root)return;
       root.querySelectorAll('.candidate-agent').forEach(el=>{remember(el,el.dataset.candidateRef||el.dataset.generationId||el.dataset.candidateParent||'');el.remove();});
-      for(const c of data.candidates||[]){
+      for(const c of candidates){
         const ref=candidateRef(c),draft=stateFor(ref);
         root.insertAdjacentHTML('beforeend',card(c,draft));
         const el=root.lastElementChild;
@@ -212,5 +215,8 @@
   }
 
   window.refreshCandidates=refresh;
-  async function loop(){await refresh();setTimeout(loop,1500);} loop();
+  // Candidate lifecycle is not a realtime control signal. Match the main 4 s UI cadence
+  // instead of running a second 1.5 s DB/status poller on Raspberry Pi.
+  async function loop(){await refresh();setTimeout(loop,4000);}
+  loop();
 })();

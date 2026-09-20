@@ -426,7 +426,10 @@ class Release025SourceContractTests(unittest.TestCase):
 
     def test_observation_cursor_tracks_received_time_incrementally(self):
         source = self.source("observation_contract.py")
-        self.assertIn("(event_time>? OR received_time>?)", source)
+        self.assertNotIn("(event_time>? OR received_time>?)", source)
+        self.assertIn("event_time>? AND event_time<=?", source)
+        self.assertIn("received_time>? AND received_time<=?", source)
+        self.assertIn("idx_feature_obs_entity_received_time", source)
         self.assertIn("temporal_feature_forward_query", source)
         self.assertIn("late packets are merged back", source)
         self.assertIn("UNION ALL", source)
