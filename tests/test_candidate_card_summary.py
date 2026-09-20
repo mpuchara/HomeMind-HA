@@ -90,7 +90,7 @@ class CandidateCardDecisionSummaryTests(unittest.TestCase):
             "shadow_current": 1.0,
         }
 
-    def test_parent_desired_comes_from_same_observed_shadow_event(self):
+    def test_parent_tile_uses_latest_fresh_parent_observation(self):
         with self.store.conn() as c:
             c.execute(
                 "INSERT INTO candidate_generation_decisions VALUES(?,?,?,?,?,?,?,?,?)",
@@ -100,16 +100,39 @@ class CandidateCardDecisionSummaryTests(unittest.TestCase):
                 "INSERT INTO candidate_generation_decisions VALUES(?,?,?,?,?,?,?,?,?)",
                 ("live", "g1", "shared", 90.0, 1.0, 0.0, 0.71, "c", "s"),
             )
-            # A newer unrelated parent observation must not replace the exact-context pair.
+            # Card observability follows the newest still-fresh Parent decision.
+            # Paired A/B evidence remains same-event-only elsewhere.
             c.execute(
                 "INSERT INTO candidate_generation_decisions VALUES(?,?,?,?,?,?,?,?,?)",
                 ("live", "g0", "other", 94.0, 1.0, 0.0, 0.55, "p", "s"),
             )
         out = decorate_candidate_status(self.store, self._status(), now=100.0)
-        self.assertEqual(out["parent_desired"], 1.0)
-        self.assertEqual(out["parent_confidence"], 0.81)
+        self.assertEqual(out["parent_desired"], 0.0)
+        self.assertEqual(out["parent_confidence"], 0.55)
+        self.assertEqual(out["parent_shadow_timestamp"], 94.0)
+        self.assertFalse(out["parent_decision_paired"])
         self.assertEqual(out["parent_generation_id"], "g0")
         self.assertEqual(out["target_property"], "power")
+
+    def test_candidate_only_passive_event_does_not_erase_fresh_parent_tile(self):
+        with self.store.conn() as c:
+            c.execute(
+                "INSERT INTO candidate_generation_decisions VALUES(?,?,?,?,?,?,?,?,?)",
+                ("live", "g0", "shared", 90.0, 1.0, 0.0, 0.81, "p", "s"),
+            )
+            c.execute(
+                "INSERT INTO candidate_generation_decisions VALUES(?,?,?,?,?,?,?,?,?)",
+                ("live", "g1", "shared", 90.0, 1.0, 1.0, 0.71, "c", "s"),
+            )
+            c.execute(
+                "INSERT INTO candidate_generation_decisions VALUES(?,?,?,?,?,?,?,?,?)",
+                ("live", "g1", "candidate-passive:1", 94.0, 1.0, 1.0, 0.72, "c", "s"),
+            )
+        out = decorate_candidate_status(self.store, self._status(), now=100.0)
+        self.assertEqual(out["parent_desired"], 0.0)
+        self.assertEqual(out["parent_confidence"], 0.81)
+        self.assertEqual(out["parent_shadow_timestamp"], 90.0)
+        self.assertFalse(out["parent_decision_paired"])
 
     def test_stale_shadow_decision_is_not_presented_as_current_desired(self):
         with self.store.conn() as c:
