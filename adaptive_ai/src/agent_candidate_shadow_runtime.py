@@ -457,13 +457,27 @@ def install(manager):
     original_on_state_changed = getattr(manager.engine, "on_state_changed", None)
 
     def _refresh_active_candidate_parents():
-        # Candidate lifecycle mutations are rare. Rebuild one compact in-memory set there,
-        # instead of probing agent_candidates from every before/after live inference.
+        # The realtime observer is rooted at the Live agent, not at the direct parent
+        # surrogate. Gen 2+ rows in agent_candidates use a Candidate as parent_agent_id;
+        # routing by that ID silently loses events because _shadow_generations expects the
+        # lineage root_agent_id. Resolve every active lineage back to its Live root.
         try:
             with manager.store.conn() as db:
-                rows = db.execute(
-                    "SELECT DISTINCT parent_agent_id FROM agent_candidates"
-                ).fetchall()
+                has_lineage = db.execute(
+                    "SELECT 1 FROM sqlite_master WHERE type='table' AND name='agent_candidate_generations'"
+                ).fetchone()
+                if has_lineage:
+                    rows = db.execute(
+                        """SELECT DISTINCT root_agent_id
+                           FROM agent_candidate_generations
+                           WHERE generation_type='candidate'
+                             AND agent_id IS NOT NULL
+                             AND lifecycle_state NOT IN ('discarded','pruned','promoted')"""
+                    ).fetchall()
+                else:
+                    rows = db.execute(
+                        "SELECT DISTINCT parent_agent_id FROM agent_candidates"
+                    ).fetchall()
             values = {str(row[0]) for row in rows if row and row[0]}
         except Exception:
             values = set(active_candidate_parents)
@@ -1163,7 +1177,7 @@ def install(manager):
     handler.do_GET = do_get
     manager._candidate_shadow_runtime_installed = True
     manager.candidate_shadow_contract = "observed_generation_predictions_no_executor_plus_passive_event_fallback"
-    manager.candidate_event_contract = "state_changed_dependency_index_to_candidate_worker_with_parent_path_dedup"
+    manager.candidate_event_contract = "state_changed_root_lineage_index_to_candidate_worker_with_parent_path_dedup"
     manager.candidate_hot_read_contract = "current_generation_snapshots_and_active_ab_edge_are_ram_first"
     manager.candidate_decision_history_contract = "observed_only_no_policy_replay_gaps_preserved"
     manager.candidate_pair_contract = "same_prediction_event_same_future_outcome"
