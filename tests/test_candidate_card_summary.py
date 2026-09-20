@@ -134,7 +134,7 @@ class CandidateCardDecisionSummaryTests(unittest.TestCase):
         self.assertEqual(out["parent_shadow_timestamp"], 90.0)
         self.assertFalse(out["parent_decision_paired"])
 
-    def test_stale_shadow_decision_is_not_presented_as_current_desired(self):
+    def test_stale_parent_decision_remains_available_as_last_decision(self):
         with self.store.conn() as c:
             c.execute(
                 "INSERT INTO candidate_generation_decisions VALUES(?,?,?,?,?,?,?,?,?)",
@@ -145,8 +145,11 @@ class CandidateCardDecisionSummaryTests(unittest.TestCase):
                 ("live", "g1", "old", 1.0, 1.0, 0.0, 0.71, "c", "s"),
             )
         out = decorate_candidate_status(self.store, self._status(), now=200.0)
-        self.assertIsNone(out["parent_desired"])
-        self.assertIsNone(out["parent_confidence"])
+        self.assertEqual(out["parent_desired"], 1.0)
+        self.assertEqual(out["parent_confidence"], 0.81)
+        self.assertEqual(out["parent_shadow_timestamp"], 1.0)
+        self.assertFalse(out["parent_decision_fresh"])
+        self.assertTrue(out["parent_decision_paired"])
 
 
 class CandidateCardUiContractTests(unittest.TestCase):
