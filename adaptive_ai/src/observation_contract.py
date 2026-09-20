@@ -1052,7 +1052,7 @@ class ObservationSQLiteTemporalTracker(replay_module.SQLiteTemporalTracker):
                     "SELECT * FROM ("
                     "SELECT event_key,entity_id,event_time,received_time,state,attributes_json,"
                     "last_changed,last_updated,source,quality "
-                    "FROM feature_observation_events "
+                    "FROM feature_observation_events INDEXED BY idx_feature_obs_entity_received_time "
                     "WHERE entity_id=? AND received_time>? AND received_time<=? "
                     "AND event_time<=? "
                     "ORDER BY event_time DESC,received_time DESC,event_key DESC LIMIT ?)"
