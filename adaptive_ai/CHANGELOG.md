@@ -1,3 +1,13 @@
+# 0.14.47 — 2026-09-20
+
+- Restore the Correct chart's physical Current history. Candidate charts now read Current directly from target entity_history instead of deriving it from Candidate observation rows, so gaps in Candidate inference no longer erase the real device-state curve.
+- Fix Gen 2+ / Gen 3+ Candidate realtime routing. Active Candidate observers are indexed by durable lineage root_agent_id rather than agent_candidates.parent_agent_id, which becomes a Candidate surrogate after Gen 1.
+- Limit explicit Train/Rebuild to a rolling seven-day history window anchored to current time. Older archive remains durable but no longer multiplies every interactive retrain.
+- Clamp interrupted legacy 10+ day training windows forward into the new seven-day window on Resume.
+- Remove fixed inter-chunk pauses from explicit selected-agent training with a dedicated agent_training_pause_ms=0 option. Discovery and background Recorder work keep the existing 1500 ms safety pause.
+- Increase explicit training cooperative duty from 20% to 55%, reduce maximum uninterrupted Python work from 50 ms to 35 ms, and cap throttle sleeps at 0.5 s. Fresh HA state_changed events still request strict realtime priority.
+- Preserve one-heavy-job FIFO, Candidate Executor isolation, durable history/evidence, and all 0.14.46 RAM-first hot-read behavior.
+
 # 0.14.46 — 2026-09-19
 
 - Move the 1 s Candidate live-card path to RAM. Current comes from the websocket-backed Engine state map; Candidate/Parent Desired, confidence and timestamp come from the in-memory generation runtime. SQLite is now only a cold restart/backfill source for these tiles.
