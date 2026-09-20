@@ -267,6 +267,38 @@ class CandidateShadowRuntimeTests(unittest.TestCase):
         finally:
             self.store.conn = original_conn
 
+    def test_passive_candidate_refresh_does_not_blank_fresh_parent_card_decision(self):
+        _, generation = self._g1(prediction=1.0, confidence=.93)
+        shared = self._run_shadow()
+        self.assertIsNotNone(shared)
+
+        before = self.manager.candidate_live_runtime_snapshots()
+        row = next(x for x in before if x["generation_id"] == generation["generation_id"])
+        self.assertEqual(row["parent_desired"], 0.0)
+        self.assertEqual(row["candidate_desired"], 1.0)
+        self.assertTrue(row["parent_decision_paired"])
+
+        # Candidate fallback runs independently on a later HA revision. This refreshes
+        # Candidate Desired, but must not make the still-fresh Parent Desired disappear.
+        new_state = {
+            "entity_id": "binary_sensor.presence", "state": "on", "attributes": {},
+            "last_updated": "2026-09-20T12:00:00+00:00",
+        }
+        self.engine.on_state_changed({
+            "entity_id": "binary_sensor.presence", "new_state": new_state
+        })
+        observed = self.manager.drain_candidate_shadow_events(force=True, max_roots=8)
+        self.assertEqual(observed, 1)
+
+        after = self.manager.candidate_live_runtime_snapshots()
+        row = next(x for x in after if x["generation_id"] == generation["generation_id"])
+        self.assertEqual(row["parent_desired"], 0.0)
+        self.assertEqual(row["candidate_desired"], 1.0)
+        self.assertFalse(row["parent_decision_paired"])
+        self.assertIsNotNone(row["parent_shadow_timestamp"])
+        self.executor.service.assert_not_called()
+        self.executor.release_control.assert_not_called()
+
     def test_passive_state_changed_observer_keeps_candidate_shadow_alive_when_parent_is_paused(self):
         _, generation = self._g1(prediction=1.0, confidence=.93)
         # Root remains mode=paused, so ordinary live inference is intentionally not a
