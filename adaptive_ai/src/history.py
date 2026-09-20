@@ -150,7 +150,12 @@ class HistoryManager(threading.Thread):
     def _training_bounds(self):
         stats = STORE.archive_stats()
         end_ts = float(stats.get("max_ts") or now_ts())
-        start_ts = float(stats.get("min_ts") or (end_ts - float(OPTIONS["history_bootstrap_days"]) * 86400.0))
+        earliest = float(stats.get("min_ts") or end_ts)
+        # Explicit agent training intentionally uses a recent rolling window rather than
+        # replaying the entire local archive. Older history remains durable for diagnostics
+        # and future offline analysis, but does not multiply every interactive retrain.
+        days = max(1.0, min(30.0, float(OPTIONS.get("agent_training_history_days", 7) or 7)))
+        start_ts = max(earliest, end_ts - days * 86400.0)
         return start_ts, end_ts
 
     def _start_agent_job(self, agent_id, rebuild=False):
@@ -341,7 +346,10 @@ class HistoryManager(threading.Thread):
         if not agent:
             return
         archive_start, archive_end = self._training_bounds()
-        start_ts = archive_start if rebuild or agent.get("training_window_start_ts") is None else float(agent["training_window_start_ts"])
+        persisted_start = agent.get("training_window_start_ts")
+        # Upgrade-safe clamp: an interrupted 10+ day job resumes inside the new rolling
+        # window instead of dragging the obsolete older portion forward forever.
+        start_ts = archive_start if rebuild or persisted_start is None else max(archive_start, float(persisted_start))
         cursor = start_ts if rebuild or agent.get("training_cursor_ts") is None else max(start_ts, float(agent["training_cursor_ts"]))
         # Explicit Resume/Rebuild reaches current Recorder time, not merely the previous
         # local archive maximum. Resume backfills only selected features; Rebuild scans
@@ -391,7 +399,9 @@ class HistoryManager(threading.Thread):
                         f"Historical indexing checkpoint {((cursor-start_ts)/max(1.0,target_end-start_ts)):.0%}",
                         {"cursor_ts": cursor, "end_ts": target_end, "final": final})
             if not final:
-                self.stop_event.wait(max(0.0, float(OPTIONS.get("history_background_pause_ms", 250))) / 1000.0)
+                pause_ms = max(0.0, float(OPTIONS.get("history_background_pause_ms", 0) or 0))
+                if pause_ms:
+                    self.stop_event.wait(pause_ms / 1000.0)
 
     def request_agent_rebuild(self, agent_id):
         return self._start_agent_job(agent_id, rebuild=True)
