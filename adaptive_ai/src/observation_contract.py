@@ -732,6 +732,8 @@ class FeatureJournal:
                     ON feature_observation_events(entity_id,event_time,received_time);
                 CREATE INDEX IF NOT EXISTS idx_feature_obs_received
                     ON feature_observation_events(received_time);
+                CREATE INDEX IF NOT EXISTS idx_feature_obs_entity_received_time
+                    ON feature_observation_events(entity_id,received_time,event_time);
                 CREATE TABLE IF NOT EXISTS feature_windows (
                     window_id TEXT PRIMARY KEY, contract_version INTEGER NOT NULL,
                     agent_id TEXT NOT NULL, anchor_time REAL NOT NULL, start_time REAL NOT NULL,
@@ -1012,32 +1014,68 @@ class ObservationSQLiteTemporalTracker(replay_module.SQLiteTemporalTracker):
         return result
 
     def _feature_interval_rows(self, entity_ids, lo, hi):
-        """Rows that became causally visible since the previous replay timestamp."""
-        if float(hi) <= float(lo):
+        """Rows that became causally visible since the previous replay timestamp.
+
+        Split the two causal eligibility paths so SQLite can use a lower-bound range
+        index instead of scanning old history behind an OR predicate:
+
+        * event_time in (lo, hi] with received_time <= hi;
+        * late receipt in (lo, hi] for an event_time <= lo.
+
+        The branches are disjoint. Each keeps at most HISTORY_SAMPLES newest rows and
+        Python restores the exact previous per-entity top-64 ordering after the UNION.
+        """
+        lo, hi = float(lo), float(hi)
+        if hi <= lo:
             return []
         result = []
         for ids in self._chunks(entity_ids):
             parts, params = [], []
             for eid in ids:
+                # Newly occurring event-time rows. idx_feature_obs_entity_time can seek
+                # directly into (lo, hi] instead of walking the entity's old prefix.
                 parts.append(
                     "SELECT * FROM ("
                     "SELECT event_key,entity_id,event_time,received_time,state,attributes_json,"
                     "last_changed,last_updated,source,quality "
                     "FROM feature_observation_events "
-                    "WHERE entity_id=? AND event_time<=? AND received_time<=? "
-                    "AND (event_time>? OR received_time>?) "
+                    "WHERE entity_id=? AND event_time>? AND event_time<=? "
+                    "AND received_time<=? "
                     "ORDER BY event_time DESC,received_time DESC,event_key DESC LIMIT ?)"
                 )
-                params.extend([
-                    eid, float(hi), float(hi), float(lo), float(lo),
-                    self.HISTORY_SAMPLES,
-                ])
+                params.extend([eid, lo, hi, hi, self.HISTORY_SAMPLES])
+
+                # Late packets whose event_time was already behind the previous cursor.
+                # The extra entity+received_time index makes an empty increment O(range)
+                # rather than O(total retained history for that entity).
+                parts.append(
+                    "SELECT * FROM ("
+                    "SELECT event_key,entity_id,event_time,received_time,state,attributes_json,"
+                    "last_changed,last_updated,source,quality "
+                    "FROM feature_observation_events "
+                    "WHERE entity_id=? AND received_time>? AND received_time<=? "
+                    "AND event_time<=? "
+                    "ORDER BY event_time DESC,received_time DESC,event_key DESC LIMIT ?)"
+                )
+                params.extend([eid, lo, hi, lo, self.HISTORY_SAMPLES])
             if not parts:
                 continue
             sql = " UNION ALL ".join(parts)
-            raw = self._fetch_rows(sql, params)
+            raw = [
+                FeatureJournal.normalized_row(row)
+                for row in self._fetch_rows(sql, params)
+            ]
             TRAINING_BUDGET.checkpoint("temporal_feature_forward_query")
-            result.extend(FeatureJournal.normalized_row(row) for row in raw)
+
+            # The previous single-OR query applied ORDER BY ... LIMIT 64 independently
+            # per entity. Two bounded disjoint branches may yield up to 128 rows, so trim
+            # after merging to preserve that exact contract.
+            grouped = {}
+            for row in raw:
+                grouped.setdefault(row["entity_id"], []).append(row)
+            for eid in sorted(grouped):
+                rows = sorted(grouped[eid], key=self._row_order)
+                result.extend(rows[-self.HISTORY_SAMPLES:])
         result.sort(key=self._row_order)
         return result
 
