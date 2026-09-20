@@ -79,6 +79,7 @@ DEFAULT_OPTIONS = {
     "agent_training_chunk_hours": 6,
     "agent_training_overlap_hours": 6,
     "agent_training_history_days": 7,
+    "agent_training_pause_ms": 0,
     "min_historical_support": 0.20,
     "max_context_novelty": 0.85,
     "confidence_validation_fraction": 0.20,
@@ -99,7 +100,7 @@ DEFAULT_OPTIONS = {
     "history_fast_target_hours": 6,
     "history_parallel_requests": 1,
     "history_context_import_interval_seconds": 60,
-    "history_background_pause_ms": 0,
+    "history_background_pause_ms": 1500,
     "history_background_start_delay_seconds": 60,
     "background_cpu_duty_cycle": 0.20,
     "process_nice": 10,
@@ -283,8 +284,8 @@ def load_options():
             # suitable for Raspberry Pi class hosts.
             if data.get("agent_training_chunk_hours") == 24:
                 options["agent_training_chunk_hours"] = 6
-            if data.get("history_background_pause_ms") in (500, 1500):
-                options["history_background_pause_ms"] = 0
+            if data.get("history_background_pause_ms") == 500:
+                options["history_background_pause_ms"] = 1500
             # 0.14.16: the old 10 s startup delay still overlapped first Ingress and
             # HA realtime requests on Raspberry Pi. Preserve explicit custom values.
             if data.get("history_background_start_delay_seconds") == 10:
