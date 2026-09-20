@@ -78,6 +78,7 @@ DEFAULT_OPTIONS = {
     "candidate_benchmark_min_samples": 12,
     "agent_training_chunk_hours": 6,
     "agent_training_overlap_hours": 6,
+    "agent_training_history_days": 7,
     "min_historical_support": 0.20,
     "max_context_novelty": 0.85,
     "confidence_validation_fraction": 0.20,
@@ -98,15 +99,15 @@ DEFAULT_OPTIONS = {
     "history_fast_target_hours": 6,
     "history_parallel_requests": 1,
     "history_context_import_interval_seconds": 60,
-    "history_background_pause_ms": 1500,
+    "history_background_pause_ms": 0,
     "history_background_start_delay_seconds": 60,
     "background_cpu_duty_cycle": 0.20,
     "process_nice": 10,
-    "training_cpu_duty_cycle": 0.20,
+    "training_cpu_duty_cycle": 0.55,
     "training_archive_batch_rows": 16,
     "training_experience_batch_rows": 64,
-    "training_throttle_max_sleep_seconds": 2.0,
-    "training_max_continuous_work_ms": 50,
+    "training_throttle_max_sleep_seconds": 0.50,
+    "training_max_continuous_work_ms": 35,
     "manual_agent_training": True,
     "max_concurrent_training_jobs": 1,
     "manual_discovery_hours": 24,
@@ -282,18 +283,20 @@ def load_options():
             # suitable for Raspberry Pi class hosts.
             if data.get("agent_training_chunk_hours") == 24:
                 options["agent_training_chunk_hours"] = 6
-            if data.get("history_background_pause_ms") == 500:
-                options["history_background_pause_ms"] = 1500
+            if data.get("history_background_pause_ms") in (500, 1500):
+                options["history_background_pause_ms"] = 0
             # 0.14.16: the old 10 s startup delay still overlapped first Ingress and
             # HA realtime requests on Raspberry Pi. Preserve explicit custom values.
             if data.get("history_background_start_delay_seconds") == 10:
                 options["history_background_start_delay_seconds"] = 60
             # 0.14.27: migrate only defaults shipped by earlier releases.
             # Explicit custom budgets stay untouched.
-            if data.get("training_cpu_duty_cycle") in (0.55, 0.25):
-                options["training_cpu_duty_cycle"] = 0.20
-            if data.get("training_max_continuous_work_ms") == 75:
-                options["training_max_continuous_work_ms"] = 50
+            if data.get("training_cpu_duty_cycle") in (0.20, 0.25):
+                options["training_cpu_duty_cycle"] = 0.55
+            if data.get("training_max_continuous_work_ms") in (75, 50):
+                options["training_max_continuous_work_ms"] = 35
+            if data.get("training_throttle_max_sleep_seconds") == 2.0:
+                options["training_throttle_max_sleep_seconds"] = 0.50
     except Exception as exc:
         print(f"[options] Failed to read options: {exc}", flush=True)
     # 0.9 never starts heavy replay implicitly, including installations with the
