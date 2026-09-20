@@ -969,14 +969,18 @@ def install(manager):
                     str(g.get("generation_id")): dict(latest_generation_runtime.get(str(g.get("generation_id"))) or {})
                     for g in generations
                 }
+            parent_fresh = bool(
+                parent_hot
+                and now - float(parent_hot.get("ts") or 0.0) <= DECISION_STALE_SECONDS
+            )
             for generation in generations:
                 gid = str(generation.get("generation_id") or "")
                 child = generation_hot.get(gid) or {}
                 fresh = bool(child and now - float(child.get("ts") or 0.0) <= DECISION_STALE_SECONDS)
-                same_event_parent = (
-                    parent_hot
-                    if fresh and parent_hot and parent_hot.get("event_id") == child.get("event_id")
-                    else {}
+                paired = bool(
+                    fresh
+                    and parent_fresh
+                    and parent_hot.get("event_id") == child.get("event_id")
                 )
                 snapshots.append({
                     "generation_id": gid,
@@ -984,7 +988,16 @@ def install(manager):
                     "root_agent_id": str(root_id),
                     "target_property": root.get("target_property"),
                     "shadow_current": current,
-                    "parent_desired": same_event_parent.get("desired") if fresh else None,
+                    # Card tiles are operational observability, not paired A/B evidence.
+                    # A Candidate-only passive heartbeat must not erase a still-fresh
+                    # direct-parent Desired merely because the two observations have
+                    # different event ids. Pair scoring remains same-event-only elsewhere.
+                    "parent_desired": parent_hot.get("desired") if parent_fresh else None,
+                    "parent_confidence": parent_hot.get("confidence") if parent_fresh else None,
+                    "parent_shadow_timestamp": (
+                        float(parent_hot.get("ts")) if parent_fresh else None
+                    ),
+                    "parent_decision_paired": paired,
                     "candidate_desired": child.get("desired") if fresh else None,
                     "candidate_confidence": child.get("confidence") if fresh else None,
                     "shadow_timestamp": float(child.get("ts")) if fresh else None,
