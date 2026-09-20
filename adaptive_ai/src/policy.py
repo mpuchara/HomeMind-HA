@@ -237,10 +237,10 @@ class MultiHorizonPolicy(PolicyBackend):
         self.lock = threading.RLock()
         self.context_engine = context_engine
         self.model_revision = (model or {}).get("model_revision") or str(uuid.uuid4())
-        # Context Tournament needs a stable champion identity across deterministic
-        # lazy-decay steps. A real learned-weight update rotates both revisions; decay
-        # rotates only model_revision because it changes the time-materialized weights
-        # without creating a new learning epoch.
+        # Context Tournament needs a stable champion identity across ordinary online
+        # learning and deterministic lazy decay. Both may change model_revision for
+        # provenance, but only construction of a genuinely fresh champion (Train/Rebuild
+        # or replacement policy) creates a new tournament_revision.
         self.tournament_revision = (
             (model or {}).get("tournament_revision") or self.model_revision
         )
