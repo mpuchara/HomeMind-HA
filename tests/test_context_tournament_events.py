@@ -194,6 +194,8 @@ class ContextTournamentEventTests(unittest.TestCase):
         self.assertEqual(first['data']['selection_rank'], 1)
         self.assertAlmostEqual(first['data']['feature_score'], 0.72)
         self.assertEqual(first['data']['schema_revision'], 3)
+        self.assertEqual(first['data']['evaluation_reason'], 'challenger_selected')
+        self.assertIn('evaluation_champion_revision', first['data'])
         count = len([e for e in self.service.store.events if e['kind'] == 'context_challenger_started'])
         self.service.sync_agent(self.service.agent)
         self.assertEqual(
