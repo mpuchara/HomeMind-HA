@@ -1,3 +1,12 @@
+# 0.14.51 — 2026-09-20
+
+- Make Candidate decision tiles last-known-state displays: `Desired`, `Candidate Desired` and Candidate confidence remain available until a newer real decision replaces them.
+- Keep the existing 95-second freshness window as metadata only. Freshness no longer turns an observed decision back into `—` on the card.
+- Preserve `shadow_active` as a freshness signal, separate from the last observed Candidate decision shown to the user.
+- On restart, warm the latest Parent/Candidate decision once from durable decision history and keep subsequent 1-second card polling RAM-first.
+- Harden the browser cache so sparse/heavy Candidate status payloads cannot erase a non-null last decision for the same generation.
+- Keep paired A/B evidence, promotion gates, Correct history gap semantics and Candidate Executor isolation unchanged.
+
 # 0.14.50 — 2026-09-20
 
 - Fix intermittent Candidate-card `Desired` disappearing while `Candidate Desired` stays visible.
