@@ -11,7 +11,7 @@ from storage import STORE
 from ha import HA, AUTOMATION_KNOWLEDGE
 from context import (archived_state, balanced_presence_driver_score, controllable_context_exclusions, default_action_interval, electrical_context_exclusions, entity_capability_tags, historical_reward, is_context_candidate_entity, is_esphome_sensor_entity, is_fast_reactive_agent, numeric_activity_driver_score, occupancy_state_bool, target_options_for_state, target_value, transition_edges)
 from telemetry import HEAVY_JOBS, rss_mb
-from replay import SQLiteTemporalTracker, DeferredUpdates, BoundedUsage
+from replay import SQLiteTemporalTracker, DeferredUpdates, BoundedUsage, ReplayQueryCache
 from training_budget import TRAINING_BUDGET
 from policy import MultiHorizonPolicy
 
@@ -79,6 +79,7 @@ class HistoryManager(threading.Thread):
         self.training_schema_cache = {}
         self.training_schema_cache_hits = 0
         self.training_schema_cache_misses = 0
+        self.training_replay_cache_status = {}
         self.job_cancel_event = None
         self.agent_jobs_lock = threading.RLock()
         self.discovery_job_lock = threading.RLock()
@@ -130,6 +131,7 @@ class HistoryManager(threading.Thread):
                 "training_schema_cache_entries": len(self.training_schema_cache),
                 "training_schema_cache_hits": int(self.training_schema_cache_hits),
                 "training_schema_cache_misses": int(self.training_schema_cache_misses),
+                "training_replay_cache": dict(self.training_replay_cache_status),
                 "training_stage_progress": (
                     (self.work_done / self.work_total) if self.work_total else None
                 ),
@@ -1513,11 +1515,17 @@ class HistoryManager(threading.Thread):
         # dwell was immediately followed by a rewind to the next action's precursor.
         # Incremental cursors stay forward-moving far more often when these roles do not
         # fight over one timestamp.
+        replay_query_cache = ReplayQueryCache(
+            max_rows=int(OPTIONS.get("training_replay_ram_cache_rows", 8192) or 0),
+            max_entry_rows=int(OPTIONS.get("training_replay_ram_cache_entry_rows", 1024) or 1024),
+        )
         timeline = SQLiteTemporalTracker(
-            STORE, watched_entities, self.engine.context, start_ts, end_ts
+            STORE, watched_entities, self.engine.context, start_ts, end_ts,
+            query_cache=replay_query_cache,
         )
         persistence_timeline = SQLiteTemporalTracker(
-            STORE, watched_entities, self.engine.context, start_ts, end_ts
+            STORE, watched_entities, self.engine.context, start_ts, end_ts,
+            query_cache=replay_query_cache,
         )
         pending = {}
         last_value = {}
@@ -2064,6 +2072,7 @@ class HistoryManager(threading.Thread):
             )
         heldout_updates.close()
         _publish_temporal_replay_stats()
+        self.training_replay_cache_status = replay_query_cache.status()
         timeline.close()
         persistence_timeline.close()
         TRAINING_BUDGET.checkpoint("finalization_complete", force=True)
