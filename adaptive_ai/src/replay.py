@@ -1,11 +1,72 @@
 """Bounded-memory historical views. Large timelines and held-out vectors stay on disk."""
 import json
 import sqlite3
-from collections import defaultdict, deque
+from collections import defaultdict, deque, OrderedDict
 from adaptive_presence import AdaptivePresenceModel
 from context import archived_state, TemporalHistory, state_scalar
 from home_state import RoomBeliefModel
 from training_budget import TRAINING_BUDGET
+
+
+class ReplayQueryCache:
+    """Bounded per-training LRU for small immutable historical query results.
+
+    Two temporal trackers serve onset and persistence replay. They often ask SQLite for
+    the same bounded seed/interval rows. Sharing those exact results in RAM removes repeat
+    reads without materializing the whole archive or weakening durability.
+    """
+    def __init__(self, max_rows=8192, max_entry_rows=1024):
+        self.max_rows = max(0, int(max_rows))
+        self.max_entry_rows = max(1, int(max_entry_rows))
+        self.rows = 0
+        self.data = OrderedDict()
+        self.hits = 0
+        self.misses = 0
+        self.evictions = 0
+
+    @staticmethod
+    def _key(sql, params):
+        return (str(sql), tuple(params or ()))
+
+    def get(self, sql, params):
+        if self.max_rows <= 0:
+            self.misses += 1
+            return None
+        key = self._key(sql, params)
+        value = self.data.pop(key, None)
+        if value is None:
+            self.misses += 1
+            return None
+        self.data[key] = value
+        self.hits += 1
+        return [dict(row) for row in value]
+
+    def put(self, sql, params, rows):
+        if self.max_rows <= 0:
+            return
+        rows = [dict(row) for row in (rows or ())]
+        if len(rows) > self.max_entry_rows or len(rows) > self.max_rows:
+            return
+        key = self._key(sql, params)
+        previous = self.data.pop(key, None)
+        if previous is not None:
+            self.rows -= len(previous)
+        self.data[key] = rows
+        self.rows += len(rows)
+        while self.rows > self.max_rows and self.data:
+            _, evicted = self.data.popitem(last=False)
+            self.rows -= len(evicted)
+            self.evictions += 1
+
+    def status(self):
+        return {
+            "rows": int(self.rows),
+            "entries": len(self.data),
+            "hits": int(self.hits),
+            "misses": int(self.misses),
+            "evictions": int(self.evictions),
+            "max_rows": int(self.max_rows),
+        }
 
 
 class BoundedUsage:
@@ -115,12 +176,13 @@ class SQLiteTemporalTracker:
     # training duty cycle. Python already merges/sorts the bounded result afterwards.
     SQL_ENTITY_CHUNK = 32
 
-    def __init__(self, store, watched, context, start, end):
+    def __init__(self, store, watched, context, start, end, query_cache=None):
         self.conn = sqlite3.connect(store.path, timeout=30)
         self.conn.row_factory = sqlite3.Row
         self.conn.execute('PRAGMA cache_size=-2048')
         self.watched = sorted(set(watched or ()))
         self.context = context
+        self.query_cache = query_cache
         self.start = float(start)
         self.end = float(end)
         self.home_entities = sorted(set(context.relevant_entities()))
@@ -183,9 +245,16 @@ class SQLiteTemporalTracker:
             )
 
     def _fetch_rows(self, sql, params):
+        if self.query_cache is not None:
+            cached = self.query_cache.get(sql, params)
+            if cached is not None:
+                self._metrics["ram_query_hits"] = int(self._metrics.get("ram_query_hits") or 0) + 1
+                return cached
         rows = [dict(row) for row in self.conn.execute(sql, params).fetchall()]
         self._metrics["sql_queries"] += 1
         self._metrics["rows_loaded"] += len(rows)
+        if self.query_cache is not None:
+            self.query_cache.put(sql, params, rows)
         return rows
 
     def _base_bulk_before(self, entity_ids, ts, count):
