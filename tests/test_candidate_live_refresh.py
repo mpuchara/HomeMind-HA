@@ -10,8 +10,9 @@ class CandidateLiveRefreshContractTests(unittest.TestCase):
         self.assertIn('def live_candidate_snapshots(manager):', text)
         self.assertIn('path == "/api/candidate-live"', text)
         self.assertIn('state_map = dict(manager.engine.state_map)', text)
-        self.assertIn('"parent_desired": row.get("parent_desired") if fresh else None', text)
-        self.assertIn('"candidate_desired": row.get("child_desired") if fresh else None', text)
+        self.assertIn('"parent_desired": row.get("parent_desired") if parent_fresh else None', text)
+        self.assertIn('"candidate_desired": row.get("child_desired") if child_fresh else None', text)
+        self.assertIn('"parent_decision_paired": bool(', text)
         self.assertIn('manager.live_snapshots = lambda: live_candidate_snapshots(manager)', text)
 
     def test_candidate_decision_tiles_have_one_second_lightweight_refresh(self):
