@@ -256,13 +256,13 @@
     const hi=Math.max(Number(subject.max_value),...(values.length?values:[Number(subject.max_value)]));
     const span=Math.max(1e-6,hi-lo),start=Number(data.start??range.start),end=Number(data.end??range.end),width=Math.max(1,end-start),stale=Number(data.stale_after_seconds||95);
     const x=t=>50+930*(Number(t)-start)/width,y=v=>300-255*(Number(v)-lo)/span;
-    const path=points=>{let d='',active=false,last=0;for(const p of (points||[]).slice().sort((a,b)=>Number(a.ts)-Number(b.ts))){const v=p.value,ts=Number(p.ts);if(v==null||!Number.isFinite(Number(v))||(last&&ts-last>stale))active=false;if(v!=null&&Number.isFinite(Number(v))){d+=active?` H${x(ts)} V${y(v)}`:` M${x(ts)},${y(v)}`;active=true;last=ts;}}return d;};
+    const path=(points,expire=true)=>{let d='',active=false,last=0;for(const p of (points||[]).slice().sort((a,b)=>Number(a.ts)-Number(b.ts))){const v=p.value,ts=Number(p.ts);if(v==null||!Number.isFinite(Number(v))||(expire&&last&&ts-last>stale))active=false;if(v!=null&&Number.isFinite(Number(v))){d+=active?` H${x(ts)} V${y(v)}`:` M${x(ts)},${y(v)}`;active=true;last=ts;}}return d;};
     const rendered=[];
     if(series.live_desired)rendered.push(`<path data-series="live_desired" d="${path(series.live_desired.points)}" fill="none" stroke="${COLORS.candidate}" stroke-width="2" stroke-dasharray="8 6" stroke-linecap="round" opacity="0.95"/>`);
     if(series.parent_desired)rendered.push(`<path data-series="parent_desired" d="${path(series.parent_desired.points)}" fill="none" stroke="${COLORS.parent}" stroke-width="2" stroke-dasharray="8 6" stroke-linecap="round" opacity="0.95"/>`);
     if(series.candidate_desired)rendered.push(`<path data-series="candidate_desired" d="${path(series.candidate_desired.points)}" fill="none" stroke="${COLORS.candidate}" stroke-width="2" stroke-dasharray="8 6" stroke-linecap="round" opacity="0.95"/>`);
     if(series.current){
-      const currentPath=path(series.current.points);
+      const currentPath=path(series.current.points,false);
       rendered.push(`<path data-series="current-outline" d="${currentPath}" fill="none" stroke="#04111f" stroke-width="6" stroke-linejoin="round" stroke-linecap="round" opacity="0.92"/>`);
       rendered.push(`<path data-series="current" d="${currentPath}" fill="none" stroke="${COLORS.current}" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>`);
     }
