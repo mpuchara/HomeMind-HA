@@ -49,8 +49,8 @@ def install(core, manager):
     # authoritative. 0.14.15/16 shipped 55%; 0.14.17-0.14.25 shipped 25% / 75 ms.
     if float(core.OPTIONS.get("agent_training_chunk_hours", 24) or 24) == 24.0:
         core.OPTIONS["agent_training_chunk_hours"] = 6
-    if int(core.OPTIONS.get("history_background_pause_ms", 500) or 0) in (500, 1500):
-        core.OPTIONS["history_background_pause_ms"] = 0
+    if int(core.OPTIONS.get("history_background_pause_ms", 500) or 0) == 500:
+        core.OPTIONS["history_background_pause_ms"] = 1500
     current_duty = float(core.OPTIONS.get("training_cpu_duty_cycle", 0.55) or 0.55)
     if current_duty in (0.20, 0.25):
         core.OPTIONS["training_cpu_duty_cycle"] = DEFAULT_TRAINING_DUTY_CYCLE
