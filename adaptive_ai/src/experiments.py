@@ -193,12 +193,38 @@ class Experiments:
         return selected, x, prediction_inputs
 
     @staticmethod
-    def _presence_outcome_sources(agent, selected, states, registry):
+    def _verified_presence_outcome_role(eid, state, registry):
+        """Return broad compatibility kind plus explicit HA-backed presence role.
+
+        Prediction may use broader heuristics, but positive experiment outcomes require
+        stronger evidence: a tracker domain or an explicit HA occupancy device class.
+        A name-only/template binary helper therefore remains a predictor/background fact
+        and can never become proof of arrival.
+        """
+        if not state or state.get('state') in ('unavailable', 'unknown'):
+            return None
+        reg = registry or {}
+        domain = str(eid).split('.', 1)[0]
+        kind, _ = source_kind(eid, state, reg)
+        if domain in {'person', 'device_tracker'}:
+            return ('tracker', 'tracker') if kind == 'tracker' else None
+        if domain != 'binary_sensor' or kind != 'binary':
+            return None
+        attrs = state.get('attributes') or {}
+        device_class = str(
+            attrs.get('device_class') or reg.get('original_device_class') or ''
+        ).strip().lower()
+        if device_class not in {'motion', 'occupancy', 'presence'}:
+            return None
+        return 'binary', device_class
+
+    @classmethod
+    def _presence_outcome_sources(cls, agent, selected, states, registry):
         """Return verified same-area presence sources allowed to settle a presence outcome.
 
         A predictor is not automatically an outcome source. Both the target and source
-        must have explicit HA area mappings, and the source must have a verified binary
-        or tracker presence role. Missing mapping deliberately leaves the outcome unknown.
+        must have explicit HA area mappings, and the source must have a verified physical
+        presence role. Missing mapping or role deliberately leaves the outcome unknown.
         """
         target_area = (registry.get(agent['target_entity'], {}) or {}).get('area_id')
         if not target_area:
@@ -209,17 +235,19 @@ class Experiments:
             if suffix != 'value' or eid == agent['target_entity']:
                 continue
             state = states.get(eid)
-            if not state or state.get('state') in ('unavailable', 'unknown'):
-                continue
             reg = registry.get(eid, {}) or {}
-            kind, _ = source_kind(eid, state, reg)
+            verified = cls._verified_presence_outcome_role(eid, state, reg)
             source_area = reg.get('area_id')
-            if kind not in {'binary', 'tracker'} or not source_area or source_area != target_area:
+            if not verified or not source_area or source_area != target_area:
                 continue
             before = state_scalar(state)
             if before is None:
                 continue
-            sources[eid] = {'role': kind, 'area_id': source_area, 'before': before, 'anchored_at': None}
+            role, verified_role = verified
+            sources[eid] = {
+                'role': role, 'verified_role': verified_role, 'area_id': source_area,
+                'before': before, 'anchored_at': None,
+            }
         return sources
 
     @staticmethod
