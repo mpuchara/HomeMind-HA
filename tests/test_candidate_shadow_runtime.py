@@ -304,6 +304,43 @@ class CandidateShadowRuntimeTests(unittest.TestCase):
         self.executor.service.assert_not_called()
         self.executor.release_control.assert_not_called()
 
+    def test_gen3_passive_events_route_through_live_root(self):
+        g1_status, g1 = self._g1(prediction=0.0, confidence=.8)
+        g2 = self.manager.spawn_child(g1["generation_id"], "candidate_correct")
+        g2_model = self.store.get_model(g2["agent_id"])
+        g2_model["prediction"] = 1.0
+        g2_model["confidence"] = .9
+        g2_model["model_revision"] = "g2-rev"
+        self.store.save_model(g2["agent_id"], g2_model)
+        self.engine.models.pop(g2["agent_id"], None)
+        self._mark_trained(g1_status["candidate_id"], g2["agent_id"], g2["generation_id"])
+
+        g3 = self.manager.spawn_child(g2["generation_id"], "candidate_correct")
+        g3_model = self.store.get_model(g3["agent_id"])
+        g3_model["prediction"] = 1.0
+        g3_model["confidence"] = .95
+        g3_model["model_revision"] = "g3-rev"
+        self.store.save_model(g3["agent_id"], g3_model)
+        self.engine.models.pop(g3["agent_id"], None)
+        self._mark_trained(g2["agent_id"], g3["agent_id"], g3["generation_id"])
+        self.manager.invalidate_candidate_shadow_cache()
+
+        self.assertTrue(self.manager.candidate_hot_active(self.root["id"]))
+        self.assertFalse(self.manager.candidate_hot_active(g2["agent_id"]))
+
+        new_state = {
+            "entity_id": "light.shadow", "state": "on", "attributes": {},
+            "context": {}, "last_updated": "2026-09-20T09:00:00+00:00",
+        }
+        self.engine.on_state_changed({"entity_id": "light.shadow", "new_state": new_state})
+        observed = self.manager.drain_candidate_shadow_events(force=True, max_roots=8)
+        self.assertEqual(observed, 1)
+        hot = self.manager.candidate_latest_runtime(g3["generation_id"])
+        self.assertIsNotNone(hot)
+        self.assertEqual(hot["current"], 1.0)
+        self.assertEqual(hot["desired"], 1.0)
+        self.executor.service.assert_not_called()
+
     def test_candidate_shadow_never_dispatches_home_assistant_service(self):
         self._g1(prediction=1.0)
         self._run_shadow()
