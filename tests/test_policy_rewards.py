@@ -98,12 +98,19 @@ class PolicyTests(unittest.TestCase):
         exported=p.serialize()
         self.assertEqual(exported['tournament_revision'],tournament_before)
 
-    def test_policy_learning_rotates_tournament_revision(self):
+    def test_online_policy_learning_keeps_tournament_revision(self):
         p=MultiHorizonPolicy(agent(),{}, {},set())
-        before=p.tournament_revision
+        model_before=p.model_revision
+        tournament_before=p.tournament_revision
         p.update(1,1,{0:1},1)
-        self.assertNotEqual(p.tournament_revision,before)
-        self.assertEqual(p.tournament_revision,p.model_revision)
+        self.assertNotEqual(p.model_revision,model_before)
+        self.assertEqual(p.tournament_revision,tournament_before)
+        self.assertNotEqual(p.model_revision,p.tournament_revision)
+
+    def test_fresh_policy_gets_new_tournament_revision(self):
+        first=MultiHorizonPolicy(agent(),{}, {},set())
+        second=MultiHorizonPolicy(agent(),{}, {},set())
+        self.assertNotEqual(first.tournament_revision,second.tournament_revision)
 
     def test_inference_export_distinct_from_training(self):
         p=MultiHorizonPolicy(agent(),{}, {},set())

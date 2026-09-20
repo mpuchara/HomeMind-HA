@@ -296,6 +296,8 @@ def install_context_events(service):
         emit(aid, "info", "context_challenger_started", {
             "entity_id": str(entity_id),
             "evaluation_started_ts": started,
+            "evaluation_reason": str(model.get("evaluation_reason") or "unknown"),
+            "evaluation_champion_revision": model.get("evaluation_champion_revision"),
             "schema_revision": int(tournament.get("schema_revision") or 0),
             "feature_score": _numeric(scores.get(entity_id)),
             "selection_rank": int(rank),

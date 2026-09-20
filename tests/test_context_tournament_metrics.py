@@ -233,6 +233,28 @@ class ContextTournamentMetricIntegrationTests(unittest.TestCase):
         self.assertEqual(row['evaluation_champion_revision'], 'champion-2')
         self.assertEqual(row['evaluation_reason'], 'champion_model_changed')
 
+    def test_online_learning_revision_change_keeps_challenger_epoch(self):
+        self.service.observe_shadow(self.agent, dict(self.states), {self.challenger})
+        model = self.service._load_shadow_model(self.agent['id'], self.challenger, 2)
+        model['samples'] = 21
+        started = model['evaluation_started_ts']
+        self.service._save_shadow_model(self.agent['id'], self.challenger, model)
+
+        online_updated = SimpleNamespace(
+            schema=SimpleNamespace(entities=[self.active]),
+            model_revision='champion-1-online-update',
+            tournament_revision='champion-1',
+        )
+        self.engine.models[self.agent['id']] = online_updated
+        self.service.sync_agent(
+            self.agent, policy=online_updated,
+            feature_scores={self.challenger: .95}
+        )
+        row = self.service.shadow_status(self.agent)['challengers'][0]
+        self.assertEqual(row['samples'], 21)
+        self.assertEqual(row['evaluation_started_ts'], started)
+        self.assertEqual(row['evaluation_champion_revision'], 'champion-1')
+
     def test_decay_only_model_revision_change_keeps_challenger_epoch(self):
         self.service.observe_shadow(self.agent, dict(self.states), {self.challenger})
         model = self.service._load_shadow_model(self.agent['id'], self.challenger, 2)
