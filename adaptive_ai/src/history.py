@@ -210,7 +210,14 @@ class HistoryManager(threading.Thread):
         return seed
 
     def training_schema_seed(self, agent_id, agent=None):
-        item = self.training_schema_cache.get(str(agent_id))
+        aid = str(agent_id)
+        lock = getattr(self, "agent_jobs_lock", None)
+        if lock is not None:
+            with lock:
+                active = aid in set(getattr(self, "agent_jobs", set()) or set())
+            if not active:
+                return None
+        item = self.training_schema_cache.get(aid)
         if not item:
             self.training_schema_cache_misses += 1
             return None
