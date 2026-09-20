@@ -1,3 +1,12 @@
+# 0.14.50 — 2026-09-20
+
+- Fix intermittent Candidate-card `Desired` disappearing while `Candidate Desired` stays visible.
+- Treat Parent Desired and Candidate Desired as two independently observed operational values, each with the existing 95-second freshness limit.
+- Candidate-only passive/heartbeat observations no longer clear a still-fresh Parent Desired solely because their event ID differs from the Parent's last observation.
+- Expose `parent_decision_paired` so diagnostics can distinguish an independently fresh display pair from a true same-event A/B pair.
+- Keep paired future A/B evidence, comparison scoring, promotion gates and Candidate Executor isolation strictly same-event-only; no evidence semantics are relaxed.
+- Preserve the 0.14.49 Candidate heartbeat, Correct chart fixes, seven-day training window and RAM-first hot paths.
+
 # 0.14.49 — 2026-09-20
 
 - Fix the quiet-home Candidate Shadow heartbeat. The intended 30-second refresh can now observe the same Home Assistant state revision again; revision dedupe still suppresses duplicate event-driven requests.
