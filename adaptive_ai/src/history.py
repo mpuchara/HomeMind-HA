@@ -149,7 +149,7 @@ class HistoryManager(threading.Thread):
 
     def _training_bounds(self):
         stats = STORE.archive_stats()
-        end_ts = float(stats.get("max_ts") or now_ts())
+        end_ts = max(float(stats.get("max_ts") or 0.0), now_ts())
         earliest = float(stats.get("min_ts") or end_ts)
         # Explicit agent training intentionally uses a recent rolling window rather than
         # replaying the entire local archive. Older history remains durable for diagnostics
