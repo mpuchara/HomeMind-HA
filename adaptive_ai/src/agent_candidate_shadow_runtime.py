@@ -1021,7 +1021,9 @@ def install(manager):
         result = original_lineage_status(ref) if original_lineage_status is not None else None
         return _decorate_status(result)
 
-    def _queue_passive_root(root_id, revision, *, delay_seconds=0.35, wake=True):
+    def _queue_passive_root(
+        root_id, revision, *, delay_seconds=0.35, wake=True, force_observe=False
+    ):
         root_id = str(root_id)
         with manager.lock:
             previous = passive_pending.get(root_id) or {}
@@ -1031,16 +1033,23 @@ def install(manager):
                     float(previous.get("due") or (time.monotonic() + delay_seconds)),
                     time.monotonic() + max(0.0, float(delay_seconds)),
                 ),
+                # A heartbeat must be allowed to observe the same state revision again.
+                # Revision dedupe is correct for duplicate state_changed requests, but it
+                # must not suppress the periodic freshness observation itself.
+                "force_observe": bool(previous.get("force_observe")) or bool(force_observe),
             }
         if wake:
             manager.wake_event.set()
 
-    def _observe_passive_root(root_id, revision):
+    def _observe_passive_root(root_id, revision, *, force_observe=False):
         root_id = str(root_id)
         if root_id not in active_candidate_parents:
             return False
         root_rt = _root_runtime(root_id)
-        if int(root_rt.get("last_candidate_observed_revision") or 0) >= int(revision or 0):
+        if (
+            not force_observe
+            and int(root_rt.get("last_candidate_observed_revision") or 0) >= int(revision or 0)
+        ):
             return False
         root_rt["last_candidate_attempt_monotonic"] = time.monotonic()
         root = _root_config(root_id)
@@ -1083,19 +1092,28 @@ def install(manager):
             if now - last_activity >= DECISION_HEARTBEAT_SECONDS:
                 # We are already on the Candidate worker. Do not self-signal the wake
                 # event or an untrained/temporarily unavailable Candidate could spin.
-                _queue_passive_root(root_id, current_revision, delay_seconds=0.0, wake=False)
+                _queue_passive_root(
+                    root_id, current_revision, delay_seconds=0.0, wake=False,
+                    force_observe=True,
+                )
 
         ready = []
         with manager.lock:
             for root_id, pending in list(passive_pending.items()):
                 if force or float(pending.get("due") or 0.0) <= now:
-                    ready.append((root_id, int(pending.get("revision") or 0)))
+                    ready.append((
+                        root_id,
+                        int(pending.get("revision") or 0),
+                        bool(pending.get("force_observe")),
+                    ))
                     passive_pending.pop(root_id, None)
                     if len(ready) >= max(1, int(max_roots)):
                         break
         completed = 0
-        for root_id, revision in ready:
-            completed += int(_observe_passive_root(root_id, revision))
+        for root_id, revision, force_observe in ready:
+            completed += int(_observe_passive_root(
+                root_id, revision, force_observe=force_observe
+            ))
         return completed
 
     def candidate_state_changed(data):
