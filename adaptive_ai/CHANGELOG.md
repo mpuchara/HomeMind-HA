@@ -1,3 +1,12 @@
+# 0.14.52 — 2026-09-20
+
+- Speed up historical training replay without changing rewards, labels or policy semantics: incremental FeatureJournal reads now use two disjoint indexed ranges instead of an `event_time OR received_time` predicate that could scan old history on every empty step.
+- Add an `(entity_id, received_time, event_time)` index for late-packet replay; ordinary event-time increments continue to use the existing entity/event-time index.
+- Preserve the previous exact per-entity newest-64 ordering after merging the two causal branches, including late and out-of-order observations.
+- Add regression coverage comparing the new split-range result to the legacy OR query and verifying SQLite chooses the received-time index.
+- Include the open PR #130 Sensor Tournament fix: quality persistence now supplies 12 values for 12 columns, with restart/shadow regression coverage.
+- Keep the 7-day manual training window, bounded RAM replay cache, Candidate lineage, Correct history and physical-control guards unchanged.
+
 # 0.14.51 — 2026-09-20
 
 - Make Candidate decision tiles last-known-state displays: `Desired`, `Candidate Desired` and Candidate confidence remain available until a newer real decision replaces them.
