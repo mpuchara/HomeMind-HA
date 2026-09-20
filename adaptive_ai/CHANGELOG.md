@@ -1,3 +1,12 @@
+# 0.14.49 — 2026-09-20
+
+- Fix the quiet-home Candidate Shadow heartbeat. The intended 30-second refresh can now observe the same Home Assistant state revision again; revision dedupe still suppresses duplicate event-driven requests.
+- Keep sparse Parent/Candidate Desired visible in Correct for the existing 95-second observed-decision validity window. A single real Shadow observation now draws a horizontal state segment instead of an invisible zero-length SVG move.
+- Preserve genuine runtime gaps after the stale cutoff. No historical Desired is synthesized and policy replay remains disabled.
+- Give direct Parent and Candidate Desired different dash patterns so identical G2/G3 decisions do not completely cover one another.
+- Show separate Current, Parent and Candidate point counts in the Correct status line to make missing-generation telemetry immediately visible during debugging.
+- Preserve Current history, seven-day training, RAM replay cache, reward/model/promotion semantics, Candidate Executor isolation and physical-control guards from 0.14.48.
+
 # 0.14.48 — 2026-09-20
 
 - Fix the remaining Correct chart Current regression. Recorder state is now projected across the selected range: the last state at/before `Od` is drawn from `Od`, and the last known state is extended to `Do`.
