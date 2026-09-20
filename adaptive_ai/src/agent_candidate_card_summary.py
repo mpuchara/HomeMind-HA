@@ -131,6 +131,7 @@ def live_candidate_snapshots(manager):
             """SELECT g.generation_id,g.parent_generation_id,g.root_agent_id,g.agent_id,
                       child.ts AS child_ts,child.event_id AS child_event_id,
                       child.desired AS child_desired,child.confidence AS child_confidence,
+                      parent.ts AS parent_ts,parent.event_id AS parent_event_id,
                       parent.desired AS parent_desired,parent.confidence AS parent_confidence
                FROM agent_candidate_generations g
                LEFT JOIN candidate_generation_decisions child
@@ -139,7 +140,8 @@ def live_candidate_snapshots(manager):
                               WHERE d.generation_id=g.generation_id)
                LEFT JOIN candidate_generation_decisions parent
                  ON parent.generation_id=g.parent_generation_id
-                AND parent.event_id=child.event_id
+                AND parent.ts=(SELECT MAX(p.ts) FROM candidate_generation_decisions p
+                               WHERE p.generation_id=g.parent_generation_id)
                WHERE g.generation_type='candidate' AND g.agent_id IS NOT NULL
                  AND g.lifecycle_state NOT IN ('discarded','pruned','promoted')
                ORDER BY g.root_agent_id,g.generation_number,g.created_ts"""
@@ -167,17 +169,30 @@ def live_candidate_snapshots(manager):
         except (TypeError, ValueError):
             current = None
         child_ts = row.get("child_ts")
-        fresh = child_ts is not None and now - float(child_ts) <= DECISION_STALE_SECONDS
+        child_fresh = (
+            child_ts is not None and now - float(child_ts) <= DECISION_STALE_SECONDS
+        )
+        parent_ts = row.get("parent_ts")
+        parent_fresh = (
+            parent_ts is not None and now - float(parent_ts) <= DECISION_STALE_SECONDS
+        )
         snapshots.append({
             "generation_id": row.get("generation_id"),
             "candidate_id": row.get("agent_id"),
             "root_agent_id": root_id,
             "target_property": root.get("target_property"),
             "shadow_current": current,
-            "parent_desired": row.get("parent_desired") if fresh else None,
-            "candidate_desired": row.get("child_desired") if fresh else None,
-            "candidate_confidence": row.get("child_confidence") if fresh else None,
-            "shadow_timestamp": float(child_ts) if fresh else None,
+            "parent_desired": row.get("parent_desired") if parent_fresh else None,
+            "parent_confidence": row.get("parent_confidence") if parent_fresh else None,
+            "parent_shadow_timestamp": float(parent_ts) if parent_fresh else None,
+            "parent_decision_paired": bool(
+                child_fresh
+                and parent_fresh
+                and row.get("child_event_id") == row.get("parent_event_id")
+            ),
+            "candidate_desired": row.get("child_desired") if child_fresh else None,
+            "candidate_confidence": row.get("child_confidence") if child_fresh else None,
+            "shadow_timestamp": float(child_ts) if child_fresh else None,
             "live_snapshot_ts": now,
         })
     return snapshots
@@ -223,6 +238,7 @@ def install(manager):
     handler.do_GET = do_get
     manager._candidate_card_summary_installed = True
     manager.candidate_card_decision_contract = (
-        "ram_first_current_plus_same_observed_event_direct_parent_desired_plus_candidate_desired"
+        "ram_first_current_plus_independently_fresh_parent_and_candidate_desired_"
+        "with_same_event_pairing_metadata"
     )
     return manager
