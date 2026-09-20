@@ -66,6 +66,7 @@ options:
   agent_candidate_backup_hours: 24
   agent_training_chunk_hours: 6
   agent_training_overlap_hours: 6
+  agent_training_history_days: 7
   min_historical_support: 0.20
   max_context_novelty: 0.85
   confidence_validation_fraction: 0.20
@@ -86,15 +87,15 @@ options:
   history_fast_target_hours: 6
   history_parallel_requests: 1
   history_context_import_interval_seconds: 60
-  history_background_pause_ms: 1500
+  history_background_pause_ms: 0
   history_background_start_delay_seconds: 60
   background_cpu_duty_cycle: 0.20
   process_nice: 10
-  training_cpu_duty_cycle: 0.20
+  training_cpu_duty_cycle: 0.55
   training_archive_batch_rows: 16
   training_experience_batch_rows: 64
-  training_throttle_max_sleep_seconds: 2.0
-  training_max_continuous_work_ms: 50
+  training_throttle_max_sleep_seconds: 0.50
+  training_max_continuous_work_ms: 35
   manual_agent_training: true
   max_concurrent_training_jobs: 1
   manual_discovery_hours: 24
@@ -159,6 +160,7 @@ schema:
   agent_candidate_backup_hours: "int(1,168)"
   agent_training_chunk_hours: "int(6,168)"
   agent_training_overlap_hours: "int(0,48)"
+  agent_training_history_days: "float(1,30)"
   min_historical_support: "float(0.0,1.0)"
   max_context_novelty: "float(0.0,1.0)"
   confidence_validation_fraction: "float(0.05,0.40)"
