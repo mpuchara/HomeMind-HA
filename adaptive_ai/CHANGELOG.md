@@ -1,3 +1,11 @@
+# 0.14.52 — 2026-09-20
+
+- Fix `KeyError: 'candidate_id'` when Apply Correct is used from Root Live while a deep Candidate lineage (Gen2+) already exists.
+- Resolve the current active Candidate tip explicitly instead of relying on the generic `enqueue()` return shape, which may be a lineage status without `candidate_id`.
+- Rebase active Root Live Correct labels onto the current Candidate tip before creating the next child generation, so the user's durable correction is not lost when the lineage advances.
+- Preserve direct-parent lineage semantics: Gen2+ produces the next child from the current tip, while Root Live and the effective parent policy models remain unchanged.
+- Keep durable Correct admission, single-heavy-job scheduling, Candidate Executor isolation, A/B evidence and promotion gates unchanged.
+
 # 0.14.51 — 2026-09-20
 
 - Make Candidate decision tiles last-known-state displays: `Desired`, `Candidate Desired` and Candidate confidence remain available until a newer real decision replaces them.
