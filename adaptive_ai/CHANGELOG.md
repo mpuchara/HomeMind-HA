@@ -1,3 +1,15 @@
+# 0.14.58 — 2026-09-21
+
+- Remove periodic durable I/O from the event→intent hot path. Live inference now runs before archive, decision-history and room-model persistence; those writes are serialized on a dedicated background housekeeping worker.
+- Keep housekeeping bounded under continuous traffic: defer microSD/SQLite work for the short realtime tail after a Home Assistant state event, but force regular catch-up so buffers cannot starve.
+- Stop Home Assistant registry refreshes from globally clearing the in-memory policy cache. Trained policies keep their explicit persisted schema and warm weights; only the dependency routing index is invalidated when topology changes.
+- Coalesce bursts of entity/device/area registry update events into at most one in-flight full-list request per registry plus one bounded follow-up. Registry topology processing now runs off the websocket receive thread.
+- Treat identical registry payloads as no-ops, avoiding repeated ContextEngine reconfiguration after reconnects or duplicate HA registry notifications.
+- Move the healthy-WebSocket full `/states` safety reconciliation from the old shipped 5-minute default to 15 minutes, including migration of the exact legacy default. The poll is additionally deferred while realtime events or another admitted heavy job are active.
+- Defer Candidate 30-second heartbeat work, Candidate backup cleanup and Sensor Tournament persistence for a short window after realtime HA events. Their semantics remain unchanged; they simply yield priority to live inference.
+- Add runtime QoS diagnostics for registry refreshes, housekeeping and full-state resync deferrals/durations so future latency spikes can be correlated without expensive historical queries.
+- No reward, policy math, Candidate promotion, Correct, Train/Rebuild, physical-control or evidence semantics changed.
+
 # 0.14.57 — 2026-09-21
 
 - Change user-visible **Discard** semantics to retire the whole unpromoted Candidate cycle. Hidden ancestor Candidates are no longer resumed after the visible leaf is discarded.
