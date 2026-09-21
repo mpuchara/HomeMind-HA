@@ -10,6 +10,7 @@ from correct_margin_repair import (
     _repair_margins,
     _select_stable_candidate,
 )
+from policy import DiagonalLinUCB
 
 
 SRC = ROOT / "adaptive_ai" / "src"
@@ -92,6 +93,46 @@ class CorrectMarginRepairTests(unittest.TestCase):
         self.assertGreater(repair["negative_updates"], 0)
         self.assertEqual(repair["positive_updates"], repair["negative_updates"])
         self.assertEqual(repair["stop_reason"], "target_margin_satisfied")
+
+    def test_real_diagonal_linucb_needs_wrong_arm_penalty_to_cross_boundary(self):
+        class ActualPolicy:
+            def __init__(self):
+                self.actions = [0.0, 1.0]
+                self.horizons = [0]
+                self.heads = {0: DiagonalLinUCB(2, self.actions, 0.0)}
+                self.lock = threading.RLock()
+
+            def predict(self, features):
+                chosen, confidence, arms = self.heads[0].choose(features, explore=False)
+                return chosen, confidence, arms, 0, 1.0, 0.0
+
+        features = {0: 1.0}
+        positive_only = ActualPolicy()
+        for _ in range(40):
+            positive_only.heads[0].update(0, features, 1.0)
+        for _ in range(12):
+            positive_only.heads[0].update(1, features, 1.0)
+        chosen, *_ = positive_only.predict(features)
+        self.assertEqual(chosen["index"], 0)
+
+        policy = ActualPolicy()
+        for _ in range(40):
+            policy.heads[0].update(0, features, 1.0)
+        sample = _sample("linucb-boundary")
+        sample["features"] = features
+        repair = _repair_margins(
+            policy,
+            [sample],
+            target_margin=0.02,
+            max_rounds=12,
+            per_label_round_budget=12,
+            stall_rounds=2,
+            min_progress=1e-6,
+        )
+        chosen, *_ = policy.predict(features)
+        self.assertEqual(chosen["index"], 1)
+        self.assertGreaterEqual(repair["after"]["margin_min"], 0.02)
+        self.assertGreater(repair["negative_updates"], 0)
 
     def test_no_progress_stops_before_global_round_limit(self):
         policy = _FakePolicy(means=(4.0, 0.0), step=0.25, learns=False)
