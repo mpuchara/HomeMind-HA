@@ -114,8 +114,16 @@ def _duration_seconds(value):
         except (TypeError, ValueError):
             return None
     if isinstance(value, str):
+        text = value.strip()
+        if ":" in text:
+            try:
+                parts = [float(part) for part in text.split(":")]
+                if len(parts) == 3:
+                    return max(0.0, parts[0] * 3600.0 + parts[1] * 60.0 + parts[2])
+            except (TypeError, ValueError):
+                return None
         try:
-            return max(0.0, float(value))
+            return max(0.0, float(text))
         except (TypeError, ValueError):
             return None
     if not isinstance(value, dict):
@@ -189,6 +197,16 @@ def automation_action_services(actions):
         command = actions.get("action", actions.get("service"))
         if isinstance(command, str) and re.fullmatch(r"[a-z_]+\.[a-z0-9_]+", command):
             found.add(command)
+        device_domain = actions.get("domain")
+        device_type = actions.get("type")
+        if (
+            isinstance(device_domain, str)
+            and isinstance(device_type, str)
+            and re.fullmatch(r"[a-z_]+", device_domain)
+            and re.fullmatch(r"[a-z0-9_]+", device_type)
+            and device_type in {"turn_on", "turn_off", "toggle", "open", "close"}
+        ):
+            found.add(f"{device_domain}.{device_type}")
         for value in actions.values():
             if isinstance(value, (dict, list)):
                 found.update(automation_action_services(value))
