@@ -8,6 +8,7 @@ import traceback
 
 import main as core
 from training_queue import TrainingQueue
+from training_request_semantics import train_request_mode
 
 
 TRAINING_QUEUE = None
@@ -198,11 +199,11 @@ def do_post(self):
         agent = core.STORE.get_agent(agent_id)
         if not agent:
             return self.send_json(404, {"error": "agent/history engine not found"})
-        partial = (agent.get("training_state") != "needs_retrain" and
-                   agent.get("training_cursor_ts") is not None and
-                   float(agent.get("training_progress") or 0.0) < 0.999)
-        return _queue_agent(self, agent_id, rebuild=not partial,
-                            reason="training", resumed=bool(partial))
+        rebuild, resumed = train_request_mode(
+            agent, core.STORE.get_model(agent_id) is not None
+        )
+        return _queue_agent(self, agent_id, rebuild=rebuild,
+                            reason="training", resumed=resumed)
 
     if TRAINING_QUEUE is not None and path.startswith("/api/agents/") and path.endswith("/resume"):
         if not self.require_trusted_client() or not self.require_runtime():
