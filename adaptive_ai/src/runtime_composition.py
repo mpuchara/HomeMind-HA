@@ -75,6 +75,12 @@ class RuntimeCompositionRoot:
                 "contract": getattr(manager, "performance_f22_contract", None),
                 "semantics": "bounded computation only; raw evidence remains authoritative",
             },
+            "correct_learning_debug": {
+                "owner": "manager.correct_learning_debug",
+                "contract": getattr(manager, "correct_learning_debug_contract", None),
+                "http": "/api/agents/{agent_id}/debug/correct-learning",
+                "semantics": "read-only bounded diagnostics; full historical reconstruction is opt-in",
+            },
             "low_power": low_power() if callable(low_power) else None,
             "transport": router.descriptor(),
             "dependencies": {
@@ -105,6 +111,7 @@ class RuntimeCompositionRoot:
         from confidence_contract import install as install_confidence_contract
         from confidence_runtime import install_runtime_semantics
         from device_agents import install_runtime as install_device_agent_runtime
+        from correct_learning_debug import register_correct_learning_debug_route
         from performance_f22 import install as install_performance_f22
         from performance_f22_order_guard import install as install_performance_f22_order_guard
         from promotion_validation import install as install_promotion_validation
@@ -145,6 +152,7 @@ class RuntimeCompositionRoot:
         router = install_dispatch(self.core)
         register_feedback_routes(router, self.core)
         register_promotion_routes(router, self.core, manager)
+        register_correct_learning_debug_route(router, self.core, manager)
 
         self.dependencies = RuntimeDependencies(clock=self.clock, repository=self.core.STORE, transport=router)
         self.contracts = self._contract_snapshot(manager, router)
