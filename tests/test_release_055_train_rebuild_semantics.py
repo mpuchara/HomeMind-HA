@@ -1,10 +1,7 @@
 """0.14.55 regressions for explicit Train/Rebuild semantics."""
-import sys
 import unittest
 
 import support
-
-sys.path.insert(0, str(support.SRC))
 
 from training_request_semantics import train_request_mode
 
