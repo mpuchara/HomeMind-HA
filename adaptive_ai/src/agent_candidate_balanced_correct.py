@@ -283,6 +283,17 @@ def _balanced_fine_tune(manager, candidate):
         "schema_changed": False,
         "base_model_revision": base_revision or None,
         "candidate_model_revision": str(getattr(policy, "model_revision", "") or "") or None,
+        # Private hand-off for the later margin-repair layer. It is removed before any
+        # offline gate/report persistence, so raw feature vectors never become UI/API
+        # diagnostics merely because Stage 2 needs to re-check anchor retention.
+        "_stability_anchor_samples": [
+            {
+                "target_history_id": anchor.get("target_history_id"),
+                "desired_idx": int(anchor["desired_idx"]),
+                "features": dict(anchor["features"]),
+            }
+            for anchor in anchors
+        ],
     }
 
 
