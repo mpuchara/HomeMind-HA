@@ -353,7 +353,9 @@ def rank_residual_context(rows, current_entities, candidate):
             continue
         role_counts = Counter()
         for row in rows:
-            item = (row.get("snapshot") or {}).get(entity_id) or {}
+            item = (row.get("snapshot") or {}).get(entity_id)
+            if not item:
+                continue
             role_counts[str(item.get("role") or foundation.ROLE_OTHER)] += 1
         role = role_counts.most_common(1)[0][0] if role_counts else foundation.ROLE_OTHER
         if not _automatic_role_allowed(candidate, role):
