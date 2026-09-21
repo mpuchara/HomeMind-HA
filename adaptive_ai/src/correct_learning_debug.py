@@ -290,6 +290,7 @@ def _manual_context_snapshot(store, agent_ids):
                 "supervision_events": event_count,
                 "latest_role_counts": dict(latest_metadata.get("role_counts") or {}),
                 "latest_room_belief": latest_metadata.get("room_belief"),
+                "latest_semantic_reliability": latest_metadata.get("semantic_reliability"),
                 "latest_baseline": latest_metadata.get("baseline"),
                 "top_scores": dict(sorted(
                     ((k, v) for k, v in scores.items() if k != "_error"),
