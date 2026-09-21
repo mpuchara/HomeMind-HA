@@ -6,13 +6,13 @@
 - Add at most two context entities per Candidate build, while preserving configured input filters and the normal schema-capacity limit.
 - Support pre-0.14.63 Correct facts with bounded bulk historical as-of reconstruction.
 - Migrate existing policy statistics by semantic feature label so shifted interaction slots cannot reinterpret old weights; initialize new feature slots from priors and reset calibration evidence.
-- Rebuild schema-changed Candidate offline scoring from raw entity_history through SQLiteTemporalTracker + current policy.features, never legacy serialized feature indexes.
+- Rebuild both stable parent and schema-changed Candidate offline scores from the same raw entity_history timeline through SQLiteTemporalTracker + each policy's current policy.features, never legacy serialized feature indexes.
 - Rebuild opposite-class stability anchors from the same raw historical feature contract after schema evolution.
 - Refresh Candidate benchmark provenance from the schema-changed raw-history held-out replay before any later promotion.
 - Report missing_context when no eligible discriminator exists or a bounded schema challenger still leaves any explicit supervision unresolved.
 - Surface Missing context and automatic schema enrichment on the existing Candidate card without new polling.
 - Keep all Stage-3 work on Candidate build paths; realtime event→intent inference and Executor authority are unchanged.
-- Full suite contains 1082 tests.
+- Full suite contains 1083 tests.
 
 # 0.14.64 — 2026-09-21
 
