@@ -916,13 +916,18 @@ class AgentCandidateManager(threading.Thread):
                 if not http.require_trusted_client() or not http.require_runtime():
                     return
                 agent_id = path.split("/")[3]
-                # Existing Live model keeps running; only a first-ever agent trains in place.
-                if self.store.get_model(agent_id) is not None and not is_candidate(self.store, agent_id):
-                    try:
-                        candidate = self.enqueue(agent_id, "manual_rebuild")
-                        return http.send_json(202, {"ok": True, "state": "candidate_queued", "candidate": candidate})
-                    except ValueError as exc:
-                        return http.send_json(404, {"error": str(exc)})
+                # Rebuild belongs to the selected Live agent itself. Candidate lineage is
+                # feedback/correction state and must never be recreated by this button.
+                # Rebuilding a parent underneath an active Candidate would invalidate the
+                # Candidate's immutable parent snapshot, so require the user to resolve it.
+                if not is_candidate(self.store, agent_id):
+                    existing = self._candidate_row(agent_id)
+                    if existing:
+                        return http.send_json(409, {
+                            "error": "Discard or promote the current Candidate before rebuilding the Live agent",
+                            "candidate": self.status(agent_id),
+                        })
+                return original_delete(http)
             return original_delete(http)
 
         handler.do_GET = do_get
