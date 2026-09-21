@@ -43,6 +43,9 @@ ROLE_PARAMS = {
                     movement=.55, semantics='aggregate_tracker'),
     'door': dict(active=0.0, stale_after=5.0, half_life=5.0, observability=.15,
                  movement=.35, semantics='transition_only'),
+    'boundary_signal': dict(active=0.0, stale_after=5.0, half_life=5.0,
+                            observability=.08, movement=.55,
+                            semantics='explicit_boundary_transition_only'),
     'auxiliary': dict(active=.20, stale_after=10.0, half_life=15.0, observability=.25,
                       movement=.10, semantics='auxiliary_likelihood'),
 }
