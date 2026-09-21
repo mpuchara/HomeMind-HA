@@ -163,7 +163,8 @@ def install(core, manager):
         now = time.monotonic()
         if now < maintenance_state["next_at"]:
             return None
-        last_event = float(getattr(core.ENGINE, "last_event_monotonic", 0.0) or 0.0)
+        runtime_engine = getattr(core, "ENGINE", None) or getattr(manager, "engine", None)
+        last_event = float(getattr(runtime_engine, "last_event_monotonic", 0.0) or 0.0)
         if last_event and now - last_event < 0.50:
             # Backup expiry is maintenance-only. Retry on the next Candidate worker pass
             # instead of acquiring SQLite immediately after a realtime HA transition.
