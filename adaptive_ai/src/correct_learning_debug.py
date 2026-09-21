@@ -210,6 +210,74 @@ def _generation_by_agent(rows):
     }
 
 
+def _base_room_forecast_read_only(context, entity_id, ts):
+    """Mirror RoomBeliefModel.forecast without mutating values/live hysteresis."""
+    ts = float(ts)
+    area = context.area_for(entity_id)
+    home = context.home
+    with context.lock, home.lock:
+        if not area:
+            belief = {
+                "occupancy": .5, "uncertainty": 1.0, "observability": 0.0,
+                "known": False, "evidence_sources": [], "direct_active": [],
+            }
+            arrivals, support, hypotheses = [0.0, 0.0, 0.0], 0.0, []
+            departure = 0.0
+        else:
+            belief = home._fuse_room(area, ts)
+            arrivals, support, hypotheses = home._arrival_forecast(area, ts)
+            departure = home._departure_forecast(area, ts, float(belief["occupancy"]))
+        now = float(belief["occupancy"])
+        occupancy_h = [
+            max(0.0, min(1.0, now * (1.0 - departure * horizon / 5.0) +
+                         (1.0 - now) * arrival))
+            for horizon, arrival in zip((1, 3, 5), arrivals)
+        ]
+        trajectory_confidence = support / (support + 8.0)
+        base = {
+            "occupancy_now": now,
+            "occupancy_in_1s": occupancy_h[0],
+            "occupancy_in_3s": occupancy_h[1],
+            "occupancy_in_5s": occupancy_h[2],
+            "arrival_probability": arrivals[-1],
+            "departure_probability": departure,
+            "trajectory_confidence": trajectory_confidence,
+            "area_id": area,
+            "known": bool(belief["known"]),
+            "support": support,
+            "uncertainty": belief["uncertainty"],
+            "observability": belief["observability"],
+            "evidence_sources": belief["evidence_sources"],
+            "arrival_probability_by_horizon": {
+                "1s": arrivals[0], "3s": arrivals[1], "5s": arrivals[2],
+            },
+            "movement_hypotheses": [
+                {
+                    "path": list(h["path"]), "mass": float(h["mass"]),
+                    "age_seconds": max(0.0, ts - float(h["ts"])),
+                }
+                for h in sorted(hypotheses, key=lambda row: -float(row["mass"]))[:home.MAX_HYPOTHESES]
+            ],
+            "model_version": home.VERSION,
+        }
+        # AdaptivePresence.evaluate is stateful. Use an exported clone so diagnostics can
+        # reproduce the probability transform without altering the production hysteresis,
+        # false-ON budget or metrics.
+        presence_clone = type(context.adaptive_presence)(context.adaptive_presence.export())
+        return context.augment_home_forecast(
+            home, area, base, ts, presence_model=presence_clone, cache={}
+        )
+
+
+class _ReadOnlyContextProxy:
+    def __init__(self, context):
+        self._context = context
+        self.excluded = set(getattr(context, "excluded", set()) or ())
+
+    def forecast(self, entity_id, ts):
+        return _base_room_forecast_read_only(self._context, entity_id, ts)
+
+
 def _policy_for_model(engine, agent, raw):
     with engine.lock:
         states = dict(engine.state_map)
@@ -217,7 +285,7 @@ def _policy_for_model(engine, agent, raw):
     relevance = dict((getattr(engine, "context_relevance", {}) or {}).get(agent["id"]) or {})
     return MultiHorizonPolicy(
         agent, states, registry, set(), model=raw, relevance_scores=relevance,
-        context_engine=engine.context,
+        context_engine=_ReadOnlyContextProxy(engine.context),
     )
 
 
@@ -293,8 +361,9 @@ def _context_at_label(engine, store, agent, label):
             "historical_sensor_only_meta": h_meta,
             "home_tail_difference": home_diff,
             "home_context_contract": (
-                "with_context_engine uses shared ContextEngine.forecast at sample_ts; "
-                "historical_sensor_only excludes that provider"
+                "with_context_engine is a read-only reconstruction of shared RoomBelief "
+                "at sample_ts using a cloned AdaptivePresence state; historical_sensor_only "
+                "excludes the home provider entirely"
             ),
         }
     except Exception as exc:
@@ -418,7 +487,7 @@ def _current_context(engine, root_agent, debug_entities):
         states = dict(engine.state_map)
     area = engine.context.area_for(target)
     try:
-        forecast = engine.context.forecast(target, now)
+        forecast = _base_room_forecast_read_only(engine.context, target, now)
     except Exception as exc:
         forecast = {"error": f"{type(exc).__name__}: {exc}"}
     sources = []
@@ -529,7 +598,7 @@ class CorrectLearningDebugService:
         tournament = getattr(self.engine, "context_tournament", None)
         if tournament is not None:
             try:
-                result["context_tournament"] = tournament.shadow_status(root_agent)
+                result["context_tournament"] = tournament.state(root_agent["id"])
             except Exception as exc:
                 result["context_tournament"] = {"error": f"{type(exc).__name__}: {exc}"}
 
