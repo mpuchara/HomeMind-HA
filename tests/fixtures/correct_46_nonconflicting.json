@@ -1,0 +1,612 @@
+{
+  "contract": "synthetic_correct_46_v1",
+  "note": "Synthetic structural reproduction of the G10 failure: one active stationary-energy schema overlaps across desired classes; broad context contains potentially separating evidence. No private raw values are copied.",
+  "active_non_conflicting": 46,
+  "class_counts": {
+    "OFF": 29,
+    "ON": 17
+  },
+  "schema_entities": [
+    "sensor.fixture_stationary_energy"
+  ],
+  "labels": [
+    {
+      "supervision_event_id": "fixture-off-01",
+      "sample_ts": 1800000000,
+      "desired": 0,
+      "schema": {
+        "sensor.fixture_stationary_energy": 4
+      },
+      "broad_context": {
+        "sensor.fixture_moving_energy": 18,
+        "binary_sensor.fixture_boundary": 0,
+        "sensor.fixture_humidity": 55
+      }
+    },
+    {
+      "supervision_event_id": "fixture-off-02",
+      "sample_ts": 1800000030,
+      "desired": 0,
+      "schema": {
+        "sensor.fixture_stationary_energy": 6
+      },
+      "broad_context": {
+        "sensor.fixture_moving_energy": 4,
+        "binary_sensor.fixture_boundary": 0,
+        "sensor.fixture_humidity": 58
+      }
+    },
+    {
+      "supervision_event_id": "fixture-off-03",
+      "sample_ts": 1800000060,
+      "desired": 0,
+      "schema": {
+        "sensor.fixture_stationary_energy": 8
+      },
+      "broad_context": {
+        "sensor.fixture_moving_energy": 4,
+        "binary_sensor.fixture_boundary": 0,
+        "sensor.fixture_humidity": 61
+      }
+    },
+    {
+      "supervision_event_id": "fixture-off-04",
+      "sample_ts": 1800000090,
+      "desired": 0,
+      "schema": {
+        "sensor.fixture_stationary_energy": 10
+      },
+      "broad_context": {
+        "sensor.fixture_moving_energy": 4,
+        "binary_sensor.fixture_boundary": 0,
+        "sensor.fixture_humidity": 64
+      }
+    },
+    {
+      "supervision_event_id": "fixture-off-05",
+      "sample_ts": 1800000120,
+      "desired": 0,
+      "schema": {
+        "sensor.fixture_stationary_energy": 12
+      },
+      "broad_context": {
+        "sensor.fixture_moving_energy": 18,
+        "binary_sensor.fixture_boundary": 0,
+        "sensor.fixture_humidity": 67
+      }
+    },
+    {
+      "supervision_event_id": "fixture-off-06",
+      "sample_ts": 1800000150,
+      "desired": 0,
+      "schema": {
+        "sensor.fixture_stationary_energy": 14
+      },
+      "broad_context": {
+        "sensor.fixture_moving_energy": 4,
+        "binary_sensor.fixture_boundary": 0,
+        "sensor.fixture_humidity": 70
+      }
+    },
+    {
+      "supervision_event_id": "fixture-off-07",
+      "sample_ts": 1800000180,
+      "desired": 0,
+      "schema": {
+        "sensor.fixture_stationary_energy": 16
+      },
+      "broad_context": {
+        "sensor.fixture_moving_energy": 4,
+        "binary_sensor.fixture_boundary": 0,
+        "sensor.fixture_humidity": 73
+      }
+    },
+    {
+      "supervision_event_id": "fixture-off-08",
+      "sample_ts": 1800000210,
+      "desired": 0,
+      "schema": {
+        "sensor.fixture_stationary_energy": 18
+      },
+      "broad_context": {
+        "sensor.fixture_moving_energy": 4,
+        "binary_sensor.fixture_boundary": 0,
+        "sensor.fixture_humidity": 76
+      }
+    },
+    {
+      "supervision_event_id": "fixture-off-09",
+      "sample_ts": 1800000240,
+      "desired": 0,
+      "schema": {
+        "sensor.fixture_stationary_energy": 20
+      },
+      "broad_context": {
+        "sensor.fixture_moving_energy": 18,
+        "binary_sensor.fixture_boundary": 0,
+        "sensor.fixture_humidity": 55
+      }
+    },
+    {
+      "supervision_event_id": "fixture-off-10",
+      "sample_ts": 1800000270,
+      "desired": 0,
+      "schema": {
+        "sensor.fixture_stationary_energy": 22
+      },
+      "broad_context": {
+        "sensor.fixture_moving_energy": 4,
+        "binary_sensor.fixture_boundary": 0,
+        "sensor.fixture_humidity": 58
+      }
+    },
+    {
+      "supervision_event_id": "fixture-off-11",
+      "sample_ts": 1800000300,
+      "desired": 0,
+      "schema": {
+        "sensor.fixture_stationary_energy": 24
+      },
+      "broad_context": {
+        "sensor.fixture_moving_energy": 4,
+        "binary_sensor.fixture_boundary": 0,
+        "sensor.fixture_humidity": 61
+      }
+    },
+    {
+      "supervision_event_id": "fixture-off-12",
+      "sample_ts": 1800000330,
+      "desired": 0,
+      "schema": {
+        "sensor.fixture_stationary_energy": 9
+      },
+      "broad_context": {
+        "sensor.fixture_moving_energy": 4,
+        "binary_sensor.fixture_boundary": 0,
+        "sensor.fixture_humidity": 64
+      }
+    },
+    {
+      "supervision_event_id": "fixture-off-13",
+      "sample_ts": 1800000360,
+      "desired": 0,
+      "schema": {
+        "sensor.fixture_stationary_energy": 15
+      },
+      "broad_context": {
+        "sensor.fixture_moving_energy": 18,
+        "binary_sensor.fixture_boundary": 0,
+        "sensor.fixture_humidity": 67
+      }
+    },
+    {
+      "supervision_event_id": "fixture-off-14",
+      "sample_ts": 1800000390,
+      "desired": 0,
+      "schema": {
+        "sensor.fixture_stationary_energy": 21
+      },
+      "broad_context": {
+        "sensor.fixture_moving_energy": 4,
+        "binary_sensor.fixture_boundary": 0,
+        "sensor.fixture_humidity": 70
+      }
+    },
+    {
+      "supervision_event_id": "fixture-off-15",
+      "sample_ts": 1800000420,
+      "desired": 0,
+      "schema": {
+        "sensor.fixture_stationary_energy": 7
+      },
+      "broad_context": {
+        "sensor.fixture_moving_energy": 4,
+        "binary_sensor.fixture_boundary": 0,
+        "sensor.fixture_humidity": 73
+      }
+    },
+    {
+      "supervision_event_id": "fixture-off-16",
+      "sample_ts": 1800000450,
+      "desired": 0,
+      "schema": {
+        "sensor.fixture_stationary_energy": 4
+      },
+      "broad_context": {
+        "sensor.fixture_moving_energy": 4,
+        "binary_sensor.fixture_boundary": 0,
+        "sensor.fixture_humidity": 76
+      }
+    },
+    {
+      "supervision_event_id": "fixture-off-17",
+      "sample_ts": 1800000480,
+      "desired": 0,
+      "schema": {
+        "sensor.fixture_stationary_energy": 6
+      },
+      "broad_context": {
+        "sensor.fixture_moving_energy": 18,
+        "binary_sensor.fixture_boundary": 0,
+        "sensor.fixture_humidity": 55
+      }
+    },
+    {
+      "supervision_event_id": "fixture-off-18",
+      "sample_ts": 1800000510,
+      "desired": 0,
+      "schema": {
+        "sensor.fixture_stationary_energy": 8
+      },
+      "broad_context": {
+        "sensor.fixture_moving_energy": 4,
+        "binary_sensor.fixture_boundary": 0,
+        "sensor.fixture_humidity": 58
+      }
+    },
+    {
+      "supervision_event_id": "fixture-off-19",
+      "sample_ts": 1800000540,
+      "desired": 0,
+      "schema": {
+        "sensor.fixture_stationary_energy": 10
+      },
+      "broad_context": {
+        "sensor.fixture_moving_energy": 4,
+        "binary_sensor.fixture_boundary": 0,
+        "sensor.fixture_humidity": 61
+      }
+    },
+    {
+      "supervision_event_id": "fixture-off-20",
+      "sample_ts": 1800000570,
+      "desired": 0,
+      "schema": {
+        "sensor.fixture_stationary_energy": 12
+      },
+      "broad_context": {
+        "sensor.fixture_moving_energy": 4,
+        "binary_sensor.fixture_boundary": 0,
+        "sensor.fixture_humidity": 64
+      }
+    },
+    {
+      "supervision_event_id": "fixture-off-21",
+      "sample_ts": 1800000600,
+      "desired": 0,
+      "schema": {
+        "sensor.fixture_stationary_energy": 14
+      },
+      "broad_context": {
+        "sensor.fixture_moving_energy": 18,
+        "binary_sensor.fixture_boundary": 0,
+        "sensor.fixture_humidity": 67
+      }
+    },
+    {
+      "supervision_event_id": "fixture-off-22",
+      "sample_ts": 1800000630,
+      "desired": 0,
+      "schema": {
+        "sensor.fixture_stationary_energy": 16
+      },
+      "broad_context": {
+        "sensor.fixture_moving_energy": 4,
+        "binary_sensor.fixture_boundary": 0,
+        "sensor.fixture_humidity": 70
+      }
+    },
+    {
+      "supervision_event_id": "fixture-off-23",
+      "sample_ts": 1800000660,
+      "desired": 0,
+      "schema": {
+        "sensor.fixture_stationary_energy": 18
+      },
+      "broad_context": {
+        "sensor.fixture_moving_energy": 4,
+        "binary_sensor.fixture_boundary": 0,
+        "sensor.fixture_humidity": 73
+      }
+    },
+    {
+      "supervision_event_id": "fixture-off-24",
+      "sample_ts": 1800000690,
+      "desired": 0,
+      "schema": {
+        "sensor.fixture_stationary_energy": 20
+      },
+      "broad_context": {
+        "sensor.fixture_moving_energy": 4,
+        "binary_sensor.fixture_boundary": 0,
+        "sensor.fixture_humidity": 76
+      }
+    },
+    {
+      "supervision_event_id": "fixture-off-25",
+      "sample_ts": 1800000720,
+      "desired": 0,
+      "schema": {
+        "sensor.fixture_stationary_energy": 22
+      },
+      "broad_context": {
+        "sensor.fixture_moving_energy": 18,
+        "binary_sensor.fixture_boundary": 0,
+        "sensor.fixture_humidity": 55
+      }
+    },
+    {
+      "supervision_event_id": "fixture-off-26",
+      "sample_ts": 1800000750,
+      "desired": 0,
+      "schema": {
+        "sensor.fixture_stationary_energy": 24
+      },
+      "broad_context": {
+        "sensor.fixture_moving_energy": 4,
+        "binary_sensor.fixture_boundary": 0,
+        "sensor.fixture_humidity": 58
+      }
+    },
+    {
+      "supervision_event_id": "fixture-off-27",
+      "sample_ts": 1800000780,
+      "desired": 0,
+      "schema": {
+        "sensor.fixture_stationary_energy": 9
+      },
+      "broad_context": {
+        "sensor.fixture_moving_energy": 4,
+        "binary_sensor.fixture_boundary": 0,
+        "sensor.fixture_humidity": 61
+      }
+    },
+    {
+      "supervision_event_id": "fixture-off-28",
+      "sample_ts": 1800000810,
+      "desired": 0,
+      "schema": {
+        "sensor.fixture_stationary_energy": 15
+      },
+      "broad_context": {
+        "sensor.fixture_moving_energy": 4,
+        "binary_sensor.fixture_boundary": 0,
+        "sensor.fixture_humidity": 64
+      }
+    },
+    {
+      "supervision_event_id": "fixture-off-29",
+      "sample_ts": 1800000840,
+      "desired": 0,
+      "schema": {
+        "sensor.fixture_stationary_energy": 21
+      },
+      "broad_context": {
+        "sensor.fixture_moving_energy": 18,
+        "binary_sensor.fixture_boundary": 0,
+        "sensor.fixture_humidity": 67
+      }
+    },
+    {
+      "supervision_event_id": "fixture-on-01",
+      "sample_ts": 1800001000,
+      "desired": 1,
+      "schema": {
+        "sensor.fixture_stationary_energy": 5
+      },
+      "broad_context": {
+        "sensor.fixture_moving_energy": 55,
+        "binary_sensor.fixture_boundary": 1,
+        "sensor.fixture_humidity": 52
+      }
+    },
+    {
+      "supervision_event_id": "fixture-on-02",
+      "sample_ts": 1800001030,
+      "desired": 1,
+      "schema": {
+        "sensor.fixture_stationary_energy": 7
+      },
+      "broad_context": {
+        "sensor.fixture_moving_energy": 62,
+        "binary_sensor.fixture_boundary": 0,
+        "sensor.fixture_humidity": 56
+      }
+    },
+    {
+      "supervision_event_id": "fixture-on-03",
+      "sample_ts": 1800001060,
+      "desired": 1,
+      "schema": {
+        "sensor.fixture_stationary_energy": 9
+      },
+      "broad_context": {
+        "sensor.fixture_moving_energy": 69,
+        "binary_sensor.fixture_boundary": 0,
+        "sensor.fixture_humidity": 60
+      }
+    },
+    {
+      "supervision_event_id": "fixture-on-04",
+      "sample_ts": 1800001090,
+      "desired": 1,
+      "schema": {
+        "sensor.fixture_stationary_energy": 11
+      },
+      "broad_context": {
+        "sensor.fixture_moving_energy": 76,
+        "binary_sensor.fixture_boundary": 1,
+        "sensor.fixture_humidity": 64
+      }
+    },
+    {
+      "supervision_event_id": "fixture-on-05",
+      "sample_ts": 1800001120,
+      "desired": 1,
+      "schema": {
+        "sensor.fixture_stationary_energy": 13
+      },
+      "broad_context": {
+        "sensor.fixture_moving_energy": 83,
+        "binary_sensor.fixture_boundary": 0,
+        "sensor.fixture_humidity": 68
+      }
+    },
+    {
+      "supervision_event_id": "fixture-on-06",
+      "sample_ts": 1800001150,
+      "desired": 1,
+      "schema": {
+        "sensor.fixture_stationary_energy": 15
+      },
+      "broad_context": {
+        "sensor.fixture_moving_energy": 55,
+        "binary_sensor.fixture_boundary": 0,
+        "sensor.fixture_humidity": 72
+      }
+    },
+    {
+      "supervision_event_id": "fixture-on-07",
+      "sample_ts": 1800001180,
+      "desired": 1,
+      "schema": {
+        "sensor.fixture_stationary_energy": 17
+      },
+      "broad_context": {
+        "sensor.fixture_moving_energy": 62,
+        "binary_sensor.fixture_boundary": 1,
+        "sensor.fixture_humidity": 76
+      }
+    },
+    {
+      "supervision_event_id": "fixture-on-08",
+      "sample_ts": 1800001210,
+      "desired": 1,
+      "schema": {
+        "sensor.fixture_stationary_energy": 19
+      },
+      "broad_context": {
+        "sensor.fixture_moving_energy": 69,
+        "binary_sensor.fixture_boundary": 0,
+        "sensor.fixture_humidity": 52
+      }
+    },
+    {
+      "supervision_event_id": "fixture-on-09",
+      "sample_ts": 1800001240,
+      "desired": 1,
+      "schema": {
+        "sensor.fixture_stationary_energy": 21
+      },
+      "broad_context": {
+        "sensor.fixture_moving_energy": 76,
+        "binary_sensor.fixture_boundary": 0,
+        "sensor.fixture_humidity": 56
+      }
+    },
+    {
+      "supervision_event_id": "fixture-on-10",
+      "sample_ts": 1800001270,
+      "desired": 1,
+      "schema": {
+        "sensor.fixture_stationary_energy": 23
+      },
+      "broad_context": {
+        "sensor.fixture_moving_energy": 83,
+        "binary_sensor.fixture_boundary": 1,
+        "sensor.fixture_humidity": 60
+      }
+    },
+    {
+      "supervision_event_id": "fixture-on-11",
+      "sample_ts": 1800001300,
+      "desired": 1,
+      "schema": {
+        "sensor.fixture_stationary_energy": 25
+      },
+      "broad_context": {
+        "sensor.fixture_moving_energy": 55,
+        "binary_sensor.fixture_boundary": 0,
+        "sensor.fixture_humidity": 64
+      }
+    },
+    {
+      "supervision_event_id": "fixture-on-12",
+      "sample_ts": 1800001330,
+      "desired": 1,
+      "schema": {
+        "sensor.fixture_stationary_energy": 8
+      },
+      "broad_context": {
+        "sensor.fixture_moving_energy": 62,
+        "binary_sensor.fixture_boundary": 0,
+        "sensor.fixture_humidity": 68
+      }
+    },
+    {
+      "supervision_event_id": "fixture-on-13",
+      "sample_ts": 1800001360,
+      "desired": 1,
+      "schema": {
+        "sensor.fixture_stationary_energy": 14
+      },
+      "broad_context": {
+        "sensor.fixture_moving_energy": 69,
+        "binary_sensor.fixture_boundary": 1,
+        "sensor.fixture_humidity": 72
+      }
+    },
+    {
+      "supervision_event_id": "fixture-on-14",
+      "sample_ts": 1800001390,
+      "desired": 1,
+      "schema": {
+        "sensor.fixture_stationary_energy": 20
+      },
+      "broad_context": {
+        "sensor.fixture_moving_energy": 76,
+        "binary_sensor.fixture_boundary": 0,
+        "sensor.fixture_humidity": 76
+      }
+    },
+    {
+      "supervision_event_id": "fixture-on-15",
+      "sample_ts": 1800001420,
+      "desired": 1,
+      "schema": {
+        "sensor.fixture_stationary_energy": 10
+      },
+      "broad_context": {
+        "sensor.fixture_moving_energy": 83,
+        "binary_sensor.fixture_boundary": 0,
+        "sensor.fixture_humidity": 52
+      }
+    },
+    {
+      "supervision_event_id": "fixture-on-16",
+      "sample_ts": 1800001450,
+      "desired": 1,
+      "schema": {
+        "sensor.fixture_stationary_energy": 16
+      },
+      "broad_context": {
+        "sensor.fixture_moving_energy": 55,
+        "binary_sensor.fixture_boundary": 1,
+        "sensor.fixture_humidity": 56
+      }
+    },
+    {
+      "supervision_event_id": "fixture-on-17",
+      "sample_ts": 1800001480,
+      "desired": 1,
+      "schema": {
+        "sensor.fixture_stationary_energy": 22
+      },
+      "broad_context": {
+        "sensor.fixture_moving_energy": 62,
+        "binary_sensor.fixture_boundary": 0,
+        "sensor.fixture_humidity": 60
+      }
+    }
+  ]
+}
