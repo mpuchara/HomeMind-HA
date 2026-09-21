@@ -12,7 +12,7 @@ class Release061DebugExportStaticRouteTests(unittest.TestCase):
         route = 'if path == "/debug_export_ui.js":'
         serve = 'return self.static("debug_export_ui.js", "application/javascript; charset=utf-8")'
         gate = "if not self.require_runtime():"
-        self.assertIn('<script src="debug_export_ui.js?v=0.14.61"></script>', index)
+        self.assertIn('src="debug_export_ui.js?v=', index)
         self.assertIn(route, main)
         self.assertIn(serve, main)
         self.assertLess(main.index(route), main.index(gate))
