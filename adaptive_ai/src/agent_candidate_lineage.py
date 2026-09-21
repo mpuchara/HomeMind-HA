@@ -164,6 +164,34 @@ def _ensure_root(store, root_agent_id, generation_number=None):
     return _row(store, generation_id=_root_generation_id(root_agent_id))
 
 
+def _refresh_live_generation_snapshot(store, generation):
+    """Bind a new Candidate to the model/config that is Live *now*.
+
+    A full Rebuild intentionally replaces the policy in place, while online learning can
+    also update the persisted model between Candidate cycles. The durable Live generation
+    row is therefore refreshed exactly when it becomes a new Candidate parent.
+    """
+    if not generation or generation.get("generation_type") != "live" or not generation.get("agent_id"):
+        return generation
+    agent = store.get_agent_config(str(generation["agent_id"]))
+    if not agent:
+        return generation
+    meta = model_metadata(store.get_model(str(generation["agent_id"])))
+    now = time.time()
+    with store.lock, store.conn() as c:
+        c.execute(
+            """UPDATE agent_candidate_generations
+               SET model_identity=?,config_fingerprint=?,schema_revision=?,model_revision=?,updated_ts=?
+               WHERE generation_id=?""",
+            (
+                meta.get("model_identity"), config_fingerprint(agent),
+                meta.get("schema_revision"), meta.get("model_revision"), now,
+                str(generation["generation_id"]),
+            ),
+        )
+    return _row(store, generation_id=generation["generation_id"])
+
+
 def _register_generation(store, root_id, parent_generation, candidate_id, number, reason, state="queued"):
     agent = store.get_agent_config(str(candidate_id))
     if not agent:
@@ -382,6 +410,7 @@ def install(manager):
             parent_gen = _ensure_root(manager.store, parent["id"], manager._generation(parent["id"]))
         if parent_gen is None:
             raise RuntimeError("Cannot resolve Candidate parent generation")
+        parent_gen = _refresh_live_generation_snapshot(manager.store, parent_gen)
         root = parent_gen["root_agent_id"]
         existing = _row(manager.store, agent_id=row["candidate_id"])
         if existing is None:
