@@ -465,8 +465,9 @@ class Engine(threading.Thread):
 
             self.state_map = state_map
             if initial:
-                self.context.home.arrivals.clear()
-                self.context.home.pending = None
+                # The REST startup snapshot describes current state, not fresh movement.
+                # Clear anonymous trajectories and explicit boundary-arrival hints together.
+                self.context.home.reset_movement_state()
             sync_now = now_ts()
             self.last_state_count = len(state_map)
             self.last_poll = sync_now
