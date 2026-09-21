@@ -28,6 +28,7 @@ class ContextEngine:
         self.bootstrap_delta = None
         self.bootstrap_started = 0
         self.source_details = {}
+        self.boundary_sources_by_area = {}
         self.room_checkpoint_source = None
         self.adaptive_presence = AdaptivePresenceModel()
         # Future physical threshold adapter contract only. It performs no I/O and remains
@@ -75,7 +76,16 @@ class ContextEngine:
             control, _ = controllable_context_exclusions(states, self.entities)
             electrical, _ = electrical_context_exclusions(states, self.entities)
             self.excluded = control | electrical
-            self.admitted, self.source_details = select_sources(states, self.entities, self.mapping, self.excluded)
+            self.admitted, self.source_details = select_sources(
+                states, self.entities, self.mapping, self.excluded
+            )
+            boundary_index = {}
+            for source_id, detail in self.source_details.items():
+                if not detail.get('selected'):
+                    continue
+                for target_area in detail.get('boundary_for') or ():
+                    boundary_index.setdefault(str(target_area), set()).add(str(source_id))
+            self.boundary_sources_by_area = boundary_index
             self.source_metadata = {
                 eid: {k: v for k, v in (states[eid].get('attributes') or {}).items()
                       if k in ('unit_of_measurement', 'device_class')}
@@ -96,6 +106,12 @@ class ContextEngine:
 
     def relevant_entities(self):
         return sorted(self.admitted & self.mapping.keys())
+
+    def boundary_sources_for(self, target_entity):
+        area = self.area_for(target_entity)
+        if not area:
+            return ()
+        return tuple(sorted(self.boundary_sources_by_area.get(str(area), ())))
 
     def evidence_metadata(self, eid):
         return dict(self.source_details.get(eid) or {})
@@ -272,6 +288,10 @@ class ContextEngine:
                 'unmapped_sources': len(self.admitted - self.mapping.keys()),
                 'source_details': list(self.source_details.values())[:500],
                 'source_details_total': len(self.source_details),
+                'explicit_boundary_sources': sum(
+                    len(ids) for ids in self.boundary_sources_by_area.values()
+                ),
+                'explicit_boundary_target_areas': len(self.boundary_sources_by_area),
                 'bootstrap_live_updates': self.bootstrap_delta.updated if self.bootstrap_delta else 0,
                 'mapping_error': self.mapping_error,
                 'area_names': {k: v.get('name', k) for k, v in self.areas.items()},
