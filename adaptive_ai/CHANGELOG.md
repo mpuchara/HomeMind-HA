@@ -1,3 +1,17 @@
+# 0.14.66 — 2026-09-21
+
+- Recognize real mmWave local signals including `stationary_energy`, still/move energy and explicit stationary/moving target-distance channels.
+- Treat radar energy as local raw activity evidence: it improves RoomBelief observability and Adaptive Presence capability but never directly asserts room occupancy.
+- Treat target-distance channels as nonoccupancy context only; they are never calibrated occupancy probabilities or direct virtual-presence raw sources.
+- Share one target-relative evidence-role contract between RoomBelief and Correct broad snapshots: LOCAL_EVIDENCE, BOUNDARY_ARRIVAL_PRECURSOR, TRAJECTORY_CONTEXT and RELIABILITY_CONTEXT.
+- Keep humidity/temperature in RELIABILITY_CONTEXT only, and keep remote PIR/radar activity as TRAJECTORY_CONTEXT rather than target-room occupancy truth.
+- Support explicit `boundary_for` / `arrival_precursor_for` metadata as a short-lived runtime-only arrival prior. Boundary evidence can raise arrival probability but never `occupancy_now`, is not serialized, and is cleared with movement state after startup.
+- Add sparse target-area → explicit-boundary-source event fanout so a mapped cross-room precursor wakes the target agent immediately without restoring whole-house presence fanout.
+- Treat camera/detection/presence scores as raw non-probability evidence until independently calibrated; only explicitly probability-like sources retain probability semantics.
+- Preserve automation thresholds such as bathroom >22 / <12 for 3 s as structural baseline metadata only; RoomBelief source semantics do not hardcode those thresholds.
+- Keep Stage-5 reliability calibration out of this release. No new SQL/full scans are added to event→intent and Control/Executor authority is unchanged.
+- Full suite contains 1093 tests.
+
 # 0.14.65 — 2026-09-21
 
 - Add residual-targeted Correct schema evolution after bounded Stage-2 margin repair leaves explicit supervision unresolved.

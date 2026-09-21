@@ -465,8 +465,9 @@ class Engine(threading.Thread):
 
             self.state_map = state_map
             if initial:
-                self.context.home.arrivals.clear()
-                self.context.home.pending = None
+                # The REST startup snapshot describes current state, not fresh movement.
+                # Clear anonymous trajectories and explicit boundary-arrival hints together.
+                self.context.home.reset_movement_state()
             sync_now = now_ts()
             self.last_state_count = len(state_map)
             self.last_poll = sync_now
@@ -829,11 +830,18 @@ class Engine(threading.Thread):
         )
         if policy is not None:
             deps.update(str(eid) for eid in (getattr(policy.schema, "entities", ()) or ()))
-        area = self.context.area_for(agent.get("target_entity"))
+        target_entity = agent.get("target_entity")
+        area = self.context.area_for(target_entity)
         if area:
             deps.update(
                 str(eid)
                 for eid in getattr(self.context.home, "area_sources", {}).get(area, ())
+            )
+            # Explicit boundary mappings are sparse and intentional. They are the only
+            # cross-area RoomBelief dependencies added automatically; arbitrary remote
+            # PIR/radar sources still require schema selection, avoiding whole-home fanout.
+            deps.update(
+                str(eid) for eid in self.context.boundary_sources_for(target_entity)
             )
         try:
             deps.update(str(eid) for eid in self.experiments.watches(agent["id"]))

@@ -61,7 +61,14 @@ class PresenceAdmissionTests(unittest.TestCase):
         eid='sensor.camera_ai_detection_score';c=ContextEngine(DEFAULT_OPTIONS)
         c.configure({eid:state(eid,75,unit_of_measurement='%')}, entities={eid:{'area_id':'garden'}})
         c.observe(eid,state(eid,75),100)
-        self.assertEqual(c.home.forecast('garden',100)['occupancy_now'],.75)
+        # A detection *score* is raw local evidence, not a calibrated P(occupied).
+        self.assertEqual(c.source_details[eid]['role'],'auxiliary')
+        self.assertFalse(c.source_details[eid]['calibrated_probability'])
+        self.assertFalse(c.source_details[eid]['occupancy_authority'])
+        forecast=c.forecast(eid,100)
+        self.assertLess(forecast['occupancy_now'],.5)
+        self.assertIn(eid,[row['entity_id'] for row in forecast['evidence_sources']])
+        self.assertEqual(forecast['presence_capability']['mode'],'virtual_threshold')
 
     def test_binary_other_area_does_not_suppress_zone_score(self):
         states={'binary_sensor.presence':state('binary_sensor.presence','off'),

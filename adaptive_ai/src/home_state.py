@@ -32,6 +32,10 @@ ROLE_PARAMS = {
                              observability=.82, movement=1.0, semantics='binary_occupancy'),
     'radar_activity': dict(active=.30, stale_after=4.0, half_life=5.0, observability=.35,
                            movement=.20, semantics='activity_likelihood'),
+    # Distance channels are local context/availability evidence, never occupancy proof.
+    # Keep observability deliberately below the known-room threshold even when fresh.
+    'radar_distance': dict(active=0.0, stale_after=4.0, half_life=5.0, observability=.10,
+                           movement=0.0, semantics='distance_context'),
     'auxiliary_probability': dict(active=1.0, stale_after=20.0, half_life=30.0,
                                   observability=.55, movement=.25,
                                   semantics='probability_like_score'),
@@ -39,6 +43,9 @@ ROLE_PARAMS = {
                     movement=.55, semantics='aggregate_tracker'),
     'door': dict(active=0.0, stale_after=5.0, half_life=5.0, observability=.15,
                  movement=.35, semantics='transition_only'),
+    'boundary_signal': dict(active=0.0, stale_after=5.0, half_life=5.0,
+                            observability=.08, movement=.55,
+                            semantics='explicit_boundary_transition_only'),
     'auxiliary': dict(active=.20, stale_after=10.0, half_life=15.0, observability=.25,
                       movement=.10, semantics='auxiliary_likelihood'),
 }
@@ -53,6 +60,8 @@ class RoomBeliefModel:
     MAX_SOURCES = 4096
     GAP = 30.0
     MIN_HYPOTHESIS_MASS = .08
+    BOUNDARY_HINT_TTL = 8.0
+    BOUNDARY_HINT_HALF_LIFE = 3.0
 
     def __init__(self, half_life_days=45, raw=None):
         self.half_life = max(1.0, float(half_life_days)) * 86400
@@ -65,6 +74,9 @@ class RoomBeliefModel:
         # Compatibility/debug surface only. Hypotheses, not this deque, are authoritative.
         self.arrivals = deque(maxlen=8)
         self.hypotheses = []
+        # Explicitly mapped boundary precursors are runtime-only arrival evidence.
+        # They never set occupancy_now and are never serialized/restored.
+        self.boundary_hints = deque(maxlen=16)
         self.pending = None
         self.updated = 0
         self.last_ts = 0.0
@@ -363,6 +375,67 @@ class RoomBeliefModel:
         self.arrivals.append((area, float(ts)))
         self._prune_hypotheses(ts)
 
+    @staticmethod
+    def _boundary_targets(evidence):
+        raw = (evidence or {}).get('boundary_for')
+        if raw is None:
+            return []
+        if isinstance(raw, str):
+            values = [raw]
+        elif isinstance(raw, (list, tuple, set)):
+            values = list(raw)
+        else:
+            values = [raw]
+        out = []
+        for value in values:
+            value = str(value or '').strip()
+            if value and value not in out:
+                out.append(value)
+        return out
+
+    def _record_boundary_hint(self, entity_id, source_area, targets, ts, mass):
+        mass = max(0.0, min(.85, float(mass)))
+        if mass <= 0:
+            return
+        for target in targets:
+            self.boundary_hints.append({
+                'entity_id': str(entity_id),
+                'source_area': source_area,
+                'target_area': str(target),
+                'ts': float(ts),
+                'mass': mass,
+            })
+
+    def _boundary_forecast(self, area, ts):
+        """Short-lived explicit arrival prior; never occupancy_now evidence."""
+        probabilities = [0.0, 0.0, 0.0]
+        evidence = []
+        confidence = 0.0
+        for hint in list(self.boundary_hints):
+            if str(hint.get('target_area') or '') != str(area or ''):
+                continue
+            age = float(ts) - float(hint.get('ts') or 0.0)
+            if age < 0 or age > self.BOUNDARY_HINT_TTL:
+                continue
+            freshness = math.exp(
+                -math.log(2) * age / max(1e-6, self.BOUNDARY_HINT_HALF_LIFE)
+            )
+            mass = max(0.0, min(.85, float(hint.get('mass') or 0.0)))
+            strength = mass * freshness
+            confidence = max(confidence, strength)
+            for idx, horizon_gain in enumerate((.40, .68, .82)):
+                p = max(0.0, min(.85, strength * horizon_gain))
+                probabilities[idx] = 1.0 - (1.0 - probabilities[idx]) * (1.0 - p)
+            evidence.append({
+                'entity_id': hint.get('entity_id'),
+                'source_area': hint.get('source_area'),
+                'target_area': hint.get('target_area'),
+                'age_seconds': max(0.0, age),
+                'strength': strength,
+                'semantics': 'explicit_boundary_arrival_precursor',
+            })
+        return probabilities, confidence, evidence
+
     def expire(self, ts, learn=True):
         with self.lock:
             # Engine's initial snapshot historically clears arrivals+pending to prevent
@@ -379,12 +452,20 @@ class RoomBeliefModel:
                 elif age >= 0:
                     remaining.append(hypothesis)
             self.hypotheses = remaining
+            self.boundary_hints = deque(
+                (
+                    hint for hint in self.boundary_hints
+                    if 0 <= float(ts) - float(hint.get('ts') or 0.0) <= self.BOUNDARY_HINT_TTL
+                ),
+                maxlen=16,
+            )
             self._prune_hypotheses(ts)
 
     def reset_movement_state(self):
         with self.lock:
             self.arrivals.clear()
             self.hypotheses.clear()
+            self.boundary_hints.clear()
             self.pending = None
 
     def reset_live_state(self):
@@ -431,6 +512,18 @@ class RoomBeliefModel:
                               and previous.get('value') == probability
                               and previous.get('role') == role)
             state_since = self._source_timestamp(previous, 'state_since_ts', ts) if same_state else ts
+            try:
+                previous_active = bool(
+                    previous and previous.get('available')
+                    and float(previous.get('value')) >= .5
+                )
+            except (TypeError, ValueError):
+                previous_active = False
+            try:
+                current_active = bool(available and float(probability) >= .5)
+            except (TypeError, ValueError):
+                current_active = False
+            boundary_targets = self._boundary_targets(evidence)
             self.sources[entity_id] = {
                 'area': area,
                 'value': probability,
@@ -440,7 +533,17 @@ class RoomBeliefModel:
                 'communication_reliability': communication,
                 'role': role,
                 'value_semantics': evidence.get('value_semantics') or params['semantics'],
+                'boundary_for': list(boundary_targets),
             }
+            if current_active and not previous_active and boundary_targets:
+                movement = float(params.get('movement') or 0.0)
+                # Explicit topology metadata is stronger than a generic door event but
+                # remains a bounded prior, never occupancy proof.
+                boundary_mass = max(.25, min(.85, movement if movement > 0 else .35))
+                self._record_boundary_hint(
+                    entity_id, area, boundary_targets, ts,
+                    boundary_mass * communication,
+                )
             if old_area and old_area != area:
                 self.area_sources.get(old_area, set()).discard(entity_id)
             self.area_sources.setdefault(area, set()).add(entity_id)
@@ -531,7 +634,17 @@ class RoomBeliefModel:
                 'known': False, 'evidence_sources': [], 'direct_active': [],
             }
             now = float(belief['occupancy'])
-            arrivals, support, hypotheses = self._arrival_forecast(area, ts) if area else ([0, 0, 0], 0.0, [])
+            learned_arrivals, support, hypotheses = (
+                self._arrival_forecast(area, ts) if area else ([0, 0, 0], 0.0, [])
+            )
+            boundary_arrivals, boundary_confidence, boundary_evidence = (
+                self._boundary_forecast(area, ts) if area else ([0, 0, 0], 0.0, [])
+            )
+            arrivals = [
+                1.0 - (1.0 - max(0.0, min(1.0, learned))) *
+                      (1.0 - max(0.0, min(1.0, boundary)))
+                for learned, boundary in zip(learned_arrivals, boundary_arrivals)
+            ]
             departure = self._departure_forecast(area, ts, now) if area else 0.0
             occupancy_h = [
                 max(0.0, min(1.0, now * (1.0 - departure * horizon / 5.0) +
@@ -539,6 +652,9 @@ class RoomBeliefModel:
                 for horizon, arrival in zip((1, 3, 5), arrivals)
             ]
             trajectory_confidence = support / (support + 8.0)
+            arrival_evidence_confidence = max(
+                trajectory_confidence, float(boundary_confidence)
+            )
             if area:
                 slot = self.values.setdefault(area, {'p': now, 'arrival': None, 'departure': None})
                 slot.update(p=now, known=belief['known'], observability=belief['observability'],
@@ -554,6 +670,14 @@ class RoomBeliefModel:
                 'arrival_probability_by_horizon': {
                     '1s': arrivals[0], '3s': arrivals[1], '5s': arrivals[2],
                 },
+                'learned_arrival_probability_by_horizon': {
+                    '1s': learned_arrivals[0], '3s': learned_arrivals[1], '5s': learned_arrivals[2],
+                },
+                'boundary_arrival_probability_by_horizon': {
+                    '1s': boundary_arrivals[0], '3s': boundary_arrivals[1], '5s': boundary_arrivals[2],
+                },
+                'boundary_evidence': boundary_evidence,
+                'arrival_evidence_confidence': arrival_evidence_confidence,
                 'movement_hypotheses': [
                     {'path': list(h['path']), 'mass': float(h['mass']),
                      'age_seconds': max(0.0, ts - float(h['ts']))}
@@ -627,6 +751,7 @@ class RoomBeliefModel:
             delta.area_sources = {area: set(ids) for area, ids in self.area_sources.items()}
             delta.arrivals = deque(self.arrivals, maxlen=8)
             delta.hypotheses = copy.deepcopy(self.hypotheses)
+            delta.boundary_hints = deque(copy.deepcopy(list(self.boundary_hints)), maxlen=16)
             delta.last_ts = self.last_ts
             delta._refresh_pending_compat()
             delta.expire(cutoff, learn=False)
@@ -705,6 +830,7 @@ class RoomBeliefModel:
                 'half_life_days': self.half_life / 86400,
                 'active_rooms': active_rooms,
                 'anonymous_movement_hypotheses': len(self.hypotheses),
+                'active_boundary_hints': len(self.boundary_hints),
                 'top_transitions': sorted(transitions, key=lambda row: row['weight'], reverse=True)[:10],
                 'topology_edges': [
                     {'from': origin, 'to': destination, 'weight': weight}

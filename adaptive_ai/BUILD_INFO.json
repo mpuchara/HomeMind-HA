@@ -1,10 +1,10 @@
 {
-  "version": "0.14.65",
+  "version": "0.14.66",
   "release_date": "2026-09-21",
-  "base_version": "0.14.64",
-  "base_commit": "b3d2c18aec624b8dacb3137eb60dc35c3ce640e1",
-  "release_status": "release-0.14.65-correct-residual-schema-evolution",
-  "tests_passed": 1083,
+  "base_version": "0.14.65",
+  "base_commit": "14ef754974671a7e1a506e01754ee43f07acb597",
+  "release_status": "release-0.14.66-roombelief-source-semantics",
+  "tests_passed": 1093,
   "profile": "rpi4-low-memory-complete-discovery-manual-agent-selection",
   "manual_agent_training": true,
   "max_concurrent_training_jobs": 1,
@@ -225,5 +225,13 @@
   "correct_schema_migration": "existing head statistics are remapped by semantic feature label; new feature slots start from priors; calibration is reset",
   "correct_schema_benchmark": "schema-changed Candidate parent and challenger are both rescored on the same raw entity_history timeline using SQLiteTemporalTracker and their own current policy.features; evolved schema never consumes legacy features_json for regression scoring or stability anchors",
   "correct_missing_context": "bounded schema challenger succeeds only when all residual supervision is resolved; otherwise offline gate reports missing_context",
-  "correct_stage3_hot_path": "Candidate-build-only; no event-to-intent, ActionIntent or Executor changes"
+  "correct_stage3_hot_path": "Candidate-build-only; no event-to-intent, ActionIntent or Executor changes",
+  "room_belief_stationary_energy": "stationary/still/moving radar-energy channels are admitted as local raw activity evidence; they improve observability/adaptive-presence capability but are never direct occupancy truth",
+  "room_belief_target_distance": "explicit still/stationary/moving target-distance channels are admitted as nonoccupancy context and never become AdaptivePresence raw probability sources",
+  "room_belief_boundary": "explicit boundary_for/arrival_precursor_for metadata creates bounded runtime-only arrival priors; boundary evidence never sets occupancy_now and is not serialized",
+  "room_belief_trajectory": "remote PIR/radar activity remains trajectory context rather than target-room occupancy ground truth",
+  "room_belief_role_contract": "Correct broad snapshots and RoomBelief share LOCAL_EVIDENCE / BOUNDARY_ARRIVAL_PRECURSOR / TRAJECTORY_CONTEXT / RELIABILITY_CONTEXT semantics",
+  "room_belief_event_fanout": "only explicitly mapped cross-area boundary sources are added to target event dependencies; no whole-home presence fanout",
+  "room_belief_score_semantics": "camera/detection/presence scores remain raw non-probability evidence until independent calibration; only explicit probability semantics are treated as probability-like",
+  "room_belief_stage4_scope": "no Stage-5 reliability calibration changes; no new SQL/full scans in event-to-intent; Control/Executor semantics unchanged"
 }
