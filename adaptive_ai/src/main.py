@@ -662,6 +662,12 @@ def shutdown_runtime():
             ENGINE.stop_event.set()
             ENGINE.control_workers.shutdown(wait=False, cancel_futures=True)
             ENGINE.poll_worker.shutdown(wait=False, cancel_futures=True)
+            registry_worker = getattr(ENGINE, "registry_worker", None)
+            if registry_worker is not None:
+                registry_worker.shutdown(wait=False, cancel_futures=True)
+            housekeeping_worker = getattr(ENGINE, "housekeeping_worker", None)
+            if housekeeping_worker is not None:
+                housekeeping_worker.shutdown(wait=False, cancel_futures=True)
         if HISTORY is not None:
             HISTORY.stop_event.set()
         if EVENT_STREAM is not None:

@@ -1,5 +1,5 @@
 name: "Adaptive AI"
-version: "0.14.57"
+version: "0.14.58"
 slug: "adaptive_ai"
 description: >-
   History-first local reinforcement-learning policies for Home Assistant. Imports
@@ -23,7 +23,7 @@ options:
   entity_area_mapping: "{}"
   intent_ttl_seconds: 2
   poll_seconds: 30
-  realtime_resync_seconds: 300
+  realtime_resync_seconds: 900
   realtime_fallback_poll_seconds: 10
   proactive_tick_seconds: 1
   realtime_inference_debounce_ms: 25

@@ -1,10 +1,10 @@
 {
-  "version": "0.14.57",
+  "version": "0.14.58",
   "release_date": "2026-09-21",
-  "base_version": "0.14.56",
-  "base_commit": "21c456a8aa2657d38f923417b1932b9ce5281d49",
-  "release_status": "release-0.14.57-discard-lineage-reset",
-  "tests_passed": 1029,
+  "base_version": "0.14.57",
+  "base_commit": "49c0d8564a8a26fd8f727c5fa4f56cf285d468b1",
+  "release_status": "release-0.14.58-periodic-runtime-qos",
+  "tests_passed": 1035,
   "profile": "rpi4-low-memory-complete-discovery-manual-agent-selection",
   "manual_agent_training": true,
   "max_concurrent_training_jobs": 1,
@@ -209,5 +209,9 @@
   "indexed_incremental_replay": "FeatureJournal forward replay now uses disjoint event_time and received_time range scans with an entity+received_time index; exact causal top-64 semantics are preserved while empty increments avoid walking old retained history.",
   "sensor_quality_sql_fix": "Includes PR #130 fix: context_tournament_sensor_quality INSERT now has 12 placeholders for 12 columns, restoring durable shadow quality updates.",
   "context_tournament_revision": "Context Tournament uses a stable tournament_revision for the installed champion. Lazy decay and ordinary online policy.update learning rotate model_revision only, preserving paired future-only challenger evidence. Fresh Train/Rebuild/replacement policies receive a new tournament_revision; active-schema changes and challenger reselection still reset proof.",
-  "context_challenger_event_diagnostics": "context_challenger_started now includes evaluation_reason and evaluation_champion_revision so any future epoch reset is directly attributable from Recent activity/API event payload."
+  "context_challenger_event_diagnostics": "context_challenger_started now includes evaluation_reason and evaluation_champion_revision so any future epoch reset is directly attributable from Recent activity/API event payload.",
+  "periodic_runtime_qos": "event-to-intent inference precedes all durable housekeeping; archive/decision/context writes run on one background worker",
+  "ha_registry_qos": "registry update bursts coalesced; topology processing off websocket thread; duplicate payloads are no-ops; live policy cache stays warm",
+  "ha_resync_qos": "healthy websocket safety /states snapshot defaults to 900 s and is deferred during realtime/heavy-work windows",
+  "shadow_maintenance_qos": "Candidate heartbeat, Candidate backup cleanup and Sensor Tournament persistence defer behind fresh HA events"
 }

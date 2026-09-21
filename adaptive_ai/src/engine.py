@@ -59,39 +59,102 @@ class HAEventStream(threading.Thread):
                     self.engine.ws_connected = True
                     self.engine.ws_error = None
                     HA.last_ok = now_ts(); HA.last_error = None
-                    # Registry metadata lets discovery exclude configuration/diagnostic entities.
-                    ws.send(json.dumps({"id": 1, "type": "config/entity_registry/list"}))
-                    ws.send(json.dumps({"id": 2, "type": "subscribe_events", "event_type": "state_changed"}))
-                    ws.send(json.dumps({"id": 3, "type": "config/device_registry/list"}))
-                    ws.send(json.dumps({"id": 4, "type": "config/area_registry/list"}))
-                    for ident, event_type in ((5, 'entity_registry_updated'), (6, 'device_registry_updated'), (7, 'area_registry_updated')):
-                        ws.send(json.dumps({'id': ident, 'type': 'subscribe_events', 'event_type': event_type}))
+
+                    # Registry list payloads can be large. Home Assistant may emit a burst
+                    # of *_registry_updated events while an integration reloads. Older
+                    # builds requested the full list once per event, which could flood HA,
+                    # delay websocket state_changed delivery and repeatedly cold-start the
+                    # local policy cache. Keep at most one request per registry in flight
+                    # and coalesce every burst into one bounded follow-up refresh.
+                    registry_callbacks = {
+                        "entity": self.engine.update_entity_registry,
+                        "device": self.engine.update_device_registry,
+                        "area": self.engine.update_area_registry,
+                    }
+                    registry_event_names = {5: "entity", 6: "device", 7: "area"}
+                    registry_requests = {}
+                    registry_inflight = {}
+                    registry_dirty = set()
+                    registry_last_request = {}
+                    registry_min_interval = 2.0
                     next_id = 10
-                    registry_requests = {1: self.engine.update_entity_registry, 3: self.engine.update_device_registry, 4: self.engine.update_area_registry}
+
+                    def send_registry(name, *, force=False):
+                        nonlocal next_id
+                        now_mono = time.monotonic()
+                        if name in registry_inflight:
+                            registry_dirty.add(name)
+                            with self.engine.lock:
+                                self.engine.registry_refresh_stats["coalesced"] += 1
+                            return False
+                        last = float(registry_last_request.get(name) or 0.0)
+                        if not force and now_mono - last < registry_min_interval:
+                            registry_dirty.add(name)
+                            with self.engine.lock:
+                                self.engine.registry_refresh_stats["coalesced"] += 1
+                            return False
+                        ident = next_id
+                        next_id += 1
+                        ws.send(json.dumps({"id": ident, "type": f"config/{name}_registry/list"}))
+                        registry_requests[ident] = (name, registry_callbacks[name])
+                        registry_inflight[name] = ident
+                        registry_last_request[name] = now_mono
+                        registry_dirty.discard(name)
+                        with self.engine.lock:
+                            self.engine.registry_refresh_stats["requests"] += 1
+                        return True
+
+                    def flush_registry_due():
+                        now_mono = time.monotonic()
+                        for name in tuple(registry_dirty):
+                            if name in registry_inflight:
+                                continue
+                            if now_mono - float(registry_last_request.get(name) or 0.0) >= registry_min_interval:
+                                send_registry(name)
+
+                    # Initial metadata snapshot plus realtime event subscriptions.
+                    for name in ("entity", "device", "area"):
+                        send_registry(name, force=True)
+                    ws.send(json.dumps({"id": 2, "type": "subscribe_events", "event_type": "state_changed"}))
+                    for ident, event_type in (
+                        (5, "entity_registry_updated"),
+                        (6, "device_registry_updated"),
+                        (7, "area_registry_updated"),
+                    ):
+                        ws.send(json.dumps({"id": ident, "type": "subscribe_events", "event_type": event_type}))
+
                     backoff = 2.0
                     while not self.stop_event.is_set():
                         try:
                             raw = ws.recv(timeout=5)
                         except TimeoutError:
+                            flush_registry_due()
                             continue
                         msg = json.loads(raw)
-                        if msg.get('type') == 'result' and msg.get('id') in registry_requests:
-                            callback = registry_requests.pop(msg['id'])
-                            if msg.get('success'):
-                                callback(msg.get('result') or [])
+                        if msg.get("type") == "result" and msg.get("id") in registry_requests:
+                            name, callback = registry_requests.pop(msg["id"])
+                            registry_inflight.pop(name, None)
+                            if msg.get("success"):
+                                payload = msg.get("result") or []
+                                # Registry topology processing is not part of the
+                                # state_changed hot path. Serialize it on its own worker
+                                # so a large list cannot block websocket receive.
+                                self.engine.registry_worker.submit(callback, payload)
+                            flush_registry_due()
                             continue
-                        if msg.get('type') == 'event' and msg.get('id') in (5,6,7):
-                            names = {5: ('entity', self.engine.update_entity_registry), 6: ('device', self.engine.update_device_registry), 7: ('area', self.engine.update_area_registry)}
-                            name, callback = names[msg['id']]
-                            ws.send(json.dumps({'id': next_id, 'type': f'config/{name}_registry/list'}))
-                            registry_requests[next_id] = callback
-                            next_id += 1
+                        if msg.get("type") == "event" and msg.get("id") in registry_event_names:
+                            name = registry_event_names[msg["id"]]
+                            registry_dirty.add(name)
+                            send_registry(name)
+                            flush_registry_due()
                             continue
                         if msg.get("type") != "event" or msg.get("id") != 2:
+                            flush_registry_due()
                             continue
                         event = msg.get("event") or {}
                         data = event.get("data") or {}
                         self.engine.on_state_changed(data)
+                        flush_registry_due()
             except Exception as exc:
                 self.engine.ws_connected = False
                 self.engine.ws_error = f"{type(exc).__name__}: {exc}"
@@ -157,6 +220,22 @@ class Engine(threading.Thread):
         self.error = None
         self.state_map = {}
         self.entity_registry = {}
+        # Keep the raw HA registry payloads separately from ContextEngine's resolved
+        # registry. Comparing raw snapshots lets duplicate registry refreshes become true
+        # no-ops instead of repeatedly rebuilding topology.
+        self._entity_registry_raw = None
+        self._device_registry_raw = None
+        self._area_registry_raw = None
+        self.registry_refresh_stats = {
+            "requests": 0,
+            "coalesced": 0,
+            "entity_updates": 0,
+            "device_updates": 0,
+            "area_updates": 0,
+            "duplicates": 0,
+            "last_duration_ms": 0.0,
+            "max_duration_ms": 0.0,
+        }
         self.context = ContextEngine(OPTIONS, STORE)
         self.executor = Executor(self)
         self.experiments = Experiments(STORE)
@@ -182,10 +261,27 @@ class Engine(threading.Thread):
             max_workers=self.control_worker_count, thread_name_prefix="device-control"
         )
         self.poll_worker = ThreadPoolExecutor(max_workers=1, thread_name_prefix="ha-poll")
+        # Registry topology and durable runtime housekeeping are intentionally isolated
+        # from both websocket receive and the event->intent engine thread.
+        self.registry_worker = ThreadPoolExecutor(max_workers=1, thread_name_prefix="ha-registry")
+        self.housekeeping_worker = ThreadPoolExecutor(max_workers=1, thread_name_prefix="runtime-housekeeping")
+        self.housekeeping_future = None
+        self.housekeeping_last_submit = 0.0
+        self.housekeeping_stats = {
+            "runs": 0,
+            "deferred_for_realtime": 0,
+            "busy_skips": 0,
+            "last_duration_ms": 0.0,
+            "max_duration_ms": 0.0,
+            "archive_rows": 0,
+            "decision_rows": 0,
+            "context_saves": 0,
+        }
         self.in_flight = {}
         self.resubmit_targets = set()
         self.poll_future = None
         self.last_full_poll = 0.0
+        self.next_resync_retry_monotonic = 0.0
         # REST /states health is tracked separately from generic HAClient requests.
         # A failed history/automation/config request must never make the UI claim that
         # Home Assistant itself is disconnected.
@@ -197,8 +293,12 @@ class Engine(threading.Thread):
             "last_changed_entities": 0,
             "last_duration_ms": 0.0,
             "max_duration_ms": 0.0,
+            "deferred_for_realtime": 0,
+            "deferred_for_heavy_job": 0,
+            "scheduled": 0,
         }
         self.last_ws_event = None
+        self.last_event_monotonic = 0.0
         self.ws_connected = False
         self.ws_error = None
         self.temporal_history = TemporalHistory(maxlen=24)
@@ -228,6 +328,8 @@ class Engine(threading.Thread):
             last_state_sync_ok = self.last_state_sync_ok
             last_state_sync_error = self.last_state_sync_error
             state_resync_stats = dict(self.state_resync_stats)
+            registry_refresh_stats = dict(self.registry_refresh_stats)
+            housekeeping_stats = dict(self.housekeeping_stats)
             inference_scheduler = dict(self.inference_scheduler)
         agents = STORE.list_agents()
         confidences = [runtime_conf.get(a["id"]) for a in agents]
@@ -260,6 +362,11 @@ class Engine(threading.Thread):
                 "last_ok": last_state_sync_ok,
                 "error": last_state_sync_error,
             },
+            "runtime_qos": {
+                "registry_refresh": registry_refresh_stats,
+                "housekeeping": housekeeping_stats,
+                "healthy_resync_seconds": float(OPTIONS.get("realtime_resync_seconds", 900)),
+            },
             "inference_scheduler": {
                 **inference_scheduler,
                 "fast_idle_seconds": float(OPTIONS.get("fast_idle_inference_interval_seconds", 10)),
@@ -273,29 +380,74 @@ class Engine(threading.Thread):
             "heavy_job": HEAVY_JOBS.owner,
         }
 
-    def update_entity_registry(self, entries):
-        registry = {e.get("entity_id"): e for e in entries if isinstance(e, dict) and e.get("entity_id")}
+    @staticmethod
+    def _registry_payload_snapshot(entries):
+        # HA sends ordinary JSON-compatible dict/list structures. Copy the top-level
+        # objects so later callback code cannot mutate our equality baseline.
+        return [dict(item) if isinstance(item, dict) else item for item in (entries or [])]
+
+    def _registry_update(self, kind, entries):
+        started = time.perf_counter()
+        attr = f"_{kind}_registry_raw"
+        payload = self._registry_payload_snapshot(entries)
         with self.lock:
-            changed = registry != self.entity_registry
-            self.context.configure(self.state_map, entities=registry)
+            previous = getattr(self, attr, None)
+            if previous is not None and previous == payload:
+                self.registry_refresh_stats["duplicates"] += 1
+                return False
+            setattr(self, attr, payload)
+
+            if kind == "entity":
+                registry = {
+                    e.get("entity_id"): e
+                    for e in payload
+                    if isinstance(e, dict) and e.get("entity_id")
+                }
+                self.context.configure(self.state_map, entities=registry)
+            elif kind == "device":
+                self.context.configure(self.state_map, devices=payload)
+            elif kind == "area":
+                self.context.configure(self.state_map, areas=payload)
+            else:
+                raise ValueError(f"unsupported registry kind: {kind}")
+
             self.entity_registry = self.context.resolved_registry()
-            if changed:
-                # Context membership depends on device_id. Recreate in-memory policies so
-                # a newly detected controllable device cannot leave sibling entities in
-                # an old schema. Stored weights remain available for the history rebuild.
-                self.models.clear()
-        STORE.event(None, "info", "entity_registry", f"Loaded {len(registry)} Entity Registry entries for cleaner agent discovery", None)
+            self.registry_refresh_stats[f"{kind}_updates"] += 1
+
+            # A trained policy already owns an explicit persisted feature schema and reads
+            # dynamic room/home context through ContextEngine. Registry metadata changes
+            # therefore do NOT invalidate its in-memory weights. The old global
+            # models.clear() caused a burst of SQLite model reloads after every HA
+            # registry refresh/reconnect, exactly when websocket recovery needed CPU most.
+            # Only the dependency routing index must be rebuilt against current topology.
+            self.agent_index_at = 0.0
+            self.agent_index_revision = -1
+
+        elapsed_ms = (time.perf_counter() - started) * 1000.0
+        with self.lock:
+            self.registry_refresh_stats["last_duration_ms"] = elapsed_ms
+            self.registry_refresh_stats["max_duration_ms"] = max(
+                float(self.registry_refresh_stats.get("max_duration_ms") or 0.0),
+                elapsed_ms,
+            )
+        TELEMETRY.observe(f"registry_{kind}", elapsed_ms)
+        return True
+
+    def update_entity_registry(self, entries):
+        changed = self._registry_update("entity", entries)
+        if changed:
+            STORE.event(
+                None, "info", "entity_registry",
+                f"Loaded {len(self.entity_registry)} Entity Registry entries for cleaner agent discovery",
+                None,
+            )
+        return changed
 
     def update_device_registry(self, entries):
-        with self.lock:
-            self.context.configure(self.state_map, devices=entries)
-            self.entity_registry = self.context.resolved_registry()
-            self.models.clear()
+        return self._registry_update("device", entries)
 
     def update_area_registry(self, entries):
-        with self.lock:
-            self.context.configure(self.state_map, areas=entries)
-            self.models.clear()
+        return self._registry_update("area", entries)
 
     def registry_entry(self, entity_id):
         with self.lock:
@@ -322,6 +474,7 @@ class Engine(threading.Thread):
                 self.state_map[entity_id] = new_state
             self.last_state_count = len(self.state_map)
             self.last_ws_event = now_ts()
+            self.last_event_monotonic = time.monotonic()
             self.last_trigger_entity = entity_id
             self.dirty_entities.add(entity_id)
             self.last_event_received = time.perf_counter()
@@ -619,6 +772,107 @@ class Engine(threading.Thread):
         due.discard("")
         return due
 
+    def _realtime_recent(self, seconds=0.75):
+        last = float(getattr(self, "last_event_monotonic", 0.0) or 0.0)
+        return bool(last and time.monotonic() - last < max(0.0, float(seconds)))
+
+    def _run_housekeeping(self):
+        """Persist low-priority runtime state away from the event->intent thread."""
+        started = time.perf_counter()
+        archive_rows = decision_rows = 0
+        context_saved = False
+        try:
+            archive_rows = int(self.flush_archive(force=False) or 0)
+            decision_rows = int(self.teaching.flush(force=False) or 0)
+            context_saved = bool(self.context.save())
+        except Exception as exc:
+            # Persistence failure must never make realtime inference fail. The individual
+            # buffers retain unsaved rows and will retry on the next housekeeping pass.
+            STORE.event(
+                None, "warning", "runtime_housekeeping_error",
+                f"{type(exc).__name__}: {exc}", None,
+            )
+        elapsed_ms = (time.perf_counter() - started) * 1000.0
+        with self.lock:
+            stats = self.housekeeping_stats
+            stats["runs"] += 1
+            stats["last_duration_ms"] = elapsed_ms
+            stats["max_duration_ms"] = max(float(stats.get("max_duration_ms") or 0.0), elapsed_ms)
+            stats["archive_rows"] += archive_rows
+            stats["decision_rows"] += decision_rows
+            stats["context_saves"] += int(context_saved)
+        TELEMETRY.observe("runtime_housekeeping", elapsed_ms)
+        return {
+            "archive_rows": archive_rows,
+            "decision_rows": decision_rows,
+            "context_saved": context_saved,
+        }
+
+    def _schedule_housekeeping(self, *, force=False):
+        now = time.monotonic()
+        future = self.housekeeping_future
+        if future is not None and not future.done():
+            with self.lock:
+                self.housekeeping_stats["busy_skips"] += 1
+            return False
+
+        # Do not launch microSD/SQLite work in the short critical tail immediately after a
+        # Home Assistant event. Under continuous traffic we still flush at least every
+        # ~2 s so buffers stay bounded.
+        since_submit = now - float(self.housekeeping_last_submit or 0.0)
+        if (
+            not force
+            and self._realtime_recent(0.40)
+            and since_submit < 2.0
+        ):
+            with self.lock:
+                self.housekeeping_stats["deferred_for_realtime"] += 1
+            return False
+        if not force and since_submit < 0.75:
+            return False
+
+        self.housekeeping_last_submit = now
+        self.housekeeping_future = self.housekeeping_worker.submit(self._run_housekeeping)
+        return True
+
+    def _maybe_schedule_state_resync(self):
+        """Schedule a safety /states snapshot only from a realtime-quiet window."""
+        now_epoch = now_ts()
+        now_mono = time.monotonic()
+        healthy = bool(self.ws_connected)
+        resync_seconds = float(
+            OPTIONS.get("realtime_resync_seconds", 900)
+            if healthy
+            else OPTIONS.get("realtime_fallback_poll_seconds", 10)
+        )
+        if now_epoch - float(self.last_full_poll or 0.0) < max(5.0, resync_seconds):
+            return False
+        if self.poll_future is not None and not self.poll_future.done():
+            return False
+        if now_mono < float(self.next_resync_retry_monotonic or 0.0):
+            return False
+
+        if healthy:
+            # Full /states can be several MB on a large HA installation. Avoid starting
+            # JSON decode while an event burst is already waiting for inference.
+            if self._realtime_recent(2.0):
+                with self.lock:
+                    self.state_resync_stats["deferred_for_realtime"] += 1
+                self.next_resync_retry_monotonic = now_mono + 3.0
+                return False
+            if HEAVY_JOBS.owner is not None:
+                with self.lock:
+                    self.state_resync_stats["deferred_for_heavy_job"] += 1
+                self.next_resync_retry_monotonic = now_mono + 5.0
+                return False
+
+        self.last_full_poll = now_epoch
+        self.next_resync_retry_monotonic = 0.0
+        with self.lock:
+            self.state_resync_stats["scheduled"] += 1
+        self.poll_future = self.poll_worker.submit(self.refresh_states)
+        return True
+
     def run(self):
         print(f"Adaptive AI {APP_VERSION} starting; HA={HA_BASE_URL}", flush=True)
         STORE.event(None, "info", "startup", f"Adaptive AI {APP_VERSION} started", None)
@@ -635,27 +889,16 @@ class Engine(threading.Thread):
                 # Coalesce bursts (motion + lux + light state etc.) into one inference pass.
                 self.stop_event.wait(debounce)
             try:
-                # A healthy websocket already delivers every state_changed event. The
-                # full /states snapshot is only a low-frequency safety resync in that
-                # mode; when realtime is down, fall back to the ordinary REST cadence.
-                resync_seconds = float(
-                    OPTIONS.get("realtime_resync_seconds", 300)
-                    if self.ws_connected
-                    else OPTIONS.get("realtime_fallback_poll_seconds", 10)
-                )
-                if (now_ts() - self.last_full_poll >= max(5.0, resync_seconds)
-                        and (self.poll_future is None or self.poll_future.done())):
-                    self.last_full_poll = now_ts()
-                    self.poll_future = self.poll_worker.submit(self.refresh_states)
-                self.flush_archive(force=False)
-                self.teaching.flush(force=False)
+                # Expiration is in-memory and affects current inference semantics. Durable
+                # archive/decision/context writes are deliberately scheduled *after*
+                # inference on a separate worker below.
                 self.context.home.expire(now_ts())
-                self.context.save()
                 with self.lock:
                     state_map = dict(self.state_map)
                     changed_entities = set(self.dirty_entities) if event_wakeup else set()
                     if event_wakeup:
                         self.dirty_entities.clear()
+
                 if state_map:
                     gate_open = self.inference_enabled.is_set()
                     startup_grace = time.monotonic() < float(
@@ -669,8 +912,7 @@ class Engine(threading.Thread):
                         if changed_entities:
                             with self.lock:
                                 self.dirty_entities.update(changed_entities)
-                        continue
-                    if event_wakeup and changed_entities:
+                    elif event_wakeup and changed_entities:
                         with self.lock:
                             self.inference_scheduler["event_passes"] += 1
                         self.process(state_map, changed_entities)
@@ -695,6 +937,12 @@ class Engine(threading.Thread):
                         else:
                             with self.lock:
                                 self.inference_scheduler["idle_skips"] += 1
+
+                # Periodic work must never sit in front of an event->intent pass. The
+                # background worker also serializes archive/decision/context writes so
+                # 5 s/60 s timers cannot align into a multi-write burst on the engine.
+                self._schedule_housekeeping()
+                self._maybe_schedule_state_resync()
             except Exception as exc:
                 msg = f"{type(exc).__name__}: {exc}"
                 with self.lock:
