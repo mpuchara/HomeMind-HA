@@ -138,7 +138,7 @@ class ProductRuntimeBenchmarkContractTests(unittest.TestCase):
         self.assertEqual(build["product_benchmark_unmet_criteria"], [
             "needed_light_not_worse_than_fixed_by_more_than_2pp",
         ])
-        self.assertEqual(build["tests_passed"], 1046)
+        self.assertEqual(build["tests_passed"], 1056)
         self.assertIn("6 s", build["fast_light_off_confirmation"])
         self.assertIn("82.52%", build["product_benchmark_control_qualification"])
         report = (ROOT / "BENCHMARK_PRODUCT_F24.md").read_text(encoding="utf-8")
