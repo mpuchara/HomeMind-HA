@@ -159,13 +159,13 @@ def prepare_engine_extensions():
         result["ui_message"] = journal.ui_summary(row)
 
     def _teaching_feedback(event, agent, result):
-        reason = "manual_rebuild" if event == "teaching_undone" else "wrong_decision"
+        reason = "manual_feedback_undo_rebuild" if event == "teaching_undone" else "wrong_decision"
         status = candidates.enqueue(agent["id"], reason)
         _mark_candidate(result, status)
         return status
 
     def _teach_rl_feedback(event, agent, result):
-        reason = "manual_rebuild" if event == "teach_rl_undone" else "teach"
+        reason = "manual_feedback_undo_rebuild" if event == "teach_rl_undone" else "teach"
         status = candidates.enqueue(agent["id"], reason)
         _mark_candidate(result, status)
         return status
