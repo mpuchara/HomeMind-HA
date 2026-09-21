@@ -32,6 +32,10 @@ ROLE_PARAMS = {
                              observability=.82, movement=1.0, semantics='binary_occupancy'),
     'radar_activity': dict(active=.30, stale_after=4.0, half_life=5.0, observability=.35,
                            movement=.20, semantics='activity_likelihood'),
+    # Distance channels are local context/availability evidence, never occupancy proof.
+    # Keep observability deliberately below the known-room threshold even when fresh.
+    'radar_distance': dict(active=0.0, stale_after=4.0, half_life=5.0, observability=.10,
+                           movement=0.0, semantics='distance_context'),
     'auxiliary_probability': dict(active=1.0, stale_after=20.0, half_life=30.0,
                                   observability=.55, movement=.25,
                                   semantics='probability_like_score'),
@@ -53,6 +57,8 @@ class RoomBeliefModel:
     MAX_SOURCES = 4096
     GAP = 30.0
     MIN_HYPOTHESIS_MASS = .08
+    BOUNDARY_HINT_TTL = 8.0
+    BOUNDARY_HINT_HALF_LIFE = 3.0
 
     def __init__(self, half_life_days=45, raw=None):
         self.half_life = max(1.0, float(half_life_days)) * 86400
@@ -65,6 +71,9 @@ class RoomBeliefModel:
         # Compatibility/debug surface only. Hypotheses, not this deque, are authoritative.
         self.arrivals = deque(maxlen=8)
         self.hypotheses = []
+        # Explicitly mapped boundary precursors are runtime-only arrival evidence.
+        # They never set occupancy_now and are never serialized/restored.
+        self.boundary_hints = deque(maxlen=16)
         self.pending = None
         self.updated = 0
         self.last_ts = 0.0
