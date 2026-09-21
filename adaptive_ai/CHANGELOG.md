@@ -8,7 +8,7 @@
 - Add frozen-schema residual diagnostics: fit count/ratio, unresolved Correct supervision IDs and residual class distribution.
 - Extend Correct Learning Debug with supervision-lineage counts and per-label broad context.
 - Add Stage-1 regression tests for supervision deduplication, exclusions, semantic roles, baseline parsing, residual diagnostics and hot-path isolation.
-- Full suite contains 1055 tests.
+- Full suite contains 1056 tests.
 
 # 0.14.62 — 2026-09-21
 
