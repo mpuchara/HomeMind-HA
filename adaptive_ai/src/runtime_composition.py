@@ -117,6 +117,7 @@ class RuntimeCompositionRoot:
         from confidence_runtime import install_runtime_semantics
         from device_agents import install_runtime as install_device_agent_runtime
         from correct_learning_debug import register_correct_learning_debug_route
+        from correct_data_foundation import install as install_correct_data_foundation
         from performance_f22 import install as install_performance_f22
         from performance_f22_order_guard import install as install_performance_f22_order_guard
         from promotion_validation import install as install_promotion_validation
@@ -130,6 +131,12 @@ class RuntimeCompositionRoot:
         manager = getattr(engine, "agent_candidates", None)
         if manager is None:
             return
+
+        # Correct data collection is deliberately installed after the characterized
+        # Candidate stack and before later UI/workflow adapters.  It never enters the
+        # event-to-intent path; only explicit feedback performs broad historical reads.
+        manager = install_correct_data_foundation(self.core, manager)
+        engine.agent_candidates = manager
 
         # These are user-facing product capabilities. Install them explicitly in the
         # shipped root rather than depending on a legacy overlay side effect. Both
