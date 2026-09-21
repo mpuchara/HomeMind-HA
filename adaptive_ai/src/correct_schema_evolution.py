@@ -33,6 +33,7 @@ import time
 import uuid
 
 import agent_candidate_conservative_correct as conservative
+import agent_candidate_balanced_correct as balanced
 import correct_data_foundation as foundation
 import correct_margin_repair as margin
 from context import ExplicitFeatureSchema, archived_state, context_scalar, is_fast_reactive_agent
@@ -44,6 +45,7 @@ _PATCHED = False
 _BASE_MARGIN_FINE_TUNE = margin._margin_correct_fine_tune
 _BASE_MARGIN_GATE = margin._margin_offline_gate
 _BASE_SCORE = conservative._score
+_BASE_ANCHOR_POOL = balanced._anchor_pool
 
 _MAX_ADDITIONS = 2
 _MIN_ROWS = 8
@@ -666,6 +668,93 @@ def _score_schema_replay(core, policy, agent, rows):
     }
 
 
+def _raw_anchor_pool(core, manager, candidate, policy, teach_times):
+    """Rebuild positive stability-anchor features under the evolved schema."""
+    with manager.store.conn() as db:
+        rows = [
+            dict(row)
+            for row in db.execute(
+                """SELECT h.target_history_id,h.action_index,h.action_value,h.reward,e.ts
+                   FROM historical_experiences h
+                   LEFT JOIN entity_history e ON e.id=h.target_history_id
+                   WHERE h.agent_id=? AND h.reward>0
+                   ORDER BY e.ts,h.id""",
+                (str(candidate["id"]),),
+            ).fetchall()
+        ]
+    rows = [
+        row for row in rows
+        if row.get("ts") is not None
+        and not any(
+            abs(float(row["ts"]) - float(sample_ts)) <= 0.5
+            for sample_ts in (teach_times or ())
+        )
+    ]
+    if not rows:
+        return []
+
+    times = [float(row["ts"]) for row in rows]
+    padding = max(
+        180.0,
+        float(OPTIONS.get("fast_precursor_off_seconds", 120) or 120) + 30.0,
+    )
+    tracker = SQLiteTemporalTracker(
+        core.STORE,
+        list(getattr(policy.schema, "entities", []) or []),
+        core.ENGINE.context,
+        min(times) - padding,
+        max(times) + 1.0,
+    )
+    actions = [float(value) for value in policy.actions]
+    out = []
+    try:
+        for row in rows:
+            try:
+                actual_idx = int(row["action_index"])
+                if actual_idx < 0 or actual_idx >= len(actions):
+                    continue
+                anchor_ts = _replay_anchor(
+                    tracker,
+                    policy,
+                    candidate,
+                    float(row["action_value"]),
+                    float(row["ts"]),
+                )
+                tracker.advance(anchor_ts)
+                features, _labels, _meta = policy.features(
+                    tracker.state_map,
+                    tracker.history,
+                    at_ts=anchor_ts,
+                )
+                predicted_idx, _predicted_value = conservative._prediction_index(
+                    policy, features
+                )
+            except (TypeError, ValueError, RuntimeError, KeyError):
+                continue
+            if int(predicted_idx) != int(actual_idx):
+                continue
+            out.append({
+                "target_history_id": int(row["target_history_id"]),
+                "ts": float(row["ts"]),
+                "action_idx": int(actual_idx),
+                "features": dict(features),
+                "feature_source": "raw_entity_history_schema_replay",
+            })
+    finally:
+        tracker.close()
+    return out
+
+
+def _anchor_pool_dispatch(core, manager, candidate, policy, teach_times):
+    if _schema_replay_required(policy):
+        return _raw_anchor_pool(
+            core, manager, candidate, policy, teach_times
+        )
+    return _BASE_ANCHOR_POOL(
+        manager, candidate, policy, teach_times
+    )
+
+
 def _score_dispatch(core, policy, agent, rows):
     if _schema_replay_required(policy):
         return _score_schema_replay(core, policy, agent, rows)
@@ -893,6 +982,12 @@ def install(core, manager):
         )
         conservative._score = (
             lambda policy, agent, rows: _score_dispatch(core, policy, agent, rows)
+        )
+        balanced._anchor_pool = (
+            lambda manager_obj, candidate, policy, teach_times:
+            _anchor_pool_dispatch(
+                core, manager_obj, candidate, policy, teach_times
+            )
         )
 
         def offline_gate(parent, parent_stats, candidate_stats, teach_report=None):
