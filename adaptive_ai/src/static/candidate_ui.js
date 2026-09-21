@@ -124,7 +124,7 @@
         <button class="ghost" data-promote-custom ${customEligible?'':'disabled'}>Promote</button>
       </div>
       ${ownershipDetails(c)}</details>
-      <div class="actions candidate-workflow-actions"><button class="ghost" data-wf="auto">Autonomous</button><button class="primary" data-wf="correct">Correct</button><button class="ghost" data-wf="explore">Explore</button><button class="ghost" data-wf="change">Change decision</button><button class="ghost" data-wf="settings">Settings</button></div>
+      <div class="actions candidate-workflow-actions"><button class="ghost" data-wf="auto">Autonomous</button><button class="primary" data-wf="correct">Correct</button><button class="ghost" data-wf="explore">Explore</button><button class="ghost" data-wf="change">Change decision</button><button class="ghost" data-wf="settings">Settings</button><button class="ghost" data-wf="debug">Export debug</button></div>
       <div class="candidate-actions candidate-lifecycle-actions">
         <select data-promote-mode aria-label="Promotion target mode"><option value="shadow" ${targetMode==='shadow'?'selected':''}>Promote as Shadow</option><option value="control" ${targetMode==='control'?'selected':''}>Promote as Control</option></select>
         <button class="primary" data-promote ${c.promotable?'':'disabled'}>Promote</button><button class="ghost" data-discard>Discard</button>
@@ -166,6 +166,7 @@
         el.querySelector('[data-wf=explore]').onclick=()=>window.openExplore?.(ref);
         el.querySelector('[data-wf=change]').onclick=e=>window.workflowChangeDecision?.(ref,e.currentTarget);
         el.querySelector('[data-wf=settings]').onclick=()=>window.workflowSettings?.(ref);
+        el.querySelector('[data-wf=debug]').onclick=e=>window.exportCorrectLearningDebug?.(ref,e.currentTarget);
         const modeSelect=el.querySelector('[data-promote-mode]');
         modeSelect.onchange=async()=>{
           const requested=modeSelect.value;modeSelect.disabled=true;
