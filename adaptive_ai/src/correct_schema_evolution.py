@@ -967,6 +967,13 @@ def _schema_fine_tune(core, manager, candidate):
     return final
 
 
+def _effective_parent_stats(parent_stats, report):
+    raw = dict((report or {}).get("_schema_evolution_parent_raw_stats") or {})
+    if (report or {}).get("schema_changed") and raw:
+        return raw
+    return parent_stats
+
+
 def _schema_offline_gate(parent, parent_stats, candidate_stats, teach_report=None):
     report = dict(teach_report or {})
     gate = dict(_BASE_MARGIN_GATE(parent, parent_stats, candidate_stats, report) or {})
@@ -1023,14 +1030,10 @@ def install(core, manager):
 
         def offline_gate(parent, parent_stats, candidate_stats, teach_report=None):
             report = dict(teach_report or {})
-            parent_raw_stats = report.pop(
-                "_schema_evolution_parent_raw_stats", None
+            effective_parent_stats = _effective_parent_stats(
+                parent_stats, report
             )
-            effective_parent_stats = (
-                parent_raw_stats
-                if report.get("schema_changed") and parent_raw_stats
-                else parent_stats
-            )
+            report.pop("_schema_evolution_parent_raw_stats", None)
             gate = _schema_offline_gate(
                 parent, effective_parent_stats, candidate_stats, report
             )
