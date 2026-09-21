@@ -4,7 +4,7 @@
   "base_version": "0.14.57",
   "base_commit": "49c0d8564a8a26fd8f727c5fa4f56cf285d468b1",
   "release_status": "release-0.14.58-candidate-shadow-cache-activation",
-  "tests_passed": 1031,
+  "tests_passed": 1032,
   "profile": "rpi4-low-memory-complete-discovery-manual-agent-selection",
   "manual_agent_training": true,
   "max_concurrent_training_jobs": 1,
