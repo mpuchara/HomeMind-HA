@@ -358,6 +358,14 @@ class ContextTournament:
         while not self.engine.stop_event.is_set():
             self._shadow_flush_event.wait(5.0)
             self._shadow_flush_event.clear()
+            # Sensor Tournament persistence is diagnostic/shadow-only. Avoid committing
+            # a batch in the short tail of a realtime HA event; inference and intent get
+            # first use of CPU/microSD, then the writer catches up within <=0.75 s.
+            last_event = float(getattr(self.engine, "last_event_monotonic", 0.0) or 0.0)
+            if last_event:
+                quiet_for = time.monotonic() - last_event
+                if quiet_for < 0.75 and not self.engine.stop_event.is_set():
+                    self.engine.stop_event.wait(max(0.0, 0.75 - quiet_for))
             try:
                 self._flush_shadow_models()
             except Exception as exc:
