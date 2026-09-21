@@ -75,6 +75,12 @@ class RuntimeCompositionRoot:
                 "contract": getattr(manager, "performance_f22_contract", None),
                 "semantics": "bounded computation only; raw evidence remains authoritative",
             },
+            "correct_learning": {
+                "foundation": getattr(manager, "correct_data_foundation_contract", None),
+                "optimizer": getattr(manager, "correct_optimizer_contract", None),
+                "base": getattr(manager, "correct_base_contract", None),
+                "hot_path": False,
+            },
             "correct_learning_debug": {
                 "owner": "manager.correct_learning_debug",
                 "contract": getattr(manager, "correct_learning_debug_contract", None),
