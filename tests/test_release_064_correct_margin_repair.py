@@ -223,6 +223,8 @@ class CorrectMarginRepairTests(unittest.TestCase):
         margin = source.index("manager = install_correct_margin_repair")
         residual = source.index("manager = install_correct_data_foundation")
         self.assertLess(margin, residual)
+        self.assertIn('"optimizer": getattr(manager, "correct_optimizer_contract"', source)
+        self.assertIn('"base": getattr(manager, "correct_base_contract"', source)
 
     def test_optimizer_stays_off_realtime_hot_path(self):
         engine = (SRC / "engine.py").read_text(encoding="utf-8")
