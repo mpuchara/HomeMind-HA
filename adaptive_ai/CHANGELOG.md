@@ -1,3 +1,12 @@
+# 0.14.61 — 2026-09-21
+
+- Fix **Export debug** doing nothing in 0.14.60.
+- The button helper file was packaged and referenced by `index.html`, but the base HTTP handler did not expose `/debug_export_ui.js`; Ingress therefore returned 404 and the click handler was never installed.
+- Serve `debug_export_ui.js` explicitly before runtime readiness gating, matching the other core static assets.
+- Keep the 0.14.60 Correct-learning endpoint, export bounds and all learning/runtime semantics unchanged.
+- Add a regression that fails if the helper is referenced by the UI but not reachable through the shipped HTTP handler.
+- Full suite contains 1042 tests.
+
 # 0.14.60 — 2026-09-21
 
 - Add **Export debug** directly to every Live agent workflow card and every Candidate card.

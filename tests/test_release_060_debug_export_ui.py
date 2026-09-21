@@ -50,8 +50,8 @@ class Release060DebugExportUiTests(unittest.TestCase):
 
     def test_index_loads_versioned_helper_before_candidate_ui(self):
         index = (STATIC / "index.html").read_text(encoding="utf-8")
-        helper = '<script src="debug_export_ui.js?v=0.14.60"></script>'
-        candidate = '<script src="candidate_ui.js?v=0.14.60"></script>'
+        helper = 'src="debug_export_ui.js?v='
+        candidate = 'src="candidate_ui.js?v='
         self.assertIn(helper, index)
         self.assertIn(candidate, index)
         self.assertLess(index.index(helper), index.index(candidate))
