@@ -896,14 +896,18 @@ def _schema_fine_tune(core, manager, candidate):
     final.update({
         "schema_changed": True,
         "schema_evolution_status": (
-            "enriched" if len(final_unresolved) < len(unresolved)
-            else "challenger_unresolved"
+            "enriched" if not final_unresolved else "missing_context"
         ),
         "schema_evolution_reason": (
-            "residual_count_improved"
-            if len(final_unresolved) < len(unresolved)
-            else "selected_context_did_not_reduce_residual_count"
+            "all_residual_supervision_resolved_by_bounded_schema_challenger"
+            if not final_unresolved
+            else (
+                "bounded_schema_challenger_improved_but_residual_supervision_remains"
+                if len(final_unresolved) < len(unresolved)
+                else "selected_context_did_not_reduce_residual_count"
+            )
         ),
+        "schema_evolution_improved": len(final_unresolved) < len(unresolved),
         "schema_evolution_selected": additions,
         "schema_evolution_ranked_context": ranking[:12],
         "schema_evolution_rejected_context": rejected[:12],
@@ -918,12 +922,12 @@ def _schema_fine_tune(core, manager, candidate):
     })
     manager.store.event(
         candidate["id"],
-        "info" if len(final_unresolved) < len(unresolved) else "warning",
+        "info" if not final_unresolved else "warning",
         "candidate_correct_schema_challenger",
         (
-            "Residual Correct context expanded Candidate schema"
-            if len(final_unresolved) < len(unresolved)
-            else "Residual schema challenger did not reduce unresolved Correct supervision"
+            "Residual Correct context resolved all explicit supervision with expanded schema"
+            if not final_unresolved
+            else "Bounded schema challenger still requires additional discriminative context"
         ),
         {
             "selected": additions,
