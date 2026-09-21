@@ -166,16 +166,16 @@ class CandidateBuildRequestTests(unittest.TestCase):
         self.assertTrue(newer["dirty"])
         self.assertTrue(newer["stale"])
 
-    def test_manual_rebuild_uses_full_history_queue_without_teach_preflight(self):
+    def test_feedback_undo_rebuild_uses_full_history_queue_without_teach_preflight(self):
         queue = RecordingQueue()
         self.core.TRAINING_QUEUE = queue
         self.engine.rl_teaching = RejectTeachPreflight()
 
-        requested = self.manager.request_build(self.parent["id"], "manual_rebuild")
+        requested = self.manager.request_build(self.parent["id"], "manual_feedback_undo_rebuild")
         self.assertEqual(requested["feedback_revision"], 0)
         self.assertEqual(requested["build_revision"], 0)
         row = self.manager._candidate_row(self.parent["id"])
-        self.assertEqual(row["reason"], "manual_rebuild")
+        self.assertEqual(row["reason"], "manual_feedback_undo_rebuild")
 
         self.assertTrue(self.manager._start_build(row))
         status = self.manager.status(self.parent["id"])

@@ -1,9 +1,8 @@
-"""Route Candidate manual Rebuild through the normal full historical rebuild path.
+"""Route Candidate feedback-undo rebuilds through the full historical rebuild path.
 
-Manual Rebuild is not Correct/Teach. The hidden Candidate must enter the same
-TrainingQueue/HistoryManager rebuild used by a normal agent, while the Live parent keeps
-serving. Stage 06 uses the same path for feedback undo: removing a durable label is a
-forward rebuild from the remaining journal/history, never an inverse weight update.
+The user-facing Rebuild button operates on the selected Live agent and never creates a
+Candidate. This shim is only for feedback undo: removing a durable label must rebuild the
+hidden child from the remaining journal/history rather than trying an inverse weight update.
 
 This shim is installed immediately after the base Candidate manager and before
 config/lifecycle wrappers, so those wrappers still synchronize and validate the Candidate
@@ -13,7 +12,7 @@ import json
 import time
 
 
-FULL_REBUILD_REASONS = {"manual_rebuild", "manual_feedback_undo_rebuild"}
+FULL_REBUILD_REASONS = {"manual_feedback_undo_rebuild"}
 
 
 def _blank_comparison():

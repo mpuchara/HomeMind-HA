@@ -489,7 +489,7 @@ class HistoryManager(threading.Thread):
 
     def request_agent_resume(self, agent_id):
         agent = STORE.get_agent_config(agent_id)
-        if not agent or agent.get("training_state") not in ("paused", "training", "waiting"):
+        if not agent or agent.get("training_state") not in ("paused", "training", "waiting", "qualified"):
             return False
         return self._start_agent_job(agent_id, rebuild=False)
 

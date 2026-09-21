@@ -1,3 +1,12 @@
+# 0.14.55 — 2026-09-21
+
+- Fix Train/Rebuild semantics: **Train** now continues an already trained agent from its saved historical cursor and learns newly available data; it no longer resets a completed model just because progress is already 100%.
+- Keep first-ever Train and schema-invalidated `needs_retrain` agents on the safe full-build path.
+- Make **Rebuild** the only explicit action that clears the selected Live agent model, benchmark and cursor and replays local history from the beginning.
+- Stop the Candidate HTTP layer from turning Live Rebuild into a hidden Candidate generation. After Candidate Discard, Rebuild now stays on the Live agent instead of making the discarded Candidate appear to return.
+- Protect lineage integrity: while a current Candidate still exists, Live Rebuild returns a conflict asking the user to Discard or Promote it first.
+- Keep full Candidate rebuilds for feedback-undo only; feedback corrections still preserve the immutable Live parent until promotion.
+
 # 0.14.54 — 2026-09-20
 
 - Fix the remaining `context_challenger_started` storm after 0.14.53: ordinary online `policy.update()` no longer rotates `tournament_revision`.
