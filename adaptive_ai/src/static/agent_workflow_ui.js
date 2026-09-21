@@ -304,7 +304,7 @@
   function liveActions(card,a){
     const actions=card.querySelector('.actions');if(!actions)return;
     const state=liveLearningState(a);
-    const signature=[state.training,state.neverTrained?'new':'model',a.training_cursor_ts??'',a.benchmark_score??''].join('|');
+    const signature=[state.training,state.neverTrained?'new':'model',a.mode??'',a.training_cursor_ts??'',a.benchmark_score??''].join('|');
     if(actions.dataset.generationWorkflow===signature)return;
     actions.dataset.generationWorkflow=signature;
 
