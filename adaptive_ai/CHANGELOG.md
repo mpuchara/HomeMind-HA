@@ -1,3 +1,12 @@
+# 0.14.59 — 2026-09-21
+
+- Add a bounded, trusted-client-only Correct learning diagnostic endpoint at `/api/agents/{agent_id}/debug/correct-learning`.
+- Summary mode exports Candidate lineage, retained model schemas, Correct labels, build/offline evidence, manual-feedback journal state, manual-context scores, Context Tournament state and current room evidence.
+- `detail=full` adds per-label feature reconstruction, historical sensor-only comparison, cross-generation predictions and bounded raw context windows around each Correct point.
+- Keep diagnostics observational: RoomBelief/AdaptivePresence reconstruction uses a cloned state and does not mutate production hysteresis, false-ON counters, Candidate state, policy weights or HA devices.
+- Add hard bounds for labels, context entities, raw rows and history windows; full reconstruction remains opt-in.
+- Add 4 regression/contract tests; full validation suite contains 1036 tests.
+
 # 0.14.58 — 2026-09-21
 
 - Fix newly created Correct/Teach Candidates that could remain permanently without Shadow events after build completion.
