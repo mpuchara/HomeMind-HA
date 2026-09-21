@@ -1174,9 +1174,15 @@ def install(manager):
 
     # Keep generation discovery event-invalidated. This avoids both stale Candidate
     # visibility and a generation-table query on every live inference.
+    # Conservative Correct/Teach can finish synchronously inside _start_build:
+    # queued -> building -> comparing/offline_blocked without ever passing through
+    # _finish_build_if_ready. Candidate-live polling may have cached an empty generation
+    # list while that build was running, so _start_build must invalidate the same runtime
+    # caches as asynchronous build completion or the new Candidate will never observe HA
+    # events until restart.
     for method_name in (
         "enqueue", "spawn_child", "discard", "promote",
-        "_create_candidate", "_delete_candidate", "_finish_build_if_ready",
+        "_create_candidate", "_delete_candidate", "_start_build", "_finish_build_if_ready",
     ):
         original = getattr(manager, method_name, None)
         if not callable(original):
