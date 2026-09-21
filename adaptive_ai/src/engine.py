@@ -474,6 +474,7 @@ class Engine(threading.Thread):
                 self.state_map[entity_id] = new_state
             self.last_state_count = len(self.state_map)
             self.last_ws_event = now_ts()
+            self.last_event_monotonic = time.monotonic()
             self.last_trigger_entity = entity_id
             self.dirty_entities.add(entity_id)
             self.last_event_received = time.perf_counter()
