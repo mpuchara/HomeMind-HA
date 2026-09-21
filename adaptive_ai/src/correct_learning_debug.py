@@ -15,11 +15,12 @@ import uuid
 from urllib.parse import parse_qs, unquote, urlsplit
 
 from context import archived_state
+from correct_data_foundation import supervision_event_id
 from manual_context_learning import manual_scores
 from policy import MultiHorizonPolicy
 
 
-CONTRACT_VERSION = 1
+CONTRACT_VERSION = 2
 MAX_LABELS = 256
 MAX_DEBUG_ENTITIES = 96
 MAX_RAW_ROWS_PER_LABEL = 768
@@ -160,7 +161,70 @@ def _correction_labels(store, agent_ids, limit):
                 ORDER BY sample_ts,id LIMIT ?""",
             (*ids, int(limit)),
         ).fetchall()]
+    for row in rows:
+        if not row.get("supervision_event_id"):
+            row["supervision_event_id"] = supervision_event_id(
+                row.get("fingerprint"), row.get("sample_ts"), row.get("desired")
+            )
     return rows
+
+
+def _supervision_summary(labels):
+    active = [row for row in labels if row.get("undone_ts") is None]
+    groups = {}
+    for row in active:
+        event_id = row.get("supervision_event_id") or supervision_event_id(
+            row.get("fingerprint"), row.get("sample_ts"), row.get("desired")
+        )
+        item = groups.setdefault(event_id, {
+            "supervision_event_id": event_id,
+            "sample_ts": row.get("sample_ts"),
+            "desired": row.get("desired"),
+            "physical_rows": 0,
+            "agent_ids": [],
+            "label_ids": [],
+        })
+        item["physical_rows"] += 1
+        if row.get("agent_id") not in item["agent_ids"]:
+            item["agent_ids"].append(row.get("agent_id"))
+        item["label_ids"].append(row.get("id"))
+    events = sorted(groups.values(), key=lambda item: (
+        float(item.get("sample_ts") or 0.0), str(item["supervision_event_id"])
+    ))
+    return {
+        "active_physical_rows": len(active),
+        "unique_supervision_events": len(events),
+        "lineage_copy_rows": max(0, len(active) - len(events)),
+        "events": events,
+        "training_contract": "one_active_supervision_event_one_vote_per_candidate",
+    }
+
+
+def _manual_context_for_label(store, label):
+    event_id = label.get("supervision_event_id") or supervision_event_id(
+        label.get("fingerprint"), label.get("sample_ts"), label.get("desired")
+    )
+    with store.conn() as c:
+        if not _table_exists(c, "manual_context_feedback"):
+            return None
+        cols = {str(row[1]) for row in c.execute(
+            "PRAGMA table_info(manual_context_feedback)"
+        ).fetchall()}
+        if "supervision_event_id" not in cols:
+            return None
+        row = c.execute(
+            """SELECT * FROM manual_context_feedback
+               WHERE agent_id=? AND supervision_event_id=?
+               ORDER BY created_ts DESC,id DESC LIMIT 1""",
+            (str(label.get("agent_id") or ""), str(event_id)),
+        ).fetchone()
+    if not row:
+        return None
+    out = dict(row)
+    out["snapshot"] = _json(out.pop("snapshot_json", "{}"), {})
+    if "metadata_json" in out:
+        out["metadata"] = _json(out.pop("metadata_json", "{}"), {})
+    return out
 
 
 def _feedback_journal(store, root, limit):
@@ -187,18 +251,46 @@ def _manual_context_snapshot(store, agent_ids):
     result = {}
     with store.conn() as c:
         exists = _table_exists(c, "manual_context_feedback")
+        cols = (
+            {str(row[1]) for row in c.execute(
+                "PRAGMA table_info(manual_context_feedback)"
+            ).fetchall()}
+            if exists else set()
+        )
         for aid in sorted(set(str(x) for x in agent_ids if x)):
             count = 0
+            event_count = 0
+            latest_metadata = {}
             if exists:
                 count = int(c.execute(
                     "SELECT COUNT(*) FROM manual_context_feedback WHERE agent_id=?", (aid,)
                 ).fetchone()[0])
+                if "supervision_event_id" in cols:
+                    event_count = int(c.execute(
+                        """SELECT COUNT(DISTINCT supervision_event_id)
+                           FROM manual_context_feedback
+                           WHERE agent_id=? AND supervision_event_id IS NOT NULL
+                             AND supervision_event_id!=''""",
+                        (aid,),
+                    ).fetchone()[0])
+                if "metadata_json" in cols:
+                    meta_row = c.execute(
+                        """SELECT metadata_json FROM manual_context_feedback
+                           WHERE agent_id=? ORDER BY created_ts DESC,id DESC LIMIT 1""",
+                        (aid,),
+                    ).fetchone()
+                    if meta_row:
+                        latest_metadata = _json(meta_row[0], {})
             try:
                 scores = manual_scores(store, aid) if exists else {}
             except Exception as exc:
                 scores = {"_error": f"{type(exc).__name__}: {exc}"}
             result[aid] = {
                 "observations": count,
+                "supervision_events": event_count,
+                "latest_role_counts": dict(latest_metadata.get("role_counts") or {}),
+                "latest_room_belief": latest_metadata.get("room_belief"),
+                "latest_baseline": latest_metadata.get("baseline"),
                 "top_scores": dict(sorted(
                     ((k, v) for k, v in scores.items() if k != "_error"),
                     key=lambda kv: (-float(kv[1]), kv[0]),
@@ -714,6 +806,7 @@ class CorrectLearningDebugService:
             "debug_entities": debug_entities,
             "lineage": lineage,
             "correct_labels": labels,
+            "supervision": _supervision_summary(labels),
             "candidate_builds": builds,
             "manual_feedback_journal": journal,
             "manual_context": manual_context,
@@ -754,6 +847,7 @@ class CorrectLearningDebugService:
                     },
                 }
                 if agent:
+                    row["broad_context"] = _manual_context_for_label(self.store, label)
                     row["context"] = _context_at_label(self.engine, self.store, agent, label)
                     if (row["context"] or {}).get("home_tail_difference"):
                         home_mismatch = True
