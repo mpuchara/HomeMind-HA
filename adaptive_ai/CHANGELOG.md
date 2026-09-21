@@ -1,3 +1,13 @@
+# 0.14.60 — 2026-09-21
+
+- Add **Export debug** directly to every Live agent workflow card and every Candidate card.
+- One click downloads the full bounded Correct-learning JSON: up to 256 Correct labels, ±120 s context windows and up to 768 raw rows per correction point.
+- Keep the export single-flight per button with visible `Exporting…` / `Downloaded ✓` states so repeated clicks cannot launch overlapping historical reconstructions.
+- Candidate export now accepts URL-encoded generation references such as `candidate:...` and resolves the same durable lineage as the Live root.
+- Package and syntax-check the shared `debug_export_ui.js`; Candidate workflow buttons use responsive wrapping so the extra action does not compress the card.
+- No policy, feedback, Candidate, promotion, training or physical-control semantics are changed.
+- Add 5 release regressions; full validation suite contains 1041 tests.
+
 # 0.14.59 — 2026-09-21
 
 - Add a bounded, trusted-client-only Correct learning diagnostic endpoint at `/api/agents/{agent_id}/debug/correct-learning`.
