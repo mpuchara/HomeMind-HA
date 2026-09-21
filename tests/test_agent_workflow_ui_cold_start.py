@@ -95,6 +95,12 @@ card.actions.buttons.get('shadow').onclick();
 assert.deepEqual(resumeCalls,['fresh-1']);
 assert.deepEqual(modeCalls,[['fresh-1','shadow']]);
 
+// A successful Start Shadow changes only mode; training may remain PAUSED. The action
+// renderer must still invalidate its cached button set and replace Start with Pause.
+agents[0].mode='shadow';
+context.renderAgents();
+assert.equal(card.actions.buttons.get('shadow').label,'Pause Shadow');
+
 // The workflow renderer must react to lifecycle changes on the same DOM node rather than
 // keeping its first button set forever.
 agents[0].training_state='qualified';
