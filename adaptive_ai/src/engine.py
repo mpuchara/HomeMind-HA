@@ -220,6 +220,22 @@ class Engine(threading.Thread):
         self.error = None
         self.state_map = {}
         self.entity_registry = {}
+        # Keep the raw HA registry payloads separately from ContextEngine's resolved
+        # registry. Comparing raw snapshots lets duplicate registry refreshes become true
+        # no-ops instead of repeatedly rebuilding topology.
+        self._entity_registry_raw = None
+        self._device_registry_raw = None
+        self._area_registry_raw = None
+        self.registry_refresh_stats = {
+            "requests": 0,
+            "coalesced": 0,
+            "entity_updates": 0,
+            "device_updates": 0,
+            "area_updates": 0,
+            "duplicates": 0,
+            "last_duration_ms": 0.0,
+            "max_duration_ms": 0.0,
+        }
         self.context = ContextEngine(OPTIONS, STORE)
         self.executor = Executor(self)
         self.experiments = Experiments(STORE)
@@ -245,10 +261,27 @@ class Engine(threading.Thread):
             max_workers=self.control_worker_count, thread_name_prefix="device-control"
         )
         self.poll_worker = ThreadPoolExecutor(max_workers=1, thread_name_prefix="ha-poll")
+        # Registry topology and durable runtime housekeeping are intentionally isolated
+        # from both websocket receive and the event->intent engine thread.
+        self.registry_worker = ThreadPoolExecutor(max_workers=1, thread_name_prefix="ha-registry")
+        self.housekeeping_worker = ThreadPoolExecutor(max_workers=1, thread_name_prefix="runtime-housekeeping")
+        self.housekeeping_future = None
+        self.housekeeping_last_submit = 0.0
+        self.housekeeping_stats = {
+            "runs": 0,
+            "deferred_for_realtime": 0,
+            "busy_skips": 0,
+            "last_duration_ms": 0.0,
+            "max_duration_ms": 0.0,
+            "archive_rows": 0,
+            "decision_rows": 0,
+            "context_saves": 0,
+        }
         self.in_flight = {}
         self.resubmit_targets = set()
         self.poll_future = None
         self.last_full_poll = 0.0
+        self.next_resync_retry_monotonic = 0.0
         # REST /states health is tracked separately from generic HAClient requests.
         # A failed history/automation/config request must never make the UI claim that
         # Home Assistant itself is disconnected.
@@ -260,8 +293,12 @@ class Engine(threading.Thread):
             "last_changed_entities": 0,
             "last_duration_ms": 0.0,
             "max_duration_ms": 0.0,
+            "deferred_for_realtime": 0,
+            "deferred_for_heavy_job": 0,
+            "scheduled": 0,
         }
         self.last_ws_event = None
+        self.last_event_monotonic = 0.0
         self.ws_connected = False
         self.ws_error = None
         self.temporal_history = TemporalHistory(maxlen=24)
