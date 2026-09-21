@@ -1,10 +1,10 @@
 {
-  "version": "0.14.64",
+  "version": "0.14.65",
   "release_date": "2026-09-21",
-  "base_version": "0.14.63",
-  "base_commit": "9f44e79a87285c6447419bc77b0bfc8f04e2f7be",
-  "release_status": "release-0.14.64-correct-margin-stable-base",
-  "tests_passed": 1065,
+  "base_version": "0.14.64",
+  "base_commit": "b3d2c18aec624b8dacb3137eb60dc35c3ce640e1",
+  "release_status": "release-0.14.65-correct-residual-schema-evolution",
+  "tests_passed": 1082,
   "profile": "rpi4-low-memory-complete-discovery-manual-agent-selection",
   "manual_agent_training": true,
   "max_concurrent_training_jobs": 1,
@@ -219,5 +219,11 @@
   "correct_optimizer": "pairwise Desired reinforcement + strongest wrong-arm penalty; positive target margin; per-supervision-event budget; no-progress stop",
   "correct_stable_base": "lineage parent remains auditable; optimization weights use newest retained offline-passed Candidate or Root Live, never offline-blocked child",
   "correct_margin_target": 0.02,
-  "correct_stage2_hot_path": "Candidate-build-only; no event-to-intent or Executor changes"
+  "correct_stage2_hot_path": "Candidate-build-only; no event-to-intent or Executor changes",
+  "correct_schema_evolution": "unresolved Correct supervision ranks broad historical context with residual-weighted cross-validation; at most two semantically eligible entities per build",
+  "correct_schema_roles": "fast targets auto-promote LOCAL_EVIDENCE, BOUNDARY_ARRIVAL_PRECURSOR or TRAJECTORY_CONTEXT only; RELIABILITY_CONTEXT is never occupancy proof",
+  "correct_schema_migration": "existing head statistics are remapped by semantic feature label; new feature slots start from priors; calibration is reset",
+  "correct_schema_benchmark": "schema-changed Candidate offline scoring and stability anchors are rebuilt from raw entity_history using SQLiteTemporalTracker and current policy.features; legacy features_json is forbidden for evolved schema",
+  "correct_missing_context": "bounded schema challenger succeeds only when all residual supervision is resolved; otherwise offline gate reports missing_context",
+  "correct_stage3_hot_path": "Candidate-build-only; no event-to-intent, ActionIntent or Executor changes"
 }
