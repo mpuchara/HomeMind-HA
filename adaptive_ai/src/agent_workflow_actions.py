@@ -214,7 +214,19 @@ def _create_or_coalesce_child(manager, parent_generation, reason, action, *, all
         child = existing
     elif parent_generation.get("generation_type") == "live":
         status = manager.enqueue(parent_generation["agent_id"], reason)
-        child = lineage_row(manager.store, agent_id=status["candidate_id"])
+        # Production lineage guards may redirect Root feedback to the current lineage
+        # tip. In that case enqueue returns lineage_status (generation_id/agent_id)
+        # rather than the base Candidate status (candidate_id). Resolve both contracts
+        # explicitly instead of creating the child and then crashing with KeyError.
+        candidate_id = status.get("candidate_id") if isinstance(status, dict) else None
+        generation_id = status.get("generation_id") if isinstance(status, dict) else None
+        child = (
+            lineage_row(manager.store, agent_id=candidate_id) if candidate_id else None
+        ) or (
+            lineage_row(manager.store, generation_id=generation_id) if generation_id else None
+        )
+        if not child:
+            raise RuntimeError("Candidate child was created but its lineage identity is unavailable")
     else:
         status = manager.spawn_child(parent_generation["generation_id"], reason)
         child = lineage_row(manager.store, generation_id=status["generation_id"])
