@@ -354,6 +354,21 @@ class CorrectSchemaEvolutionTests(unittest.TestCase):
             source,
         )
 
+    def test_bounded_schema_challenger_is_not_retried_as_success_while_residuals_remain(self):
+        source = (SRC / "correct_schema_evolution.py").read_text(encoding="utf-8")
+        self.assertIn(
+            '"enriched" if not final_unresolved else "missing_context"',
+            source,
+        )
+        self.assertIn(
+            "bounded_schema_challenger_improved_but_residual_supervision_remains",
+            source,
+        )
+        self.assertIn(
+            '"schema_evolution_improved": len(final_unresolved) < len(unresolved)',
+            source,
+        )
+
     def test_schema_evolution_stays_off_realtime_hot_path(self):
         engine = (SRC / "engine.py").read_text(encoding="utf-8")
         source = (SRC / "correct_schema_evolution.py").read_text(encoding="utf-8")
