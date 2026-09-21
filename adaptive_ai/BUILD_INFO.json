@@ -1,10 +1,10 @@
 {
-  "version": "0.14.62",
+  "version": "0.14.63",
   "release_date": "2026-09-21",
-  "base_version": "0.14.61",
-  "base_commit": "81d9777945dcef66bae2a763e748f143e029e24e",
-  "release_status": "release-0.14.62-async-debug-export",
-  "tests_passed": 1046,
+  "base_version": "0.14.62",
+  "base_commit": "1e4855f8a2c144c46c5ae40736425f88ecdab527",
+  "release_status": "release-0.14.63-correct-data-foundation",
+  "tests_passed": 1055,
   "profile": "rpi4-low-memory-complete-discovery-manual-agent-selection",
   "manual_agent_training": true,
   "max_concurrent_training_jobs": 1,
@@ -210,5 +210,10 @@
   "sensor_quality_sql_fix": "Includes PR #130 fix: context_tournament_sensor_quality INSERT now has 12 placeholders for 12 columns, restoring durable shadow quality updates.",
   "context_tournament_revision": "Context Tournament uses a stable tournament_revision for the installed champion. Lazy decay and ordinary online policy.update learning rotate model_revision only, preserving paired future-only challenger evidence. Fresh Train/Rebuild/replacement policies receive a new tournament_revision; active-schema changes and challenger reselection still reset proof.",
   "context_challenger_event_diagnostics": "context_challenger_started now includes evaluation_reason and evaluation_champion_revision so any future epoch reset is directly attributable from Recent activity/API event payload.",
-  "ui_debug_export": "async single-flight Correct-learning export job with progress polling and RAM-backed download"
+  "ui_debug_export": "async single-flight Correct-learning export job with progress polling and RAM-backed download",
+  "correct_data_foundation": "stable supervision_event_id; one-event-one-vote lineage dedup; explicit-feedback-only bounded broad historical context",
+  "correct_context_roles": "LOCAL_EVIDENCE + BOUNDARY_ARRIVAL_PRECURSOR + TRAJECTORY_CONTEXT + RELIABILITY_CONTEXT; humidity is reliability context",
+  "correct_baseline_metadata": "HA numeric_state above/below/for and action service metadata retained as structural baseline, never ground truth",
+  "correct_residual_diagnostics": "frozen-schema fit + unresolved supervision IDs + residual class distribution; no schema evolution in Stage 1",
+  "correct_hot_path": "broad context capture is explicit-feedback-only; no full HA scan or broad SQL work added to event-to-intent"
 }
