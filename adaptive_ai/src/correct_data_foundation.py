@@ -143,61 +143,26 @@ def _normalize_text(entity_id, state):
 
 
 def semantic_source_role(engine, agent, entity_id, state, registry=None):
-    """Assign a role without converting remote activity into local occupancy truth."""
+    """Assign the shared target-relative role used by RoomBelief and Correct context."""
+    from home_sources import target_relative_role
+
     registry = registry or {}
-    attrs = (state or {}).get("attributes") or {}
-    text = _normalize_text(entity_id, state)
-    device_class = str(attrs.get("device_class") or "").strip().lower()
     target = str(agent.get("target_entity") or "")
     context = getattr(engine, "context", None)
+    mapping = dict(getattr(context, "mapping", {}) or {}) if context is not None else {}
     target_area = context.area_for(target) if context is not None else None
-    area = context.area_for(entity_id) if context is not None else None
-    source_meta = context.evidence_metadata(entity_id) if context is not None else {}
-    source_role = str((source_meta or {}).get("role") or "").lower()
-
-    reliability_terms = (
-        "humidity", "wilgot", "temperature", "temperatura", "dew point",
-        "punkt rosy", "moisture",
+    source_detail = (
+        context.evidence_metadata(entity_id) if context is not None else {}
     )
-    if device_class in {"humidity", "temperature", "moisture"} or any(
-        term in text for term in reliability_terms
-    ):
-        return ROLE_RELIABILITY
-
-    reg = registry.get(entity_id) or {}
-    boundary_for = (
-        reg.get("boundary_for")
-        or attrs.get("boundary_for")
-        or attrs.get("arrival_precursor_for")
+    return target_relative_role(
+        entity_id,
+        state,
+        registry.get(entity_id) or {},
+        mapping,
+        target,
+        target_area,
+        source_detail=source_detail,
     )
-    explicit_boundary = bool(
-        boundary_for
-        and str(boundary_for) in {str(target_area or ""), target}
-    )
-    door_like = (
-        source_role in {"door", "opening", "boundary"}
-        or device_class in {"door", "opening"}
-        or any(term in text for term in (" door", "drzwi", "opening contact"))
-    )
-    if explicit_boundary or (door_like and target_area and area == target_area):
-        return ROLE_BOUNDARY
-
-    local_terms = (
-        "presence", "occupancy", "motion", "pir", "radar",
-        "stationary energy", "still energy", "moving energy", "move energy",
-        "target energy", "target distance", "camera score", "aidetection",
-        "ai detection", "detection score",
-    )
-    activity_like = (
-        source_role in {"presence", "occupancy", "radar_activity", "motion"}
-        or device_class in {"occupancy", "motion", "presence"}
-        or any(term in text for term in local_terms)
-    )
-    if target_area and area == target_area and activity_like:
-        return ROLE_LOCAL
-    if target_area and area and area != target_area and activity_like:
-        return ROLE_TRAJECTORY
-    return ROLE_OTHER
 
 
 def _eligible_entities(engine, agent):
