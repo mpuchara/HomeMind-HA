@@ -4,14 +4,19 @@ import math
 import threading
 import time
 from adaptive_presence import AdaptivePresenceModel, HardwareThresholdAdapterContract
-from context import controllable_context_exclusions, electrical_context_exclusions
+from context import (
+    controllable_context_exclusions, electrical_context_exclusions,
+    is_fast_reactive_agent,
+)
 from home_sources import select_sources
 from home_state import RoomBeliefModel
+from semantic_reliability import SemanticReliabilityModel
 
 
 class ContextEngine:
     ROOM_MODEL_KEY = 'room_belief_model_v2'
     LEGACY_ROOM_MODEL_KEY = 'shared_home_model_v1'
+    SEMANTIC_RELIABILITY_KEY = 'semantic_reliability_v1'
 
     def __init__(self, options, store=None):
         self.options, self.store = options, store
@@ -30,6 +35,15 @@ class ContextEngine:
         self.source_details = {}
         self.boundary_sources_by_area = {}
         self.room_checkpoint_source = None
+        reliability_raw = None
+        if store:
+            try:
+                reliability_raw = json.loads(
+                    store.meta_get(self.SEMANTIC_RELIABILITY_KEY, 'null')
+                )
+            except (ValueError, TypeError):
+                reliability_raw = None
+        self.semantic_reliability = SemanticReliabilityModel(reliability_raw)
         self.adaptive_presence = AdaptivePresenceModel()
         # Future physical threshold adapter contract only. It performs no I/O and remains
         # disabled unless a later, explicit product stage supplies a whitelist/driver.
@@ -116,6 +130,52 @@ class ContextEngine:
     def evidence_metadata(self, eid):
         return dict(self.source_details.get(eid) or {})
 
+    def prepare_home_reliability(self, home, area, ts):
+        """Refresh runtime-only semantic trust factors from Correct calibration.
+
+        This touches only the already-materialized RoomBelief source map. There is no
+        database work or whole-HA scan in event->intent inference.
+        """
+        if not area or home is None:
+            return
+        sources = getattr(home, 'sources', {})
+        for eid in tuple(getattr(home, 'area_sources', {}).get(area, ())):
+            source = sources.get(eid)
+            if not isinstance(source, dict):
+                continue
+            detail = self.semantic_reliability.evaluate(
+                area, eid, sources, ts,
+                freshness_fn=getattr(home, '_freshness', None),
+            )
+            source['semantic_reliability'] = float(detail.get('factor', 1.0))
+            source['semantic_reliability_detail'] = detail
+
+    def record_correct_reliability_feedback(
+        self, agent, *, sample_ts, desired, snapshot, supervision_id
+    ):
+        """Learn semantic source trust from explicit binary Correct only."""
+        if not is_fast_reactive_agent(agent):
+            return {
+                'recorded': False,
+                'reason': 'reliability_calibration_is_fast_binary_correct_only',
+            }
+        area = self.area_for(agent.get('target_entity'))
+        result = self.semantic_reliability.record_feedback(
+            area, desired, snapshot, supervision_id, sample_ts
+        )
+        if result.get('recorded'):
+            self._adaptive_cache.clear()
+            if self.store:
+                self.store.meta_set(
+                    self.SEMANTIC_RELIABILITY_KEY,
+                    json.dumps(
+                        self.semantic_reliability.export(),
+                        separators=(',', ':'), sort_keys=True,
+                    ),
+                )
+            self.prepare_home_reliability(self.home, area, time.time())
+        return result
+
     def _discard_orphan_movement_state(self):
         # Engine's initial REST snapshot intentionally clears `arrivals` + legacy `pending`
         # so startup states are not interpreted as fresh movement. RoomBelief keeps a richer
@@ -152,7 +212,10 @@ class ContextEngine:
                     evidence = {'role': previous_role} if previous_role else None
                     if self.bootstrap_delta is not None:
                         self.bootstrap_delta.observe(eid, previous_area, None, ts, learn=False, evidence=evidence)
-                    changed = self.home.observe(eid, previous_area, None, ts, learn=False, evidence=evidence)
+                    changed = self.home.observe(
+                        eid, previous_area, None, ts, learn=False, evidence=evidence
+                    )
+                    self.prepare_home_reliability(self.home, previous_area, ts)
                     self._adaptive_cache.clear()
                     return changed
                 return False
@@ -161,9 +224,13 @@ class ContextEngine:
             if self.bootstrap_delta is not None and ts > self.bootstrap_started:
                 self.bootstrap_delta.observe(eid, self.area_for(eid), value, ts,
                                              learn=learn, evidence=evidence)
-            changed = self.home.observe(eid, self.area_for(eid), value, ts,
-                                        learn=learn and ts > self.bootstrap_cutoff,
-                                        evidence=evidence)
+            area = self.area_for(eid)
+            changed = self.home.observe(
+                eid, area, value, ts,
+                learn=learn and ts > self.bootstrap_cutoff,
+                evidence=evidence,
+            )
+            self.prepare_home_reliability(self.home, area, ts)
             self._adaptive_cache.clear()
             return changed
 
@@ -172,8 +239,8 @@ class ContextEngine:
         st['attributes'] = {**self.source_metadata.get(eid, {}), **(st.get('attributes') or {})}
         return self.probability(eid, st)
 
-    @staticmethod
-    def _adaptive_sources(home, area, ts):
+    def _adaptive_sources(self, home, area, ts):
+        self.prepare_home_reliability(home, area, ts)
         rows = []
         for eid in sorted(getattr(home, 'area_sources', {}).get(area, ())):
             source = dict(getattr(home, 'sources', {}).get(eid) or {})
@@ -183,14 +250,21 @@ class ContextEngine:
                 freshness = float(home._freshness(source, ts))
             except Exception:
                 freshness = 0.0
-            communication = max(0.0, min(1.0, float(source.get('communication_reliability') or 0.0)))
+            communication = max(
+                0.0, min(1.0, float(source.get('communication_reliability') or 0.0))
+            )
+            semantic = max(
+                0.0, min(1.0, float(source.get('semantic_reliability', 1.0) or 0.0))
+            )
             rows.append({
                 'entity_id': eid,
                 'role': str(source.get('role') or ''),
                 'value': source.get('value'),
                 'available': bool(source.get('available')),
-                'quality': communication * freshness,
+                'quality': communication * semantic * freshness,
                 'communication_reliability': communication,
+                'semantic_reliability': semantic,
+                'semantic_reliability_detail': source.get('semantic_reliability_detail'),
                 'freshness': freshness,
             })
         return rows
@@ -209,7 +283,12 @@ class ContextEngine:
             return result
         model = presence_model or self.adaptive_presence
         ts = float(ts)
-        key = (str(area), int(getattr(home, 'revision', 0)), round(ts, 3))
+        key = (
+            str(area),
+            int(getattr(home, 'revision', 0)),
+            int(getattr(self.semantic_reliability, 'revision', 0)),
+            round(ts, 3),
+        )
         if cache is not None and key in cache:
             adaptive = dict(cache[key])
         else:
@@ -251,6 +330,7 @@ class ContextEngine:
         with self.lock:
             self._discard_orphan_movement_state()
             area = self.area_for(eid)
+            self.prepare_home_reliability(self.home, area, ts)
             base = self.home.forecast(area, ts)
             return self.augment_home_forecast(
                 self.home, area, base, ts,
@@ -292,6 +372,7 @@ class ContextEngine:
                     len(ids) for ids in self.boundary_sources_by_area.values()
                 ),
                 'explicit_boundary_target_areas': len(self.boundary_sources_by_area),
+                'semantic_reliability': self.semantic_reliability.diagnostics(),
                 'bootstrap_live_updates': self.bootstrap_delta.updated if self.bootstrap_delta else 0,
                 'mapping_error': self.mapping_error,
                 'area_names': {k: v.get('name', k) for k, v in self.areas.items()},

@@ -328,8 +328,19 @@ def capture_broad_context(core, agent, *, sample_ts, desired, rejected, source,
             else None
         )
         source_meta = core.ENGINE.context.evidence_metadata(entity_id)
+        normalized_value = core.ENGINE.context.sensor_probability(entity_id, state)
+        try:
+            normalized_value = (
+                None if normalized_value is None else float(normalized_value)
+            )
+        except (TypeError, ValueError):
+            normalized_value = None
         snapshot[entity_id] = {
             "v": round(value, 8),
+            "normalized_value": (
+                None if normalized_value is None
+                else round(max(0.0, min(1.0, normalized_value)), 8)
+            ),
             "age": round(max(0.0, float(sample_ts) - ts), 3),
             "role": role,
             "area_id": core.ENGINE.context.area_for(entity_id),
@@ -364,8 +375,9 @@ def capture_broad_context(core, agent, *, sample_ts, desired, rejected, source,
     limit = max(16, int(getattr(core, "OPTIONS", {}).get(
         "manual_context_max_snapshots", 256
     ))) if hasattr(core, "OPTIONS") else 256
+    inserted_id = None
     with core.STORE.lock, core.STORE.conn() as c:
-        c.execute(
+        cursor = c.execute(
             """INSERT INTO manual_context_feedback
                (agent_id,created_ts,desired_value,rejected_value,source,user_id,snapshot_json,
                 sample_ts,supervision_event_id,metadata_json)
@@ -378,6 +390,7 @@ def capture_broad_context(core, agent, *, sample_ts, desired, rejected, source,
                 json.dumps(metadata, separators=(",", ":"), sort_keys=True),
             ),
         )
+        inserted_id = getattr(cursor, "lastrowid", None)
         c.execute(
             """DELETE FROM manual_context_feedback
                WHERE agent_id=? AND id NOT IN (
@@ -386,6 +399,40 @@ def capture_broad_context(core, agent, *, sample_ts, desired, rejected, source,
                )""",
             (str(agent["id"]), str(agent["id"]), int(limit)),
         )
+    reliability = {
+        "recorded": False,
+        "reason": "semantic_reliability_unavailable",
+    }
+    try:
+        reliability = core.ENGINE.context.record_correct_reliability_feedback(
+            agent,
+            sample_ts=sample_ts,
+            desired=desired,
+            snapshot=snapshot,
+            supervision_id=supervision_id,
+        )
+    except Exception as exc:
+        reliability = {
+            "recorded": False,
+            "reason": "semantic_reliability_failed",
+            "error": "%s: %s" % (type(exc).__name__, exc),
+        }
+        core.STORE.event(
+            agent["id"], "warning", "correct_reliability_calibration_failed",
+            "Correct was recorded but semantic reliability calibration failed",
+            reliability,
+        )
+    metadata["semantic_reliability"] = reliability
+    if inserted_id is not None:
+        with core.STORE.lock, core.STORE.conn() as c:
+            c.execute(
+                "UPDATE manual_context_feedback SET metadata_json=? WHERE id=?",
+                (
+                    json.dumps(metadata, separators=(",", ":"), sort_keys=True),
+                    int(inserted_id),
+                ),
+            )
+
     manual_context._SCORE_CACHE.pop(str(agent["id"]), None)
     manual_context._OBSERVATION_CACHE.pop(str(agent["id"]), None)
     return {
@@ -394,6 +441,7 @@ def capture_broad_context(core, agent, *, sample_ts, desired, rejected, source,
         "candidates": len(snapshot),
         "role_counts": dict(sorted(roles.items())),
         "room_belief": room,
+        "semantic_reliability": reliability,
     }
 
 

@@ -133,6 +133,7 @@ class HistoricalHomeView:
     def observe_adaptive(self, area, ts):
         if not area:
             return
+        self.context.prepare_home_reliability(self.home, area, ts)
         base = self.home.forecast(area, ts)
         self.context.augment_home_forecast(
             self.home, area, base, ts,
@@ -142,6 +143,7 @@ class HistoricalHomeView:
 
     def forecast(self, target, ts):
         area = self.context.area_for(target)
+        self.context.prepare_home_reliability(self.home, area, ts)
         base = self.home.forecast(area, ts)
         return self.context.augment_home_forecast(
             self.home, area, base, ts,

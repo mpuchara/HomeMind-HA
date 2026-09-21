@@ -171,6 +171,11 @@ def _role(eid, state, registry):
     if domain != 'sensor':
         return None, None
 
+    if dc in {'humidity', 'temperature', 'moisture'} or any(
+        term in text for term in RELIABILITY_TERMS
+    ):
+        return 'reliability_context', 'context'
+
     unit = str(attrs.get('unit_of_measurement') or '').lower()
     # Target-distance channels are useful local context but are not occupancy
     # probabilities. Admit only explicitly radar-target distances before the generic
@@ -241,6 +246,7 @@ def _semantics(role):
         'tracker': 'aggregate_tracker',
         'door': 'transition_only',
         'boundary_signal': 'explicit_boundary_transition_only',
+        'reliability_context': 'source_reliability_context_only',
         'auxiliary': 'auxiliary_likelihood',
     }.get(role)
 
@@ -322,6 +328,9 @@ def select_sources(states, registry, mapping, excluded):
             details[eid]['occupancy_authority'] = False
         elif role == 'radar_distance':
             details[eid]['reason'] = 'distance_support_only'
+            details[eid]['occupancy_authority'] = False
+        elif role == 'reliability_context':
+            details[eid]['reason'] = 'reliability_context_only'
             details[eid]['occupancy_authority'] = False
         else:
             details[eid]['reason'] = 'active' if mapping.get(eid) else 'missing_area'

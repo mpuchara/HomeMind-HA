@@ -1,3 +1,18 @@
+# 0.14.67 — 2026-09-21
+
+- Add bounded, Correct-driven semantic reliability for local presence evidence. The calibrator learns only from explicit binary Correct supervision and remains separate from the action policy.
+- Admit humidity, temperature and moisture as RELIABILITY_CONTEXT with zero occupancy authority. Environmental context never means occupied/unoccupied by itself and no fixed “high humidity makes radar bad” rule is encoded.
+- Require both-class Correct support and out-of-fold source correctness before learning any context-conditioned trust. Unsupported or ambiguous context stays exactly neutral at reliability factor 1.0.
+- Learn local-sensor disagreement as an optional reliability context when Correct evidence shows that disagreement predicts source errors.
+- Reliability context may only down-weight supported local evidence; it can never boost a source above its unconditioned quality.
+- Keep transport and semantic reliability distinct: communication_reliability still represents source availability/transport health, while semantic_reliability represents Correct-driven evidence trust.
+- Apply the same semantic reliability profile in live RoomBelief fusion, Adaptive Presence and causal historical replay.
+- Persist bounded reliability calibration separately under `semantic_reliability_v1`; Candidate lineage copies are deduplicated by stable supervision_event_id and cannot inflate support.
+- Record each Correct reliability-calibration result in the durable broad-context metadata and surface the latest result in Correct Learning Debug.
+- Keep runtime evaluation RAM-only over already-materialized area sources: no SQLite access, no whole-HA scan and no new broad event→intent fanout.
+- Restrict presence-reliability learning to fast binary/power agents; arbitrary climate or continuous-target Correct feedback cannot become occupancy supervision.
+- Full suite contains 1103 tests.
+
 # 0.14.66 — 2026-09-21
 
 - Recognize real mmWave local signals including `stationary_energy`, still/move energy and explicit stationary/moving target-distance channels.

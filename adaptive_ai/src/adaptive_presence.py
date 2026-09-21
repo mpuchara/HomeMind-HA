@@ -329,6 +329,8 @@ class AdaptivePresenceModel:
             'selected_raw_source': source_id,
             'raw_signal': raw_value,
             'raw_signal_quality': quality,
+            'raw_semantic_reliability': chosen.get('semantic_reliability'),
+            'raw_semantic_reliability_detail': chosen.get('semantic_reliability_detail'),
             'raw_signal_semantics': 'non_probability_score',
             'raw_calibrated_likelihood': signal_p,
             'raw_calibration_confidence': calibration_confidence,

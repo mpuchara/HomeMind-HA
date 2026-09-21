@@ -46,6 +46,9 @@ ROLE_PARAMS = {
     'boundary_signal': dict(active=0.0, stale_after=5.0, half_life=5.0,
                             observability=.08, movement=.55,
                             semantics='explicit_boundary_transition_only'),
+    'reliability_context': dict(active=0.0, stale_after=90.0, half_life=180.0,
+                                observability=0.0, movement=0.0,
+                                semantics='source_reliability_context_only'),
     'auxiliary': dict(active=.20, stale_after=10.0, half_life=15.0, observability=.25,
                       movement=.10, semantics='auxiliary_likelihood'),
 }
@@ -218,33 +221,39 @@ class RoomBeliefModel:
             params = self._params(role)
             available = bool(source.get('available'))
             comm = max(0.0, min(1.0, float(source.get('communication_reliability') or 0.0)))
+            semantic_reliability = max(
+                0.0, min(1.0, float(source.get('semantic_reliability', 1.0) or 0.0))
+            )
+            evidence_comm = comm * semantic_reliability
             fresh = self._freshness(source, ts)
             try:
                 q = max(0.0, min(1.0, float(source.get('value')))) if source.get('value') is not None else None
             except (TypeError, ValueError):
                 q = None
-            observability_terms.append(float(params['observability']) * comm if available else 0.0)
+            observability_terms.append(
+                float(params['observability']) * evidence_comm if available else 0.0
+            )
             contribution = 0.0
             if available and q is not None:
                 if role in {'pir', 'radar_occupancy', 'occupancy_binary', 'tracker'}:
                     if q >= .5:
-                        contribution = float(params['active']) * comm * fresh
+                        contribution = float(params['active']) * evidence_comm * fresh
                         if contribution > 0:
                             positive.append(contribution)
                             direct_active.append((role, contribution, eid))
                     else:
-                        strength = comm * {
+                        strength = evidence_comm * {
                             'pir': .15, 'radar_occupancy': .95,
                             'occupancy_binary': .75, 'tracker': .70,
                         }.get(role, .25)
                         absence.append(strength)
                         contribution = -strength
                 elif role == 'auxiliary_probability':
-                    adjusted = .5 + (q - .5) * comm * fresh
+                    adjusted = .5 + (q - .5) * evidence_comm * fresh
                     calibrated.append(max(0.0, min(1.0, adjusted)))
                     contribution = adjusted - .5
                 elif role in {'radar_activity', 'auxiliary'}:
-                    contribution = q * float(params['active']) * comm * fresh
+                    contribution = q * float(params['active']) * evidence_comm * fresh
                     raw_activity.append(contribution)
             state_since = self._source_timestamp(source, 'state_since_ts', sample_ts)
             rows.append({
@@ -253,6 +262,10 @@ class RoomBeliefModel:
                 'value_semantics': params['semantics'],
                 'available': available,
                 'communication_reliability': comm,
+                'semantic_reliability': semantic_reliability,
+                'semantic_reliability_detail': copy.deepcopy(
+                    source.get('semantic_reliability_detail')
+                ),
                 'evidence_age_seconds': max(0.0, float(ts) - state_since),
                 'evidence_freshness': fresh,
                 'contribution': contribution,

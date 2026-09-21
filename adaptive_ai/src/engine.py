@@ -1008,7 +1008,9 @@ class Engine(threading.Thread):
         unresolved = []
         for old in rt.get('outcomes', []):
             area = old.get('area_id')
-            forecast = self.context.home.forecast(area, now_ts())
+            forecast_ts = now_ts()
+            self.context.prepare_home_reliability(self.context.home, area, forecast_ts)
+            forecast = self.context.home.forecast(area, forecast_ts)
             arrival = self.context.home.values.get(area, {}).get('arrival')
             delay = (arrival-old['started_ts']) if arrival is not None and old['started_ts'] < arrival <= old['ended_ts'] else None
             if delay is None and now_ts() < old['started_ts']+max(1,old['horizon'])+1:
@@ -1097,6 +1099,7 @@ class Engine(threading.Thread):
         pending = rt.get('pending')
         if pending and pending.get('anticipated') and pending.get('acknowledged_ts') is not None:
             area = pending.get('area_id')
+            self.context.prepare_home_reliability(self.context.home, area, timestamp)
             forecast = self.context.home.forecast(area, timestamp)
             arrival = self.context.home.values.get(area, {}).get('arrival')
             delay = arrival - pending['started_ts'] if arrival is not None and arrival > pending['started_ts'] else None
