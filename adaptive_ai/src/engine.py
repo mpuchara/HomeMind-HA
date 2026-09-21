@@ -889,27 +889,16 @@ class Engine(threading.Thread):
                 # Coalesce bursts (motion + lux + light state etc.) into one inference pass.
                 self.stop_event.wait(debounce)
             try:
-                # A healthy websocket already delivers every state_changed event. The
-                # full /states snapshot is only a low-frequency safety resync in that
-                # mode; when realtime is down, fall back to the ordinary REST cadence.
-                resync_seconds = float(
-                    OPTIONS.get("realtime_resync_seconds", 300)
-                    if self.ws_connected
-                    else OPTIONS.get("realtime_fallback_poll_seconds", 10)
-                )
-                if (now_ts() - self.last_full_poll >= max(5.0, resync_seconds)
-                        and (self.poll_future is None or self.poll_future.done())):
-                    self.last_full_poll = now_ts()
-                    self.poll_future = self.poll_worker.submit(self.refresh_states)
-                self.flush_archive(force=False)
-                self.teaching.flush(force=False)
+                # Expiration is in-memory and affects current inference semantics. Durable
+                # archive/decision/context writes are deliberately scheduled *after*
+                # inference on a separate worker below.
                 self.context.home.expire(now_ts())
-                self.context.save()
                 with self.lock:
                     state_map = dict(self.state_map)
                     changed_entities = set(self.dirty_entities) if event_wakeup else set()
                     if event_wakeup:
                         self.dirty_entities.clear()
+
                 if state_map:
                     gate_open = self.inference_enabled.is_set()
                     startup_grace = time.monotonic() < float(
@@ -923,8 +912,7 @@ class Engine(threading.Thread):
                         if changed_entities:
                             with self.lock:
                                 self.dirty_entities.update(changed_entities)
-                        continue
-                    if event_wakeup and changed_entities:
+                    elif event_wakeup and changed_entities:
                         with self.lock:
                             self.inference_scheduler["event_passes"] += 1
                         self.process(state_map, changed_entities)
@@ -949,6 +937,12 @@ class Engine(threading.Thread):
                         else:
                             with self.lock:
                                 self.inference_scheduler["idle_skips"] += 1
+
+                # Periodic work must never sit in front of an event->intent pass. The
+                # background worker also serializes archive/decision/context writes so
+                # 5 s/60 s timers cannot align into a multi-write burst on the engine.
+                self._schedule_housekeeping()
+                self._maybe_schedule_state_resync()
             except Exception as exc:
                 msg = f"{type(exc).__name__}: {exc}"
                 with self.lock:
