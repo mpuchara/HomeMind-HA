@@ -663,7 +663,6 @@ def install(manager):
         except Exception:
             pass
         manager.runtime.pop(str(root_id), None)
-        manager.engine.runtime.pop(str(root_id), None)
         manager.store.event(
             str(root_id), "info", "agent_candidate_cycle_discarded",
             "Candidate cycle discarded; next Candidate will branch from the current Live model",
