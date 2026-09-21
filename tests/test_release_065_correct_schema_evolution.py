@@ -10,6 +10,7 @@ import correct_data_foundation as foundation
 from context import ExplicitFeatureSchema
 from correct_schema_evolution import (
     _anchor_pool_dispatch,
+    _effective_parent_stats,
     _schema_limit,
     _schema_offline_gate,
     _schema_replay_required,
@@ -350,8 +351,37 @@ class CorrectSchemaEvolutionTests(unittest.TestCase):
         self.assertIn("balanced._anchor_pool =", source)
         self.assertIn('"feature_source": "raw_entity_history_schema_replay"', source)
         self.assertIn(
-            '"schema_evolution_benchmark_contract": "raw_entity_history_replay_not_legacy_features_json"',
+            '"schema_evolution_benchmark_contract": "raw_entity_history_replay_both_parent_and_candidate"',
             source,
+        )
+
+    def test_schema_changed_gate_uses_raw_replayed_parent_stats_on_the_same_contract(self):
+        legacy = {
+            "samples": 40,
+            "score": 0.95,
+            "feature_source": "legacy_features_json",
+        }
+        replayed = {
+            "samples": 40,
+            "score": 0.81,
+            "feature_source": "raw_entity_history_schema_replay",
+        }
+        report = {
+            "schema_changed": True,
+            "_schema_evolution_parent_raw_stats": replayed,
+        }
+        selected = _effective_parent_stats(legacy, report)
+        self.assertIs(selected, replayed)
+        self.assertEqual(
+            selected["feature_source"],
+            "raw_entity_history_schema_replay",
+        )
+        self.assertIs(
+            _effective_parent_stats(
+                legacy,
+                {"schema_changed": False, "_schema_evolution_parent_raw_stats": replayed},
+            ),
+            legacy,
         )
 
     def test_bounded_schema_challenger_is_not_retried_as_success_while_residuals_remain(self):
