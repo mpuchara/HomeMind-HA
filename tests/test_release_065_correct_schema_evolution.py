@@ -9,6 +9,7 @@ from support import ROOT
 import correct_data_foundation as foundation
 from context import ExplicitFeatureSchema
 from correct_schema_evolution import (
+    _anchor_pool_dispatch,
     _schema_limit,
     _schema_offline_gate,
     _schema_replay_required,
@@ -302,12 +303,52 @@ class CorrectSchemaEvolutionTests(unittest.TestCase):
         legacy_score.assert_called_once()
         self.assertEqual(result["score"], 0.77)
 
+    def test_schema_changed_balancing_anchors_are_replayed_under_new_schema(self):
+        class Policy:
+            selection_meta = {
+                "schema_evolution": {
+                    "contract": "residual_targeted_cross_validated_context"
+                }
+            }
+
+        with patch(
+            "correct_schema_evolution._raw_anchor_pool",
+            return_value=[{"target_history_id": 7, "feature_source": "raw_entity_history_schema_replay"}],
+        ) as raw_pool, patch(
+            "correct_schema_evolution._BASE_ANCHOR_POOL",
+            side_effect=AssertionError("legacy anchor features_json must not train evolved schema"),
+        ):
+            rows = _anchor_pool_dispatch(
+                object(), object(), _fast_candidate(), Policy(), [100.0]
+            )
+        raw_pool.assert_called_once()
+        self.assertEqual(rows[0]["feature_source"], "raw_entity_history_schema_replay")
+
+    def test_unchanged_schema_keeps_characterized_legacy_anchor_pool(self):
+        class Policy:
+            selection_meta = {}
+
+        with patch(
+            "correct_schema_evolution._BASE_ANCHOR_POOL",
+            return_value=[{"target_history_id": 8}],
+        ) as legacy_pool, patch(
+            "correct_schema_evolution._raw_anchor_pool",
+            side_effect=AssertionError("raw anchor replay should be schema-change-only"),
+        ):
+            rows = _anchor_pool_dispatch(
+                object(), object(), _fast_candidate(), Policy(), [100.0]
+            )
+        legacy_pool.assert_called_once()
+        self.assertEqual(rows[0]["target_history_id"], 8)
+
     def test_schema_changed_offline_gate_contract_uses_raw_history_and_refreshes_benchmark_provenance(self):
         source = (SRC / "correct_schema_evolution.py").read_text(encoding="utf-8")
         self.assertIn("SQLiteTemporalTracker(", source)
         self.assertIn("policy.features(", source)
         self.assertIn('"raw_entity_history_schema_replay"', source)
         self.assertIn('"correct-schema-heldout-replay"', source)
+        self.assertIn("balanced._anchor_pool =", source)
+        self.assertIn('"feature_source": "raw_entity_history_schema_replay"', source)
         self.assertIn(
             '"schema_evolution_benchmark_contract": "raw_entity_history_replay_not_legacy_features_json"',
             source,
