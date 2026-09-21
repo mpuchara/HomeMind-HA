@@ -1,3 +1,17 @@
+# 0.14.64 — 2026-09-21
+
+- Replace positive-only hard Correct repair with pairwise margin repair: reinforce Desired while explicitly penalizing the strongest competing wrong arm.
+- Require a small positive decision margin, not only tie-broken class fit; publish before/after min/mean margins and unresolved supervision IDs.
+- Bound repair by global rounds and per-supervision-event round budgets; stop early when fit/margin no longer improves.
+- Re-check the originally selected opposite-class stability anchors after hard repair.
+- Separate lineage parentage from optimization ancestry: audit/A-B parent stays unchanged, but Candidate weights restart from the newest retained offline-passed Candidate or Root Live.
+- Never use an `offline_blocked` / failed Candidate as the next Correct weight base.
+- Keep accumulated supervision flowing from the direct lineage parent after the weight reset.
+- Expose correction base, margin diagnostics and stop reason through Candidate status and final runtime composition contracts.
+- Keep all Stage-2 work on Candidate build paths; realtime event→intent inference and Executor authority are unchanged.
+- Add deterministic reproduction showing 12 Desired-only updates cannot cross a strongly established wrong `DiagonalLinUCB` arm while pairwise repair does.
+- Full suite contains 1065 tests.
+
 # 0.14.63 — 2026-09-21
 
 - Add a durable generation-independent `supervision_event_id` for Correct/Teach facts and deduplicate active Candidate training rows by supervision event instead of physical lineage copies.

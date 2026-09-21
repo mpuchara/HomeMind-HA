@@ -75,6 +75,12 @@ class RuntimeCompositionRoot:
                 "contract": getattr(manager, "performance_f22_contract", None),
                 "semantics": "bounded computation only; raw evidence remains authoritative",
             },
+            "correct_learning": {
+                "foundation": getattr(manager, "correct_data_foundation_contract", None),
+                "optimizer": getattr(manager, "correct_optimizer_contract", None),
+                "base": getattr(manager, "correct_base_contract", None),
+                "hot_path": False,
+            },
             "correct_learning_debug": {
                 "owner": "manager.correct_learning_debug",
                 "contract": getattr(manager, "correct_learning_debug_contract", None),
@@ -117,6 +123,7 @@ class RuntimeCompositionRoot:
         from confidence_runtime import install_runtime_semantics
         from device_agents import install_runtime as install_device_agent_runtime
         from correct_learning_debug import register_correct_learning_debug_route
+        from correct_margin_repair import install as install_correct_margin_repair
         from correct_data_foundation import install as install_correct_data_foundation
         from performance_f22 import install as install_performance_f22
         from performance_f22_order_guard import install as install_performance_f22_order_guard
@@ -132,9 +139,10 @@ class RuntimeCompositionRoot:
         if manager is None:
             return
 
-        # Correct data collection is deliberately installed after the characterized
-        # Candidate stack and before later UI/workflow adapters.  It never enters the
-        # event-to-intent path; only explicit feedback performs broad historical reads.
+        # Stage 2 replaces the old positive-only hard-repair hook before Stage 1 wraps
+        # it with residual diagnostics. Both are Candidate-build-only and stay entirely
+        # off the realtime event-to-intent path.
+        manager = install_correct_margin_repair(self.core, manager)
         manager = install_correct_data_foundation(self.core, manager)
         engine.agent_candidates = manager
 
