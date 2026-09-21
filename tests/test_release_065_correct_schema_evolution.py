@@ -2,6 +2,7 @@
 
 import json
 import unittest
+from unittest.mock import patch
 
 from support import ROOT
 
@@ -9,6 +10,7 @@ import correct_data_foundation as foundation
 from context import ExplicitFeatureSchema
 from correct_schema_evolution import (
     _schema_limit,
+    _schema_offline_gate,
     migrate_model_schema,
     rank_residual_context,
 )
@@ -236,6 +238,31 @@ class CorrectSchemaEvolutionTests(unittest.TestCase):
             '"schema_evolution": getattr(manager, "correct_schema_evolution_contract"',
             source,
         )
+
+    def test_missing_context_is_an_explicit_offline_gate_status(self):
+        report = {
+            "schema_evolution_status": "missing_context",
+            "schema_evolution_reason": "no_semantically_eligible_cross_validated_context_separates_residual_supervision",
+        }
+        with patch(
+            "correct_schema_evolution._BASE_MARGIN_GATE",
+            return_value={"passed": True, "status": "passed", "reasons": []},
+        ):
+            gate = _schema_offline_gate({}, {}, {}, report)
+        self.assertFalse(gate["passed"])
+        self.assertEqual(gate["status"], "missing_context")
+        self.assertTrue(gate["missing_context"])
+        self.assertIn(
+            "Correct residuals require additional discriminative context",
+            gate["reasons"],
+        )
+
+    def test_candidate_ui_surfaces_missing_context_and_schema_enrichment(self):
+        source = (SRC / "static" / "candidate_ui.js").read_text(encoding="utf-8")
+        self.assertIn("<b>Missing context</b>", source)
+        self.assertIn("<b>Correct schema enriched:</b>", source)
+        self.assertIn("c.schema_evolution_selected", source)
+        self.assertNotIn("fetch(", source[source.index("const schemaSelected"):source.index("const customEligible")])
 
     def test_schema_evolution_stays_off_realtime_hot_path(self):
         engine = (SRC / "engine.py").read_text(encoding="utf-8")
