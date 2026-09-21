@@ -1,3 +1,13 @@
+# 0.14.57 — 2026-09-21
+
+- Change user-visible **Discard** semantics to retire the whole unpromoted Candidate cycle. Hidden ancestor Candidates are no longer resumed after the visible leaf is discarded.
+- Preserve discarded lineage metadata for audit, but remove its surrogate agents/models so future Correct/Change decision starts again from the current Live agent.
+- Add a one-time migration that detects rollback-shaped branches left by older Discard behavior and retires them instead of allowing Gen 14/15-style resurrection after upgrade.
+- Fix the exact Correct failure shown as `KeyError: 'candidate_id'`: deep-lineage enqueue may return a lineage status with `generation_id`, and workflow creation now accepts either status contract.
+- Refresh the durable Live-parent model/config snapshot exactly when a new Candidate branches from Live. A Live agent rebuilt from scratch therefore cannot accidentally compare a new Candidate against stale lineage metadata.
+- After Discard, the next Candidate cycle starts at **Gen 1** relative to the current Live generation. Full Rebuild remains a Live-agent reset and does not restore retired Candidates.
+- Candidate physical-control isolation, paired-evidence gates, promotion checks and historical Correct labels are unchanged.
+
 # 0.14.56 — 2026-09-21
 
 - Fix the Live agent workflow action cache so a mode-only transition from Paused to Shadow immediately changes **Start Shadow** to **Pause Shadow**.
