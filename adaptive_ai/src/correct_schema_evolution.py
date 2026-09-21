@@ -36,12 +36,14 @@ import agent_candidate_conservative_correct as conservative
 import correct_data_foundation as foundation
 import correct_margin_repair as margin
 from context import ExplicitFeatureSchema, archived_state, context_scalar, is_fast_reactive_agent
-from settings import OPTIONS
+from replay import SQLiteTemporalTracker
+from settings import OPTIONS, iso_now
 
 
 _PATCHED = False
 _BASE_MARGIN_FINE_TUNE = margin._margin_correct_fine_tune
 _BASE_MARGIN_GATE = margin._margin_offline_gate
+_BASE_SCORE = conservative._score
 
 _MAX_ADDITIONS = 2
 _MIN_ROWS = 8
@@ -537,6 +539,185 @@ def migrate_model_schema(raw_model, new_entities, evolution_meta=None):
     return raw
 
 
+def _schema_replay_required(policy):
+    meta = dict(getattr(policy, "selection_meta", {}) or {})
+    evolution = dict(meta.get("schema_evolution") or {})
+    return evolution.get("contract") == "residual_targeted_cross_validated_context"
+
+
+def _primary_occupancy_sensor(policy):
+    meta = dict(getattr(policy, "selection_meta", {}) or {})
+    return (
+        meta.get("primary_occupancy_sensor")
+        or meta.get("primary_local_sensor")
+        or next(iter(meta.get("primary_local_sensors") or []), None)
+    )
+
+
+def _replay_anchor(tracker, policy, agent, action_value, action_ts):
+    if not is_fast_reactive_agent(agent):
+        return float(action_ts)
+    positive = float(action_value) >= 0.5
+    primary = _primary_occupancy_sensor(policy)
+    local_ts = None
+    if primary:
+        window = float(
+            OPTIONS.get("fast_precursor_on_seconds", 8)
+            if positive
+            else OPTIONS.get("fast_precursor_off_seconds", 120)
+        )
+        local_ts = tracker.directional_transition_before(
+            primary, action_ts, positive, window
+        )
+    return float(local_ts if local_ts is not None else action_ts)
+
+
+def _score_schema_replay(core, policy, agent, rows):
+    """Score a schema-changed policy from raw history, never old feature indexes."""
+    rows = [
+        dict(row) for row in (rows or ())
+        if row.get("ts") is not None
+    ]
+    if not rows:
+        return _BASE_SCORE(policy, agent, rows)
+    times = [float(row["ts"]) for row in rows]
+    padding = max(
+        180.0,
+        float(OPTIONS.get("fast_precursor_off_seconds", 120) or 120) + 30.0,
+    )
+    watched = list(getattr(policy.schema, "entities", []) or [])
+    tracker = SQLiteTemporalTracker(
+        core.STORE,
+        watched,
+        core.ENGINE.context,
+        min(times) - padding,
+        max(times) + 1.0,
+    )
+    actions = [float(value) for value in policy.actions]
+    binary = len(actions) == 2 or str(agent.get("target_property") or "") == "power"
+    per_action = {}
+    predicted_actions = set()
+    samples = correct = 0
+    tolerance = max(
+        float(agent.get("deadband") or 0.0),
+        (float(agent.get("max_value") or 0.0) - float(agent.get("min_value") or 0.0)) * 0.03,
+    )
+    try:
+        for row in sorted(rows, key=lambda item: (float(item["ts"]), int(item.get("id") or 0))):
+            try:
+                actual_idx = int(row["action_index"])
+                if actual_idx < 0 or actual_idx >= len(actions):
+                    continue
+                action_value = float(row.get("action_value"))
+                action_ts = float(row["ts"])
+                anchor_ts = _replay_anchor(
+                    tracker, policy, agent, action_value, action_ts
+                )
+                tracker.advance(anchor_ts)
+                features, _labels, _meta = policy.features(
+                    tracker.state_map,
+                    tracker.history,
+                    at_ts=anchor_ts,
+                )
+                predicted_idx, predicted_value = conservative._prediction_index(
+                    policy, features
+                )
+            except (TypeError, ValueError, RuntimeError, KeyError):
+                continue
+            actual_value = actions[actual_idx]
+            ok = (
+                predicted_idx == actual_idx
+                if binary
+                else abs(predicted_value - actual_value) <= tolerance
+            )
+            samples += 1
+            correct += int(ok)
+            predicted_actions.add(int(predicted_idx))
+            slot = per_action.setdefault(
+                str(actual_idx), {"samples": 0, "correct": 0}
+            )
+            slot["samples"] += 1
+            slot["correct"] += int(ok)
+    finally:
+        tracker.close()
+
+    per_accuracy = {
+        key: float(value["correct"]) / max(1, int(value["samples"]))
+        for key, value in per_action.items()
+        if int(value.get("samples") or 0) > 0
+    }
+    if binary:
+        score = (
+            sum(per_accuracy.values()) / len(per_accuracy)
+            if len(per_accuracy) == 2 else None
+        )
+    else:
+        score = float(correct) / samples if samples else None
+    return {
+        "samples": int(samples),
+        "correct": int(correct),
+        "score": score,
+        "balanced": bool(binary),
+        "per_action": per_action,
+        "per_action_accuracy": per_accuracy,
+        "actual_class_coverage": len(per_action),
+        "predicted_class_coverage": len(predicted_actions),
+        "feature_source": "raw_entity_history_schema_replay",
+    }
+
+
+def _score_dispatch(core, policy, agent, rows):
+    if _schema_replay_required(policy):
+        return _score_schema_replay(core, policy, agent, rows)
+    return _BASE_SCORE(policy, agent, rows)
+
+
+def _persist_schema_benchmark(store, candidate_id, stats, report):
+    detail = {
+        "balanced": bool(stats.get("balanced")),
+        "class_coverage": int(stats.get("actual_class_coverage") or 0) >= 2,
+        "per_action_accuracy": dict(stats.get("per_action_accuracy") or {}),
+        "counts": {
+            "samples": int(stats.get("samples") or 0),
+            "correct": int(stats.get("correct") or 0),
+            "per_action": dict(stats.get("per_action") or {}),
+            "origin_counts": {},
+        },
+        "source": "correct-schema-heldout-replay",
+        "schema_evolution": {
+            "status": report.get("schema_evolution_status"),
+            "selected": list(report.get("schema_evolution_selected") or []),
+            "schema_before_entities": list(report.get("schema_before_entities") or []),
+            "schema_after_entities": list(report.get("schema_after_entities") or []),
+        },
+    }
+    raw_detail = json.dumps(detail, separators=(",", ":"), ensure_ascii=False)
+    with store.lock, store.conn() as db:
+        db.execute(
+            """UPDATE agents SET benchmark_score=?,benchmark_samples=?,
+               benchmark_source='correct-schema-heldout-replay',
+               benchmark_detail_json=?,benchmark_updated_at=?,training_updated_at=?
+               WHERE id=?""",
+            (
+                stats.get("score"),
+                int(stats.get("samples") or 0),
+                raw_detail,
+                iso_now(),
+                iso_now(),
+                str(candidate_id),
+            ),
+        )
+    model = store.get_model(str(candidate_id))
+    if model is not None:
+        model["_benchmark_counts"] = {
+            "samples": int(stats.get("samples") or 0),
+            "correct": int(stats.get("correct") or 0),
+            "per_action": dict(stats.get("per_action") or {}),
+            "origin_counts": {},
+        }
+        store.save_model(str(candidate_id), model)
+
+
 def _feedback_watermark(store, candidate_id):
     with store.conn() as c:
         row = c.execute(
@@ -643,6 +824,8 @@ def _schema_fine_tune(core, manager, candidate):
         "schema_before_entities": current_entities,
         "schema_after_entities": new_entities,
         "schema_capacity": int(limit),
+        "schema_evolution_candidate_id": str(candidate["id"]),
+        "schema_evolution_benchmark_contract": "raw_entity_history_replay_not_legacy_features_json",
     })
     manager.store.event(
         candidate["id"],
@@ -708,7 +891,28 @@ def install(core, manager):
         conservative._conservative_fine_tune = (
             lambda manager_obj, candidate: _schema_fine_tune(core, manager_obj, candidate)
         )
-        conservative._offline_gate = _schema_offline_gate
+        conservative._score = (
+            lambda policy, agent, rows: _score_dispatch(core, policy, agent, rows)
+        )
+
+        def offline_gate(parent, parent_stats, candidate_stats, teach_report=None):
+            report = dict(teach_report or {})
+            gate = _schema_offline_gate(
+                parent, parent_stats, candidate_stats, report
+            )
+            candidate_id = report.get("schema_evolution_candidate_id")
+            if candidate_id and report.get("schema_changed"):
+                _persist_schema_benchmark(
+                    core.STORE, candidate_id, candidate_stats, report
+                )
+                gate["candidate_benchmark_source"] = "correct-schema-heldout-replay"
+                gate["candidate_benchmark_score"] = candidate_stats.get("score")
+                gate["candidate_benchmark_samples"] = int(
+                    candidate_stats.get("samples") or 0
+                )
+            return gate
+
+        conservative._offline_gate = offline_gate
         _PATCHED = True
 
     original_status = manager.status
