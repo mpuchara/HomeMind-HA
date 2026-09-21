@@ -557,17 +557,32 @@ def _install_teaching(core):
                 (event_id, int(label_id)),
             )
         source = str(kwargs.get("source") or "manual")
-        broad = capture_broad_context(
-            core,
-            agent,
-            sample_ts=float(timestamp),
-            desired=float(result.get("desired_value", desired)),
-            rejected=previous,
-            source=source,
-            supervision_id=event_id,
-            feedback_id=result.get("feedback_id"),
-            generation_id=kwargs.get("generation_id"),
-        )
+        try:
+            broad = capture_broad_context(
+                core,
+                agent,
+                sample_ts=float(timestamp),
+                desired=float(result.get("desired_value", desired)),
+                rejected=previous,
+                source=source,
+                supervision_id=event_id,
+                feedback_id=result.get("feedback_id"),
+                generation_id=kwargs.get("generation_id"),
+            )
+        except Exception as exc:
+            # The supervision fact is already durable.  A diagnostic/context failure must
+            # not strand the UI after accepting the user's Correct or prevent the normal
+            # Candidate listener from running.  Surface it explicitly for repair instead.
+            broad = {
+                "recorded": False,
+                "supervision_event_id": event_id,
+                "error": "%s: %s" % (type(exc).__name__, exc),
+            }
+            core.STORE.event(
+                agent["id"], "warning", "correct_broad_context_failed",
+                "Correct was recorded but broad context capture failed",
+                {"supervision_event_id": event_id, "error": broad["error"]},
+            )
         result["supervision_event_id"] = event_id
         result["manual_context"] = broad
         return result
