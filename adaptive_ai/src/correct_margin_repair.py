@@ -644,6 +644,26 @@ def install(core, manager):
         hard._hard_offline_gate = _margin_offline_gate
         _PATCHED = True
 
+    original_status = manager.status
+
+    def status(parent_id):
+        result = original_status(parent_id)
+        if not result:
+            return result
+        row = manager._candidate_row(parent_id)
+        gate = _json((row or {}).get("offline_gate_json"), {})
+        result["correct_optimizer"] = gate.get("correct_optimizer")
+        result["hard_margin_target"] = gate.get("hard_margin_target")
+        result["hard_margin_after_min"] = gate.get("hard_margin_after_min")
+        result["hard_margin_after_mean"] = gate.get("hard_margin_after_mean")
+        result["hard_repair_stop_reason"] = gate.get("hard_repair_stop_reason")
+        result["hard_unresolved_supervision_ids"] = list(
+            gate.get("hard_unresolved_supervision_ids") or []
+        )
+        result["correction_base"] = gate.get("correction_base")
+        return result
+
+    manager.status = status
     manager._correct_margin_repair_installed = True
     manager.correct_optimizer_contract = (
         "pairwise_margin_repair_with_wrong_arm_penalty_per_label_budget_and_progress_stop"
