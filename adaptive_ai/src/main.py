@@ -10,6 +10,7 @@ import traceback
 from urllib.parse import parse_qs
 
 from settings import (APP_VERSION, OPTIONS, STATIC_DIR, SUPPORTED_TARGETS, clamp, now_ts)
+from training_request_semantics import train_request_mode
 
 # Runtime-heavy modules are imported only after the Ingress HTTP server is listening.
 ENGINE = None
@@ -473,11 +474,13 @@ class Handler(BaseHTTPRequestHandler):
                     self._release_before_heavy_job(agent, "training")
                 except Exception as exc:
                     return self.send_json(502, {"error": f"Could not release Control before training: {exc}"})
-                partial = agent.get("training_state") != "needs_retrain" and agent.get("training_cursor_ts") is not None and float(agent.get("training_progress") or 0.0) < 0.999
-                started = HISTORY.request_agent_resume(agent_id) if partial else HISTORY.request_agent_rebuild(agent_id)
+                rebuild, resumed = train_request_mode(
+                    agent, STORE.get_model(agent_id) is not None
+                )
+                started = HISTORY.request_agent_rebuild(agent_id) if rebuild else HISTORY.request_agent_resume(agent_id)
                 if not started:
                     return self.send_json(409, {"error": "another training job is already active; low-memory mode allows one at a time"})
-                return self.send_json(202, {"ok": True, "state": "training", "resumed": bool(partial), "message": "Per-agent training started in low-memory mode"})
+                return self.send_json(202, {"ok": True, "state": "training", "resumed": resumed, "message": "Per-agent training started in low-memory mode"})
             if path.startswith("/api/agents/") and path.endswith("/resume"):
                 agent_id = path.split("/")[3]
                 agent = STORE.get_agent(agent_id)
