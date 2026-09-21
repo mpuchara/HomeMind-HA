@@ -11,6 +11,8 @@ from context import ExplicitFeatureSchema
 from correct_schema_evolution import (
     _schema_limit,
     _schema_offline_gate,
+    _schema_replay_required,
+    _score_dispatch,
     migrate_model_schema,
     rank_residual_context,
 )
@@ -263,6 +265,53 @@ class CorrectSchemaEvolutionTests(unittest.TestCase):
         self.assertIn("<b>Correct schema enriched:</b>", source)
         self.assertIn("c.schema_evolution_selected", source)
         self.assertNotIn("fetch(", source[source.index("const schemaSelected"):source.index("const customEligible")])
+
+    def test_schema_changed_policy_dispatches_to_raw_history_replay_not_legacy_vector_score(self):
+        class Policy:
+            selection_meta = {
+                "schema_evolution": {
+                    "contract": "residual_targeted_cross_validated_context"
+                }
+            }
+
+        self.assertTrue(_schema_replay_required(Policy()))
+        with patch(
+            "correct_schema_evolution._score_schema_replay",
+            return_value={"score": 0.91, "feature_source": "raw_entity_history_schema_replay"},
+        ) as replay_score, patch(
+            "correct_schema_evolution._BASE_SCORE",
+            side_effect=AssertionError("legacy features_json score must not run"),
+        ):
+            result = _score_dispatch(object(), Policy(), _fast_candidate(), [{"ts": 10.0}])
+        replay_score.assert_called_once()
+        self.assertEqual(result["feature_source"], "raw_entity_history_schema_replay")
+
+    def test_unchanged_schema_keeps_characterized_legacy_score_path(self):
+        class Policy:
+            selection_meta = {}
+
+        self.assertFalse(_schema_replay_required(Policy()))
+        with patch(
+            "correct_schema_evolution._BASE_SCORE",
+            return_value={"score": 0.77},
+        ) as legacy_score, patch(
+            "correct_schema_evolution._score_schema_replay",
+            side_effect=AssertionError("raw replay should be schema-change-only"),
+        ):
+            result = _score_dispatch(object(), Policy(), _fast_candidate(), [{"features_json": "{}"}])
+        legacy_score.assert_called_once()
+        self.assertEqual(result["score"], 0.77)
+
+    def test_schema_changed_offline_gate_contract_uses_raw_history_and_refreshes_benchmark_provenance(self):
+        source = (SRC / "correct_schema_evolution.py").read_text(encoding="utf-8")
+        self.assertIn("SQLiteTemporalTracker(", source)
+        self.assertIn("policy.features(", source)
+        self.assertIn('"raw_entity_history_schema_replay"', source)
+        self.assertIn('"correct-schema-heldout-replay"', source)
+        self.assertIn(
+            '"schema_evolution_benchmark_contract": "raw_entity_history_replay_not_legacy_features_json"',
+            source,
+        )
 
     def test_schema_evolution_stays_off_realtime_hot_path(self):
         engine = (SRC / "engine.py").read_text(encoding="utf-8")
