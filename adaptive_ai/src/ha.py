@@ -104,6 +104,97 @@ def _extract_device_ids(obj):
     return out
 
 
+def _duration_seconds(value):
+    """Normalize HA duration syntax without assigning policy meaning to it."""
+    if value is None:
+        return None
+    if isinstance(value, (int, float)):
+        try:
+            return max(0.0, float(value))
+        except (TypeError, ValueError):
+            return None
+    if isinstance(value, str):
+        try:
+            return max(0.0, float(value))
+        except (TypeError, ValueError):
+            return None
+    if not isinstance(value, dict):
+        return None
+    try:
+        return max(
+            0.0,
+            float(value.get("hours") or 0) * 3600.0
+            + float(value.get("minutes") or 0) * 60.0
+            + float(value.get("seconds") or 0),
+        )
+    except (TypeError, ValueError):
+        return None
+
+
+def automation_baseline_rules(obj, source="trigger"):
+    """Extract lightweight threshold/hysteresis semantics from readable HA config.
+
+    These rows are structural baseline metadata only. They never become rewards or hard
+    policy constraints.
+    """
+    rules = []
+    if isinstance(obj, list):
+        for item in obj:
+            rules.extend(automation_baseline_rules(item, source=source))
+        return rules
+    if not isinstance(obj, dict):
+        return rules
+
+    kind = str(obj.get("trigger", obj.get("platform", obj.get("condition", ""))) or "").lower()
+    if kind == "numeric_state":
+        values = obj.get("entity_id", obj.get("entity_ids", []))
+        values = values if isinstance(values, list) else [values]
+        for entity_id in values:
+            if not isinstance(entity_id, str) or not ENTITY_ID_RE.fullmatch(entity_id):
+                continue
+            above = obj.get("above")
+            below = obj.get("below")
+            try:
+                above = None if above is None else float(above)
+            except (TypeError, ValueError):
+                above = None
+            try:
+                below = None if below is None else float(below)
+            except (TypeError, ValueError):
+                below = None
+            rules.append({
+                "source": str(source),
+                "kind": "numeric_state",
+                "entity_id": entity_id,
+                "above": above,
+                "below": below,
+                "for_seconds": _duration_seconds(obj.get("for")),
+            })
+
+    for key, value in obj.items():
+        if key in ("entity_id", "entity_ids", "above", "below", "for"):
+            continue
+        if isinstance(value, (dict, list)):
+            rules.extend(automation_baseline_rules(value, source=source))
+    return rules
+
+
+def automation_action_services(actions):
+    """Return literal action/service names for baseline diagnostics."""
+    found = set()
+    if isinstance(actions, list):
+        for item in actions:
+            found.update(automation_action_services(item))
+    elif isinstance(actions, dict):
+        command = actions.get("action", actions.get("service"))
+        if isinstance(command, str) and re.fullmatch(r"[a-z_]+\.[a-z0-9_]+", command):
+            found.add(command)
+        for value in actions.values():
+            if isinstance(value, (dict, list)):
+                found.update(automation_action_services(value))
+    return found
+
+
 def automation_action_targets(actions, registry):
     """Only literal command destinations, never condition/template references."""
     found = set()
@@ -247,6 +338,19 @@ class AutomationKnowledge:
                 context_entities = set(previous['context_entities'])
             # Do not let the controlled target itself become a prior input merely because
             # it appears in the action block. The ordinary state remains in the context.
+            baseline_rules = (
+                list(previous.get("baseline_rules") or [])
+                if eid in failures and previous
+                else (
+                    automation_baseline_rules(triggers, source="trigger")
+                    + automation_baseline_rules(conditions, source="condition")
+                )
+            )
+            action_services = (
+                list(previous.get("action_services") or [])
+                if eid in failures and previous
+                else sorted(automation_action_services(actions))
+            )
             info = {
                 "entity_id": st.get("entity_id"),
                 "name": attrs.get("friendly_name") or st.get("entity_id"),
@@ -255,6 +359,9 @@ class AutomationKnowledge:
                 "last_triggered": attrs.get("last_triggered"),
                 "target_entities": sorted(action_entities),
                 "context_entities": sorted(context_entities - action_entities),
+                "baseline_rules": baseline_rules,
+                "action_services": action_services,
+                "baseline_contract": "structural_prior_not_ground_truth",
                 "config_status": 'cached' if eid in failures and previous else 'unavailable' if eid in failures else 'fresh',
                 "config_error": failures.get(eid),
             }
