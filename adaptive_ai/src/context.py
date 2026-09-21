@@ -300,8 +300,10 @@ def entity_capability_tags(entity_id, state):
     # "Still Energy" (%), "Move Energy" (%), and "AI detection" (points).
     activity_terms = (
         "ai detection", "aidetection", "detection score", "camera score",
-        "still energy", "move energy", "moving energy", "radar energy",
-        "still target", "moving target", "move target",
+        "still energy", "stationary energy", "move energy", "moving energy",
+        "radar energy", "still target", "stationary target", "moving target",
+        "move target", "still target distance", "stationary target distance",
+        "moving target distance", "move target distance",
     )
     if any(x in text for x in activity_terms):
         caps.add("activity")
