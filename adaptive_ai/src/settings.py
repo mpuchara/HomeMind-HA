@@ -34,7 +34,7 @@ DEFAULT_OPTIONS = {
     "poll_seconds": 30,
     # With a healthy state_changed websocket, /states is only a consistency resync.
     # Avoid rebuilding 700+ entity context every 30 s on Raspberry Pi.
-    "realtime_resync_seconds": 300,
+    "realtime_resync_seconds": 900,
     # If realtime is unavailable, keep Current usable without restoring the old 30 s lag.
     # Delta-only reconciliation makes this temporary fallback cheap enough for Pi 4.
     "realtime_fallback_poll_seconds": 10,
