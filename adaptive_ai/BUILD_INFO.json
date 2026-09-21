@@ -4,7 +4,7 @@
   "base_version": "0.14.62",
   "base_commit": "1e4855f8a2c144c46c5ae40736425f88ecdab527",
   "release_status": "release-0.14.63-correct-data-foundation",
-  "tests_passed": 1055,
+  "tests_passed": 1056,
   "profile": "rpi4-low-memory-complete-discovery-manual-agent-selection",
   "manual_agent_training": true,
   "max_concurrent_training_jobs": 1,
