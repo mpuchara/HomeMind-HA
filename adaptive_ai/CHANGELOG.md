@@ -1,3 +1,15 @@
+# 0.14.63 — 2026-09-21
+
+- Add a durable generation-independent `supervision_event_id` for Correct/Teach facts and deduplicate active Candidate training rows by supervision event instead of physical lineage copies.
+- Capture one bounded historical broad-context snapshot after explicit feedback only, preserving existing target/actuator/electrical exclusions and keeping the event→intent hot path unchanged.
+- Persist semantic context roles: `LOCAL_EVIDENCE`, `BOUNDARY_ARRIVAL_PRECURSOR`, `TRAJECTORY_CONTEXT`, `RELIABILITY_CONTEXT`; humidity/temperature remain reliability context rather than occupancy evidence.
+- Store a fresh bounded as-of RoomBelief reconstruction plus source ages/recent deltas with each Correct context snapshot.
+- Retain readable Home Assistant numeric-state thresholds, hold durations and action services as baseline metadata; automations remain structural priors, never ground truth.
+- Add frozen-schema residual diagnostics: fit count/ratio, unresolved Correct supervision IDs and residual class distribution.
+- Extend Correct Learning Debug with supervision-lineage counts and per-label broad context.
+- Add Stage-1 regression tests for supervision deduplication, exclusions, semantic roles, baseline parsing, residual diagnostics and hot-path isolation.
+- Full suite contains 1056 tests.
+
 # 0.14.62 — 2026-09-21
 
 - Fix full **Export debug** failing at the global 12 s GET safety timeout.
