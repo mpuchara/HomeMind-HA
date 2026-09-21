@@ -4,7 +4,7 @@
 - Candidate-live polling could cache an empty generation set while the Candidate was still queued/building; synchronous Conservative Correct finishes inside `_start_build`, which previously did not invalidate that cache.
 - Invalidate Candidate Shadow lifecycle caches after `_start_build` as well as asynchronous `_finish_build_if_ready`, so the newly observable Candidate joins passive HA-event and heartbeat inference immediately.
 - Preserve observed-only Candidate history, offline promotion gates, reward semantics and physical-control isolation; this hotfix changes lifecycle cache visibility only.
-- Add 0.14.58 regression coverage; full validation suite now contains 1031 tests.
+- Add 0.14.58 regression coverage; full validation suite now contains 1032 tests.
 
 # 0.14.57 — 2026-09-21
 
