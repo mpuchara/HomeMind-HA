@@ -114,9 +114,9 @@ class Release038PiDegradationTests(unittest.TestCase):
         settings = self.source("settings.py")
         self.assertIn('ping_interval=20', engine)
         self.assertIn('ping_timeout=20', engine)
-        self.assertIn('OPTIONS.get("realtime_resync_seconds", 300)', engine)
-        self.assertIn('"realtime_resync_seconds": 300', settings)
-        self.assertIn("self.engine.last_full_poll = 0.0", engine)
+        self.assertIn('OPTIONS.get("realtime_resync_seconds", 900)', engine)
+        self.assertIn('"realtime_resync_seconds": 900', settings)
+        self.assertIn("self.engine.last_full_poll = 0.0", engine)\n        self.assertIn("self._realtime_recent(2.0)", engine)
 
     def test_websocket_outage_fallback_is_fast_but_resync_processing_is_delta_only(self):
         engine = self.source("engine.py")
