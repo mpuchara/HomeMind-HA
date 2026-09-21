@@ -78,8 +78,13 @@ class RuntimeCompositionRoot:
             "correct_learning_debug": {
                 "owner": "manager.correct_learning_debug",
                 "contract": getattr(manager, "correct_learning_debug_contract", None),
-                "http": "/api/agents/{agent_id}/debug/correct-learning",
-                "semantics": "read-only bounded diagnostics; full historical reconstruction is opt-in",
+                "http": {
+                    "summary": "/api/agents/{agent_id}/debug/correct-learning",
+                    "start_export": "/api/agents/{agent_id}/debug/correct-learning/export",
+                    "job_status": "/api/debug/correct-learning/jobs/{job_id}",
+                    "download": "/api/debug/correct-learning/jobs/{job_id}/download",
+                },
+                "semantics": "read-only bounded diagnostics; full export runs as one async single-flight job",
             },
             "low_power": low_power() if callable(low_power) else None,
             "transport": router.descriptor(),

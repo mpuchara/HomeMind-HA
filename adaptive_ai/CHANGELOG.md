@@ -1,3 +1,15 @@
+# 0.14.62 — 2026-09-21
+
+- Fix full **Export debug** failing at the global 12 s GET safety timeout.
+- Replace the long synchronous browser GET with a bounded asynchronous export job: POST starts the work, short GETs poll progress, and a final lightweight download endpoint serves the finished JSON.
+- Keep the global 12 s read guard unchanged for normal UI/API reads; debug export no longer disables or weakens that protection.
+- Allow only one heavy debug export at a time on low-power systems. Repeated clicks for the same agent attach to the existing job; another agent gets a clear conflict instead of starting competing history reconstruction.
+- Keep finished reports in RAM for 10 minutes, then expire them automatically. No debug payload is persisted to SQLite.
+- Show live progress directly on the button as `Exporting… N%`.
+- Yield between reconstructed Correct points so realtime inference/Ingress can continue to make progress.
+- Preserve all learning, Candidate, promotion, training and physical-control semantics.
+- Full suite contains 1046 tests.
+
 # 0.14.61 — 2026-09-21
 
 - Fix **Export debug** doing nothing in 0.14.60.

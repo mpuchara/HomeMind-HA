@@ -29,19 +29,23 @@ class Release060DebugExportUiTests(unittest.TestCase):
         )
         self.assertIn("const candidateRef=c=>String(c.generation_id||c.candidate_id||'')", candidate)
 
-    def test_debug_helper_requests_full_bounded_export_and_downloads_json(self):
+    def test_debug_helper_requests_full_bounded_async_export_and_downloads_json(self):
         helper = (STATIC / "debug_export_ui.js").read_text(encoding="utf-8")
         for marker in (
             "detail:'full'",
-            "label_limit:'256'",
-            "window_seconds:'120'",
-            "raw_rows_per_label:'768'",
+            "label_limit:256",
+            "window_seconds:120",
+            "raw_rows_per_label:768",
             "encodeURIComponent(ref)",
-            "new Blob([JSON.stringify(payload,null,2)]",
+            "method:'POST'",
+            "/debug/correct-learning/export",
+            "api/debug/correct-learning/jobs/",
+            "adaptiveAiTimeoutMs:5000",
             "anchor.download=filename",
             "debugExportBusy",
         ):
             self.assertIn(marker, helper)
+        self.assertNotIn("new Blob([JSON.stringify", helper)
 
     def test_candidate_generation_ref_is_url_decoded_by_backend(self):
         backend = (SRC / "correct_learning_debug.py").read_text(encoding="utf-8")

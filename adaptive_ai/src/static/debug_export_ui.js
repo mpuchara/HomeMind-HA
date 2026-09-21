@@ -1,4 +1,4 @@
-// One-click bounded Correct learning diagnostic export for Live and Candidate cards.
+// One-click asynchronous bounded Correct learning diagnostic export for Live/Candidate cards.
 (()=>{
   if(window.exportCorrectLearningDebug)return;
 
@@ -14,6 +14,8 @@
     return `${d.getFullYear()}${p(d.getMonth()+1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`;
   };
 
+  const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
+
   async function parseResponse(response){
     const text=await response.text();
     let body=null;
@@ -26,21 +28,52 @@
     return body;
   }
 
-  function downloadJson(payload, ref){
-    const root=payload.root_agent||{};
-    const identity=root.name||root.target_entity||payload.root_agent_id||ref;
-    const filename=`correct-learning-${safePart(identity)}-${stamp()}.json`;
-    const blob=new Blob([JSON.stringify(payload,null,2)],{type:'application/json'});
-    const url=URL.createObjectURL(blob);
+  function triggerDownload(job,ref){
+    const filename=job?.filename||`correct-learning-${safePart(ref)}-${stamp()}.json`;
     const anchor=document.createElement('a');
-    anchor.href=url;
+    anchor.href=`api/debug/correct-learning/jobs/${encodeURIComponent(job.job_id)}/download`;
     anchor.download=filename;
     anchor.style.display='none';
     document.body.appendChild(anchor);
     anchor.click();
     anchor.remove();
-    setTimeout(()=>URL.revokeObjectURL(url),5000);
     return filename;
+  }
+
+  async function startJob(ref){
+    const response=await fetch(
+      `api/agents/${encodeURIComponent(ref)}/debug/correct-learning/export`,
+      {
+        method:'POST',
+        cache:'no-store',
+        headers:{'Accept':'application/json','Content-Type':'application/json'},
+        body:JSON.stringify({
+          detail:'full',
+          label_limit:256,
+          window_seconds:120,
+          raw_rows_per_label:768,
+        }),
+      }
+    );
+    return parseResponse(response);
+  }
+
+  async function waitForJob(job,button,original){
+    const statusUrl=`api/debug/correct-learning/jobs/${encodeURIComponent(job.job_id)}`;
+    for(let attempt=0;attempt<1200;attempt++){
+      const response=await fetch(statusUrl,{
+        cache:'no-store',
+        headers:{'Accept':'application/json'},
+        adaptiveAiTimeoutMs:5000,
+      });
+      const state=await parseResponse(response);
+      const pct=Math.max(0,Math.min(100,Math.round(Number(state.progress||0)*100)));
+      if(button)button.textContent=`Exporting… ${pct}%`;
+      if(state.state==='done')return state;
+      if(state.state==='failed')throw Error(state.error||'Debug export failed');
+      await sleep(750);
+    }
+    throw Error('Debug export did not finish within 15 minutes');
   }
 
   window.exportCorrectLearningDebug=async(ref,button)=>{
@@ -52,26 +85,17 @@
     if(button){
       button.dataset.debugExportBusy='1';
       button.disabled=true;
-      button.textContent='Exporting…';
+      button.textContent='Exporting… 0%';
     }
     try{
-      const query=new URLSearchParams({
-        detail:'full',
-        label_limit:'256',
-        window_seconds:'120',
-        raw_rows_per_label:'768',
-      });
-      const response=await fetch(
-        `api/agents/${encodeURIComponent(ref)}/debug/correct-learning?${query.toString()}`,
-        {cache:'no-store',headers:{'Accept':'application/json'}}
-      );
-      const payload=await parseResponse(response);
-      const filename=downloadJson(payload,ref);
+      const started=await startJob(ref);
+      const finished=started.state==='done'?started:await waitForJob(started,button,original);
+      const filename=triggerDownload(finished,ref);
       if(button){
         button.textContent='Downloaded ✓';
         setTimeout(()=>{if(button.isConnected)button.textContent=original;},1800);
       }
-      return {filename,payload};
+      return {filename,job:finished};
     }catch(error){
       console.error('Correct learning debug export failed',error);
       alert('Debug export failed: '+(error?.message||String(error)));

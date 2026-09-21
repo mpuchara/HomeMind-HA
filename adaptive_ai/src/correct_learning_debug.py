@@ -9,7 +9,9 @@ from __future__ import annotations
 
 import json
 import math
+import threading
 import time
+import uuid
 from urllib.parse import parse_qs, unquote, urlsplit
 
 from context import archived_state
@@ -23,6 +25,8 @@ MAX_DEBUG_ENTITIES = 96
 MAX_RAW_ROWS_PER_LABEL = 768
 DEFAULT_LABELS = 64
 DEFAULT_WINDOW_SECONDS = 120.0
+EXPORT_JOB_TTL_SECONDS = 600.0
+MAX_CONCURRENT_EXPORT_JOBS = 1
 
 
 def _table_exists(conn, name):
@@ -519,10 +523,134 @@ class CorrectLearningDebugService:
         self.manager = manager
         self.store = core.STORE
         self.engine = core.ENGINE
+        self._job_lock = threading.RLock()
+        self._jobs = {}
+        self._active_job_id = None
+
+    def _cleanup_jobs(self):
+        now = time.time()
+        with self._job_lock:
+            stale = [
+                job_id for job_id, job in self._jobs.items()
+                if job.get("state") in {"done", "failed"}
+                and now - float(job.get("finished_ts") or now) > EXPORT_JOB_TTL_SECONDS
+            ]
+            for job_id in stale:
+                self._jobs.pop(job_id, None)
+
+    def _job_public(self, job):
+        if not job:
+            return None
+        return {
+            key: job.get(key) for key in (
+                "job_id", "state", "ref", "created_ts", "started_ts", "finished_ts",
+                "progress", "message", "error", "filename", "size_bytes",
+            )
+        }
+
+    def job_status(self, job_id):
+        self._cleanup_jobs()
+        with self._job_lock:
+            job = self._jobs.get(str(job_id))
+            return self._job_public(job)
+
+    def job_bytes(self, job_id):
+        self._cleanup_jobs()
+        with self._job_lock:
+            job = self._jobs.get(str(job_id))
+            if not job:
+                return None, None
+            if job.get("state") != "done":
+                return self._job_public(job), None
+            return self._job_public(job), job.get("bytes")
+
+    def start_export(self, ref, *, detail="full", label_limit=MAX_LABELS,
+                     window_seconds=DEFAULT_WINDOW_SECONDS,
+                     raw_rows_per_label=MAX_RAW_ROWS_PER_LABEL):
+        self._cleanup_jobs()
+        ref = str(ref)
+        with self._job_lock:
+            if self._active_job_id:
+                active = self._jobs.get(self._active_job_id)
+                if active and active.get("state") == "running":
+                    if active.get("ref") == ref:
+                        return self._job_public(active)
+                    raise RuntimeError("another debug export is already running")
+                self._active_job_id = None
+
+            job_id = uuid.uuid4().hex
+            safe_ref = "".join(ch if ch.isalnum() or ch in "._-" else "-" for ch in ref)[:80] or "agent"
+            job = {
+                "job_id": job_id,
+                "state": "running",
+                "ref": ref,
+                "created_ts": time.time(),
+                "started_ts": None,
+                "finished_ts": None,
+                "progress": 0.0,
+                "message": "Queued",
+                "error": None,
+                "filename": f"correct-learning-{safe_ref}-{job_id[:8]}.json",
+                "size_bytes": None,
+                "bytes": None,
+            }
+            self._jobs[job_id] = job
+            self._active_job_id = job_id
+
+        def progress(value, message):
+            with self._job_lock:
+                current = self._jobs.get(job_id)
+                if not current or current.get("state") != "running":
+                    return
+                current["progress"] = max(0.0, min(1.0, float(value)))
+                current["message"] = str(message)
+
+        def worker():
+            with self._job_lock:
+                current = self._jobs.get(job_id)
+                if current:
+                    current["started_ts"] = time.time()
+                    current["message"] = "Collecting lineage and Correct labels"
+            try:
+                payload = self.export(
+                    ref,
+                    detail=detail,
+                    label_limit=label_limit,
+                    window_seconds=window_seconds,
+                    raw_rows_per_label=raw_rows_per_label,
+                    progress=progress,
+                )
+                encoded = json.dumps(payload, ensure_ascii=False, indent=2).encode("utf-8")
+                with self._job_lock:
+                    current = self._jobs.get(job_id)
+                    if current:
+                        current.update(
+                            state="done", finished_ts=time.time(), progress=1.0,
+                            message="Ready to download", bytes=encoded,
+                            size_bytes=len(encoded),
+                        )
+            except Exception as exc:
+                with self._job_lock:
+                    current = self._jobs.get(job_id)
+                    if current:
+                        current.update(
+                            state="failed", finished_ts=time.time(), progress=1.0,
+                            message="Export failed",
+                            error=f"{type(exc).__name__}: {exc}",
+                        )
+            finally:
+                with self._job_lock:
+                    if self._active_job_id == job_id:
+                        self._active_job_id = None
+
+        threading.Thread(
+            target=worker, name=f"correct-debug-{job_id[:8]}", daemon=True
+        ).start()
+        return self._job_public(job)
 
     def export(self, ref, *, detail="summary", label_limit=DEFAULT_LABELS,
                window_seconds=DEFAULT_WINDOW_SECONDS,
-               raw_rows_per_label=MAX_RAW_ROWS_PER_LABEL):
+               raw_rows_per_label=MAX_RAW_ROWS_PER_LABEL, progress=None):
         detail = "full" if str(detail).lower() == "full" else "summary"
         label_limit = _bounded_int(label_limit, DEFAULT_LABELS, 1, MAX_LABELS)
         window_seconds = _bounded_float(window_seconds, DEFAULT_WINDOW_SECONDS, 5.0, 600.0)
@@ -551,6 +679,8 @@ class CorrectLearningDebugService:
         manual_context = _manual_context_snapshot(self.store, agent_ids)
         area, debug_entities = _debug_entities(self.engine, root_agent, lineage)
         generation_map = _generation_by_agent(rows)
+        if callable(progress):
+            progress(0.08, "Lineage and Correct labels loaded")
 
         warnings = []
         active_labels = [x for x in labels if x.get("undone_ts") is None]
@@ -605,6 +735,9 @@ class CorrectLearningDebugService:
         if detail == "full":
             diagnostics = []
             home_mismatch = False
+            active_for_detail = [label for label in labels if label.get("undone_ts") is None]
+            total_detail = max(1, len(active_for_detail))
+            completed_detail = 0
             for label in labels:
                 if label.get("undone_ts") is not None:
                     continue
@@ -633,6 +766,15 @@ class CorrectLearningDebugService:
                             window_seconds, raw_rows_per_label,
                         )
                 diagnostics.append(row)
+                completed_detail += 1
+                if callable(progress):
+                    progress(
+                        0.08 + 0.90 * (completed_detail / total_detail),
+                        f"Reconstructed Correct point {completed_detail}/{len(active_for_detail)}",
+                    )
+                # Yield the GIL between historical points so realtime inference and Ingress
+                # can make progress on small Raspberry Pi systems.
+                time.sleep(0.01)
             result["label_diagnostics"] = diagnostics
             if home_mismatch:
                 result["warnings"].append({
@@ -643,6 +785,8 @@ class CorrectLearningDebugService:
                         "changing learning weights."
                     ),
                 })
+        if callable(progress):
+            progress(0.99, "Serializing report")
         return result
 
 
@@ -667,6 +811,50 @@ def register_correct_learning_debug_route(registry, core, manager):
                 "error": f"Correct debug export failed: {type(exc).__name__}: {exc}"
             })
 
+    def start_job(http, params):
+        try:
+            body = http.read_json()
+            body = body if isinstance(body, dict) else {}
+            job = service.start_export(
+                unquote(params["agent_id"]),
+                detail=body.get("detail", "full"),
+                label_limit=body.get("label_limit", MAX_LABELS),
+                window_seconds=body.get("window_seconds", DEFAULT_WINDOW_SECONDS),
+                raw_rows_per_label=body.get("raw_rows_per_label", MAX_RAW_ROWS_PER_LABEL),
+            )
+            return http.send_json(202, job)
+        except ValueError as exc:
+            return http.send_json(404, {"error": str(exc)})
+        except RuntimeError as exc:
+            return http.send_json(409, {"error": str(exc)})
+        except Exception as exc:
+            return http.send_json(500, {
+                "error": f"Could not start Correct debug export: {type(exc).__name__}: {exc}"
+            })
+
+    def job_status(http, params):
+        job = service.job_status(params["job_id"])
+        if not job:
+            return http.send_json(404, {"error": "debug export job not found or expired"})
+        return http.send_json(200, job)
+
+    def job_download(http, params):
+        job, data = service.job_bytes(params["job_id"])
+        if not job:
+            return http.send_json(404, {"error": "debug export job not found or expired"})
+        if job.get("state") == "failed":
+            return http.send_json(500, {"error": job.get("error") or "debug export failed", "job": job})
+        if job.get("state") != "done" or data is None:
+            return http.send_json(409, {"error": "debug export is not ready", "job": job})
+        filename = str(job.get("filename") or "correct-learning-debug.json").replace('"', "")
+        http.send_response(200)
+        http.send_header("Content-Type", "application/json; charset=utf-8")
+        http.send_header("Content-Length", str(len(data)))
+        http.send_header("Content-Disposition", f'attachment; filename="{filename}"')
+        http.send_header("Cache-Control", "no-store")
+        http.end_headers()
+        http.wfile.write(data)
+
     registry.register(
         "GET",
         "debug.correct_learning",
@@ -676,8 +864,35 @@ def register_correct_learning_debug_route(registry, core, manager):
         require_runtime=True,
         priority=250,
     )
+    registry.register(
+        "POST",
+        "debug.correct_learning.start",
+        r"^/api/agents/(?P<agent_id>[^/]+)/debug/correct-learning/export$",
+        start_job,
+        require_trusted=True,
+        require_runtime=True,
+        priority=260,
+    )
+    registry.register(
+        "GET",
+        "debug.correct_learning.job_status",
+        r"^/api/debug/correct-learning/jobs/(?P<job_id>[a-f0-9]+)$",
+        job_status,
+        require_trusted=True,
+        require_runtime=False,
+        priority=260,
+    )
+    registry.register(
+        "GET",
+        "debug.correct_learning.job_download",
+        r"^/api/debug/correct-learning/jobs/(?P<job_id>[a-f0-9]+)/download$",
+        job_download,
+        require_trusted=True,
+        require_runtime=False,
+        priority=260,
+    )
     manager.correct_learning_debug = service
     manager.correct_learning_debug_contract = (
-        "read_only_bounded_lineage_labels_features_room_context_and_raw_windows"
+        "read_only_bounded_async_single_flight_lineage_labels_features_room_context_and_raw_windows"
     )
     return service
