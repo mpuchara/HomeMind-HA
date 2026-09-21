@@ -774,7 +774,7 @@ class CorrectLearningDebugService:
                     )
                 # Yield the GIL between historical points so realtime inference and Ingress
                 # can make progress on small Raspberry Pi systems.
-                time.sleep(0)
+                time.sleep(0.01)
             result["label_diagnostics"] = diagnostics
             if home_mismatch:
                 result["warnings"].append({
@@ -811,6 +811,50 @@ def register_correct_learning_debug_route(registry, core, manager):
                 "error": f"Correct debug export failed: {type(exc).__name__}: {exc}"
             })
 
+    def start_job(http, params):
+        try:
+            body = http.read_json()
+            body = body if isinstance(body, dict) else {}
+            job = service.start_export(
+                unquote(params["agent_id"]),
+                detail=body.get("detail", "full"),
+                label_limit=body.get("label_limit", MAX_LABELS),
+                window_seconds=body.get("window_seconds", DEFAULT_WINDOW_SECONDS),
+                raw_rows_per_label=body.get("raw_rows_per_label", MAX_RAW_ROWS_PER_LABEL),
+            )
+            return http.send_json(202, job)
+        except ValueError as exc:
+            return http.send_json(404, {"error": str(exc)})
+        except RuntimeError as exc:
+            return http.send_json(409, {"error": str(exc)})
+        except Exception as exc:
+            return http.send_json(500, {
+                "error": f"Could not start Correct debug export: {type(exc).__name__}: {exc}"
+            })
+
+    def job_status(http, params):
+        job = service.job_status(params["job_id"])
+        if not job:
+            return http.send_json(404, {"error": "debug export job not found or expired"})
+        return http.send_json(200, job)
+
+    def job_download(http, params):
+        job, data = service.job_bytes(params["job_id"])
+        if not job:
+            return http.send_json(404, {"error": "debug export job not found or expired"})
+        if job.get("state") == "failed":
+            return http.send_json(500, {"error": job.get("error") or "debug export failed", "job": job})
+        if job.get("state") != "done" or data is None:
+            return http.send_json(409, {"error": "debug export is not ready", "job": job})
+        filename = str(job.get("filename") or "correct-learning-debug.json").replace('"', "")
+        http.send_response(200)
+        http.send_header("Content-Type", "application/json; charset=utf-8")
+        http.send_header("Content-Length", str(len(data)))
+        http.send_header("Content-Disposition", f'attachment; filename="{filename}"')
+        http.send_header("Cache-Control", "no-store")
+        http.end_headers()
+        http.wfile.write(data)
+
     registry.register(
         "GET",
         "debug.correct_learning",
@@ -820,8 +864,35 @@ def register_correct_learning_debug_route(registry, core, manager):
         require_runtime=True,
         priority=250,
     )
+    registry.register(
+        "POST",
+        "debug.correct_learning.start",
+        r"^/api/agents/(?P<agent_id>[^/]+)/debug/correct-learning/export$",
+        start_job,
+        require_trusted=True,
+        require_runtime=True,
+        priority=260,
+    )
+    registry.register(
+        "GET",
+        "debug.correct_learning.job_status",
+        r"^/api/debug/correct-learning/jobs/(?P<job_id>[a-f0-9]+)$",
+        job_status,
+        require_trusted=True,
+        require_runtime=False,
+        priority=260,
+    )
+    registry.register(
+        "GET",
+        "debug.correct_learning.job_download",
+        r"^/api/debug/correct-learning/jobs/(?P<job_id>[a-f0-9]+)/download$",
+        job_download,
+        require_trusted=True,
+        require_runtime=False,
+        priority=260,
+    )
     manager.correct_learning_debug = service
     manager.correct_learning_debug_contract = (
-        "read_only_bounded_lineage_labels_features_room_context_and_raw_windows"
+        "read_only_bounded_async_single_flight_lineage_labels_features_room_context_and_raw_windows"
     )
     return service
