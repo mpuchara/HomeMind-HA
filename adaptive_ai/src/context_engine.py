@@ -205,7 +205,10 @@ class ContextEngine:
                 area=area,
                 ts=ts,
                 arrival_prior=arrival_prior,
-                trajectory_confidence=float(result.get('trajectory_confidence') or 0.0),
+                trajectory_confidence=float(
+                    result.get('arrival_evidence_confidence',
+                               result.get('trajectory_confidence', 0.0)) or 0.0
+                ),
                 raw_sources=sources,
                 room_calibration=(home.calibration_metrics() if hasattr(home, 'calibration_metrics') else None),
                 capability=capability,
