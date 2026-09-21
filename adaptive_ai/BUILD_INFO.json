@@ -1,9 +1,9 @@
 {
-  "version": "0.14.55",
+  "version": "0.14.56",
   "release_date": "2026-09-21",
-  "base_version": "0.14.54",
-  "base_commit": "d7e19f28880c3fdff8902619f18d41d7e4403b88",
-  "release_status": "release-0.14.55-train-rebuild-semantics",
+  "base_version": "0.14.55",
+  "base_commit": "ec6df8e23abf59a69c89dbb385d685a6f6dc2a18",
+  "release_status": "release-0.14.56-shadow-action-refresh",
   "tests_passed": 1026,
   "profile": "rpi4-low-memory-complete-discovery-manual-agent-selection",
   "manual_agent_training": true,

@@ -1,3 +1,10 @@
+# 0.14.56 — 2026-09-21
+
+- Fix the Live agent workflow action cache so a mode-only transition from Paused to Shadow immediately changes **Start Shadow** to **Pause Shadow**.
+- Include `mode` in the action-render signature; previously the card header could already show SHADOW while the cached action row still reflected PAUSED.
+- Add a regression reproducing the real path where training state remains PAUSED and only the agent mode changes.
+- No training, policy, Candidate, reward, benchmark or physical-control semantics changed.
+
 # 0.14.55 — 2026-09-21
 
 - Fix Train/Rebuild semantics: **Train** now continues an already trained agent from its saved historical cursor and learns newly available data; it no longer resets a completed model just because progress is already 100%.
