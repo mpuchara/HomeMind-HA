@@ -199,16 +199,24 @@ class CandidateLineageTests(unittest.TestCase):
         finally:
             manager2.stop()
 
-    def test_discard_g2_does_not_destroy_g1(self):
+    def test_discard_g2_retires_entire_unpromoted_cycle_and_next_candidate_is_g1(self):
         g1_status, g1 = self._g1()
         g1_id = g1_status["candidate_id"]
-        g1_model = self.store.get_model(g1_id)
         g2 = self.manager.spawn_child(g1["generation_id"])
+
         result = self.manager.discard(g1_id)
         self.assertTrue(result["discarded"])
-        self.assertEqual(self.store.get_model(g1_id), g1_model)
-        self.assertIsNotNone(self.store.get_agent_config(g1_id))
+        self.assertEqual(result["discard_scope"], "candidate_cycle")
+        self.assertIsNone(self.store.get_agent_config(g1_id))
+        self.assertEqual(self.manager.lineage_status(g1["generation_id"])["state"], "discarded")
         self.assertEqual(self.manager.lineage_status(g2["generation_id"])["state"], "discarded")
+        self.assertEqual(self.manager.list_status(), [])
+
+        fresh_status = self.manager.enqueue(self.root["id"], "teach")
+        fresh = self.manager.lineage_status(fresh_status["generation_id"])
+        self.assertEqual(fresh["generation_number"], 1)
+        self.assertEqual(fresh["parent_generation_id"], f"root:{self.root['id']}")
+        self.assertEqual(fresh["parent_type"], "live")
 
     def test_config_fingerprints_are_generation_aware(self):
         g1_status, g1 = self._g1()

@@ -164,6 +164,34 @@ def _ensure_root(store, root_agent_id, generation_number=None):
     return _row(store, generation_id=_root_generation_id(root_agent_id))
 
 
+def _refresh_live_generation_snapshot(store, generation):
+    """Bind a new Candidate to the model/config that is Live *now*.
+
+    A full Rebuild intentionally replaces the policy in place, while online learning can
+    also update the persisted model between Candidate cycles. The durable Live generation
+    row is therefore refreshed exactly when it becomes a new Candidate parent.
+    """
+    if not generation or generation.get("generation_type") != "live" or not generation.get("agent_id"):
+        return generation
+    agent = store.get_agent_config(str(generation["agent_id"]))
+    if not agent:
+        return generation
+    meta = model_metadata(store.get_model(str(generation["agent_id"])))
+    now = time.time()
+    with store.lock, store.conn() as c:
+        c.execute(
+            """UPDATE agent_candidate_generations
+               SET model_identity=?,config_fingerprint=?,schema_revision=?,model_revision=?,updated_ts=?
+               WHERE generation_id=?""",
+            (
+                meta.get("model_identity"), config_fingerprint(agent),
+                meta.get("schema_revision"), meta.get("model_revision"), now,
+                str(generation["generation_id"]),
+            ),
+        )
+    return _row(store, generation_id=generation["generation_id"])
+
+
 def _register_generation(store, root_id, parent_generation, candidate_id, number, reason, state="queued"):
     agent = store.get_agent_config(str(candidate_id))
     if not agent:
@@ -382,6 +410,7 @@ def install(manager):
             parent_gen = _ensure_root(manager.store, parent["id"], manager._generation(parent["id"]))
         if parent_gen is None:
             raise RuntimeError("Cannot resolve Candidate parent generation")
+        parent_gen = _refresh_live_generation_snapshot(manager.store, parent_gen)
         root = parent_gen["root_agent_id"]
         existing = _row(manager.store, agent_id=row["candidate_id"])
         if existing is None:
@@ -559,8 +588,95 @@ def install(manager):
             ).fetchall()]
         return [lineage_status(r["generation_id"]) or r for r in rows]
 
+    def _active_cycle_generations(root_id):
+        with manager.store.conn() as c:
+            return [dict(r) for r in c.execute(
+                """SELECT * FROM agent_candidate_generations
+                   WHERE root_agent_id=? AND generation_type='candidate'
+                     AND lifecycle_state NOT IN ('discarded','pruned','promoted')
+                   ORDER BY generation_number DESC,created_ts DESC""",
+                (str(root_id),),
+            ).fetchall()]
+
+    def _discard_cycle(root_id, *, source="user_discard"):
+        """Retire the whole unpromoted Candidate branch for this Live root.
+
+        The UI exposes one Candidate card and one Discard action. Returning to an older
+        hidden Candidate after that action is therefore incorrect product behaviour.
+        Durable lineage rows remain for audit, but every unpromoted surrogate/model is
+        retired so the next correction starts a fresh Candidate cycle from Live.
+        """
+        generations = _active_cycle_generations(root_id)
+        if not generations:
+            return 0
+        surrogate_ids = [str(g["agent_id"]) for g in generations if g.get("agent_id")]
+
+        # Delete deepest edges first so no child can outlive its direct parent surrogate.
+        for generation in generations:
+            agent_id = generation.get("agent_id")
+            if not agent_id:
+                continue
+            with manager.store.conn() as c:
+                edge = c.execute(
+                    "SELECT * FROM agent_candidates WHERE candidate_id=?",
+                    (str(agent_id),),
+                ).fetchone()
+            if edge is not None:
+                original_delete(dict(edge))
+            else:
+                queue = manager._queue()
+                if queue is not None:
+                    queue.cancel(str(agent_id))
+                manager.engine.models.pop(str(agent_id), None)
+                manager.engine.runtime.pop(str(agent_id), None)
+                try:
+                    manager.store.delete_agent(str(agent_id))
+                except Exception:
+                    pass
+
+        now = time.time()
+        with manager.store.lock, manager.store.conn() as c:
+            c.execute(
+                """UPDATE agent_candidate_generations
+                   SET lifecycle_state='discarded',model_retained=0,agent_id=NULL,
+                       resume_state=NULL,retired_ts=COALESCE(retired_ts,?),updated_ts=?
+                   WHERE root_agent_id=? AND generation_type='candidate'
+                     AND lifecycle_state NOT IN ('discarded','pruned','promoted')""",
+                (now, now, str(root_id)),
+            )
+            if surrogate_ids:
+                placeholders = ",".join("?" for _ in surrogate_ids)
+                c.execute(
+                    f"DELETE FROM agent_candidates WHERE candidate_id IN ({placeholders})",
+                    surrogate_ids,
+                )
+                c.execute(
+                    f"DELETE FROM agent_candidates WHERE parent_agent_id IN ({placeholders})",
+                    surrogate_ids,
+                )
+                c.execute(
+                    f"DELETE FROM agent_generation_state WHERE agent_id IN ({placeholders})",
+                    surrogate_ids,
+                )
+        try:
+            candidate_module.refresh_candidate_ids_cache(manager.store)
+        except Exception:
+            pass
+        manager.runtime.pop(str(root_id), None)
+        manager.store.event(
+            str(root_id), "info", "agent_candidate_cycle_discarded",
+            "Candidate cycle discarded; next Candidate will branch from the current Live model",
+            {"retired_generations": len(generations), "source": str(source)},
+        )
+        return len(generations)
+
     def delete_candidate(row):
         generation = _row(manager.store, agent_id=row.get("candidate_id"))
+        cascade_cycle = int(row.get("discard_requested") or 0) >= 2
+        if generation and cascade_cycle:
+            _discard_cycle(generation["root_agent_id"], source="user_discard")
+            return None
+
         parent_gen = _row(manager.store, generation_id=generation.get("parent_generation_id")) if generation else None
         result = original_delete(row)
         if generation:
@@ -586,7 +702,75 @@ def install(manager):
         return result
 
     def discard(parent_id):
-        return original_discard(parent_id)
+        row = manager._candidate_row(parent_id)
+        if not row:
+            return original_discard(parent_id)
+        generation = _row(manager.store, agent_id=row.get("candidate_id"))
+        if generation:
+            # 2 means user-visible cycle discard. 1 remains the legacy/deferred single-edge
+            # marker used by internal lifecycle cleanup.
+            with manager.store.lock, manager.store.conn() as c:
+                c.execute(
+                    "UPDATE agent_candidates SET discard_requested=2,updated_ts=? WHERE parent_agent_id=?",
+                    (time.time(), str(parent_id)),
+                )
+        result = original_discard(parent_id)
+        if generation and isinstance(result, dict) and result.get("state") == "discarding":
+            # Base discard writes 1 for an active training job; restore the stronger
+            # durable intent so deferred cleanup still retires the whole cycle.
+            with manager.store.lock, manager.store.conn() as c:
+                c.execute(
+                    "UPDATE agent_candidates SET discard_requested=2,updated_ts=? WHERE parent_agent_id=?",
+                    (time.time(), str(parent_id)),
+                )
+        if isinstance(result, dict) and generation:
+            result = dict(result)
+            result["discard_scope"] = "candidate_cycle"
+            result["root_agent_id"] = generation["root_agent_id"]
+        return result
+
+    def _repair_legacy_discard_rollbacks():
+        marker = "candidate_discard_cycle_migration_v1"
+        getter = getattr(manager.store, "meta_get", None)
+        setter = getattr(manager.store, "meta_set", None)
+        if callable(getter) and getter(marker) == "1":
+            return
+        repaired = []
+        with manager.store.conn() as c:
+            roots = [str(r[0]) for r in c.execute(
+                """SELECT DISTINCT root_agent_id FROM agent_candidate_generations
+                   WHERE generation_type='candidate'
+                     AND lifecycle_state NOT IN ('discarded','pruned','promoted')"""
+            ).fetchall()]
+        for root_id in roots:
+            with manager.store.conn() as c:
+                live = c.execute(
+                    """SELECT generation_number FROM agent_candidate_generations
+                       WHERE root_agent_id=? AND generation_type='live' AND agent_id=?
+                         AND lifecycle_state='live'
+                       ORDER BY updated_ts DESC,generation_number DESC LIMIT 1""",
+                    (root_id, root_id),
+                ).fetchone()
+                live_number = int(live[0]) if live else 0
+                old_discard = c.execute(
+                    """SELECT 1 FROM agent_candidate_generations
+                       WHERE root_agent_id=? AND generation_type='candidate'
+                         AND lifecycle_state='discarded' AND generation_number>?
+                       LIMIT 1""",
+                    (root_id, live_number),
+                ).fetchone()
+            if old_discard and _active_tip(manager.store, root_id):
+                count = _discard_cycle(root_id, source="legacy_discard_repair")
+                if count:
+                    repaired.append((root_id, count))
+        if callable(setter):
+            setter(marker, "1")
+        for root_id, count in repaired:
+            manager.store.event(
+                root_id, "warning", "legacy_candidate_discard_repaired",
+                "Retired Candidate ancestors that an older Discard implementation could reactivate",
+                {"retired_generations": count},
+            )
 
     def before_live_process(agent, state_map):
         original_before(agent, state_map)
@@ -702,6 +886,10 @@ def install(manager):
     manager._candidate_lineage_installed = True
     manager.candidate_lineage_contract = "single_branch_direct_parent_generation_chain"
     manager.candidate_model_retention = max(2, int(OPTIONS.get("agent_candidate_model_retention", 3)))
+
+    # 0.14.57 migration: older Discard could expose an ancestor Candidate again. Repair
+    # those rollback-shaped branches once, preserving their metadata as discarded audit.
+    _repair_legacy_discard_rollbacks()
 
     # Refresh migrated metadata after all wrappers are active.
     for generation in list_lineage_roots(manager.store):
