@@ -371,7 +371,8 @@ class CorrectSchemaEvolutionTests(unittest.TestCase):
             "_schema_evolution_parent_raw_stats": replayed,
         }
         selected = _effective_parent_stats(legacy, report)
-        self.assertIs(selected, replayed)
+        self.assertEqual(selected, replayed)
+        self.assertIsNot(selected, legacy)
         self.assertEqual(
             selected["feature_source"],
             "raw_entity_history_schema_replay",
