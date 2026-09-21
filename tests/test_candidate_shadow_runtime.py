@@ -231,6 +231,35 @@ class CandidateShadowRuntimeTests(unittest.TestCase):
         finally:
             shadow_runtime_module._shadow_generations = original
 
+    def test_direct_correct_build_invalidates_prebuild_empty_generation_cache(self):
+        status = self.manager.enqueue(self.root["id"], "teach")
+        generation_id = status["generation_id"]
+
+        # Reproduce the production race: the 1 s Candidate-live poll sees the generation
+        # while it is queued, so _cached_generations intentionally stores an empty list.
+        self.assertEqual(self.manager.candidate_live_runtime_snapshots(), [])
+
+        row = self.manager._candidate_row(self.root["id"])
+        self.assertTrue(self.manager._start_build(row))
+        state = self.manager.lineage_status(generation_id)["state"]
+        self.assertIn(state, ("comparing", "offline_blocked", "insufficient_evidence"))
+
+        # A relevant HA event after the synchronous Correct build must immediately reach
+        # Candidate Shadow without restart or another lineage mutation.
+        new_state = {
+            "entity_id": "binary_sensor.presence", "state": "off", "attributes": {},
+            "last_updated": "2026-09-21T13:00:00+00:00",
+        }
+        self.engine.on_state_changed({
+            "entity_id": "binary_sensor.presence", "new_state": new_state
+        })
+        observed = self.manager.drain_candidate_shadow_events(force=True, max_roots=8)
+        self.assertEqual(observed, 1)
+        hot = self.manager.candidate_latest_runtime(generation_id)
+        self.assertIsNotNone(hot)
+        self.assertEqual(hot["generation_id"], generation_id)
+        self.executor.service.assert_not_called()
+
     def test_candidate_shadow_inference_runs_after_training_and_exposes_card_values(self):
         status, generation = self._g1(prediction=1.0, confidence=.93)
         bundle = self._run_shadow()
