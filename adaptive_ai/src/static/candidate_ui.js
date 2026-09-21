@@ -79,12 +79,19 @@
     const timing=m.on_lead_gain_seconds!=null?`ON timing ${signedSec(m.on_lead_gain_seconds)}`:m.off_lead_gain_seconds!=null?`OFF timing ${signedSec(m.off_lead_gain_seconds)}`:null;
     const targetMode=c.promotion_target_mode==='control'?'control':'shadow';
     const gateReason=(gate.reasons||[]).join(' · ')||'—';
+    const schemaSelected=(c.schema_evolution_selected||[]).map(x=>x.entity_id||x).filter(Boolean);
+    const schemaLine=c.missing_context
+      ? `<p class="candidate-error"><b>Missing context</b> — ${esc(c.schema_evolution_reason||gateReason)}</p>`
+      : schemaSelected.length
+        ? `<p class="candidate-small"><b>Correct schema enriched:</b> ${schemaSelected.map(esc).join(' · ')}</p>`
+        : '';
     const customEligible=c.training_state==='qualified'&&!['queued','building','exploring','failed','discarding'].includes(c.state);
     return `<article class="agent candidate-agent" data-candidate-parent="${esc(c.parent_agent_id)}" data-generation-id="${esc(c.generation_id||'')}" data-candidate-ref="${esc(candidateRef(c))}">
       <div class="candidate-top"><div><span class="candidate-badge">CANDIDATE</span><h3>${esc(candidateTitle(c))} · Gen ${esc(generation)}</h3></div><span class="candidate-state">${esc(stateLabel(c))}${queueText}</span></div>
       <p class="candidate-sub">Direct-parent snapshot → generation training → persistent Shadow → paired future A/B. Candidate is isolated from Executor.</p>
       ${progress==null?'':`<div class="candidate-progress"><span style="width:${progress}%"></span></div><p class="candidate-small">Training ${progress}% · build rev ${c.build_revision} / feedback rev ${c.feedback_revision}</p>`}
       ${c.last_error?`<p class="candidate-error">${esc(c.last_error)}</p>`:''}
+      ${schemaLine}
       ${exploreLine(c)}
       <div class="candidate-compare candidate-compare-minimal">
         <div><span>Comparison</span><b>${esc(parentGain(m.accuracy_gain))}</b></div>
