@@ -240,9 +240,19 @@ class CandidateShadowRuntimeTests(unittest.TestCase):
         self.assertEqual(self.manager.candidate_live_runtime_snapshots(), [])
 
         row = self.manager._candidate_row(self.root["id"])
-        self.assertTrue(self.manager._start_build(row))
+
+        # Exercise the Shadow runtime's _start_build lifecycle wrapper with a deterministic
+        # synchronous completion. Conservative Correct's own contract (covered separately)
+        # is that this exact hook can finish the generation without _finish_build_if_ready.
+        def direct_finish(build_row):
+            self._mark_trained(
+                build_row["parent_agent_id"], build_row["candidate_id"], generation_id
+            )
+            return True
+
+        self.assertTrue(self.manager._start_build(row, __original=direct_finish))
         state = self.manager.lineage_status(generation_id)["state"]
-        self.assertIn(state, ("comparing", "offline_blocked", "insufficient_evidence"))
+        self.assertEqual(state, "comparing")
 
         # A relevant HA event after the synchronous Correct build must immediately reach
         # Candidate Shadow without restart or another lineage mutation.
