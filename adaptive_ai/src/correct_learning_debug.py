@@ -10,7 +10,7 @@ from __future__ import annotations
 import json
 import math
 import time
-from urllib.parse import parse_qs, urlsplit
+from urllib.parse import parse_qs, unquote, urlsplit
 
 from context import archived_state
 from manual_context_learning import manual_scores
@@ -653,7 +653,7 @@ def register_correct_learning_debug_route(registry, core, manager):
         query = parse_qs(urlsplit(http.path).query)
         try:
             payload = service.export(
-                params["agent_id"],
+                unquote(params["agent_id"]),
                 detail=(query.get("detail") or ["summary"])[0],
                 label_limit=(query.get("label_limit") or [DEFAULT_LABELS])[0],
                 window_seconds=(query.get("window_seconds") or [DEFAULT_WINDOW_SECONDS])[0],
