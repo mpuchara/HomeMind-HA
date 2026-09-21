@@ -1,5 +1,6 @@
 """0.14.63 Stage-1 Correct data foundation regression tests."""
 
+import json
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
@@ -58,6 +59,24 @@ class _Policy:
 
 
 class CorrectDataFoundationTests(unittest.TestCase):
+    def test_real_problem_fixture_has_46_nonconflicting_points_and_overlapping_primary_signal(self):
+        fixture = json.loads(
+            (ROOT / "tests" / "fixtures" / "correct_46_nonconflicting.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        labels = fixture["labels"]
+        self.assertEqual(len(labels), 46)
+        self.assertEqual(sum(1 for row in labels if row["desired"] == 0), 29)
+        self.assertEqual(sum(1 for row in labels if row["desired"] == 1), 17)
+        event_ids = {row["supervision_event_id"] for row in labels}
+        self.assertEqual(len(event_ids), 46)
+        by_value = {}
+        for row in labels:
+            value = row["schema"]["sensor.fixture_stationary_energy"]
+            by_value.setdefault(value, set()).add(row["desired"])
+        self.assertTrue(any(values == {0, 1} for values in by_value.values()))
+
     def test_supervision_identity_is_stable_across_lineage_rows(self):
         event = supervision_event_id("target-fingerprint", 1234.56789123, 1.0)
         copied = supervision_event_id("target-fingerprint", 1234.56789124, 1.0)
