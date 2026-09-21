@@ -59,39 +59,102 @@ class HAEventStream(threading.Thread):
                     self.engine.ws_connected = True
                     self.engine.ws_error = None
                     HA.last_ok = now_ts(); HA.last_error = None
-                    # Registry metadata lets discovery exclude configuration/diagnostic entities.
-                    ws.send(json.dumps({"id": 1, "type": "config/entity_registry/list"}))
-                    ws.send(json.dumps({"id": 2, "type": "subscribe_events", "event_type": "state_changed"}))
-                    ws.send(json.dumps({"id": 3, "type": "config/device_registry/list"}))
-                    ws.send(json.dumps({"id": 4, "type": "config/area_registry/list"}))
-                    for ident, event_type in ((5, 'entity_registry_updated'), (6, 'device_registry_updated'), (7, 'area_registry_updated')):
-                        ws.send(json.dumps({'id': ident, 'type': 'subscribe_events', 'event_type': event_type}))
+
+                    # Registry list payloads can be large. Home Assistant may emit a burst
+                    # of *_registry_updated events while an integration reloads. Older
+                    # builds requested the full list once per event, which could flood HA,
+                    # delay websocket state_changed delivery and repeatedly cold-start the
+                    # local policy cache. Keep at most one request per registry in flight
+                    # and coalesce every burst into one bounded follow-up refresh.
+                    registry_callbacks = {
+                        "entity": self.engine.update_entity_registry,
+                        "device": self.engine.update_device_registry,
+                        "area": self.engine.update_area_registry,
+                    }
+                    registry_event_names = {5: "entity", 6: "device", 7: "area"}
+                    registry_requests = {}
+                    registry_inflight = {}
+                    registry_dirty = set()
+                    registry_last_request = {}
+                    registry_min_interval = 2.0
                     next_id = 10
-                    registry_requests = {1: self.engine.update_entity_registry, 3: self.engine.update_device_registry, 4: self.engine.update_area_registry}
+
+                    def send_registry(name, *, force=False):
+                        nonlocal next_id
+                        now_mono = time.monotonic()
+                        if name in registry_inflight:
+                            registry_dirty.add(name)
+                            with self.engine.lock:
+                                self.engine.registry_refresh_stats["coalesced"] += 1
+                            return False
+                        last = float(registry_last_request.get(name) or 0.0)
+                        if not force and now_mono - last < registry_min_interval:
+                            registry_dirty.add(name)
+                            with self.engine.lock:
+                                self.engine.registry_refresh_stats["coalesced"] += 1
+                            return False
+                        ident = next_id
+                        next_id += 1
+                        ws.send(json.dumps({"id": ident, "type": f"config/{name}_registry/list"}))
+                        registry_requests[ident] = (name, registry_callbacks[name])
+                        registry_inflight[name] = ident
+                        registry_last_request[name] = now_mono
+                        registry_dirty.discard(name)
+                        with self.engine.lock:
+                            self.engine.registry_refresh_stats["requests"] += 1
+                        return True
+
+                    def flush_registry_due():
+                        now_mono = time.monotonic()
+                        for name in tuple(registry_dirty):
+                            if name in registry_inflight:
+                                continue
+                            if now_mono - float(registry_last_request.get(name) or 0.0) >= registry_min_interval:
+                                send_registry(name)
+
+                    # Initial metadata snapshot plus realtime event subscriptions.
+                    for name in ("entity", "device", "area"):
+                        send_registry(name, force=True)
+                    ws.send(json.dumps({"id": 2, "type": "subscribe_events", "event_type": "state_changed"}))
+                    for ident, event_type in (
+                        (5, "entity_registry_updated"),
+                        (6, "device_registry_updated"),
+                        (7, "area_registry_updated"),
+                    ):
+                        ws.send(json.dumps({"id": ident, "type": "subscribe_events", "event_type": event_type}))
+
                     backoff = 2.0
                     while not self.stop_event.is_set():
                         try:
                             raw = ws.recv(timeout=5)
                         except TimeoutError:
+                            flush_registry_due()
                             continue
                         msg = json.loads(raw)
-                        if msg.get('type') == 'result' and msg.get('id') in registry_requests:
-                            callback = registry_requests.pop(msg['id'])
-                            if msg.get('success'):
-                                callback(msg.get('result') or [])
+                        if msg.get("type") == "result" and msg.get("id") in registry_requests:
+                            name, callback = registry_requests.pop(msg["id"])
+                            registry_inflight.pop(name, None)
+                            if msg.get("success"):
+                                payload = msg.get("result") or []
+                                # Registry topology processing is not part of the
+                                # state_changed hot path. Serialize it on its own worker
+                                # so a large list cannot block websocket receive.
+                                self.engine.registry_worker.submit(callback, payload)
+                            flush_registry_due()
                             continue
-                        if msg.get('type') == 'event' and msg.get('id') in (5,6,7):
-                            names = {5: ('entity', self.engine.update_entity_registry), 6: ('device', self.engine.update_device_registry), 7: ('area', self.engine.update_area_registry)}
-                            name, callback = names[msg['id']]
-                            ws.send(json.dumps({'id': next_id, 'type': f'config/{name}_registry/list'}))
-                            registry_requests[next_id] = callback
-                            next_id += 1
+                        if msg.get("type") == "event" and msg.get("id") in registry_event_names:
+                            name = registry_event_names[msg["id"]]
+                            registry_dirty.add(name)
+                            send_registry(name)
+                            flush_registry_due()
                             continue
                         if msg.get("type") != "event" or msg.get("id") != 2:
+                            flush_registry_due()
                             continue
                         event = msg.get("event") or {}
                         data = event.get("data") or {}
                         self.engine.on_state_changed(data)
+                        flush_registry_due()
             except Exception as exc:
                 self.engine.ws_connected = False
                 self.engine.ws_error = f"{type(exc).__name__}: {exc}"
