@@ -51,6 +51,11 @@ def install(core, manager):
         core.OPTIONS["agent_training_chunk_hours"] = 6
     if int(core.OPTIONS.get("history_background_pause_ms", 500) or 0) == 500:
         core.OPTIONS["history_background_pause_ms"] = 1500
+    # 0.14.57 and older shipped a 5 minute full /states safety snapshot. With the
+    # websocket authoritative in healthy operation this needlessly aligned large HA JSON
+    # decoding with other periodic work. Migrate only that exact shipped default.
+    if int(core.OPTIONS.get("realtime_resync_seconds", 300) or 300) == 300:
+        core.OPTIONS["realtime_resync_seconds"] = 900
     current_duty = float(core.OPTIONS.get("training_cpu_duty_cycle", 0.55) or 0.55)
     if current_duty in (0.20, 0.25):
         core.OPTIONS["training_cpu_duty_cycle"] = DEFAULT_TRAINING_DUTY_CYCLE
