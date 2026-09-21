@@ -37,6 +37,7 @@ import agent_candidate_balanced_correct as balanced
 import correct_data_foundation as foundation
 import correct_margin_repair as margin
 from context import ExplicitFeatureSchema, archived_state, context_scalar, is_fast_reactive_agent
+from policy import MultiHorizonPolicy
 from replay import SQLiteTemporalTracker
 from settings import OPTIONS, iso_now
 
@@ -893,6 +894,31 @@ def _schema_fine_tune(core, manager, candidate):
 
     final = dict(_BASE_MARGIN_FINE_TUNE(manager, candidate) or {})
     final_unresolved = list(final.get("hard_unresolved_supervision_ids") or [])
+
+    # Regression must compare parent and challenger under the same reconstructed feature
+    # contract once schema indexes differ. Rebuild the stable parent policy from the exact
+    # pre-evolution model and score it on the same target rows/timestamps via raw history.
+    service = getattr(manager.engine, "rl_teaching", None)
+    labels = conservative._teach_rows(service, candidate) if service is not None else []
+    teach_times = [float(label["sample_ts"]) for label in labels]
+    heldout_rows = conservative._history_rows(
+        manager.store, candidate["id"], teach_times
+    )
+    with core.ENGINE.lock:
+        state_map = dict(core.ENGINE.state_map)
+        registry = dict(core.ENGINE.entity_registry)
+    parent_policy = MultiHorizonPolicy(
+        candidate,
+        state_map,
+        registry,
+        set(),
+        model=initial_model,
+        context_engine=core.ENGINE.context,
+    )
+    parent_raw_stats = _score_schema_replay(
+        core, parent_policy, candidate, heldout_rows
+    )
+
     final.update({
         "schema_changed": True,
         "schema_evolution_status": (
@@ -918,7 +944,8 @@ def _schema_fine_tune(core, manager, candidate):
         "schema_after_entities": new_entities,
         "schema_capacity": int(limit),
         "schema_evolution_candidate_id": str(candidate["id"]),
-        "schema_evolution_benchmark_contract": "raw_entity_history_replay_not_legacy_features_json",
+        "schema_evolution_benchmark_contract": "raw_entity_history_replay_both_parent_and_candidate",
+        "_schema_evolution_parent_raw_stats": parent_raw_stats,
     })
     manager.store.event(
         candidate["id"],
@@ -996,9 +1023,23 @@ def install(core, manager):
 
         def offline_gate(parent, parent_stats, candidate_stats, teach_report=None):
             report = dict(teach_report or {})
-            gate = _schema_offline_gate(
-                parent, parent_stats, candidate_stats, report
+            parent_raw_stats = report.pop(
+                "_schema_evolution_parent_raw_stats", None
             )
+            effective_parent_stats = (
+                parent_raw_stats
+                if report.get("schema_changed") and parent_raw_stats
+                else parent_stats
+            )
+            gate = _schema_offline_gate(
+                parent, effective_parent_stats, candidate_stats, report
+            )
+            if report.get("schema_changed"):
+                gate["parent_benchmark_source"] = "correct-schema-heldout-replay"
+                gate["parent_benchmark_score"] = effective_parent_stats.get("score")
+                gate["parent_benchmark_samples"] = int(
+                    effective_parent_stats.get("samples") or 0
+                )
             candidate_id = report.get("schema_evolution_candidate_id")
             if candidate_id and report.get("schema_changed"):
                 _persist_schema_benchmark(
