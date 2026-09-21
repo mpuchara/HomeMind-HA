@@ -138,6 +138,12 @@ def _role(eid, state, registry):
     ):
         return 'door', 'door'
     if domain == 'binary_sensor':
+        has_explicit_boundary = bool(
+            registry.get('boundary_for')
+            or attrs.get('boundary_for')
+            or registry.get('arrival_precursor_for')
+            or attrs.get('arrival_precursor_for')
+        )
         explicit = (
             dc in OCCUPANCY_CLASSES
             or bool(re.search(
@@ -149,6 +155,8 @@ def _role(eid, state, registry):
             ))
         )
         if not explicit or (dc and dc not in OCCUPANCY_CLASSES):
+            if has_explicit_boundary:
+                return 'boundary_signal', 'boundary'
             return None, None
         radar = any(token in text for token in (
             'radar', 'mmwave', 'ld2410', 'ld2411',
@@ -197,6 +205,13 @@ def _role(eid, state, registry):
         'aidetection', 'detection score', 'presence score', 'occupancy score',
     )):
         return 'auxiliary', 'score'
+    if (
+        registry.get('boundary_for')
+        or attrs.get('boundary_for')
+        or registry.get('arrival_precursor_for')
+        or attrs.get('arrival_precursor_for')
+    ):
+        return 'boundary_signal', 'boundary'
     return None, None
 
 
@@ -225,6 +240,7 @@ def _semantics(role):
         'auxiliary_probability': 'probability_like_score',
         'tracker': 'aggregate_tracker',
         'door': 'transition_only',
+        'boundary_signal': 'explicit_boundary_transition_only',
         'auxiliary': 'auxiliary_likelihood',
     }.get(role)
 
