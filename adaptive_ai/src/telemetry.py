@@ -215,6 +215,8 @@ class Telemetry:
         self.last_cpu = self.cpu_start
 
     def observe(self, name, milliseconds):
+        debug = globals().get("RUNTIME_DEBUG")
+        debug_enabled = bool(debug is not None and debug.enabled)
         debug_latency = None
         with self.lock:
             value = float(milliseconds)
@@ -224,7 +226,7 @@ class Telemetry:
             )
             self.counts[name] += 1
             self.sums[name] += value
-            if name == "event_to_intent":
+            if name == "event_to_intent" and debug_enabled:
                 now_mono = time.monotonic()
                 recent = [
                     sample for stamp, sample in self.recent_samples.get(name, ())
@@ -236,8 +238,7 @@ class Telemetry:
                     "recent_count": len(recent),
                     "total_count": int(self.counts[name]),
                 }
-        debug = globals().get("RUNTIME_DEBUG")
-        if debug_latency is not None and debug is not None and debug.enabled:
+        if debug_latency is not None:
             debug.instant("event_to_intent", **debug_latency)
 
     def intent(self, status, reason):
