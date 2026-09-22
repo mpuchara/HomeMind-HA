@@ -419,6 +419,18 @@ class AgentCandidateManager(threading.Thread):
                    WHERE state IN ('building','discarding')""",
                 (now,),
             )
+            # 0.14.70 could leave a Correct Candidate failed when Stage-3 discovered that
+            # its persisted stable base used an older feature-schema contract.  Preserve
+            # the Candidate/feedback and route it through the isolated current-schema
+            # historical rebuild on the first 0.14.71 startup.
+            c.execute(
+                """UPDATE agent_candidates
+                   SET state='queued',reason='schema_upgrade_rebuild',dirty=1,queued_ts=?,
+                       last_error=NULL,updated_ts=?
+                   WHERE state='failed'
+                     AND last_error LIKE '%Stable correction base schema is incompatible%'""",
+                (now, now),
+            )
 
     def _create_candidate(self, parent):
         payload = {
