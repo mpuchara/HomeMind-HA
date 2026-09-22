@@ -1,4 +1,5 @@
 import tempfile
+import threading
 import unittest
 from contextlib import contextmanager
 from pathlib import Path
@@ -105,6 +106,26 @@ class CandidateQueuedTrainingDeadlockTests(unittest.TestCase):
             teaching=FakeTeaching(), rl_teaching=None, models={}, runtime={},
             executor=FakeExecutor(), process_agent=lambda *args, **kwargs: None,
             wake_event=SimpleNamespace(set=lambda: None),
+            lock=threading.RLock(),
+            state_map={
+                "light.bathroom": {
+                    "entity_id": "light.bathroom",
+                    "state": "off",
+                    "attributes": {},
+                },
+                "sensor.espen4_stationary_energy": {
+                    "entity_id": "sensor.espen4_stationary_energy",
+                    "state": "35",
+                    "attributes": {
+                        "unit_of_measurement": "%",
+                        "friendly_name": "ESPEN4 Stationary Energy",
+                    },
+                },
+            },
+            entity_registry={
+                "light.bathroom": {"area_id": "bathroom"},
+                "sensor.espen4_stationary_energy": {"area_id": "bathroom"},
+            },
         )
         self.engine.rl_teaching = RLTeaching(self.store, self.engine)
         self.core = SimpleNamespace(
