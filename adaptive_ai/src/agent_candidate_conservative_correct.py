@@ -25,7 +25,7 @@ from training_budget import TRAINING_BUDGET
 _CORRECT_REASONS = {
     "feedback", "wrong_decision", "wrong_decision_undo", "teach", "teach_undo", "teach_train",
 }
-_FULL_REBUILD_REASONS = {"manual_rebuild", "config_change"}
+_FULL_REBUILD_REASONS = {"manual_rebuild", "config_change", "schema_upgrade_rebuild"}
 _CANDIDATE_WORK_KEY = "candidate_correct_work"
 _BUDGET_THREAD_NAME = "adaptive-ai-index-candidate-correct"
 
