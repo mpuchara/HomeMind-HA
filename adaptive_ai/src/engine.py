@@ -17,7 +17,7 @@ from context_engine import ContextEngine
 from executor import Executor
 from intent import ActionIntent
 from experiments import Experiments
-from telemetry import TELEMETRY, HEAVY_JOBS
+from telemetry import TELEMETRY, HEAVY_JOBS, RUNTIME_DEBUG
 from fast_runtime import fast_light_on_assist_action, is_fast_target, stabilize_fast_light_power_decision
 from training_budget import TRAINING_BUDGET
 
@@ -233,6 +233,7 @@ class Engine(threading.Thread):
         confidences = [runtime_conf.get(a["id"]) for a in agents]
         confidences = [x for x in confidences if x is not None]
         history = self.history_manager.status() if self.history_manager is not None else {"phase": "starting", "archive": {"n": 0, "days": 0, "entities": 0}}
+        telemetry = TELEMETRY.snapshot()
         return {
             "version": APP_VERSION,
             "ha_connected": bool(
@@ -269,7 +270,8 @@ class Engine(threading.Thread):
             "history": history,
             "home_intelligence": self.context.diagnostics(),
             "home_bootstrap": dict(self.home_bootstrap.status) if self.home_bootstrap else {},
-            "telemetry": TELEMETRY.snapshot(),
+            "telemetry": telemetry,
+            "runtime_debug": RUNTIME_DEBUG.summary(telemetry),
             "heavy_job": HEAVY_JOBS.owner,
         }
 
@@ -674,6 +676,8 @@ class Engine(threading.Thread):
                     if event_wakeup and changed_entities:
                         with self.lock:
                             self.inference_scheduler["event_passes"] += 1
+                        if RUNTIME_DEBUG.enabled:
+                            RUNTIME_DEBUG.instant("event_pass", changed_count=len(changed_entities), changed_entities=sorted(changed_entities)[:24])
                         self.process(state_map, changed_entities)
                     elif self.initial_inference_pending:
                         # Exactly one complete inference pass warms all qualified agents
