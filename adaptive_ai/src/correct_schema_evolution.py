@@ -55,6 +55,39 @@ _MIN_COVERAGE = 0.60
 _MIN_RESIDUAL_COVERAGE = 0.70
 _MIN_CV_BALANCED_ACCURACY = 0.62
 _MIN_RESIDUAL_ACCURACY = 0.60
+_SCHEMA_UPGRADE_REASON = "schema_upgrade_rebuild"
+
+
+def _stable_model_schema_compatible(raw_model):
+    """True only when stored weights have the exact current semantic feature contract.
+
+    A model with an old policy/schema version or a different feature dimension cannot be
+    remapped safely: old numeric indexes must never be reinterpreted as today's labels.
+    Such a Candidate is rebuilt from history in isolation before Correct is evaluated.
+    """
+    raw = dict(raw_model or {})
+    schema = raw.get("schema") or {}
+    try:
+        dims = int(raw.get("dims") or schema.get("dims") or OPTIONS.get("feature_dimensions", 128))
+        if int(raw.get("version", 0)) != int(MultiHorizonPolicy.VERSION):
+            return False
+    except (TypeError, ValueError):
+        return False
+    return ExplicitFeatureSchema.from_export(schema, dims) is not None
+
+
+def _schema_contract_detail(raw_model):
+    raw = dict(raw_model or {})
+    schema = raw.get("schema") or {}
+    return {
+        "policy_version": raw.get("version"),
+        "required_policy_version": MultiHorizonPolicy.VERSION,
+        "schema_version": schema.get("version"),
+        "required_schema_version": ExplicitFeatureSchema.VERSION,
+        "model_dims": raw.get("dims"),
+        "schema_dims": schema.get("dims"),
+        "required_dims": int(OPTIONS.get("feature_dimensions", 128)),
+    }
 
 
 def _json(raw, default=None):
@@ -1014,6 +1047,43 @@ def install(core, manager):
     if not getattr(manager, "_correct_margin_repair_installed", False):
         manager = margin.install(core, manager)
 
+    original_start = manager._start_build
+
+    def start_build(row):
+        reason = str(row.get("reason") or "")
+        if reason in conservative._CORRECT_REASONS:
+            raw_model = manager.store.get_model(str(row.get("candidate_id") or ""))
+            if raw_model is not None and not _stable_model_schema_compatible(raw_model):
+                now = time.time()
+                detail = _schema_contract_detail(raw_model)
+                with manager.store.lock, manager.store.conn() as c:
+                    c.execute(
+                        """UPDATE agent_candidates
+                           SET reason=?,state='queued',dirty=1,last_error=NULL,updated_ts=?
+                           WHERE parent_agent_id=?""",
+                        (_SCHEMA_UPGRADE_REASON, now, str(row["parent_agent_id"])),
+                    )
+                manager.runtime.pop(str(row["parent_agent_id"]), None)
+                manager.store.event(
+                    row["parent_agent_id"],
+                    "warning",
+                    "agent_candidate_schema_upgrade_rebuild",
+                    "Candidate Correct base uses an older feature schema; rebuilding the hidden Candidate from history under the current schema before evaluation",
+                    {
+                        "candidate_id": row.get("candidate_id"),
+                        "previous_reason": reason,
+                        "rebuild_reason": _SCHEMA_UPGRADE_REASON,
+                        **detail,
+                    },
+                )
+                fresh = manager._candidate_row(row["parent_agent_id"]) or {
+                    **row, "reason": _SCHEMA_UPGRADE_REASON, "state": "queued", "dirty": 1
+                }
+                return original_start(fresh)
+        return original_start(row)
+
+    manager._start_build = start_build
+
     if not _PATCHED:
         conservative._conservative_fine_tune = (
             lambda manager_obj, candidate: _schema_fine_tune(core, manager_obj, candidate)
@@ -1076,6 +1146,9 @@ def install(core, manager):
     manager._correct_schema_evolution_installed = True
     manager.correct_schema_evolution_contract = (
         "unresolved_correct_residuals_rank_broad_context_then_bounded_schema_challenger_or_missing_context"
+    )
+    manager.correct_schema_upgrade_contract = (
+        "incompatible_stable_correct_base_routes_to_isolated_historical_candidate_rebuild"
     )
     core.STORE.event(
         None,
