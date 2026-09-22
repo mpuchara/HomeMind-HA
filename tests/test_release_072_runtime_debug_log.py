@@ -76,6 +76,7 @@ class RuntimeDebugLogTests(unittest.TestCase):
         self.assertIn('"Content-Disposition"', source)
         self.assertIn("RUNTIME_DEBUG.set_enabled", source)
         self.assertIn('"threads": _thread_snapshot()', source)
+        self.assertIn('getattr(queue, "snapshot", None)', source)
 
     def test_diagnostics_ui_surfaces_p95_current_work_and_controls(self):
         source = (SRC / "static" / "runtime_debug_ui.js").read_text(encoding="utf-8")
