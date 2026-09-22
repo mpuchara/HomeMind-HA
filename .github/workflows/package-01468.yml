@@ -1,0 +1,29 @@
+name: Package Adaptive AI 0.14.68
+
+on:
+  push:
+    branches:
+      - package/install-0.14.68
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify version
+        run: |
+          grep -q 'version: "0.14.68"' adaptive_ai/config.yaml
+          grep -q '"version": "0.14.68"' adaptive_ai/BUILD_INFO.json
+          grep -q '"tests_passed": 1107' adaptive_ai/BUILD_INFO.json
+      - name: Build install ZIP
+        run: |
+          mkdir -p dist
+          zip -r dist/Adaptive-AI-0.14.68-install.zip adaptive_ai -x 'adaptive_ai/__pycache__/*' 'adaptive_ai/src/__pycache__/*' '*.pyc'
+          sha256sum dist/Adaptive-AI-0.14.68-install.zip > dist/Adaptive-AI-0.14.68-install.zip.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Adaptive-AI-0.14.68-install
+          path: |
+            dist/Adaptive-AI-0.14.68-install.zip
+            dist/Adaptive-AI-0.14.68-install.zip.sha256
+          if-no-files-found: error
