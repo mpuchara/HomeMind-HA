@@ -7,7 +7,7 @@
 - Expose Candidate worker health in the Candidate status contract: alive state, heartbeat age, last error, error count and restart count.
 - Throttle repeated identical worker-error events to one event per 30 seconds to avoid log storms while retaining diagnostics.
 - Keep Candidate Correct semantics unchanged: exact direct-parent snapshot -> conservative correction/schema stages -> offline gate -> future Shadow A/B. No changes to ActionIntent, Executor or Home Assistant service dispatch.
-- Add four 0.14.70 worker-recovery contract regressions; full suite contains 1117 tests.
+- Add five 0.14.70 worker-recovery regressions, including a functional scheduler-fault recovery test; full suite contains 1118 tests.
 
 # 0.14.69 — 2026-09-22
 
