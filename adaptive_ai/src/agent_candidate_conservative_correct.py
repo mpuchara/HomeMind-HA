@@ -197,7 +197,7 @@ def _teach_rows(service, candidate):
     ]
 
 
-def _conservative_fine_tune(manager, candidate, *, parent_id=None):
+def _conservative_fine_tune(manager, candidate):
     """Fine-tune the snapshot without feature selection or historical rebuilding.
 
     All pre-correction predictions are collected before the first policy update. A
@@ -212,7 +212,8 @@ def _conservative_fine_tune(manager, candidate, *, parent_id=None):
     manager.engine.models.pop(candidate["id"], None)
     policy = manager.engine.policy(candidate)
     labels = _teach_rows(service, candidate)
-    parent_id = str(parent_id or candidate.get("id") or "")
+    edge = manager._row_by_candidate(candidate["id"]) if callable(getattr(manager, "_row_by_candidate", None)) else None
+    parent_id = str((edge or {}).get("parent_agent_id") or "")
     total_labels = max(1, len(labels))
     positive_weight = max(1, int(OPTIONS.get("teach_rl_positive_weight", 6)))
     negative_weight = max(0, int(OPTIONS.get("teach_rl_negative_weight", 3)))
@@ -660,9 +661,7 @@ def install(manager):
                 progress=0.40, benchmark_rows=len(rows), labels_total=len(labels),
             )
 
-            report = _conservative_fine_tune(
-                manager, candidate, parent_id=parent["id"]
-            )
+            report = _conservative_fine_tune(manager, candidate)
             candidate = manager.store.get_agent_config(candidate["id"]) or candidate
             _set_candidate_work(
                 manager, parent["id"], state="active", phase="scoring_candidate",
