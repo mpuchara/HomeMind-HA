@@ -242,6 +242,56 @@ class AgentCandidateManager(threading.Thread):
     def _queue(self):
         return getattr(self.core, "TRAINING_QUEUE", None)
 
+    def _claim_candidate_training_job(self, candidate_id, *, rebuild, reason):
+        """Own exactly one queued Candidate job without deadlocking lifecycle state.
+
+        A Candidate can briefly acquire a TrainingQueue entry before AgentCandidateManager
+        advances its durable edge from queued -> building. Returning early merely because
+        status_for() is non-null leaves that edge queued forever, so Shadow comparison never
+        starts and the Candidate appears to have stopped receiving events.
+
+        Pending jobs are safe to adopt/upgrade. Active jobs are never mutated mid-flight:
+        the Candidate manager waits for them to finish, then requests the intended build on
+        the next poll.
+        """
+        queue = self._queue()
+        if queue is None:
+            return None, "queue_unavailable"
+        candidate_id = str(candidate_id)
+        reason = str(reason)
+        existing = queue.status_for(candidate_id)
+        if existing and str(existing.get("state") or "") == "active":
+            return None, "active_external_job"
+
+        if existing and str(existing.get("state") or "") == "queued":
+            existing_reason = str(existing.get("reason") or "")
+            existing_rebuild = bool(existing.get("rebuild"))
+            desired_rebuild = bool(rebuild)
+
+            if reason == "teach_rl":
+                # TrainingQueue has an explicit atomic pending-job upgrade for Teach RL.
+                queued = queue.enqueue(
+                    candidate_id, rebuild=True, reason="teach_rl"
+                )
+                return queued, (
+                    "adopted_pending_teach_rl"
+                    if existing_reason == "teach_rl" and existing_rebuild
+                    else "upgraded_pending_to_teach_rl"
+                )
+
+            if existing_reason == reason and existing_rebuild == desired_rebuild:
+                return existing, "adopted_matching_pending_job"
+
+            # Full rebuild / autonomous continuation semantics cannot safely be inferred
+            # from another pending reason. Cancel only the not-yet-active entry and replace
+            # it with the exact lifecycle request.
+            queue.cancel(candidate_id)
+
+        queued = queue.enqueue(
+            candidate_id, rebuild=bool(rebuild), reason=reason
+        )
+        return queued, "enqueued_candidate_job"
+
     def _candidate_row(self, parent_id):
         with self.store.conn() as c:
             row = c.execute("SELECT * FROM agent_candidates WHERE parent_agent_id=?", (str(parent_id),)).fetchone()
@@ -427,16 +477,24 @@ class AgentCandidateManager(threading.Thread):
         if not candidate or not parent:
             self._fail(row, "candidate or live agent disappeared")
             return True
+
+        # Never mutate an already-active unrelated queue/history job. It will disappear
+        # from status_for() when complete and the next Candidate poll will claim the slot.
         existing = queue.status_for(candidate["id"])
-        if existing:
+        if existing and str(existing.get("state") or "") == "active":
             return False
+
         try:
             synced = self._sync_feedback(parent, candidate)
             service = getattr(self.engine, "rl_teaching", None)
             if service is None:
                 raise RuntimeError("Teach RL service unavailable")
             service.prepare_retrain(candidate)
-            queued = queue.enqueue(candidate["id"], rebuild=True, reason="teach_rl")
+            queued, queue_claim = self._claim_candidate_training_job(
+                candidate["id"], rebuild=True, reason="teach_rl"
+            )
+            if queued is None:
+                return False
             now = time.time()
             with self.store.lock, self.store.conn() as c:
                 c.execute(
@@ -448,7 +506,8 @@ class AgentCandidateManager(threading.Thread):
             self.store.event(row["parent_agent_id"], "info", "agent_candidate_build_started",
                              "Candidate rebuild started while the live agent keeps serving",
                              {"candidate_id": candidate["id"], "generation": row["generation"],
-                              "feedback": synced, "queue": queued})
+                              "feedback": synced, "queue": queued,
+                              "queue_claim": queue_claim})
             return True
         except Exception as exc:
             self._fail(row, f"{type(exc).__name__}: {exc}")

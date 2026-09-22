@@ -578,7 +578,8 @@ def install(manager):
         if not candidate or not parent:
             manager._fail(row, "candidate or parent generation disappeared")
             return True
-        if queue.status_for(candidate["id"]):
+        existing = queue.status_for(candidate["id"])
+        if existing and str(existing.get("state") or "") == "active":
             return False
         try:
             candidate = _copy_parent_snapshot(manager, parent["id"], candidate["id"])
@@ -602,12 +603,17 @@ def install(manager):
                        ) AND action='autonomous' AND started_ts IS NULL""",
                     (now, str(candidate["id"])),
                 )
-            queued = queue.enqueue(candidate["id"], rebuild=False, reason="autonomous_continuation")
+            queued, queue_claim = manager._claim_candidate_training_job(
+                candidate["id"], rebuild=False, reason="autonomous_continuation"
+            )
+            if queued is None:
+                return False
             manager.store.event(
                 row["parent_agent_id"], "info", "agent_autonomous_continuation_started",
                 "Autonomous child continues from the parent snapshot without clear_learning",
                 {
                     "candidate_id": candidate["id"], "queue": queued,
+                    "queue_claim": queue_claim,
                     "training_mode": "resume_from_parent_cursor",
                     "schema_policy": "preserve_parent_schema",
                 },
