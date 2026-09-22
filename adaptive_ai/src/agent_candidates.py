@@ -1120,12 +1120,15 @@ class AgentCandidateManager(threading.Thread):
 
             for row in rows:
                 state = str(row.get("state") or "queued")
-                trace = RUNTIME_DEBUG.begin(
-                    "candidate_lifecycle",
-                    parent_agent_id=str(row.get("parent_agent_id") or ""),
-                    candidate_id=str(row.get("candidate_id") or ""),
-                    state=state,
-                    reason=str(row.get("reason") or ""),
+                trace = (
+                    RUNTIME_DEBUG.begin(
+                        "candidate_lifecycle",
+                        parent_agent_id=str(row.get("parent_agent_id") or ""),
+                        candidate_id=str(row.get("candidate_id") or ""),
+                        state=state,
+                        reason=str(row.get("reason") or ""),
+                    )
+                    if RUNTIME_DEBUG.enabled else None
                 )
                 try:
                     if state == "queued":
