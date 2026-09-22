@@ -1,3 +1,14 @@
+# 0.14.71 — 2026-09-22
+
+- Fix Candidate Correct failing during training with `ValueError: Stable correction base schema is incompatible`.
+- Root cause: Stage-3 residual schema evolution tried to semantically remap a persisted stable base whose policy/schema version or feature dimensions did not match the current explicit feature contract. Rejecting the remap was correct for safety, but the exception incorrectly failed the whole Candidate.
+- Detect incompatible stored correction bases before conservative Stage-3 fine-tuning and route the hidden Candidate through the existing historical `teach_rl` rebuild under the current schema.
+- Preserve the Live parent unchanged while the compatibility rebuild runs; only the hidden Candidate is rebuilt.
+- Keep old feature indexes isolated: no old numeric dimension is silently reinterpreted as a current semantic feature label.
+- Run the normal full-rebuild offline gate after schema-upgrade training before future Shadow A/B can begin.
+- Automatically recover the specific 0.14.70 failed Candidate on startup by requeuing it as `schema_upgrade_rebuild`, preserving its lineage and Correct feedback.
+- Add seven regressions for current/legacy schema compatibility, rebuild routing, immediate scheduling, startup recovery and offline-gate coverage. Full suite contains 1125 tests.
+
 # 0.14.70 — 2026-09-22
 
 - Fix Candidate generations that remain indefinitely at `Queued · queue #1` while diagnostics show `Heavy job: idle`.
