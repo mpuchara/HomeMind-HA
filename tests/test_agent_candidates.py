@@ -1,5 +1,6 @@
 import json
 import tempfile
+import threading
 import unittest
 from contextlib import contextmanager
 from pathlib import Path
@@ -104,6 +105,28 @@ class CandidateTests(unittest.TestCase):
         self.assertIsNotNone(self.store.get_agent(candidate_id))
         self.assertEqual([a["id"] for a in self.store.list_agents()], [self.parent["id"]])
         self.assertEqual([a["id"] for a in self.store.list_agent_configs()], [self.parent["id"]])
+
+    def test_worker_loop_survives_candidate_lifecycle_exception(self):
+        self.manager.enqueue(self.parent["id"], "wrong_decision")
+        self.manager.poll_seconds = 0.01
+        calls = {"count": 0}
+
+        def flaky_start(row):
+            calls["count"] += 1
+            if calls["count"] == 1:
+                raise RuntimeError("synthetic candidate scheduler fault")
+            self.manager.stop_event.set()
+            return True
+
+        self.manager._start_build = flaky_start
+        worker = threading.Thread(target=self.manager._worker_loop, daemon=True)
+        worker.start()
+        worker.join(timeout=1.0)
+
+        self.assertFalse(worker.is_alive())
+        self.assertGreaterEqual(calls["count"], 2)
+        self.assertEqual(self.manager._worker_error_count, 1)
+        self.assertIn("synthetic candidate scheduler fault", self.manager._worker_last_error)
 
     def test_feedback_coalesces_into_one_candidate_and_revision(self):
         first = self.manager.enqueue(self.parent["id"], "wrong_decision")

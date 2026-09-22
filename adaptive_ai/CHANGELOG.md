@@ -1,3 +1,14 @@
+# 0.14.70 — 2026-09-22
+
+- Fix Candidate generations that remain indefinitely at `Queued · queue #1` while diagnostics show `Heavy job: idle`.
+- The Candidate card's `candidate_worker` queue is a lifecycle queue owned by `AgentCandidateManager`, not the normal historical TrainingQueue. In 0.14.69 an unhandled lifecycle/decorator/SQLite exception could terminate that scheduler thread while the durable Candidate row remained queued, leaving no heavy job to execute it.
+- Make the Candidate lifecycle scheduler resilient: per-Candidate, list and maintenance exceptions are caught and retried instead of terminating the scheduler for all generations.
+- Add a single-flight recovery worker if the primary Candidate scheduler thread exits unexpectedly. Enqueue and Candidate status reads verify scheduler liveness, so an already-persisted queued Candidate can recover without requiring a new correction.
+- Expose Candidate worker health in the Candidate status contract: alive state, heartbeat age, last error, error count and restart count.
+- Throttle repeated identical worker-error events to one event per 30 seconds to avoid log storms while retaining diagnostics.
+- Keep Candidate Correct semantics unchanged: exact direct-parent snapshot -> conservative correction/schema stages -> offline gate -> future Shadow A/B. No changes to ActionIntent, Executor or Home Assistant service dispatch.
+- Add five 0.14.70 worker-recovery regressions, including a functional scheduler-fault recovery test; full suite contains 1118 tests.
+
 # 0.14.69 — 2026-09-22
 
 - Fix delayed Candidate-card hydration when Home Assistant Ingress transiently reports the iframe as hidden during initial navigation.

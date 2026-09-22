@@ -231,6 +231,14 @@ class AgentCandidateManager(threading.Thread):
         self.wake_event = threading.Event()
         self.lock = threading.RLock()
         self.runtime = {}
+        self._worker_health_lock = threading.RLock()
+        self._worker_heartbeat_ts = 0.0
+        self._worker_last_error = None
+        self._worker_error_count = 0
+        self._worker_restart_count = 0
+        self._worker_last_error_event_ts = 0.0
+        self._worker_last_error_signature = None
+        self._recovery_worker = None
         ensure_tables(self.store)
         self._recover()
         self._install_feedback_hooks()
@@ -238,6 +246,86 @@ class AgentCandidateManager(threading.Thread):
         self._install_http()
         if start_worker:
             self.start()
+
+    def _worker_health(self):
+        recovery = getattr(self, "_recovery_worker", None)
+        alive = bool(self.is_alive() or (recovery is not None and recovery.is_alive()))
+        heartbeat = float(getattr(self, "_worker_heartbeat_ts", 0.0) or 0.0)
+        now = time.time()
+        return {
+            "alive": alive,
+            "heartbeat_ts": heartbeat or None,
+            "heartbeat_age_seconds": (max(0.0, now - heartbeat) if heartbeat else None),
+            "last_error": getattr(self, "_worker_last_error", None),
+            "error_count": int(getattr(self, "_worker_error_count", 0) or 0),
+            "restart_count": int(getattr(self, "_worker_restart_count", 0) or 0),
+        }
+
+    def _record_worker_error(self, phase, exc, row=None):
+        detail = {
+            "phase": str(phase),
+            "error": f"{type(exc).__name__}: {exc}",
+        }
+        if row:
+            detail.update({
+                "parent_agent_id": row.get("parent_agent_id"),
+                "candidate_id": row.get("candidate_id"),
+                "state": row.get("state"),
+                "reason": row.get("reason"),
+            })
+        now = time.time()
+        signature = f"{detail['phase']}|{detail['error']}|{detail.get('candidate_id') or ''}"
+        with self._worker_health_lock:
+            self._worker_last_error = detail["error"]
+            self._worker_error_count += 1
+            self._worker_heartbeat_ts = now
+            should_emit = (
+                signature != self._worker_last_error_signature
+                or now - float(self._worker_last_error_event_ts or 0.0) >= 30.0
+            )
+            if should_emit:
+                self._worker_last_error_signature = signature
+                self._worker_last_error_event_ts = now
+        if should_emit:
+            try:
+                self.store.event(
+                    (row or {}).get("parent_agent_id"), "error", "agent_candidate_worker_error",
+                    "Candidate lifecycle worker recovered from an internal error", detail,
+                )
+            except Exception:
+                pass
+
+    def _ensure_worker_alive(self):
+        if self.stop_event.is_set():
+            return False
+        recovery = getattr(self, "_recovery_worker", None)
+        if self.is_alive() or (recovery is not None and recovery.is_alive()):
+            return True
+        # start_worker=False is used deliberately by unit tests and composition setup.
+        # Before Thread.start() has ever run, leave startup ownership with the caller.
+        if self.ident is None:
+            return False
+        with self._worker_health_lock:
+            recovery = getattr(self, "_recovery_worker", None)
+            if self.is_alive() or (recovery is not None and recovery.is_alive()):
+                return True
+            self._worker_restart_count += 1
+            recovery = threading.Thread(
+                target=self._worker_loop,
+                name=f"adaptive-ai-agent-candidates-recovery-{self._worker_restart_count}",
+                daemon=True,
+            )
+            self._recovery_worker = recovery
+            recovery.start()
+        try:
+            self.store.event(
+                None, "warning", "agent_candidate_worker_restarted",
+                "Candidate lifecycle worker restarted after an unexpected exit",
+                {"restart_count": int(self._worker_restart_count)},
+            )
+        except Exception:
+            pass
+        return True
 
     def _queue(self):
         return getattr(self.core, "TRAINING_QUEUE", None)
@@ -417,6 +505,7 @@ class AgentCandidateManager(threading.Thread):
                              "Explicit feedback queued a new Candidate generation",
                              {"reason": reason, "candidate_id": row["candidate_id"]})
             self.wake_event.set()
+        self._ensure_worker_alive()
         return self.status(parent_id)
 
     def _sync_feedback(self, parent, candidate):
@@ -676,13 +765,19 @@ class AgentCandidateManager(threading.Thread):
         }
 
     def status(self, parent_id):
-        return self._status_from_row(self._candidate_row(parent_id))
+        self._ensure_worker_alive()
+        result = self._status_from_row(self._candidate_row(parent_id))
+        if result is not None:
+            result["worker"] = self._worker_health()
+        return result
 
     def list_status(self):
+        self._ensure_worker_alive()
         out = []
         for row in self._all_rows():
             status = self._status_from_row(row)
             if status is not None:
+                status["worker"] = self._worker_health()
                 out.append(status)
         return out
 
@@ -998,20 +1093,50 @@ class AgentCandidateManager(threading.Thread):
         with self.store.lock, self.store.conn() as c:
             c.execute("DELETE FROM agent_generation_backups WHERE expires_ts<?", (time.time(),))
 
-    def run(self):
+    def _worker_loop(self):
         while not self.stop_event.is_set():
+            with self._worker_health_lock:
+                self._worker_heartbeat_ts = time.time()
             changed = False
-            for row in self._all_rows():
-                state = str(row.get("state") or "queued")
-                if state == "queued":
-                    changed = self._start_build(row) or changed
-                elif state == "building":
-                    changed = self._finish_build_if_ready(row) or changed
-                elif state == "discarding":
-                    changed = self._finish_build_if_ready(row) or changed
-            self._maintenance()
+            try:
+                rows = self._all_rows()
+            except Exception as exc:
+                self._record_worker_error("list_candidates", exc)
+                rows = []
+
+            for row in rows:
+                try:
+                    state = str(row.get("state") or "queued")
+                    if state == "queued":
+                        changed = self._start_build(row) or changed
+                    elif state == "building":
+                        changed = self._finish_build_if_ready(row) or changed
+                    elif state == "discarding":
+                        changed = self._finish_build_if_ready(row) or changed
+                except Exception as exc:
+                    # One malformed/stale Candidate must never kill the scheduler for all
+                    # remaining generations. The row stays durable and is retried.
+                    self._record_worker_error("candidate_lifecycle", exc, row)
+
+            try:
+                self._maintenance()
+            except Exception as exc:
+                self._record_worker_error("maintenance", exc)
+
+            with self._worker_health_lock:
+                self._worker_heartbeat_ts = time.time()
             self.wake_event.wait(self.poll_seconds if not changed else 0.05)
             self.wake_event.clear()
+
+    def run(self):
+        # The Candidate scheduler is product-critical. Keep the thread alive across
+        # lifecycle/decorator/SQLite exceptions; _ensure_worker_alive() additionally
+        # replaces the scheduler if the Thread itself ever exits unexpectedly.
+        try:
+            self._worker_loop()
+        except BaseException as exc:
+            if not self.stop_event.is_set():
+                self._record_worker_error("worker_exit", exc)
 
     def stop(self):
         self.stop_event.set()
