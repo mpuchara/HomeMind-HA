@@ -9,7 +9,7 @@ import time
 
 
 DEBOUNCE_SECONDS = 15.0
-IMMEDIATE_REASONS = {"teach_train", "manual_rebuild"}
+IMMEDIATE_REASONS = {"teach_train", "manual_rebuild", "schema_upgrade_rebuild"}
 
 
 def install(manager):
