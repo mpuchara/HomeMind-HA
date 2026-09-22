@@ -50,7 +50,7 @@ async function load(){
     const rt=status.realtime||{};
     c.textContent=status.ha_connected?`HA connected · ${status.state_count} entities${rt.connected?' · realtime':' · REST fallback'}`:`HA disconnected · ${status.ha_error||status.engine_error||'unknown error'}`;
     c.className='pill'+(status.ha_connected?' good':'');
-    lastHistory=status.history||{};renderOverview(status);renderHistory(lastHistory,status);renderHome(status);
+    lastHistory=status.history||{};renderOverview(status);renderHistory(lastHistory,status);renderHome(status);window.renderRuntimeDebugDiagnostics?.(status);
     // HTTP is intentionally available before runtime composition. Do not fan out to
     // /agents, /events or live card reads until Engine.start() and the final adapters are
     // actually ready; otherwise a slow migration looks like missing Shadow predictions.
