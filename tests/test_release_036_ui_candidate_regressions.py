@@ -69,6 +69,24 @@ class Release036UiCandidateRegressionTests(unittest.TestCase):
         self.assertIn("setTimeout(loop,4000)", source)
         self.assertNotIn("setTimeout(loop,1500)", source)
 
+    def test_candidate_initial_hydration_is_not_lost_while_ingress_is_hidden(self):
+        source = (ROOT / "adaptive_ai" / "src" / "static" / "candidate_ui.js").read_text(encoding="utf-8")
+        self.assertIn("let firstRefreshAttempted=false;", source)
+        self.assertIn("let hydrated=false;", source)
+        self.assertIn("if(document.hidden&&firstRefreshAttempted&&!force)return;", source)
+        self.assertIn("firstRefreshAttempted=true;", source)
+        self.assertIn("hydrated=true;", source)
+
+    def test_candidate_hydration_retries_immediately_when_ui_becomes_visible_or_agents_arrive(self):
+        source = (ROOT / "adaptive_ai" / "src" / "static" / "candidate_ui.js").read_text(encoding="utf-8")
+        self.assertIn("window.addEventListener('visibilitychange'", source)
+        self.assertIn("if(!document.hidden)refresh({force:true})", source)
+        self.assertIn("window.addEventListener('adaptive-ai:agents'", source)
+        self.assertIn("if(!hydrated)refresh({force:true})", source)
+        self.assertIn("window.refreshCandidates=()=>refresh({force:true})", source)
+        # The fix is event-driven; do not reintroduce a faster periodic DB poll.
+        self.assertIn("setTimeout(loop,4000)", source)
+
     def test_hot_status_backlog_gauges_never_wait_for_persistence_locks(self):
         source = self.source("release_017_ui_lifeline.py")
         block = source.split("# These are advisory backlog gauges only.", 1)[1].split(
