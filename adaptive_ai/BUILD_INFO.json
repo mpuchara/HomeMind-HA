@@ -1,10 +1,10 @@
 {
-  "version": "0.14.71",
+  "version": "0.14.72",
   "release_date": "2026-09-22",
-  "base_version": "0.14.70",
-  "base_commit": "083351e55f98448521b6bde3deb904469dfad580",
-  "release_status": "release-0.14.71-candidate-legacy-schema-recovery",
-  "tests_passed": 1125,
+  "base_version": "0.14.71",
+  "base_commit": "fca1169ce9da603b99634262a22d701492e8085e",
+  "release_status": "release-0.14.72-runtime-debug-log",
+  "tests_passed": 1132,
   "profile": "rpi4-low-memory-complete-discovery-manual-agent-selection",
   "manual_agent_training": true,
   "max_concurrent_training_jobs": 1,
@@ -40,7 +40,7 @@
   "migration": "no destructive migration; existing agents, models, feedback, raw archive, historical experiences, candidate lineage, rollback and generation state preserved",
   "physical_control": "unchanged; repaired agents return to Shadow and Control still requires qualified state plus all existing guards",
   "pi4": "0.14.38 targets the long-soak Raspberry Pi failure: drift analysis is coalesced on a throttled background observer, REST /states reconciliation is delta-only after bootstrap, websocket outage fallback reconciles every 10 s, and HA core-state health is tracked separately from unrelated REST errors.",
-  "ci_status": "0.14.71 pre-release validation pending.",
+  "ci_status": "0.14.72 pre-release validation pending.",
   "training_slice_budget": "adaptive-ai-index workers call a shared CooperativeTrainingBudget; expensive temporal tracker loops yield between entities/events and finalization is no longer outside the throttle",
   "finalization_lifeline": "HEAVY_JOBS remains owned through final gc.collect(), so /api/status and /api/agents stay on lightweight lifeline reads until the worker is actually finished",
   "finalization_progress": "post-replay UI now exposes bounded stages: replay complete, policy serialization, benchmark save, qualification, checkpoint complete",
@@ -257,5 +257,8 @@
   "candidate_worker_error_events": "Repeated identical scheduler errors are throttled to at most one event per 30 seconds.",
   "candidate_schema_upgrade_rebuild": "Correct candidates whose persisted stable base uses an incompatible policy/schema contract are routed to an isolated historical Candidate rebuild under the current schema instead of failing Stage-3 migration.",
   "candidate_schema_failure_recovery": "The 0.14.70 failure 'Stable correction base schema is incompatible' is requeued on startup as schema_upgrade_rebuild without discarding Candidate lineage or feedback.",
-  "candidate_schema_safety": "Old feature indexes are never reinterpreted under current semantic labels; schema upgrade uses historical rebuild plus existing offline gate before future Shadow A/B."
+  "candidate_schema_safety": "Old feature indexes are never reinterpreted under current semantic labels; schema upgrade uses historical rebuild plus existing offline gate before future Shadow A/B.",
+  "runtime_debug_log": "Opt-in bounded RAM trace in Diagnostics: event-to-intent latency samples/p95, active inference/Candidate/heavy-job spans, current thread snapshot and one-click JSON download.",
+  "runtime_debug_default": "disabled; no file writes or extra polling; event-to-intent rolling p95 work at observation time is performed only while debug logging is enabled.",
+  "runtime_debug_capacity": 4096
 }

@@ -17,7 +17,7 @@ from context_engine import ContextEngine
 from executor import Executor
 from intent import ActionIntent
 from experiments import Experiments
-from telemetry import TELEMETRY, HEAVY_JOBS
+from telemetry import TELEMETRY, HEAVY_JOBS, RUNTIME_DEBUG
 from fast_runtime import fast_light_on_assist_action, is_fast_target, stabilize_fast_light_power_decision
 from training_budget import TRAINING_BUDGET
 
@@ -233,6 +233,7 @@ class Engine(threading.Thread):
         confidences = [runtime_conf.get(a["id"]) for a in agents]
         confidences = [x for x in confidences if x is not None]
         history = self.history_manager.status() if self.history_manager is not None else {"phase": "starting", "archive": {"n": 0, "days": 0, "entities": 0}}
+        telemetry = TELEMETRY.snapshot()
         return {
             "version": APP_VERSION,
             "ha_connected": bool(
@@ -269,7 +270,8 @@ class Engine(threading.Thread):
             "history": history,
             "home_intelligence": self.context.diagnostics(),
             "home_bootstrap": dict(self.home_bootstrap.status) if self.home_bootstrap else {},
-            "telemetry": TELEMETRY.snapshot(),
+            "telemetry": telemetry,
+            "runtime_debug": RUNTIME_DEBUG.summary(telemetry),
             "heavy_job": HEAVY_JOBS.owner,
         }
 
@@ -674,6 +676,8 @@ class Engine(threading.Thread):
                     if event_wakeup and changed_entities:
                         with self.lock:
                             self.inference_scheduler["event_passes"] += 1
+                        if RUNTIME_DEBUG.enabled:
+                            RUNTIME_DEBUG.instant("event_pass", changed_count=len(changed_entities), changed_entities=sorted(changed_entities)[:24])
                         self.process(state_map, changed_entities)
                     elif self.initial_inference_pending:
                         # Exactly one complete inference pass warms all qualified agents
@@ -891,6 +895,7 @@ class Engine(threading.Thread):
                 del self.in_flight[target]
 
     def process_target(self, agents, changed_entities=None, snapshot=None):
+        target_trace = (RUNTIME_DEBUG.begin("inference_target", target_entity=str((agents[0] if agents else {}).get("target_entity") or "unknown"), agent_count=len(agents or ()), changed_count=len(changed_entities or ())) if RUNTIME_DEBUG.enabled else None)
         if snapshot is None:
             with self.lock:
                 states = dict(self.state_map)
@@ -907,11 +912,14 @@ class Engine(threading.Thread):
             for agent in agents:
                 if self.stop_event.is_set():
                     return
+                agent_trace = (RUNTIME_DEBUG.begin("inference_agent", agent_id=str(agent.get("id") or ""), target_entity=str(agent.get("target_entity") or ""), mode=str(agent.get("mode") or "")) if RUNTIME_DEBUG.enabled else None)
                 try:
                     # Agent snapshots come from the routing cache. Control safety is still
                     # revalidated from durable config inside Executor before any HA call.
                     self.process_agent(agent, states, changed_entities if changed_entities else None)
+                    RUNTIME_DEBUG.end(agent_trace, status="ok")
                 except Exception as exc:
+                    RUNTIME_DEBUG.end(agent_trace, status="error", error=f"{type(exc).__name__}: {exc}")
                     STORE.event(agent["id"], "error", "agent_error", str(exc), {"trace": traceback.format_exc(limit=4)})
         finally:
             for name in ("entity_revisions", "context_revision", "state_revision"):
@@ -919,6 +927,7 @@ class Engine(threading.Thread):
                     delattr(self._inference_tls, name)
                 except AttributeError:
                     pass
+            RUNTIME_DEBUG.end(target_trace, status="ok")
         if self.state_revision != revision:
             self.wake_event.set()
 

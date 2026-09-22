@@ -16,6 +16,8 @@ import math
 import threading
 import time
 
+from telemetry import RUNTIME_DEBUG
+
 
 _TLS = threading.local()
 _STORE_PATCHED = False
@@ -1117,15 +1119,30 @@ class AgentCandidateManager(threading.Thread):
                 rows = []
 
             for row in rows:
+                state = str(row.get("state") or "queued")
+                trace = (
+                    RUNTIME_DEBUG.begin(
+                        "candidate_lifecycle",
+                        parent_agent_id=str(row.get("parent_agent_id") or ""),
+                        candidate_id=str(row.get("candidate_id") or ""),
+                        state=state,
+                        reason=str(row.get("reason") or ""),
+                    )
+                    if RUNTIME_DEBUG.enabled else None
+                )
                 try:
-                    state = str(row.get("state") or "queued")
                     if state == "queued":
                         changed = self._start_build(row) or changed
                     elif state == "building":
                         changed = self._finish_build_if_ready(row) or changed
                     elif state == "discarding":
                         changed = self._finish_build_if_ready(row) or changed
+                    RUNTIME_DEBUG.end(trace, status="ok")
                 except Exception as exc:
+                    RUNTIME_DEBUG.end(
+                        trace, status="error",
+                        error=f"{type(exc).__name__}: {exc}",
+                    )
                     # One malformed/stale Candidate must never kill the scheduler for all
                     # remaining generations. The row stays durable and is retried.
                     self._record_worker_error("candidate_lifecycle", exc, row)

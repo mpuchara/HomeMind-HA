@@ -1,3 +1,14 @@
+# 0.14.72 — 2026-09-22
+
+- Add an opt-in runtime debug logger inside **Diagnostics & technical details**.
+- Show `event → intent p95` for the recent 60-second window and the retained telemetry window directly in Diagnostics.
+- Add **Start debug log / Stop debug log** controls. Logging is disabled by default and stores only a bounded in-RAM ring buffer (4096 rows); it does not add disk writes or a new poller.
+- While enabled, trace event passes, per-target/per-agent inference, Candidate lifecycle work and every shared `HEAVY_JOBS` owner. The panel surfaces currently active spans with age/thread/context.
+- Log every `event_to_intent` latency sample together with the current recent p95 while debug logging is enabled. With logging disabled the hot observation path remains O(1).
+- Add **Download log** beside the toggle. The JSON export includes the full bounded trace, active spans, telemetry snapshot, heavy-job owner, TrainingQueue state, Candidate-worker health, engine scheduler/realtime state and active thread list.
+- Add seven regressions for disabled overhead, active-span visibility, event→intent logging, heavy-job tracing, API routes, UI controls and runtime instrumentation.
+- Full suite target: 1132 tests.
+
 # 0.14.71 — 2026-09-22
 
 - Fix Candidate Correct failing during training with `ValueError: Stable correction base schema is incompatible`.
