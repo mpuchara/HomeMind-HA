@@ -13,6 +13,7 @@
     .agent.candidate-agent{border:1px solid #8b5cf6;background:linear-gradient(180deg,rgba(139,92,246,.13),rgba(139,92,246,.045));box-shadow:0 0 0 1px rgba(139,92,246,.05) inset}
     .candidate-top{display:flex;justify-content:space-between;gap:12px;align-items:flex-start}.candidate-top h3{margin:.35rem 0 0}.candidate-badge{display:inline-flex;padding:.18rem .48rem;border-radius:999px;background:rgba(139,92,246,.22);font-size:.68rem;font-weight:800;letter-spacing:.08em}.candidate-state{font-size:.8rem;font-weight:700;opacity:.85}.candidate-sub,.candidate-small{font-size:.78rem;opacity:.78}.candidate-error{font-size:.78rem;color:#ff8f8f}.candidate-progress{height:6px;border-radius:99px;background:rgba(255,255,255,.09);overflow:hidden}.candidate-progress span{display:block;height:100%;background:#9f7aea}.candidate-compare{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin:12px 0}.candidate-compare>div{padding:8px;border-radius:10px;background:rgba(0,0,0,.12)}.candidate-compare span{display:block;font-size:.68rem;opacity:.65}.candidate-compare b{display:block;margin-top:3px;font-size:.83rem}.candidate-actions{display:flex;gap:8px}.candidate-actions button,.candidate-lifecycle-actions select{flex:1;min-width:0}
     .candidate-workflow-actions{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:7px;margin-top:10px}.candidate-workflow-actions button{min-width:0}.candidate-lifecycle-actions{margin-top:8px;opacity:.82}
+    .runtime-debug-title{align-items:center}.runtime-debug-controls{display:flex;gap:8px;flex-wrap:wrap}.runtime-debug-grid{margin:10px 0}.runtime-debug-current{margin:10px 0}.runtime-debug-active{display:flex;justify-content:space-between;gap:12px;padding:8px 10px;margin-top:6px;border-radius:8px;background:rgba(255,255,255,.035)}.runtime-debug-active span{font-size:.72rem;opacity:.72;text-align:right;overflow-wrap:anywhere}
   </style>
 </head>
 <body>
@@ -50,6 +51,7 @@
       <summary><span>Diagnostics & technical details</span><span class="details-chevron" aria-hidden="true">⌄</span></summary>
       <section id="historyPanel" class="history-panel"></section>
       <section id="homePanel" class="history-panel" aria-label="Home Intelligence"></section>
+      <section id="runtimeDebugPanel" class="history-panel" aria-label="Runtime debug log"></section>
       <section>
         <div class="section-title"><h2>Recent activity</h2><button class="ghost" id="refreshBtn">Refresh</button></div>
         <div id="events" class="events"></div>
@@ -79,6 +81,7 @@
 <script src="polling_guard.js?v=0.14.71"></script>
 <script src="app.js?v=0.14.71"></script>
 <script src="debug_export_ui.js?v=0.14.71"></script>
+<script src="runtime_debug_ui.js?v=0.14.71"></script>
 <script src="settings.js?v=0.14.71"></script>
 <script src="p0.js?v=0.14.71"></script>
 <script src="automation_baseline_ui.js?v=0.14.71"></script>
