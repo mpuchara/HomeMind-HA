@@ -1,3 +1,16 @@
+# 0.14.68 — 2026-09-22
+
+- Fix a Candidate lifecycle deadlock where a hidden Candidate could already own a pending TrainingQueue job while its durable Candidate state remained `queued`.
+- Previously, `_start_build()` returned immediately for any non-null `queue.status_for(candidate_id)`; that left the Candidate permanently queued, so Shadow comparison never started and the card stayed at `Future samples 0` / `No fresh Shadow observation yet`.
+- Add explicit Candidate queue-claim semantics. Pending Teach jobs are adopted/upgraded atomically to `teach_rl` and the Candidate advances to `building`.
+- Replace incompatible not-yet-active pending jobs for feedback-undo full rebuild and Autonomous continuation with the exact requested lifecycle job.
+- Never mutate an already-active external/history job. The Candidate manager waits for it to finish and claims the intended build on the next poll.
+- Apply the same lifecycle repair to Correct/Teach, feedback-undo full rebuild and Autonomous continuation.
+- Preserve the safety contract that `queued` and `building` Candidate weights do not run Shadow inference. Fresh Candidate events begin only after a successful build reaches `comparing` / `ready`.
+- No event→intent, ActionIntent or Executor changes.
+- Add four regressions covering pending-job adoption, active-job waiting/recovery, full-rebuild replacement and the Shadow-state boundary.
+- Full suite contains 1107 tests.
+
 # 0.14.67 — 2026-09-21
 
 - Add bounded, Correct-driven semantic reliability for local presence evidence. The calibrator learns only from explicit binary Correct supervision and remains separate from the action policy.

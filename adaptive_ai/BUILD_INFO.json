@@ -1,10 +1,10 @@
 {
-  "version": "0.14.67",
-  "release_date": "2026-09-21",
-  "base_version": "0.14.66",
-  "base_commit": "74894f3ed59e22230977da8dbdc1410d0513520e",
-  "release_status": "release-0.14.67-correct-driven-semantic-reliability",
-  "tests_passed": 1103,
+  "version": "0.14.68",
+  "release_date": "2026-09-22",
+  "base_version": "0.14.67",
+  "base_commit": "01e4831400f22a85f8c7e445602f62ab716efec7",
+  "release_status": "release-0.14.68-candidate-queue-deadlock-fix",
+  "tests_passed": 1107,
   "profile": "rpi4-low-memory-complete-discovery-manual-agent-selection",
   "manual_agent_training": true,
   "max_concurrent_training_jobs": 1,
@@ -40,7 +40,7 @@
   "migration": "no destructive migration; existing agents, models, feedback, raw archive, historical experiences, candidate lineage, rollback and generation state preserved",
   "physical_control": "unchanged; repaired agents return to Shadow and Control still requires qualified state plus all existing guards",
   "pi4": "0.14.38 targets the long-soak Raspberry Pi failure: drift analysis is coalesced on a throttled background observer, REST /states reconciliation is delta-only after bootstrap, websocket outage fallback reconciles every 10 s, and HA core-state health is tracked separately from unrelated REST errors.",
-  "ci_status": "0.14.67 pre-release validation passed on Python 3.11/3.13, Stage 17/18, source smoke, simulations and Docker; release-head validation pending.",
+  "ci_status": "0.14.68 pre-release validation passed on Python 3.11/3.13, Stage 17/18, source smoke, simulations and Docker; release-head validation pending.",
   "training_slice_budget": "adaptive-ai-index workers call a shared CooperativeTrainingBudget; expensive temporal tracker loops yield between entities/events and finalization is no longer outside the throttle",
   "finalization_lifeline": "HEAVY_JOBS remains owned through final gc.collect(), so /api/status and /api/agents stay on lightweight lifeline reads until the worker is actually finished",
   "finalization_progress": "post-replay UI now exposes bounded stages: replay complete, policy serialization, benchmark save, qualification, checkpoint complete",
@@ -243,5 +243,10 @@
   "semantic_reliability_transport_separation": "communication_reliability remains transport health; semantic_reliability is a separate Correct-driven factor and diagnostics expose both",
   "semantic_reliability_replay": "live RoomBelief, AdaptivePresence and HistoricalHomeView replay apply the same persisted semantic reliability profile",
   "semantic_reliability_persistence": "bounded calibration persists separately under semantic_reliability_v1 app_meta so RoomBelief topology/bootstrap replacement cannot erase it",
-  "semantic_reliability_debug": "Correct broad-context metadata and summary debug expose the reliability calibration result for the same supervision event"
+  "semantic_reliability_debug": "Correct broad-context metadata and summary debug expose the reliability calibration result for the same supervision event",
+  "candidate_queue_deadlock_fix": "Candidate queued lifecycle now adopts/upgrades an existing pending TrainingQueue job instead of returning forever while durable state remains queued",
+  "candidate_queue_claim": "pending teach jobs upgrade atomically to teach_rl; incompatible pending full-rebuild/autonomous jobs are safely replaced before activation; active jobs are never mutated mid-flight",
+  "candidate_shadow_recovery": "queued/building weights remain excluded from Shadow; Candidate starts receiving fresh Shadow events only after the repaired lifecycle reaches comparing/ready",
+  "candidate_queue_paths": "Correct/Teach, feedback-undo full rebuild and Autonomous continuation share the repaired queue-claim semantics",
+  "candidate_queue_hot_path": "no event-to-intent, policy inference, ActionIntent or Executor changes; fix is confined to Candidate background lifecycle"
 }
