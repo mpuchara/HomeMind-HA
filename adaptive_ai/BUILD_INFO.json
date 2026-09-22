@@ -4,7 +4,7 @@
   "base_version": "0.14.69",
   "base_commit": "7bea06cd0d4a228eceb78ab05b6c02dd54cfadd4",
   "release_status": "release-0.14.70-candidate-worker-recovery",
-  "tests_passed": 1117,
+  "tests_passed": 1118,
   "profile": "rpi4-low-memory-complete-discovery-manual-agent-selection",
   "manual_agent_training": true,
   "max_concurrent_training_jobs": 1,
