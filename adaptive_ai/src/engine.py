@@ -895,7 +895,7 @@ class Engine(threading.Thread):
                 del self.in_flight[target]
 
     def process_target(self, agents, changed_entities=None, snapshot=None):
-        target_trace = RUNTIME_DEBUG.begin("inference_target", target_entity=str((agents[0] if agents else {}).get("target_entity") or "unknown"), agent_count=len(agents or ()), changed_count=len(changed_entities or ()))
+        target_trace = (RUNTIME_DEBUG.begin("inference_target", target_entity=str((agents[0] if agents else {}).get("target_entity") or "unknown"), agent_count=len(agents or ()), changed_count=len(changed_entities or ())) if RUNTIME_DEBUG.enabled else None)
         if snapshot is None:
             with self.lock:
                 states = dict(self.state_map)
@@ -912,7 +912,7 @@ class Engine(threading.Thread):
             for agent in agents:
                 if self.stop_event.is_set():
                     return
-                agent_trace = RUNTIME_DEBUG.begin("inference_agent", agent_id=str(agent.get("id") or ""), target_entity=str(agent.get("target_entity") or ""), mode=str(agent.get("mode") or ""))
+                agent_trace = (RUNTIME_DEBUG.begin("inference_agent", agent_id=str(agent.get("id") or ""), target_entity=str(agent.get("target_entity") or ""), mode=str(agent.get("mode") or "")) if RUNTIME_DEBUG.enabled else None)
                 try:
                     # Agent snapshots come from the routing cache. Control safety is still
                     # revalidated from durable config inside Executor before any HA call.
