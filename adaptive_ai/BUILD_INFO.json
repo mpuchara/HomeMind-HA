@@ -1,10 +1,10 @@
 {
-  "version": "0.14.68",
+  "version": "0.14.69",
   "release_date": "2026-09-22",
-  "base_version": "0.14.67",
-  "base_commit": "01e4831400f22a85f8c7e445602f62ab716efec7",
-  "release_status": "release-0.14.68-candidate-queue-deadlock-fix",
-  "tests_passed": 1107,
+  "base_version": "0.14.68",
+  "base_commit": "4717ba9c755392660288fb0a49cf58b1e5d4fa83",
+  "release_status": "release-0.14.69-candidate-hydration-correct-work-visibility",
+  "tests_passed": 1113,
   "profile": "rpi4-low-memory-complete-discovery-manual-agent-selection",
   "manual_agent_training": true,
   "max_concurrent_training_jobs": 1,
@@ -40,7 +40,7 @@
   "migration": "no destructive migration; existing agents, models, feedback, raw archive, historical experiences, candidate lineage, rollback and generation state preserved",
   "physical_control": "unchanged; repaired agents return to Shadow and Control still requires qualified state plus all existing guards",
   "pi4": "0.14.38 targets the long-soak Raspberry Pi failure: drift analysis is coalesced on a throttled background observer, REST /states reconciliation is delta-only after bootstrap, websocket outage fallback reconciles every 10 s, and HA core-state health is tracked separately from unrelated REST errors.",
-  "ci_status": "0.14.68 pre-release validation passed on Python 3.11/3.13, Stage 17/18, source smoke, simulations and Docker; release-head validation pending.",
+  "ci_status": "0.14.69 pre-release validation pending after Candidate hydration/Correct worker integration.",
   "training_slice_budget": "adaptive-ai-index workers call a shared CooperativeTrainingBudget; expensive temporal tracker loops yield between entities/events and finalization is no longer outside the throttle",
   "finalization_lifeline": "HEAVY_JOBS remains owned through final gc.collect(), so /api/status and /api/agents stay on lightweight lifeline reads until the worker is actually finished",
   "finalization_progress": "post-replay UI now exposes bounded stages: replay complete, policy serialization, benchmark save, qualification, checkpoint complete",
@@ -248,5 +248,8 @@
   "candidate_queue_claim": "pending teach jobs upgrade atomically to teach_rl; incompatible pending full-rebuild/autonomous jobs are safely replaced before activation; active jobs are never mutated mid-flight",
   "candidate_shadow_recovery": "queued/building weights remain excluded from Shadow; Candidate starts receiving fresh Shadow events only after the repaired lifecycle reaches comparing/ready",
   "candidate_queue_paths": "Correct/Teach, feedback-undo full rebuild and Autonomous continuation share the repaired queue-claim semantics",
-  "candidate_queue_hot_path": "no event-to-intent, policy inference, ActionIntent or Executor changes; fix is confined to Candidate background lifecycle"
+  "candidate_queue_hot_path": "no event-to-intent, policy inference, ActionIntent or Executor changes; fix is confined to Candidate background lifecycle",
+  "candidate_initial_hydration": "first Candidate lifecycle read is not suppressed by transient HA Ingress document.hidden; visibility and first Live-agent readiness trigger immediate bounded retry without increasing the 4 s steady poll cadence",
+  "candidate_correct_worker_visibility": "Conservative Correct remains outside destructive historical rebuild but exposes candidate_worker queued/active state, queue position/blocker and phase-aware progress",
+  "candidate_correct_qos": "Conservative Correct serializes with HEAVY_JOBS and uses cooperative TRAINING_BUDGET checkpoints across context reconstruction, fine-tune and offline scoring"
 }
