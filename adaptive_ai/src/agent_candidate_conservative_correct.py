@@ -597,21 +597,46 @@ def install(manager):
             manager._fail(row, "Live policy snapshot is unavailable; train Live before Correct")
             return True
 
+        owner = "candidate_correct"
+        if not HEAVY_JOBS.acquire(owner):
+            _set_candidate_work(
+                manager, parent["id"], state="queued", phase="waiting_for_heavy_slot",
+                progress=0.0, blocked_by=HEAVY_JOBS.owner,
+            )
+            return False
+
+        TRAINING_BUDGET.begin(thread_name=_BUDGET_THREAD_NAME)
         build_revision = int(row.get("feedback_revision") or 0)
         now = time.time()
-        with manager.store.lock, manager.store.conn() as c:
-            c.execute(
-                """UPDATE agent_candidates SET state='building',build_revision=?,dirty=0,
-                   build_started_ts=?,build_finished_ts=NULL,comparison_started_ts=NULL,
-                   comparison_json='{}',offline_gate_json='{}',last_error=NULL,updated_ts=?
-                   WHERE parent_agent_id=?""",
-                (build_revision, now, now, str(row["parent_agent_id"])),
+        try:
+            with manager.store.lock, manager.store.conn() as c:
+                c.execute(
+                    """UPDATE agent_candidates SET state='building',build_revision=?,dirty=0,
+                       build_started_ts=?,build_finished_ts=NULL,comparison_started_ts=NULL,
+                       comparison_json='{}',offline_gate_json='{}',last_error=NULL,updated_ts=?
+                       WHERE parent_agent_id=?""",
+                    (build_revision, now, now, str(row["parent_agent_id"])),
+                )
+            _set_candidate_work(
+                manager, parent["id"], state="active", phase="snapshot",
+                progress=0.05, started_ts=now, blocked_by=None,
+            )
+            manager.store.event(
+                parent["id"], "info", "agent_candidate_correct_started",
+                "Candidate Correct worker started conservative snapshot fine-tune",
+                {"candidate_id": candidate["id"], "generation": row.get("generation"),
+                 "build_revision": build_revision, "backend": "candidate_worker"},
             )
 
-        try:
             candidate = _copy_parent_snapshot(manager, parent["id"], candidate["id"])
+            _set_candidate_work(
+                manager, parent["id"], state="active", phase="syncing_feedback", progress=0.12
+            )
             synced = manager._sync_feedback(parent, candidate)
             candidate = manager.store.get_agent_config(candidate["id"]) or candidate
+            TRAINING_BUDGET.checkpoint(
+                "candidate_correct_snapshot", force=True, thread_name=_BUDGET_THREAD_NAME
+            )
 
             # Parent and Candidate are scored on the exact same immutable held-out row
             # list. Exclude every active Teach timestamp up front, even if one Teach
@@ -619,14 +644,35 @@ def install(manager):
             # regression benchmark and avoids changing the denominator after fine-tune.
             labels = _teach_rows(manager.engine.rl_teaching, candidate)
             teach_times = [float(x["sample_ts"]) for x in labels]
+            _set_candidate_work(
+                manager, parent["id"], state="active", phase="loading_offline_benchmark",
+                progress=0.20, labels_total=len(labels),
+            )
             rows = _history_rows(manager.store, candidate["id"], teach_times)
+            _set_candidate_work(
+                manager, parent["id"], state="active", phase="scoring_parent_snapshot",
+                progress=0.28, benchmark_rows=len(rows),
+            )
             parent_policy = _policy_for(manager, candidate)
             parent_stats = _score(parent_policy, candidate, rows)
+            _set_candidate_work(
+                manager, parent["id"], state="active", phase="fine_tuning",
+                progress=0.40, benchmark_rows=len(rows), labels_total=len(labels),
+            )
 
-            report = _conservative_fine_tune(manager, candidate)
+            report = _conservative_fine_tune(
+                manager, candidate, parent_id=parent["id"]
+            )
             candidate = manager.store.get_agent_config(candidate["id"]) or candidate
+            _set_candidate_work(
+                manager, parent["id"], state="active", phase="scoring_candidate",
+                progress=0.82, benchmark_rows=len(rows),
+            )
             candidate_policy = _policy_for(manager, candidate)
             candidate_stats = _score(candidate_policy, candidate, rows)
+            _set_candidate_work(
+                manager, parent["id"], state="active", phase="offline_gate", progress=0.94
+            )
             gate = _offline_gate(parent, parent_stats, candidate_stats, report)
 
             fresh = manager._candidate_row(parent["id"]) or row
@@ -636,6 +682,10 @@ def install(manager):
                         "UPDATE agent_candidates SET state='queued',dirty=1,updated_ts=? WHERE parent_agent_id=?",
                         (time.time(), str(parent["id"])),
                     )
+                _set_candidate_work(
+                    manager, parent["id"], state="queued", phase="new_feedback",
+                    progress=0.0, blocked_by=None,
+                )
                 manager.store.event(
                     parent["id"], "info", "agent_candidate_requeued",
                     "New feedback arrived during Candidate fine-tune; restarting from a fresh Live snapshot",
@@ -646,16 +696,29 @@ def install(manager):
                 return True
 
             _persist_gate(manager, fresh, gate)
+            _set_candidate_work(
+                manager, parent["id"], state="done", phase="complete", progress=1.0,
+                finished_ts=time.time(), labels_done=report.get("labels_applied"),
+                labels_total=report.get("labels_applied"),
+            )
             manager.store.event(
                 parent["id"], "info", "agent_candidate_correct_complete",
                 "Candidate Correct fine-tuned the exact Live snapshot without rebuild or schema reselection",
                 {"candidate_id": candidate["id"], "generation": fresh.get("generation"),
-                 "feedback": synced, "teach": report, "offline_gate": gate},
+                 "feedback": synced, "teach": report, "offline_gate": gate,
+                 "backend": "candidate_worker"},
             )
             return True
         except Exception as exc:
+            _set_candidate_work(
+                manager, parent["id"], state="failed", phase="failed", progress=0.0,
+                error=f"{type(exc).__name__}: {exc}", finished_ts=time.time(),
+            )
             manager._fail(row, f"{type(exc).__name__}: {exc}")
             return True
+        finally:
+            TRAINING_BUDGET.end()
+            HEAVY_JOBS.release(owner)
 
     def finish_build_if_ready(row):
         # Conservative Correct never enters TrainingQueue. Explicit Full Rebuild remains
@@ -723,6 +786,21 @@ def install(manager):
         result["historical_parent_score"] = gate.get("historical_parent_score")
         result["historical_candidate_score"] = gate.get("historical_candidate_score")
         result["historical_benchmark_samples"] = gate.get("benchmark_samples")
+
+        if row and str(row.get("reason") or "") in _CORRECT_REASONS:
+            work = _candidate_work(manager, row["parent_agent_id"])
+            synthetic_queue = _candidate_worker_queue(manager, row)
+            if result.get("queue") is None and synthetic_queue is not None:
+                result["queue"] = synthetic_queue
+            if work:
+                result["candidate_work"] = work
+                result["training_backend"] = "candidate_worker"
+                if str(row.get("state") or "") == "building":
+                    result["training_progress"] = max(
+                        float(result.get("training_progress") or 0.0),
+                        float(work.get("progress") or 0.0),
+                    )
+
         if not gate.get("passed"):
             result["promotable"] = False
             if isinstance(result.get("comparison"), dict):
