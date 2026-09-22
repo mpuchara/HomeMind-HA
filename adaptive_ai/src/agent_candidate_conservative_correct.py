@@ -197,7 +197,7 @@ def _teach_rows(service, candidate):
     ]
 
 
-def _conservative_fine_tune(manager, candidate):
+def _conservative_fine_tune(manager, candidate, *, parent_id=None):
     """Fine-tune the snapshot without feature selection or historical rebuilding.
 
     All pre-correction predictions are collected before the first policy update. A
@@ -212,6 +212,8 @@ def _conservative_fine_tune(manager, candidate):
     manager.engine.models.pop(candidate["id"], None)
     policy = manager.engine.policy(candidate)
     labels = _teach_rows(service, candidate)
+    parent_id = str(parent_id or candidate.get("id") or "")
+    total_labels = max(1, len(labels))
     positive_weight = max(1, int(OPTIONS.get("teach_rl_positive_weight", 6)))
     negative_weight = max(0, int(OPTIONS.get("teach_rl_negative_weight", 3)))
     deadband = max(.01, float(candidate.get("deadband") or .01))
@@ -221,7 +223,13 @@ def _conservative_fine_tune(manager, candidate):
     # earlier Teach sample in the same revision.
     usable = []
     before_correct = 0
-    for label in labels:
+    for index, label in enumerate(labels):
+        if parent_id:
+            _set_candidate_work(
+                manager, parent_id, state="active", phase="reconstructing_correct_context",
+                progress=0.42 + 0.16 * (index / total_labels),
+                labels_done=index, labels_total=len(labels),
+            )
         features = service._label_context(candidate, policy, label["sample_ts"])
         if features is None:
             continue
@@ -239,10 +247,20 @@ def _conservative_fine_tune(manager, candidate):
             "desired_value": desired_value,
             "was_correct": bool(correct),
         })
+        TRAINING_BUDGET.checkpoint(
+            "candidate_correct_context", thread_name=_BUDGET_THREAD_NAME
+        )
 
     base_revision = str(getattr(policy, "model_revision", "") or "")
     negative_updates = 0
-    for sample in usable:
+    total_usable = max(1, len(usable))
+    for index, sample in enumerate(usable):
+        if parent_id:
+            _set_candidate_work(
+                manager, parent_id, state="active", phase="applying_correct_updates",
+                progress=0.60 + 0.15 * (index / total_usable),
+                labels_done=index, labels_total=len(usable),
+            )
         for horizon in policy.horizons:
             if sample["chosen_idx"] != sample["desired_idx"]:
                 for _ in range(negative_weight):
@@ -262,6 +280,9 @@ def _conservative_fine_tune(manager, candidate):
             "Candidate Teach desired correction", sample["features"], "teach-ui",
             source="candidate_correct",
         )
+        TRAINING_BUDGET.checkpoint(
+            "candidate_correct_update", thread_name=_BUDGET_THREAD_NAME
+        )
 
     # A changed set of weights is a new Candidate model revision, while the report keeps
     # the exact parent revision from which it originated.
@@ -273,6 +294,14 @@ def _conservative_fine_tune(manager, candidate):
         _, chosen_value = _prediction_index(policy, sample["features"])
         after_correct += int(abs(chosen_value - sample["desired_value"]) <= deadband)
 
+    if parent_id:
+        _set_candidate_work(
+            manager, parent_id, state="active", phase="saving_candidate_model",
+            progress=0.78, labels_done=len(usable), labels_total=len(usable),
+        )
+    TRAINING_BUDGET.checkpoint(
+        "candidate_correct_save", force=True, thread_name=_BUDGET_THREAD_NAME
+    )
     manager.store.save_model(candidate["id"], policy.serialize())
     manager.engine.models[candidate["id"]] = policy
     return {
@@ -310,7 +339,11 @@ def _history_rows(store, agent_id, teach_times=()):
     if not times:
         return rows
     filtered = []
-    for row in rows:
+    for index, row in enumerate(rows):
+        if index and index % 64 == 0:
+            TRAINING_BUDGET.checkpoint(
+                "candidate_correct_history_filter", thread_name=_BUDGET_THREAD_NAME
+            )
         ts = row.get("ts")
         if ts is not None and any(abs(float(ts) - sample_ts) <= .5 for sample_ts in times):
             continue
@@ -328,7 +361,11 @@ def _score(policy, agent, rows):
         float(agent.get("deadband") or 0.0),
         (float(agent.get("max_value") or 0.0) - float(agent.get("min_value") or 0.0)) * .03,
     )
-    for row in rows:
+    for index, row in enumerate(rows):
+        if index and index % 64 == 0:
+            TRAINING_BUDGET.checkpoint(
+                "candidate_correct_offline_score", thread_name=_BUDGET_THREAD_NAME
+            )
         features = _features(row.get("features_json"))
         if not features:
             continue
