@@ -60,6 +60,13 @@ class CandidateLegacySchemaRecoveryTests(unittest.TestCase):
             source,
         )
 
+    def test_schema_upgrade_rebuild_bypasses_feedback_debounce(self):
+        source = (
+            ROOT / "adaptive_ai" / "src" / "agent_candidate_debounce.py"
+        ).read_text(encoding="utf-8")
+        self.assertIn('"schema_upgrade_rebuild"', source)
+        self.assertIn("IMMEDIATE_REASONS", source)
+
     def test_schema_upgrade_rebuild_gets_full_rebuild_offline_gate(self):
         source = (
             ROOT / "adaptive_ai" / "src" / "agent_candidate_conservative_correct.py"
