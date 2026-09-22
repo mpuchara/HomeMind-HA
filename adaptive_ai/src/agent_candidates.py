@@ -236,6 +236,8 @@ class AgentCandidateManager(threading.Thread):
         self._worker_last_error = None
         self._worker_error_count = 0
         self._worker_restart_count = 0
+        self._worker_last_error_event_ts = 0.0
+        self._worker_last_error_signature = None
         self._recovery_worker = None
         ensure_tables(self.store)
         self._recover()
@@ -271,17 +273,27 @@ class AgentCandidateManager(threading.Thread):
                 "state": row.get("state"),
                 "reason": row.get("reason"),
             })
+        now = time.time()
+        signature = f"{detail['phase']}|{detail['error']}|{detail.get('candidate_id') or ''}"
         with self._worker_health_lock:
             self._worker_last_error = detail["error"]
             self._worker_error_count += 1
-            self._worker_heartbeat_ts = time.time()
-        try:
-            self.store.event(
-                (row or {}).get("parent_agent_id"), "error", "agent_candidate_worker_error",
-                "Candidate lifecycle worker recovered from an internal error", detail,
+            self._worker_heartbeat_ts = now
+            should_emit = (
+                signature != self._worker_last_error_signature
+                or now - float(self._worker_last_error_event_ts or 0.0) >= 30.0
             )
-        except Exception:
-            pass
+            if should_emit:
+                self._worker_last_error_signature = signature
+                self._worker_last_error_event_ts = now
+        if should_emit:
+            try:
+                self.store.event(
+                    (row or {}).get("parent_agent_id"), "error", "agent_candidate_worker_error",
+                    "Candidate lifecycle worker recovered from an internal error", detail,
+                )
+            except Exception:
+                pass
 
     def _ensure_worker_alive(self):
         if self.stop_event.is_set():
