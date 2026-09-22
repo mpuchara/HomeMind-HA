@@ -8,6 +8,8 @@
   const parentGain=v=>v==null?'vs Parent —':`vs Parent ${Number(v)>=0?'+':''}${(Number(v)*100).toFixed(1)}%`;
   const api=async(path,opts={})=>{const r=await fetch(path,{headers:{'Content-Type':'application/json'},...opts});const b=await r.json();if(!r.ok)throw Error(b.error||`HTTP ${r.status}`);return b;};
   let busy=false;
+  let firstRefreshAttempted=false;
+  let hydrated=false;
   const uiState=new Map();
   // Promote is an explicit human acceptance action. Default evidence rules therefore do
   // not add a second hidden gate; hard model/config/atomic/Control guards stay backend-owned.
@@ -149,12 +151,18 @@
     const offline=el.querySelector('[data-custom-offline]');if(offline)state.allowOffline=offline.checked;
   }
 
-  async function refresh(){
-    if(busy||document.hidden)return;
+  async function refresh({force=false}={}){
+    if(busy)return;
+    // Home Assistant Ingress can mark the iframe hidden during the first navigation frame.
+    // Never let that suppress the first Candidate hydration; after the first attempt,
+    // background tabs can still skip the heavy lifecycle read until they become visible.
+    if(document.hidden&&firstRefreshAttempted&&!force)return;
+    firstRefreshAttempted=true;
     busy=true;
     try{
       const data=await api('api/candidates');
       const candidates=data.candidates||[];
+      hydrated=true;
       window.__adaptiveAiCandidates=candidates;
       window.dispatchEvent(new CustomEvent('adaptive-ai:candidates',{detail:candidates}));
       const root=document.getElementById('agents');if(!root)return;
@@ -222,7 +230,12 @@
     finally{busy=false;}
   }
 
-  window.refreshCandidates=refresh;
+  window.refreshCandidates=()=>refresh({force:true});
+  // If HA Ingress reveals the iframe after the first script pass, hydrate immediately
+  // instead of waiting for the next 4 s lifecycle poll. Also retry once the main agent
+  // list proves runtime readiness, but only until Candidate hydration has succeeded.
+  window.addEventListener('visibilitychange',()=>{if(!document.hidden)refresh({force:true});});
+  window.addEventListener('adaptive-ai:agents',()=>{if(!hydrated)refresh({force:true});});
   // Candidate lifecycle is not a realtime control signal. Match the main 4 s UI cadence
   // instead of running a second 1.5 s DB/status poller on Raspberry Pi.
   async function loop(){await refresh();setTimeout(loop,4000);}
