@@ -1,3 +1,17 @@
+# 0.14.69 — 2026-09-22
+
+- Fix delayed Candidate-card hydration when Home Assistant Ingress transiently reports the iframe as hidden during initial navigation.
+- Allow the first Candidate lifecycle read even while hidden, and refresh immediately when the document becomes visible or the first Live-agent payload confirms runtime readiness.
+- Preserve the existing 4 s Candidate lifecycle cadence; the hydration fix is event-driven and does not add a faster database poller.
+- Make Correct Candidate work explicit instead of appearing as an unexplained `Queued` state while the normal historical TrainingQueue is empty.
+- Surface a dedicated `candidate_worker` queue contract with queued/active state, queue position, blocker and phase-aware progress on the existing Candidate card.
+- Serialize Conservative Correct with the shared `HEAVY_JOBS` gate so snapshot fine-tune/offline scoring cannot silently compete with historical training or discovery.
+- Add cooperative `TRAINING_BUDGET` checkpoints across Correct context reconstruction, supervised updates and offline scoring to preserve Ingress/realtime CPU priority.
+- Keep Correct semantics unchanged: exact Live snapshot → conservative supervised fine-tune → same-row offline regression gate → future Shadow A/B; no destructive historical rebuild is introduced.
+- No reward, schema, parent-model, promotion, ActionIntent, Executor or Home Assistant service semantics are changed.
+- Add six regressions covering initial Candidate hydration plus Candidate Correct queue visibility, shared heavy-work serialization and cooperative CPU budgeting.
+- Full suite contains 1113 tests.
+
 # 0.14.68 — 2026-09-22
 
 - Fix a Candidate lifecycle deadlock where a hidden Candidate could already own a pending TrainingQueue job while its durable Candidate state remained `queued`.
