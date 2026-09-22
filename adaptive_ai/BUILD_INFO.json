@@ -4,7 +4,7 @@
   "base_version": "0.14.70",
   "base_commit": "083351e55f98448521b6bde3deb904469dfad580",
   "release_status": "release-0.14.71-candidate-legacy-schema-recovery",
-  "tests_passed": 1124,
+  "tests_passed": 1125,
   "profile": "rpi4-low-memory-complete-discovery-manual-agent-selection",
   "manual_agent_training": true,
   "max_concurrent_training_jobs": 1,
