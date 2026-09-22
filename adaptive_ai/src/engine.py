@@ -895,6 +895,7 @@ class Engine(threading.Thread):
                 del self.in_flight[target]
 
     def process_target(self, agents, changed_entities=None, snapshot=None):
+        target_trace = RUNTIME_DEBUG.begin("inference_target", target_entity=str((agents[0] if agents else {}).get("target_entity") or "unknown"), agent_count=len(agents or ()), changed_count=len(changed_entities or ()))
         if snapshot is None:
             with self.lock:
                 states = dict(self.state_map)
@@ -911,11 +912,14 @@ class Engine(threading.Thread):
             for agent in agents:
                 if self.stop_event.is_set():
                     return
+                agent_trace = RUNTIME_DEBUG.begin("inference_agent", agent_id=str(agent.get("id") or ""), target_entity=str(agent.get("target_entity") or ""), mode=str(agent.get("mode") or ""))
                 try:
                     # Agent snapshots come from the routing cache. Control safety is still
                     # revalidated from durable config inside Executor before any HA call.
                     self.process_agent(agent, states, changed_entities if changed_entities else None)
+                    RUNTIME_DEBUG.end(agent_trace, status="ok")
                 except Exception as exc:
+                    RUNTIME_DEBUG.end(agent_trace, status="error", error=f"{type(exc).__name__}: {exc}")
                     STORE.event(agent["id"], "error", "agent_error", str(exc), {"trace": traceback.format_exc(limit=4)})
         finally:
             for name in ("entity_revisions", "context_revision", "state_revision"):
@@ -923,6 +927,7 @@ class Engine(threading.Thread):
                     delattr(self._inference_tls, name)
                 except AttributeError:
                     pass
+            RUNTIME_DEBUG.end(target_trace, status="ok")
         if self.state_revision != revision:
             self.wake_event.set()
 
