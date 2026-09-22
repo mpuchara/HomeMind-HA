@@ -133,6 +133,7 @@ class RuntimeCompositionRoot:
         from rpi_low_power_runtime import install as install_rpi_low_power_runtime
         from workflow_request_queue import install as install_workflow_request_queue
         from runtime_http import install_dispatch, register_feedback_routes, register_promotion_routes
+        from runtime_debug_log import register_runtime_debug_routes
         from trial_knowledge import install as install_trial_knowledge
 
         # Existing fast + preference + episode composition is the characterized base.
@@ -176,6 +177,7 @@ class RuntimeCompositionRoot:
         register_feedback_routes(router, self.core)
         register_promotion_routes(router, self.core, manager)
         register_correct_learning_debug_route(router, self.core, manager)
+        register_runtime_debug_routes(router, self.core, manager)
 
         self.dependencies = RuntimeDependencies(clock=self.clock, repository=self.core.STORE, transport=router)
         self.contracts = self._contract_snapshot(manager, router)
