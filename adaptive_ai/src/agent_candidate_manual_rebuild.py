@@ -55,7 +55,8 @@ def install(manager):
         if not candidate or not parent:
             manager._fail(row, "candidate or live agent disappeared")
             return True
-        if queue.status_for(candidate["id"]):
+        existing = queue.status_for(candidate["id"])
+        if existing and str(existing.get("state") or "") == "active":
             return False
 
         try:
@@ -64,7 +65,11 @@ def install(manager):
             # full historical rebuild and HistoryManager exposes its real progress.
             # The withdrawn feedback row/label has already been retired in the journal,
             # so replay cannot accidentally bake it back into the child policy.
-            queued = queue.enqueue(candidate["id"], rebuild=True, reason="full_rebuild")
+            queued, queue_claim = manager._claim_candidate_training_job(
+                candidate["id"], rebuild=True, reason="full_rebuild"
+            )
+            if queued is None:
+                return False
             now = time.time()
             with manager.store.lock, manager.store.conn() as c:
                 c.execute(
@@ -77,7 +82,7 @@ def install(manager):
                 row["parent_agent_id"], "info", "agent_candidate_full_rebuild_started",
                 "Candidate full historical rebuild started while the Live agent keeps serving",
                 {"candidate_id": candidate["id"], "generation": row.get("generation"),
-                 "queue": queued, "reason": reason},
+                 "queue": queued, "queue_claim": queue_claim, "reason": reason},
             )
             return True
         except Exception as exc:
