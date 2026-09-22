@@ -36,11 +36,15 @@ class RuntimeDebugLogService:
 
     def _queue_status(self):
         queue = getattr(self.core, "TRAINING_QUEUE", None)
-        status = getattr(queue, "status", None)
-        if not callable(status):
+        if queue is None:
+            return None
+        getter = getattr(queue, "snapshot", None)
+        if not callable(getter):
+            getter = getattr(queue, "status", None)
+        if not callable(getter):
             return None
         try:
-            return status()
+            return getter()
         except Exception as exc:
             return {"error": f"{type(exc).__name__}: {exc}"}
 
