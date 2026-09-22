@@ -7,7 +7,7 @@
 - Keep old feature indexes isolated: no old numeric dimension is silently reinterpreted as a current semantic feature label.
 - Run the normal full-rebuild offline gate after schema-upgrade training before future Shadow A/B can begin.
 - Automatically recover the specific 0.14.70 failed Candidate on startup by requeuing it as `schema_upgrade_rebuild`, preserving its lineage and Correct feedback.
-- Add six regressions for current/legacy schema compatibility, rebuild routing, startup recovery and offline-gate coverage. Full suite contains 1124 tests.
+- Add seven regressions for current/legacy schema compatibility, rebuild routing, immediate scheduling, startup recovery and offline-gate coverage. Full suite contains 1125 tests.
 
 # 0.14.70 — 2026-09-22
 
