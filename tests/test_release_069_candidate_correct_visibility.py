@@ -14,7 +14,7 @@ class CandidateCorrectVisibilityContractTests(unittest.TestCase):
         self.assertIn('result["queue"] = synthetic_queue', source)
         self.assertIn('result["training_backend"] = "candidate_worker"', source)
         self.assertIn('result["training_progress"] = max(', source)
-        self.assertIn('"phase": "waiting_for_heavy_slot"', source)
+        self.assertIn('phase="waiting_for_heavy_slot"', source)
 
     def test_correct_serializes_with_shared_heavy_work(self):
         source = self.source("agent_candidate_conservative_correct.py")
