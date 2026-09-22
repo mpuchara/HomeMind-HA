@@ -36,8 +36,8 @@ class CandidateCorrectVisibilityContractTests(unittest.TestCase):
         source = (
             ROOT / "adaptive_ai" / "src" / "static" / "candidate_ui.js"
         ).read_text(encoding="utf-8")
-        self.assertIn("q.state==='queued'?\` · queue #", source)
-        self.assertIn("q.state==='active'?\` · active", source)
+        self.assertIn("queue #${q.position||1}", source)
+        self.assertIn("q.state==='active'", source)
         self.assertIn("c.state==='building'?", source)
         self.assertIn("c.training_progress||0", source)
 
