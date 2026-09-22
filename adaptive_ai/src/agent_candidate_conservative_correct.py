@@ -18,12 +18,61 @@ import time
 import uuid
 
 from settings import OPTIONS, iso_now
+from telemetry import HEAVY_JOBS
+from training_budget import TRAINING_BUDGET
 
 
 _CORRECT_REASONS = {
     "feedback", "wrong_decision", "wrong_decision_undo", "teach", "teach_undo", "teach_train",
 }
 _FULL_REBUILD_REASONS = {"manual_rebuild", "config_change"}
+_CANDIDATE_WORK_KEY = "candidate_correct_work"
+_BUDGET_THREAD_NAME = "adaptive-ai-index-candidate-correct"
+
+
+def _set_candidate_work(manager, parent_id, **fields):
+    parent_id = str(parent_id)
+    with manager.lock:
+        runtime = manager.runtime.setdefault(parent_id, {})
+        work = dict(runtime.get(_CANDIDATE_WORK_KEY) or {})
+        work.update(fields)
+        work["updated_ts"] = time.time()
+        runtime[_CANDIDATE_WORK_KEY] = work
+        return dict(work)
+
+
+def _candidate_work(manager, parent_id):
+    with manager.lock:
+        runtime = manager.runtime.get(str(parent_id)) or {}
+        return dict(runtime.get(_CANDIDATE_WORK_KEY) or {})
+
+
+def _candidate_worker_queue(manager, row):
+    state = str(row.get("state") or "queued")
+    if state not in ("queued", "building") or str(row.get("reason") or "") not in _CORRECT_REASONS:
+        return None
+    rows = [
+        item for item in manager._all_rows()
+        if str(item.get("state") or "") in ("queued", "building")
+        and str(item.get("reason") or "") in _CORRECT_REASONS
+    ]
+    candidate_id = str(row.get("candidate_id") or "")
+    if state == "building":
+        return {
+            "state": "active", "position": 0, "ahead": 0,
+            "reason": "candidate_correct", "backend": "candidate_worker",
+            "blocked_by": None, "agent_id": candidate_id,
+        }
+    position = 1
+    for index, item in enumerate(rows):
+        if str(item.get("candidate_id") or "") == candidate_id:
+            position = index + 1
+            break
+    return {
+        "state": "queued", "position": position, "ahead": max(0, position - 1),
+        "reason": "candidate_correct", "backend": "candidate_worker",
+        "blocked_by": HEAVY_JOBS.owner, "agent_id": candidate_id,
+    }
 
 
 def _json(raw, default=None):
