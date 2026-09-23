@@ -6,9 +6,10 @@
 - Keep longer interactive priority for explicit user workflows such as Correct; only HA realtime reasons use the shorter cap.
 - Increase historical-experience persistence batches from 64 to 128 rows to reduce SQLite/WAL commit overhead.
 - Increase the shared replay RAM query cache from 8,192 to 16,384 rows so the onset and persistence temporal trackers reuse more SQLite results instead of evicting them.
+- Reuse successful Recorder coverage in RAM across repeated Rebuilds: an identical seven-day target/context range is skipped, while later runs fetch only a 30-minute overlap plus the new tail. A timed-out/skipped Recorder slice is never marked as complete coverage.
 - Migrate only previously shipped defaults; explicit custom tuning remains authoritative.
 - Add regression coverage for bounded realtime event storms and preservation of longer non-realtime interactive priority.
-- Full suite target: 1134 tests.
+- Full suite target: 1138 tests.
 
 # 0.14.72 — 2026-09-22
 
