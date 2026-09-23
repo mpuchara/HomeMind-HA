@@ -23,6 +23,8 @@ class RealtimePreemptionTests(unittest.TestCase):
             max_slice_seconds=.05,
             max_sleep_seconds=2.0,
             thread_prefixes=("worker",),
+            realtime_max_burst_seconds=.45,
+            realtime_cooldown_seconds=.20,
         )
         self.assertTrue(budget.begin(thread_name="worker"))
         clock.now = .02
@@ -32,17 +34,59 @@ class RealtimePreemptionTests(unittest.TestCase):
         self.assertAlmostEqual(clock.now, .27, places=6)
         slept2 = budget.checkpoint("unit2", thread_name="worker")
         self.assertAlmostEqual(slept2, .25, places=6)
-        self.assertAlmostEqual(clock.now, .52, places=6)
+        self.assertAlmostEqual(clock.now, .47, places=6)
         stats = budget.snapshot()
         self.assertEqual(stats["interactive_preemptions"], 2)
-        self.assertAlmostEqual(stats["interactive_sleep_seconds"], .50, places=6)
+        self.assertAlmostEqual(stats["interactive_sleep_seconds"], .45, places=6)
         self.assertTrue(str(stats["last_checkpoint"]).startswith("interactive:"))
+
+    def test_realtime_event_storm_hits_short_cap_and_cooldown(self):
+        clock = FakeClock()
+        budget = CooperativeTrainingBudget(clock=clock, sleeper=clock.sleep)
+        budget.configure(
+            duty_cycle=.65,
+            max_slice_seconds=.035,
+            max_sleep_seconds=.5,
+            thread_prefixes=("worker",),
+            realtime_max_burst_seconds=.45,
+            realtime_cooldown_seconds=.20,
+        )
+        clock.now = .10
+        self.assertAlmostEqual(
+            budget.request_interactive_window(.30, reason="ha_state_changed"),
+            .40, places=6,
+        )
+        clock.now = .20
+        self.assertAlmostEqual(
+            budget.request_interactive_window(.40, reason="realtime_inference"),
+            .55, places=6,
+        )
+        clock.now = .30
+        self.assertAlmostEqual(
+            budget.request_interactive_window(.30, reason="ha_state_changed"),
+            .55, places=6,
+        )
+        clock.now = .56
+        self.assertAlmostEqual(
+            budget.request_interactive_window(.30, reason="ha_state_changed"),
+            .55, places=6,
+        )
+        self.assertEqual(budget.snapshot()["interactive_requests_suppressed"], 1)
+
+    def test_non_realtime_interaction_keeps_longer_priority_window(self):
+        clock = FakeClock()
+        budget = CooperativeTrainingBudget(clock=clock, sleeper=clock.sleep)
+        clock.now = .10
+        until = budget.request_interactive_window(.90, reason="correct_label")
+        self.assertAlmostEqual(until, 1.00, places=6)
 
     def test_engine_requests_priority_window_on_ha_event(self):
         source = (ROOT / "adaptive_ai" / "src" / "engine.py").read_text(encoding="utf-8")
         self.assertIn("TRAINING_BUDGET.request_interactive_window(", source)
         self.assertIn('reason="ha_state_changed"', source)
         self.assertIn('reason="realtime_inference"', source)
+        self.assertIn('"training_realtime_event_priority_seconds"', source)
+        self.assertIn('"training_realtime_inference_priority_seconds"', source)
 
     def test_ui_uses_only_recent_60s_event_latency(self):
         p0 = (ROOT / "adaptive_ai" / "src" / "static" / "p0.js").read_text(encoding="utf-8")
