@@ -33,7 +33,7 @@ class RealtimePreemptionTests(unittest.TestCase):
         self.assertAlmostEqual(slept, .25, places=6)
         self.assertAlmostEqual(clock.now, .27, places=6)
         slept2 = budget.checkpoint("unit2", thread_name="worker")
-        self.assertAlmostEqual(slept2, .25, places=6)
+        self.assertAlmostEqual(slept2, .20, places=6)
         self.assertAlmostEqual(clock.now, .47, places=6)
         stats = budget.snapshot()
         self.assertEqual(stats["interactive_preemptions"], 2)
