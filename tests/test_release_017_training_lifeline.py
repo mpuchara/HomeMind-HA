@@ -60,7 +60,7 @@ assert _budget_pause(2.0, 0.25, 2.0) == 2.0
         self.assertIn("DEFAULT_ARCHIVE_BATCH_ROWS = 16", source)
         self.assertIn("DEFAULT_TRAINING_DUTY_CYCLE = 0.65", source)
         self.assertIn("DEFAULT_MAX_THROTTLE_SLEEP_SECONDS = 0.50", source)
-        self.assertIn('current_duty in (0.20, 0.25)', source)
+        self.assertIn('current_duty in (0.20, 0.25, 0.55)', source)
         self.assertIn('core.OPTIONS["training_cpu_duty_cycle"] = DEFAULT_TRAINING_DUTY_CYCLE', source)
         self.assertIn('effective_training_duty_cycle', budget_source)
 
