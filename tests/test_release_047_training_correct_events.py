@@ -18,9 +18,11 @@ class Release047TrainingCorrectEventsTests(unittest.TestCase):
         self.assertIn('agent_training_pause_ms', run)
 
     def test_explicit_history_refresh_has_no_background_pause(self):
-        source = inspect.getsource(HistoryManager._refresh_agent_history)
-        self.assertIn('agent_training_pause_ms', source)
-        self.assertNotIn('history_background_pause_ms', source)
+        refresh = inspect.getsource(HistoryManager._refresh_agent_history)
+        importer = inspect.getsource(HistoryManager._training_recorder_import)
+        self.assertIn('_training_recorder_import', refresh)
+        self.assertIn('agent_training_pause_ms', importer)
+        self.assertNotIn('history_background_pause_ms', refresh + importer)
 
     def test_correct_candidate_current_uses_physical_history(self):
         source = inspect.getsource(build_correct_history)
@@ -40,7 +42,7 @@ class Release047TrainingCorrectEventsTests(unittest.TestCase):
         config=(ROOT/'adaptive_ai/config.yaml').read_text(encoding='utf-8')
         self.assertIn('"agent_training_history_days": 7', settings)
         self.assertIn('"agent_training_pause_ms": 0', settings)
-        self.assertIn('"training_cpu_duty_cycle": 0.55', settings)
+        self.assertIn('"training_cpu_duty_cycle": 0.65', settings)
         self.assertIn('"training_max_continuous_work_ms": 35', settings)
         self.assertIn('history_background_pause_ms: 1500', config)
         self.assertIn('agent_training_pause_ms: 0', config)

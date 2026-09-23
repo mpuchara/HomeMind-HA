@@ -34,12 +34,18 @@ class CooperativeTrainingBudget:
         self._max_sleep_seconds = 2.0
         self._thread_prefixes = ("adaptive-ai-index-",)
         self._interactive_until = 0.0
-        self._interactive_started_at = 0.0
+        self._interactive_started_at = None
         # Continuous HA sensor traffic must not starve offline training forever. A burst
         # may keep strict realtime priority only for a bounded interval, followed by a
         # short cooldown in which the training worker is guaranteed a scheduling slice.
         self._interactive_max_burst_seconds = 1.25
         self._interactive_cooldown_seconds = 0.10
+        # Realtime HA traffic gets a much shorter burst contract than explicit user
+        # actions such as Correct.  The trainer already yields after <=35 ms work slices,
+        # so a full 1.25 s blackout after every state_changed event needlessly starves
+        # replay in active homes.  These values are configurable by the Pi runtime.
+        self._realtime_max_burst_seconds = 0.45
+        self._realtime_cooldown_seconds = 0.20
         self._interactive_cooldown_until = 0.0
         self._interactive_reason = None
         self._stats = {
@@ -68,6 +74,8 @@ class CooperativeTrainingBudget:
         thread_prefixes=("adaptive-ai-index-",),
         clock=None,
         sleeper=None,
+        realtime_max_burst_seconds=None,
+        realtime_cooldown_seconds=None,
     ):
         with self._lock:
             if clock is not None:
@@ -82,6 +90,14 @@ class CooperativeTrainingBudget:
                 float(max_sleep_seconds), 0.050, 5.0
             )
             self._thread_prefixes = tuple(str(x) for x in thread_prefixes)
+            if realtime_max_burst_seconds is not None:
+                self._realtime_max_burst_seconds = self._clamp(
+                    float(realtime_max_burst_seconds), 0.15, 1.25
+                )
+            if realtime_cooldown_seconds is not None:
+                self._realtime_cooldown_seconds = self._clamp(
+                    float(realtime_cooldown_seconds), 0.05, 1.0
+                )
         return self.snapshot()
 
     def _eligible(self, thread_name=None):
@@ -100,8 +116,18 @@ class CooperativeTrainingBudget:
         without starving the FIFO.
         """
         duration = self._clamp(float(seconds), 0.05, 3.0)
+        reason = str(reason or "interactive")
+        realtime_reason = reason in {"ha_state_changed", "realtime_inference"}
         now = self._clock()
         with self._lock:
+            max_burst = (
+                float(self._realtime_max_burst_seconds)
+                if realtime_reason else float(self._interactive_max_burst_seconds)
+            )
+            cooldown = (
+                float(self._realtime_cooldown_seconds)
+                if realtime_reason else float(self._interactive_cooldown_seconds)
+            )
             if (
                 now < float(self._interactive_cooldown_until or 0.0)
                 and now >= float(self._interactive_until or 0.0)
@@ -111,20 +137,23 @@ class CooperativeTrainingBudget:
 
             active = now < float(self._interactive_until or 0.0)
             if active:
-                started = float(self._interactive_started_at or now)
-                cap = started + float(self._interactive_max_burst_seconds)
+                started = float(
+                    self._interactive_started_at
+                    if self._interactive_started_at is not None else now
+                )
+                cap = started + max_burst
                 until = min(
                     cap,
                     max(float(self._interactive_until or 0.0), now + duration),
                 )
             else:
                 self._interactive_started_at = now
-                until = now + min(duration, float(self._interactive_max_burst_seconds))
+                until = now + min(duration, max_burst)
 
             self._interactive_until = until
             self._interactive_cooldown_until = max(
                 float(self._interactive_cooldown_until or 0.0),
-                until + float(self._interactive_cooldown_seconds),
+                until + cooldown,
             )
             self._interactive_reason = str(reason or "interactive")
             return until
@@ -238,6 +267,8 @@ class CooperativeTrainingBudget:
             "interactive_requests_suppressed": int(stats["interactive_requests_suppressed"]),
             "interactive_max_burst_seconds": float(self._interactive_max_burst_seconds),
             "interactive_cooldown_seconds": float(self._interactive_cooldown_seconds),
+            "realtime_max_burst_seconds": float(self._realtime_max_burst_seconds),
+            "realtime_cooldown_seconds": float(self._realtime_cooldown_seconds),
             "last_checkpoint": stats["last_label"],
         }
 

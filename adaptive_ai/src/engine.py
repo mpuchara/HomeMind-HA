@@ -331,7 +331,8 @@ class Engine(threading.Thread):
             # strict-priority window so Shadow/Control inference is never queued behind
             # cooperative offline work for seconds.
             TRAINING_BUDGET.request_interactive_window(
-                0.75, reason="ha_state_changed"
+                float(OPTIONS.get("training_realtime_event_priority_seconds", 0.30)),
+                reason="ha_state_changed",
             )
             self.context.observe(entity_id, new_state, now_ts())
         HA.last_ok = now_ts(); HA.last_error = None
@@ -858,7 +859,8 @@ class Engine(threading.Thread):
         changed = set(changed_entities or ())
         if changed:
             TRAINING_BUDGET.request_interactive_window(
-                1.0, reason="realtime_inference"
+                float(OPTIONS.get("training_realtime_inference_priority_seconds", 0.40)),
+                reason="realtime_inference",
             )
 
         agents = self._active_agents_for_changes(changed)

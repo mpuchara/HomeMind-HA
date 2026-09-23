@@ -80,6 +80,13 @@ class HistoryManager(threading.Thread):
         self.training_schema_cache_hits = 0
         self.training_schema_cache_misses = 0
         self.training_replay_cache_status = {}
+        # Recorder imports are global archive data, not model state. Repeated Rebuilds
+        # in one process therefore reuse successful per-entity coverage and fetch only
+        # a short overlap + new tail instead of downloading the same 7 days again.
+        self.training_recorder_coverage = {}
+        self.training_recorder_coverage_hits = 0
+        self.training_recorder_coverage_misses = 0
+        self.recorder_skipped_slices = 0
         self.job_cancel_event = None
         self.agent_jobs_lock = threading.RLock()
         self.discovery_job_lock = threading.RLock()
@@ -132,6 +139,9 @@ class HistoryManager(threading.Thread):
                 "training_schema_cache_hits": int(getattr(self, "training_schema_cache_hits", 0) or 0),
                 "training_schema_cache_misses": int(getattr(self, "training_schema_cache_misses", 0) or 0),
                 "training_replay_cache": dict(getattr(self, "training_replay_cache_status", {}) or {}),
+                "training_recorder_coverage_entries": len(getattr(self, "training_recorder_coverage", {}) or {}),
+                "training_recorder_coverage_hits": int(getattr(self, "training_recorder_coverage_hits", 0) or 0),
+                "training_recorder_coverage_misses": int(getattr(self, "training_recorder_coverage_misses", 0) or 0),
                 "training_stage_progress": (
                     (self.work_done / self.work_total) if self.work_total else None
                 ),
@@ -368,6 +378,71 @@ class HistoryManager(threading.Thread):
             if entity_capability_tags(eid, current.get(eid) or {}) & {"occupancy", "activity"}
         )
 
+    def _training_recorder_import(self, entity_ids, start_ts, end_ts, *, batch_size,
+                                  minimal, no_attributes, source, label, max_hours):
+        """Reuse successful Recorder coverage inside one process and fetch only deltas.
+
+        The local entity_history archive is shared by Live and Candidate generations.
+        Re-downloading the same seven-day Recorder interval on every Rebuild adds wall
+        clock time without adding training evidence. Coverage is intentionally RAM-only:
+        after restart we perform one authoritative refresh again. Any skipped Recorder
+        slice prevents the attempted range from being cached.
+        """
+        ids = sorted(set(str(eid) for eid in (entity_ids or ()) if eid))
+        if not ids or float(end_ts) <= float(start_ts):
+            return 0
+        overlap = max(
+            60.0,
+            float(OPTIONS.get("training_recorder_refresh_overlap_minutes", 30) or 30) * 60.0,
+        )
+        full_ids, tail = [], []
+        for eid in ids:
+            item = self.training_recorder_coverage.get((str(source), eid))
+            if not item or float(item[0]) > float(start_ts) + 1.0:
+                full_ids.append(eid)
+                self.training_recorder_coverage_misses += 1
+                continue
+            covered_end = float(item[1])
+            if covered_end >= float(end_ts) - 1.0:
+                self.training_recorder_coverage_hits += 1
+                continue
+            tail.append((eid, max(float(start_ts), covered_end - overlap)))
+            self.training_recorder_coverage_hits += 1
+
+        plans = []
+        if full_ids:
+            plans.append((full_ids, float(start_ts), float(end_ts), "full"))
+        if tail:
+            tail_ids = [eid for eid, _ in tail]
+            tail_start = min(ts for _, ts in tail)
+            plans.append((tail_ids, tail_start, float(end_ts), "delta"))
+        if not plans:
+            return 0
+
+        inserted = 0
+        for plan_ids, plan_start, plan_end, plan_kind in plans:
+            skipped_before = int(getattr(self, "recorder_skipped_slices", 0) or 0)
+            inserted += self._import_section(
+                plan_ids, plan_start, plan_end,
+                batch_size=batch_size, minimal=minimal, no_attributes=no_attributes,
+                source=source, progress_lo=self.progress, progress_hi=self.progress,
+                label=f"{label} · {plan_kind}", max_hours=max_hours, parallel_requests=1,
+                inter_chunk_pause_ms=int(OPTIONS.get("agent_training_pause_ms", 0)),
+            )
+            skipped_after = int(getattr(self, "recorder_skipped_slices", 0) or 0)
+            if skipped_after == skipped_before:
+                for eid in plan_ids:
+                    key = (str(source), eid)
+                    previous = self.training_recorder_coverage.get(key)
+                    if previous and float(previous[1]) + overlap >= plan_start:
+                        self.training_recorder_coverage[key] = (
+                            min(float(previous[0]), plan_start),
+                            max(float(previous[1]), plan_end),
+                        )
+                    else:
+                        self.training_recorder_coverage[key] = (plan_start, plan_end)
+        return inserted
+
     def _refresh_agent_history(self, agent, start_ts, end_ts, rebuild=False):
         """Explicit jobs backfill only what they need from Recorder.
 
@@ -391,11 +466,11 @@ class HistoryManager(threading.Thread):
             model = STORE.get_model(agent["id"]) or self.training_schema_seed(agent["id"], agent) or {}
             context_ids = [eid for eid in ((model.get("schema") or {}).get("entities") or []) if eid != target]
         try:
-            self._import_section(
-                [target], start_ts, end_ts, batch_size=1, minimal=False, no_attributes=False,
-                source="ha_history_full", progress_lo=self.progress, progress_hi=self.progress,
-                label=f"Agent {agent['id']} · target history", max_hours=6, parallel_requests=1,
-                inter_chunk_pause_ms=int(OPTIONS.get("agent_training_pause_ms", 0)),
+            self._training_recorder_import(
+                [target], start_ts, end_ts,
+                batch_size=1, minimal=False, no_attributes=False,
+                source="ha_history_full",
+                label=f"Agent {agent['id']} · target history", max_hours=6,
             )
             if context_ids:
                 with self.engine.lock:
@@ -403,18 +478,19 @@ class HistoryManager(threading.Thread):
                 fast_ids = [eid for eid in context_ids if entity_capability_tags(eid, live_states.get(eid) or {}) & {"occupancy", "activity"}]
                 regular_ids = [eid for eid in context_ids if eid not in set(fast_ids)]
                 if fast_ids:
-                    self._import_section(
-                        fast_ids, start_ts, end_ts, batch_size=30, minimal=True, no_attributes=True,
-                        source="ha_history_fast_context", progress_lo=self.progress, progress_hi=self.progress,
-                        label=f"Agent {agent['id']} · high-resolution behavioural context", max_hours=6, parallel_requests=1,
-                        inter_chunk_pause_ms=int(OPTIONS.get("agent_training_pause_ms", 0)),
+                    self._training_recorder_import(
+                        fast_ids, start_ts, end_ts,
+                        batch_size=30, minimal=True, no_attributes=True,
+                        source="ha_history_fast_context",
+                        label=f"Agent {agent['id']} · high-resolution behavioural context",
+                        max_hours=6,
                     )
                 if regular_ids:
-                    self._import_section(
-                        regular_ids, start_ts, end_ts, batch_size=50, minimal=True, no_attributes=True,
-                        source="ha_history_minimal", progress_lo=self.progress, progress_hi=self.progress,
-                        label=f"Agent {agent['id']} · context history", max_hours=12, parallel_requests=1,
-                        inter_chunk_pause_ms=int(OPTIONS.get("agent_training_pause_ms", 0)),
+                    self._training_recorder_import(
+                        regular_ids, start_ts, end_ts,
+                        batch_size=50, minimal=True, no_attributes=True,
+                        source="ha_history_minimal",
+                        label=f"Agent {agent['id']} · context history", max_hours=12,
                     )
             self.refresh_archive_cache()
         except Exception as exc:
@@ -748,6 +824,7 @@ class HistoryManager(threading.Thread):
         STORE.event(None, "warning", "history_slice_skipped", msg, {
             "entities": entity_ids, "start": iso_from_ts(start_ts), "end": iso_from_ts(end_ts)
         })
+        self.recorder_skipped_slices = int(getattr(self, "recorder_skipped_slices", 0) or 0) + 1
         return 0
 
     @staticmethod

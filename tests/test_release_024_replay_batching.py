@@ -144,9 +144,9 @@ class Release024SourceContractTests(unittest.TestCase):
     def test_new_batch_size_is_bounded_and_configurable(self):
         config = (ROOT / "adaptive_ai" / "config.yaml").read_text(encoding="utf-8")
         settings = self.source("settings.py")
-        self.assertIn("training_experience_batch_rows: 64", config)
+        self.assertIn("training_experience_batch_rows: 128", config)
         self.assertIn('training_experience_batch_rows: "int(8,512)"', config)
-        self.assertIn('"training_experience_batch_rows": 64', settings)
+        self.assertIn('"training_experience_batch_rows": 128', settings)
 
 
 if __name__ == "__main__":

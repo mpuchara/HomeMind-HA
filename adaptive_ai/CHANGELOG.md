@@ -1,3 +1,16 @@
+# 0.14.73 — 2026-09-23
+
+- Speed up explicit historical training without shortening the 7-day training window or changing reward/benchmark semantics.
+- Raise the explicit training cooperative CPU duty cycle from 55% to 65% while retaining the 35 ms maximum continuous-work slice.
+- Replace the old long realtime blackout behavior with reason-aware QoS: HA state changes request 300 ms priority, inference requests 400 ms, and repeated realtime traffic is capped to a 450 ms burst followed by a 200 ms cooldown in which replay can run.
+- Keep longer interactive priority for explicit user workflows such as Correct; only HA realtime reasons use the shorter cap.
+- Increase historical-experience persistence batches from 64 to 128 rows to reduce SQLite/WAL commit overhead.
+- Increase the shared replay RAM query cache from 8,192 to 16,384 rows so the onset and persistence temporal trackers reuse more SQLite results instead of evicting them.
+- Reuse successful Recorder coverage in RAM across repeated Rebuilds: an identical seven-day target/context range is skipped, while later runs fetch only a 30-minute overlap plus the new tail. A timed-out/skipped Recorder slice is never marked as complete coverage.
+- Migrate only previously shipped defaults; explicit custom tuning remains authoritative.
+- Add regression coverage for bounded realtime event storms and preservation of longer non-realtime interactive priority.
+- Full suite target: 1139 tests.
+
 # 0.14.72 — 2026-09-22
 
 - Add an opt-in runtime debug logger inside **Diagnostics & technical details**.

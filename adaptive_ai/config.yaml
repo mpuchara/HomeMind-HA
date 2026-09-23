@@ -1,5 +1,5 @@
 name: "Adaptive AI"
-version: "0.14.72"
+version: "0.14.73"
 slug: "adaptive_ai"
 description: >-
   History-first local reinforcement-learning policies for Home Assistant. Imports
@@ -92,13 +92,18 @@ options:
   history_background_start_delay_seconds: 60
   background_cpu_duty_cycle: 0.20
   process_nice: 10
-  training_cpu_duty_cycle: 0.55
+  training_cpu_duty_cycle: 0.65
   training_archive_batch_rows: 16
-  training_experience_batch_rows: 64
-  training_replay_ram_cache_rows: 8192
+  training_experience_batch_rows: 128
+  training_replay_ram_cache_rows: 16384
   training_replay_ram_cache_entry_rows: 1024
   training_throttle_max_sleep_seconds: 0.50
   training_max_continuous_work_ms: 35
+  training_realtime_event_priority_seconds: 0.30
+  training_realtime_inference_priority_seconds: 0.40
+  training_realtime_max_burst_seconds: 0.45
+  training_realtime_cooldown_seconds: 0.20
+  training_recorder_refresh_overlap_minutes: 30
   manual_agent_training: true
   max_concurrent_training_jobs: 1
   manual_discovery_hours: 24
@@ -196,6 +201,11 @@ schema:
   training_replay_ram_cache_entry_rows: "int(64,4096)"
   training_throttle_max_sleep_seconds: "float(0.25,5.0)"
   training_max_continuous_work_ms: "int(25,500)"
+  training_realtime_event_priority_seconds: "float(0.05,1.25)"
+  training_realtime_inference_priority_seconds: "float(0.05,1.25)"
+  training_realtime_max_burst_seconds: "float(0.15,1.25)"
+  training_realtime_cooldown_seconds: "float(0.05,1.00)"
+  training_recorder_refresh_overlap_minutes: "int(1,360)"
   manual_agent_training: "bool"
   max_concurrent_training_jobs: "int(1,1)"
   manual_discovery_hours: "int(6,72)"
