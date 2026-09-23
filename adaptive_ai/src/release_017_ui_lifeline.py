@@ -312,6 +312,24 @@ def install(runtime):
         low_power = getattr(core, "LOW_POWER_RUNTIME", None)
         if callable(low_power):
             payload["low_power_runtime"] = low_power()
+
+        # Runtime debug is an opt-in RAM-only diagnostic service. Keep its summary on
+        # the hot status path so the Diagnostics panel can render and preserve ON/OFF
+        # state without calling Engine.status() or touching historical aggregates.
+        runtime_debug_service = getattr(
+            getattr(core.ENGINE, "agent_candidates", None),
+            "runtime_debug_log",
+            None,
+        )
+        runtime_debug_status = getattr(runtime_debug_service, "status", None)
+        if callable(runtime_debug_status):
+            try:
+                payload["runtime_debug"] = runtime_debug_status()
+            except Exception as exc:
+                payload["runtime_debug"] = {
+                    "enabled": False,
+                    "error": f"{type(exc).__name__}: {exc}",
+                }
         release_016 = getattr(core, "RELEASE_016_RESOURCE_GUARD", None)
         if callable(release_016):
             payload["resource_guard"] = release_016()
