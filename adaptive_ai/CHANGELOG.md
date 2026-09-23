@@ -9,7 +9,7 @@
 - Reuse successful Recorder coverage in RAM across repeated Rebuilds: an identical seven-day target/context range is skipped, while later runs fetch only a 30-minute overlap plus the new tail. A timed-out/skipped Recorder slice is never marked as complete coverage.
 - Migrate only previously shipped defaults; explicit custom tuning remains authoritative.
 - Add regression coverage for bounded realtime event storms and preservation of longer non-realtime interactive priority.
-- Full suite target: 1138 tests.
+- Full suite target: 1139 tests.
 
 # 0.14.72 — 2026-09-22
 
