@@ -104,13 +104,17 @@ DEFAULT_OPTIONS = {
     "history_background_start_delay_seconds": 60,
     "background_cpu_duty_cycle": 0.20,
     "process_nice": 10,
-    "training_cpu_duty_cycle": 0.55,
+    "training_cpu_duty_cycle": 0.65,
     "training_archive_batch_rows": 16,
-    "training_experience_batch_rows": 64,
-    "training_replay_ram_cache_rows": 8192,
+    "training_experience_batch_rows": 128,
+    "training_replay_ram_cache_rows": 16384,
     "training_replay_ram_cache_entry_rows": 1024,
     "training_throttle_max_sleep_seconds": 0.50,
     "training_max_continuous_work_ms": 35,
+    "training_realtime_event_priority_seconds": 0.30,
+    "training_realtime_inference_priority_seconds": 0.40,
+    "training_realtime_max_burst_seconds": 0.45,
+    "training_realtime_cooldown_seconds": 0.20,
     "manual_agent_training": True,
     "max_concurrent_training_jobs": 1,
     "manual_discovery_hours": 24,
@@ -294,12 +298,18 @@ def load_options():
                 options["history_background_start_delay_seconds"] = 60
             # 0.14.27: migrate only defaults shipped by earlier releases.
             # Explicit custom budgets stay untouched.
-            if data.get("training_cpu_duty_cycle") in (0.20, 0.25):
-                options["training_cpu_duty_cycle"] = 0.55
+            if data.get("training_cpu_duty_cycle") in (0.20, 0.25, 0.55):
+                options["training_cpu_duty_cycle"] = 0.65
             if data.get("training_max_continuous_work_ms") in (75, 50):
                 options["training_max_continuous_work_ms"] = 35
             if data.get("training_throttle_max_sleep_seconds") == 2.0:
                 options["training_throttle_max_sleep_seconds"] = 0.50
+            # 0.14.73: migrate only the previous shipped replay-throughput defaults.
+            # Explicitly tuned installations keep their chosen values.
+            if data.get("training_experience_batch_rows") == 64:
+                options["training_experience_batch_rows"] = 128
+            if data.get("training_replay_ram_cache_rows") == 8192:
+                options["training_replay_ram_cache_rows"] = 16384
     except Exception as exc:
         print(f"[options] Failed to read options: {exc}", flush=True)
     # 0.9 never starts heavy replay implicitly, including installations with the
