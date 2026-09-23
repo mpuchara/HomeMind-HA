@@ -466,11 +466,11 @@ class HistoryManager(threading.Thread):
             model = STORE.get_model(agent["id"]) or self.training_schema_seed(agent["id"], agent) or {}
             context_ids = [eid for eid in ((model.get("schema") or {}).get("entities") or []) if eid != target]
         try:
-            self._import_section(
-                [target], start_ts, end_ts, batch_size=1, minimal=False, no_attributes=False,
-                source="ha_history_full", progress_lo=self.progress, progress_hi=self.progress,
-                label=f"Agent {agent['id']} · target history", max_hours=6, parallel_requests=1,
-                inter_chunk_pause_ms=int(OPTIONS.get("agent_training_pause_ms", 0)),
+            self._training_recorder_import(
+                [target], start_ts, end_ts,
+                batch_size=1, minimal=False, no_attributes=False,
+                source="ha_history_full",
+                label=f"Agent {agent['id']} · target history", max_hours=6,
             )
             if context_ids:
                 with self.engine.lock:
@@ -478,18 +478,19 @@ class HistoryManager(threading.Thread):
                 fast_ids = [eid for eid in context_ids if entity_capability_tags(eid, live_states.get(eid) or {}) & {"occupancy", "activity"}]
                 regular_ids = [eid for eid in context_ids if eid not in set(fast_ids)]
                 if fast_ids:
-                    self._import_section(
-                        fast_ids, start_ts, end_ts, batch_size=30, minimal=True, no_attributes=True,
-                        source="ha_history_fast_context", progress_lo=self.progress, progress_hi=self.progress,
-                        label=f"Agent {agent['id']} · high-resolution behavioural context", max_hours=6, parallel_requests=1,
-                        inter_chunk_pause_ms=int(OPTIONS.get("agent_training_pause_ms", 0)),
+                    self._training_recorder_import(
+                        fast_ids, start_ts, end_ts,
+                        batch_size=30, minimal=True, no_attributes=True,
+                        source="ha_history_fast_context",
+                        label=f"Agent {agent['id']} · high-resolution behavioural context",
+                        max_hours=6,
                     )
                 if regular_ids:
-                    self._import_section(
-                        regular_ids, start_ts, end_ts, batch_size=50, minimal=True, no_attributes=True,
-                        source="ha_history_minimal", progress_lo=self.progress, progress_hi=self.progress,
-                        label=f"Agent {agent['id']} · context history", max_hours=12, parallel_requests=1,
-                        inter_chunk_pause_ms=int(OPTIONS.get("agent_training_pause_ms", 0)),
+                    self._training_recorder_import(
+                        regular_ids, start_ts, end_ts,
+                        batch_size=50, minimal=True, no_attributes=True,
+                        source="ha_history_minimal",
+                        label=f"Agent {agent['id']} · context history", max_hours=12,
                     )
             self.refresh_archive_cache()
         except Exception as exc:
