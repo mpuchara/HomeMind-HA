@@ -34,7 +34,7 @@ class CooperativeTrainingBudget:
         self._max_sleep_seconds = 2.0
         self._thread_prefixes = ("adaptive-ai-index-",)
         self._interactive_until = 0.0
-        self._interactive_started_at = 0.0
+        self._interactive_started_at = None
         # Continuous HA sensor traffic must not starve offline training forever. A burst
         # may keep strict realtime priority only for a bounded interval, followed by a
         # short cooldown in which the training worker is guaranteed a scheduling slice.
@@ -137,7 +137,10 @@ class CooperativeTrainingBudget:
 
             active = now < float(self._interactive_until or 0.0)
             if active:
-                started = float(self._interactive_started_at or now)
+                started = float(
+                    self._interactive_started_at
+                    if self._interactive_started_at is not None else now
+                )
                 cap = started + max_burst
                 until = min(
                     cap,
