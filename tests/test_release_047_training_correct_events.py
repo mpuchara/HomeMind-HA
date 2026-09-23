@@ -18,9 +18,11 @@ class Release047TrainingCorrectEventsTests(unittest.TestCase):
         self.assertIn('agent_training_pause_ms', run)
 
     def test_explicit_history_refresh_has_no_background_pause(self):
-        source = inspect.getsource(HistoryManager._refresh_agent_history)
-        self.assertIn('agent_training_pause_ms', source)
-        self.assertNotIn('history_background_pause_ms', source)
+        refresh = inspect.getsource(HistoryManager._refresh_agent_history)
+        importer = inspect.getsource(HistoryManager._training_recorder_import)
+        self.assertIn('_training_recorder_import', refresh)
+        self.assertIn('agent_training_pause_ms', importer)
+        self.assertNotIn('history_background_pause_ms', refresh + importer)
 
     def test_correct_candidate_current_uses_physical_history(self):
         source = inspect.getsource(build_correct_history)
