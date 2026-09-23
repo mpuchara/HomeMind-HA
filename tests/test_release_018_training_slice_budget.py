@@ -125,9 +125,9 @@ assert slept == []
         self.assertIn('training_max_continuous_work_ms: "int(25,500)"', config)
         self.assertIn('"training_max_continuous_work_ms": 35', settings)
         self.assertIn("DEFAULT_MAX_CONTINUOUS_WORK_MS = 35", runtime)
-        self.assertIn("DEFAULT_TRAINING_DUTY_CYCLE = 0.55", runtime)
-        self.assertIn("training_cpu_duty_cycle: 0.55", config)
-        self.assertIn('"training_cpu_duty_cycle": 0.55', settings)
+        self.assertIn("DEFAULT_TRAINING_DUTY_CYCLE = 0.65", runtime)
+        self.assertIn("training_cpu_duty_cycle: 0.65", config)
+        self.assertIn('"training_cpu_duty_cycle": 0.65', settings)
         self.assertIn("TRAINING_BUDGET.configure(", runtime)
         self.assertIn('TRAINING_BUDGET.checkpoint("archive_iter_row")', runtime)
 
