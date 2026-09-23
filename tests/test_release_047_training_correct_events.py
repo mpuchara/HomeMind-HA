@@ -40,7 +40,7 @@ class Release047TrainingCorrectEventsTests(unittest.TestCase):
         config=(ROOT/'adaptive_ai/config.yaml').read_text(encoding='utf-8')
         self.assertIn('"agent_training_history_days": 7', settings)
         self.assertIn('"agent_training_pause_ms": 0', settings)
-        self.assertIn('"training_cpu_duty_cycle": 0.55', settings)
+        self.assertIn('"training_cpu_duty_cycle": 0.65', settings)
         self.assertIn('"training_max_continuous_work_ms": 35', settings)
         self.assertIn('history_background_pause_ms: 1500', config)
         self.assertIn('agent_training_pause_ms: 0', config)
