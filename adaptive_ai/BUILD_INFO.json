@@ -4,7 +4,7 @@
   "base_version": "0.14.72",
   "base_commit": "549c469af62666e31c52d9a4d49fe61b57bdbd67",
   "release_status": "release-0.14.73-training-throughput-qos",
-  "tests_passed": 1134,
+  "tests_passed": 1138,
   "profile": "rpi4-low-memory-complete-discovery-manual-agent-selection",
   "manual_agent_training": true,
   "max_concurrent_training_jobs": 1,
@@ -263,5 +263,6 @@
   "runtime_debug_capacity": 4096,
   "training_realtime_qos": "state_changed requests 300 ms priority and realtime inference requests 400 ms; repeated HA traffic cannot extend one realtime blackout beyond 450 ms before a 200 ms training opportunity",
   "training_persistence_batch_rows": 128,
-  "training_replay_ram_cache_rows": 16384
+  "training_replay_ram_cache_rows": 16384,
+  "training_recorder_reuse": "Successful per-entity Recorder coverage is cached in RAM for the process lifetime; repeated Rebuilds skip identical history and fetch only a 30-minute overlap plus new tail. Any skipped Recorder slice prevents coverage from being cached."
 }
