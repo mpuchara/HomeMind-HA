@@ -103,6 +103,7 @@ options:
   training_realtime_inference_priority_seconds: 0.40
   training_realtime_max_burst_seconds: 0.45
   training_realtime_cooldown_seconds: 0.20
+  training_recorder_refresh_overlap_minutes: 30
   manual_agent_training: true
   max_concurrent_training_jobs: 1
   manual_discovery_hours: 24
@@ -204,6 +205,7 @@ schema:
   training_realtime_inference_priority_seconds: "float(0.05,1.25)"
   training_realtime_max_burst_seconds: "float(0.15,1.25)"
   training_realtime_cooldown_seconds: "float(0.05,1.00)"
+  training_recorder_refresh_overlap_minutes: "int(1,360)"
   manual_agent_training: "bool"
   max_concurrent_training_jobs: "int(1,1)"
   manual_discovery_hours: "int(6,72)"
