@@ -1,3 +1,12 @@
+# 0.14.74 — 2026-09-23
+
+- Fix the missing **Runtime debug log** section in Diagnostics & technical details.
+- Explicitly serve `/runtime_debug_ui.js`; 0.14.73 referenced the asset from `index.html` but the base HTTP handler returned 404.
+- Add the opt-in runtime debug summary to the hot `/api/status` payload so ON/OFF state, buffer count, event → intent p95 and active spans remain visible across normal UI refreshes.
+- Keep the diagnostics read path RAM-only and avoid Engine.status()/historical aggregate reads.
+- Add regression coverage for both static asset delivery and hot-status integration.
+- Full suite target: 1141 tests.
+
 # 0.14.73 — 2026-09-23
 
 - Speed up explicit historical training without shortening the 7-day training window or changing reward/benchmark semantics.
