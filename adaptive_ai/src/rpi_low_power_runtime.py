@@ -19,12 +19,14 @@ import time
 from training_budget import TRAINING_BUDGET
 
 
-CONTRACT_VERSION = 4
+CONTRACT_VERSION = 5
 DEFAULT_ARCHIVE_BATCH_ROWS = 16
-DEFAULT_EXPERIENCE_BATCH_ROWS = 64
-DEFAULT_TRAINING_DUTY_CYCLE = 0.55
+DEFAULT_EXPERIENCE_BATCH_ROWS = 128
+DEFAULT_TRAINING_DUTY_CYCLE = 0.65
 DEFAULT_MAX_THROTTLE_SLEEP_SECONDS = 0.50
 DEFAULT_MAX_CONTINUOUS_WORK_MS = 35
+DEFAULT_REALTIME_MAX_BURST_SECONDS = 0.45
+DEFAULT_REALTIME_COOLDOWN_SECONDS = 0.20
 DEFAULT_CANDIDATE_IDLE_POLL_SECONDS = 3.0
 MAINTENANCE_INTERVAL_SECONDS = 60.0
 
@@ -51,11 +53,13 @@ def install(core, manager):
         core.OPTIONS["agent_training_chunk_hours"] = 6
     if int(core.OPTIONS.get("history_background_pause_ms", 500) or 0) == 500:
         core.OPTIONS["history_background_pause_ms"] = 1500
-    current_duty = float(core.OPTIONS.get("training_cpu_duty_cycle", 0.55) or 0.55)
-    if current_duty in (0.20, 0.25):
+    current_duty = float(core.OPTIONS.get("training_cpu_duty_cycle", 0.65) or 0.65)
+    if current_duty in (0.20, 0.25, 0.55):
         core.OPTIONS["training_cpu_duty_cycle"] = DEFAULT_TRAINING_DUTY_CYCLE
     core.OPTIONS.setdefault("training_cpu_duty_cycle", DEFAULT_TRAINING_DUTY_CYCLE)
     core.OPTIONS.setdefault("training_archive_batch_rows", DEFAULT_ARCHIVE_BATCH_ROWS)
+    if int(core.OPTIONS.get("training_experience_batch_rows", DEFAULT_EXPERIENCE_BATCH_ROWS) or DEFAULT_EXPERIENCE_BATCH_ROWS) == 64:
+        core.OPTIONS["training_experience_batch_rows"] = DEFAULT_EXPERIENCE_BATCH_ROWS
     core.OPTIONS.setdefault("training_experience_batch_rows", DEFAULT_EXPERIENCE_BATCH_ROWS)
     core.OPTIONS.setdefault(
         "training_throttle_max_sleep_seconds", DEFAULT_MAX_THROTTLE_SLEEP_SECONDS
@@ -64,6 +68,12 @@ def install(core, manager):
         core.OPTIONS["training_max_continuous_work_ms"] = DEFAULT_MAX_CONTINUOUS_WORK_MS
     core.OPTIONS.setdefault(
         "training_max_continuous_work_ms", DEFAULT_MAX_CONTINUOUS_WORK_MS
+    )
+    core.OPTIONS.setdefault(
+        "training_realtime_max_burst_seconds", DEFAULT_REALTIME_MAX_BURST_SECONDS
+    )
+    core.OPTIONS.setdefault(
+        "training_realtime_cooldown_seconds", DEFAULT_REALTIME_COOLDOWN_SECONDS
     )
 
     duty = _clamp(
@@ -105,6 +115,16 @@ def install(core, manager):
         25.0,
         500.0,
     )
+    realtime_max_burst = _clamp(
+        float(core.OPTIONS.get("training_realtime_max_burst_seconds", DEFAULT_REALTIME_MAX_BURST_SECONDS)),
+        0.15,
+        1.25,
+    )
+    realtime_cooldown = _clamp(
+        float(core.OPTIONS.get("training_realtime_cooldown_seconds", DEFAULT_REALTIME_COOLDOWN_SECONDS)),
+        0.05,
+        1.0,
+    )
 
     TRAINING_BUDGET.configure(
         duty_cycle=duty,
@@ -113,6 +133,8 @@ def install(core, manager):
         thread_prefixes=("adaptive-ai-index-",),
         clock=lambda: time.perf_counter(),
         sleeper=lambda seconds: time.sleep(seconds),
+        realtime_max_burst_seconds=realtime_max_burst,
+        realtime_cooldown_seconds=realtime_cooldown,
     )
 
     # Store.archive_iter is a common streaming boundary for historical screening and
@@ -172,6 +194,8 @@ def install(core, manager):
             "experience_batch_rows": experience_batch_rows,
             "max_throttle_sleep_seconds": max_sleep,
             "max_continuous_work_ms": max_slice_ms,
+            "realtime_max_burst_seconds": realtime_max_burst,
+            "realtime_cooldown_seconds": realtime_cooldown,
             "candidate_idle_poll_seconds": DEFAULT_CANDIDATE_IDLE_POLL_SECONDS,
             "maintenance_interval_seconds": MAINTENANCE_INTERVAL_SECONDS,
             **budget,
@@ -185,7 +209,7 @@ def install(core, manager):
         "rpi_low_power_runtime_ready",
         (
             "Historical training has a Pi-safe CPU duty cycle plus a "
-            f"{max_slice_ms:.0f} ms continuous-work slice budget and batched replay persistence"
+            f"{max_slice_ms:.0f} ms continuous-work slice budget, bounded realtime preemption and batched replay persistence"
         ),
         snapshot(),
     )
