@@ -4,7 +4,7 @@
   "base_version": "0.14.72",
   "base_commit": "549c469af62666e31c52d9a4d49fe61b57bdbd67",
   "release_status": "release-0.14.73-training-throughput-qos",
-  "tests_passed": 1138,
+  "tests_passed": 1139,
   "profile": "rpi4-low-memory-complete-discovery-manual-agent-selection",
   "manual_agent_training": true,
   "max_concurrent_training_jobs": 1,
