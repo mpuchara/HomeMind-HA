@@ -115,6 +115,7 @@ DEFAULT_OPTIONS = {
     "training_realtime_inference_priority_seconds": 0.40,
     "training_realtime_max_burst_seconds": 0.45,
     "training_realtime_cooldown_seconds": 0.20,
+    "training_recorder_refresh_overlap_minutes": 30,
     "manual_agent_training": True,
     "max_concurrent_training_jobs": 1,
     "manual_discovery_hours": 24,
