@@ -557,21 +557,10 @@ class TrustedAutomaticRewardService:
                 "legacy_pending_horizon": pending.get("horizon"),
             },
         }
-        saved, inserted = self.journal.start(payload)
-        if inserted:
-            self.store.event(
-                agent["id"], "info",
-                "automatic_correct_observation_started",
-                "Automatic Correct observation window started",
-                {
-                    "resolution_key": key,
-                    "decision_id": decision_id,
-                    "trial_id": trial_id,
-                    "observation_start": start,
-                    "observation_end": end,
-                    "learning_enabled": False,
-                },
-            )
+        saved, _inserted = self.journal.start(payload)
+        # Do not mirror every observation window into Recent activity. The journal is
+        # the durable audit source and runtime_for exposes a RAM summary; per-action
+        # activity events would double normal Control write volume.
         return saved
 
     def _row_for_pending(self, agent, pending):
@@ -1082,34 +1071,27 @@ def install(core):
             provenance.mark_outcome(
                 decision_id, reward, str(reason)
             )
-        core.STORE.event(
-            agent["id"],
-            (
-                "info"
-                if resolved
-                and resolved.get("status") == "trusted"
-                else "warning"
-            ),
-            "automatic_correct_outcome",
-            (
-                "Automatic Correct trusted outcome"
-                if resolved
-                and resolved.get("status") == "trusted"
-                else "Automatic Correct outcome kept out of learning"
-            ),
-            {
-                "proposed_reward": reward,
-                "reason": str(reason),
-                "status": (
-                    (resolved or {}).get("status")
-                    or "unknown"
+        resolution_status = (resolved or {}).get("status") or "unknown"
+        if resolution_status in {"trusted", "rejected"}:
+            core.STORE.event(
+                agent["id"],
+                "info" if resolution_status == "trusted" else "warning",
+                "automatic_correct_outcome",
+                (
+                    "Automatic Correct trusted outcome"
+                    if resolution_status == "trusted"
+                    else "Automatic Correct rejected attribution"
                 ),
-                "resolution_key": (
-                    (resolved or {}).get("resolution_key")
-                ),
-                "policy_updated": False,
-            },
-        )
+                {
+                    "proposed_reward": reward,
+                    "reason": str(reason),
+                    "status": resolution_status,
+                    "resolution_key": (
+                        (resolved or {}).get("resolution_key")
+                    ),
+                    "policy_updated": False,
+                },
+            )
         return bool(resolved)
 
     engine._reward_pending = reward_pending
