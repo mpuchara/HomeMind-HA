@@ -66,7 +66,7 @@ class WorkflowRequestQueueTests(unittest.TestCase):
     def test_worker_creates_candidate_after_http_admission_and_persists_result(self):
         self.queue.enqueue_correct("root:abc", "req-2")
         self.assertTrue(self.queue.process_once())
-        self.commit.assert_called_once_with("root:abc")
+        self.commit.assert_called_once_with("root:abc", request_id="req-2")
         status = self.queue.status("req-2")
         self.assertEqual(status["state"], STATE_DONE)
         self.assertEqual(status["result"]["child_generation_id"], "candidate:g1")

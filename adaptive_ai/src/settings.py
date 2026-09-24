@@ -15,7 +15,7 @@ try:
 except Exception:
     ws_connect = None
 
-APP_VERSION = "0.14.83"
+APP_VERSION = "0.14.84"
 HISTORY_BOOTSTRAP_REVISION = "target-attrs-v2"
 TRAINING_REVISION = "shared-home-intents-v19"
 DATA_DIR = Path(os.environ.get("ADAPTIVE_AI_DATA", "/data"))
@@ -137,6 +137,28 @@ DEFAULT_OPTIONS = {
     "tiny_mlp_tournament_min_gain": 0.0,
     "tiny_mlp_max_parameters": 50000,
     "tiny_mlp_max_serialized_bytes": 524288,
+    # Stage-5 Manual Correct: incremental neural fine-tune. Explicit labels remain
+    # supervised data and are mixed with bounded replay; reward learning stays disabled.
+    "tiny_mlp_correct_fraction": 0.25,
+    "tiny_mlp_correct_max_samples": 256,
+    "tiny_mlp_correct_replay_samples": 192,
+    "tiny_mlp_correct_holdout_samples": 64,
+    "tiny_mlp_correct_holdout_exclusion_seconds": 90,
+    "tiny_mlp_correct_nearby_seconds": "10,30",
+    "tiny_mlp_correct_max_epochs": 6,
+    "tiny_mlp_correct_batch_size": 16,
+    "tiny_mlp_correct_learning_rate": 0.003,
+    "tiny_mlp_correct_l2": 0.0001,
+    "tiny_mlp_correct_gradient_clip": 0.5,
+    "tiny_mlp_correct_early_stop_patience": 2,
+    "tiny_mlp_correct_early_stop_min_delta": 0.0005,
+    "tiny_mlp_correct_min_holdout_samples": 12,
+    "tiny_mlp_correct_max_accuracy_regression": 0.03,
+    "tiny_mlp_correct_min_parent_agreement": 0.85,
+    "tiny_mlp_correct_min_nearby_agreement": 0.75,
+    "tiny_mlp_correct_max_regression_fraction": 0.10,
+    "tiny_mlp_correct_max_parent_relative_l2": 0.20,
+    "tiny_mlp_correct_min_correction_fit": 0.95,
     # CPU-heavy historical replay runs in one child process. The parent remains the
     # authority for HA ingress/HTTP/queue/control and supervises RSS/CPU/I/O.
     "training_process_isolation": True,

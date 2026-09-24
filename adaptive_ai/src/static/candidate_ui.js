@@ -69,7 +69,7 @@
   };
 
   function card(c,draft){
-    const m=c.comparison||{},q=c.queue||{},gate=c.offline_gate||{};
+    const m=c.comparison||{},q=c.queue||{},gate=c.offline_gate||{},correct=c.correct_learning||{};
     const progress=c.state==='building'?Math.max(0,Math.min(100,Math.round((c.training_progress||0)*100))):null;
     const queueText=q.state==='queued'?` · queue #${q.position||1}`:q.state==='active'?' · active':'';
     const perAction=m.required_future_samples_per_action||20;
@@ -82,6 +82,9 @@
     const targetMode=c.promotion_target_mode==='control'?'control':'shadow';
     const gateReason=(gate.reasons||[]).join(' · ')||'—';
     const schemaSelected=(c.schema_evolution_selected||[]).map(x=>x.entity_id||x).filter(Boolean);
+    const policyBackend=c.candidate_policy_backend||correct.source_backend||'diagonal_linucb';
+    const correctPath=correct.path||c.correct_path||'—';
+    const rebuildReason=correct.rebuild_reason||c.correct_rebuild_reason||null;
     const schemaLine=c.missing_context
       ? `<p class="candidate-error"><b>Missing context</b> — ${esc(c.schema_evolution_reason||gateReason)}</p>`
       : schemaSelected.length
@@ -111,6 +114,11 @@
         <div><span>Historical regression</span><b>${esc(regression)}</b></div>
         <div><span>Offline benchmark samples</span><b>${esc(gateSamples)}</b></div>
         <div><span>Offline gate</span><b>${esc(gate.status||'pending')}</b></div>
+        <div><span>Policy backend</span><b>${esc(policyBackend)}</b></div>
+        <div><span>Correct path</span><b>${esc(correctPath)}</b></div>
+        <div><span>Rebuild reason</span><b>${esc(rebuildReason||'—')}</b></div>
+        <div><span>Parent agreement after Correct</span><b>${pct(correct.parent_child_agreement)}</b></div>
+        <div><span>Neural parent distance</span><b>${correct.parent_relative_l2==null?'—':Number(correct.parent_relative_l2).toFixed(4)}</b></div>
         <div><span>Offline gate reason</span><b>${esc(gateReason)}</b></div>
         <div><span>Parent accuracy</span><b>${pct(m.live_accuracy)}</b></div>
         <div><span>Candidate accuracy</span><b>${pct(m.candidate_accuracy)}</b></div>
