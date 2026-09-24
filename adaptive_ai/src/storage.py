@@ -29,6 +29,11 @@ class Store:
         self._event_buffer_first_at = None
         self._event_buffer_seq = 0
         self._event_prune_batches = 0
+        # Process-isolated historical workers may install a publication guard and
+        # request keyset-paged archive reads. Both are process-local switches: the
+        # realtime process keeps the ordinary Store contract unchanged.
+        self.training_publish_guard = None
+        self.checkpointed_archive_reads = False
         self._init()
         self._load_meta_cache()
         self._load_recent_events()
@@ -387,6 +392,13 @@ class Store:
         ids = list(latest)
         placeholders = ",".join("?" for _ in ids)
         with self.lock, self.conn() as c:
+            guard = getattr(self, "training_publish_guard", None)
+            if callable(guard):
+                # Validate immediately before the atomic model upsert. A clean worker
+                # therefore cannot publish a model for an agent whose configuration
+                # changed after the versioned training job was created.
+                for agent_id in ids:
+                    guard(str(agent_id), latest[agent_id])
             watermarks = {
                 str(row["agent_id"]): int(row["watermark"] or 0)
                 for row in c.execute(
@@ -423,6 +435,24 @@ class Store:
 
     def save_model(self, agent_id, model):
         self.save_models_batch([(agent_id, model)])
+
+    def restore_model_snapshot(self, agent_id, model):
+        """Restore an exact pre-job model without recalculating its history watermark."""
+        with self.lock, self.conn() as c:
+            if model is None:
+                c.execute("DELETE FROM rl_models WHERE agent_id=?", (str(agent_id),))
+            else:
+                c.execute(
+                    """INSERT INTO rl_models(agent_id,model_json,updated_at) VALUES(?,?,?)
+                       ON CONFLICT(agent_id) DO UPDATE SET
+                       model_json=excluded.model_json,updated_at=excluded.updated_at""",
+                    (
+                        str(agent_id),
+                        json.dumps(dict(model), separators=(",", ":")),
+                        iso_now(),
+                    ),
+                )
+        self.touch_agent_index()
 
     def discard_uncommitted_experiences(self, agent_id):
         model = self.get_model(agent_id) or {}
@@ -692,7 +722,12 @@ class Store:
             return int(c.execute(sql, vals).fetchone()[0] or 0)
 
     def archive_iter(self, start_ts=None, end_ts=None, entity_ids=None, chunk_size=2000):
-        """Stream history rows in bounded batches instead of materializing the archive."""
+        """Stream history rows without materializing the archive.
+
+        Normal runtime keeps one reader for throughput. Isolated training workers set
+        checkpointed_archive_reads so each batch is a short SQLite snapshot and cannot
+        pin WAL checkpoints for an entire multi-minute history scan.
+        """
         where, vals = [], []
         if start_ts is not None:
             where.append("ts>=?"); vals.append(float(start_ts))
@@ -701,15 +736,47 @@ class Store:
         ids = sorted(set(entity_ids or []))
         if ids:
             where.append("entity_id IN (%s)" % ",".join("?" for _ in ids)); vals.extend(ids)
-        sql = "SELECT * FROM entity_history" + ((" WHERE " + " AND ".join(where)) if where else "") + " ORDER BY ts,id"
-        with self.conn() as c:
-            cursor = c.execute(sql, vals)
-            while True:
-                batch = cursor.fetchmany(max(100, int(chunk_size)))
-                if not batch:
-                    break
-                for row in batch:
-                    yield dict(row)
+        predicate = ((" WHERE " + " AND ".join(where)) if where else "")
+        size = max(100, int(chunk_size))
+
+        if not bool(getattr(self, "checkpointed_archive_reads", False)):
+            sql = "SELECT * FROM entity_history" + predicate + " ORDER BY ts,id"
+            with self.conn() as c:
+                cursor = c.execute(sql, vals)
+                while True:
+                    batch = cursor.fetchmany(size)
+                    if not batch:
+                        break
+                    for row in batch:
+                        yield dict(row)
+            return
+
+        last_ts = None
+        last_id = None
+        base_where = list(where)
+        base_vals = list(vals)
+        while True:
+            page_where = list(base_where)
+            page_vals = list(base_vals)
+            if last_ts is not None:
+                page_where.append("(ts>? OR (ts=? AND id>?))")
+                page_vals.extend([float(last_ts), float(last_ts), int(last_id)])
+            page_sql = (
+                "SELECT * FROM entity_history"
+                + ((" WHERE " + " AND ".join(page_where)) if page_where else "")
+                + " ORDER BY ts,id LIMIT ?"
+            )
+            page_vals.append(size)
+            with self.conn() as c:
+                batch = c.execute(page_sql, page_vals).fetchall()
+            if not batch:
+                break
+            for row in batch:
+                item = dict(row)
+                last_ts, last_id = float(item["ts"]), int(item["id"])
+                yield item
+            if len(batch) < size:
+                break
 
     def archive_change_iter(self, start_ts=None, end_ts=None, entity_ids=None, chunk_size=2000):
         """Stream only effective per-entity state/attribute changes.
