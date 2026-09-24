@@ -23,8 +23,9 @@ class HistoryManager(threading.Thread):
     and turns logged trajectories into offline contextual-RL experiences."""
     daemon = True
 
-    def __init__(self, engine):
+    def __init__(self, engine, worker_mode=False):
         super().__init__(name="adaptive-ai-history")
+        self.worker_mode = bool(worker_mode)
         self.engine = engine
         self.stop_event = threading.Event()
         self.lock = threading.RLock()
@@ -84,6 +85,12 @@ class HistoryManager(threading.Thread):
         self.training_schema_cache_misses = 0
         self.training_replay_cache_status = {}
         self.training_home_context_cache_status = {}
+        self.training_process_status = {
+            "enabled": bool(OPTIONS.get("training_process_isolation", True)),
+            "state": "idle",
+            "contract": "isolated_training_process_v1",
+        }
+        self.active_training_process = None
         # Recorder imports are global archive data, not model state. Repeated Rebuilds
         # in one process therefore reuse successful per-entity coverage and fetch only
         # a short overlap + new tail instead of downloading the same 7 days again.
@@ -103,7 +110,7 @@ class HistoryManager(threading.Thread):
         # collecting target history. Expose whether the activity classifier has run so
         # the UI can distinguish "pending" from a real zero-device result.
         self.discovery_classified = False
-        if bool(OPTIONS.get("manual_agent_training", True)):
+        if (not self.worker_mode) and bool(OPTIONS.get("manual_agent_training", True)):
             paused = STORE.pause_stale_training_agents()
             if paused:
                 STORE.event(None, "info", "manual_training_migration", f"Paused {paused} unfinished automatic training job(s); resume manually when ready", None)
@@ -145,6 +152,9 @@ class HistoryManager(threading.Thread):
                 "training_replay_cache": dict(getattr(self, "training_replay_cache_status", {}) or {}),
                 "training_home_context_cache": dict(
                     getattr(self, "training_home_context_cache_status", {}) or {}
+                ),
+                "training_process": dict(
+                    getattr(self, "training_process_status", {}) or {}
                 ),
                 "training_recorder_coverage_entries": len(getattr(self, "training_recorder_coverage", {}) or {}),
                 "training_recorder_coverage_hits": int(getattr(self, "training_recorder_coverage_hits", 0) or 0),
@@ -550,7 +560,7 @@ class HistoryManager(threading.Thread):
             chunk_end = min(target_end, cursor + chunk_s)
             chunk_start = max(start_ts, cursor - overlap_s) if cursor > start_ts else start_ts
             final = chunk_end >= target_end - 0.5
-            self.train_from_archive(
+            self._run_training_chunk(
                 chunk_start, chunk_end, qualify=final, agent_ids={agent_id}, include_candidates=True,
                 benchmark=True, accumulate_benchmark=True,
                 progress_lo=(cursor-start_ts)/max(1,target_end-start_ts),
@@ -566,6 +576,15 @@ class HistoryManager(threading.Thread):
                 pause_ms = max(0.0, float(OPTIONS.get("agent_training_pause_ms", 0) or 0))
                 if pause_ms:
                     self.stop_event.wait(pause_ms / 1000.0)
+
+    def _run_training_chunk(self, start_ts, end_ts, **kwargs):
+        """Run one CPU-heavy replay chunk, isolated from realtime when supported."""
+        if self.worker_mode or not bool(OPTIONS.get("training_process_isolation", True)):
+            return self.train_from_archive(start_ts, end_ts, **kwargs)
+        from training_process import run_isolated_training_chunk
+        return run_isolated_training_chunk(
+            self, start_ts, end_ts, **kwargs
+        )
 
     def request_agent_rebuild(self, agent_id):
         return self._start_agent_job(agent_id, rebuild=True)
