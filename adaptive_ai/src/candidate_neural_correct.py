@@ -476,7 +476,10 @@ def _reconstruct_dataset(
 
     return {
         "corrections": corrections,
-        "replay": prior_correct_replay + replay,
+        # mixed_training_rows keeps the newest/tail replay entries under its cap.
+        # Place prior explicit Correct at the tail so bounded history can never evict
+        # stronger human supervision before ordinary historical replay.
+        "replay": replay + prior_correct_replay,
         "prior_correct_replay": prior_correct_replay,
         "historical_replay": replay,
         "holdout": holdout,
