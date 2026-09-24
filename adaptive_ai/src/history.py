@@ -1779,6 +1779,24 @@ class HistoryManager(threading.Thread):
             home_context_cache=replay_home_context_cache,
             context_cache_contract=context_cache_contract,
         )
+
+        if neural_enabled:
+            from observation_space import observation_as_of
+
+        def neural_observation(agent, tracker, sample_ts):
+            if not neural_enabled:
+                return None
+            mask = neural_masks.get(str(agent["id"]))
+            if mask is None:
+                return None
+            return observation_as_of(
+                mask,
+                tracker.state_map,
+                tracker,
+                float(sample_ts),
+                agent,
+            )
+
         pending = {}
         last_value = {}
         new_count = 0
