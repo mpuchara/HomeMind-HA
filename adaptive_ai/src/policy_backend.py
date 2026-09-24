@@ -26,9 +26,10 @@ BACKEND_CAPABILITIES = {
         "shadow_only": True,
         "historical_training": True,
     },
-    # Reserved contract only.  Stage 3 will provide the real implementation.
+    # Stage 3 provides real inference/persistence, but intentionally no training or
+    # production authority. Historical training/tournament begins only in Stage 4.
     "tiny_mlp": {
-        "implemented": False,
+        "implemented": True,
         "production_active_capable": False,
         "shadow_only": True,
         "historical_training": False,
