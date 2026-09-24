@@ -4,7 +4,7 @@
   "base_version": "0.14.84",
   "base_commit": "3bebae9f1307bd4f152c1e00919e309dafb9f913",
   "release_status": "stage6-trusted-automatic-correct-validation",
-  "tests_passed": 1236,
+  "tests_passed": 1253,
   "profile": "rpi4-low-memory-complete-discovery-manual-agent-selection",
   "manual_agent_training": true,
   "max_concurrent_training_jobs": 1,
@@ -430,5 +430,6 @@
   "automatic_correct_persistence": "one durable resolution per decision/trial with observation, action timestamp, observation window, area, outcome/reward sources, confidence, attribution reason and source reliability",
   "automatic_correct_learning": "disabled in Stage 6; ordinary delayed scalar rewards no longer call policy.update/save_model/add_feedback",
   "automatic_correct_authority": "observer/audit only; no ActionIntent creation, Executor bypass or Home Assistant service path",
-  "automatic_correct_ui": "agent runtime diagnostics expose proposed/trusted reward, outcome, source, confidence/reliability, attribution, trial/action timestamp, observation window and unknown/rejected reason"
+  "automatic_correct_ui": "agent runtime diagnostics expose proposed/trusted reward, outcome, source, confidence/reliability, attribution, trial/action timestamp, observation window and unknown/rejected reason",
+  "stage6_tests_passed": 1253
 }
