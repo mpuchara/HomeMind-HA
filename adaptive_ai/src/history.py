@@ -1625,7 +1625,9 @@ class HistoryManager(threading.Thread):
         # It is deliberately tied to explicit benchmarked historical training only:
         # no periodic reward update, no live feedback mutation, no Control authority.
         neural_enabled = bool(
-            benchmark and OPTIONS.get("tiny_mlp_supervised_training_enabled", True)
+            benchmark
+            and OPTIONS.get("tiny_mlp_supervised_training_enabled", True)
+            and len(agents) <= 16
         )
         neural_masks = {}
         neural_backends = {}
@@ -1639,11 +1641,20 @@ class HistoryManager(threading.Thread):
             from tiny_mlp_shadow import load_training_record
 
             registry_snapshot = self.engine.context.resolved_registry()
-            train_cap = max(
+            agent_count = max(1, len(agents))
+            configured_train_cap = max(
                 64, int(OPTIONS.get("tiny_mlp_train_max_samples", 4096) or 4096)
             )
-            holdout_cap = max(
+            configured_holdout_cap = max(
                 64, int(OPTIONS.get("tiny_mlp_holdout_max_samples", 4096) or 4096)
+            )
+            # Bound total retained Python observation rows across a multi-agent pass.
+            # Explicit Train normally has one agent and therefore keeps the full cap.
+            train_cap = min(
+                configured_train_cap, max(64, 4096 // agent_count)
+            )
+            holdout_cap = min(
+                configured_holdout_cap, max(64, 2048 // agent_count)
             )
             hidden = tuple(
                 int(x.strip()) for x in str(
