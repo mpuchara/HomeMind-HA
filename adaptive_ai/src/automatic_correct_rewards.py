@@ -263,6 +263,16 @@ class AutomaticRewardJournal:
                 "SELECT * FROM automatic_reward_experiences WHERE resolution_key=?",
                 (key,),
             ).fetchone()
+            if saved is None and row.get("trial_id"):
+                saved = c.execute(
+                    "SELECT * FROM automatic_reward_experiences WHERE trial_id=?",
+                    (str(row.get("trial_id")),),
+                ).fetchone()
+            if saved is None and row.get("decision_id"):
+                saved = c.execute(
+                    "SELECT * FROM automatic_reward_experiences WHERE decision_id=?",
+                    (str(row.get("decision_id")),),
+                ).fetchone()
         decoded = self._decode(saved)
         if inserted:
             self._cache_transition(decoded)
