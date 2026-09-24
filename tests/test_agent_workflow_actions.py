@@ -222,12 +222,13 @@ class AgentWorkflowActionTests(unittest.TestCase):
 
     def add_correct_label(self, agent):
         with self.store.lock, self.store.conn() as c:
-            c.execute(
+            row = c.execute(
                 """INSERT INTO teaching_rl_labels
                    (agent_id,created_ts,sample_ts,desired,previous_desired,fingerprint,undone_ts)
                    VALUES(?,?,?,?,?,?,NULL)""",
                 (agent["id"], time.time(), time.time()-5, 1.0, 0.0, rl_fingerprint(agent)),
             )
+            return int(row.lastrowid)
 
     def test_live_autonomous_creates_child_without_clear_learning_and_preserves_parent(self):
         before = self.model(self.root["id"])
@@ -251,6 +252,41 @@ class AgentWorkflowActionTests(unittest.TestCase):
         child = self.manager.lineage_status(result["child_generation_id"])
         self.assertEqual(child["parent_generation_id"], f"root:{self.root['id']}")
         self.assertEqual(self.model(self.root["id"]), before)
+
+    def test_durable_correct_request_groups_only_labels_from_current_operation(self):
+        first_label = self.add_correct_label(self.root)
+        second_label = self.add_correct_label(self.root)
+        first = self.manager.workflow_correct_commit(
+            self.root["id"], request_id="correct-op-a"
+        )
+        self.assertEqual(first["correct_operation_id"], "correct-op-a")
+        self.assertEqual(first["correct_label_ids"], [first_label, second_label])
+
+        with self.store.conn() as c:
+            row = dict(c.execute(
+                "SELECT * FROM agent_correct_operations WHERE operation_id=?",
+                ("correct-op-a",),
+            ).fetchone())
+        self.assertEqual(row["status"], "committed")
+        self.assertEqual(json.loads(row["label_ids_json"]), [first_label, second_label])
+        self.assertEqual(row["child_generation_id"], first["child_generation_id"])
+
+        # A later Correct on the same direct parent coalesces into the existing child,
+        # but its operation batch contains only the newly added/edited labels.
+        time.sleep(.002)
+        third_label = self.add_correct_label(self.root)
+        second = self.manager.workflow_correct_commit(
+            self.root["id"], request_id="correct-op-b"
+        )
+        self.assertTrue(second["coalesced"])
+        self.assertEqual(second["child_generation_id"], first["child_generation_id"])
+        self.assertEqual(second["correct_label_ids"], [third_label])
+        with self.store.conn() as c:
+            row = dict(c.execute(
+                "SELECT * FROM agent_correct_operations WHERE operation_id=?",
+                ("correct-op-b",),
+            ).fetchone())
+        self.assertEqual(json.loads(row["label_ids_json"]), [third_label])
 
     def test_live_change_decision_records_context_label_and_creates_child(self):
         before = self.model(self.root["id"])
