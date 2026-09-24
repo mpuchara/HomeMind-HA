@@ -4,7 +4,7 @@
   "base_version": "0.14.78",
   "base_commit": "f72a5e86c9ba8a6c6e1951c59e44237258b873ed",
   "release_status": "release-0.14.79-shared-historical-context",
-  "tests_passed": 1174,
+  "tests_passed": 1176,
   "profile": "rpi4-low-memory-complete-discovery-manual-agent-selection",
   "manual_agent_training": true,
   "max_concurrent_training_jobs": 1,
@@ -288,6 +288,6 @@
   "shared_historical_context_key_079": "Cache identity includes exact replay timestamp, event and received-time watermarks, visible-row fingerprint, topology revision, semantic-reliability revision, home-checkpoint identity, model versions and the policy/schema/feature-contract namespace.",
   "shared_historical_context_memory_079": "Default limit is 32 snapshots and 8192 source-weighted units; cache lifetime is one heavy training job and nothing is persisted to SQLite.",
   "shared_historical_context_semantics_079": "Cache miss runs the pre-0.14.79 30-second causal RoomBelief rebuild unchanged; late packets, rewinds, topology changes and feature-contract changes are explicit regression cases.",
-  "shared_historical_context_profile_079": "CI profiles 1/5/20 synthetic agent timelines, 8/32/64 context sensors and static/dynamic history, comparing cache disabled versus enabled with exact forecast parity; wall-clock and RSS are reported as informational machine-local measurements.",
+  "shared_historical_context_profile_079": "CI profiles 1/5/20 synthetic agent timelines, 8/32/64 context sensors and static/dynamic history, comparing cache disabled versus enabled with exact forecast parity; process CPU time is measured directly while wall-clock/RSS are host-local diagnostics.",
   "shared_historical_context_safety_079": "No rewards, policy updates, Candidate lineage, Correct behavior, ActionIntent, Executor or physical Home Assistant control semantics are changed."
 }
