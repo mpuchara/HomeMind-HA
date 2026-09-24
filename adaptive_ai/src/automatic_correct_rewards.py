@@ -632,7 +632,24 @@ class TrustedAutomaticRewardService:
             kind, _reason = source_kind(eid, state, reg)
             if kind not in {"binary", "tracker"}:
                 continue
-            source_area = reg.get("area_id")
+            current_area = reg.get("area_id")
+            mask_features = (
+                (row.get("observation_mask") or {}).get("features") or []
+            )
+            captured_area = next(
+                (
+                    feature.get("area_id")
+                    for feature in mask_features
+                    if str(feature.get("entity_id") or "") == str(eid)
+                    and feature.get("area_id")
+                ),
+                None,
+            )
+            explicit_area = (
+                (row.get("outcome_sources") or {}).get(str(eid), {})
+                or {}
+            ).get("area_id")
+            source_area = explicit_area or captured_area or current_area
             latest = latest_events.get(eid)
             if not latest or not _active_state(state):
                 continue
@@ -649,10 +666,21 @@ class TrustedAutomaticRewardService:
                 "origin": str(origin or "unknown"),
                 "reliability": _source_reliability(kind),
                 "area_id": source_area,
+                "captured_area_id": captured_area or explicit_area,
+                "current_area_id": current_area,
                 "kind": kind,
                 "event_time": float(event_time),
             }
-            if source_area and source_area == area:
+            # A topology change during the observation interval makes area attribution
+            # ambiguous. Never reinterpret the source under its new room.
+            if (
+                (captured_area or explicit_area)
+                and current_area
+                and str(current_area) != str(captured_area or explicit_area)
+            ):
+                detail["rejected_reason"] = "source area changed after action"
+                rejected.append(detail)
+            elif source_area and source_area == area:
                 valid.append(detail)
             else:
                 rejected.append(detail)
@@ -664,6 +692,11 @@ class TrustedAutomaticRewardService:
             )
             return valid[0], None
         if rejected:
+            if any(
+                item.get("rejected_reason") == "source area changed after action"
+                for item in rejected
+            ):
+                return None, "presence source area changed after action"
             return (
                 None,
                 "presence-like outcome source belongs to another area",
