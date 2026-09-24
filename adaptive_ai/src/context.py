@@ -574,7 +574,7 @@ def controllable_context_exclusions(state_map, registry):
         "esphome_sensor_sibling_overrides": rescued_esphome_sensors,
     }
 
-def select_context_entities(agent, state_map, registry, hint_entities, max_entities=None, relevance_scores=None):
+def select_context_entities(agent, state_map, registry, hint_entities, max_entities=None, relevance_scores=None, reference_ts=None):
     """Select a compact model from the broad all-entity candidate universe.
 
     v0.7.12 screens every parseable HA entity except controllable-device inputs and
@@ -652,7 +652,8 @@ def select_context_entities(agent, state_map, registry, hint_entities, max_entit
             score += min(420 if fast else 220, (100 if fast else 55) * len(overlap)); reasons.append("semantic")
         changed = parse_ts((st or {}).get("last_changed"))
         if changed:
-            age = max(0.0, now_ts() - changed)
+            selection_now = now_ts() if reference_ts is None else float(reference_ts)
+            age = max(0.0, selection_now - changed)
             score += 80.0 * math.exp(-age / 21600.0)
         ranked.append((score, eid, reasons, loc))
     ranked.sort(key=lambda x: (-x[0], x[1]))
