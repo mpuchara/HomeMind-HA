@@ -236,8 +236,9 @@ class TinyMLPShadowService:
                 INSERT INTO tiny_mlp_shadow_models
                     (agent_id,backend,backend_version,feature_schema_id,
                      feature_mask_id,model_json,mask_json,source_policy_revision,
+                     training_json,tournament_json,selected_backend,
                      created_ts,updated_ts)
-                VALUES(?,?,?,?,?,?,?,?,?,?)
+                VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)
                 ON CONFLICT(agent_id) DO UPDATE SET
                     backend=excluded.backend,
                     backend_version=excluded.backend_version,
@@ -246,6 +247,9 @@ class TinyMLPShadowService:
                     model_json=excluded.model_json,
                     mask_json=excluded.mask_json,
                     source_policy_revision=excluded.source_policy_revision,
+                    training_json=excluded.training_json,
+                    tournament_json=excluded.tournament_json,
+                    selected_backend=excluded.selected_backend,
                     updated_ts=excluded.updated_ts
                 """,
                 (
@@ -257,6 +261,9 @@ class TinyMLPShadowService:
                     encoded,
                     mask_encoded,
                     str(source_policy_revision),
+                    "{}",
+                    "{}",
+                    "diagonal_linucb",
                     now,
                     now,
                 ),
