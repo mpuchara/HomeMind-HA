@@ -107,6 +107,8 @@ def install(manager):
 
     original_status = manager.status
     original_list_status = manager.list_status
+    original_promote = manager.promote
+    original_promote_custom = getattr(manager, "promote_custom", None)
 
     def enrich(result):
         if not isinstance(result, dict):
@@ -132,6 +134,17 @@ def install(manager):
         )
         result["candidate_neural_shadow_active"] = neural_active
         result["candidate_neural_physical_authority"] = False
+        result["candidate_neural_promotable"] = False if neural_active else None
+        if neural_active:
+            result["promotable"] = False
+            vetoes = list(result.get("promotion_vetoes") or [])
+            if not any(str(item.get("reason") or "") == "neural_stage4_shadow_only" for item in vetoes if isinstance(item, dict)):
+                vetoes.append({
+                    "reason": "neural_stage4_shadow_only",
+                    "message": "Tiny MLP Stage 4 Candidate is Shadow-only and cannot be promoted yet",
+                    "custom_override": "never",
+                })
+            result["promotion_vetoes"] = vetoes
         return result
 
     def status(parent_id):
@@ -140,11 +153,48 @@ def install(manager):
     def list_status(*args, **kwargs):
         return [enrich(dict(row)) for row in original_list_status(*args, **kwargs)]
 
+    def _assert_not_neural_selected(parent_id):
+        row = candidate_row(parent_id)
+        if row is None:
+            # parent_id is commonly the root/parent rather than the candidate id.
+            try:
+                status_row = original_status(parent_id) or {}
+            except Exception:
+                status_row = {}
+            candidate_id = status_row.get("candidate_id")
+        else:
+            candidate_id = row.get("candidate_id")
+        if not candidate_id:
+            try:
+                status_row = original_status(parent_id) or {}
+                candidate_id = status_row.get("candidate_id")
+            except Exception:
+                candidate_id = None
+        if candidate_id:
+            eligible, _record, _gate = neural_eligible(candidate_id)
+            if eligible:
+                raise ValueError(
+                    "Tiny MLP Stage 4 Candidate is Shadow-only; neural promotion to Live/Control is not enabled"
+                )
+
+    def promote(parent_id, *args, **kwargs):
+        _assert_not_neural_selected(parent_id)
+        return original_promote(parent_id, *args, **kwargs)
+
+    def promote_custom(parent_id, *args, **kwargs):
+        _assert_not_neural_selected(parent_id)
+        if original_promote_custom is None:
+            raise ValueError("Custom Candidate promotion is unavailable")
+        return original_promote_custom(parent_id, *args, **kwargs)
+
     manager.candidate_backend_predictor = predict
     manager.status = status
     manager.list_status = list_status
+    manager.promote = promote
+    if original_promote_custom is not None:
+        manager.promote_custom = promote_custom
     manager._candidate_neural_shadow_installed = True
     manager.candidate_neural_shadow_contract = (
-        "offline_gate_plus_identical_holdout_tournament_selects_shadow_backend_only"
+        "offline_gate_plus_identical_holdout_tournament_selects_shadow_backend_only_no_live_promotion"
     )
     return manager
