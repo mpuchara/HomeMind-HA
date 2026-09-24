@@ -40,7 +40,7 @@
   "migration": "no destructive migration; existing agents, models, feedback, raw archive, historical experiences, candidate lineage, rollback and generation state preserved",
   "physical_control": "unchanged; repaired agents return to Shadow and Control still requires qualified state plus all existing guards",
   "pi4": "0.14.38 targets the long-soak Raspberry Pi failure: drift analysis is coalesced on a throttled background observer, REST /states reconciliation is delta-only after bootstrap, websocket outage fallback reconciles every 10 s, and HA core-state health is tracked separately from unrelated REST errors.",
-  "ci_status": "0.14.81 code validation passed in run #3400: Python 3.11/3.13 with 1201 tests, 775-entity observation benchmark, historical causality regressions, existing performance suite, Stage 17/18, source smoke, simulations and Docker. Final release-bookkeeping HEAD validation pending.",
+  "ci_status": "0.14.81 functional release code passed Validate HomeMind #3410: Python 3.11/3.13 with 1201 tests, 775-entity observation-space benchmark, historical/received-time causality regressions, existing performance suite, Stage 17/18, source smoke, simulations and Docker.",
   "training_slice_budget": "adaptive-ai-index workers call a shared CooperativeTrainingBudget; expensive temporal tracker loops yield between entities/events and finalization is no longer outside the throttle",
   "finalization_lifeline": "HEAVY_JOBS remains owned through final gc.collect(), so /api/status and /api/agents stay on lightweight lifeline reads until the worker is actually finished",
   "finalization_progress": "post-replay UI now exposes bounded stages: replay complete, policy serialization, benchmark save, qualification, checkpoint complete",
@@ -332,20 +332,21 @@
   "observation_space_performance_gate_081": "CI profiles a synthetic 775-entity installation. The deterministic gate requires exact global feature cardinality, a 32..128 selected mask, zero selector calls in the active Ridge hot path and semantic parity before/after mask materialization; p50/p95/p99 and the comparable p95 ratio are reported.",
   "observation_space_safety_081": "No neural inference, policy backend selection, reward learning, Candidate authority, Correct mutation, ActionIntent, Executor or physical Home Assistant dispatch is introduced or changed in Stage 2.",
   "observation_space_benchmark_081": {
-    "run": 3400,
+    "run": 3410,
     "entities": 775,
     "descriptors_per_entity": 6,
     "global_feature_count": 4661,
     "selected_feature_count": 65,
-    "selector_materialization_ms_p50": 13.807935,
-    "selector_materialization_ms_p95": 15.3165104,
+    "selector_materialization_ms_p50": 20.135412,
+    "selector_materialization_ms_p95": 24.8365974,
     "hot_path_selector_calls": 0,
     "hot_path_semantic_parity": true,
-    "hot_path_p95_us_before_materialization": 106.807,
-    "hot_path_p95_us_after_materialization": 105.26995,
-    "hot_path_p95_ratio": 0.9856090892919004,
+    "hot_path_p95_us_before_materialization": 177.599,
+    "hot_path_p95_us_after_materialization": 170.66,
+    "hot_path_p95_ratio": 0.9609288340587504,
     "investigate_threshold_ratio": 1.1,
     "schema_id": "obs-v1:ea3eedc323495884",
-    "note": "GitHub-host synthetic scale benchmark. Mask materialization is outside active Ridge event->intent; timing ratio is used only as the comparable >10% investigation gate."
+    "mask_id": "7576b2d6bf4513972349f8c995370c5e1ba4fa22d79fcd7382ed11c0eb7c6489",
+    "note": "GitHub-host synthetic scale benchmark, not Raspberry Pi 4. Mask materialization is outside active Ridge event->intent; timing ratio is only the comparable >10% investigation gate."
   }
 }
