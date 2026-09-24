@@ -5,7 +5,9 @@ import threading
 import uuid
 from settings import (OPTIONS, clamp, now_ts, sigmoid)
 from context import (ExplicitFeatureSchema, action_values, build_explicit_features, controllable_context_exclusions, electrical_context_exclusions, parse_horizons, select_context_entities)
-from policy_backend import PolicyBackend
+from policy_backend import (
+    PolicyBackend, require_backend, serialize_backend_model, verify_model_checksum,
+)
 from home_state import FEATURE_NAMES
 
 class DiagonalLinUCB:
@@ -231,11 +233,16 @@ class DiagonalLinUCB:
 
 
 class MultiHorizonPolicy(PolicyBackend):
+    BACKEND = "diagonal_linucb"
     VERSION = 10
     def __init__(self, agent, state_map, registry, hint_entities, model=None, relevance_scores=None, context_engine=None):
         self.agent = agent
         self.lock = threading.RLock()
         self.context_engine = context_engine
+        if model:
+            require_backend(model, expected=self.BACKEND)
+            if not verify_model_checksum(model):
+                raise ValueError("NEEDS_RETRAIN: policy model checksum mismatch")
         self.model_revision = (model or {}).get("model_revision") or str(uuid.uuid4())
         # Context Tournament needs a stable champion identity across ordinary online
         # learning and deterministic lazy decay. Both may change model_revision for
@@ -338,10 +345,18 @@ class MultiHorizonPolicy(PolicyBackend):
 
     def serialize(self):
         with self.lock:
-            return json.loads(json.dumps(self.export()))
+            raw = json.loads(json.dumps(self.export()))
+            return serialize_backend_model(
+                raw,
+                policy_backend=self.BACKEND,
+                backend_version=self.VERSION,
+            )
 
     @classmethod
     def deserialize(cls, raw, **kwargs):
+        require_backend(raw, expected=cls.BACKEND)
+        if not verify_model_checksum(raw):
+            raise ValueError('NEEDS_RETRAIN: policy model checksum mismatch')
         if raw.get('version') != cls.VERSION or raw.get('schema', {}).get('version') != ExplicitFeatureSchema.VERSION:
             raise ValueError('NEEDS_RETRAIN: incompatible policy/schema')
         return cls(model=raw, **kwargs)
@@ -355,7 +370,12 @@ class MultiHorizonPolicy(PolicyBackend):
                 self.model_revision = str(uuid.uuid4())
 
     def diagnostics(self):
-        return {'backend': 'diagonal_linucb', 'policy_version': self.VERSION,
+        persisted = self.serialize()
+        return {'backend': self.BACKEND, 'backend_version': self.VERSION,
+                'model_format_version': persisted.get('model_format_version'),
+                'feature_schema_id': persisted.get('feature_schema_id'),
+                'feature_mask_id': persisted.get('feature_mask_id'),
+                'model_checksum': persisted.get('model_checksum'),
                 'model_revision': self.model_revision,
                 'tournament_revision': self.tournament_revision,
                 'effective_updates': self.total_updates,
