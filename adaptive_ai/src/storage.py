@@ -454,6 +454,50 @@ class Store:
                 )
         self.touch_agent_index()
 
+    def restore_training_chunk_snapshot(self, agent_id, agent, model):
+        """Rollback a rejected/aborted isolated chunk to its exact pre-chunk lifecycle."""
+        agent = dict(agent or {})
+        with self.lock, self.conn() as c:
+            if model is None:
+                c.execute("DELETE FROM rl_models WHERE agent_id=?", (str(agent_id),))
+            else:
+                c.execute(
+                    """INSERT INTO rl_models(agent_id,model_json,updated_at) VALUES(?,?,?)
+                       ON CONFLICT(agent_id) DO UPDATE SET
+                       model_json=excluded.model_json,updated_at=excluded.updated_at""",
+                    (
+                        str(agent_id),
+                        json.dumps(dict(model), separators=(",", ":")),
+                        iso_now(),
+                    ),
+                )
+            c.execute(
+                """UPDATE agents SET training_state=?,mode=?,benchmark_score=?,
+                   benchmark_samples=?,benchmark_source=?,benchmark_detail_json=?,
+                   benchmark_updated_at=?,training_window_start_ts=?,training_cursor_ts=?,
+                   training_window_end_ts=?,training_progress=?,training_updated_at=?
+                   WHERE id=?""",
+                (
+                    str(agent.get("training_state") or "training"),
+                    str(agent.get("mode") or "paused"),
+                    agent.get("benchmark_score"),
+                    int(agent.get("benchmark_samples") or 0),
+                    agent.get("benchmark_source"),
+                    json.dumps(
+                        agent.get("benchmark_detail") or {},
+                        separators=(",", ":"), ensure_ascii=False,
+                    ),
+                    agent.get("benchmark_updated_at"),
+                    agent.get("training_window_start_ts"),
+                    agent.get("training_cursor_ts"),
+                    agent.get("training_window_end_ts"),
+                    float(agent.get("training_progress") or 0.0),
+                    agent.get("training_updated_at") or iso_now(),
+                    str(agent_id),
+                ),
+            )
+        self.touch_agent_index()
+
     def discard_uncommitted_experiences(self, agent_id):
         model = self.get_model(agent_id) or {}
         with self.lock, self.conn() as c:
