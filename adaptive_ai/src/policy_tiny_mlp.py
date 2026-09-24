@@ -66,11 +66,13 @@ class TinyMLPBackend(PolicyBackend):
         if model is None:
             self.weights, self.biases = self._initialize_parameters()
             self.model_revision = self._initial_revision()
+            self.persisted_checksum = None
         else:
             self._load_parameters(model)
             self.model_revision = str(model.get("model_revision") or self._initial_revision())
             self.trained = bool(model.get("trained", False))
             self.training_samples = int(model.get("training_samples") or 0)
+            self.persisted_checksum = model.get("model_checksum")
 
     @staticmethod
     def _canonical(value):
@@ -263,13 +265,15 @@ class TinyMLPBackend(PolicyBackend):
             "weights": [list(layer) for layer in self.weights],
             "biases": [list(layer) for layer in self.biases],
         }
-        return serialize_backend_model(
+        packed = serialize_backend_model(
             raw,
             policy_backend=self.BACKEND,
             backend_version=self.VERSION,
             schema_id=self.schema_id,
             mask_id=self.mask_id,
         )
+        self.persisted_checksum = packed.get("model_checksum")
+        return packed
 
     @classmethod
     def deserialize(
