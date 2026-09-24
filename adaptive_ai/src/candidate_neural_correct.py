@@ -671,6 +671,11 @@ def install(manager):
         return manager
 
     _ensure_schema(manager.store)
+    # Candidate workers are started by the base runtime before the final HTTP workflow
+    # layer is attached. Materialize the generic Correct-operation table now so restart
+    # recovery cannot race schema creation.
+    from agent_workflow_actions import ensure_workflow_tables
+    ensure_workflow_tables(manager.store)
     original_start = manager._start_build
     original_status = manager.status
     original_list_status = manager.list_status
