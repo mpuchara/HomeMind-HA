@@ -97,6 +97,8 @@ options:
   training_experience_batch_rows: 128
   training_replay_ram_cache_rows: 16384
   training_replay_ram_cache_entry_rows: 1024
+  observation_selected_features: 96
+  observation_freshness_tau_seconds: 300
   training_process_isolation: true
   training_worker_nice: 10
   training_worker_memory_limit_mb: 520
@@ -204,6 +206,8 @@ schema:
   training_experience_batch_rows: "int(8,512)"
   training_replay_ram_cache_rows: "int(0,65536)"
   training_replay_ram_cache_entry_rows: "int(64,4096)"
+  observation_selected_features: "int(16,128)"
+  observation_freshness_tau_seconds: "int(1,86400)"
   training_process_isolation: "bool"
   training_worker_nice: "int(0,19)"
   training_worker_memory_limit_mb: "int(128,2048)"
