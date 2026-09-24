@@ -46,8 +46,12 @@ def _canonical(value):
 
 def model_checksum(raw):
     """Stable checksum of the serialized model, excluding the checksum field itself."""
-    clean = dict(raw or {})
-    clean.pop("model_checksum", None)
+    # Store-owned bookkeeping (for example _history_watermark/_benchmark_counts) is
+    # appended after backend serialization and is intentionally outside model identity.
+    clean = {
+        key: value for key, value in dict(raw or {}).items()
+        if key != "model_checksum" and not str(key).startswith("_")
+    }
     return hashlib.sha256(_canonical(clean).encode("utf-8")).hexdigest()
 
 
