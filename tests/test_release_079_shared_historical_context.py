@@ -1,10 +1,12 @@
 import tempfile
 import threading
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 
 from context_engine import ContextEngine
 from observation_contract import FeatureJournal, ObservationSQLiteTemporalTracker
+import replay as replay_module
 from replay import HistoricalContextCache, ReplayQueryCache, SQLiteTemporalTracker
 from settings import DEFAULT_OPTIONS
 from storage import Store
@@ -249,6 +251,65 @@ class SharedHistoricalContextTests(unittest.TestCase):
             self.assertEqual(second.stats()["home_context_cache_misses"], 1)
         finally:
             second.close()
+
+    def test_new_home_sensor_invalidates_cached_snapshot(self):
+        cache = HistoricalContextCache(max_entries=8, max_units=2048)
+        ts = self.base + 35
+        first = self.tracker(cache)
+        try:
+            first.advance(ts)
+        finally:
+            first.close()
+
+        extra = "binary_sensor.kitchen_extra"
+        expanded_states = dict(self.states)
+        expanded_states[extra] = state(extra, "on", device_class="occupancy")
+        expanded_registry = dict(self.registry)
+        expanded_registry[extra] = {"area_id": "kitchen"}
+        self.store.archive_batch([
+            (
+                extra, self.base + 2, "on",
+                {"device_class": "occupancy"}, None, "test",
+            ),
+        ])
+        self.ctx.configure(expanded_states, entities=expanded_registry)
+
+        second = SQLiteTemporalTracker(
+            self.store,
+            [self.motion, self.radar, extra],
+            self.ctx,
+            self.base,
+            self.base + 120,
+            query_cache=ReplayQueryCache(max_rows=4096),
+            home_context_cache=cache,
+            context_cache_contract="policy:11:schema:12:feature:2",
+        )
+        try:
+            second.advance(ts)
+            self.assertIn(extra, second.home_entities)
+            self.assertEqual(second.stats()["home_context_cache_hits"], 0)
+            self.assertEqual(second.stats()["home_context_cache_misses"], 1)
+        finally:
+            second.close()
+
+    def test_room_model_version_invalidates_cached_snapshot(self):
+        cache = HistoricalContextCache(max_entries=8, max_units=2048)
+        ts = self.base + 35
+        first = self.tracker(cache)
+        try:
+            first.advance(ts)
+        finally:
+            first.close()
+
+        original = int(replay_module.RoomBeliefModel.VERSION)
+        with patch.object(replay_module.RoomBeliefModel, "VERSION", original + 1):
+            second = self.tracker(cache)
+            try:
+                second.advance(ts)
+                self.assertEqual(second.stats()["home_context_cache_hits"], 0)
+                self.assertEqual(second.stats()["home_context_cache_misses"], 1)
+            finally:
+                second.close()
 
     def test_feature_contract_namespace_prevents_cross_contract_reuse(self):
         cache = HistoricalContextCache(max_entries=8, max_units=2048)
