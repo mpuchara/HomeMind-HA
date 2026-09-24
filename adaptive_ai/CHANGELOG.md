@@ -6,9 +6,9 @@
 - Keep the established 30-second historical rebuild as the authoritative miss path. Rewind, late received data, future-by-receipt data, topology changes and feature-contract changes are covered by regression tests.
 - Bound Raspberry Pi memory by default to 32 snapshots / 8192 source-weighted units; the LRU exists only for one training job and is never persisted.
 - Expose cache hits, misses, evictions and actual RoomBelief render executions through historical-training diagnostics.
-- Add a deterministic profile matrix for 1/5/20 synthetic agent timelines, 8/32/64 context sensors and static/dynamic histories. CI gates exact forecast parity and render-work reduction; wall-clock/RSS remain informational host measurements.
+- Add a deterministic profile matrix for 1/5/20 synthetic agent timelines, 8/32/64 context sensors and static/dynamic histories. CI gates exact forecast parity and render-work reduction; process CPU time is measured directly; wall-clock/RSS remain informational host measurements.
 - No changes to replay rewards, learned samples, policy update order, Candidate lineage, Correct, ActionIntent, Executor or physical HA dispatch.
-- Full suite target: 1174 tests.
+- Full suite target: 1176 tests.
 
 # 0.14.78 — 2026-09-24
 
