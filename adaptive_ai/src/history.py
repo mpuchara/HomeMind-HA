@@ -2286,6 +2286,123 @@ class HistoryManager(threading.Thread):
         # before any serialization/benchmark/qualification work begins.
         TRAINING_BUDGET.checkpoint("replay_complete", force=True)
 
+        # Stage 4 supervised challenger is trained before Ridge heldout rows are folded
+        # back into the final checkpoint. Tournament therefore sees the exact untouched
+        # chronological holdout used by the established recorded-behaviour benchmark.
+        self.neural_training_artifacts = {}
+        if neural_enabled:
+            import json
+            from policy_tiny_mlp_training import (
+                build_training_artifact,
+                evaluate_supervised,
+                tournament_result,
+                train_supervised,
+            )
+
+            if progress_enabled:
+                self.set_status(
+                    progress=float(replay_end) + (float(validation_end) - float(replay_end)) * 0.35,
+                    message=f"{progress_label}: training tiny MLP Shadow challenger",
+                    stage_eta_seconds=0,
+                    work_done=replay_total,
+                    work_total=replay_total,
+                    work_unit="offline supervised batches",
+                    eta_source="bounded epochs + early stopping",
+                    phase_detail="Ridge remains baseline · MLP has no physical authority",
+                )
+            tournament_threshold = clamp(
+                float(OPTIONS.get("candidate_benchmark_threshold", 0.78)), 0.0, 1.0
+            )
+            tournament_min_samples = max(
+                1, int(OPTIONS.get("candidate_benchmark_min_samples", 12))
+            )
+            train_min_samples = max(
+                4, int(OPTIONS.get("tiny_mlp_train_min_samples", 24) or 24)
+            )
+            for agent in agents:
+                aid = str(agent["id"])
+                backend = neural_backends.get(aid)
+                mask = neural_masks.get(aid)
+                if backend is None or mask is None:
+                    continue
+                train_rows = list(neural_train_samples.get(aid) or ())
+                holdout_rows = list(neural_holdout_samples.get(aid) or ())
+                trainer_report = {
+                    "trained": bool(backend.trained),
+                    "samples": 0,
+                    "reason": "warm_start_no_new_supervised_batch",
+                }
+                distinct_actions = {int(row["action_idx"]) for row in train_rows}
+                if len(train_rows) >= train_min_samples and len(distinct_actions) >= 2:
+                    trainer_report = train_supervised(
+                        backend,
+                        train_rows,
+                        max_samples=int(
+                            OPTIONS.get("tiny_mlp_train_max_samples", 4096) or 4096
+                        ),
+                        max_epochs=int(
+                            OPTIONS.get("tiny_mlp_train_max_epochs", 12) or 12
+                        ),
+                        batch_size=int(
+                            OPTIONS.get("tiny_mlp_train_batch_size", 16) or 16
+                        ),
+                        learning_rate=float(
+                            OPTIONS.get("tiny_mlp_learning_rate", 0.012) or 0.012
+                        ),
+                        l2=float(OPTIONS.get("tiny_mlp_l2", 0.0001) or 0.0001),
+                        gradient_clip=float(
+                            OPTIONS.get("tiny_mlp_gradient_clip", 1.0) or 1.0
+                        ),
+                        early_stop_patience=int(
+                            OPTIONS.get("tiny_mlp_early_stop_patience", 3) or 3
+                        ),
+                        early_stop_min_delta=float(
+                            OPTIONS.get("tiny_mlp_early_stop_min_delta", 0.001)
+                            or 0.001
+                        ),
+                        checkpoint=TRAINING_BUDGET.checkpoint,
+                    )
+                if not backend.trained:
+                    continue
+
+                mlp_metrics = evaluate_supervised(backend, agent, holdout_rows)
+                preview = backend.serialize()
+                serialized_bytes = len(
+                    json.dumps(
+                        preview, sort_keys=True, separators=(",", ":"), allow_nan=False
+                    ).encode("utf-8")
+                )
+                tournament = tournament_result(
+                    agent=agent,
+                    actions=policy.actions if (policy := policies[aid]) else (),
+                    ridge_stats=neural_chunk_benchmark.get(aid) or {},
+                    mlp_metrics=mlp_metrics,
+                    threshold=tournament_threshold,
+                    minimum_samples=tournament_min_samples,
+                    minimum_gain=float(
+                        OPTIONS.get("tiny_mlp_tournament_min_gain", 0.0) or 0.0
+                    ),
+                    parameter_count=backend.parameter_count,
+                    serialized_bytes=serialized_bytes,
+                    max_parameters=int(
+                        OPTIONS.get("tiny_mlp_max_parameters", 50000) or 50000
+                    ),
+                    max_serialized_bytes=int(
+                        OPTIONS.get("tiny_mlp_max_serialized_bytes", 524288)
+                        or 524288
+                    ),
+                )
+                artifact = build_training_artifact(
+                    agent=agent,
+                    policy=policy,
+                    mask=mask,
+                    backend=backend,
+                    trainer=trainer_report,
+                    tournament=tournament,
+                )
+                self.neural_training_artifacts[aid] = artifact
+                TRAINING_BUDGET.checkpoint("tiny_mlp_tournament", force=True)
+
         # The newest slice was held out while confidence was calibrated. Once its
         # out-of-sample score is recorded, fold it into the final policy so no history is
         # wasted. Calibration remains a genuine chronological backtest.
