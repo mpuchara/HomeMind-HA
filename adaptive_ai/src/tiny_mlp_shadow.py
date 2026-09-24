@@ -142,12 +142,17 @@ class TinyMLPShadowService:
             init_seed=self._seed_for(agent["id"], mask, policy),
         )
 
-    def _backend(self, agent, policy, mask):
+    def _backend(self, agent, policy, mask, *, source_policy_revision=None):
         aid = str(agent["id"])
         signature = self._signature(mask, policy)
+        source_policy_revision = str(source_policy_revision or "unknown")
         with self.lock:
             cached = self.cache.get(aid)
-            if cached and cached["signature"] == signature:
+            if (
+                cached
+                and cached["signature"] == signature
+                and cached.get("source_policy_revision") == source_policy_revision
+            ):
                 return cached["backend"], "memory"
 
             raw = self._load_raw(aid)
@@ -167,6 +172,8 @@ class TinyMLPShadowService:
                         )
                     self.cache[aid] = {
                         "signature": signature,
+                        "source_policy_revision": source_policy_revision,
+                        "mask": mask,
                         "backend": backend,
                     }
                     return backend, "persisted_restart"
@@ -184,7 +191,12 @@ class TinyMLPShadowService:
 
             backend = self._new_backend(agent, policy, mask)
             self._persist(aid, backend)
-            self.cache[aid] = {"signature": signature, "backend": backend}
+            self.cache[aid] = {
+                "signature": signature,
+                "source_policy_revision": source_policy_revision,
+                "mask": mask,
+                "backend": backend,
+            }
             self.store.event(
                 aid,
                 "info",
@@ -206,17 +218,54 @@ class TinyMLPShadowService:
     def observe(self, agent, policy, state_map, temporal, *, timestamp):
         if not self.enabled or str(agent.get("mode") or "") != "shadow":
             return None
-        registry = self.engine.context.resolved_registry()
-        hints = list(getattr(getattr(policy, "schema", None), "entities", ()) or ())
-        relevance = dict((getattr(policy, "selection_meta", {}) or {}).get("selection_scores") or {})
-        mask, mask_diagnostics = select_observation_mask(
-            agent,
-            state_map,
-            registry,
-            hints,
-            relevance_scores=relevance,
+        aid = str(agent["id"])
+        source_policy_revision = str(
+            getattr(policy, "tournament_revision", None)
+            or getattr(policy, "model_revision", None)
+            or "unknown"
         )
-        backend, model_source = self._backend(agent, policy, mask)
+        actions = tuple(float(x) for x in policy.actions)
+        horizons = tuple(int(x) for x in policy.horizons)
+        with self.lock:
+            cached = self.cache.get(aid)
+            reusable = bool(
+                cached
+                and cached.get("source_policy_revision") == source_policy_revision
+                and cached["signature"][3] == actions
+                and cached["signature"][4] == horizons
+            )
+            if reusable:
+                mask = cached["mask"]
+                backend = cached["backend"]
+                model_source = "memory"
+            else:
+                mask = None
+                backend = None
+                model_source = None
+
+        if mask is None:
+            # Feature selection is a model-lifecycle operation, not per-event work.  A
+            # stable tournament_revision keeps the same Stage-2 mask through ordinary
+            # online Ridge updates; Train/Rebuild produces a new revision and rematerializes
+            # the isolated neural copy once.
+            registry = self.engine.context.resolved_registry()
+            hints = list(getattr(getattr(policy, "schema", None), "entities", ()) or ())
+            relevance = dict(
+                (getattr(policy, "selection_meta", {}) or {}).get("selection_scores") or {}
+            )
+            mask, _mask_diagnostics = select_observation_mask(
+                agent,
+                state_map,
+                registry,
+                hints,
+                relevance_scores=relevance,
+            )
+            backend, model_source = self._backend(
+                agent,
+                policy,
+                mask,
+                source_policy_revision=source_policy_revision,
+            )
         observation = observation_as_of(
             mask,
             state_map,
@@ -246,7 +295,7 @@ class TinyMLPShadowService:
             "schema_id": mask.schema_id,
             "mask_id": mask.mask_id,
             "selected_feature_count": len(mask.feature_ids),
-            "global_feature_count": int(mask_diagnostics.get("global_feature_count") or 0),
+            "global_feature_count": int(mask.global_feature_count),
             "missing_feature_count": int(observation.get("missing_feature_count") or 0),
             "architecture": list(backend.architecture),
             "parameter_count": backend.parameter_count,
