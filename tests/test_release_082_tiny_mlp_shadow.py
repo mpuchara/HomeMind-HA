@@ -36,12 +36,14 @@ def observation(ids=FEATURE_IDS):
 
 
 class TinyMLPBackendTests(unittest.TestCase):
-    def test_backend_is_real_but_shadow_only_and_not_trainable(self):
+    def test_backend_is_real_shadow_only_and_online_reward_training_is_disabled(self):
         caps = backend_capabilities("tiny_mlp")
         self.assertTrue(caps["implemented"])
         self.assertFalse(caps["production_active_capable"])
         self.assertTrue(caps["shadow_only"])
-        self.assertFalse(caps["historical_training"])
+        self.assertTrue(caps["historical_training"])
+        self.assertTrue(caps["supervised_training"])
+        self.assertFalse(caps["online_reward_updates"])
 
         model = backend()
         diag = model.diagnostics()
