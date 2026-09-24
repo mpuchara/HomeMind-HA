@@ -114,6 +114,13 @@ DEFAULT_OPTIONS = {
     # onset/persistence cursors' overlapping as-of requests.
     "training_home_context_cache_entries": 32,
     "training_home_context_cache_units": 8192,
+    # CPU-heavy historical replay runs in one child process. The parent remains the
+    # authority for HA ingress/HTTP/queue/control and supervises RSS/CPU/I/O.
+    "training_process_isolation": True,
+    "training_worker_nice": 10,
+    "training_worker_memory_limit_mb": 520,
+    "training_worker_poll_ms": 200,
+    "training_worker_terminate_grace_seconds": 2.0,
     "training_throttle_max_sleep_seconds": 0.50,
     "training_max_continuous_work_ms": 35,
     "training_realtime_event_priority_seconds": 0.30,
