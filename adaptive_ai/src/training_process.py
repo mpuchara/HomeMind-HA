@@ -288,9 +288,24 @@ def _restore_rejected_chunk(
     store, agent_id, agent_before, model_before, *, preserve_lifecycle=False
 ):
     if preserve_lifecycle:
-        # A concurrent configuration edit is authoritative. Restore only the model
-        # checkpoint and its experience watermark; keep the newer needs_retrain/lifecycle.
+        # A concurrent configuration edit is authoritative. Restore only the previous
+        # model checkpoint, then explicitly invalidate training authority. The child may
+        # have reached benchmark/qualification after the edit, so keeping whichever
+        # lifecycle row happens to be latest is not safe.
         store.restore_model_snapshot(agent_id, model_before)
+        store.set_training_state(
+            agent_id,
+            "needs_retrain",
+            score=None,
+            samples=0,
+            source=None,
+            detail={
+                "reason": (
+                    "Configuration changed during isolated training; "
+                    "stale worker result rejected"
+                )
+            },
+        )
     else:
         restore = getattr(store, "restore_training_chunk_snapshot", None)
         if callable(restore):
