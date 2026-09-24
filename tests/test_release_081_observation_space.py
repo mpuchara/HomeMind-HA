@@ -5,6 +5,7 @@ from pathlib import Path
 import tempfile
 import unittest
 
+import context as context_module
 from context import HistoricalTemporalTracker, TemporalHistory
 from context_engine import ContextEngine
 from observation_contract import FeatureJournal, ObservationSQLiteTemporalTracker
@@ -126,6 +127,36 @@ class ObservationSpaceCatalogTests(unittest.TestCase):
         self.assertTrue(home_rows)
         self.assertTrue(all(row.get("area_id") == "kitchen" for row in home_rows))
         self.assertTrue(all(row.get("target_entity") == self.target for row in home_rows))
+
+    def test_stage2_mask_is_stable_across_wall_clock_time_for_same_snapshot(self):
+        states = copy.deepcopy(self.states)
+        for idx, eid in enumerate(sorted(states)):
+            states[eid]["last_changed"] = BASE + idx
+            states[eid]["last_updated"] = BASE + idx
+        original_now = context_module.now_ts
+        try:
+            context_module.now_ts = lambda: BASE + 1_000
+            first, first_diag = select_observation_mask(
+                self.agent, states, self.registry, [self.motion],
+                relevance_scores={self.motion: .95, self.radar: .91},
+            )
+            context_module.now_ts = lambda: BASE + 1_000_000
+            second, second_diag = select_observation_mask(
+                self.agent, states, self.registry, [self.motion],
+                relevance_scores={self.motion: .95, self.radar: .91},
+            )
+        finally:
+            context_module.now_ts = original_now
+        self.assertEqual(first.mask_id, second.mask_id)
+        self.assertEqual(first.feature_ids, second.feature_ids)
+        self.assertEqual(
+            first_diag["selection_reference_ts"],
+            second_diag["selection_reference_ts"],
+        )
+        self.assertEqual(
+            first_diag["selection_reference_ts"],
+            max(BASE + idx for idx, _eid in enumerate(sorted(states))),
+        )
 
     def test_mask_roundtrip_and_incompatibility_detection(self):
         mask, _ = select_observation_mask(
