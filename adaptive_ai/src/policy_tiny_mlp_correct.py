@@ -177,14 +177,21 @@ def mixed_training_rows(corrections, replay, *, correction_fraction=0.25, max_sa
         }
     fraction = max(0.20, min(0.30, float(correction_fraction)))
     limit = max(len(corrections), int(max_samples))
-    # Reserve enough room for every explicit label at least once.
-    max_replay = max(0, limit - len(corrections))
-    replay = replay[-max_replay:] if max_replay else []
+    # Correction weight is a product contract, so when the optimizer cap is full trim
+    # replay first. Otherwise a large replay set could squeeze explicit human labels
+    # below the configured 20-30% despite the requested correction_fraction.
+    max_replay_for_fraction = max(
+        0,
+        int(math.floor(limit * (1.0 - fraction))),
+    )
+    max_replay_for_labels = max(0, limit - len(corrections))
+    replay_limit = min(max_replay_for_fraction, max_replay_for_labels)
+    replay = replay[-replay_limit:] if replay_limit else []
 
     if replay:
         desired_correction_slots = max(
             len(corrections),
-            int(round(len(replay) * fraction / max(1e-9, 1.0 - fraction))),
+            int(math.ceil(len(replay) * fraction / max(1e-9, 1.0 - fraction))),
         )
     else:
         desired_correction_slots = len(corrections)
