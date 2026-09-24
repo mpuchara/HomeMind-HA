@@ -6,6 +6,8 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from types import SimpleNamespace
+from unittest.mock import patch
 
 from settings import DEFAULT_OPTIONS, TRAINING_REVISION
 from storage import Store
@@ -160,6 +162,87 @@ class StoreIsolationContracts(unittest.TestCase):
         self.assertEqual(self.store.get_model(agent["id"])["value"], "old")
         rows = self.store.list_historical_experiences(agent["id"])
         self.assertEqual([row["target_history_id"] for row in rows], [1])
+
+
+class SupervisorRollbackContracts(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory(prefix="hm-supervisor-")
+        self.store = Store(Path(self.temp.name) / "adaptive_ai.db")
+        self.agent = self.store.create_agent({
+            "name": "Supervisor test",
+            "target_entity": "switch.target",
+            "target_property": "power",
+            "min_value": 0, "max_value": 1,
+            "deadband": .5, "exploration_step": 1,
+            "confidence_threshold": .78,
+            "action_interval": 30,
+            "input_entities": ["binary_sensor.motion"],
+        })
+        self.store.add_historical_experience(
+            self.agent["id"], 1, 0, 0.0, 1.0, 10.0, {0: 1.0}
+        )
+        self.store.save_model(
+            self.agent["id"], {"version": 1, "value": "pre-worker"}
+        )
+        self.before_model = self.store.get_model(self.agent["id"])
+        self.before_agent = self.store.get_agent_config(self.agent["id"])
+
+    def tearDown(self):
+        self.temp.cleanup()
+
+    def test_rejected_chunk_helper_rolls_back_model_lifecycle_and_experiences(self):
+        import training_process
+
+        self.store.add_historical_experience(
+            self.agent["id"], 2, 1, 1.0, 1.0, 10.0, {0: 2.0}
+        )
+        self.store.save_model(
+            self.agent["id"], {"version": 1, "value": "worker-result"}
+        )
+        self.store.set_training_state(
+            self.agent["id"], "qualified", score=.99, samples=99,
+            source="worker", detail={"worker": True},
+            shadow_after_completion=True,
+        )
+
+        training_process._restore_rejected_chunk(
+            self.store, self.agent["id"], self.before_agent, self.before_model
+        )
+        self.assertEqual(
+            self.store.get_model(self.agent["id"])["value"], "pre-worker"
+        )
+        after = self.store.get_agent_config(self.agent["id"])
+        self.assertEqual(after["training_state"], self.before_agent["training_state"])
+        self.assertEqual(after["mode"], self.before_agent["mode"])
+        self.assertEqual(after["benchmark_score"], self.before_agent["benchmark_score"])
+        rows = self.store.list_historical_experiences(self.agent["id"])
+        self.assertEqual([row["target_history_id"] for row in rows], [1])
+
+    def test_worker_mode_history_init_does_not_pause_parent_training_lifecycle(self):
+        import history as history_module
+
+        self.store.set_training_state(
+            self.agent["id"], "training", score=None, samples=0,
+            source=None, detail={"worker": "active"},
+        )
+        fake_engine = SimpleNamespace()
+        with patch.object(history_module, "STORE", self.store):
+            history_module.HistoryManager(fake_engine, worker_mode=True)
+        current = self.store.get_agent_config(self.agent["id"])
+        self.assertEqual(current["training_state"], "training")
+
+    def test_parent_mode_history_init_keeps_existing_restart_pause_contract(self):
+        import history as history_module
+
+        self.store.set_training_state(
+            self.agent["id"], "training", score=None, samples=0,
+            source=None, detail={"restart": True},
+        )
+        fake_engine = SimpleNamespace()
+        with patch.object(history_module, "STORE", self.store):
+            history_module.HistoryManager(fake_engine, worker_mode=False)
+        current = self.store.get_agent_config(self.agent["id"])
+        self.assertEqual(current["training_state"], "paused")
 
 
 class ActualWorkerSmoke(unittest.TestCase):
