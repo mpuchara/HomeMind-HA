@@ -203,7 +203,9 @@ class WorkflowRequestQueue(threading.Thread):
         try:
             if str(row.get("action")) != ACTION_CORRECT:
                 raise ValueError(f"Unsupported workflow action: {row.get('action')}")
-            result = self.manager.workflow_correct_commit(str(row["generation_ref"]))
+            result = self.manager.workflow_correct_commit(
+                str(row["generation_ref"]), request_id=rid
+            )
             self._finish(rid, state=STATE_DONE, result=result)
             try:
                 self.store.event(
