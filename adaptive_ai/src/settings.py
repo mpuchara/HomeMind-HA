@@ -109,6 +109,11 @@ DEFAULT_OPTIONS = {
     "training_experience_batch_rows": 128,
     "training_replay_ram_cache_rows": 16384,
     "training_replay_ram_cache_entry_rows": 1024,
+    # Exact historical RoomBelief snapshots shared only inside one heavy training job.
+    # 32 bounded entries keep the Pi 4 memory footprint small while covering the two
+    # onset/persistence cursors' overlapping as-of requests.
+    "training_home_context_cache_entries": 32,
+    "training_home_context_cache_units": 8192,
     "training_throttle_max_sleep_seconds": 0.50,
     "training_max_continuous_work_ms": 35,
     "training_realtime_event_priority_seconds": 0.30,
