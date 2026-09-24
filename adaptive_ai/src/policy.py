@@ -283,18 +283,39 @@ class MultiHorizonPolicy(PolicyBackend):
             selection_meta = fresh_meta
         selection_meta.update(self.context_exclusion_meta)
         self.selection_meta = selection_meta
-        # Stage 2 observation mask is diagnostic/preparatory only. It is intentionally
-        # not consumed by DiagonalLinUCB.features(), so existing policy decisions and the
-        # realtime feature hot path remain byte-for-byte compatible with 0.14.80.
-        self.observation_mask, self.observation_diagnostics = select_observation_mask(
-            agent,
-            state_map,
-            registry,
-            hint_entities,
-            relevance_scores=relevance_scores,
-        )
+        # Stage 2 is not allowed to add work to the realtime inference path. The
+        # feature-level observation mask is materialized lazily by diagnostics/UI (or a
+        # future backend) rather than during first-event policy construction.
+        self.observation_mask = None
+        self.observation_diagnostics = {
+            "schema_id": None,
+            "mask_id": None,
+            "selected_feature_count": 0,
+            "global_feature_count": 0,
+            "missing_feature_count": 0,
+            "status": "not_materialized",
+            "selection_profile": "feature-level-v1",
+            "hot_path_active": False,
+        }
         raw_heads = (model or {}).get("heads", {}) if model and int(model.get("version", 0)) == self.VERSION else {}
         self.heads = {h: DiagonalLinUCB(self.dims, self.actions, self.alpha, raw_heads.get(str(h))) for h in self.horizons}
+
+    def materialize_observation_mask(
+        self, state_map, registry, hint_entities, relevance_scores=None
+    ):
+        with self.lock:
+            mask, diagnostics = select_observation_mask(
+                self.agent,
+                state_map,
+                registry,
+                hint_entities,
+                relevance_scores=relevance_scores,
+            )
+            diagnostics = dict(diagnostics)
+            diagnostics["status"] = "ready"
+            self.observation_mask = mask
+            self.observation_diagnostics = diagnostics
+            return mask, diagnostics
 
     @property
     def total_updates(self):
