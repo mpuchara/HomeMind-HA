@@ -128,6 +128,7 @@ class SharedHistoricalContextTests(unittest.TestCase):
             first_forecast = self.signature(
                 first.history.home_context.forecast(self.target, ts)
             )
+            first_state = first.state_map[self.radar]["state"]
         finally:
             first.close()
 
@@ -139,6 +140,22 @@ class SharedHistoricalContextTests(unittest.TestCase):
             source="late-test",
             event_key="late-visible",
         )
+
+        # Authoritative reference after the late packet: no shared home-context cache.
+        reference = ObservationSQLiteTemporalTracker(
+            self.store, [self.motion, self.radar], self.ctx,
+            self.base, self.base + 120,
+            home_context_cache=None,
+            context_cache_contract="feature-contract-v2",
+        )
+        try:
+            reference.advance(ts)
+            reference_state = reference.state_map[self.radar]["state"]
+            reference_forecast = self.signature(
+                reference.history.home_context.forecast(self.target, ts)
+            )
+        finally:
+            reference.close()
 
         second = ObservationSQLiteTemporalTracker(
             self.store, [self.motion, self.radar], self.ctx,
@@ -155,11 +172,10 @@ class SharedHistoricalContextTests(unittest.TestCase):
             self.assertEqual(second.stats()["home_context_cache_misses"], 1)
             self.assertEqual(cache.status()["hits"], 0)
             self.assertEqual(cache.status()["misses"], 2)
-            self.assertNotEqual(
-                second.state_map[self.radar].get("state"),
-                first_forecast.get("_unused_state_marker"),
-            )
-            self.assertIsInstance(second_forecast, dict)
+            self.assertNotEqual(first_state, reference_state)
+            self.assertNotEqual(first_forecast, reference_forecast)
+            self.assertEqual(second.state_map[self.radar]["state"], reference_state)
+            self.assertEqual(second_forecast, reference_forecast)
         finally:
             second.close()
 
