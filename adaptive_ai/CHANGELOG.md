@@ -1,3 +1,20 @@
+# 0.14.80 — 2026-09-24
+
+- Isolate CPU-heavy historical replay from realtime Home Assistant/HTTP/control work in **one clean Python worker process**. Recorder refresh, queue admission, lifecycle and physical control remain parent-owned.
+- Preserve the one-heavy-job contract: there is never one training process per device. The existing TrainingQueue/HEAVY_JOBS serialization remains authoritative.
+- Add versioned training-job descriptor v1 with app/training revision, agent-config fingerprint, structural runtime-context fingerprint, fixed history bounds, state/registry snapshot, automation hints, schema seed, options snapshot and checksum.
+- Guard model publication immediately before the atomic SQLite upsert, then revalidate agent configuration and runtime topology/options in the parent before exposing the result to realtime caches.
+- Make aborted/stale worker chunks rollback-safe: restore the exact pre-chunk model, lifecycle, benchmark and cursor, then discard historical experiences newer than the restored model watermark.
+- Use keyset-paged `entity_history` reads in isolated workers so a long replay does not keep one SQLite read transaction/WAL snapshot open for the whole scan. Normal runtime keeps the previous high-throughput iterator.
+- Supervise worker resources without assuming cgroups: best-effort niceness, configurable RSS ceiling, CPU/RSS/read/write diagnostics, bounded polling and terminate→kill fallback.
+- Keep the existing cooperative replay budget inside the child process. The process boundary removes Python GIL/allocator/GC competition from the realtime parent; the budget still prevents the child from consuming unlimited host resources.
+- Ship `/app/pi_training_profile.py` in the add-on. It collects repeatable **idle / training / Correct / training+Correct / steady-events / burst** traces, including HTTP p50/p95/p99, available runtime latency/backlog metrics, training progress, RSS, process CPU and I/O.
+- CPU normalization is explicit: `one_core_percent = CPU_seconds / wall_seconds × 100`; `host_percent = one_core_percent / logical_cpu_count`.
+- CI covers a real clean-subprocess historical replay plus worker cancellation/rollback, stale-config rejection, restart lifecycle, guarded model publication and keyset-reader parity.
+- No Raspberry Pi 4 performance numbers are claimed from GitHub runners. The packaged profiler is the acceptance tool for before/after measurements on the actual device.
+- No changes to replay rewards/order, policy semantics, Correct, Candidate lineage/promotion, ActionIntent, Executor or physical Home Assistant service dispatch.
+- Full suite target: **1188 tests**.
+
 # 0.14.79 — 2026-09-24
 
 - Re-profile historical RoomBelief reconstruction after the 0.14.76–0.14.78 performance fixes and add a bounded shared context layer only around exact duplicate causal requests.
