@@ -11,7 +11,10 @@ from storage import STORE
 from ha import HA, AUTOMATION_KNOWLEDGE
 from context import (archived_state, balanced_presence_driver_score, controllable_context_exclusions, default_action_interval, electrical_context_exclusions, entity_capability_tags, historical_reward, is_context_candidate_entity, is_esphome_sensor_entity, is_fast_reactive_agent, numeric_activity_driver_score, occupancy_state_bool, target_options_for_state, target_value, transition_edges)
 from telemetry import HEAVY_JOBS, rss_mb
-from replay import SQLiteTemporalTracker, DeferredUpdates, BoundedUsage, ReplayQueryCache
+from replay import (
+    SQLiteTemporalTracker, DeferredUpdates, BoundedUsage, ReplayQueryCache,
+    HistoricalContextCache,
+)
 from training_budget import TRAINING_BUDGET
 from policy import MultiHorizonPolicy
 
@@ -80,6 +83,7 @@ class HistoryManager(threading.Thread):
         self.training_schema_cache_hits = 0
         self.training_schema_cache_misses = 0
         self.training_replay_cache_status = {}
+        self.training_home_context_cache_status = {}
         # Recorder imports are global archive data, not model state. Repeated Rebuilds
         # in one process therefore reuse successful per-entity coverage and fetch only
         # a short overlap + new tail instead of downloading the same 7 days again.
@@ -139,6 +143,9 @@ class HistoryManager(threading.Thread):
                 "training_schema_cache_hits": int(getattr(self, "training_schema_cache_hits", 0) or 0),
                 "training_schema_cache_misses": int(getattr(self, "training_schema_cache_misses", 0) or 0),
                 "training_replay_cache": dict(getattr(self, "training_replay_cache_status", {}) or {}),
+                "training_home_context_cache": dict(
+                    getattr(self, "training_home_context_cache_status", {}) or {}
+                ),
                 "training_recorder_coverage_entries": len(getattr(self, "training_recorder_coverage", {}) or {}),
                 "training_recorder_coverage_hits": int(getattr(self, "training_recorder_coverage_hits", 0) or 0),
                 "training_recorder_coverage_misses": int(getattr(self, "training_recorder_coverage_misses", 0) or 0),
@@ -1603,13 +1610,41 @@ class HistoryManager(threading.Thread):
             max_rows=int(OPTIONS.get("training_replay_ram_cache_rows", 8192) or 0),
             max_entry_rows=int(OPTIONS.get("training_replay_ram_cache_entry_rows", 1024) or 1024),
         )
+        # RoomBelief/AdaptivePresence reconstruction is identical for trackers that ask
+        # for the same causal home state. Share only immutable exact-as-of snapshots; the
+        # onset and persistence cursors still own separate mutable tracker/model state.
+        replay_home_context_cache = HistoricalContextCache(
+            max_entries=int(
+                OPTIONS.get("training_home_context_cache_entries", 32) or 0
+            ),
+            max_units=int(
+                OPTIONS.get("training_home_context_cache_units", 8192) or 0
+            ),
+        )
+        context_cache_contract = "|".join(sorted({
+            "policy:%s:schema:%s:dims:%s:feature:%s" % (
+                int(getattr(policy, "VERSION", 0) or 0),
+                int(getattr(policy.schema, "VERSION", 0) or 0),
+                int(getattr(policy, "dims", 0) or 0),
+                int(
+                    (getattr(policy, "selection_meta", {}) or {}).get(
+                        "feature_contract_version", 0
+                    ) or 0
+                ),
+            )
+            for policy in policies.values()
+        }))
         timeline = SQLiteTemporalTracker(
             STORE, watched_entities, self.engine.context, start_ts, end_ts,
             query_cache=replay_query_cache,
+            home_context_cache=replay_home_context_cache,
+            context_cache_contract=context_cache_contract,
         )
         persistence_timeline = SQLiteTemporalTracker(
             STORE, watched_entities, self.engine.context, start_ts, end_ts,
             query_cache=replay_query_cache,
+            home_context_cache=replay_home_context_cache,
+            context_cache_contract=context_cache_contract,
         )
         pending = {}
         last_value = {}
@@ -1666,7 +1701,8 @@ class HistoryManager(threading.Thread):
             numeric = (
                 "advances", "same_ts_hits", "forward_advances", "bulk_rebuilds",
                 "rewinds", "sql_queries", "rows_loaded", "home_rebuilds",
-                "legacy_asof_queries_estimate",
+                "home_render_executes", "home_context_cache_hits",
+                "home_context_cache_misses", "legacy_asof_queries_estimate",
             )
             totals = {
                 key: int(onset.get(key) or 0) + int(persistence.get(key) or 0)
@@ -1677,10 +1713,11 @@ class HistoryManager(threading.Thread):
                 max(0.0, 1.0 - totals["sql_queries"] / legacy) if legacy else None
             )
             self.temporal_replay_stats = {
-                "contract": "incremental_bulk_v1",
+                "contract": "incremental_bulk_shared_home_v2",
                 "onset": onset,
                 "persistence": persistence,
                 "totals": totals,
+                "home_context_cache": replay_home_context_cache.status(),
             }
             return self.temporal_replay_stats
 
@@ -2157,6 +2194,7 @@ class HistoryManager(threading.Thread):
         heldout_updates.close()
         _publish_temporal_replay_stats()
         self.training_replay_cache_status = replay_query_cache.status()
+        self.training_home_context_cache_status = replay_home_context_cache.status()
         timeline.close()
         persistence_timeline.close()
         TRAINING_BUDGET.checkpoint("finalization_complete", force=True)
