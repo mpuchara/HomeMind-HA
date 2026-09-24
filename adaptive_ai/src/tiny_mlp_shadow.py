@@ -100,6 +100,57 @@ def load_training_record(store, agent_id):
     }
 
 
+def restore_training_record(store, agent_id, record):
+    """Restore the exact pre-job neural Shadow record or delete a newly-created one."""
+    ensure_tables(store)
+    agent_id = str(agent_id)
+    with store.lock, store.conn() as c:
+        if not record:
+            c.execute(
+                "DELETE FROM tiny_mlp_shadow_models WHERE agent_id=?",
+                (agent_id,),
+            )
+            return
+        model = dict(record.get("model") or {})
+        mask = dict(record.get("mask") or {})
+        c.execute(
+            """
+            INSERT INTO tiny_mlp_shadow_models
+                (agent_id,backend,backend_version,feature_schema_id,feature_mask_id,
+                 model_json,mask_json,source_policy_revision,training_json,tournament_json,
+                 selected_backend,created_ts,updated_ts)
+            VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)
+            ON CONFLICT(agent_id) DO UPDATE SET
+                backend=excluded.backend,
+                backend_version=excluded.backend_version,
+                feature_schema_id=excluded.feature_schema_id,
+                feature_mask_id=excluded.feature_mask_id,
+                model_json=excluded.model_json,
+                mask_json=excluded.mask_json,
+                source_policy_revision=excluded.source_policy_revision,
+                training_json=excluded.training_json,
+                tournament_json=excluded.tournament_json,
+                selected_backend=excluded.selected_backend,
+                updated_ts=excluded.updated_ts
+            """,
+            (
+                agent_id,
+                str(model.get("policy_backend") or model.get("backend") or "tiny_mlp"),
+                int(model.get("backend_version") or model.get("version") or 1),
+                str(mask.get("schema_id") or model.get("feature_schema_id") or ""),
+                str(mask.get("mask_id") or model.get("feature_mask_id") or ""),
+                json.dumps(model, sort_keys=True, separators=(",", ":"), allow_nan=False),
+                json.dumps(mask, sort_keys=True, separators=(",", ":"), allow_nan=False),
+                str(record.get("source_policy_revision") or "unknown"),
+                json.dumps(dict(record.get("training") or {}), sort_keys=True, separators=(",", ":"), allow_nan=False),
+                json.dumps(dict(record.get("tournament") or {}), sort_keys=True, separators=(",", ":"), allow_nan=False),
+                str(record.get("selected_backend") or "diagonal_linucb"),
+                time.time(),
+                time.time(),
+            ),
+        )
+
+
 def publish_training_artifact(store, artifact):
     """Persist a verified offline-training artifact after parent stale-job checks."""
     if not isinstance(artifact, dict) or artifact.get("format") != "homemind-tiny-mlp-training-artifact":
