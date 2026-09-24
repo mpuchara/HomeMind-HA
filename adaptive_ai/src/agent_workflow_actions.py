@@ -13,6 +13,7 @@ fresh child. Candidate actions are policy-only and never call Home Assistant ser
 import json
 import math
 import time
+import uuid
 from urllib.parse import parse_qs, unquote, urlsplit
 
 from context import target_value
@@ -69,6 +70,24 @@ def ensure_workflow_tables(store):
                 ON agent_generation_actions(parent_generation_id,id DESC);
             CREATE INDEX IF NOT EXISTS idx_generation_actions_child
                 ON agent_generation_actions(child_generation_id,id DESC);
+
+            CREATE TABLE IF NOT EXISTS agent_correct_operations (
+                operation_id TEXT PRIMARY KEY,
+                root_agent_id TEXT NOT NULL,
+                parent_generation_id TEXT NOT NULL,
+                parent_agent_id TEXT NOT NULL,
+                child_generation_id TEXT,
+                candidate_id TEXT,
+                label_ids_json TEXT NOT NULL,
+                created_ts REAL NOT NULL,
+                committed_ts REAL,
+                status TEXT NOT NULL,
+                detail_json TEXT NOT NULL DEFAULT '{}'
+            );
+            CREATE INDEX IF NOT EXISTS idx_correct_operations_parent
+                ON agent_correct_operations(parent_generation_id,created_ts DESC);
+            CREATE INDEX IF NOT EXISTS idx_correct_operations_child
+                ON agent_correct_operations(child_generation_id,created_ts DESC);
             """
         )
 
@@ -512,20 +531,115 @@ def install(manager):
             manager, generation, AUTONOMOUS_REASON, "autonomous", allow_coalesce=False
         )
 
-    def workflow_correct_commit(ref):
+    def workflow_correct_commit(ref, request_id=None):
         generation, agent = _resolve_generation(manager, ref)
         _preflight_child(manager, generation, allow_coalesce=True)
+        fp = rl_fingerprint(agent)
+        operation_id = str(request_id or uuid.uuid4())
+        now = time.time()
+
+        # A Correct operation consists of labels created/edited since the preceding
+        # committed Correct operation on this exact generation. The first post-upgrade
+        # operation adopts existing active labels for backward compatibility.
         with manager.store.conn() as c:
-            count = int(c.execute(
-                """SELECT COUNT(*) FROM teaching_rl_labels
-                   WHERE agent_id=? AND undone_ts IS NULL AND fingerprint=?""",
-                (str(agent["id"]), rl_fingerprint(agent)),
-            ).fetchone()[0])
-        if count <= 0:
-            raise ValueError("Add at least one Correct point before creating the child Candidate")
-        return _create_or_coalesce_child(
-            manager, generation, CORRECT_REASON, "correct", allow_coalesce=True
-        )
+            previous = c.execute(
+                """SELECT committed_ts FROM agent_correct_operations
+                   WHERE parent_generation_id=? AND status='committed'
+                   ORDER BY committed_ts DESC,created_ts DESC LIMIT 1""",
+                (str(generation["generation_id"]),),
+            ).fetchone()
+            cutoff = float(previous["committed_ts"]) if previous and previous["committed_ts"] is not None else None
+            if cutoff is None:
+                label_rows = c.execute(
+                    """SELECT id FROM teaching_rl_labels
+                       WHERE agent_id=? AND undone_ts IS NULL AND fingerprint=?
+                       ORDER BY id""",
+                    (str(agent["id"]), fp),
+                ).fetchall()
+            else:
+                label_rows = c.execute(
+                    """SELECT id FROM teaching_rl_labels
+                       WHERE agent_id=? AND undone_ts IS NULL AND fingerprint=? AND created_ts>?
+                       ORDER BY id""",
+                    (str(agent["id"]), fp, cutoff),
+                ).fetchall()
+            label_ids = [int(row["id"]) for row in label_rows]
+
+        if not label_ids:
+            # Preserve compatibility for legacy/direct callers that may intentionally
+            # reapply the cumulative label set without the durable UI request flow.
+            if request_id is None:
+                with manager.store.conn() as c:
+                    label_ids = [
+                        int(row["id"]) for row in c.execute(
+                            """SELECT id FROM teaching_rl_labels
+                               WHERE agent_id=? AND undone_ts IS NULL AND fingerprint=?
+                               ORDER BY id""",
+                            (str(agent["id"]), fp),
+                        ).fetchall()
+                    ]
+            if not label_ids:
+                raise ValueError("Add at least one new Correct point before creating the child Candidate")
+
+        with manager.store.lock, manager.store.conn() as c:
+            c.execute(
+                """INSERT OR REPLACE INTO agent_correct_operations
+                   (operation_id,root_agent_id,parent_generation_id,parent_agent_id,
+                    child_generation_id,candidate_id,label_ids_json,created_ts,
+                    committed_ts,status,detail_json)
+                   VALUES(?,?,?,?,NULL,NULL,?,?,NULL,'prepared','{}')""",
+                (
+                    operation_id,
+                    str(generation["root_agent_id"]),
+                    str(generation["generation_id"]),
+                    str(agent["id"]),
+                    json.dumps(label_ids, separators=(",", ":")),
+                    now,
+                ),
+            )
+        try:
+            result = _create_or_coalesce_child(
+                manager, generation, CORRECT_REASON, "correct", allow_coalesce=True
+            )
+            child_generation_id = (result or {}).get("child_generation_id")
+            child_generation = (
+                lineage_row(manager.store, generation_id=str(child_generation_id))
+                if child_generation_id else None
+            )
+            with manager.store.lock, manager.store.conn() as c:
+                c.execute(
+                    """UPDATE agent_correct_operations
+                       SET child_generation_id=?,candidate_id=?,committed_ts=?,
+                           status='committed',detail_json=?
+                       WHERE operation_id=?""",
+                    (
+                        str(child_generation_id or ""),
+                        str((child_generation or {}).get("agent_id") or ""),
+                        time.time(),
+                        json.dumps({
+                            "label_count": len(label_ids),
+                            "coalesced": bool((result or {}).get("coalesced")),
+                        }, separators=(",", ":")),
+                        operation_id,
+                    ),
+                )
+            result = dict(result or {})
+            result["correct_operation_id"] = operation_id
+            result["correct_label_ids"] = list(label_ids)
+            return result
+        except Exception as exc:
+            with manager.store.lock, manager.store.conn() as c:
+                c.execute(
+                    """UPDATE agent_correct_operations
+                       SET committed_ts=?,status='failed',detail_json=?
+                       WHERE operation_id=?""",
+                    (
+                        time.time(),
+                        json.dumps({"error": f"{type(exc).__name__}: {exc}"}, separators=(",", ":")),
+                        operation_id,
+                    ),
+                )
+            raise
 
     def workflow_change_decision(ref, desired_value=None):
         generation, agent = _resolve_generation(manager, ref)
