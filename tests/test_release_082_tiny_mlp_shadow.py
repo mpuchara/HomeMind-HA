@@ -6,6 +6,7 @@ import tempfile
 import threading
 import unittest
 
+from observation_space import ObservationMask, observation_schema_id
 from policy_backend import backend_capabilities, verify_model_checksum
 from policy_tiny_mlp import TinyMLPBackend
 from storage import Store
@@ -127,11 +128,16 @@ class TinyMLPShadowPersistenceTests(unittest.TestCase):
         self.engine = SimpleNamespace(lock=threading.RLock(), runtime={})
         self.agent = {"id": "candidate-stage3-test", "mode": "shadow"}
         self.policy = SimpleNamespace(actions=[0.0, 1.0], horizons=[1])
-        self.mask = SimpleNamespace(
-            schema_id="obs-stage3-test",
-            mask_id="mask-stage3-test",
+        self.mask = ObservationMask(
+            schema_id=observation_schema_id(),
+            mask_version=1,
             feature_ids=FEATURE_IDS,
+            features=tuple({"id": fid} for fid in FEATURE_IDS),
+            selected_entities=(),
+            global_feature_count=len(FEATURE_IDS),
+            missing_feature_count=0,
         )
+        self.source_policy_revision = "ridge-rev-stage3"
 
     def tearDown(self):
         self.temp.cleanup()
@@ -141,18 +147,26 @@ class TinyMLPShadowPersistenceTests(unittest.TestCase):
             self.store, self.engine, enabled=True
         )
         first, source = first_service._backend(
-            self.agent, self.policy, self.mask
+            self.agent,
+            self.policy,
+            self.mask,
+            source_policy_revision=self.source_policy_revision,
         )
         self.assertEqual(source, "created")
         first_raw = first_service.persisted_model(self.agent["id"])
         self.assertTrue(first_raw)
         self.assertEqual(first_raw["policy_backend"], "tiny_mlp")
+        persisted_mask = first_service.persisted_mask(self.agent["id"])
+        self.assertEqual(persisted_mask["mask_id"], self.mask.mask_id)
 
         second_service = TinyMLPShadowService(
             self.store, self.engine, enabled=True
         )
         restored, source = second_service._backend(
-            self.agent, self.policy, self.mask
+            self.agent,
+            self.policy,
+            self.mask,
+            source_policy_revision=self.source_policy_revision,
         )
         self.assertEqual(source, "persisted_restart")
         self.assertEqual(
@@ -163,18 +177,31 @@ class TinyMLPShadowPersistenceTests(unittest.TestCase):
 
     def test_mask_change_reinitializes_only_isolated_shadow_copy(self):
         service = TinyMLPShadowService(self.store, self.engine, enabled=True)
-        first, _ = service._backend(self.agent, self.policy, self.mask)
-        changed_mask = SimpleNamespace(
-            schema_id=self.mask.schema_id,
-            mask_id="mask-stage3-new",
-            feature_ids=FEATURE_IDS,
+        first, _ = service._backend(
+            self.agent,
+            self.policy,
+            self.mask,
+            source_policy_revision=self.source_policy_revision,
+        )
+        changed_ids = FEATURE_IDS[:-1] + ("feature:new",)
+        changed_mask = ObservationMask(
+            schema_id=observation_schema_id(),
+            mask_version=1,
+            feature_ids=changed_ids,
+            features=tuple({"id": fid} for fid in changed_ids),
+            selected_entities=(),
+            global_feature_count=len(changed_ids),
+            missing_feature_count=0,
         )
         second, source = service._backend(
-            self.agent, self.policy, changed_mask
+            self.agent,
+            self.policy,
+            changed_mask,
+            source_policy_revision=self.source_policy_revision,
         )
         self.assertEqual(source, "created")
         self.assertNotEqual(first.mask_id, second.mask_id)
-        self.assertEqual(second.mask_id, "mask-stage3-new")
+        self.assertEqual(second.mask_id, changed_mask.mask_id)
 
 
 class TinyMLPAuthorityBoundaryTests(unittest.TestCase):
