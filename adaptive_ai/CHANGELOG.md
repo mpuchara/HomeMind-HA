@@ -10,7 +10,7 @@
 - Preserve Manual Correct, Candidate lifecycle/lineage, rewards, historical training, `ActionIntent`, Executor and physical Home Assistant control unchanged.
 - Add packaged `tiny_mlp_benchmark.py` plus CI probe for one, 20 and 50 loaded models, repeated p50/p95/p99 inference, current RSS, startup/load, serialization/deserialization and restart persistence. CI measurements are synthetic host timings, not Raspberry Pi 4 results.
 - Add Stage-3 regressions for deterministic initialization, binary/setpoint action mapping, persistence/restart, checksum/schema/mask/order guards, Candidate-ID persistence, Control exclusion and fail-open Shadow observation.
-- Full suite target: **1213 tests** before final merge.
+- Full PR CI: **1213 tests** pass on Python 3.11 and 3.13; Docker image/smoke and all configured benchmark steps pass. GitHub Linux host MLP probe: p95 ~0.332 ms for 96→32→16→2; 50 loaded models add ~1.28 MB RSS versus probe baseline. These are not Raspberry Pi 4 measurements.
 
 # 0.14.81 — 2026-09-24
 
