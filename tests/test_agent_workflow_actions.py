@@ -288,6 +288,24 @@ class AgentWorkflowActionTests(unittest.TestCase):
             ).fetchone())
         self.assertEqual(json.loads(row["label_ids_json"]), [third_label])
 
+    def test_committed_correct_operation_replays_idempotently_after_crash(self):
+        label_id = self.add_correct_label(self.root)
+        first = self.manager.workflow_correct_commit(
+            self.root["id"], request_id="correct-crash-safe"
+        )
+        second = self.manager.workflow_correct_commit(
+            self.root["id"], request_id="correct-crash-safe"
+        )
+        self.assertEqual(second["child_generation_id"], first["child_generation_id"])
+        self.assertEqual(second["correct_label_ids"], [label_id])
+        self.assertTrue(second["idempotent_replay"])
+        with self.store.conn() as c:
+            count = c.execute(
+                "SELECT COUNT(*) FROM agent_correct_operations WHERE operation_id=?",
+                ("correct-crash-safe",),
+            ).fetchone()[0]
+        self.assertEqual(count, 1)
+
     def test_live_change_decision_records_context_label_and_creates_child(self):
         before = self.model(self.root["id"])
         self.engine.runtime[self.root["id"]] = {"last_prediction": 0.0, "last_confidence": .8}
