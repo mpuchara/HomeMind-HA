@@ -1,3 +1,19 @@
+# 0.14.84 — 2026-09-24
+
+- Continue the Tiny Neural Policy / Correct / Offline-RL master plan with **Stage 5: existing chart-based Manual Correct + incremental supervised Tiny MLP fine-tune**.
+- Preserve the existing Agent/Candidate Correct chart and generation-aware selected-point workflow. No new generic reward button or neural-only Correct UX is introduced.
+- Route Correct through the new neural path only when the exact selected direct-parent Candidate genuinely runs a trained, tournament-selected Tiny MLP with a passed offline gate. Ridge/current-backend Correct remains on the established conservative snapshot path.
+- Reconstruct every selected neural Correct point from the source model's exact persisted Stage-2 feature mask using causal SQLite historical replay. Missing source features make the point unusable and auditable; current/future state is never fabricated into an old timestamp.
+- Persist one correction batch for all selected points with source generation/model checksum, backend, schema/mask, original observed decision, desired decision, as-of observation and unusable reason.
+- Fine-tune an exact cloned neural parent with a bounded configurable 20–30% correction / 70–80% historical replay mixture, small learning rate, bounded epochs, early stopping, L2 and gradient clipping.
+- Protect against catastrophic forgetting with corrected-point fit, untouched historical holdout, parent/child action agreement, regression count/fraction, nearby-context agreement and parent-parameter-distance gates.
+- Keep the parent neural model immutable. Failed gates block the child Candidate and preserve the parent; stale feedback requeues the child before publication.
+- Structural incompatibility (mask/schema/source revision/model) explicitly switches the Correct path to Full Rebuild and records a visible rebuild reason instead of silently falling back to another backend.
+- A passed neural Correct result remains a Candidate in Shadow. Stage 5 still adds no neural Live/Control authority, ActionIntent shortcut, Executor call or direct Home Assistant service path.
+- Expose Candidate diagnostics for policy backend, Correct path, Rebuild reason, parent agreement and neural parent distance.
+- Add Stage-5 functional regressions for bounded correction weighting, immutable parent, drift gate, disabled online reward updates, causal as-of reconstruction and missing-source audit semantics.
+- Add a packaged synthetic incremental-Correct benchmark; host timing is informational and must be rerun on Raspberry Pi for target-class validation.
+
 # 0.14.83 — 2026-09-24
 
 - Continue the Tiny Neural Policy / Correct / Offline-RL master plan with **Stage 4: bounded offline supervised Tiny MLP training + neutral Ridge↔MLP tournament**.
