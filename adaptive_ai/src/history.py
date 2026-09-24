@@ -1958,6 +1958,24 @@ class HistoryManager(threading.Thread):
             slot = stat["per_action"].setdefault(str(actual), {"samples": 0, "correct": 0})
             slot["samples"] += 1
             slot["correct"] += 1 if correct else 0
+            if neural_enabled:
+                chunk = neural_chunk_benchmark[str(agent["id"])]
+                chunk["samples"] += 1
+                chunk["correct"] += 1 if correct else 0
+                chunk_slot = chunk["per_action"].setdefault(
+                    str(actual), {"samples": 0, "correct": 0}
+                )
+                chunk_slot["samples"] += 1
+                chunk_slot["correct"] += 1 if correct else 0
+                observation = old.get("neural_anchor_observation")
+                if observation is not None:
+                    neural_holdout_samples[str(agent["id"])].append({
+                        "observation": observation,
+                        "action_idx": actual,
+                        "weight": float(reward),
+                        "timestamp": float(old.get("anchor_ts", old["ts"])),
+                        "source": "heldout_onset",
+                    })
             infos = automation_infos_by_agent.get(agent["id"]) or []
             origin = "manual" if old.get("user_id") else ("automation_assisted" if infos else "anonymous_external")
             stat["origin_counts"][origin] = int(stat["origin_counts"].get(origin) or 0) + 1
@@ -2012,16 +2030,46 @@ class HistoryManager(threading.Thread):
             # 1) Onset samples. Context is taken at the action boundary. The runtime
             # is event-driven, so it can reach this same environmental context as soon
             # as a precursor state_changed event arrives, before a human acts.
+            crosses_validation = old["ts"] < validation_start <= effective_end
+            anchor_sample_ts = float(old.get("anchor_ts", old["ts"]))
+            if (
+                neural_enabled
+                and float(reward) > 0.0
+                and not crosses_validation
+                and anchor_sample_ts < validation_start
+                and old.get("neural_anchor_observation") is not None
+            ):
+                neural_train_samples[str(agent["id"])].append({
+                    "observation": old["neural_anchor_observation"],
+                    "action_idx": int(old["action_idx"]),
+                    "weight": float(reward),
+                    "timestamp": anchor_sample_ts,
+                    "source": "onset",
+                })
             for h, features in old["features_by_horizon"].items():
-                if old["ts"] < validation_start <= effective_end:
+                if crosses_validation:
                     continue  # purge rewards whose outcomes cross the validation boundary
-                learn_or_validate(policy, h, old["action_idx"], features, reward, old.get("anchor_ts", old["ts"]))
+                learn_or_validate(policy, h, old["action_idx"], features, reward, anchor_sample_ts)
 
             # Optional upstream ON cue: neighbouring-room sensors may legitimately fire
             # a few seconds before the dedicated local sensor. Teach that cue weakly so
             # it can accelerate ON, but never let it define OFF/occupancy persistence.
+            upstream_ts = float(old.get("upstream_anchor_ts", old["ts"]))
+            if (
+                neural_enabled
+                and float(reward) > 0.0
+                and upstream_ts < validation_start
+                and old.get("neural_upstream_observation") is not None
+            ):
+                neural_train_samples[str(agent["id"])].append({
+                    "observation": old["neural_upstream_observation"],
+                    "action_idx": int(old["action_idx"]),
+                    "weight": float(reward) * 0.35,
+                    "timestamp": upstream_ts,
+                    "source": "upstream",
+                })
             for h, features in (old.get("upstream_features_by_horizon") or {}).items():
-                if old.get("upstream_anchor_ts", old["ts"]) >= validation_start:
+                if upstream_ts >= validation_start:
                     heldout_updates.append((policy, int(h), old["action_idx"], features, float(reward) * 0.35, float(old["ts"])))
                 else:
                     policy.update(h, old["action_idx"], features, float(reward) * 0.35, old["ts"])
@@ -2071,6 +2119,18 @@ class HistoryManager(threading.Thread):
                     heldout_updates.append((policy, h, old["action_idx"], features, float(reward), float(target_time)))
                 else:
                     policy.update(h, old["action_idx"], features, reward, target_time)
+                    if neural_enabled and float(reward) > 0.0:
+                        observation = neural_observation(
+                            agent, persistence_timeline, target_time
+                        )
+                        if observation is not None:
+                            neural_train_samples[str(agent["id"])].append({
+                                "observation": observation,
+                                "action_idx": int(old["action_idx"]),
+                                "weight": float(reward),
+                                "timestamp": float(target_time),
+                                "source": "persistence",
+                            })
 
             new_count += 1
             return True
