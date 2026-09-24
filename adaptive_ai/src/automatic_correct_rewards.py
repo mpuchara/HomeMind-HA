@@ -458,6 +458,10 @@ class TrustedAutomaticRewardService:
             or str(result.get("status") or "") != "ACCEPTED"
         ):
             return None
+        # Manual Correct / Teaching is explicit supervised evidence. Never reinterpret
+        # that user label as an Automatic Correct reward experience.
+        if getattr(intent, "teaching_id", None):
+            return None
         agent = self.store.get_agent_config(intent.agent_id)
         if not agent:
             return None
