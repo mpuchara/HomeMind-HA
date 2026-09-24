@@ -1,9 +1,9 @@
 {
-  "version": "0.14.83",
+  "version": "0.14.84",
   "release_date": "2026-09-24",
-  "base_version": "0.14.82",
-  "base_commit": "c4c45e3ded73498ce8dfe78040ecf28df6ed8bc2",
-  "release_status": "release-0.14.83-supervised-mlp-candidate-shadow",
+  "base_version": "0.14.83",
+  "base_commit": "3c0a1c97d88a041157867282fd61a9b1f5dd8506",
+  "release_status": "stage5-neural-correct-ci-pending",
   "tests_passed": 1223,
   "profile": "rpi4-low-memory-complete-discovery-manual-agent-selection",
   "manual_agent_training": true,
@@ -384,5 +384,11 @@
     "gradient_clip_events": 188,
     "online_reward_updates": false,
     "physical_authority": false
-  }
+  },
+  "tiny_mlp_stage5": "existing chart-based Manual Correct preserved; trained neural Candidate direct-parent uses causal as-of incremental supervised fine-tune",
+  "tiny_mlp_correct_lineage": "exact selected Candidate generation is the neural parent; parent model remains immutable and child keeps normal Candidate lineage",
+  "tiny_mlp_correct_replay": "configurable 20-30% explicit correction weight plus bounded historical replay; holdout excluded from optimizer",
+  "tiny_mlp_correct_gate": "corrected-point fit + unaffected holdout + parent agreement + regression fraction + nearby agreement + relative-L2 parent distance",
+  "tiny_mlp_correct_rebuild": "structural incompatibility is explicit Full Rebuild with rebuild_reason; missing historical source data is unusable evidence, never fabricated",
+  "tiny_mlp_correct_authority": "Candidate Shadow only; no neural Live/Control promotion, ActionIntent bypass, Executor call or direct HA dispatch in Stage 5"
 }
