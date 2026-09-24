@@ -114,6 +114,10 @@ DEFAULT_OPTIONS = {
     # onset/persistence cursors' overlapping as-of requests.
     "training_home_context_cache_entries": 32,
     "training_home_context_cache_units": 8192,
+    # Stage-2 semantic observation contract. Active Ridge inference still uses the
+    # existing ExplicitFeatureSchema in 0.14.81; these bounds prepare future backends.
+    "observation_selected_features": 96,
+    "observation_freshness_tau_seconds": 300,
     # CPU-heavy historical replay runs in one child process. The parent remains the
     # authority for HA ingress/HTTP/queue/control and supervises RSS/CPU/I/O.
     "training_process_isolation": True,
