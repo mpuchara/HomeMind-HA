@@ -70,6 +70,11 @@ class RuntimeCompositionRoot:
                 "source_of_truth": "promotion_validations[]",
             },
             "execution": {"owner": "engine.executor", "contract": "ActionIntent_to_Executor_only_physical_dispatch"},
+            "neural_shadow": (
+                engine.tiny_mlp_shadow.diagnostics()
+                if getattr(engine, "tiny_mlp_shadow", None) is not None
+                else None
+            ),
             "performance": {
                 "owner": "manager.performance_f22",
                 "contract": getattr(manager, "performance_f22_contract", None),
@@ -134,6 +139,7 @@ class RuntimeCompositionRoot:
         from workflow_request_queue import install as install_workflow_request_queue
         from runtime_http import install_dispatch, register_feedback_routes, register_promotion_routes
         from runtime_debug_log import register_runtime_debug_routes
+        from tiny_mlp_shadow import install as install_tiny_mlp_shadow
         from trial_knowledge import install as install_trial_knowledge
 
         # Existing fast + preference + episode composition is the characterized base.
@@ -178,6 +184,11 @@ class RuntimeCompositionRoot:
         register_promotion_routes(router, self.core, manager)
         register_correct_learning_debug_route(router, self.core, manager)
         register_runtime_debug_routes(router, self.core, manager)
+
+        # Stage 3 observer is installed after all established policy/Candidate/Correct
+        # composition. It wraps the completed Shadow inference result only and has no
+        # ActionIntent/Executor path.
+        install_tiny_mlp_shadow(self.core)
 
         self.dependencies = RuntimeDependencies(clock=self.clock, repository=self.core.STORE, transport=router)
         self.contracts = self._contract_snapshot(manager, router)
