@@ -1408,6 +1408,7 @@ class Engine(threading.Thread):
             "historical_experiences": int(agent.get("historical_count") or 0),
             "micro_exploration": experiment_status['config']['enabled'],
             "selected_context_entities": list(policy.schema.entities) if policy else [],
+            "observation_space": dict(getattr(policy, "observation_diagnostics", {}) or {}) if policy else {},
             "prediction_horizons": list(policy.horizons) if policy else parse_horizons(agent),
             "training_state": agent.get("training_state") or "training",
             "benchmark_score": agent.get("benchmark_score"),
