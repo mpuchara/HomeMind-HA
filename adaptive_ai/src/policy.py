@@ -8,6 +8,7 @@ from context import (ExplicitFeatureSchema, action_values, build_explicit_featur
 from policy_backend import (
     PolicyBackend, require_backend, serialize_backend_model, verify_model_checksum,
 )
+from observation_space import select_observation_mask
 from home_state import FEATURE_NAMES
 
 class DiagonalLinUCB:
@@ -282,6 +283,16 @@ class MultiHorizonPolicy(PolicyBackend):
             selection_meta = fresh_meta
         selection_meta.update(self.context_exclusion_meta)
         self.selection_meta = selection_meta
+        # Stage 2 observation mask is diagnostic/preparatory only. It is intentionally
+        # not consumed by DiagonalLinUCB.features(), so existing policy decisions and the
+        # realtime feature hot path remain byte-for-byte compatible with 0.14.80.
+        self.observation_mask, self.observation_diagnostics = select_observation_mask(
+            agent,
+            state_map,
+            registry,
+            hint_entities,
+            relevance_scores=relevance_scores,
+        )
         raw_heads = (model or {}).get("heads", {}) if model and int(model.get("version", 0)) == self.VERSION else {}
         self.heads = {h: DiagonalLinUCB(self.dims, self.actions, self.alpha, raw_heads.get(str(h))) for h in self.horizons}
 
@@ -379,7 +390,8 @@ class MultiHorizonPolicy(PolicyBackend):
                 'model_revision': self.model_revision,
                 'tournament_revision': self.tournament_revision,
                 'effective_updates': self.total_updates,
-                'policy_half_life_days': OPTIONS.get('policy_half_life_days', 30)}
+                'policy_half_life_days': OPTIONS.get('policy_half_life_days', 30),
+                'observation_space': dict(self.observation_diagnostics)}
 
     def inference_export(self):
         """Deployment state without training matrices b/A or per-arm raw moments."""
