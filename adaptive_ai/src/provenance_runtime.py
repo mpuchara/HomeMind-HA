@@ -99,6 +99,14 @@ def install(core):
         "flushes": 0,
         "max_queue": 0,
     }
+    deferred_acks = {}
+    ack_stats = {
+        "queued": 0,
+        "coalesced": 0,
+        "flushed": 0,
+        "flushes": 0,
+        "max_queue": 0,
+    }
     event_stats = {"flushed": 0, "flushes": 0, "errors": 0}
     generation_cache = {}
     schema_cache = {}
@@ -159,12 +167,75 @@ def install(core):
         if wake:
             deferred_event.set()
 
+    def _merge_ack(existing, incoming):
+        if existing is None:
+            return dict(incoming)
+        merged = dict(existing)
+        if incoming.get("event_id") is not None:
+            merged["event_id"] = incoming.get("event_id")
+        if merged.get("ack_time") is None:
+            merged["ack_time"] = incoming.get("ack_time")
+        elif incoming.get("ack_time") is not None:
+            merged["ack_time"] = min(float(merged["ack_time"]), float(incoming["ack_time"]))
+        return merged
+
+    def queue_deferred_ack(decision_id, event_id=None, ack_time=None):
+        if not decision_id:
+            return False
+        row = {
+            "decision_id": str(decision_id),
+            "event_id": None if event_id is None else str(event_id),
+            "ack_time": float(now_ts() if ack_time is None else ack_time),
+        }
+        with deferred_lock:
+            key = row["decision_id"]
+            previous = deferred_acks.get(key)
+            deferred_acks[key] = _merge_ack(previous, row)
+            ack_stats["queued"] += 1
+            if previous is not None:
+                ack_stats["coalesced"] += 1
+            ack_stats["max_queue"] = max(int(ack_stats["max_queue"]), len(deferred_acks))
+            wake = len(deferred_acks) >= 32
+        if wake:
+            deferred_event.set()
+        return True
+
+    def flush_deferred_acks(decision_id=None):
+        key = None if decision_id is None else str(decision_id)
+        with deferred_lock:
+            if not deferred_acks:
+                return 0
+            if key is None:
+                batch = list(deferred_acks.values())
+                deferred_acks.clear()
+            else:
+                row = deferred_acks.pop(key, None)
+                if row is None:
+                    return 0
+                batch = [row]
+        try:
+            written = journal.mark_acks_batch(batch)
+        except Exception:
+            with deferred_lock:
+                for row in batch:
+                    row_key = str(row["decision_id"])
+                    deferred_acks[row_key] = _merge_ack(
+                        deferred_acks.get(row_key), row
+                    )
+            raise
+        with deferred_lock:
+            ack_stats["flushed"] += len(batch)
+            ack_stats["flushes"] += 1
+        return int(written or 0)
+
     def deferred_snapshot():
         with deferred_lock:
             decision = {**deferred_stats, "pending": len(deferred_rows)}
+            acknowledgements = {**ack_stats, "pending": len(deferred_acks)}
         return {
             **decision,
             "decisions": decision,
+            "acknowledgements": acknowledgements,
             "events": {
                 **event_stats,
                 "pending": journal.pending_event_count(),
@@ -194,6 +265,7 @@ def install(core):
             try:
                 flush_event_provenance()
                 flush_deferred()
+                flush_deferred_acks()
             except Exception as exc:
                 event_stats["errors"] += 1
                 try:
@@ -208,12 +280,14 @@ def install(core):
         try:
             flush_event_provenance()
             flush_deferred()
+            flush_deferred_acks()
         except Exception:
             pass
 
     # Manual feedback and explicit provenance reads can force durability before lookup.
     store._flush_provenance_decisions = flush_deferred
     store._flush_provenance_events = flush_event_provenance
+    store._flush_provenance_acks = flush_deferred_acks
     engine.provenance_deferred_snapshot = deferred_snapshot
     threading.Thread(
         target=provenance_writer,
@@ -264,7 +338,13 @@ def install(core):
         try:
             result = original_on_state_changed(data)
             if command and command.get("decision_id"):
-                journal.mark_ack(command["decision_id"], event_id=event_id, ack_time=event_time)
+                # ACK provenance is audit metadata. Queue it for the existing provenance
+                # writer so the websocket receive thread never waits behind Store.lock.
+                # Runtime acknowledgement/reward state is still updated synchronously by
+                # the established Engine path; physical dispatch safety is unchanged.
+                queue_deferred_ack(
+                    command["decision_id"], event_id=event_id, ack_time=event_time
+                )
             journal.mark_event_processed(event_id, processed_time=now_ts())
             return result
         finally:
