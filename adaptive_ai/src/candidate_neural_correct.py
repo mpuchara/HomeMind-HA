@@ -503,8 +503,23 @@ def _create_batch(manager, row, source_generation, backend, mask, *, batch_id=No
                 (batch_id,root_agent_id,parent_generation_id,parent_agent_id,
                  child_generation_id,candidate_id,created_ts,source_backend,
                  source_model_revision,source_model_checksum,feature_schema_id,
-                 feature_mask_id,path,status)
-            VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                 feature_mask_id,path,status,finished_ts,report_json)
+            VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,? ,NULL,'{}')
+            ON CONFLICT(batch_id) DO UPDATE SET
+                root_agent_id=excluded.root_agent_id,
+                parent_generation_id=excluded.parent_generation_id,
+                parent_agent_id=excluded.parent_agent_id,
+                child_generation_id=excluded.child_generation_id,
+                candidate_id=excluded.candidate_id,
+                source_backend=excluded.source_backend,
+                source_model_revision=excluded.source_model_revision,
+                source_model_checksum=excluded.source_model_checksum,
+                feature_schema_id=excluded.feature_schema_id,
+                feature_mask_id=excluded.feature_mask_id,
+                path=excluded.path,
+                status='running',
+                finished_ts=NULL,
+                report_json='{}'
             """,
             (
                 batch_id,
@@ -522,6 +537,10 @@ def _create_batch(manager, row, source_generation, backend, mask, *, batch_id=No
                 "incremental_fine_tune",
                 "running",
             ),
+        )
+        c.execute(
+            "DELETE FROM tiny_mlp_correct_samples WHERE batch_id=?",
+            (batch_id,),
         )
     return batch_id
 
