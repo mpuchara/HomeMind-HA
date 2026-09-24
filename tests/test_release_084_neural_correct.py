@@ -190,6 +190,15 @@ class _NoHomeContext:
     def resolved_registry(self):
         return {}
 
+    def area_for(self, entity_id):
+        return None
+
+    def prepare_home_reliability(self, home, area, ts):
+        return None
+
+    def augment_home_forecast(self, home, area, base, ts, **kwargs):
+        return dict(base or {})
+
 
 class HistoricalCorrectReconstructionTests(unittest.TestCase):
     def test_selected_point_uses_pre_timestamp_sensor_value_not_future_state(self):
