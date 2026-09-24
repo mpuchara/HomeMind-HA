@@ -1,3 +1,21 @@
+# 0.14.85 — 2026-09-24
+
+- Continue the Tiny Neural Policy / Correct / Offline-RL master plan with **Stage 6: trusted Automatic Correct outcome/reward pipeline only**.
+- Keep Manual Correct completely separate: the existing chart, selected timestamps, explicit desired action, durable Correct operation batches and Stage-5 supervised neural fine-tune are unchanged. Teaching intents are not inserted into the Automatic Correct reward buffer.
+- Add a durable `automatic_reward_experiences` journal with one-resolution-per-decision/trial semantics. Each row records the exact agent/generation, decision/trial ID, action/value/time, observation window, target/area, Stage-2 observation + feature mask, prediction inputs, background dependencies, outcome/reward sources, proposed/trusted reward, confidence, attribution reason, source event/origin/reliability and unknown/rejected reason.
+- Capture the causal Stage-2 observation at accepted action time. Restart-interrupted pending windows become `unknown`; current/future state is never retroactively fabricated into a past action.
+- Trust explicit user reversal only when durable provenance proves an exact-target user/user-intent event inside the observation window.
+- Trust presence outcomes only when a verified binary/tracker source belongs to the target area, changed inside the exact observation window and meets the configured confidence/source-reliability thresholds. Experiment rewards are restricted further to that trial's explicit `outcome_sources`.
+- Reject cross-area presence attribution. Unrelated binary helpers, missing area mapping, unverifiable user events and other weak evidence never become trusted reward.
+- Treat **lack of override as unknown**, even though the legacy preference reward proposed a small positive value. Absence of an expected presence event also remains unknown until a later contract can prove continuous sensor coverage/reliability for the whole observation window.
+- **Disable scalar reward learning in Stage 6.** Ordinary delayed Automatic Correct rewards no longer call the legacy live-feedback `policy.update` / model-save / feedback path. The existing explicit manual-demonstration supervised path remains separate and intact.
+- Keep experiment/Teaching lifecycle compatibility where those paths already have their own explicit contracts; Stage 6 does not reinterpret their user labels as generic scalar reward.
+- Add RAM-backed per-agent Automatic Correct summary diagnostics to the ordinary runtime payload, plus an explicit read-only `GET /api/agents/{agent_id}/automatic-correct` audit endpoint for recent full experiences.
+- Add agent-card diagnostics for outcome, proposed/trusted reward, source, confidence/reliability, attribution, trial/decision ID, action timestamp, observation window, buffer counts and unknown/rejected reason without adding a new UI poller.
+- Keep the physical authority boundary unchanged: Stage 6 creates no ActionIntent, never calls Executor for dispatch and has no direct Home Assistant service path.
+- Add functional regressions for deduplication, restart recovery, weak acceptance, exact-target reversal, same-area presence, cross-room false attribution, unrelated binary sources, missing area mapping, trial outcome-source isolation, Stage-2 action snapshot capture, Manual/Automatic Correct separation and the no-reward-learning boundary.
+- Add a packaged synthetic Automatic Correct journal benchmark. Host SQLite timings are informational and must not be presented as Raspberry Pi 4 measurements.
+
 # 0.14.84 — 2026-09-24
 
 - Continue the Tiny Neural Policy / Correct / Offline-RL master plan with **Stage 5: existing chart-based Manual Correct + incremental supervised Tiny MLP fine-tune**.
