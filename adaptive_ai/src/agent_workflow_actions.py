@@ -533,7 +533,6 @@ def install(manager):
 
     def workflow_correct_commit(ref, request_id=None):
         generation, agent = _resolve_generation(manager, ref)
-        _preflight_child(manager, generation, allow_coalesce=True)
         fp = rl_fingerprint(agent)
         operation_id = str(request_id or uuid.uuid4())
         now = time.time()
@@ -577,6 +576,8 @@ def install(manager):
                         ],
                         "idempotent_replay": True,
                     }
+
+        _preflight_child(manager, generation, allow_coalesce=True)
 
         # A Correct operation consists of labels created/edited since the preceding
         # committed Correct operation on this exact generation. The first post-upgrade
