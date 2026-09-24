@@ -151,12 +151,12 @@
           const reason=String(active.reason||'training');
           const reasonLabel=TRAINING_REASON_LABELS[reason]||'Background training';
           const lp=status.low_power_runtime||{};
-          const duty=Math.round(Number(lp.training_cpu_duty_cycle||0)*100);
+          const duty=Math.round(Number(lp.training_wall_duty_cycle_target??lp.training_cpu_duty_cycle??0)*100);
           const slice=Math.round(Number(lp.max_continuous_work_ms||0));
           const observed=Math.round(Number(lp.max_observed_slice_ms||0));
           const overruns=Number(lp.slice_overruns||0);
           const replayBatch=Math.round(Number(lp.experience_batch_rows||0));
-          const budget=duty?`CPU budget ${duty}%${slice?` · max slice ${slice} ms`:''}${replayBatch?` · replay batch ${replayBatch}`:''}`:'Pi-safe CPU budget';
+          const budget=duty?`wall duty target ${duty}%${slice?` · max slice ${slice} ms`:''}${replayBatch?` · replay batch ${replayBatch}`:''}`:'Pi-safe cooperative budget';
           const observedText=observed?` · longest slice ${observed} ms${overruns?` · ${overruns} overrun${overruns===1?'':'s'}`:''}`:'';
           const timing=panel.querySelector('.history-timing span');
           if(timing)timing.textContent=`${timing.textContent||''} ${reasonLabel} · ${budget}${observedText}. Training yields between bounded work slices so Ingress and realtime control keep CPU priority.`.trim();

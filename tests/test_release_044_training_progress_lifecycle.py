@@ -66,7 +66,7 @@ class Release044TrainingProgressLifecycleTests(unittest.TestCase):
         active = source.split("if(active){", 1)[1].split("return result;", 1)[0]
         self.assertIn("panel.querySelector('.history-timing span')", active)
         self.assertNotIn("panel.innerHTML=", active)
-        self.assertIn("CPU budget", active)
+        self.assertIn("wall duty target", active)
 
 
 if __name__ == "__main__":

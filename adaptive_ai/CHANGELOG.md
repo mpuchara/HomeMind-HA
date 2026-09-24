@@ -1,3 +1,14 @@
+# 0.14.77 — 2026-09-24
+
+- Change cooperative training preemption from **checkpoint-scoped** to **burst-epoch-scoped** scheduling. A heavy worker now performs one strict scheduler yield per realtime/user-priority burst and then returns to the normal bounded work/sleep quantum.
+- Repeated `state_changed` / realtime-inference extensions inside the same bounded burst no longer multiply sleep by the number of fine-grained replay checkpoints.
+- Preserve the existing 450 ms realtime burst cap and 200 ms cooldown. A new burst still forces an immediate yield; an explicit user action such as Correct can escalate an active realtime epoch once.
+- Keep the existing 35 ms continuous-work bound and 65% cooperative duty target after the strict realtime yield, so sustained sensor traffic cannot starve historical learning.
+- Add deterministic virtual-time coverage for 64 micro-checkpoints, burst extension, realtime→Correct escalation and steady 2/4/10 Hz HA traffic.
+- Add `tools/benchmark_training_qos.py` to CI. The benchmark reports wall-clock work/sleep accounting and does not claim Linux process CPU utilisation.
+- Preserve the persisted `training_cpu_duty_cycle` option name for compatibility, but expose diagnostics/UI as a **cooperative wall-clock duty target** rather than a CPU-utilisation measurement.
+- No changes to replay ordering, samples, rewards, models, Candidate lineage, ActionIntent, Executor or physical-control semantics.
+
 # 0.14.76 — 2026-09-24
 
 - Remove the quadratic Live Correct chart lookup path. Observed Desired and physical Current are now merged in one forward pass over the already ordered streams instead of rebuilding complete timestamp lists for every rendered point.

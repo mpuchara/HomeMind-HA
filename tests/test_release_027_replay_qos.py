@@ -30,15 +30,120 @@ class RealtimePreemptionTests(unittest.TestCase):
         clock.now = .02
         budget.request_interactive_window(.5, reason="ha_state_changed")
         slept = budget.checkpoint("unit", thread_name="worker")
-        self.assertAlmostEqual(slept, .25, places=6)
-        self.assertAlmostEqual(clock.now, .27, places=6)
+        # One strict scheduler hand-off uses the configured work quantum, not a fixed
+        # 250 ms sleep and not one sleep per micro-checkpoint.
+        self.assertAlmostEqual(slept, .05, places=6)
+        self.assertAlmostEqual(clock.now, .07, places=6)
         slept2 = budget.checkpoint("unit2", thread_name="worker")
-        self.assertAlmostEqual(slept2, .20, places=6)
-        self.assertAlmostEqual(clock.now, .47, places=6)
+        self.assertAlmostEqual(slept2, 0.0, places=6)
+        self.assertAlmostEqual(clock.now, .07, places=6)
         stats = budget.snapshot()
-        self.assertEqual(stats["interactive_preemptions"], 2)
-        self.assertAlmostEqual(stats["interactive_sleep_seconds"], .45, places=6)
+        self.assertEqual(stats["interactive_preemptions"], 1)
+        self.assertAlmostEqual(stats["interactive_sleep_seconds"], .05, places=6)
+        self.assertEqual(stats["interactive_priority_epochs"], 1)
+        self.assertEqual(stats["interactive_yield_quantum_ms"], 50.0)
         self.assertTrue(str(stats["last_checkpoint"]).startswith("interactive:"))
+
+    def test_many_micro_checkpoints_pay_one_priority_yield_per_burst(self):
+        clock = FakeClock()
+        budget = CooperativeTrainingBudget(clock=clock, sleeper=clock.sleep)
+        budget.configure(
+            duty_cycle=.65,
+            max_slice_seconds=.035,
+            max_sleep_seconds=.5,
+            thread_prefixes=("worker",),
+            realtime_max_burst_seconds=.45,
+            realtime_cooldown_seconds=.20,
+        )
+        budget.begin(thread_name="worker")
+        budget.request_interactive_window(.30, reason="ha_state_changed")
+        total_sleep = 0.0
+        for _ in range(64):
+            clock.now += .0001
+            total_sleep += budget.checkpoint("micro", thread_name="worker")
+        stats = budget.snapshot()
+        self.assertLessEqual(total_sleep, .055)
+        self.assertEqual(stats["interactive_preemptions"], 1)
+        self.assertEqual(stats["interactive_priority_epochs"], 1)
+        # Only 6.4 ms of useful work followed the strict 35 ms hand-off, so the
+        # ordinary 35 ms duty-cycle slice should not fire yet. This is exactly the
+        # micro-checkpoint case that previously multiplied interactive sleeps.
+        self.assertEqual(stats["slice_checkpoints"], 0)
+        self.assertLess(stats["interactive_sleep_seconds"], .055)
+
+    def test_realtime_extensions_do_not_create_new_priority_epochs(self):
+        clock = FakeClock()
+        budget = CooperativeTrainingBudget(clock=clock, sleeper=clock.sleep)
+        budget.configure(
+            duty_cycle=.65,
+            max_slice_seconds=.035,
+            max_sleep_seconds=.5,
+            thread_prefixes=("worker",),
+            realtime_max_burst_seconds=.45,
+            realtime_cooldown_seconds=.20,
+        )
+        budget.begin(thread_name="worker")
+        for _ in range(5):
+            budget.request_interactive_window(.30, reason="ha_state_changed")
+            clock.now += .01
+            budget.checkpoint("event", thread_name="worker")
+        stats = budget.snapshot()
+        self.assertEqual(stats["interactive_priority_epochs"], 1)
+        self.assertEqual(stats["interactive_preemptions"], 1)
+
+    def test_explicit_user_action_escalates_active_realtime_epoch(self):
+        clock = FakeClock()
+        budget = CooperativeTrainingBudget(clock=clock, sleeper=clock.sleep)
+        budget.configure(
+            duty_cycle=.65,
+            max_slice_seconds=.035,
+            max_sleep_seconds=.5,
+            thread_prefixes=("worker",),
+            realtime_max_burst_seconds=.45,
+            realtime_cooldown_seconds=.20,
+        )
+        budget.begin(thread_name="worker")
+        budget.request_interactive_window(.30, reason="ha_state_changed")
+        first = budget.checkpoint("event", thread_name="worker")
+        self.assertGreater(first, 0.0)
+        budget.request_interactive_window(.90, reason="correct_label")
+        second = budget.checkpoint("correct", thread_name="worker")
+        self.assertGreater(second, 0.0)
+        stats = budget.snapshot()
+        self.assertEqual(stats["interactive_priority_epochs"], 2)
+        self.assertEqual(stats["interactive_epoch_escalations"], 1)
+        self.assertEqual(stats["interactive_preemptions"], 2)
+
+    def test_steady_realtime_traffic_still_allows_training_progress(self):
+        for hz in (2, 4, 10):
+            with self.subTest(hz=hz):
+                clock = FakeClock()
+                budget = CooperativeTrainingBudget(clock=clock, sleeper=clock.sleep)
+                budget.configure(
+                    duty_cycle=.65,
+                    max_slice_seconds=.035,
+                    max_sleep_seconds=.5,
+                    thread_prefixes=("worker",),
+                    realtime_max_burst_seconds=.45,
+                    realtime_cooldown_seconds=.20,
+                )
+                budget.begin(thread_name="worker")
+                active_work = 0.0
+                next_event = 0.0
+                end = 4.0
+                while clock.now < end:
+                    if clock.now + 1e-12 >= next_event:
+                        budget.request_interactive_window(.30, reason="ha_state_changed")
+                        next_event += 1.0 / hz
+                    # Deterministic 5 ms unit of useful replay work.
+                    clock.now += .005
+                    active_work += .005
+                    budget.checkpoint("steady", thread_name="worker")
+                stats = budget.snapshot()
+                self.assertGreater(active_work, .25)
+                self.assertGreater(stats["slice_checkpoints"], 0)
+                self.assertLess(stats["interactive_sleep_seconds"], end * .45)
+                self.assertGreater(stats["interactive_requests_suppressed"], 0 if hz >= 4 else -1)
 
     def test_realtime_event_storm_hits_short_cap_and_cooldown(self):
         clock = FakeClock()

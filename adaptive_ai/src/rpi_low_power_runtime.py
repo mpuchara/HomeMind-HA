@@ -19,7 +19,7 @@ import time
 from training_budget import TRAINING_BUDGET
 
 
-CONTRACT_VERSION = 5
+CONTRACT_VERSION = 6
 DEFAULT_ARCHIVE_BATCH_ROWS = 16
 DEFAULT_EXPERIENCE_BATCH_ROWS = 128
 DEFAULT_TRAINING_DUTY_CYCLE = 0.65
@@ -189,7 +189,12 @@ def install(core, manager):
         budget = TRAINING_BUDGET.snapshot()
         return {
             "contract_version": CONTRACT_VERSION,
+            # Compatibility key: this setting name is already persisted in options.
+            # Semantically it is a cooperative wall-clock work/sleep target, not measured
+            # Linux process CPU utilisation.
             "training_cpu_duty_cycle": duty,
+            "training_wall_duty_cycle_target": duty,
+            "budget_semantics": "cooperative_wall_clock_not_process_cpu",
             "archive_batch_rows": batch_rows,
             "experience_batch_rows": experience_batch_rows,
             "max_throttle_sleep_seconds": max_sleep,
@@ -208,7 +213,7 @@ def install(core, manager):
         "info",
         "rpi_low_power_runtime_ready",
         (
-            "Historical training has a Pi-safe CPU duty cycle plus a "
+            "Historical training has a Pi-safe cooperative wall-clock duty target plus a "
             f"{max_slice_ms:.0f} ms continuous-work slice budget, bounded realtime preemption and batched replay persistence"
         ),
         snapshot(),
