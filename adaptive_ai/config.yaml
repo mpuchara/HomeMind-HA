@@ -1,5 +1,5 @@
 name: "Adaptive AI"
-version: "0.14.83"
+version: "0.14.84"
 slug: "adaptive_ai"
 description: >-
   History-first local reinforcement-learning policies for Home Assistant. Imports
@@ -116,6 +116,26 @@ options:
   tiny_mlp_tournament_min_gain: 0.0
   tiny_mlp_max_parameters: 50000
   tiny_mlp_max_serialized_bytes: 524288
+  tiny_mlp_correct_fraction: 0.25
+  tiny_mlp_correct_max_samples: 256
+  tiny_mlp_correct_replay_samples: 192
+  tiny_mlp_correct_holdout_samples: 64
+  tiny_mlp_correct_holdout_exclusion_seconds: 90
+  tiny_mlp_correct_nearby_seconds: "10,30"
+  tiny_mlp_correct_max_epochs: 6
+  tiny_mlp_correct_batch_size: 16
+  tiny_mlp_correct_learning_rate: 0.003
+  tiny_mlp_correct_l2: 0.0001
+  tiny_mlp_correct_gradient_clip: 0.5
+  tiny_mlp_correct_early_stop_patience: 2
+  tiny_mlp_correct_early_stop_min_delta: 0.0005
+  tiny_mlp_correct_min_holdout_samples: 12
+  tiny_mlp_correct_max_accuracy_regression: 0.03
+  tiny_mlp_correct_min_parent_agreement: 0.85
+  tiny_mlp_correct_min_nearby_agreement: 0.75
+  tiny_mlp_correct_max_regression_fraction: 0.10
+  tiny_mlp_correct_max_parent_relative_l2: 0.20
+  tiny_mlp_correct_min_correction_fit: 0.95
   training_process_isolation: true
   training_worker_nice: 10
   training_worker_memory_limit_mb: 520
@@ -242,6 +262,26 @@ schema:
   tiny_mlp_tournament_min_gain: "float(0.0,1.0)"
   tiny_mlp_max_parameters: "int(100,500000)"
   tiny_mlp_max_serialized_bytes: "int(16384,4194304)"
+  tiny_mlp_correct_fraction: "float(0.20,0.30)"
+  tiny_mlp_correct_max_samples: "int(16,2048)"
+  tiny_mlp_correct_replay_samples: "int(0,2048)"
+  tiny_mlp_correct_holdout_samples: "int(0,1024)"
+  tiny_mlp_correct_holdout_exclusion_seconds: "float(0.0,600.0)"
+  tiny_mlp_correct_nearby_seconds: "str"
+  tiny_mlp_correct_max_epochs: "int(1,32)"
+  tiny_mlp_correct_batch_size: "int(1,128)"
+  tiny_mlp_correct_learning_rate: "float(0.000001,0.1)"
+  tiny_mlp_correct_l2: "float(0.0,0.1)"
+  tiny_mlp_correct_gradient_clip: "float(0.0001,10.0)"
+  tiny_mlp_correct_early_stop_patience: "int(1,10)"
+  tiny_mlp_correct_early_stop_min_delta: "float(0.0,0.1)"
+  tiny_mlp_correct_min_holdout_samples: "int(4,256)"
+  tiny_mlp_correct_max_accuracy_regression: "float(0.0,0.25)"
+  tiny_mlp_correct_min_parent_agreement: "float(0.0,1.0)"
+  tiny_mlp_correct_min_nearby_agreement: "float(0.0,1.0)"
+  tiny_mlp_correct_max_regression_fraction: "float(0.0,1.0)"
+  tiny_mlp_correct_max_parent_relative_l2: "float(0.0,2.0)"
+  tiny_mlp_correct_min_correction_fit: "float(0.0,1.0)"
   training_process_isolation: "bool"
   training_worker_nice: "int(0,19)"
   training_worker_memory_limit_mb: "int(128,2048)"
