@@ -55,9 +55,12 @@ def model_metadata(model):
         or f"v{schema.get('version', 'unknown')}:{_sha(schema)[:16]}"
     )
     return {
-        "model_identity": _sha(model) if model else None,
+        # Stage-1 backend envelopes carry their own stable checksum.  Legacy models keep
+        # the historical whole-payload digest so existing lineage remains compatible.
+        "model_identity": (model.get("model_checksum") or _sha(model)) if model else None,
         "model_revision": model.get("model_revision"),
         "schema_revision": str(schema_revision) if schema_revision is not None else None,
+        "policy_backend": model.get("policy_backend") or model.get("backend") or "diagonal_linucb",
     }
 
 
