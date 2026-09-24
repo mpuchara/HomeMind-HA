@@ -8,6 +8,7 @@ semantic parity, deterministic render-count reduction and the configured memory 
 from __future__ import annotations
 
 import argparse
+import gc
 import json
 import os
 from pathlib import Path
@@ -120,7 +121,7 @@ def forecast_signature(forecast):
     return tuple(out)
 
 
-def run_once(sensor_count, agent_count, dynamic, cache_enabled):
+def run_once(sensor_count, agent_count, dynamic, cache_enabled, trace_memory=False):
     temp, store, ctx, sensors, targets, base = make_fixture(sensor_count, dynamic)
     query_cache = ReplayQueryCache(max_rows=16384, max_entry_rows=1024)
     home_cache = (
@@ -143,9 +144,13 @@ def run_once(sensor_count, agent_count, dynamic, cache_enabled):
     onset_requests, persistence_requests = requests(agent_count, targets, base)
     signatures = {"onset": [], "persistence": []}
 
+    gc.collect()
     rss_before = rss_mb()
-    tracemalloc.start()
-    started = time.perf_counter()
+    if trace_memory:
+        tracemalloc.start()
+    wall_started = time.perf_counter()
+    cpu_started = time.process_time()
+    peak = 0
     try:
         for ts, target in onset_requests:
             onset.advance(ts)
@@ -159,10 +164,13 @@ def run_once(sensor_count, agent_count, dynamic, cache_enabled):
                     persistence.history.home_context.forecast(target, ts)
                 ))
             )
-        elapsed = time.perf_counter() - started
-        _, peak = tracemalloc.get_traced_memory()
+        elapsed = time.perf_counter() - wall_started
+        cpu_seconds = time.process_time() - cpu_started
+        if trace_memory:
+            _, peak = tracemalloc.get_traced_memory()
     finally:
-        tracemalloc.stop()
+        if trace_memory:
+            tracemalloc.stop()
         onset_stats = onset.stats()
         persistence_stats = persistence.stats()
         onset.close()
@@ -175,7 +183,10 @@ def run_once(sensor_count, agent_count, dynamic, cache_enabled):
 
     return {
         "elapsed_seconds": elapsed,
-        "python_peak_mb": peak / (1024 * 1024),
+        "cpu_seconds": cpu_seconds,
+        "python_peak_mb": (
+            peak / (1024 * 1024) if trace_memory else None
+        ),
         "rss_before_mb": rss_before,
         "rss_after_mb": rss_mb(),
         "signatures": signatures,
@@ -217,6 +228,12 @@ def run_matrix():
                         baseline["elapsed_seconds"] / max(cached["elapsed_seconds"], 1e-9),
                         3,
                     ),
+                    "baseline_cpu_seconds": round(baseline["cpu_seconds"], 4),
+                    "cached_cpu_seconds": round(cached["cpu_seconds"], 4),
+                    "cpu_speedup": round(
+                        baseline["cpu_seconds"] / max(cached["cpu_seconds"], 1e-9),
+                        3,
+                    ),
                     "baseline_home_renders": baseline["home_render_executes"],
                     "cached_home_renders": cached["home_render_executes"],
                     "render_reduction": round(reduction, 4),
@@ -226,7 +243,6 @@ def run_matrix():
                     "cache_entries": cached["cache"]["entries"],
                     "cache_units": cached["cache"]["units"],
                     "cache_evictions": cached["cache"]["evictions"],
-                    "cached_python_peak_mb": round(cached["python_peak_mb"], 3),
                     "cached_rss_after_mb": (
                         None if cached["rss_after_mb"] is None
                         else round(cached["rss_after_mb"], 3)
@@ -236,6 +252,20 @@ def run_matrix():
     representative = next(
         row for row in rows
         if row["history"] == "dynamic" and row["sensors"] == 64 and row["agents"] == 20
+    )
+    # One dedicated allocation trace keeps CI practical. It is deliberately excluded
+    # from wall/CPU speedup comparisons because tracemalloc changes allocation cost.
+    memory_probe = run_once(
+        64, 20, True, cache_enabled=True, trace_memory=True
+    )
+    representative["cached_python_peak_mb"] = round(
+        float(memory_probe["python_peak_mb"] or 0.0), 3
+    )
+    representative["memory_probe_cache_entries"] = int(
+        memory_probe["cache"]["entries"]
+    )
+    representative["memory_probe_cache_units"] = int(
+        memory_probe["cache"]["units"]
     )
     avg_reduction = sum(reductions) / max(1, len(reductions))
     bounded = all(
@@ -251,7 +281,8 @@ def run_matrix():
             "representative_dynamic_20_agents_64_sensors": representative,
             "cache_bounds_respected": bounded,
             "wall_clock_is_informational": True,
-            "rss_note": "RSS is process-level current RSS; tracemalloc reports Python allocations for each measured replay run.",
+            "cpu_time_is_process_time": True,
+            "rss_note": "RSS is process-level current RSS; tracemalloc is enabled only for the representative cached memory probe.",
         },
     }
     result["pass"] = bool(
