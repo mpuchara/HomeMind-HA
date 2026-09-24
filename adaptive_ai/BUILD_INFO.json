@@ -1,10 +1,10 @@
 {
-  "version": "0.14.79",
+  "version": "0.14.80",
   "release_date": "2026-09-24",
-  "base_version": "0.14.78",
-  "base_commit": "f72a5e86c9ba8a6c6e1951c59e44237258b873ed",
-  "release_status": "release-0.14.79-shared-historical-context",
-  "tests_passed": 1176,
+  "base_version": "0.14.79",
+  "base_commit": "8dff859b8dcf35b1ddc72abc48d7f522ed3fbc9e",
+  "release_status": "release-0.14.80-isolated-training-process",
+  "tests_passed": 1189,
   "profile": "rpi4-low-memory-complete-discovery-manual-agent-selection",
   "manual_agent_training": true,
   "max_concurrent_training_jobs": 1,
@@ -40,7 +40,7 @@
   "migration": "no destructive migration; existing agents, models, feedback, raw archive, historical experiences, candidate lineage, rollback and generation state preserved",
   "physical_control": "unchanged; repaired agents return to Shadow and Control still requires qualified state plus all existing guards",
   "pi4": "0.14.38 targets the long-soak Raspberry Pi failure: drift analysis is coalesced on a throttled background observer, REST /states reconciliation is delta-only after bootstrap, websocket outage fallback reconciles every 10 s, and HA core-state health is tracked separately from unrelated REST errors.",
-  "ci_status": "0.14.79 branch validation passed: Validate HomeMind run #3343 (Python 3.11/3.13, 1176 tests each, Correct scaling, training QoS, HA-ingress decoupling, shared-context CPU/RSS profile, Stage 17/18, source smoke, simulations, Docker smoke).",
+  "ci_status": "0.14.80 branch validation passed on Python 3.11/3.13 with 1189 tests, process-isolation regressions, historical performance benchmarks, source entrypoint/simulations and Docker smoke.",
   "training_slice_budget": "adaptive-ai-index workers call a shared CooperativeTrainingBudget; expensive temporal tracker loops yield between entities/events and finalization is no longer outside the throttle",
   "finalization_lifeline": "HEAVY_JOBS remains owned through final gc.collect(), so /api/status and /api/agents stay on lightweight lifeline reads until the worker is actually finished",
   "finalization_progress": "post-replay UI now exposes bounded stages: replay complete, policy serialization, benchmark save, qualification, checkpoint complete",
@@ -307,5 +307,17 @@
     "cached_python_peak_mb": 8.785,
     "cached_process_rss_after_mb": 31.434,
     "note": "Host synthetic profile; process CPU/render reduction are algorithmic evidence, RSS/wall-clock are machine-local. Small fully-static contexts can be neutral/slightly slower in absolute sub-second work, while every dynamic matrix case improved."
-  }
+  },
+  "training_process_isolation_080": "One clean Python child executes each CPU-heavy historical replay chunk. The parent remains authoritative for HA websocket ingress, HTTP, training queue admission, Recorder refresh, ActionIntent/Executor and physical control.",
+  "training_process_job_contract_080": "Versioned job v1 includes app/training revision, agent config fingerprint, structural runtime-context fingerprint, state/registry snapshot, automation hints, schema seed, options snapshot, fixed chunk bounds and checksum.",
+  "training_process_publication_guard_080": "Worker model publication is guarded immediately before the atomic rl_models upsert. Parent revalidates agent config and runtime topology/options before accepting the child result into parent runtime caches.",
+  "training_process_failure_safety_080": "Cancellation, worker error, memory kill or stale result restores the exact pre-chunk model/lifecycle/benchmark/cursor and removes historical experiences newer than the restored model watermark.",
+  "training_process_sqlite_080": "Isolated workers use keyset-paged entity_history reads with a fresh short SQLite snapshot per batch so one multi-minute replay scan does not pin a WAL reader continuously.",
+  "training_process_resources_080": "Exactly one heavy worker remains allowed. Defaults: best-effort +10 worker niceness relative to the parent, 520 MB worker RSS limit, 200 ms supervisor polling, 2 s terminate grace; no cgroup or platform-specific quota is assumed.",
+  "training_process_observability_080": "History status exposes worker PID/state/wall time/peak RSS/CPU seconds/read+write bytes and child cooperative-budget diagnostics. Packaged pi_training_profile.py collects repeatable idle/training/Correct/training+Correct/steady-events/burst traces.",
+  "training_process_cpu_semantics_080": "Pi profiler reports one_core_percent = CPU_seconds/wall_seconds*100 and host_percent = one_core_percent/logical_cpu_count, avoiding ambiguous CPU-percent normalization.",
+  "training_process_validation_scope_080": "CI includes a real clean-subprocess historical replay smoke plus cancellation rollback, stale-config rejection, worker-mode restart lifecycle, publication guard and checkpointed archive read parity. Real Raspberry Pi 4 latency/CPU/RSS/I/O measurements remain a device test, not a GitHub-runner claim.",
+  "training_process_safety_080": "Training remains offline-only and does not grant physical authority. Existing Shadow/Control qualification, Correct/Candidate lineage, reward/order semantics and HA service dispatch are unchanged.",
+  "training_process_parent_crash_080": "Job descriptor records parent PID plus Linux process start token when available. Worker watchdog stops replay after parent loss and publication guard rejects model writes if the originating realtime parent no longer exists.",
+  "training_process_stale_config_080": "If agent training configuration changes during a worker job, parent restores the previous model/watermark, discards new experiences and forces the newer configuration to needs_retrain/paused; stale benchmark/qualification cannot survive."
 }

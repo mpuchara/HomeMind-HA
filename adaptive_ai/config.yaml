@@ -1,5 +1,5 @@
 name: "Adaptive AI"
-version: "0.14.79"
+version: "0.14.80"
 slug: "adaptive_ai"
 description: >-
   History-first local reinforcement-learning policies for Home Assistant. Imports
@@ -97,6 +97,11 @@ options:
   training_experience_batch_rows: 128
   training_replay_ram_cache_rows: 16384
   training_replay_ram_cache_entry_rows: 1024
+  training_process_isolation: true
+  training_worker_nice: 10
+  training_worker_memory_limit_mb: 520
+  training_worker_poll_ms: 200
+  training_worker_terminate_grace_seconds: 2.0
   training_throttle_max_sleep_seconds: 0.50
   training_max_continuous_work_ms: 35
   training_realtime_event_priority_seconds: 0.30
@@ -199,6 +204,11 @@ schema:
   training_experience_batch_rows: "int(8,512)"
   training_replay_ram_cache_rows: "int(0,65536)"
   training_replay_ram_cache_entry_rows: "int(64,4096)"
+  training_process_isolation: "bool"
+  training_worker_nice: "int(0,19)"
+  training_worker_memory_limit_mb: "int(128,2048)"
+  training_worker_poll_ms: "int(50,2000)"
+  training_worker_terminate_grace_seconds: "float(0.2,10.0)"
   training_throttle_max_sleep_seconds: "float(0.25,5.0)"
   training_max_continuous_work_ms: "int(25,500)"
   training_realtime_event_priority_seconds: "float(0.05,1.25)"
