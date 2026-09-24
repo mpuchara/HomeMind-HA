@@ -494,6 +494,9 @@ class ProvenanceJournal:
         flush = getattr(self.store, "_flush_provenance_decisions", None)
         if callable(flush):
             flush()
+        flush_acks = getattr(self.store, "_flush_provenance_acks", None)
+        if callable(flush_acks):
+            flush_acks(str(decision_id))
         with self.store.conn() as c:
             row = c.execute("SELECT * FROM provenance_decisions WHERE decision_id=?", (str(decision_id),)).fetchone()
         if not row:
@@ -528,9 +531,44 @@ class ProvenanceJournal:
         with self.store.lock, self.store.conn() as c:
             c.execute(
                 """UPDATE provenance_decisions SET ack_event_id=COALESCE(?,ack_event_id),
-                   ack_time=COALESCE(ack_time,?) WHERE decision_id=?""",
+                    ack_time=COALESCE(ack_time,?) WHERE decision_id=?""",
                 (event_id, ack_time, str(decision_id)),
             )
+
+    def mark_acks_batch(self, rows):
+        """Persist deferred HA acknowledgement links in one transaction.
+
+        Live websocket ingestion may queue these audit fields in RAM so it never waits
+        behind an unrelated SQLite writer. Batch semantics intentionally match repeated
+        mark_ack calls: newest non-null event id wins while the first ack_time is kept.
+        """
+        prepared = []
+        for raw in rows or ():
+            if not raw:
+                continue
+            if isinstance(raw, dict):
+                decision_id = raw.get("decision_id")
+                event_id = raw.get("event_id")
+                ack_time = raw.get("ack_time")
+            else:
+                decision_id, event_id, ack_time = raw
+            if not decision_id:
+                continue
+            prepared.append((
+                None if event_id is None else str(event_id),
+                float(self.clock() if ack_time is None else ack_time),
+                str(decision_id),
+            ))
+        if not prepared:
+            return 0
+        with self.store.lock, self.store.conn() as c:
+            before = c.total_changes
+            c.executemany(
+                """UPDATE provenance_decisions SET ack_event_id=COALESCE(?,ack_event_id),
+                    ack_time=COALESCE(ack_time,?) WHERE decision_id=?""",
+                prepared,
+            )
+            return int(c.total_changes - before)
 
     def mark_outcome(self, decision_id, reward, reason, outcome_time=None):
         if not decision_id:
