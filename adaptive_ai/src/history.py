@@ -1713,7 +1713,10 @@ class HistoryManager(threading.Thread):
                 max(0.0, 1.0 - totals["sql_queries"] / legacy) if legacy else None
             )
             self.temporal_replay_stats = {
-                "contract": "incremental_bulk_shared_home_v2",
+                # Preserve the established incremental replay contract: 0.14.79 changes
+                # only how duplicate rendered home contexts are reused across cursors.
+                "contract": "incremental_bulk_v1",
+                "home_context_contract": "shared_immutable_v1",
                 "onset": onset,
                 "persistence": persistence,
                 "totals": totals,
