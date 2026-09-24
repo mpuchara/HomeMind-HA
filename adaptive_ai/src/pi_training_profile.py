@@ -114,6 +114,110 @@ def fetch_status(base_url, timeout=3.0):
     return payload, (time.perf_counter() - started) * 1000.0
 
 
+def fetch_readonly_path(base_url, path, timeout=3.0):
+    path = str(path or "").strip()
+    if not path.startswith("/api/"):
+        raise ValueError("--correct-path must be a read-only /api/... path")
+    started = time.perf_counter()
+    req = Request(base_url.rstrip("/") + path, method="GET")
+    with urlopen(req, timeout=timeout) as response:
+        response.read()
+    return (time.perf_counter() - started) * 1000.0
+
+
+def _metric_value(report, path, key="p95"):
+    value = report
+    for part in path.split("."):
+        if not isinstance(value, dict):
+            return None
+        value = value.get(part)
+    if isinstance(value, dict):
+        value = value.get(key)
+    return float(value) if isinstance(value, (int, float)) else None
+
+
+def _delta(candidate, baseline):
+    if candidate is None or baseline is None:
+        return None
+    return round(float(candidate) - float(baseline), 4)
+
+
+def comparison(candidate, baseline):
+    """Compare two same-scenario reports without hiding worker CPU in 0.14.80."""
+    warnings = []
+    if baseline.get("scenario") != candidate.get("scenario"):
+        warnings.append("scenario mismatch")
+    bdur = float(baseline.get("duration_seconds") or 0.0)
+    cdur = float(candidate.get("duration_seconds") or 0.0)
+    if bdur and cdur and abs(bdur - cdur) / max(bdur, cdur) > .05:
+        warnings.append("duration differs by more than 5%")
+
+    fields = {
+        "http_status_p95_ms": (
+            _metric_value(candidate, "http_status_latency_ms", "p95"),
+            _metric_value(baseline, "http_status_latency_ms", "p95"),
+        ),
+        "http_status_p99_ms": (
+            _metric_value(candidate, "http_status_latency_ms", "p99"),
+            _metric_value(baseline, "http_status_latency_ms", "p99"),
+        ),
+        "correct_http_p95_ms": (
+            _metric_value(candidate, "correct_http_latency_ms", "p95"),
+            _metric_value(baseline, "correct_http_latency_ms", "p95"),
+        ),
+        "runtime_cpu_one_core_percent": (
+            _metric_value(candidate, "runtime", "cpu_one_core_percent"),
+            _metric_value(baseline, "runtime", "cpu_one_core_percent"),
+        ),
+        "combined_cpu_one_core_percent": (
+            _metric_value(candidate, "combined", "cpu_one_core_percent"),
+            _metric_value(baseline, "combined", "cpu_one_core_percent"),
+        ),
+        "runtime_rss_p95_mb": (
+            _metric_value(candidate, "runtime", "rss_mb_p95"),
+            _metric_value(baseline, "runtime", "rss_mb_p95"),
+        ),
+        "combined_rss_p95_mb": (
+            _metric_value(candidate, "combined", "rss_p95_mb_sum"),
+            _metric_value(baseline, "combined", "rss_p95_mb_sum"),
+        ),
+        "training_progress_delta": (
+            _metric_value(candidate, "training_progress", "delta"),
+            _metric_value(baseline, "training_progress", "delta"),
+        ),
+    }
+    out = {}
+    for name, (cand, base) in fields.items():
+        out[name] = {
+            "baseline": base,
+            "candidate": cand,
+            "candidate_minus_baseline": _delta(cand, base),
+        }
+
+    shared_runtime = {}
+    bmetrics = baseline.get("runtime_latency_metrics") or {}
+    cmetrics = candidate.get("runtime_latency_metrics") or {}
+    for key in sorted(set(bmetrics) & set(cmetrics)):
+        base = (bmetrics.get(key) or {}).get("p95")
+        cand = (cmetrics.get(key) or {}).get("p95")
+        if isinstance(base, (int, float)) and isinstance(cand, (int, float)):
+            shared_runtime[key] = {
+                "baseline_p95": float(base),
+                "candidate_p95": float(cand),
+                "candidate_minus_baseline": _delta(cand, base),
+            }
+    return {
+        "contract": "pi_training_profile_comparison_v1",
+        "warnings": warnings,
+        "fields": out,
+        "shared_runtime_latency_p95": shared_runtime,
+        "interpretation": (
+            "Negative latency/CPU/RSS delta is lower on candidate; progress delta is "
+            "reported raw and should be interpreted with equal data/scenario duration."
+        ),
+    }
+
+
 def recursive_metrics(value, prefix=""):
     out = {}
     if isinstance(value, dict):
@@ -176,6 +280,8 @@ def run(args):
     started = time.monotonic()
     deadline = started + float(args.duration)
     status_latencies = []
+    correct_latencies = []
+    last_correct_probe = 0.0
     runtime_samples = []
     worker_samples = []
     status_metrics = []
@@ -192,6 +298,21 @@ def run(args):
             status_latencies.append(latency)
             versions.add(str(status.get("version")))
             status_metrics.append(recursive_metrics(status))
+            if (
+                args.correct_path
+                and time.monotonic() - last_correct_probe >= float(args.correct_interval)
+            ):
+                try:
+                    correct_latencies.append(
+                        fetch_readonly_path(
+                            args.base_url, args.correct_path, timeout=args.timeout
+                        )
+                    )
+                except Exception as exc:
+                    failures.append(
+                        f"Correct GET {type(exc).__name__}: {exc}"
+                    )
+                last_correct_probe = time.monotonic()
             history = status.get("history") or {}
             if history.get("training_overall_progress") is not None:
                 progress.append(float(history["training_overall_progress"]))
@@ -227,15 +348,46 @@ def run(args):
         if values
     }
 
-    return {
+    runtime_summary = summarize_process(runtime_samples, elapsed, cpu_count)
+    worker_summary = summarize_process(worker_samples, elapsed, cpu_count)
+    runtime_cpu = float((runtime_summary or {}).get("cpu_seconds_delta") or 0.0)
+    worker_cpu = float((worker_summary or {}).get("cpu_seconds_delta") or 0.0)
+    combined_cpu = runtime_cpu + worker_cpu
+    runtime_rss = (runtime_summary or {}).get("rss_mb_p95")
+    worker_rss = (worker_summary or {}).get("rss_mb_p95")
+    combined = {
+        "cpu_seconds_delta": round(combined_cpu, 3),
+        "cpu_one_core_percent": round(
+            combined_cpu / max(elapsed, 1e-9) * 100.0, 2
+        ),
+        "cpu_host_percent": round(
+            combined_cpu / max(elapsed, 1e-9) * 100.0 / cpu_count, 2
+        ),
+        "rss_p95_mb_sum": (
+            None
+            if runtime_rss is None
+            else round(float(runtime_rss) + float(worker_rss or 0.0), 3)
+        ),
+        "read_bytes_delta": int(
+            ((runtime_summary or {}).get("read_bytes_delta") or 0)
+            + ((worker_summary or {}).get("read_bytes_delta") or 0)
+        ),
+        "write_bytes_delta": int(
+            ((runtime_summary or {}).get("write_bytes_delta") or 0)
+            + ((worker_summary or {}).get("write_bytes_delta") or 0)
+        ),
+    }
+
+    report = {
         "contract": "pi_training_profile_v1",
         "scenario": args.scenario,
         "release_versions_seen": sorted(versions),
         "duration_seconds": round(elapsed, 3),
         "interval_seconds": float(args.interval),
         "logical_cpu_count": cpu_count,
-        "runtime": summarize_process(runtime_samples, elapsed, cpu_count),
-        "worker": summarize_process(worker_samples, elapsed, cpu_count),
+        "runtime": runtime_summary,
+        "worker": worker_summary,
+        "combined": combined,
         "worker_pids_seen": sorted(worker_pids),
         "http_status_latency_ms": {
             "p50": percentile(status_latencies, .50),
@@ -243,6 +395,14 @@ def run(args):
             "p99": percentile(status_latencies, .99),
             "max": max(status_latencies) if status_latencies else None,
             "samples": len(status_latencies),
+        },
+        "correct_http_latency_ms": {
+            "path": args.correct_path,
+            "p50": percentile(correct_latencies, .50),
+            "p95": percentile(correct_latencies, .95),
+            "p99": percentile(correct_latencies, .99),
+            "max": max(correct_latencies) if correct_latencies else None,
+            "samples": len(correct_latencies),
         },
         "training_progress": {
             "first": progress[0] if progress else None,
@@ -258,6 +418,10 @@ def run(args):
             "No synthetic HA service calls are generated by this tool.",
         ],
     }
+    if args.baseline:
+        baseline = json.loads(Path(args.baseline).read_text(encoding="utf-8"))
+        report["comparison_to_baseline"] = comparison(report, baseline)
+    return report
 
 
 def main():
@@ -268,6 +432,15 @@ def main():
     parser.add_argument("--base-url", default="http://127.0.0.1:8099")
     parser.add_argument("--runtime-pid", type=int)
     parser.add_argument("--timeout", type=float, default=3.0)
+    parser.add_argument(
+        "--correct-path",
+        help="Optional read-only /api/... GET used to measure Correct HTTP latency",
+    )
+    parser.add_argument("--correct-interval", type=float, default=2.0)
+    parser.add_argument(
+        "--baseline",
+        help="Optional prior JSON report for same-scenario before/after comparison",
+    )
     parser.add_argument("--output")
     parser.add_argument("--compact", action="store_true")
     args = parser.parse_args()
