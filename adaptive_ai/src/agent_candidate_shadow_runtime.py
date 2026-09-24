@@ -153,6 +153,12 @@ def _predict_candidate(manager, generation, state_map, event_ts):
     if not agent_id:
         return None
     try:
+        backend_predictor = getattr(manager, "candidate_backend_predictor", None)
+        if callable(backend_predictor):
+            selected = backend_predictor(generation, state_map, event_ts)
+            if selected is not None:
+                return selected
+
         policy = manager.engine.models.get(str(agent_id))
         if policy is None:
             agent = manager.store.get_agent_config(str(agent_id))

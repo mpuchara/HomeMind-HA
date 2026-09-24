@@ -1,10 +1,10 @@
 {
-  "version": "0.14.82",
+  "version": "0.14.83",
   "release_date": "2026-09-24",
-  "base_version": "0.14.81",
-  "base_commit": "6350f78aae7e55f9d7c67ec36b91a3c20222d44c",
-  "release_status": "stage3-tiny-mlp-shadow-ci-green",
-  "tests_passed": 1213,
+  "base_version": "0.14.82",
+  "base_commit": "c4c45e3ded73498ce8dfe78040ecf28df6ed8bc2",
+  "release_status": "release-0.14.83-supervised-mlp-candidate-shadow",
+  "tests_passed": 1223,
   "profile": "rpi4-low-memory-complete-discovery-manual-agent-selection",
   "manual_agent_training": true,
   "max_concurrent_training_jobs": 1,
@@ -40,7 +40,7 @@
   "migration": "no destructive migration; existing agents, models, feedback, raw archive, historical experiences, candidate lineage, rollback and generation state preserved",
   "physical_control": "unchanged; repaired agents return to Shadow and Control still requires qualified state plus all existing guards",
   "pi4": "0.14.38 targets the long-soak Raspberry Pi failure: drift analysis is coalesced on a throttled background observer, REST /states reconciliation is delta-only after bootstrap, websocket outage fallback reconciles every 10 s, and HA core-state health is tracked separately from unrelated REST errors.",
-  "ci_status": "PR #167 green on Python 3.11 + 3.13, Docker image smoke, compile/JS, historical benchmarks and 0.14.82 tiny MLP benchmark",
+  "ci_status": "0.14.83 branch validation: 1223-test suite, Python 3.11/3.13, Docker image smoke and bounded supervised MLP benchmark; final merge gate uses the same workflow.",
   "training_slice_budget": "adaptive-ai-index workers call a shared CooperativeTrainingBudget; expensive temporal tracker loops yield between entities/events and finalization is no longer outside the throttle",
   "finalization_lifeline": "HEAVY_JOBS remains owned through final gc.collect(), so /api/status and /api/agents stay on lightweight lifeline reads until the worker is actually finished",
   "finalization_progress": "post-replay UI now exposes bounded stages: replay complete, policy serialization, benchmark save, qualification, checkpoint complete",
@@ -352,8 +352,37 @@
   "observation_space_determinism_081": "Stage-2 selection uses the state snapshot's max last_updated/last_changed timestamp as a stable reference for recency scoring, so identical snapshots produce identical masks across process restarts/wall-clock time. Existing Ridge selection keeps its prior default now_ts behavior.",
   "tiny_mlp_stage3": "real inference/persistence only; selected_features->32->16->existing action values; float32 parameters; no training",
   "tiny_mlp_authority": "hard-gated to agent mode=shadow; zero Control calls; no ActionIntent/Executor/HA dispatch path",
-  "tiny_mlp_persistence": "additive isolated tiny_mlp_shadow_models table; checksum/schema/mask/feature-order/action-space guarded restart",
-  "tiny_mlp_training": "disabled; update() rejects learning; historical training and Ridge/MLP tournament deferred to Stage 4",
+  "tiny_mlp_persistence": "training artifact persisted separately from rl_models with mask, source Ridge revision, trainer report, tournament report and selected backend",
+  "tiny_mlp_training": "offline supervised only; no live reward/online update; bounded samples/epochs/batches, L2, gradient clipping and early stopping",
   "tiny_mlp_failure_semantics": "observer runs after authoritative Ridge process_agent; neural errors update diagnostics only and preserve Ridge result",
-  "tiny_mlp_benchmark": "GitHub Linux/Python 3.11 synthetic host: 96->32->16->2, 3666 params, inference p50 0.323 ms / p95 0.332 ms / p99 0.342 ms, serialized 76189 B, restart identical; 50 loaded models p95 0.345 ms and +1277952 B RSS vs probe baseline. Not a Raspberry Pi 4 measurement."
+  "tiny_mlp_benchmark": "GitHub Linux/Python 3.11 synthetic host: 96->32->16->2, 3666 params, inference p50 0.323 ms / p95 0.332 ms / p99 0.342 ms, serialized 76189 B, restart identical; 50 loaded models p95 0.345 ms and +1277952 B RSS vs probe baseline. Not a Raspberry Pi 4 measurement.",
+  "tiny_mlp_stage4": "bounded offline supervised imitation training on causal Stage-2 observations; identical chronological heldout tournament against Ridge",
+  "tiny_mlp_tournament": "MLP can be selected for Candidate Shadow only when same holdout rows, class coverage, existing 78% threshold, resource gates and strict score gain all pass",
+  "tiny_mlp_candidate_authority": "selected neural backend may drive Candidate observed Shadow A/B only after existing Candidate offline gate; no ActionIntent/Executor/HA dispatch",
+  "tiny_mlp_promotion": "Stage-4 neural winner is explicitly non-promotable to Live/Control; promotion is blocked until a later neural Live authority stage",
+  "tiny_mlp_stage4_benchmark": {
+    "environment": "GitHub-hosted Ubuntu / Python 3.11; synthetic host timing, not Raspberry Pi 4",
+    "architecture": [
+      96,
+      32,
+      16,
+      2
+    ],
+    "parameter_count": 3666,
+    "train_samples": 384,
+    "holdout_samples": 160,
+    "epochs": 8,
+    "training_wall_seconds": 4.2376,
+    "training_rss_delta_bytes": 401408,
+    "serialized_bytes": 81518,
+    "holdout_balanced_accuracy": 0.9427083333333333,
+    "trained_inference_us": {
+      "p50": 393.116,
+      "p95": 408.1725,
+      "p99": 426.29707
+    },
+    "gradient_clip_events": 188,
+    "online_reward_updates": false,
+    "physical_authority": false
+  }
 }

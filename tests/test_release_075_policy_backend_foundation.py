@@ -35,7 +35,9 @@ class PolicyBackendFoundationTests(unittest.TestCase):
         self.assertTrue(BACKEND_CAPABILITIES["tiny_mlp"]["implemented"])
         self.assertFalse(BACKEND_CAPABILITIES["tiny_mlp"]["production_active_capable"])
         self.assertTrue(BACKEND_CAPABILITIES["tiny_mlp"]["shadow_only"])
-        self.assertFalse(BACKEND_CAPABILITIES["tiny_mlp"]["historical_training"])
+        self.assertTrue(BACKEND_CAPABILITIES["tiny_mlp"]["historical_training"])
+        self.assertTrue(BACKEND_CAPABILITIES["tiny_mlp"]["supervised_training"])
+        self.assertFalse(BACKEND_CAPABILITIES["tiny_mlp"]["online_reward_updates"])
         self.assertEqual(
             require_backend({"policy_backend": "tiny_mlp"}),
             "tiny_mlp",

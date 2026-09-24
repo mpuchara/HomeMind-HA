@@ -71,7 +71,12 @@ class RuntimeCompositionRoot:
             },
             "execution": {"owner": "engine.executor", "contract": "ActionIntent_to_Executor_only_physical_dispatch"},
             "neural_shadow": (
-                engine.tiny_mlp_shadow.diagnostics()
+                {
+                    **engine.tiny_mlp_shadow.diagnostics(),
+                    "candidate_contract": getattr(
+                        manager, "candidate_neural_shadow_contract", None
+                    ),
+                }
                 if getattr(engine, "tiny_mlp_shadow", None) is not None
                 else None
             ),
@@ -140,6 +145,7 @@ class RuntimeCompositionRoot:
         from runtime_http import install_dispatch, register_feedback_routes, register_promotion_routes
         from runtime_debug_log import register_runtime_debug_routes
         from tiny_mlp_shadow import install as install_tiny_mlp_shadow
+        from candidate_neural_shadow import install as install_candidate_neural_shadow
         from trial_knowledge import install as install_trial_knowledge
 
         # Existing fast + preference + episode composition is the characterized base.
@@ -189,6 +195,8 @@ class RuntimeCompositionRoot:
         # composition. It wraps the completed Shadow inference result only and has no
         # ActionIntent/Executor path.
         install_tiny_mlp_shadow(self.core)
+        manager = install_candidate_neural_shadow(manager)
+        engine.agent_candidates = manager
 
         self.dependencies = RuntimeDependencies(clock=self.clock, repository=self.core.STORE, transport=router)
         self.contracts = self._contract_snapshot(manager, router)

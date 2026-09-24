@@ -677,7 +677,12 @@ class AgentCandidateManager(threading.Thread):
         self.engine.models.pop(candidate_id, None)
         self.engine.runtime.pop(candidate_id, None)
         with self.store.lock, self.store.conn() as c:
-            for table in ("teaching_rl_labels", "teaching_rl_jobs", "manual_context_feedback"):
+            for table in (
+                "teaching_rl_labels",
+                "teaching_rl_jobs",
+                "manual_context_feedback",
+                "tiny_mlp_shadow_models",
+            ):
                 if c.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (table,)).fetchone():
                     c.execute(f"DELETE FROM {table} WHERE agent_id=?", (candidate_id,))
             c.execute("DELETE FROM agent_candidates WHERE candidate_id=?", (candidate_id,))

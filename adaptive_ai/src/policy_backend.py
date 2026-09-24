@@ -26,13 +26,15 @@ BACKEND_CAPABILITIES = {
         "shadow_only": True,
         "historical_training": True,
     },
-    # Stage 3 provides real inference/persistence, but intentionally no training or
-    # production authority. Historical training/tournament begins only in Stage 4.
+    # Stage 4 provides bounded offline supervised training and neutral tournament
+    # selection. Online/reward learning and production physical authority remain disabled.
     "tiny_mlp": {
         "implemented": True,
         "production_active_capable": False,
         "shadow_only": True,
-        "historical_training": False,
+        "historical_training": True,
+        "supervised_training": True,
+        "online_reward_updates": False,
     },
 }
 

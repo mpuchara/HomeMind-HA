@@ -85,6 +85,7 @@ class HistoryManager(threading.Thread):
         self.training_schema_cache_misses = 0
         self.training_replay_cache_status = {}
         self.training_home_context_cache_status = {}
+        self.neural_training_artifacts = {}
         self.training_process_status = {
             "enabled": bool(OPTIONS.get("training_process_isolation", True)),
             "state": "idle",
@@ -153,6 +154,10 @@ class HistoryManager(threading.Thread):
                 "training_home_context_cache": dict(
                     getattr(self, "training_home_context_cache_status", {}) or {}
                 ),
+                "tiny_mlp_training": {
+                    "enabled": bool(OPTIONS.get("tiny_mlp_supervised_training_enabled", True)),
+                    "artifact_agents": sorted((getattr(self, "neural_training_artifacts", {}) or {}).keys()),
+                },
                 "training_process": dict(
                     getattr(self, "training_process_status", {}) or {}
                 ),
@@ -1616,6 +1621,120 @@ class HistoryManager(threading.Thread):
                 "origin_counts": {str(k): int(v or 0) for k, v in (prior.get("origin_counts") or {}).items()},
             }
 
+        # Stage 4 trains a tiny supervised challenger beside the established Ridge model.
+        # It is deliberately tied to explicit benchmarked historical training only:
+        # no periodic reward update, no live feedback mutation, no Control authority.
+        neural_enabled = bool(
+            benchmark
+            and OPTIONS.get("tiny_mlp_supervised_training_enabled", True)
+            and len(agents) <= 16
+        )
+        neural_masks = {}
+        neural_backends = {}
+        neural_train_samples = {}
+        neural_holdout_samples = {}
+        neural_chunk_benchmark = {}
+        if neural_enabled:
+            import hashlib
+            from observation_space import ObservationMask, select_observation_mask
+            from policy_tiny_mlp import TinyMLPBackend
+            from tiny_mlp_shadow import load_training_record
+
+            registry_snapshot = self.engine.context.resolved_registry()
+            agent_count = max(1, len(agents))
+            configured_train_cap = max(
+                64, int(OPTIONS.get("tiny_mlp_train_max_samples", 4096) or 4096)
+            )
+            configured_holdout_cap = max(
+                64, int(OPTIONS.get("tiny_mlp_holdout_max_samples", 4096) or 4096)
+            )
+            # Bound total retained Python observation rows across a multi-agent pass.
+            # Explicit Train normally has one agent and therefore keeps the full cap.
+            train_cap = min(
+                configured_train_cap, max(64, 4096 // agent_count)
+            )
+            holdout_cap = min(
+                configured_holdout_cap, max(64, 2048 // agent_count)
+            )
+            hidden = tuple(
+                int(x.strip()) for x in str(
+                    OPTIONS.get("tiny_mlp_hidden_layers", "32,16")
+                ).split(",") if x.strip()
+            )
+            base_seed = int(OPTIONS.get("tiny_mlp_init_seed", 1482) or 1482)
+            for a in agents:
+                aid = str(a["id"])
+                policy = policies[aid]
+                source_revision = str(
+                    getattr(policy, "tournament_revision", None)
+                    or getattr(policy, "model_revision", None)
+                    or "unknown"
+                )
+                record = load_training_record(STORE, aid)
+                mask = None
+                if (
+                    record
+                    and record.get("mask")
+                    and record.get("source_policy_revision") == source_revision
+                ):
+                    try:
+                        mask = ObservationMask.from_export(record["mask"])
+                    except Exception:
+                        mask = None
+                if mask is None:
+                    mask, _diag = select_observation_mask(
+                        a,
+                        self.engine.state_map,
+                        registry_snapshot,
+                        list(getattr(policy.schema, "entities", ()) or ()),
+                        relevance_scores=dict(
+                            self.engine.context_relevance.get(aid) or {}
+                        ),
+                    )
+                backend = None
+                if (
+                    record
+                    and record.get("model")
+                    and record.get("source_policy_revision") == source_revision
+                ):
+                    try:
+                        backend = TinyMLPBackend.deserialize(
+                            record["model"],
+                            expected_schema_id=mask.schema_id,
+                            expected_mask_id=mask.mask_id,
+                            expected_feature_ids=mask.feature_ids,
+                            expected_actions=policy.actions,
+                            expected_horizons=policy.horizons,
+                        )
+                        if tuple(backend.hidden) != tuple(hidden):
+                            backend = None
+                    except Exception:
+                        backend = None
+                if backend is None:
+                    seed_material = (
+                        f"{base_seed}|{aid}|{mask.schema_id}|{mask.mask_id}"
+                    ).encode("utf-8")
+                    seed = int.from_bytes(
+                        hashlib.sha256(seed_material).digest()[:8], "big"
+                    ) & 0x7FFFFFFFFFFFFFFF
+                    backend = TinyMLPBackend(
+                        actions=policy.actions,
+                        horizons=policy.horizons,
+                        feature_ids=mask.feature_ids,
+                        schema_id=mask.schema_id,
+                        mask_id=mask.mask_id,
+                        hidden=hidden,
+                        init_seed=seed,
+                    )
+                neural_masks[aid] = mask
+                neural_backends[aid] = backend
+                neural_train_samples[aid] = deque(maxlen=train_cap)
+                neural_holdout_samples[aid] = deque(maxlen=holdout_cap)
+                neural_chunk_benchmark[aid] = {
+                    "samples": 0,
+                    "correct": 0,
+                    "per_action": {},
+                }
 
         # Historical features are reconstructed causally as-of each requested timestamp.
         # 0.14.25 keeps two bounded incremental cursor roles (onset/anticipation and dwell
@@ -1671,6 +1790,24 @@ class HistoryManager(threading.Thread):
             home_context_cache=replay_home_context_cache,
             context_cache_contract=context_cache_contract,
         )
+
+        if neural_enabled:
+            from observation_space import observation_as_of
+
+        def neural_observation(agent, tracker, sample_ts):
+            if not neural_enabled:
+                return None
+            mask = neural_masks.get(str(agent["id"]))
+            if mask is None:
+                return None
+            return observation_as_of(
+                mask,
+                tracker.state_map,
+                tracker,
+                float(sample_ts),
+                agent,
+            )
+
         pending = {}
         last_value = {}
         new_count = 0
@@ -1832,6 +1969,24 @@ class HistoryManager(threading.Thread):
             slot = stat["per_action"].setdefault(str(actual), {"samples": 0, "correct": 0})
             slot["samples"] += 1
             slot["correct"] += 1 if correct else 0
+            if neural_enabled:
+                chunk = neural_chunk_benchmark[str(agent["id"])]
+                chunk["samples"] += 1
+                chunk["correct"] += 1 if correct else 0
+                chunk_slot = chunk["per_action"].setdefault(
+                    str(actual), {"samples": 0, "correct": 0}
+                )
+                chunk_slot["samples"] += 1
+                chunk_slot["correct"] += 1 if correct else 0
+                observation = old.get("neural_anchor_observation")
+                if observation is not None:
+                    neural_holdout_samples[str(agent["id"])].append({
+                        "observation": observation,
+                        "action_idx": actual,
+                        "weight": float(reward),
+                        "timestamp": float(old.get("anchor_ts", old["ts"])),
+                        "source": "heldout_onset",
+                    })
             infos = automation_infos_by_agent.get(agent["id"]) or []
             origin = "manual" if old.get("user_id") else ("automation_assisted" if infos else "anonymous_external")
             stat["origin_counts"][origin] = int(stat["origin_counts"].get(origin) or 0) + 1
@@ -1886,16 +2041,49 @@ class HistoryManager(threading.Thread):
             # 1) Onset samples. Context is taken at the action boundary. The runtime
             # is event-driven, so it can reach this same environmental context as soon
             # as a precursor state_changed event arrives, before a human acts.
+            crosses_validation = old["ts"] < validation_start <= effective_end
+            anchor_sample_ts = float(old.get("anchor_ts", old["ts"]))
+            if (
+                neural_enabled
+                and float(reward) > 0.0
+                and not crosses_validation
+                and anchor_sample_ts < validation_start
+                and old.get("neural_anchor_observation") is not None
+            ):
+                neural_train_samples[str(agent["id"])].append({
+                    "observation": old["neural_anchor_observation"],
+                    "action_idx": int(old["action_idx"]),
+                    "weight": float(reward),
+                    "timestamp": anchor_sample_ts,
+                    "source": "onset",
+                })
             for h, features in old["features_by_horizon"].items():
-                if old["ts"] < validation_start <= effective_end:
+                if crosses_validation:
                     continue  # purge rewards whose outcomes cross the validation boundary
-                learn_or_validate(policy, h, old["action_idx"], features, reward, old.get("anchor_ts", old["ts"]))
+                learn_or_validate(policy, h, old["action_idx"], features, reward, anchor_sample_ts)
 
             # Optional upstream ON cue: neighbouring-room sensors may legitimately fire
             # a few seconds before the dedicated local sensor. Teach that cue weakly so
             # it can accelerate ON, but never let it define OFF/occupancy persistence.
+            raw_upstream_ts = old.get("upstream_anchor_ts")
+            upstream_ts = float(
+                old["ts"] if raw_upstream_ts is None else raw_upstream_ts
+            )
+            if (
+                neural_enabled
+                and float(reward) > 0.0
+                and upstream_ts < validation_start
+                and old.get("neural_upstream_observation") is not None
+            ):
+                neural_train_samples[str(agent["id"])].append({
+                    "observation": old["neural_upstream_observation"],
+                    "action_idx": int(old["action_idx"]),
+                    "weight": float(reward) * 0.35,
+                    "timestamp": upstream_ts,
+                    "source": "upstream",
+                })
             for h, features in (old.get("upstream_features_by_horizon") or {}).items():
-                if old.get("upstream_anchor_ts", old["ts"]) >= validation_start:
+                if upstream_ts >= validation_start:
                     heldout_updates.append((policy, int(h), old["action_idx"], features, float(reward) * 0.35, float(old["ts"])))
                 else:
                     policy.update(h, old["action_idx"], features, float(reward) * 0.35, old["ts"])
@@ -1945,6 +2133,18 @@ class HistoryManager(threading.Thread):
                     heldout_updates.append((policy, h, old["action_idx"], features, float(reward), float(target_time)))
                 else:
                     policy.update(h, old["action_idx"], features, reward, target_time)
+                    if neural_enabled and float(reward) > 0.0:
+                        observation = neural_observation(
+                            agent, persistence_timeline, target_time
+                        )
+                        if observation is not None:
+                            neural_train_samples[str(agent["id"])].append({
+                                "observation": observation,
+                                "action_idx": int(old["action_idx"]),
+                                "weight": float(reward),
+                                "timestamp": float(target_time),
+                                "source": "persistence",
+                            })
 
             new_count += 1
             return True
@@ -2018,12 +2218,17 @@ class HistoryManager(threading.Thread):
                 # timestamp once, oldest -> newest, so the onset cursor can stay
                 # incremental instead of anchor -> upstream -> early rewinds.
                 snapshots = {}
+                neural_snapshots = {}
                 for query_ts in sorted(query_times):
                     timeline.advance(query_ts)
                     features, _, meta = policy.features(
                         timeline.state_map, timeline.history, at_ts=query_ts
                     )
                     snapshots[query_ts] = (dict(features), dict(meta or {}))
+                    if neural_enabled:
+                        neural_snapshots[query_ts] = neural_observation(
+                            agent, timeline, query_ts
+                        )
 
                 anchor_features = snapshots[float(anchor_ts)][0]
                 features_by_horizon = {
@@ -2054,6 +2259,11 @@ class HistoryManager(threading.Thread):
                     "history_id": row["id"], "ts": float(row["ts"]), "anchor_ts": anchor_ts,
                     "upstream_anchor_ts": upstream_anchor_ts, "features_by_horizon": features_by_horizon,
                     "upstream_features_by_horizon": upstream_features_by_horizon,
+                    "neural_anchor_observation": neural_snapshots.get(float(anchor_ts)),
+                    "neural_upstream_observation": (
+                        neural_snapshots.get(float(upstream_anchor_ts))
+                        if upstream_anchor_ts is not None else None
+                    ),
                     "action_idx": action_idx, "action_value": actions[action_idx], "user_id": row.get("context_user_id"),
                 }
                 last_value[aid] = float(value)
@@ -2089,6 +2299,123 @@ class HistoryManager(threading.Thread):
         # finalization work ran outside the archive-iterator throttle. Force a yield
         # before any serialization/benchmark/qualification work begins.
         TRAINING_BUDGET.checkpoint("replay_complete", force=True)
+
+        # Stage 4 supervised challenger is trained before Ridge heldout rows are folded
+        # back into the final checkpoint. Tournament therefore sees the exact untouched
+        # chronological holdout used by the established recorded-behaviour benchmark.
+        self.neural_training_artifacts = {}
+        if neural_enabled:
+            import json
+            from policy_tiny_mlp_training import (
+                build_training_artifact,
+                evaluate_supervised,
+                tournament_result,
+                train_supervised,
+            )
+
+            if progress_enabled:
+                self.set_status(
+                    progress=float(replay_end) + (float(validation_end) - float(replay_end)) * 0.35,
+                    message=f"{progress_label}: training tiny MLP Shadow challenger",
+                    stage_eta_seconds=0,
+                    work_done=replay_total,
+                    work_total=replay_total,
+                    work_unit="offline supervised batches",
+                    eta_source="bounded epochs + early stopping",
+                    phase_detail="Ridge remains baseline · MLP has no physical authority",
+                )
+            tournament_threshold = clamp(
+                float(OPTIONS.get("candidate_benchmark_threshold", 0.78)), 0.0, 1.0
+            )
+            tournament_min_samples = max(
+                1, int(OPTIONS.get("candidate_benchmark_min_samples", 12))
+            )
+            train_min_samples = max(
+                4, int(OPTIONS.get("tiny_mlp_train_min_samples", 24) or 24)
+            )
+            for agent in agents:
+                aid = str(agent["id"])
+                backend = neural_backends.get(aid)
+                mask = neural_masks.get(aid)
+                if backend is None or mask is None:
+                    continue
+                train_rows = list(neural_train_samples.get(aid) or ())
+                holdout_rows = list(neural_holdout_samples.get(aid) or ())
+                trainer_report = {
+                    "trained": bool(backend.trained),
+                    "samples": 0,
+                    "reason": "warm_start_no_new_supervised_batch",
+                }
+                distinct_actions = {int(row["action_idx"]) for row in train_rows}
+                if len(train_rows) >= train_min_samples and len(distinct_actions) >= 2:
+                    trainer_report = train_supervised(
+                        backend,
+                        train_rows,
+                        max_samples=int(
+                            OPTIONS.get("tiny_mlp_train_max_samples", 4096) or 4096
+                        ),
+                        max_epochs=int(
+                            OPTIONS.get("tiny_mlp_train_max_epochs", 12) or 12
+                        ),
+                        batch_size=int(
+                            OPTIONS.get("tiny_mlp_train_batch_size", 16) or 16
+                        ),
+                        learning_rate=float(
+                            OPTIONS.get("tiny_mlp_learning_rate", 0.012) or 0.012
+                        ),
+                        l2=float(OPTIONS.get("tiny_mlp_l2", 0.0001) or 0.0001),
+                        gradient_clip=float(
+                            OPTIONS.get("tiny_mlp_gradient_clip", 1.0) or 1.0
+                        ),
+                        early_stop_patience=int(
+                            OPTIONS.get("tiny_mlp_early_stop_patience", 3) or 3
+                        ),
+                        early_stop_min_delta=float(
+                            OPTIONS.get("tiny_mlp_early_stop_min_delta", 0.001)
+                            or 0.001
+                        ),
+                        checkpoint=TRAINING_BUDGET.checkpoint,
+                    )
+                if not backend.trained:
+                    continue
+
+                mlp_metrics = evaluate_supervised(backend, agent, holdout_rows)
+                preview = backend.serialize()
+                serialized_bytes = len(
+                    json.dumps(
+                        preview, sort_keys=True, separators=(",", ":"), allow_nan=False
+                    ).encode("utf-8")
+                )
+                tournament = tournament_result(
+                    agent=agent,
+                    actions=policy.actions if (policy := policies[aid]) else (),
+                    ridge_stats=neural_chunk_benchmark.get(aid) or {},
+                    mlp_metrics=mlp_metrics,
+                    threshold=tournament_threshold,
+                    minimum_samples=tournament_min_samples,
+                    minimum_gain=float(
+                        OPTIONS.get("tiny_mlp_tournament_min_gain", 0.0) or 0.0
+                    ),
+                    parameter_count=backend.parameter_count,
+                    serialized_bytes=serialized_bytes,
+                    max_parameters=int(
+                        OPTIONS.get("tiny_mlp_max_parameters", 50000) or 50000
+                    ),
+                    max_serialized_bytes=int(
+                        OPTIONS.get("tiny_mlp_max_serialized_bytes", 524288)
+                        or 524288
+                    ),
+                )
+                artifact = build_training_artifact(
+                    agent=agent,
+                    policy=policy,
+                    mask=mask,
+                    backend=backend,
+                    trainer=trainer_report,
+                    tournament=tournament,
+                )
+                self.neural_training_artifacts[aid] = artifact
+                TRAINING_BUDGET.checkpoint("tiny_mlp_tournament", force=True)
 
         # The newest slice was held out while confidence was calibrated. Once its
         # out-of-sample score is recorded, fold it into the final policy so no history is
@@ -2219,6 +2546,37 @@ class HistoryManager(threading.Thread):
                  "qualification": qualification_summary,
                  "temporal_replay": _publish_temporal_replay_stats()},
             )
+        if self.neural_training_artifacts and not self.worker_mode:
+            from tiny_mlp_shadow import publish_training_artifact
+            service = getattr(self.engine, "tiny_mlp_shadow", None)
+            for aid, artifact in list(self.neural_training_artifacts.items()):
+                try:
+                    published = publish_training_artifact(STORE, artifact)
+                    if service is not None and callable(getattr(service, "invalidate", None)):
+                        service.invalidate(aid)
+                    STORE.event(
+                        aid,
+                        "info",
+                        "tiny_mlp_supervised_tournament",
+                        "Offline supervised Tiny MLP tournament completed; physical authority unchanged",
+                        {
+                            "selected_backend": published.get("selected_backend"),
+                            "trained": published.get("trained"),
+                            "tournament": artifact.get("tournament"),
+                            "trainer": artifact.get("trainer"),
+                            "shadow_only": True,
+                            "physical_authority": False,
+                        },
+                    )
+                except Exception as exc:
+                    STORE.event(
+                        aid,
+                        "warning",
+                        "tiny_mlp_supervised_publish_failed",
+                        "Ridge training completed but the optional Tiny MLP Shadow artifact was not published",
+                        {"error": f"{type(exc).__name__}: {exc}", "physical_authority": False},
+                    )
+
         heldout_updates.close()
         _publish_temporal_replay_stats()
         self.training_replay_cache_status = replay_query_cache.status()

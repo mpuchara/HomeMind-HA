@@ -1,13 +1,12 @@
-"""Real tiny neural policy backend for Stage 3 Shadow inference.
+"""Tiny neural policy backend used for local Shadow inference.
 
-This module deliberately implements inference and persistence only.  It does not train,
-create ActionIntent objects or dispatch Home Assistant services.  Stage 3 keeps the
-existing Ridge/current backend authoritative and gives TinyMLPBackend zero physical
-authority.
+Stage 4 adds *offline supervised* training through policy_tiny_mlp_training.py.  This
+backend still has no online/reward-learning API and no physical authority: update()
+remains disabled, ActionIntent/Executor are not imported here, and runtime promotion
+continues to be owned by the existing Candidate lifecycle.
 
-Weights are stored as IEEE-754 float32 arrays from the Python standard library.  Dense
-accumulation uses Python floats, avoiding a new NumPy/TensorFlow/PyTorch dependency in
-the Raspberry Pi add-on.
+Weights and normalization vectors use IEEE-754 float32 arrays from the Python standard
+library.  The add-on therefore keeps the Stage-3 no-NumPy/TensorFlow/PyTorch footprint.
 """
 from __future__ import annotations
 
@@ -62,6 +61,9 @@ class TinyMLPBackend(PolicyBackend):
         self.architecture = (self.input_size, *self.hidden, self.output_size)
         self.trained = False
         self.training_samples = 0
+        self.training_meta = {}
+        self.input_mean = array("f", [0.0] * self.input_size)
+        self.input_scale = array("f", [1.0] * self.input_size)
 
         if model is None:
             self.weights, self.biases = self._initialize_parameters()
@@ -69,9 +71,11 @@ class TinyMLPBackend(PolicyBackend):
             self.persisted_checksum = None
         else:
             self._load_parameters(model)
+            self._load_normalization(model)
             self.model_revision = str(model.get("model_revision") or self._initial_revision())
             self.trained = bool(model.get("trained", False))
             self.training_samples = int(model.get("training_samples") or 0)
+            self.training_meta = dict(model.get("training_meta") or {})
             self.persisted_checksum = model.get("model_checksum")
 
     @staticmethod
@@ -94,8 +98,6 @@ class TinyMLPBackend(PolicyBackend):
         return "tiny-mlp-init-" + digest[:20]
 
     def _rng(self):
-        # Fixed xorshift64* stream: deterministic across supported Python versions and
-        # independent of Python's random implementation details.
         state = (self.init_seed & 0xFFFFFFFFFFFFFFFF) ^ 0x9E3779B97F4A7C15
         if state == 0:
             state = 0xD1B54A32D192ED03
@@ -106,7 +108,6 @@ class TinyMLPBackend(PolicyBackend):
             state ^= (state >> 27) & mask
             state &= mask
             value = (state * 2685821657736338717) & mask
-            # 53 stable mantissa bits mapped to [0,1).
             yield float(value >> 11) / float(1 << 53)
 
     def _initialize_parameters(self):
@@ -114,17 +115,16 @@ class TinyMLPBackend(PolicyBackend):
         weights = []
         biases = []
         for fan_in, fan_out in zip(self.architecture, self.architecture[1:]):
-            # Xavier-uniform is only an initialization scale here.  Stage 3 never trains
-            # these parameters and reports every neural confidence as zero.
             limit = math.sqrt(6.0 / float(fan_in + fan_out))
-            layer = array(
-                "f",
-                (
-                    (next(random_values) * 2.0 - 1.0) * limit
-                    for _ in range(int(fan_in) * int(fan_out))
-                ),
+            weights.append(
+                array(
+                    "f",
+                    (
+                        (next(random_values) * 2.0 - 1.0) * limit
+                        for _ in range(int(fan_in) * int(fan_out))
+                    ),
+                )
             )
-            weights.append(layer)
             biases.append(array("f", [0.0] * int(fan_out)))
         return weights, biases
 
@@ -152,6 +152,20 @@ class TinyMLPBackend(PolicyBackend):
         self.weights = weights
         self.biases = biases
 
+    def _load_normalization(self, model):
+        raw_mean = list(model.get("input_mean") or [0.0] * self.input_size)
+        raw_scale = list(model.get("input_scale") or [1.0] * self.input_size)
+        if len(raw_mean) != self.input_size or len(raw_scale) != self.input_size:
+            raise ValueError("NEEDS_RETRAIN: tiny MLP normalization width mismatch")
+        mean = [float(x) for x in raw_mean]
+        scale = [float(x) for x in raw_scale]
+        if not all(math.isfinite(x) for x in mean + scale):
+            raise ValueError("NEEDS_RETRAIN: tiny MLP normalization contains non-finite values")
+        if any(x <= 0.0 for x in scale):
+            raise ValueError("NEEDS_RETRAIN: tiny MLP normalization scale must be positive")
+        self.input_mean = array("f", mean)
+        self.input_scale = array("f", scale)
+
     def _dense_input(self, features):
         if isinstance(features, dict) and "values" in features:
             ids = tuple(str(x) for x in (features.get("feature_ids") or ()))
@@ -161,7 +175,6 @@ class TinyMLPBackend(PolicyBackend):
         elif isinstance(features, (list, tuple, array)):
             values = list(features)
         elif isinstance(features, dict):
-            # Useful for low-level benchmarks while retaining fixed positional semantics.
             values = [features.get(i, 0.0) for i in range(self.input_size)]
         else:
             raise TypeError("TinyMLPBackend expects an observation vector")
@@ -172,12 +185,22 @@ class TinyMLPBackend(PolicyBackend):
             raise ValueError("tiny MLP observation contains non-finite values")
         return dense
 
+    def normalized_input(self, features):
+        dense = self._dense_input(features)
+        return [
+            max(-6.0, min(6.0, (value - float(mean)) / float(scale)))
+            for value, mean, scale in zip(dense, self.input_mean, self.input_scale)
+        ]
+
     @staticmethod
     def _relu(values):
         return [value if value > 0.0 else 0.0 for value in values]
 
-    def _forward(self, dense):
-        current = dense
+    def _forward(self, dense, *, already_normalized=False):
+        current = list(dense) if already_normalized else [
+            max(-6.0, min(6.0, (float(value) - float(mean)) / float(scale)))
+            for value, mean, scale in zip(dense, self.input_mean, self.input_scale)
+        ]
         for layer_index, (fan_in, fan_out) in enumerate(
             zip(self.architecture, self.architecture[1:])
         ):
@@ -193,48 +216,65 @@ class TinyMLPBackend(PolicyBackend):
             current = output if layer_index == len(self.weights) - 1 else self._relu(output)
         return current
 
+    @staticmethod
+    def softmax(scores):
+        if not scores:
+            return []
+        peak = max(float(x) for x in scores)
+        exp = [math.exp(max(-60.0, min(60.0, float(x) - peak))) for x in scores]
+        total = sum(exp)
+        if total <= 0.0 or not math.isfinite(total):
+            return [1.0 / len(scores)] * len(scores)
+        return [value / total for value in exp]
+
     def predict(self, features, allowed_indices=None):
         dense = self._dense_input(features)
         scores = self._forward(dense)
+        probabilities = self.softmax(scores)
         if allowed_indices is None:
             allowed = list(range(len(self.actions)))
         else:
-            allowed = sorted({int(x) for x in allowed_indices if 0 <= int(x) < len(self.actions)})
+            allowed = sorted(
+                {int(x) for x in allowed_indices if 0 <= int(x) < len(self.actions)}
+            )
         if not allowed:
             raise ValueError("allowed action set is empty")
         chosen_index = min(
             allowed,
-            key=lambda idx: (-float(scores[idx]), int(idx)),
+            key=lambda idx: (-float(probabilities[idx] if self.trained else scores[idx]), int(idx)),
         )
+        support = min(1.0, math.log1p(max(0, self.training_samples)) / math.log(257.0)) if self.trained else 0.0
         arms = [
             {
                 "index": int(index),
                 "value": float(action),
                 "score": float(scores[index]),
-                # Keep familiar diagnostic keys without pretending an untrained model has
-                # calibrated reward/confidence estimates.
-                "mean": float(scores[index]),
-                "uncertainty": 1.0,
-                "support": 0.0,
-                "novelty": 1.0,
+                "probability": float(probabilities[index]),
+                "mean": float(probabilities[index] if self.trained else scores[index]),
+                "uncertainty": float(1.0 - probabilities[index]) if self.trained else 1.0,
+                "support": float(support),
+                "novelty": float(1.0 - support),
             }
             for index, action in enumerate(self.actions)
         ]
         chosen = dict(arms[chosen_index])
-        chosen["trained"] = False
-        chosen["structural_confidence"] = 0.0
-        chosen["validation_accuracy"] = 0.0
+        confidence = float(probabilities[chosen_index]) if self.trained else 0.0
+        chosen["trained"] = bool(self.trained)
+        chosen["confidence_kind"] = "softmax_uncalibrated" if self.trained else "untrained_zero"
+        chosen["structural_confidence"] = confidence
+        chosen["validation_accuracy"] = float(
+            (self.training_meta.get("tournament") or {}).get("mlp_score") or 0.0
+        )
         chosen["validation_lower_bound"] = 0.0
-        chosen["validation_samples"] = 0
-        # Stage 3 uses the existing action values and horizon abstraction but has no
-        # training/evidence with which to select among horizons.  Use the configured
-        # first horizon deterministically; Stage 4 owns historical training/tournament.
+        chosen["validation_samples"] = int(
+            (self.training_meta.get("tournament") or {}).get("samples") or 0
+        )
         horizon = int(self.horizons[0])
-        return chosen, 0.0, arms, horizon, 0.0, 1.0
+        return chosen, confidence, arms, horizon, support, 1.0 - support
 
     def update(self, horizon, action_idx, features, reward, sample_ts=None):
         raise RuntimeError(
-            "tiny MLP training is disabled in Stage 3; inference/persistence is Shadow-only"
+            "tiny MLP online/reward training is disabled; Stage 4 trains only in the offline supervised trainer"
         )
 
     def decay(self, now=None):
@@ -242,7 +282,10 @@ class TinyMLPBackend(PolicyBackend):
 
     @property
     def parameter_count(self):
-        return sum(len(layer) for layer in self.weights) + sum(len(layer) for layer in self.biases)
+        return (
+            sum(len(layer) for layer in self.weights)
+            + sum(len(layer) for layer in self.biases)
+        )
 
     def serialize(self):
         raw = {
@@ -260,8 +303,11 @@ class TinyMLPBackend(PolicyBackend):
             "observation_schema_id": self.schema_id,
             "observation_mask_id": self.mask_id,
             "init_seed": self.init_seed,
-            "trained": False,
-            "training_samples": 0,
+            "trained": bool(self.trained),
+            "training_samples": int(self.training_samples),
+            "training_meta": dict(self.training_meta or {}),
+            "input_mean": list(self.input_mean),
+            "input_scale": list(self.input_scale),
             "weights": [list(layer) for layer in self.weights],
             "biases": [list(layer) for layer in self.biases],
         }
@@ -294,7 +340,9 @@ class TinyMLPBackend(PolicyBackend):
             raise ValueError("NEEDS_RETRAIN: incompatible tiny MLP backend version")
         if str(raw.get("dtype") or "") != cls.DTYPE:
             raise ValueError("NEEDS_RETRAIN: incompatible tiny MLP dtype")
-        schema_id = str(raw.get("observation_schema_id") or raw.get("feature_schema_id") or "")
+        schema_id = str(
+            raw.get("observation_schema_id") or raw.get("feature_schema_id") or ""
+        )
         mask_id = str(raw.get("observation_mask_id") or raw.get("feature_mask_id") or "")
         feature_ids = tuple(str(x) for x in (raw.get("feature_ids") or ()))
         actions = tuple(float(x) for x in (raw.get("actions") or ()))
@@ -303,11 +351,17 @@ class TinyMLPBackend(PolicyBackend):
             raise ValueError("NEEDS_RETRAIN: tiny MLP observation schema mismatch")
         if expected_mask_id is not None and mask_id != str(expected_mask_id):
             raise ValueError("NEEDS_RETRAIN: tiny MLP observation mask mismatch")
-        if expected_feature_ids is not None and feature_ids != tuple(str(x) for x in expected_feature_ids):
+        if expected_feature_ids is not None and feature_ids != tuple(
+            str(x) for x in expected_feature_ids
+        ):
             raise ValueError("NEEDS_RETRAIN: tiny MLP observation feature order mismatch")
-        if expected_actions is not None and actions != tuple(float(x) for x in expected_actions):
+        if expected_actions is not None and actions != tuple(
+            float(x) for x in expected_actions
+        ):
             raise ValueError("NEEDS_RETRAIN: tiny MLP action space mismatch")
-        if expected_horizons is not None and horizons != tuple(int(x) for x in expected_horizons):
+        if expected_horizons is not None and horizons != tuple(
+            int(x) for x in expected_horizons
+        ):
             raise ValueError("NEEDS_RETRAIN: tiny MLP horizon set mismatch")
         hidden = tuple(int(x) for x in (raw.get("hidden") or cls.DEFAULT_HIDDEN))
         obj = cls(
@@ -324,15 +378,15 @@ class TinyMLPBackend(PolicyBackend):
             raise ValueError("NEEDS_RETRAIN: tiny MLP persisted input width mismatch")
         if int(raw.get("output_size") or -1) != obj.output_size:
             raise ValueError("NEEDS_RETRAIN: tiny MLP persisted output width mismatch")
-        if bool(raw.get("trained", False)) or int(raw.get("training_samples") or 0) != 0:
-            # Stage 3 must never silently load a future/trainable neural policy into this
-            # inference-only runtime contract.
-            raise ValueError("NEEDS_RETRAIN: trained tiny MLP is unsupported by Stage 3 runtime")
+        if obj.trained and obj.training_samples <= 0:
+            raise ValueError("NEEDS_RETRAIN: trained tiny MLP has no training sample count")
         return obj
 
     def diagnostics(self):
         raw = self.serialize()
-        encoded = json.dumps(raw, sort_keys=True, separators=(",", ":"), allow_nan=False)
+        encoded = json.dumps(
+            raw, sort_keys=True, separators=(",", ":"), allow_nan=False
+        )
         return {
             "backend": self.BACKEND,
             "backend_version": self.VERSION,
@@ -347,9 +401,10 @@ class TinyMLPBackend(PolicyBackend):
             "parameter_count": self.parameter_count,
             "dtype": self.DTYPE,
             "serialized_bytes": len(encoded.encode("utf-8")),
-            "trained": False,
-            "training_samples": 0,
-            "historical_training": False,
+            "trained": bool(self.trained),
+            "training_samples": int(self.training_samples),
+            "historical_training": bool(self.trained),
+            "training_meta": dict(self.training_meta or {}),
             "shadow_only": True,
             "dispatch_capability": False,
             "physical_authority": False,

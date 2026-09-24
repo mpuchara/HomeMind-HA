@@ -1,3 +1,21 @@
+# 0.14.83 — 2026-09-24
+
+- Continue the Tiny Neural Policy / Correct / Offline-RL master plan with **Stage 4: bounded offline supervised Tiny MLP training + neutral Ridge↔MLP tournament**.
+- Train Tiny MLP only inside explicit historical Train/Rebuild benchmark passes. The neural backend still rejects `update(... reward ...)`; no live reward learning or online neural mutation is introduced.
+- Reconstruct MLP inputs from the same causal Stage-2 observation mask on the existing historical replay cursors. No second Recorder/history scan is added.
+- Use accepted historical target behaviour as supervised imitation labels. Own-command acknowledgements remain excluded by the existing provenance boundary. Onset/persistence samples stay training-only; the chronological validation slice remains untouched until scoring.
+- Keep resource use bounded for Raspberry Pi: deterministic training/holdout caps, tiny mini-batches, bounded epochs, L2 regularization, global gradient clipping, early stopping and cooperative `TRAINING_BUDGET` checkpoints.
+- Add train-only input normalization persisted with the model. Runtime inference uses the persisted normalization and continues to use the existing action abstraction for binary/discrete/setpoint agents.
+- Compare Ridge and MLP on the **same held-out onset rows and the same recorded-behaviour metric**. MLP can win only with identical holdout cardinality, required class coverage, the existing Candidate benchmark threshold, resource gates and a strict positive score gain. A tie stays with Ridge.
+- Persist the supervised neural artifact separately from `rl_models`: model+checksum, exact Stage-2 mask, source Ridge revision, trainer report, tournament result and selected backend. Ridge remains the authoritative Live policy.
+- Isolated training workers return the neural artifact to the realtime parent. The parent publishes it only after the existing job-id, agent-fingerprint and runtime-topology stale-result checks have passed.
+- A tournament-winning MLP may drive **Candidate observed Shadow A/B only after the existing Candidate offline gate passes**. Missing/failed selected-neural inference remains an evidence gap instead of silently falling back to Ridge.
+- Neural Candidate Shadow still creates no `ActionIntent`, never invokes Executor and has no Home Assistant service-dispatch path.
+- Stage-4 neural winners are explicitly **not promotable to Live/Control yet**. This prevents a misleading promotion that would otherwise copy the Candidate's Ridge baseline while its A/B evidence came from MLP. Neural Live/Control authority remains a later-stage capability.
+- Discard/prune cleanup retires the Candidate's isolated neural artifact together with the Candidate lifecycle.
+- Existing Ridge learning, Correct behaviour, reward semantics, Candidate offline gate, paired Shadow evidence, `ActionIntent`, Executor and physical Home Assistant control remain unchanged outside the explicit neural Candidate Shadow branch.
+- Stage-4 regression suite: **1223 tests**. Synthetic GitHub-host trainer probe (`96→32→16→2`, 3666 parameters, 384 train / 160 holdout, 8 epochs) completed in ~4.24 s, added ~392 KB RSS, serialized to ~81.5 KB, reached 94.27% held-out balanced accuracy and ~0.408 ms trained-inference p95. These are host-local CI measurements, not Raspberry Pi 4 results.
+
 # 0.14.82 — 2026-09-24
 
 - Continue the Tiny Neural Policy / Correct / Offline-RL master plan with **Stage 3: real tiny MLP inference + persistence in Shadow only**.

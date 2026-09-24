@@ -15,9 +15,9 @@ try:
 except Exception:
     ws_connect = None
 
-APP_VERSION = "0.14.82"
+APP_VERSION = "0.14.83"
 HISTORY_BOOTSTRAP_REVISION = "target-attrs-v2"
-TRAINING_REVISION = "shared-home-intents-v18"
+TRAINING_REVISION = "shared-home-intents-v19"
 DATA_DIR = Path(os.environ.get("ADAPTIVE_AI_DATA", "/data"))
 DB_PATH = DATA_DIR / "adaptive_ai.db"
 OPTIONS_PATH = DATA_DIR / "options.json"
@@ -123,6 +123,20 @@ DEFAULT_OPTIONS = {
     "tiny_mlp_shadow_enabled": True,
     "tiny_mlp_hidden_layers": "32,16",
     "tiny_mlp_init_seed": 1482,
+    "tiny_mlp_supervised_training_enabled": True,
+    "tiny_mlp_train_min_samples": 24,
+    "tiny_mlp_train_max_samples": 4096,
+    "tiny_mlp_holdout_max_samples": 4096,
+    "tiny_mlp_train_max_epochs": 12,
+    "tiny_mlp_train_batch_size": 16,
+    "tiny_mlp_learning_rate": 0.012,
+    "tiny_mlp_l2": 0.0001,
+    "tiny_mlp_gradient_clip": 1.0,
+    "tiny_mlp_early_stop_patience": 3,
+    "tiny_mlp_early_stop_min_delta": 0.001,
+    "tiny_mlp_tournament_min_gain": 0.0,
+    "tiny_mlp_max_parameters": 50000,
+    "tiny_mlp_max_serialized_bytes": 524288,
     # CPU-heavy historical replay runs in one child process. The parent remains the
     # authority for HA ingress/HTTP/queue/control and supervises RSS/CPU/I/O.
     "training_process_isolation": True,

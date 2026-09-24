@@ -46,6 +46,9 @@ def ensure_tables(store):
                 model_json TEXT NOT NULL,
                 mask_json TEXT,
                 source_policy_revision TEXT,
+                training_json TEXT,
+                tournament_json TEXT,
+                selected_backend TEXT NOT NULL DEFAULT 'diagonal_linucb',
                 created_ts REAL NOT NULL,
                 updated_ts REAL NOT NULL
             );
@@ -63,6 +66,156 @@ def ensure_tables(store):
             c.execute(
                 "ALTER TABLE tiny_mlp_shadow_models ADD COLUMN source_policy_revision TEXT"
             )
+        if "training_json" not in columns:
+            c.execute("ALTER TABLE tiny_mlp_shadow_models ADD COLUMN training_json TEXT")
+        if "tournament_json" not in columns:
+            c.execute("ALTER TABLE tiny_mlp_shadow_models ADD COLUMN tournament_json TEXT")
+        if "selected_backend" not in columns:
+            c.execute(
+                "ALTER TABLE tiny_mlp_shadow_models ADD COLUMN selected_backend TEXT NOT NULL DEFAULT 'diagonal_linucb'"
+            )
+
+
+
+def load_training_record(store, agent_id):
+    ensure_tables(store)
+    with store.conn() as c:
+        row = c.execute(
+            """
+            SELECT model_json,mask_json,source_policy_revision,
+                   training_json,tournament_json,selected_backend,
+                   created_ts,updated_ts
+            FROM tiny_mlp_shadow_models WHERE agent_id=?
+            """,
+            (str(agent_id),),
+        ).fetchone()
+    if not row:
+        return None
+    return {
+        "model": json.loads(row[0]) if row[0] else None,
+        "mask": json.loads(row[1]) if row[1] else None,
+        "source_policy_revision": str(row[2] or "unknown"),
+        "training": json.loads(row[3]) if row[3] else {},
+        "tournament": json.loads(row[4]) if row[4] else {},
+        "selected_backend": str(row[5] or "diagonal_linucb"),
+        "created_ts": float(row[6] or 0.0),
+        "updated_ts": float(row[7] or 0.0),
+    }
+
+
+def restore_training_record(store, agent_id, record):
+    """Restore the exact pre-job neural Shadow record or delete a newly-created one."""
+    ensure_tables(store)
+    agent_id = str(agent_id)
+    with store.lock, store.conn() as c:
+        if not record:
+            c.execute(
+                "DELETE FROM tiny_mlp_shadow_models WHERE agent_id=?",
+                (agent_id,),
+            )
+            return
+        model = dict(record.get("model") or {})
+        mask = dict(record.get("mask") or {})
+        c.execute(
+            """
+            INSERT INTO tiny_mlp_shadow_models
+                (agent_id,backend,backend_version,feature_schema_id,feature_mask_id,
+                 model_json,mask_json,source_policy_revision,training_json,tournament_json,
+                 selected_backend,created_ts,updated_ts)
+            VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)
+            ON CONFLICT(agent_id) DO UPDATE SET
+                backend=excluded.backend,
+                backend_version=excluded.backend_version,
+                feature_schema_id=excluded.feature_schema_id,
+                feature_mask_id=excluded.feature_mask_id,
+                model_json=excluded.model_json,
+                mask_json=excluded.mask_json,
+                source_policy_revision=excluded.source_policy_revision,
+                training_json=excluded.training_json,
+                tournament_json=excluded.tournament_json,
+                selected_backend=excluded.selected_backend,
+                updated_ts=excluded.updated_ts
+            """,
+            (
+                agent_id,
+                str(model.get("policy_backend") or model.get("backend") or "tiny_mlp"),
+                int(model.get("backend_version") or model.get("version") or 1),
+                str(mask.get("schema_id") or model.get("feature_schema_id") or ""),
+                str(mask.get("mask_id") or model.get("feature_mask_id") or ""),
+                json.dumps(model, sort_keys=True, separators=(",", ":"), allow_nan=False),
+                json.dumps(mask, sort_keys=True, separators=(",", ":"), allow_nan=False),
+                str(record.get("source_policy_revision") or "unknown"),
+                json.dumps(dict(record.get("training") or {}), sort_keys=True, separators=(",", ":"), allow_nan=False),
+                json.dumps(dict(record.get("tournament") or {}), sort_keys=True, separators=(",", ":"), allow_nan=False),
+                str(record.get("selected_backend") or "diagonal_linucb"),
+                float(record.get("created_ts") or time.time()),
+                float(record.get("updated_ts") or time.time()),
+            ),
+        )
+
+
+def publish_training_artifact(store, artifact):
+    """Persist a verified offline-training artifact after parent stale-job checks."""
+    if not isinstance(artifact, dict) or artifact.get("format") != "homemind-tiny-mlp-training-artifact":
+        raise ValueError("invalid tiny MLP training artifact")
+    ensure_tables(store)
+    agent_id = str(artifact["agent_id"])
+    model = dict(artifact.get("model") or {})
+    mask = dict(artifact.get("mask") or {})
+    source_revision = str(artifact.get("source_policy_revision") or "unknown")
+    training = dict(artifact.get("trainer") or {})
+    tournament = dict(artifact.get("tournament") or {})
+    selected = str(artifact.get("selected_backend") or "diagonal_linucb")
+    backend = TinyMLPBackend.deserialize(
+        model,
+        expected_schema_id=mask.get("schema_id"),
+        expected_mask_id=mask.get("mask_id"),
+        expected_feature_ids=mask.get("feature_ids"),
+    )
+    guard = getattr(store, "training_publish_guard", None)
+    if callable(guard):
+        guard(agent_id, model)
+    now = time.time()
+    with store.lock, store.conn() as c:
+        c.execute(
+            """
+            INSERT INTO tiny_mlp_shadow_models
+                (agent_id,backend,backend_version,feature_schema_id,feature_mask_id,
+                 model_json,mask_json,source_policy_revision,training_json,tournament_json,
+                 selected_backend,created_ts,updated_ts)
+            VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)
+            ON CONFLICT(agent_id) DO UPDATE SET
+                backend=excluded.backend,
+                backend_version=excluded.backend_version,
+                feature_schema_id=excluded.feature_schema_id,
+                feature_mask_id=excluded.feature_mask_id,
+                model_json=excluded.model_json,
+                mask_json=excluded.mask_json,
+                source_policy_revision=excluded.source_policy_revision,
+                training_json=excluded.training_json,
+                tournament_json=excluded.tournament_json,
+                selected_backend=excluded.selected_backend,
+                updated_ts=excluded.updated_ts
+            """,
+            (
+                agent_id, backend.BACKEND, backend.VERSION, backend.schema_id,
+                backend.mask_id,
+                json.dumps(model, sort_keys=True, separators=(",", ":"), allow_nan=False),
+                json.dumps(mask, sort_keys=True, separators=(",", ":"), allow_nan=False),
+                source_revision,
+                json.dumps(training, sort_keys=True, separators=(",", ":"), allow_nan=False),
+                json.dumps(tournament, sort_keys=True, separators=(",", ":"), allow_nan=False),
+                selected, now, now,
+            ),
+        )
+    return {
+        "agent_id": agent_id,
+        "backend": backend.BACKEND,
+        "trained": backend.trained,
+        "selected_backend": selected,
+        "model_revision": backend.model_revision,
+        "model_checksum": backend.persisted_checksum or model.get("model_checksum"),
+    }
 
 
 class TinyMLPShadowService:
@@ -120,21 +273,7 @@ class TinyMLPShadowService:
         ) & 0x7FFFFFFFFFFFFFFF
 
     def _load_record(self, agent_id):
-        with self.store.conn() as c:
-            row = c.execute(
-                """
-                SELECT model_json,mask_json,source_policy_revision
-                FROM tiny_mlp_shadow_models WHERE agent_id=?
-                """,
-                (str(agent_id),),
-            ).fetchone()
-        if not row:
-            return None
-        return {
-            "model": json.loads(row[0]) if row[0] else None,
-            "mask": json.loads(row[1]) if row[1] else None,
-            "source_policy_revision": str(row[2] or "unknown"),
-        }
+        return load_training_record(self.store, agent_id)
 
     def _persist(self, agent_id, backend, mask, source_policy_revision):
         raw = backend.serialize()
@@ -151,8 +290,9 @@ class TinyMLPShadowService:
                 INSERT INTO tiny_mlp_shadow_models
                     (agent_id,backend,backend_version,feature_schema_id,
                      feature_mask_id,model_json,mask_json,source_policy_revision,
+                     training_json,tournament_json,selected_backend,
                      created_ts,updated_ts)
-                VALUES(?,?,?,?,?,?,?,?,?,?)
+                VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)
                 ON CONFLICT(agent_id) DO UPDATE SET
                     backend=excluded.backend,
                     backend_version=excluded.backend_version,
@@ -161,6 +301,9 @@ class TinyMLPShadowService:
                     model_json=excluded.model_json,
                     mask_json=excluded.mask_json,
                     source_policy_revision=excluded.source_policy_revision,
+                    training_json=excluded.training_json,
+                    tournament_json=excluded.tournament_json,
+                    selected_backend=excluded.selected_backend,
                     updated_ts=excluded.updated_ts
                 """,
                 (
@@ -172,6 +315,9 @@ class TinyMLPShadowService:
                     encoded,
                     mask_encoded,
                     str(source_policy_revision),
+                    "{}",
+                    "{}",
+                    "diagonal_linucb",
                     now,
                     now,
                 ),
@@ -383,8 +529,8 @@ class TinyMLPShadowService:
             "shadow_only": True,
             "dispatch_capability": False,
             "physical_authority": False,
-            "training_enabled": False,
-            "historical_training": False,
+            "training_enabled": bool(backend.trained),
+            "historical_training": bool(backend.trained),
             "baseline_backend": getattr(policy, "BACKEND", "unknown"),
             "source_policy_revision": self._source_policy_revision(policy),
             "backend": backend.BACKEND,
@@ -420,7 +566,11 @@ class TinyMLPShadowService:
                 }
                 for row in arms
             ],
-            "note": "untrained neural inference; diagnostic only",
+            "note": (
+                "trained supervised neural inference; Shadow diagnostic only"
+                if backend.trained else
+                "untrained neural inference; diagnostic only"
+            ),
         }
         with self.engine.lock:
             runtime = self.engine.runtime.setdefault(str(agent["id"]), {})
@@ -452,6 +602,48 @@ class TinyMLPShadowService:
         record = self._load_record(agent_id)
         return (record or {}).get("mask")
 
+    def persisted_record(self, agent_id):
+        record = self._load_record(agent_id)
+        return dict(record or {})
+
+    def invalidate(self, agent_id):
+        with self.lock:
+            self.cache.pop(str(agent_id), None)
+
+    def predict_persisted(self, agent, policy, state_map, temporal, *, timestamp, require_selected=False):
+        record = self._load_record(agent["id"])
+        if not record or not record.get("model") or not record.get("mask"):
+            return None
+        if require_selected and record.get("selected_backend") != TinyMLPBackend.BACKEND:
+            return None
+        backend = TinyMLPBackend.deserialize(
+            record["model"],
+            expected_schema_id=record["mask"].get("schema_id"),
+            expected_mask_id=record["mask"].get("mask_id"),
+            expected_feature_ids=record["mask"].get("feature_ids"),
+            expected_actions=policy.actions,
+            expected_horizons=policy.horizons,
+        )
+        if require_selected and not backend.trained:
+            return None
+        mask = ObservationMask.from_export(record["mask"])
+        observation = observation_as_of(
+            mask, state_map, temporal, float(timestamp), agent,
+            home_provider=self.engine.context,
+        )
+        chosen, confidence, arms, horizon, support, novelty = backend.predict(observation)
+        return {
+            "backend": backend,
+            "record": record,
+            "observation": observation,
+            "chosen": chosen,
+            "confidence": confidence,
+            "arms": arms,
+            "horizon": horizon,
+            "support": support,
+            "novelty": novelty,
+        }
+
     def diagnostics(self):
         with self.lock:
             loaded = len(self.cache)
@@ -464,8 +656,8 @@ class TinyMLPShadowService:
             "hidden": list(self.hidden),
             "loaded_models": loaded,
             "mask_selection": "once_per_source_policy_revision_then_persisted",
-            "training_enabled": False,
-            "historical_training": False,
+            "training_enabled": bool(OPTIONS.get("tiny_mlp_supervised_training_enabled", True)),
+            "historical_training": bool(OPTIONS.get("tiny_mlp_supervised_training_enabled", True)),
             "dispatch_capability": False,
             "physical_authority": False,
             "ridge_baseline_changed": False,
