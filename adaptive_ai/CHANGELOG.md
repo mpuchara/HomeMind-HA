@@ -1,3 +1,14 @@
+# 0.14.78 — 2026-09-24
+
+- Remove the final synchronous SQLite write found on the normal Home Assistant websocket ACK path: own-command `ack_event_id` / `ack_time` provenance now queues in RAM and is persisted by the existing background provenance writer.
+- Keep physical-control semantics unchanged. Command reservation/dispatch, Engine pending acknowledgement, reward timing, ActionIntent and Executor safety remain synchronous exactly as before; only audit metadata persistence is deferred.
+- Batch queued acknowledgement updates in one transaction. Repeated ACKs preserve the legacy contract: the latest non-null event id wins while the first acknowledgement timestamp remains authoritative.
+- Preserve strong explicit-read behavior: reading a provenance decision forces that decision's queued ACK durable before the SQLite SELECT.
+- Add an integration regression and CI benchmark that hold the shared Store writer mutex in another thread while delivering a real own-command `state_changed`; websocket ingest must finish without waiting for SQLite and the ACK must still become durable after the lock is released.
+- Extend provenance diagnostics with queued/coalesced/flushed ACK counts.
+- No changes to replay order, observations, rewards, policies, Candidate lineage, promotion, Correct, ActionIntent, Executor or Home Assistant service dispatch.
+- Full suite target: 1167 tests.
+
 # 0.14.77 — 2026-09-24
 
 - Change cooperative training preemption from **checkpoint-scoped** to **burst-epoch-scoped** scheduling. A heavy worker now performs one strict scheduler yield per realtime/user-priority burst and then returns to the normal bounded work/sleep quantum.
