@@ -14,7 +14,7 @@
 - Stage-4 neural winners are explicitly **not promotable to Live/Control yet**. This prevents a misleading promotion that would otherwise copy the Candidate's Ridge baseline while its A/B evidence came from MLP. Neural Live/Control authority remains a later-stage capability.
 - Discard/prune cleanup retires the Candidate's isolated neural artifact together with the Candidate lifecycle.
 - Existing Ridge learning, Correct behaviour, reward semantics, Candidate offline gate, paired Shadow evidence, `ActionIntent`, Executor and physical Home Assistant control remain unchanged outside the explicit neural Candidate Shadow branch.
-- Final CI/test/benchmark numbers will be recorded after the Stage-4 branch validation completes.
+- Stage-4 regression suite: **1223 tests**. Synthetic GitHub-host trainer probe (`96→32→16→2`, 3666 parameters, 384 train / 160 holdout, 8 epochs) completed in ~4.24 s, added ~392 KB RSS, serialized to ~81.5 KB, reached 94.27% held-out balanced accuracy and ~0.408 ms trained-inference p95. These are host-local CI measurements, not Raspberry Pi 4 results.
 
 # 0.14.82 — 2026-09-24
 
