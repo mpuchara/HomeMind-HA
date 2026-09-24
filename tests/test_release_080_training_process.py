@@ -218,6 +218,166 @@ class SupervisorRollbackContracts(unittest.TestCase):
         rows = self.store.list_historical_experiences(self.agent["id"])
         self.assertEqual([row["target_history_id"] for row in rows], [1])
 
+    def _fake_history(self, *, stop=False):
+        event = __import__("threading").Event()
+        if stop:
+            event.set()
+        engine = SimpleNamespace(
+            models={}, context_relevance={}, state_map={}, entity_registry={},
+            lock=__import__("threading").RLock(),
+            agent_index_at=1.0, agent_index_revision=1,
+            wake_event=__import__("threading").Event(),
+        )
+        return SimpleNamespace(
+            engine=engine,
+            stop_event=event,
+            job_cancel_event=None,
+            active_training_process=None,
+            training_process_status={},
+            temporal_replay_stats={},
+            training_replay_cache_status={},
+            training_home_context_cache_status={},
+            training_schema_cache={},
+            set_status=lambda **kwargs: None,
+        )
+
+    def _supervisor_job(self, root):
+        import training_process
+        job_id = "supervisor-test"
+        return {
+            "format": training_process.JOB_FORMAT,
+            "version": training_process.JOB_VERSION,
+            "job_id": job_id,
+            "agent_id": self.agent["id"],
+            "agent_fingerprint": agent_config_fingerprint(self.before_agent),
+            "context_fingerprint": runtime_context_fingerprint({}, {}, dict(DEFAULT_OPTIONS)),
+            "job_path": str(Path(root) / f"{job_id}.job.json"),
+            "status_path": str(Path(root) / f"{job_id}.status.json"),
+            "result_path": str(Path(root) / f"{job_id}.result.json"),
+            "log_path": str(Path(root) / f"{job_id}.log"),
+        }
+
+    def test_parent_cancellation_terminates_worker_and_rolls_back_dirty_chunk(self):
+        import storage as storage_module
+        import training_process
+
+        history = self._fake_history(stop=True)
+        job = self._supervisor_job(self.temp.name)
+        store = self.store
+        aid = self.agent["id"]
+
+        class FakeProcess:
+            pid = os.getpid()
+
+            def __init__(self):
+                self.code = None
+                self.dirtied = False
+
+            def poll(self):
+                return self.code
+
+            def terminate(self):
+                if not self.dirtied:
+                    store.add_historical_experience(
+                        aid, 2, 1, 1.0, 1.0, 10.0, {0: 2.0}
+                    )
+                    store.save_model(aid, {"version": 1, "value": "dirty-child"})
+                    self.dirtied = True
+                self.code = -15
+
+            def kill(self):
+                self.code = -9
+
+            def wait(self, timeout=None):
+                return self.code if self.code is not None else 0
+
+        fake = FakeProcess()
+        with (
+            patch.object(storage_module, "STORE", self.store),
+            patch.object(training_process, "DATA_DIR", Path(self.temp.name)),
+            patch.object(training_process, "_build_job", return_value=dict(job)),
+            patch.object(training_process, "_prune_job_files", return_value=None),
+            patch.object(training_process.subprocess, "Popen", return_value=fake),
+            patch.object(training_process, "_proc_metrics", return_value={
+                "rss_mb": 10.0, "cpu_seconds": .1,
+                "read_bytes": 0, "write_bytes": 0,
+            }),
+        ):
+            with self.assertRaisesRegex(InterruptedError, "cancelled"):
+                training_process.run_isolated_training_chunk(
+                    history, 1.0, 2.0, agent_ids={aid}
+                )
+
+        self.assertEqual(self.store.get_model(aid)["value"], "pre-worker")
+        rows = self.store.list_historical_experiences(aid)
+        self.assertEqual([row["target_history_id"] for row in rows], [1])
+        self.assertEqual(history.training_process_status["state"], "cancelled")
+
+    def test_successful_worker_result_is_rejected_after_agent_config_change(self):
+        import storage as storage_module
+        import training_process
+
+        history = self._fake_history(stop=False)
+        job = self._supervisor_job(self.temp.name)
+        store = self.store
+        aid = self.agent["id"]
+
+        class FakeProcess:
+            pid = os.getpid()
+
+            def __init__(self):
+                self.code = 0
+                store.add_historical_experience(
+                    aid, 2, 1, 1.0, 1.0, 10.0, {0: 2.0}
+                )
+                store.save_model(aid, {"version": 1, "value": "stale-child"})
+                store.update_agent(aid, {"input_entities": ["sensor.changed"]})
+                Path(job["result_path"]).write_text(json.dumps({
+                    "ok": True,
+                    "job_id": job["job_id"],
+                    "return_value": 1,
+                    "context_relevance": {},
+                    "temporal_replay": {},
+                    "training_replay_cache": {},
+                    "training_home_context_cache": {},
+                    "schema_cache_item": {},
+                }), encoding="utf-8")
+
+            def poll(self):
+                return self.code
+
+            def terminate(self):
+                self.code = -15
+
+            def kill(self):
+                self.code = -9
+
+            def wait(self, timeout=None):
+                return self.code
+
+        with (
+            patch.object(storage_module, "STORE", self.store),
+            patch.object(training_process, "DATA_DIR", Path(self.temp.name)),
+            patch.object(training_process, "_build_job", return_value=dict(job)),
+            patch.object(training_process, "_prune_job_files", return_value=None),
+            patch.object(training_process.subprocess, "Popen", side_effect=lambda *a, **k: FakeProcess()),
+            patch.object(training_process, "_proc_metrics", return_value={
+                "rss_mb": 10.0, "cpu_seconds": .1,
+                "read_bytes": 0, "write_bytes": 0,
+            }),
+        ):
+            with self.assertRaises(training_process.StaleTrainingJob):
+                training_process.run_isolated_training_chunk(
+                    history, 1.0, 2.0, agent_ids={aid}
+                )
+
+        current = self.store.get_agent_config(aid)
+        self.assertEqual(current["input_entities"], ["sensor.changed"])
+        self.assertEqual(self.store.get_model(aid)["value"], "pre-worker")
+        rows = self.store.list_historical_experiences(aid)
+        self.assertEqual([row["target_history_id"] for row in rows], [1])
+        self.assertEqual(history.training_process_status["state"], "failed")
+
     def test_worker_mode_history_init_does_not_pause_parent_training_lifecycle(self):
         import history as history_module
 
