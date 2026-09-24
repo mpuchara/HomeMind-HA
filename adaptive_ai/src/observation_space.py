@@ -338,6 +338,11 @@ def observation_as_of(mask, state_map, temporal, at_ts, agent, *, home_provider=
         # Historical replay/Correct trackers own their exact as-of state, including
         # RoomBelief. Reposition before reading so future tracker state cannot leak.
         advance(at_ts)
+    # SQLiteTemporalTracker/HistoricalTemporalTracker expose the causal values through
+    # their state_map + TemporalHistory pair. Live callers may pass TemporalHistory
+    # directly, so normalize both forms here.
+    causal_state_map = getattr(temporal, "state_map", None) or state_map
+    causal_temporal = getattr(temporal, "history", None) or temporal
     dt = datetime.fromtimestamp(at_ts).astimezone()
     hour = dt.hour + dt.minute / 60.0 + dt.second / 3600.0
     dow = dt.weekday()
@@ -347,7 +352,11 @@ def observation_as_of(mask, state_map, temporal, at_ts, agent, *, home_provider=
         "time:dow_sin": math.sin(2 * math.pi * dow / 7.0),
         "time:dow_cos": math.cos(2 * math.pi * dow / 7.0),
     }
-    provider = home_provider or getattr(temporal, "home_context", None)
+    provider = (
+        home_provider
+        or getattr(causal_temporal, "home_context", None)
+        or getattr(temporal, "home_context", None)
+    )
     forecast = {}
     if provider is not None and callable(getattr(provider, "forecast", None)):
         forecast = provider.forecast(agent["target_entity"], at_ts) or {}
@@ -368,7 +377,9 @@ def observation_as_of(mask, state_map, temporal, at_ts, agent, *, home_provider=
         else:
             entity_id = row["entity_id"]
             if entity_id not in entity_cache:
-                snapshot, available = _entity_descriptor_snapshot(entity_id, state_map, temporal, at_ts, agent)
+                snapshot, available = _entity_descriptor_snapshot(
+                    entity_id, causal_state_map, causal_temporal, at_ts, agent
+                )
                 entity_cache[entity_id] = snapshot
                 entity_available[entity_id] = available
             value = float(entity_cache[entity_id].get(row["descriptor"], 0.0))
