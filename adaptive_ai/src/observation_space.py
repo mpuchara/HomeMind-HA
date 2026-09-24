@@ -288,7 +288,12 @@ def _state_at(entity_id, state_map, temporal, at_ts):
 
 def _scalar_at(entity_id, state_map, temporal, at_ts, agent):
     state = _state_at(entity_id, state_map, temporal, at_ts)
-    value = context_scalar(entity_id, state, agent) if state is not None else None
+    if state is None:
+        return None, None
+    raw_state = str(state.get("state") or "").strip().lower()
+    if raw_state in ("unavailable", "unknown", "none", ""):
+        return state, None
+    value = context_scalar(entity_id, state, agent)
     return state, value
 
 
