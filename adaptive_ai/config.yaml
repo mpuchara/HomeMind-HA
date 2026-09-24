@@ -1,5 +1,5 @@
 name: "Adaptive AI"
-version: "0.14.82"
+version: "0.14.83"
 slug: "adaptive_ai"
 description: >-
   History-first local reinforcement-learning policies for Home Assistant. Imports
@@ -102,6 +102,20 @@ options:
   tiny_mlp_shadow_enabled: true
   tiny_mlp_hidden_layers: "32,16"
   tiny_mlp_init_seed: 1482
+  tiny_mlp_supervised_training_enabled: true
+  tiny_mlp_train_min_samples: 24
+  tiny_mlp_train_max_samples: 4096
+  tiny_mlp_holdout_max_samples: 4096
+  tiny_mlp_train_max_epochs: 12
+  tiny_mlp_train_batch_size: 16
+  tiny_mlp_learning_rate: 0.012
+  tiny_mlp_l2: 0.0001
+  tiny_mlp_gradient_clip: 1.0
+  tiny_mlp_early_stop_patience: 3
+  tiny_mlp_early_stop_min_delta: 0.001
+  tiny_mlp_tournament_min_gain: 0.0
+  tiny_mlp_max_parameters: 50000
+  tiny_mlp_max_serialized_bytes: 524288
   training_process_isolation: true
   training_worker_nice: 10
   training_worker_memory_limit_mb: 520
