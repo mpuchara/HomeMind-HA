@@ -2144,12 +2144,17 @@ class HistoryManager(threading.Thread):
                 # timestamp once, oldest -> newest, so the onset cursor can stay
                 # incremental instead of anchor -> upstream -> early rewinds.
                 snapshots = {}
+                neural_snapshots = {}
                 for query_ts in sorted(query_times):
                     timeline.advance(query_ts)
                     features, _, meta = policy.features(
                         timeline.state_map, timeline.history, at_ts=query_ts
                     )
                     snapshots[query_ts] = (dict(features), dict(meta or {}))
+                    if neural_enabled:
+                        neural_snapshots[query_ts] = neural_observation(
+                            agent, timeline, query_ts
+                        )
 
                 anchor_features = snapshots[float(anchor_ts)][0]
                 features_by_horizon = {
@@ -2180,6 +2185,11 @@ class HistoryManager(threading.Thread):
                     "history_id": row["id"], "ts": float(row["ts"]), "anchor_ts": anchor_ts,
                     "upstream_anchor_ts": upstream_anchor_ts, "features_by_horizon": features_by_horizon,
                     "upstream_features_by_horizon": upstream_features_by_horizon,
+                    "neural_anchor_observation": neural_snapshots.get(float(anchor_ts)),
+                    "neural_upstream_observation": (
+                        neural_snapshots.get(float(upstream_anchor_ts))
+                        if upstream_anchor_ts is not None else None
+                    ),
                     "action_idx": action_idx, "action_value": actions[action_idx], "user_id": row.get("context_user_id"),
                 }
                 last_value[aid] = float(value)
