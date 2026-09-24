@@ -36,18 +36,6 @@ def _ensure_table(store):
         )
 
 
-def _flush_pending(engine):
-    teaching = getattr(engine, "teaching", None)
-    flush = getattr(teaching, "flush", None)
-    if callable(flush):
-        try:
-            flush()
-        except Exception:
-            # The chart is diagnostics.  A temporarily busy flush must not break it; any
-            # still-buffered rows are merged below when the standard Teaching buffer exists.
-            pass
-
-
 def _buffer_snapshot(engine, agent_id, end):
     teaching = getattr(engine, "teaching", None)
     buffer = getattr(teaching, "buffer", None)
@@ -75,8 +63,16 @@ def _buffer_snapshot(engine, agent_id, end):
 
 
 def _recorded_rows(store, engine, agent_id, start, end):
-    """Return one seed at/before start plus all recorded decisions inside the range."""
-    _flush_pending(engine)
+    """Read one seed plus the range without turning a chart GET into a writer.
+
+    Correct/Teach is a read path.  Do not force Teaching.flush() here: that can acquire the
+    shared Store writer mutex and make an interactive chart wait behind historical
+    training.  Instead take a bounded RAM snapshot before and after the SQLite read.  The
+    double snapshot closes the small race where a concurrent flush removes a row from the
+    deque after the SELECT snapshot was chosen; timestamp de-duplication below makes a row
+    present in both SQLite and RAM harmless.
+    """
+    buffered_before = _buffer_snapshot(engine, agent_id, end)
     with store.conn() as c:
         seed = c.execute(
             "SELECT ts,current,desired FROM decision_history "
@@ -93,8 +89,9 @@ def _recorded_rows(store, engine, agent_id, start, end):
         )
 
     # A freshly displayed card value can still be in Teaching's non-blocking write buffer.
-    # Merge it so opening Teach immediately after observing the card cannot lose the latest
-    # Desired merely because SQLite flush is a few milliseconds behind.
+    # Merge both bounded snapshots so opening Correct immediately after observing the card
+    # cannot lose the latest Desired merely because a background flush raced the SELECT.
+    rows.extend(buffered_before)
     rows.extend(_buffer_snapshot(engine, agent_id, end))
     by_ts = {}
     for row in rows:
@@ -111,24 +108,29 @@ def _recorded_rows(store, engine, agent_id, start, end):
     return ([before[-1]] if before else []) + inside
 
 
-def _desired_at(rows, timestamp):
+def _timestamps(rows):
+    """Build one immutable timestamp index for repeated as-of lookups."""
+    return tuple(float(row["ts"]) for row in (rows or []))
+
+
+def _desired_at(rows, timestamp, times=None):
     if not rows:
         return None
-    times = [r["ts"] for r in rows]
+    times = _timestamps(rows) if times is None else times
     idx = bisect_right(times, float(timestamp)) - 1
     if idx < 0:
         return None
     row = rows[idx]
-    if float(timestamp) - row["ts"] > DESIRED_STALE_SECONDS:
+    if float(timestamp) - float(row["ts"]) > DESIRED_STALE_SECONDS:
         return None
     value = row.get("desired")
     return None if value is None else float(value)
 
 
-def _current_at(points, timestamp):
+def _current_at(points, timestamp, times=None):
     if not points:
         return None
-    times = [float(p["ts"]) for p in points]
+    times = _timestamps(points) if times is None else times
     idx = bisect_right(times, float(timestamp)) - 1
     if idx < 0:
         return None
@@ -175,12 +177,14 @@ def install(store, engine, service):
         # sampling tick.
         times = {float(p["ts"]) for p in base_points}
         times.update(_event_times(rows, start_ts, end_ts))
+        current_times = _timestamps(base_points)
+        desired_times = _timestamps(rows)
         points = []
         for ts in sorted(t for t in times if start_ts <= t <= end_ts):
             points.append({
                 "ts": ts,
-                "current": _current_at(base_points, ts),
-                "desired": _desired_at(rows, ts),
+                "current": _current_at(base_points, ts, current_times),
+                "desired": _desired_at(rows, ts, desired_times),
             })
         base["points"] = points
         base["desired_source"] = "observed_runtime_decision_history"
