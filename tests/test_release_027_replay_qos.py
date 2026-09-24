@@ -65,7 +65,10 @@ class RealtimePreemptionTests(unittest.TestCase):
         self.assertLessEqual(total_sleep, .055)
         self.assertEqual(stats["interactive_preemptions"], 1)
         self.assertEqual(stats["interactive_priority_epochs"], 1)
-        self.assertGreater(stats["slice_checkpoints"], 0)
+        # Only 6.4 ms of useful work followed the strict 35 ms hand-off, so the
+        # ordinary 35 ms duty-cycle slice should not fire yet. This is exactly the
+        # micro-checkpoint case that previously multiplied interactive sleeps.
+        self.assertEqual(stats["slice_checkpoints"], 0)
         self.assertLess(stats["interactive_sleep_seconds"], .055)
 
     def test_realtime_extensions_do_not_create_new_priority_epochs(self):
