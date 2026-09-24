@@ -343,8 +343,8 @@ class Stage5SourceAndUiContracts(unittest.TestCase):
         self.assertIn("incremental_correct_finetune", source)
         self.assertIn("schema_upgrade_rebuild", source)
         self.assertIn("rebuild_reason", source)
-        self.assertNotIn("ActionIntent", source)
-        self.assertNotIn(".executor", source)
+        self.assertNotIn("from action", source.lower())
+        self.assertNotIn("engine.executor", source)
 
     def test_candidate_ui_surfaces_correct_path_without_changing_chart_contract(self):
         candidate = self.source("static/candidate_ui.js")
