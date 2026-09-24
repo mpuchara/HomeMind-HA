@@ -156,10 +156,13 @@ class NeutralTournamentTests(unittest.TestCase):
         self.assertGreater(result["gain"], 0)
 
     def test_equal_or_worse_mlp_keeps_ridge(self):
-        result = self.result(mlp={
-            "score": .75,
-            "per_action_accuracy": {"0": .7, "1": .8},
-        })
+        result = self.result(
+            threshold=.70,
+            mlp={
+                "score": .75,
+                "per_action_accuracy": {"0": .75, "1": .75},
+            },
+        )
         self.assertFalse(result["passed"])
         self.assertEqual(result["selected_backend"], "diagonal_linucb")
         self.assertEqual(result["reason"], "ridge_equal_or_better_on_identical_holdout")
