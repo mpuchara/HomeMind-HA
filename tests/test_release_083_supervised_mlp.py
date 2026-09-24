@@ -274,6 +274,8 @@ class CandidateNeuralShadowTests(unittest.TestCase):
             store=StoreStub(),
             status=lambda parent_id: {"candidate_id": "candidate-1"},
             list_status=lambda *a, **k: [{"candidate_id": "candidate-1"}],
+            promote=lambda parent_id, *a, **k: {"promoted": parent_id},
+            promote_custom=lambda parent_id, *a, **k: {"custom_promoted": parent_id},
             _row_by_candidate=lambda candidate_id: {
                 "candidate_id": candidate_id,
                 "offline_gate_json": json.dumps({"passed": offline_passed}),
@@ -297,6 +299,13 @@ class CandidateNeuralShadowTests(unittest.TestCase):
         status = manager.status("root")
         self.assertTrue(status["candidate_neural_shadow_active"])
         self.assertFalse(status["candidate_neural_physical_authority"])
+
+    def test_selected_neural_candidate_cannot_be_promoted_to_live_or_control(self):
+        manager, _calls = self.manager(offline_passed=True, selected=True)
+        with self.assertRaisesRegex(ValueError, "Shadow-only"):
+            manager.promote("candidate-1")
+        with self.assertRaisesRegex(ValueError, "Shadow-only"):
+            manager.promote_custom("candidate-1")
 
     def test_failed_offline_gate_or_ridge_tournament_keeps_existing_candidate_backend(self):
         blocked, calls = self.manager(offline_passed=False, selected=True)
