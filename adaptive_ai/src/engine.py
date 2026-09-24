@@ -1347,7 +1347,26 @@ class Engine(threading.Thread):
         selected_entities = list(policy.schema.entities) if policy else None
         with self.lock:
             states = dict(self.state_map)
+            registry = dict(self.entity_registry)
             target_state = self.state_map.get(agent["target_entity"])
+        if policy is not None and getattr(policy, "observation_mask", None) is None:
+            try:
+                hint_entities, _ = AUTOMATION_KNOWLEDGE.hints_for_target(
+                    agent["target_entity"]
+                )
+                policy.materialize_observation_mask(
+                    states,
+                    registry,
+                    hint_entities,
+                    relevance_scores=self.context_relevance.get(agent["id"]),
+                )
+            except Exception as exc:
+                policy.observation_diagnostics = {
+                    **dict(getattr(policy, "observation_diagnostics", {}) or {}),
+                    "status": "error",
+                    "error": f"{type(exc).__name__}: {exc}",
+                    "hot_path_active": False,
+                }
         recs, present = sensor_recommendations(agent, states, confidence, selected_entities)
         prediction_label = None
         if agent["target_property"] == "option_index" and rt.get("last_prediction") is not None:
@@ -1408,6 +1427,7 @@ class Engine(threading.Thread):
             "historical_experiences": int(agent.get("historical_count") or 0),
             "micro_exploration": experiment_status['config']['enabled'],
             "selected_context_entities": list(policy.schema.entities) if policy else [],
+            "observation_space": dict(getattr(policy, "observation_diagnostics", {}) or {}) if policy else {},
             "prediction_horizons": list(policy.horizons) if policy else parse_horizons(agent),
             "training_state": agent.get("training_state") or "training",
             "benchmark_score": agent.get("benchmark_score"),

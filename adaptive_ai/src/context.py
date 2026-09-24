@@ -574,7 +574,7 @@ def controllable_context_exclusions(state_map, registry):
         "esphome_sensor_sibling_overrides": rescued_esphome_sensors,
     }
 
-def select_context_entities(agent, state_map, registry, hint_entities, max_entities=None, relevance_scores=None):
+def select_context_entities(agent, state_map, registry, hint_entities, max_entities=None, relevance_scores=None, reference_ts=None):
     """Select a compact model from the broad all-entity candidate universe.
 
     v0.7.12 screens every parseable HA entity except controllable-device inputs and
@@ -652,7 +652,8 @@ def select_context_entities(agent, state_map, registry, hint_entities, max_entit
             score += min(420 if fast else 220, (100 if fast else 55) * len(overlap)); reasons.append("semantic")
         changed = parse_ts((st or {}).get("last_changed"))
         if changed:
-            age = max(0.0, now_ts() - changed)
+            selection_now = now_ts() if reference_ts is None else float(reference_ts)
+            age = max(0.0, selection_now - changed)
             score += 80.0 * math.exp(-age / 21600.0)
         ranked.append((score, eid, reasons, loc))
     ranked.sort(key=lambda x: (-x[0], x[1]))
@@ -725,6 +726,17 @@ def select_context_entities(agent, state_map, registry, hint_entities, max_entit
                 break
     selected_set = set(selected)
     rationale = {eid: reasons for _, eid, reasons, _ in ranked if eid in selected_set}
+    selection_scores = {
+        eid: round(float(score), 6)
+        for score, eid, _, _ in ranked
+        if eid in selected_set
+    }
+    selection_rank = {
+        eid: rank + 1
+        for rank, (_, eid, _, _) in enumerate(
+            [row for row in ranked if row[1] in selected_set]
+        )
+    }
     primary_local = [eid for _, eid, _, loc in ranked if eid in selected_set and loc["local"] and loc["occupancy"]]
     occupancy_selected = [x for x in ranked if x[1] in selected_set and x[3]["occupancy"]]
     occupancy_selected.sort(key=lambda x: (
@@ -751,6 +763,8 @@ def select_context_entities(agent, state_map, registry, hint_entities, max_entit
     return selected, {
         "considered_entities": considered, "selected_entities": len(selected),
         "selection_reasons": rationale,
+        "selection_scores": selection_scores,
+        "selection_rank": selection_rank,
         "primary_local_sensors": primary_local[:4],
         "primary_local_sensor": primary_local[0] if primary_local else None,
         "primary_occupancy_sensor": primary_occupancy,
