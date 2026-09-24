@@ -345,7 +345,9 @@ def incremental_correct_finetune(
         "parent_model_revision": str(parent.model_revision),
         "candidate_model_revision": str(child.model_revision),
         "parent_model_checksum": parent.serialize().get("model_checksum"),
-        "candidate_model_checksum": child.serialize().get("model_checksum"),
+        # Final child checksum is intentionally added by the lifecycle after this
+        # report is embedded in training_meta. Serializing it here would checksum a
+        # pre-report payload and expose a stale identity in diagnostics.
         "rollback_semantics": "parent_immutable_child_rejected_on_failed_gate",
         "online_reward_updates": False,
         "physical_authority": False,
