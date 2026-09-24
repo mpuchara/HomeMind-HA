@@ -16,7 +16,11 @@ from policy_tiny_mlp_training import (
     train_supervised,
 )
 from storage import Store
-from tiny_mlp_shadow import load_training_record, publish_training_artifact
+from tiny_mlp_shadow import (
+    load_training_record,
+    publish_training_artifact,
+    restore_training_record,
+)
 
 
 FEATURE_IDS = ("feature:x", "feature:bias")
@@ -224,6 +228,36 @@ class TrainingArtifactPersistenceTests(unittest.TestCase):
             self.assertEqual(record["selected_backend"], "tiny_mlp")
             self.assertEqual(record["tournament"]["mlp_score"], .9)
             self.assertIsNone(store.get_model(agent["id"]))
+
+
+    def test_training_record_restore_reverts_or_deletes_new_artifact(self):
+        with tempfile.TemporaryDirectory(prefix="hm-stage4-restore-") as root:
+            store = Store(Path(root) / "stage4.db")
+            model = backend()
+            train_supervised(model, classification_rows(), max_epochs=6, learning_rate=.03)
+            mask = ObservationMask(
+                schema_id=observation_schema_id(),
+                mask_version=1,
+                feature_ids=FEATURE_IDS,
+                features=tuple({"id": fid} for fid in FEATURE_IDS),
+                selected_entities=(),
+                global_feature_count=2,
+                missing_feature_count=0,
+            )
+            model.mask_id = mask.mask_id
+            artifact = build_training_artifact(
+                agent={"id": "candidate-rollback"},
+                policy=SimpleNamespace(tournament_revision="ridge-r1", model_revision="m1"),
+                mask=mask,
+                backend=model,
+                trainer={"trained": True},
+                tournament={"passed": True, "selected_backend": "tiny_mlp"},
+            )
+            self.assertIsNone(load_training_record(store, "candidate-rollback"))
+            publish_training_artifact(store, artifact)
+            self.assertIsNotNone(load_training_record(store, "candidate-rollback"))
+            restore_training_record(store, "candidate-rollback", None)
+            self.assertIsNone(load_training_record(store, "candidate-rollback"))
 
 
 class CandidateNeuralShadowTests(unittest.TestCase):
