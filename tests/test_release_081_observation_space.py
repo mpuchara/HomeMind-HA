@@ -107,7 +107,9 @@ class ObservationSpaceCatalogTests(unittest.TestCase):
 
         self.assertEqual(first.mask_id, second.mask_id)
         self.assertEqual(first.feature_ids, second.feature_ids)
-        self.assertEqual(first_diag["selected_feature_count"], 95)
+        # Fast reactive targets intentionally keep at most eight context entities:
+        # 11 global/home features + 8 * 6 entity descriptors = 59.
+        self.assertEqual(first_diag["selected_feature_count"], 59)
         self.assertLessEqual(first_diag["selected_feature_count"], 128)
         self.assertGreaterEqual(first_diag["selected_feature_count"], 32)
         self.assertEqual(first_diag["schema_id"], observation_schema_id())
