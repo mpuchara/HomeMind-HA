@@ -77,6 +77,29 @@ def ensure_tables(store):
 
 
 
+def load_training_record(store, agent_id):
+    ensure_tables(store)
+    with store.conn() as c:
+        row = c.execute(
+            """
+            SELECT model_json,mask_json,source_policy_revision,
+                   training_json,tournament_json,selected_backend
+            FROM tiny_mlp_shadow_models WHERE agent_id=?
+            """,
+            (str(agent_id),),
+        ).fetchone()
+    if not row:
+        return None
+    return {
+        "model": json.loads(row[0]) if row[0] else None,
+        "mask": json.loads(row[1]) if row[1] else None,
+        "source_policy_revision": str(row[2] or "unknown"),
+        "training": json.loads(row[3]) if row[3] else {},
+        "tournament": json.loads(row[4]) if row[4] else {},
+        "selected_backend": str(row[5] or "diagonal_linucb"),
+    }
+
+
 def publish_training_artifact(store, artifact):
     """Persist a verified offline-training artifact after parent stale-job checks."""
     if not isinstance(artifact, dict) or artifact.get("format") != "homemind-tiny-mlp-training-artifact":
@@ -196,25 +219,7 @@ class TinyMLPShadowService:
         ) & 0x7FFFFFFFFFFFFFFF
 
     def _load_record(self, agent_id):
-        with self.store.conn() as c:
-            row = c.execute(
-                """
-                SELECT model_json,mask_json,source_policy_revision,
-                       training_json,tournament_json,selected_backend
-                FROM tiny_mlp_shadow_models WHERE agent_id=?
-                """,
-                (str(agent_id),),
-            ).fetchone()
-        if not row:
-            return None
-        return {
-            "model": json.loads(row[0]) if row[0] else None,
-            "mask": json.loads(row[1]) if row[1] else None,
-            "source_policy_revision": str(row[2] or "unknown"),
-            "training": json.loads(row[3]) if row[3] else {},
-            "tournament": json.loads(row[4]) if row[4] else {},
-            "selected_backend": str(row[5] or "diagonal_linucb"),
-        }
+        return load_training_record(self.store, agent_id)
 
     def _persist(self, agent_id, backend, mask, source_policy_revision):
         raw = backend.serialize()
