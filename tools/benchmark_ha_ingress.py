@@ -11,13 +11,21 @@ from __future__ import annotations
 import argparse
 from datetime import datetime, timezone
 import json
+import os
 from pathlib import Path
 import sys
+import tempfile
 import threading
 import time
 from types import SimpleNamespace
 
 ROOT = Path(__file__).resolve().parents[1]
+# Standalone CI/local runs do not have the Home Assistant add-on /data mount. Set an
+# isolated data directory before importing settings/storage/engine.
+os.environ.setdefault(
+    "ADAPTIVE_AI_DATA",
+    tempfile.mkdtemp(prefix="homemind-ha-ingress-benchmark-"),
+)
 SRC = ROOT / "adaptive_ai" / "src"
 TESTS = ROOT / "tests"
 for path in (str(SRC), str(TESTS)):
