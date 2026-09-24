@@ -43,7 +43,11 @@ STATE_METADATA_KEYS = (
 
 
 class StaleTrainingJob(RuntimeError):
-    pass
+    preserve_training_state = True
+
+    def __init__(self, message, *, preserve_lifecycle=True):
+        super().__init__(message)
+        self.preserve_lifecycle = bool(preserve_lifecycle)
 
 
 def _canonical(value):
@@ -87,6 +91,26 @@ def runtime_context_fingerprint(state_map, registry, options):
 def descriptor_checksum(payload):
     clean = {k: v for k, v in dict(payload or {}).items() if k != "checksum"}
     return _digest(clean)
+
+
+def _process_start_token(pid):
+    """Return Linux process start ticks when available, otherwise None."""
+    try:
+        fields = Path(f"/proc/{int(pid)}/stat").read_text(encoding="utf-8").split()
+        return str(fields[21])
+    except (OSError, ValueError, IndexError):
+        return None
+
+
+def _same_process_alive(pid, start_token=None):
+    try:
+        os.kill(int(pid), 0)
+    except (OSError, ValueError):
+        return False
+    if start_token is None:
+        return True
+    current = _process_start_token(pid)
+    return current is not None and str(current) == str(start_token)
 
 
 def _atomic_json(path, payload):
@@ -198,6 +222,8 @@ def _build_job(history, start_ts, end_ts, kwargs):
         "app_version": APP_VERSION,
         "training_revision": TRAINING_REVISION,
         "created_at": now_ts(),
+        "parent_pid": os.getpid(),
+        "parent_start_token": _process_start_token(os.getpid()),
         "agent_id": agent_id,
         "agent_fingerprint": agent_config_fingerprint(agent),
         "context_fingerprint": runtime_context_fingerprint(
@@ -258,12 +284,19 @@ def _terminate(process, grace_seconds=2.0):
             pass
 
 
-def _restore_rejected_chunk(store, agent_id, agent_before, model_before):
-    restore = getattr(store, "restore_training_chunk_snapshot", None)
-    if callable(restore):
-        restore(agent_id, agent_before, model_before)
-    else:
+def _restore_rejected_chunk(
+    store, agent_id, agent_before, model_before, *, preserve_lifecycle=False
+):
+    if preserve_lifecycle:
+        # A concurrent configuration edit is authoritative. Restore only the model
+        # checkpoint and its experience watermark; keep the newer needs_retrain/lifecycle.
         store.restore_model_snapshot(agent_id, model_before)
+    else:
+        restore = getattr(store, "restore_training_chunk_snapshot", None)
+        if callable(restore):
+            restore(agent_id, agent_before, model_before)
+        else:
+            store.restore_model_snapshot(agent_id, model_before)
     store.discard_uncommitted_experiences(agent_id)
     store.touch_agent_index()
 
@@ -372,6 +405,12 @@ def run_isolated_training_chunk(history, start_ts, end_ts, **kwargs):
             )
         if return_code != 0 or not isinstance(result, dict) or not result.get("ok"):
             detail = (result or {}).get("error") if isinstance(result, dict) else None
+            error_type = (result or {}).get("error_type") if isinstance(result, dict) else None
+            if error_type == "StaleTrainingJob":
+                raise StaleTrainingJob(
+                    detail or "isolated worker rejected stale training job",
+                    preserve_lifecycle=True,
+                )
             raise RuntimeError(
                 detail or f"isolated training worker exited with code {return_code}"
             )
@@ -381,7 +420,8 @@ def run_isolated_training_chunk(history, start_ts, end_ts, **kwargs):
         current_agent = STORE.get_agent_config(agent_id)
         if agent_config_fingerprint(current_agent) != job["agent_fingerprint"]:
             raise StaleTrainingJob(
-                "agent configuration changed while isolated training was running"
+                "agent configuration changed while isolated training was running",
+                preserve_lifecycle=True,
             )
         current_state, current_registry, _ = _snapshot_parent_context(history, agent_id)
         current_context = runtime_context_fingerprint(
@@ -389,7 +429,8 @@ def run_isolated_training_chunk(history, start_ts, end_ts, **kwargs):
         )
         if current_context != job["context_fingerprint"]:
             raise StaleTrainingJob(
-                "runtime topology/options changed while isolated training was running"
+                "runtime topology/options changed while isolated training was running",
+                preserve_lifecycle=False,
             )
 
         # Child writes are durable, but all parent runtime caches are process-local.
@@ -425,9 +466,12 @@ def run_isolated_training_chunk(history, start_ts, end_ts, **kwargs):
             "worker_budget": result.get("training_budget"),
         }
         return int(result.get("return_value") or 0)
-    except Exception:
+    except Exception as exc:
         _restore_rejected_chunk(
-            STORE, agent_id, agent_before, model_before
+            STORE, agent_id, agent_before, model_before,
+            preserve_lifecycle=bool(
+                isinstance(exc, StaleTrainingJob) and exc.preserve_lifecycle
+            ),
         )
         history.engine.models.pop(agent_id, None)
         history.engine.agent_index_at = 0.0
@@ -554,6 +598,22 @@ def worker_main(job_path):
     history = HistoryManager(engine, worker_mode=True)
     engine.history_manager = history
     aid = str(job["agent_id"])
+
+    parent_pid = int(job.get("parent_pid") or 0)
+    parent_start_token = job.get("parent_start_token")
+
+    def parent_watchdog():
+        while not history.stop_event.wait(0.50):
+            if not _same_process_alive(parent_pid, parent_start_token):
+                history.stop_event.set()
+                return
+
+    if parent_pid > 0:
+        threading.Thread(
+            target=parent_watchdog,
+            name="adaptive-ai-training-parent-watchdog",
+            daemon=True,
+        ).start()
     history.agent_jobs.add(aid)
     if isinstance(job.get("schema_cache_item"), dict) and job["schema_cache_item"]:
         history.training_schema_cache[aid] = dict(job["schema_cache_item"])
@@ -564,6 +624,13 @@ def worker_main(job_path):
     def publication_guard(agent_id, _model):
         if str(agent_id) != aid:
             raise StaleTrainingJob("worker attempted to publish unexpected agent")
+        if parent_pid > 0 and not _same_process_alive(
+            parent_pid, parent_start_token
+        ):
+            raise StaleTrainingJob(
+                "realtime parent process disappeared before model publication",
+                preserve_lifecycle=False,
+            )
         current = STORE.get_agent_config(agent_id)
         if agent_config_fingerprint(current) != expected_agent:
             raise StaleTrainingJob(
@@ -610,6 +677,7 @@ def worker_main(job_path):
     except Exception as exc:
         result.update({
             "error": f"{type(exc).__name__}: {exc}",
+            "error_type": type(exc).__name__,
             "trace": traceback.format_exc(limit=12),
             "training_budget": TRAINING_BUDGET.snapshot(),
             "elapsed_seconds": round(time.monotonic() - started, 3),
