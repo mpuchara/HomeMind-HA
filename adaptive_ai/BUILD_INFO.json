@@ -4,7 +4,7 @@
   "base_version": "0.14.79",
   "base_commit": "8dff859b8dcf35b1ddc72abc48d7f522ed3fbc9e",
   "release_status": "release-0.14.80-isolated-training-process",
-  "tests_passed": 1188,
+  "tests_passed": 1189,
   "profile": "rpi4-low-memory-complete-discovery-manual-agent-selection",
   "manual_agent_training": true,
   "max_concurrent_training_jobs": 1,
@@ -317,5 +317,7 @@
   "training_process_observability_080": "History status exposes worker PID/state/wall time/peak RSS/CPU seconds/read+write bytes and child cooperative-budget diagnostics. Packaged pi_training_profile.py collects repeatable idle/training/Correct/training+Correct/steady-events/burst traces.",
   "training_process_cpu_semantics_080": "Pi profiler reports one_core_percent = CPU_seconds/wall_seconds*100 and host_percent = one_core_percent/logical_cpu_count, avoiding ambiguous CPU-percent normalization.",
   "training_process_validation_scope_080": "CI includes a real clean-subprocess historical replay smoke plus cancellation rollback, stale-config rejection, worker-mode restart lifecycle, publication guard and checkpointed archive read parity. Real Raspberry Pi 4 latency/CPU/RSS/I/O measurements remain a device test, not a GitHub-runner claim.",
-  "training_process_safety_080": "Training remains offline-only and does not grant physical authority. Existing Shadow/Control qualification, Correct/Candidate lineage, reward/order semantics and HA service dispatch are unchanged."
+  "training_process_safety_080": "Training remains offline-only and does not grant physical authority. Existing Shadow/Control qualification, Correct/Candidate lineage, reward/order semantics and HA service dispatch are unchanged.",
+  "training_process_parent_crash_080": "Job descriptor records parent PID plus Linux process start token when available. Worker watchdog stops replay after parent loss and publication guard rejects model writes if the originating realtime parent no longer exists.",
+  "training_process_stale_config_080": "If agent training configuration changes during a worker job, parent restores the previous model/watermark, discards new experiences and forces the newer configuration to needs_retrain/paused; stale benchmark/qualification cannot survive."
 }
