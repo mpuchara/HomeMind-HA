@@ -1621,6 +1621,109 @@ class HistoryManager(threading.Thread):
                 "origin_counts": {str(k): int(v or 0) for k, v in (prior.get("origin_counts") or {}).items()},
             }
 
+        # Stage 4 trains a tiny supervised challenger beside the established Ridge model.
+        # It is deliberately tied to explicit benchmarked historical training only:
+        # no periodic reward update, no live feedback mutation, no Control authority.
+        neural_enabled = bool(
+            benchmark and OPTIONS.get("tiny_mlp_supervised_training_enabled", True)
+        )
+        neural_masks = {}
+        neural_backends = {}
+        neural_train_samples = {}
+        neural_holdout_samples = {}
+        neural_chunk_benchmark = {}
+        if neural_enabled:
+            import hashlib
+            from observation_space import ObservationMask, select_observation_mask
+            from policy_tiny_mlp import TinyMLPBackend
+            from tiny_mlp_shadow import load_training_record
+
+            registry_snapshot = self.engine.context.resolved_registry()
+            train_cap = max(
+                64, int(OPTIONS.get("tiny_mlp_train_max_samples", 4096) or 4096)
+            )
+            holdout_cap = max(
+                64, int(OPTIONS.get("tiny_mlp_holdout_max_samples", 4096) or 4096)
+            )
+            hidden = tuple(
+                int(x.strip()) for x in str(
+                    OPTIONS.get("tiny_mlp_hidden_layers", "32,16")
+                ).split(",") if x.strip()
+            )
+            base_seed = int(OPTIONS.get("tiny_mlp_init_seed", 1482) or 1482)
+            for a in agents:
+                aid = str(a["id"])
+                policy = policies[aid]
+                source_revision = str(
+                    getattr(policy, "tournament_revision", None)
+                    or getattr(policy, "model_revision", None)
+                    or "unknown"
+                )
+                record = load_training_record(STORE, aid)
+                mask = None
+                if (
+                    record
+                    and record.get("mask")
+                    and record.get("source_policy_revision") == source_revision
+                ):
+                    try:
+                        mask = ObservationMask.from_export(record["mask"])
+                    except Exception:
+                        mask = None
+                if mask is None:
+                    mask, _diag = select_observation_mask(
+                        a,
+                        self.engine.state_map,
+                        registry_snapshot,
+                        list(getattr(policy.schema, "entities", ()) or ()),
+                        relevance_scores=dict(
+                            self.engine.context_relevance.get(aid) or {}
+                        ),
+                    )
+                backend = None
+                if (
+                    record
+                    and record.get("model")
+                    and record.get("source_policy_revision") == source_revision
+                ):
+                    try:
+                        backend = TinyMLPBackend.deserialize(
+                            record["model"],
+                            expected_schema_id=mask.schema_id,
+                            expected_mask_id=mask.mask_id,
+                            expected_feature_ids=mask.feature_ids,
+                            expected_actions=policy.actions,
+                            expected_horizons=policy.horizons,
+                        )
+                        if tuple(backend.hidden) != tuple(hidden):
+                            backend = None
+                    except Exception:
+                        backend = None
+                if backend is None:
+                    seed_material = (
+                        f"{base_seed}|{aid}|{mask.schema_id}|{mask.mask_id}"
+                    ).encode("utf-8")
+                    seed = int.from_bytes(
+                        hashlib.sha256(seed_material).digest()[:8], "big"
+                    ) & 0x7FFFFFFFFFFFFFFF
+                    backend = TinyMLPBackend(
+                        actions=policy.actions,
+                        horizons=policy.horizons,
+                        feature_ids=mask.feature_ids,
+                        schema_id=mask.schema_id,
+                        mask_id=mask.mask_id,
+                        hidden=hidden,
+                        init_seed=seed,
+                    )
+                neural_masks[aid] = mask
+                neural_backends[aid] = backend
+                neural_train_samples[aid] = deque(maxlen=train_cap)
+                neural_holdout_samples[aid] = deque(maxlen=holdout_cap)
+                neural_chunk_benchmark[aid] = {
+                    "samples": 0,
+                    "correct": 0,
+                    "per_action": {},
+                }
 
         # Historical features are reconstructed causally as-of each requested timestamp.
         # 0.14.25 keeps two bounded incremental cursor roles (onset/anticipation and dwell
