@@ -1,3 +1,14 @@
+# 0.14.76 — 2026-09-24
+
+- Remove the quadratic Live Correct chart lookup path. Observed Desired and physical Current are now merged in one forward pass over the already ordered streams instead of rebuilding complete timestamp lists for every rendered point.
+- Preserve the exact Correct evidence contract: recorded runtime Desired only, physical Current from entity history, direct-parent Candidate comparison, pre-range seed behavior, duplicate timestamp resolution, `None` values and the existing 95-second stale-gap boundary.
+- Make ordinary Correct/Teach history reads read-only. They no longer force `Teaching.flush()` and Live Correct no longer executes schema DDL while serving a chart or point request.
+- Merge persisted `decision_history` rows with bounded RAM snapshots taken before and after the SQLite SELECT so a concurrent background flush cannot make a freshly observed Desired disappear from the interactive chart.
+- Pre-index repeated Teach observed-history as-of lookups as well, keeping the older Teach/point inspector semantics unchanged.
+- Add deterministic 1k/2k/4k/8k scaling coverage. CI gates exact old/new output parity plus linear optimized work growth; wall-clock speedup and chart JSON size are reported but are not brittle pass/fail thresholds.
+- Add regressions proving Correct reads complete while the shared Python Store writer mutex is held and that interactive reads never invoke `Teaching.flush()`.
+- No policy, reward, model, Candidate lineage, ActionIntent, Executor or physical-control semantics change.
+
 # 0.14.75 — 2026-09-24
 
 - Lock the current chart-based **Correct** and Candidate direct-parent behavior as permanent Stage-1 regression contracts; no Correct UX, reward, promotion, ActionIntent or Executor semantics are changed.

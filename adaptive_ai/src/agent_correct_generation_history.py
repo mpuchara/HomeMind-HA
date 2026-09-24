@@ -11,7 +11,7 @@ from urllib.parse import parse_qs, unquote, urlsplit
 from agent_candidate_lineage import _row as lineage_row
 from agent_workflow_actions import _resolve_generation
 from context import archived_state, target_value
-from teach_observed_history import DESIRED_STALE_SECONDS, _desired_at, _recorded_rows, _ensure_table
+from teach_observed_history import DESIRED_STALE_SECONDS, _desired_at, _recorded_rows, _timestamps
 from training_budget import TRAINING_BUDGET
 from teaching_rl import fingerprint as rl_fingerprint
 
@@ -92,44 +92,88 @@ def _current_rows(manager, agent, start, end):
     return out
 
 
-def _current_at(rows, timestamp):
+def _current_at(rows, timestamp, times=None):
     if not rows:
         return None
-    times = [float(row["ts"]) for row in rows]
+    times = _timestamps(rows) if times is None else times
     idx = bisect_right(times, float(timestamp)) - 1
     return None if idx < 0 else rows[idx].get("current")
 
 
-def _live_observed_history(manager, generation, agent, start, end):
-    """Build Correct history from two narrow indexed streams, with zero policy replay."""
-    _ensure_table(manager.store)
-    decisions = _recorded_rows(
-        manager.store, manager.engine, agent["id"], float(start), float(end)
-    )
-    currents = _current_rows(manager, agent, start, end)
+def _live_observed_points(decisions, currents, start, end, *, stats=None):
+    """Merge observed Desired and Current streams in one forward pass.
 
-    times = {float(start), float(end)}
+    The pre-0.14.76 implementation rebuilt every stream's full timestamp list for every
+    output point.  With D Desired rows, C Current rows and P chart points that created
+    O(P*(D+C)) Python work.  Both input streams are already ordered, so advance one cursor
+    per stream while walking the single sorted chart timeline instead.
+    """
+    start = float(start)
+    end = float(end)
+    times = {start, end}
     times.update(float(row["ts"]) for row in decisions)
     times.update(float(row["ts"]) for row in currents)
     for row in decisions:
         cutoff = float(row["ts"]) + float(DESIRED_STALE_SECONDS) + 1e-4
-        if float(start) <= cutoff <= float(end):
+        if start <= cutoff <= end:
             times.add(cutoff)
+    timeline = sorted(times)
 
+    desired_times = _timestamps(decisions)
+    current_times = _timestamps(currents)
+    desired_index = -1
+    current_index = -1
+    desired_advances = 0
+    current_advances = 0
     points = []
     gaps = []
     gap_start = None
-    for ts in sorted(times):
-        desired = _desired_at(decisions, ts)
-        current = _current_at(currents, ts)
+
+    for ts in timeline:
+        while desired_index + 1 < len(desired_times) and desired_times[desired_index + 1] <= ts:
+            desired_index += 1
+            desired_advances += 1
+        desired = None
+        if desired_index >= 0:
+            row = decisions[desired_index]
+            if ts - float(row["ts"]) <= DESIRED_STALE_SECONDS:
+                value = row.get("desired")
+                desired = None if value is None else float(value)
+
+        while current_index + 1 < len(current_times) and current_times[current_index + 1] <= ts:
+            current_index += 1
+            current_advances += 1
+        current = None if current_index < 0 else currents[current_index].get("current")
+
         points.append({"ts": ts, "current": current, "desired": desired})
         if desired is None and gap_start is None:
             gap_start = ts
         elif desired is not None and gap_start is not None:
             gaps.append({"start": gap_start, "end": ts})
             gap_start = None
+
     if gap_start is not None:
-        gaps.append({"start": gap_start, "end": float(end)})
+        gaps.append({"start": gap_start, "end": end})
+
+    if stats is not None:
+        stats.update({
+            "decision_rows": len(decisions),
+            "current_rows": len(currents),
+            "timeline_points": len(timeline),
+            "decision_advances": desired_advances,
+            "current_advances": current_advances,
+            "lookup_work": len(timeline) + desired_advances + current_advances,
+        })
+    return points, gaps
+
+
+def _live_observed_history(manager, generation, agent, start, end):
+    """Build Correct history from two narrow indexed streams, with zero policy replay."""
+    decisions = _recorded_rows(
+        manager.store, manager.engine, agent["id"], float(start), float(end)
+    )
+    currents = _current_rows(manager, agent, start, end)
+    points, gaps = _live_observed_points(decisions, currents, start, end)
 
     return {
         "points": points,
@@ -147,7 +191,6 @@ def _observed_generation_at(manager, generation, timestamp):
         if row:
             return dict(row)
     if generation.get("generation_type") == "live":
-        _ensure_table(manager.store)
         rows = _recorded_rows(
             manager.store, manager.engine, generation["agent_id"],
             float(timestamp), float(timestamp),
