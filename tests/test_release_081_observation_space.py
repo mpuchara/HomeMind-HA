@@ -291,6 +291,10 @@ class RidgeIsolationTests(unittest.TestCase):
             registry,
             [motion],
         )
+        self.assertEqual(p.diagnostics()["observation_space"]["status"], "not_materialized")
+        p.materialize_observation_mask(
+            states, registry, [motion], relevance_scores={motion: .9}
+        )
         diag = p.diagnostics()["observation_space"]
         self.assertEqual(diag["schema_id"], observation_schema_id())
         self.assertTrue(diag["mask_id"])
