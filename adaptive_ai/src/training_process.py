@@ -610,7 +610,7 @@ def worker_main(job_path):
         _atomic_json(job["result_path"], result)
         return 2
     finally:
-        budget.end(thread_name="adaptive-ai-index-process")
+        budget.end()
 
 
 def main():
