@@ -463,6 +463,35 @@ def run_isolated_training_chunk(history, start_ts, end_ts, **kwargs):
         schema_item = result.get("schema_cache_item")
         if isinstance(schema_item, dict) and schema_item:
             history.training_schema_cache[agent_id] = schema_item
+
+        neural_artifacts = dict(result.get("neural_training_artifacts") or {})
+        history.neural_training_artifacts = neural_artifacts
+        if neural_artifacts:
+            from tiny_mlp_shadow import publish_training_artifact
+            service = getattr(history.engine, "tiny_mlp_shadow", None)
+            for neural_agent_id, artifact in neural_artifacts.items():
+                try:
+                    published = publish_training_artifact(STORE, artifact)
+                    if service is not None and callable(getattr(service, "invalidate", None)):
+                        service.invalidate(neural_agent_id)
+                    STORE.event(
+                        neural_agent_id, "info", "tiny_mlp_supervised_tournament",
+                        "Offline supervised Tiny MLP tournament completed; physical authority unchanged",
+                        {
+                            "selected_backend": published.get("selected_backend"),
+                            "trained": published.get("trained"),
+                            "tournament": artifact.get("tournament"),
+                            "trainer": artifact.get("trainer"),
+                            "shadow_only": True,
+                            "physical_authority": False,
+                        },
+                    )
+                except Exception as exc:
+                    STORE.event(
+                        neural_agent_id, "warning", "tiny_mlp_supervised_publish_failed",
+                        "Ridge training completed but the optional Tiny MLP Shadow artifact was not published",
+                        {"error": f"{type(exc).__name__}: {exc}", "physical_authority": False},
+                    )
         STORE.touch_agent_index()
         history.engine.agent_index_at = 0.0
         history.engine.agent_index_revision = -1
@@ -683,6 +712,9 @@ def worker_main(job_path):
             ),
             "schema_cache_item": dict(
                 history.training_schema_cache.get(aid) or {}
+            ),
+            "neural_training_artifacts": dict(
+                history.neural_training_artifacts or {}
             ),
             "training_budget": TRAINING_BUDGET.snapshot(),
             "elapsed_seconds": round(time.monotonic() - started, 3),
