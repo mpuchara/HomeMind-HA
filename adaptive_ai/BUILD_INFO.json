@@ -1,10 +1,10 @@
 {
-  "version": "0.14.74",
-  "release_date": "2026-09-23",
-  "base_version": "0.14.73",
-  "base_commit": "d90c34bb60264ffc499541cc07275e71462393c6",
-  "release_status": "release-0.14.74-runtime-debug-ui-visible",
-  "tests_passed": 1141,
+  "version": "0.14.75",
+  "release_date": "2026-09-24",
+  "base_version": "0.14.74",
+  "base_commit": "32e9848bf999bd646e1c25d9853fb796f77363b4",
+  "release_status": "release-0.14.75-policy-backend-foundation",
+  "tests_passed": 1150,
   "profile": "rpi4-low-memory-complete-discovery-manual-agent-selection",
   "manual_agent_training": true,
   "max_concurrent_training_jobs": 1,
@@ -40,7 +40,7 @@
   "migration": "no destructive migration; existing agents, models, feedback, raw archive, historical experiences, candidate lineage, rollback and generation state preserved",
   "physical_control": "unchanged; repaired agents return to Shadow and Control still requires qualified state plus all existing guards",
   "pi4": "0.14.38 targets the long-soak Raspberry Pi failure: drift analysis is coalesced on a throttled background observer, REST /states reconciliation is delta-only after bootstrap, websocket outage fallback reconciles every 10 s, and HA core-state health is tracked separately from unrelated REST errors.",
-  "ci_status": "0.14.74 validation pending.",
+  "ci_status": "0.14.75 validation pending.",
   "training_slice_budget": "adaptive-ai-index workers call a shared CooperativeTrainingBudget; expensive temporal tracker loops yield between entities/events and finalization is no longer outside the throttle",
   "finalization_lifeline": "HEAVY_JOBS remains owned through final gc.collect(), so /api/status and /api/agents stay on lightweight lifeline reads until the worker is actually finished",
   "finalization_progress": "post-replay UI now exposes bounded stages: replay complete, policy serialization, benchmark save, qualification, checkpoint complete",
@@ -265,5 +265,10 @@
   "training_persistence_batch_rows": 128,
   "training_replay_ram_cache_rows": 16384,
   "training_recorder_reuse": "Successful per-entity Recorder coverage is cached in RAM for the process lifetime; repeated Rebuilds skip identical history and fetch only a 30-minute overlap plus new tail. Any skipped Recorder slice prevents coverage from being cached.",
-  "runtime_debug_ui": "Runtime debug diagnostics UI asset is explicitly served by the base HTTP handler and runtime_debug state is included in the hot /api/status payload."
+  "runtime_debug_ui": "Runtime debug diagnostics UI asset is explicitly served by the base HTTP handler and runtime_debug state is included in the hot /api/status payload.",
+  "stage1_policy_backend_contract": "Common model envelope records policy_backend, backend_version, model_format_version, feature_schema_id, feature_mask_id and a stable model_checksum while preserving backend-specific payloads.",
+  "stage1_backend_compatibility": "Persisted models without policy_backend remain diagonal_linucb; explicit unknown or not-yet-implemented backends are rejected rather than silently reinterpreted.",
+  "stage1_tiny_mlp": "tiny_mlp is a reserved non-active capability descriptor only; no neural runtime/training/control path exists in 0.14.75.",
+  "stage1_correct_regression_gate": "Existing Agent/Candidate chart-based Correct, direct-parent lineage and discarded-candidate protections remain authoritative and run in the full regression suite.",
+  "stage1_backend_benchmark": "Diagnostics-only benchmark harness reports inference p50/p95/p99, bounded update cost, serialized/deep model size, 20/50-agent memory projections, serialization/deserialization and projected event-to-intent inference overhead."
 }
