@@ -1,3 +1,17 @@
+# 0.14.82 — 2026-09-24
+
+- Continue the Tiny Neural Policy / Correct / Offline-RL master plan with **Stage 3: real tiny MLP inference + persistence in Shadow only**.
+- Add a first-class `tiny_mlp` policy backend with deterministic initialization, configurable `selected_features -> 32 -> 16 -> actions` layers, float32 parameter storage, forward inference, common model checksum/version envelope and strict observation schema/mask/feature-order validation.
+- Keep neural training deliberately disabled in this release. `TinyMLPBackend.update()` fails closed; persisted Stage-3 models carry `trained=false` and zero training samples. Historical supervised training and Ridge/MLP tournament remain Stage 4 work.
+- Reuse the Stage-2 deterministic observation mask and semantic live observation vector. The neural output selects only from the existing policy action values, so binary/discrete targets and continuous/setpoint action bins use the current action abstraction without a new actuator path.
+- Add an isolated `TinyMLPShadowService` with its own additive SQLite persistence. Compatible models reload after restart with the same checksum/model revision; schema, mask, feature-order, action-space or architecture changes reinitialize only the untrained Shadow copy and never rebuild/replace the Live or Candidate policy.
+- Install the observer after the established final runtime composition. The authoritative Ridge/current `process_agent` path runs first and its return value is preserved exactly. Tiny MLP runs only when the agent mode is literally `shadow`; **Control executes zero neural inference calls**.
+- Neural errors are fail-open for the existing Ridge path and are surfaced only as `runtime.tiny_mlp_shadow` diagnostics. The service imports neither `ActionIntent` nor Executor/HA dispatch code and has `dispatch_capability=false`, `physical_authority=false`.
+- Preserve Manual Correct, Candidate lifecycle/lineage, rewards, historical training, `ActionIntent`, Executor and physical Home Assistant control unchanged.
+- Add packaged `tiny_mlp_benchmark.py` plus CI probe for one, 20 and 50 loaded models, repeated p50/p95/p99 inference, current RSS, startup/load, serialization/deserialization and restart persistence. CI measurements are synthetic host timings, not Raspberry Pi 4 results.
+- Add Stage-3 regressions for deterministic initialization, binary/setpoint action mapping, persistence/restart, checksum/schema/mask/order guards, Candidate-ID persistence, Control exclusion and fail-open Shadow observation.
+- Full suite target: **1213 tests** before final merge.
+
 # 0.14.81 — 2026-09-24
 
 - Resume the Tiny Neural Policy / Correct / Offline-RL master plan with **Stage 2: global semantic observation space + deterministic per-agent feature selection**. The version number is shifted forward because 0.14.76–0.14.80 were used for the completed Raspberry Pi performance series.
