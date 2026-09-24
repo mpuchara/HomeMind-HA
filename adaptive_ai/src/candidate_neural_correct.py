@@ -280,7 +280,7 @@ def _experience_rows(store, agent_id, correction_times):
     return replay, holdout
 
 
-def _reconstruct_dataset(manager, parent, candidate, mask, labels):
+def _reconstruct_dataset(manager, parent, candidate, mask, labels, actions):
     labels = list(labels or ())
     correction_times = [
         float(row["sample_ts"])
@@ -393,10 +393,7 @@ def _reconstruct_dataset(manager, parent, candidate, mask, labels):
                     "label_id": source.get("id"),
                     "timestamp": float(timestamp),
                     "observation": observation,
-                    "action_idx": nearest_action(
-                        load_training_record(manager.store, parent["id"])["model"]["actions"],
-                        desired,
-                    ),
+                    "action_idx": nearest_action(actions, desired),
                     "weight": 1.0,
                     "source": "manual_correct",
                 }
@@ -739,7 +736,7 @@ def install(manager):
                 policy_backend=TinyMLPBackend.BACKEND,
             )
             dataset = _reconstruct_dataset(
-                manager, parent, candidate, mask, labels
+                manager, parent, candidate, mask, labels, parent_backend.actions
             )
             _save_sample_audit(
                 manager, batch_id, dataset.get("sample_audit") or ()
