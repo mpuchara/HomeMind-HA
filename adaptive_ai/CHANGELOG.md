@@ -13,7 +13,9 @@
 - CI covers a real clean-subprocess historical replay plus worker cancellation/rollback, stale-config rejection, restart lifecycle, guarded model publication and keyset-reader parity.
 - No Raspberry Pi 4 performance numbers are claimed from GitHub runners. The packaged profiler is the acceptance tool for before/after measurements on the actual device.
 - No changes to replay rewards/order, policy semantics, Correct, Candidate lineage/promotion, ActionIntent, Executor or physical Home Assistant service dispatch.
-- Parent-crash protection records parent PID/start-token in the versioned job, stops orphaned replay through a watchdog and refuses model publication after parent loss.\n- A configuration change during training forces the newer agent configuration to `needs_retrain` after stale-result rollback; stale qualification can never survive.\n- Full suite target: **1189 tests**.
+- Parent-crash protection records parent PID/start-token in the versioned job, stops orphaned replay through a watchdog and refuses model publication after parent loss.
+- A configuration change during training forces the newer agent configuration to `needs_retrain` after stale-result rollback; stale qualification can never survive.
+- Full suite target: **1189 tests**.
 
 # 0.14.79 — 2026-09-24
 
