@@ -83,7 +83,8 @@ def load_training_record(store, agent_id):
         row = c.execute(
             """
             SELECT model_json,mask_json,source_policy_revision,
-                   training_json,tournament_json,selected_backend
+                   training_json,tournament_json,selected_backend,
+                   created_ts,updated_ts
             FROM tiny_mlp_shadow_models WHERE agent_id=?
             """,
             (str(agent_id),),
@@ -97,6 +98,8 @@ def load_training_record(store, agent_id):
         "training": json.loads(row[3]) if row[3] else {},
         "tournament": json.loads(row[4]) if row[4] else {},
         "selected_backend": str(row[5] or "diagonal_linucb"),
+        "created_ts": float(row[6] or 0.0),
+        "updated_ts": float(row[7] or 0.0),
     }
 
 
@@ -145,8 +148,8 @@ def restore_training_record(store, agent_id, record):
                 json.dumps(dict(record.get("training") or {}), sort_keys=True, separators=(",", ":"), allow_nan=False),
                 json.dumps(dict(record.get("tournament") or {}), sort_keys=True, separators=(",", ":"), allow_nan=False),
                 str(record.get("selected_backend") or "diagonal_linucb"),
-                time.time(),
-                time.time(),
+                float(record.get("created_ts") or time.time()),
+                float(record.get("updated_ts") or time.time()),
             ),
         )
 
