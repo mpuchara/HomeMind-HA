@@ -203,9 +203,16 @@ def select_observation_mask(agent, state_map, registry, hint_entities, relevance
         row = dict(catalog_by_id[feature_id])
         row.update({"score": 1000000.0, "selection_reason": ["global-time"], "entity_rank": 0})
         rows.append(row)
+    target_area = _area_for(registry, agent.get("target_entity"))
     for feature_id in HOME_FEATURES:
         row = dict(catalog_by_id[feature_id])
-        row.update({"score": 999000.0, "selection_reason": ["target-area-home-context"], "entity_rank": 0})
+        row.update({
+            "score": 999000.0,
+            "selection_reason": ["target-area-home-context"],
+            "entity_rank": 0,
+            "area_id": target_area,
+            "target_entity": agent.get("target_entity"),
+        })
         rows.append(row)
     scores = dict(meta.get("selection_scores") or {})
     ranks = dict(meta.get("selection_rank") or {})
@@ -321,6 +328,11 @@ def observation_as_of(mask, state_map, temporal, at_ts, agent, *, home_provider=
     if mask.schema_id != observation_schema_id():
         raise ValueError("NEEDS_RETRAIN: incompatible observation schema")
     at_ts = float(at_ts)
+    advance = getattr(temporal, "advance", None)
+    if callable(advance):
+        # Historical replay/Correct trackers own their exact as-of state, including
+        # RoomBelief. Reposition before reading so future tracker state cannot leak.
+        advance(at_ts)
     dt = datetime.fromtimestamp(at_ts).astimezone()
     hour = dt.hour + dt.minute / 60.0 + dt.second / 3600.0
     dow = dt.weekday()
