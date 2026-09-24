@@ -328,6 +328,11 @@ def run_isolated_training_chunk(history, start_ts, end_ts, **kwargs):
     agent_id = job["agent_id"]
     agent_before = STORE.get_agent_config(agent_id)
     model_before = STORE.get_model(agent_id)
+    try:
+        from tiny_mlp_shadow import load_training_record
+        neural_before = load_training_record(STORE, agent_id)
+    except Exception:
+        neural_before = None
     poll_seconds = max(
         0.05, float(OPTIONS.get("training_worker_poll_ms", 200) or 200) / 1000.0
     )
@@ -517,6 +522,14 @@ def run_isolated_training_chunk(history, start_ts, end_ts, **kwargs):
                 isinstance(exc, StaleTrainingJob) and exc.preserve_lifecycle
             ),
         )
+        try:
+            from tiny_mlp_shadow import restore_training_record
+            restore_training_record(STORE, agent_id, neural_before)
+            service = getattr(history.engine, "tiny_mlp_shadow", None)
+            if service is not None and callable(getattr(service, "invalidate", None)):
+                service.invalidate(agent_id)
+        except Exception:
+            pass
         history.engine.models.pop(agent_id, None)
         history.engine.agent_index_at = 0.0
         history.engine.agent_index_revision = -1
