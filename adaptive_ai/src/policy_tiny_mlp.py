@@ -274,7 +274,7 @@ class TinyMLPBackend(PolicyBackend):
 
     def update(self, horizon, action_idx, features, reward, sample_ts=None):
         raise RuntimeError(
-            "tiny MLP online/reward update is disabled; Stage 4 trains only in the offline supervised trainer"
+            "tiny MLP online/reward training is disabled; Stage 4 trains only in the offline supervised trainer"
         )
 
     def decay(self, now=None):
