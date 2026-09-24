@@ -320,7 +320,13 @@ class HistoryManager(threading.Thread):
                 self._run_agent_indexing(agent_id, rebuild=rebuild)
             except Exception as exc:
                 STORE.event(agent_id, "error", "agent_index_failed", str(exc), {"trace": traceback.format_exc(limit=6)})
-                STORE.set_training_state(agent_id, "paused", detail={"reason": str(exc)})
+                # A stale isolated job can mean the user/configuration changed while
+                # training was running. Preserve that newer needs_retrain/lifecycle
+                # instead of overwriting it with a generic PAUSED failure state.
+                if not bool(getattr(exc, "preserve_training_state", False)):
+                    STORE.set_training_state(
+                        agent_id, "paused", detail={"reason": str(exc)}
+                    )
             finally:
                 # Keep the heavy slot owned until final GC is complete. Otherwise the UI
                 # lifeline can switch back to rich aggregate reads while this worker still
