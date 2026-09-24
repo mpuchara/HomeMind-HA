@@ -100,8 +100,8 @@ assert _budget_pause(2.0, 0.25, 2.0) == 2.0
 
     def test_ui_surfaces_active_training_budget_instead_of_system_ready(self):
         source = (ROOT / "adaptive_ai/src/static/runtime_activity_ui.js").read_text(encoding="utf-8")
-        self.assertIn("const duty=Math.round(Number(lp.training_cpu_duty_cycle||0)*100);", source)
-        self.assertIn("CPU budget ${duty}%", source)
+        self.assertIn("lp.training_wall_duty_cycle_target??lp.training_cpu_duty_cycle", source)
+        self.assertIn("wall duty target ${duty}%", source)
         self.assertIn("Training yields between bounded work slices so Ingress and realtime control keep CPU priority.", source)
         self.assertIn("Autonomous Candidate training", source)
 
