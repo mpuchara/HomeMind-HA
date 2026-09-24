@@ -725,6 +725,17 @@ def select_context_entities(agent, state_map, registry, hint_entities, max_entit
                 break
     selected_set = set(selected)
     rationale = {eid: reasons for _, eid, reasons, _ in ranked if eid in selected_set}
+    selection_scores = {
+        eid: round(float(score), 6)
+        for score, eid, _, _ in ranked
+        if eid in selected_set
+    }
+    selection_rank = {
+        eid: rank + 1
+        for rank, (_, eid, _, _) in enumerate(
+            [row for row in ranked if row[1] in selected_set]
+        )
+    }
     primary_local = [eid for _, eid, _, loc in ranked if eid in selected_set and loc["local"] and loc["occupancy"]]
     occupancy_selected = [x for x in ranked if x[1] in selected_set and x[3]["occupancy"]]
     occupancy_selected.sort(key=lambda x: (
@@ -751,6 +762,8 @@ def select_context_entities(agent, state_map, registry, hint_entities, max_entit
     return selected, {
         "considered_entities": considered, "selected_entities": len(selected),
         "selection_reasons": rationale,
+        "selection_scores": selection_scores,
+        "selection_rank": selection_rank,
         "primary_local_sensors": primary_local[:4],
         "primary_local_sensor": primary_local[0] if primary_local else None,
         "primary_occupancy_sensor": primary_occupancy,
