@@ -3,7 +3,7 @@
   "release_date": "2026-09-24",
   "base_version": "0.14.81",
   "base_commit": "6350f78aae7e55f9d7c67ec36b91a3c20222d44c",
-  "release_status": "stage3-tiny-mlp-shadow-ci-green",
+  "release_status": "release-0.14.82-tiny-mlp-shadow",
   "tests_passed": 1213,
   "profile": "rpi4-low-memory-complete-discovery-manual-agent-selection",
   "manual_agent_training": true,
@@ -40,7 +40,7 @@
   "migration": "no destructive migration; existing agents, models, feedback, raw archive, historical experiences, candidate lineage, rollback and generation state preserved",
   "physical_control": "unchanged; repaired agents return to Shadow and Control still requires qualified state plus all existing guards",
   "pi4": "0.14.38 targets the long-soak Raspberry Pi failure: drift analysis is coalesced on a throttled background observer, REST /states reconciliation is delta-only after bootstrap, websocket outage fallback reconciles every 10 s, and HA core-state health is tracked separately from unrelated REST errors.",
-  "ci_status": "PR #167 green on Python 3.11 + 3.13, Docker image smoke, compile/JS, historical benchmarks and 0.14.82 tiny MLP benchmark",
+  "ci_status": "0.14.82 PR #167 Validate HomeMind #3448 passed: Python 3.11/3.13 with 1213 tests, compile/JS checks, Stage 17/18, observation benchmark, tiny MLP benchmark and Docker image smoke.",
   "training_slice_budget": "adaptive-ai-index workers call a shared CooperativeTrainingBudget; expensive temporal tracker loops yield between entities/events and finalization is no longer outside the throttle",
   "finalization_lifeline": "HEAVY_JOBS remains owned through final gc.collect(), so /api/status and /api/agents stay on lightweight lifeline reads until the worker is actually finished",
   "finalization_progress": "post-replay UI now exposes bounded stages: replay complete, policy serialization, benchmark save, qualification, checkpoint complete",
@@ -355,5 +355,31 @@
   "tiny_mlp_persistence": "additive isolated tiny_mlp_shadow_models table; checksum/schema/mask/feature-order/action-space guarded restart",
   "tiny_mlp_training": "disabled; update() rejects learning; historical training and Ridge/MLP tournament deferred to Stage 4",
   "tiny_mlp_failure_semantics": "observer runs after authoritative Ridge process_agent; neural errors update diagnostics only and preserve Ridge result",
-  "tiny_mlp_benchmark": "GitHub Linux/Python 3.11 synthetic host: 96->32->16->2, 3666 params, inference p50 0.323 ms / p95 0.332 ms / p99 0.342 ms, serialized 76189 B, restart identical; 50 loaded models p95 0.345 ms and +1277952 B RSS vs probe baseline. Not a Raspberry Pi 4 measurement."
+  "tiny_mlp_benchmark": {
+    "environment": "GitHub-hosted Ubuntu / Python 3.11; synthetic host timing, not Raspberry Pi 4",
+    "architecture": [
+      96,
+      32,
+      16,
+      2
+    ],
+    "parameter_count": 3666,
+    "inference_us": {
+      "p50": 323.076,
+      "p95": 331.73485,
+      "p99": 342.24723
+    },
+    "serialized_bytes": 76189,
+    "restart_persistence_identical": true,
+    "rss_delta_bytes": {
+      "1_model": 65536,
+      "20_models": 389120,
+      "50_models": 1277952
+    },
+    "50_model_inference_us": {
+      "p50": 328.4845,
+      "p95": 344.73675,
+      "p99": 628.86391
+    }
+  }
 }
