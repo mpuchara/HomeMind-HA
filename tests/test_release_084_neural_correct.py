@@ -7,6 +7,7 @@ import tempfile
 import unittest
 
 import candidate_neural_correct as neural_correct
+import agent_candidate_lineage as lineage
 from context import archived_state, context_scalar
 from observation_space import ObservationMask, observation_schema_id
 from policy_tiny_mlp import TinyMLPBackend
@@ -16,6 +17,8 @@ from policy_tiny_mlp_correct import (
 )
 from policy_tiny_mlp_training import train_supervised
 from storage import Store
+from policy_tiny_mlp_training import build_training_artifact
+from tiny_mlp_shadow import publish_training_artifact
 
 
 FEATURE_IDS = ("feature:x", "feature:bias")
@@ -337,6 +340,88 @@ class HistoricalCorrectReconstructionTests(unittest.TestCase):
                 "missing_source_features",
                 dataset["sample_audit"][0]["unusable_reason"],
             )
+
+
+class NeuralCorrectLineageSelectionTests(unittest.TestCase):
+    def test_only_exact_candidate_generation_neural_artifact_is_eligible_parent(self):
+        with tempfile.TemporaryDirectory(prefix="hm-stage5-lineage-") as root:
+            store = Store(Path(root) / "stage5.db")
+            lineage.ensure_lineage_tables(store)
+            live = store.create_agent({
+                "name": "Root", "target_entity": "light.stage5", "target_property": "power",
+                "min_value": 0, "max_value": 1, "deadband": .5, "action_interval": .25,
+                "exploration_step": 1, "input_entities": ["*"],
+            })
+            candidate = store.create_agent({
+                "name": "Root · Candidate", "target_entity": "light.stage5", "target_property": "power",
+                "min_value": 0, "max_value": 1, "deadband": .5, "action_interval": .25,
+                "exploration_step": 1, "input_entities": ["*"],
+            })
+            store.save_model(live["id"], {
+                "version": 10, "model_revision": "root-ridge", "schema": {"version": 1},
+            })
+            store.save_model(candidate["id"], {
+                "version": 10, "model_revision": "candidate-ridge", "schema": {"version": 1},
+            })
+            root_generation = lineage._ensure_root(store, live["id"], 0)
+            candidate_generation = lineage._register_generation(
+                store, live["id"], root_generation, candidate["id"], 1,
+                "test", "comparing",
+            )
+
+            feature_id = "time:hour_sin"
+            mask = ObservationMask(
+                schema_id=observation_schema_id(),
+                mask_version=1,
+                feature_ids=(feature_id,),
+                features=({
+                    "id": feature_id, "name": feature_id, "kind": "global",
+                    "entity_id": None, "area_id": None,
+                    "descriptor": "hour_sin", "lag_seconds": 0.0,
+                },),
+                selected_entities=(),
+                global_feature_count=1,
+                missing_feature_count=0,
+            )
+            model = TinyMLPBackend(
+                actions=(0.0, 1.0), horizons=(1,), feature_ids=(feature_id,),
+                schema_id=mask.schema_id, mask_id=mask.mask_id, hidden=(4, 2), init_seed=1484,
+            )
+            model.trained = True
+            model.training_samples = 20
+            artifact = build_training_artifact(
+                agent=candidate,
+                policy=SimpleNamespace(
+                    tournament_revision="candidate-ridge",
+                    model_revision="candidate-ridge",
+                ),
+                mask=mask,
+                backend=model,
+                trainer={"trained": True},
+                tournament={
+                    "passed": True,
+                    "selected_backend": "tiny_mlp",
+                    "samples": 20,
+                    "mlp_score": .9,
+                },
+            )
+            publish_training_artifact(store, artifact)
+
+            manager = SimpleNamespace(
+                store=store,
+                _row_by_candidate=lambda candidate_id: {
+                    "candidate_id": str(candidate_id),
+                    "offline_gate_json": '{"passed":true}',
+                },
+            )
+            selected = neural_correct._source_neural_record(manager, candidate["id"])
+            self.assertIsNotNone(selected)
+            self.assertEqual(selected[0]["generation_id"], candidate_generation["generation_id"])
+            self.assertEqual(selected[1]["selected_backend"], "tiny_mlp")
+
+            # Root Live is deliberately never treated as a neural Correct parent in
+            # Stage 5; neural Active authority is still disabled until controlled rollout.
+            self.assertIsNone(neural_correct._source_neural_record(manager, live["id"]))
 
 
 class Stage5SourceAndUiContracts(unittest.TestCase):
