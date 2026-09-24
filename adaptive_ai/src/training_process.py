@@ -258,8 +258,12 @@ def _terminate(process, grace_seconds=2.0):
             pass
 
 
-def _restore_rejected_chunk(store, agent_id, model_before):
-    store.restore_model_snapshot(agent_id, model_before)
+def _restore_rejected_chunk(store, agent_id, agent_before, model_before):
+    restore = getattr(store, "restore_training_chunk_snapshot", None)
+    if callable(restore):
+        restore(agent_id, agent_before, model_before)
+    else:
+        store.restore_model_snapshot(agent_id, model_before)
     store.discard_uncommitted_experiences(agent_id)
     store.touch_agent_index()
 
@@ -274,6 +278,7 @@ def run_isolated_training_chunk(history, start_ts, end_ts, **kwargs):
     _prune_job_files()
 
     agent_id = job["agent_id"]
+    agent_before = STORE.get_agent_config(agent_id)
     model_before = STORE.get_model(agent_id)
     poll_seconds = max(
         0.05, float(OPTIONS.get("training_worker_poll_ms", 200) or 200) / 1000.0
@@ -421,7 +426,9 @@ def run_isolated_training_chunk(history, start_ts, end_ts, **kwargs):
         }
         return int(result.get("return_value") or 0)
     except Exception:
-        _restore_rejected_chunk(STORE, agent_id, model_before)
+        _restore_rejected_chunk(
+            STORE, agent_id, agent_before, model_before
+        )
         history.engine.models.pop(agent_id, None)
         history.engine.agent_index_at = 0.0
         history.engine.agent_index_revision = -1
