@@ -17,6 +17,8 @@ from training_process import (
     agent_config_fingerprint,
     descriptor_checksum,
     runtime_context_fingerprint,
+    _process_start_token,
+    _same_process_alive,
 )
 
 
@@ -72,6 +74,13 @@ class TrainingProcessContractTests(unittest.TestCase):
             runtime_context_fingerprint(states_a, registry, options),
             runtime_context_fingerprint(states_a, registry, {**options, "x": 2}),
         )
+
+    def test_parent_process_identity_uses_pid_plus_start_token(self):
+        token = _process_start_token(os.getpid())
+        self.assertTrue(_same_process_alive(os.getpid(), token))
+        if token is not None:
+            self.assertFalse(_same_process_alive(os.getpid(), str(int(token) + 1)))
+        self.assertFalse(_same_process_alive(99999999, None))
 
     def test_descriptor_checksum_covers_versioned_job_payload(self):
         job = {
@@ -373,6 +382,7 @@ class SupervisorRollbackContracts(unittest.TestCase):
 
         current = self.store.get_agent_config(aid)
         self.assertEqual(current["input_entities"], ["sensor.changed"])
+        self.assertEqual(current["training_state"], "needs_retrain")
         self.assertEqual(self.store.get_model(aid)["value"], "pre-worker")
         rows = self.store.list_historical_experiences(aid)
         self.assertEqual([row["target_history_id"] for row in rows], [1])
