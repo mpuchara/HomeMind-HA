@@ -95,6 +95,83 @@ class TrainingProcessContractTests(unittest.TestCase):
         self.assertNotEqual(job["checksum"], descriptor_checksum(altered))
 
 
+class PiProfilerContracts(unittest.TestCase):
+    def test_baseline_comparison_reports_total_cpu_without_hiding_worker(self):
+        from pi_training_profile import comparison
+
+        baseline = {
+            "scenario": "training",
+            "duration_seconds": 60.0,
+            "runtime": {
+                "cpu_one_core_percent": 80.0,
+                "rss_mb_p95": 150.0,
+            },
+            "worker": None,
+            "combined": {
+                "cpu_one_core_percent": 80.0,
+                "rss_p95_mb_sum": 150.0,
+            },
+            "http_status_latency_ms": {"p95": 120.0, "p99": 180.0},
+            "correct_http_latency_ms": {"p95": None},
+            "training_progress": {"delta": .20},
+            "runtime_latency_metrics": {
+                "telemetry.event_to_intent_p95_ms": {"p95": 250.0}
+            },
+        }
+        candidate = {
+            "scenario": "training",
+            "duration_seconds": 60.0,
+            "runtime": {
+                "cpu_one_core_percent": 25.0,
+                "rss_mb_p95": 110.0,
+            },
+            "worker": {
+                "cpu_one_core_percent": 40.0,
+                "rss_mb_p95": 80.0,
+            },
+            "combined": {
+                "cpu_one_core_percent": 65.0,
+                "rss_p95_mb_sum": 190.0,
+            },
+            "http_status_latency_ms": {"p95": 40.0, "p99": 60.0},
+            "correct_http_latency_ms": {"p95": None},
+            "training_progress": {"delta": .22},
+            "runtime_latency_metrics": {
+                "telemetry.event_to_intent_p95_ms": {"p95": 90.0}
+            },
+        }
+        result = comparison(candidate, baseline)
+        self.assertEqual(result["warnings"], [])
+        self.assertEqual(
+            result["fields"]["runtime_cpu_one_core_percent"][
+                "candidate_minus_baseline"
+            ],
+            -55.0,
+        )
+        self.assertEqual(
+            result["fields"]["combined_cpu_one_core_percent"][
+                "candidate_minus_baseline"
+            ],
+            -15.0,
+        )
+        self.assertEqual(
+            result["shared_runtime_latency_p95"][
+                "telemetry.event_to_intent_p95_ms"
+            ]["candidate_minus_baseline"],
+            -160.0,
+        )
+
+    def test_baseline_comparison_warns_on_non_equivalent_scenario(self):
+        from pi_training_profile import comparison
+
+        result = comparison(
+            {"scenario": "burst", "duration_seconds": 30.0},
+            {"scenario": "idle", "duration_seconds": 60.0},
+        )
+        self.assertIn("scenario mismatch", result["warnings"])
+        self.assertIn("duration differs by more than 5%", result["warnings"])
+
+
 class StoreIsolationContracts(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory(prefix="hm-process-store-")
