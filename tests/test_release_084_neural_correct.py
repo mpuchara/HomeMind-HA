@@ -8,6 +8,7 @@ import unittest
 
 import candidate_neural_correct as neural_correct
 import agent_candidate_lineage as lineage
+from agent_candidates import ensure_tables as ensure_candidate_tables
 from context import archived_state, context_scalar
 from observation_space import ObservationMask, observation_schema_id
 from policy_tiny_mlp import TinyMLPBackend
@@ -422,6 +423,81 @@ class NeuralCorrectLineageSelectionTests(unittest.TestCase):
             # Root Live is deliberately never treated as a neural Correct parent in
             # Stage 5; neural Active authority is still disabled until controlled rollout.
             self.assertIsNone(neural_correct._source_neural_record(manager, live["id"]))
+
+
+class NeuralCorrectBatchPersistenceTests(unittest.TestCase):
+    def test_same_operation_batch_can_be_restarted_without_duplicate_or_unique_error(self):
+        with tempfile.TemporaryDirectory(prefix="hm-stage5-batch-") as root:
+            store = Store(Path(root) / "stage5.db")
+            ensure_candidate_tables(store)
+            lineage.ensure_lineage_tables(store)
+            neural_correct._ensure_schema(store)
+            parent = store.create_agent({
+                "name": "Parent", "target_entity": "light.stage5", "target_property": "power",
+                "min_value": 0, "max_value": 1, "deadband": .5, "action_interval": .25,
+                "exploration_step": 1, "input_entities": ["*"],
+            })
+            child = store.create_agent({
+                "name": "Child", "target_entity": "light.stage5", "target_property": "power",
+                "min_value": 0, "max_value": 1, "deadband": .5, "action_interval": .25,
+                "exploration_step": 1, "input_entities": ["*"],
+            })
+            root_generation = lineage._ensure_root(store, parent["id"], 0)
+            child_generation = lineage._register_generation(
+                store, parent["id"], root_generation, child["id"], 1,
+                "test", "building",
+            )
+            feature_id = "time:hour_sin"
+            mask = ObservationMask(
+                schema_id=observation_schema_id(),
+                mask_version=1,
+                feature_ids=(feature_id,),
+                features=({
+                    "id": feature_id, "name": feature_id, "kind": "global",
+                    "entity_id": None, "area_id": None,
+                    "descriptor": "hour_sin", "lag_seconds": 0.0,
+                },),
+                selected_entities=(),
+                global_feature_count=1,
+                missing_feature_count=0,
+            )
+            model = TinyMLPBackend(
+                actions=(0.0, 1.0), horizons=(1,), feature_ids=(feature_id,),
+                schema_id=mask.schema_id, mask_id=mask.mask_id, hidden=(4, 2), init_seed=1484,
+            )
+            manager = SimpleNamespace(store=store)
+            edge = {"parent_agent_id": parent["id"], "candidate_id": child["id"]}
+            first = neural_correct._create_batch(
+                manager, edge, root_generation, model, mask,
+                batch_id="correct-operation-stable",
+            )
+            with store.lock, store.conn() as db:
+                db.execute(
+                    """INSERT INTO tiny_mlp_correct_samples
+                       (batch_id,label_id,sample_ts,desired,usable)
+                       VALUES(?,?,?,?,?)""",
+                    (first, 1, 100.0, 1.0, 1),
+                )
+            second = neural_correct._create_batch(
+                manager, edge, root_generation, model, mask,
+                batch_id="correct-operation-stable",
+            )
+            self.assertEqual(first, second)
+            with store.conn() as db:
+                batches = db.execute(
+                    "SELECT COUNT(*) FROM tiny_mlp_correct_batches WHERE batch_id=?",
+                    (second,),
+                ).fetchone()[0]
+                samples = db.execute(
+                    "SELECT COUNT(*) FROM tiny_mlp_correct_samples WHERE batch_id=?",
+                    (second,),
+                ).fetchone()[0]
+            self.assertEqual(batches, 1)
+            self.assertEqual(samples, 0)
+            self.assertEqual(
+                lineage._row(store, agent_id=child["id"])["generation_id"],
+                child_generation["generation_id"],
+            )
 
 
 class Stage5SourceAndUiContracts(unittest.TestCase):
