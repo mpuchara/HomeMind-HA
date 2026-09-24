@@ -1,3 +1,16 @@
+# 0.14.79 — 2026-09-24
+
+- Re-profile historical RoomBelief reconstruction after the 0.14.76–0.14.78 performance fixes and add a bounded shared context layer only around exact duplicate causal requests.
+- Share immutable exact-as-of RoomBelief/AdaptivePresence snapshots between the existing onset and persistence replay cursors within one heavy training job. Mutable cursor/model state is never shared.
+- Make cache identity causal and versioned: exact timestamp, event/received-time watermarks, visible-row fingerprint, topology revision, semantic-reliability revision, home-checkpoint identity, RoomBelief/AdaptivePresence versions and the active policy/schema/feature contract.
+- Keep the established 30-second historical rebuild as the authoritative miss path. Rewind, late received data, future-by-receipt data, topology changes and feature-contract changes are covered by regression tests.
+- Bound Raspberry Pi memory by default to 32 snapshots / 8192 source-weighted units; the LRU exists only for one training job and is never persisted.
+- Expose cache hits, misses, evictions and actual RoomBelief render executions through historical-training diagnostics.
+- Add a deterministic profile matrix for 1/5/20 synthetic agent timelines, 8/32/64 context sensors and static/dynamic histories. CI gates exact forecast parity and render-work reduction; process CPU time is measured directly; wall-clock/RSS remain informational host measurements.
+- Final CI profile: all cases preserve exact forecast parity and reduce duplicate RoomBelief renders by 25%. In the representative dynamic 20-agent/64-sensor case CPU falls from 5.7755 s to 4.4976 s (1.284× speedup), with 25% cache hit-rate and 4768/8192 cache units used. Tiny fully-static cases remain sub-second and can be neutral/slightly slower due to snapshot bookkeeping.
+- No changes to replay rewards, learned samples, policy update order, Candidate lineage, Correct, ActionIntent, Executor or physical HA dispatch.
+- Full suite target: 1176 tests.
+
 # 0.14.78 — 2026-09-24
 
 - Remove the final synchronous SQLite write found on the normal Home Assistant websocket ACK path: own-command `ack_event_id` / `ack_time` provenance now queues in RAM and is persisted by the existing background provenance writer.

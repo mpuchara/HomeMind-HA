@@ -1,6 +1,9 @@
 """Bounded-memory historical views. Large timelines and held-out vectors stay on disk."""
+import copy
+import hashlib
 import json
 import sqlite3
+import threading
 from collections import defaultdict, deque, OrderedDict
 from adaptive_presence import AdaptivePresenceModel
 from context import archived_state, TemporalHistory, state_scalar
@@ -67,6 +70,126 @@ class ReplayQueryCache:
             "evictions": int(self.evictions),
             "max_rows": int(self.max_rows),
         }
+
+
+class HistoricalContextSnapshot:
+    """Immutable replay snapshot restored into a tracker's private mutable view.
+
+    RoomBelief movement hypotheses and AdaptivePresence hysteresis are runtime state, so
+    sharing a live model instance between cursors would be incorrect.  Capture only the
+    fully rendered as-of state and deep-copy it back into each cursor on a cache hit.
+    Learned graph/dwell/calibration statistics remain owned by that cursor's checkpoint.
+    """
+
+    HOME_RUNTIME_FIELDS = (
+        "values", "sources", "area_sources", "arrivals", "hypotheses",
+        "boundary_hints", "pending", "updated", "last_ts",
+        "last_decay_ts", "revision",
+    )
+
+    def __init__(self, home_runtime, adaptive_runtime, adaptive_cache, units):
+        self.home_runtime = home_runtime
+        self.adaptive_runtime = adaptive_runtime
+        self.adaptive_cache = adaptive_cache
+        self.units = max(1, int(units))
+
+    @classmethod
+    def capture(cls, view):
+        home_runtime = {
+            name: copy.deepcopy(getattr(view.home, name))
+            for name in cls.HOME_RUNTIME_FIELDS
+        }
+        adaptive_runtime = copy.deepcopy(view.adaptive.__dict__)
+        adaptive_cache = copy.deepcopy(view.adaptive_cache)
+        units = (
+            len(home_runtime.get("sources") or {})
+            + 2 * len(home_runtime.get("values") or {})
+            + 8 * len(home_runtime.get("hypotheses") or ())
+            + 2 * len(home_runtime.get("boundary_hints") or ())
+            + 4 * len(adaptive_runtime.get("live") or {})
+            + len(adaptive_cache or {})
+        )
+        return cls(home_runtime, adaptive_runtime, adaptive_cache, units)
+
+    def restore(self, view):
+        for name, value in self.home_runtime.items():
+            setattr(view.home, name, copy.deepcopy(value))
+        adaptive = AdaptivePresenceModel()
+        adaptive.__dict__.update(copy.deepcopy(self.adaptive_runtime))
+        view.adaptive = adaptive
+        view.adaptive_cache = copy.deepcopy(self.adaptive_cache)
+
+
+class HistoricalContextCache:
+    """Bounded per-training LRU for exact causal home-context snapshots.
+
+    Keys are built by SQLiteTemporalTracker from exact replay time, event/receipt
+    watermark, rendered-row fingerprint, topology/reliability revisions, checkpoint
+    identity and the caller's feature-contract namespace.  The cache never shares a
+    mutable RoomBeliefModel between trackers.
+    """
+
+    def __init__(self, max_entries=32, max_units=8192):
+        self.max_entries = max(0, int(max_entries))
+        self.max_units = max(0, int(max_units))
+        self.units = 0
+        self.data = OrderedDict()
+        self.hits = 0
+        self.misses = 0
+        self.puts = 0
+        self.evictions = 0
+        self.lock = threading.RLock()
+
+    def get(self, key):
+        if self.max_entries <= 0 or self.max_units <= 0:
+            with self.lock:
+                self.misses += 1
+            return None
+        with self.lock:
+            value = self.data.pop(key, None)
+            if value is None:
+                self.misses += 1
+                return None
+            self.data[key] = value
+            self.hits += 1
+            return value
+
+    def put(self, key, snapshot):
+        if (
+            self.max_entries <= 0 or self.max_units <= 0
+            or snapshot is None or int(snapshot.units) > self.max_units
+        ):
+            return False
+        with self.lock:
+            previous = self.data.pop(key, None)
+            if previous is not None:
+                self.units -= int(previous.units)
+            self.data[key] = snapshot
+            self.units += int(snapshot.units)
+            self.puts += 1
+            while (
+                len(self.data) > self.max_entries or self.units > self.max_units
+            ) and self.data:
+                _, evicted = self.data.popitem(last=False)
+                self.units -= int(evicted.units)
+                self.evictions += 1
+        return True
+
+    def status(self):
+        with self.lock:
+            requests = self.hits + self.misses
+            return {
+                "entries": len(self.data),
+                "units": int(self.units),
+                "hits": int(self.hits),
+                "misses": int(self.misses),
+                "puts": int(self.puts),
+                "evictions": int(self.evictions),
+                "max_entries": int(self.max_entries),
+                "max_units": int(self.max_units),
+                "hit_rate": (float(self.hits) / requests) if requests else None,
+                "snapshot_contract": "immutable_restore_v1",
+            }
 
 
 class BoundedUsage:
@@ -178,13 +301,18 @@ class SQLiteTemporalTracker:
     # training duty cycle. Python already merges/sorts the bounded result afterwards.
     SQL_ENTITY_CHUNK = 32
 
-    def __init__(self, store, watched, context, start, end, query_cache=None):
+    def __init__(self, store, watched, context, start, end, query_cache=None,
+                 home_context_cache=None, context_cache_contract=None):
         self.conn = sqlite3.connect(store.path, timeout=30)
         self.conn.row_factory = sqlite3.Row
         self.conn.execute('PRAGMA cache_size=-2048')
         self.watched = sorted(set(watched or ()))
         self.context = context
         self.query_cache = query_cache
+        self.home_context_cache = home_context_cache
+        self.context_cache_contract = str(
+            context_cache_contract or "historical_home_context_v1"
+        )
         self.start = float(start)
         self.end = float(end)
         self.home_entities = sorted(set(context.relevant_entities()))
@@ -205,6 +333,9 @@ class SQLiteTemporalTracker:
             "sql_queries": 0,
             "rows_loaded": 0,
             "home_rebuilds": 0,
+            "home_render_executes": 0,
+            "home_context_cache_hits": 0,
+            "home_context_cache_misses": 0,
             "home_cache_full_rebuilds": 0,
             "home_cache_forward_updates": 0,
             "legacy_asof_queries_estimate": 0,
@@ -217,7 +348,14 @@ class SQLiteTemporalTracker:
             self._metrics["sql_queries"] += 1
         except sqlite3.OperationalError:
             row = None
-        self.home_view = HistoricalHomeView(context, json.loads(row[0]) if row else None)
+        checkpoint_raw = row[0] if row else None
+        self._home_checkpoint_revision = (
+            hashlib.sha256(str(checkpoint_raw).encode("utf-8")).hexdigest()[:16]
+            if checkpoint_raw is not None else "none"
+        )
+        self.home_view = HistoricalHomeView(
+            context, json.loads(checkpoint_raw) if checkpoint_raw else None
+        )
 
     @classmethod
     def _chunks(cls, entity_ids):
@@ -393,14 +531,78 @@ class SQLiteTemporalTracker:
             self._set_entity_rows(eid, list(self._watched_rows.get(eid, ())) + new_rows)
             TRAINING_BUDGET.checkpoint("temporal_watched_entity")
 
+    @staticmethod
+    def _home_row_fingerprint(row):
+        return (
+            str(row.get("entity_id") or ""),
+            str(row.get("id") or ""),
+            float(row.get("ts") or 0.0),
+            float(row.get("_feature_received_time") or row.get("ts") or 0.0),
+            str(row.get("state") or ""),
+            str(row.get("attributes_json") or ""),
+            str(row.get("source") or ""),
+            str(row.get("quality") or ""),
+        )
+
+    def _historical_context_cache_key(self, ts):
+        if self.home_context_cache is None:
+            return None
+        ts = float(ts)
+        digest = hashlib.blake2b(digest_size=16)
+        event_watermark = 0.0
+        received_watermark = 0.0
+
+        for eid in sorted(self._home_seed_rows):
+            row = self._home_seed_rows[eid]
+            item = self._home_row_fingerprint(row)
+            digest.update(repr(("seed", item)).encode("utf-8"))
+            event_watermark = max(event_watermark, float(item[2]))
+            received_watermark = max(received_watermark, float(item[3]))
+        for row in self._home_window_rows:
+            item = self._home_row_fingerprint(row)
+            digest.update(repr(("window", item)).encode("utf-8"))
+            event_watermark = max(event_watermark, float(item[2]))
+            received_watermark = max(received_watermark, float(item[3]))
+
+        reliability = getattr(self.context, "semantic_reliability", None)
+        reliability_revision = int(getattr(reliability, "revision", 0) or 0)
+        topology_revision = int(getattr(self.context, "registry_revision", 0) or 0)
+        return (
+            "historical_home_context_v1",
+            self.context_cache_contract,
+            type(self).__name__,
+            ts,
+            event_watermark,
+            received_watermark,
+            topology_revision,
+            reliability_revision,
+            self._home_checkpoint_revision,
+            int(RoomBeliefModel.VERSION),
+            int(AdaptivePresenceModel.VERSION),
+            tuple(self.home_entities),
+            digest.hexdigest(),
+        )
+
     def _render_home_cache(self, ts):
         """Render the exact 30-second causal Room Belief view from cached rows.
 
         The semantic rebuild remains deliberate: movement hypotheses are window-relative.
-        The expensive part was repeatedly asking SQLite for every seed on every feature
-        timestamp. Seeds/window rows now advance incrementally in memory.
+        0.14.79 may restore an immutable exact-as-of snapshot shared by the onset and
+        persistence cursors.  Cache misses execute the established rebuild unchanged.
         """
         view = self.home_view
+        self._metrics["home_rebuilds"] += 1
+        cache_key = self._historical_context_cache_key(ts)
+        if cache_key is not None:
+            snapshot = self.home_context_cache.get(cache_key)
+            if snapshot is not None:
+                snapshot.restore(view)
+                self.history.home_context = view
+                self._metrics["home_context_cache_hits"] += 1
+                return
+            self._metrics["home_context_cache_misses"] += 1
+
+        self._metrics["home_render_executes"] += 1
         view.reset()
         cutoff = float(ts) - 30.0
         ids = self.home_entities
@@ -437,7 +639,10 @@ class SQLiteTemporalTracker:
             TRAINING_BUDGET.checkpoint("temporal_home_event")
 
         self.history.home_context = view
-        self._metrics["home_rebuilds"] += 1
+        if cache_key is not None:
+            self.home_context_cache.put(
+                cache_key, HistoricalContextSnapshot.capture(view)
+            )
 
     def _rebuild_home_cache(self, ts):
         cutoff = float(ts) - 30.0
@@ -561,6 +766,8 @@ class SQLiteTemporalTracker:
             "home_window_rows": len(self._home_window_rows),
             "home_seed_entities": len(self._home_seed_rows),
             "history_samples_per_entity": self.HISTORY_SAMPLES,
+            "home_context_cache_enabled": self.home_context_cache is not None,
+            "context_cache_contract": self.context_cache_contract,
             "query_reduction_ratio": (
                 max(0.0, 1.0 - (actual / legacy)) if legacy > 0 else None
             ),
