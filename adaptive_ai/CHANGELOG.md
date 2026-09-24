@@ -14,7 +14,7 @@
 - Final Stage-2 scale run #3410: 4661 possible semantic features → 65 selected; selector materialization 20.14 ms p50 / 24.84 ms p95 outside the hot path; Ridge p95 177.60 µs before vs 170.66 µs after mask materialization (ratio 0.961), with zero selector calls and exact decision parity. These are GitHub-host synthetic timings, not Raspberry Pi 4 measurements.
 - Add historical causality regressions for direct timestamps, rewinds, unavailable sources and received-time visibility; the existing full Correct/Candidate regression suite remains unchanged.
 - No neural model is active yet. No changes to policy/reward semantics, Correct learning, Candidate lifecycle/promotion, ActionIntent, Executor or physical Home Assistant control.
-- Full suite target: **1201 tests**.
+- Full suite target: **1202 tests**.
 
 # 0.14.80 — 2026-09-24
 
