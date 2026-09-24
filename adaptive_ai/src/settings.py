@@ -15,7 +15,7 @@ try:
 except Exception:
     ws_connect = None
 
-APP_VERSION = "0.14.81"
+APP_VERSION = "0.14.82"
 HISTORY_BOOTSTRAP_REVISION = "target-attrs-v2"
 TRAINING_REVISION = "shared-home-intents-v18"
 DATA_DIR = Path(os.environ.get("ADAPTIVE_AI_DATA", "/data"))
@@ -118,6 +118,11 @@ DEFAULT_OPTIONS = {
     # existing ExplicitFeatureSchema in 0.14.81; these bounds prepare future backends.
     "observation_selected_features": 96,
     "observation_freshness_tau_seconds": 300,
+    # Stage-3 neural policy is inference/persistence only and hard-gated to Shadow.
+    # Hidden sizes remain deliberately tiny for Raspberry Pi class hosts.
+    "tiny_mlp_shadow_enabled": True,
+    "tiny_mlp_hidden_layers": "32,16",
+    "tiny_mlp_init_seed": 1482,
     # CPU-heavy historical replay runs in one child process. The parent remains the
     # authority for HA ingress/HTTP/queue/control and supervises RSS/CPU/I/O.
     "training_process_isolation": True,
