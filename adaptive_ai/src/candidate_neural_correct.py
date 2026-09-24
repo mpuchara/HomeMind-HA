@@ -228,6 +228,43 @@ def _validate_source(manager, parent, record):
     return policy, mask, backend
 
 
+def _correct_operation(manager, source_generation, row):
+    """Resolve the newest durable Correct operation for this exact parent->child edge."""
+    child_generation = lineage._row(
+        manager.store, agent_id=str(row["candidate_id"])
+    )
+    child_generation_id = str((child_generation or {}).get("generation_id") or "")
+    try:
+        with manager.store.conn() as c:
+            rows = [
+                dict(item) for item in c.execute(
+                    """SELECT * FROM agent_correct_operations
+                       WHERE parent_generation_id=?
+                         AND status IN ('prepared','committed')
+                       ORDER BY created_ts DESC LIMIT 8""",
+                    (str(source_generation["generation_id"]),),
+                ).fetchall()
+            ]
+    except Exception:
+        return None
+    for operation in rows:
+        bound_child = str(operation.get("child_generation_id") or "")
+        if bound_child and child_generation_id and bound_child != child_generation_id:
+            continue
+        try:
+            label_ids = [
+                int(value)
+                for value in json.loads(operation.get("label_ids_json") or "[]")
+            ]
+        except Exception:
+            label_ids = []
+        if not label_ids:
+            continue
+        operation["label_ids"] = label_ids
+        return operation
+    return None
+
+
 def _experience_rows(store, agent_id, correction_times):
     train_limit = max(
         0, int(OPTIONS.get("tiny_mlp_correct_replay_samples", 192) or 192)
@@ -278,13 +315,20 @@ def _experience_rows(store, agent_id, correction_times):
     return replay, holdout
 
 
-def _reconstruct_dataset(manager, parent, candidate, mask, labels, actions):
+def _reconstruct_dataset(
+    manager, parent, candidate, mask, labels, actions, *, current_label_ids=None
+):
     labels = list(labels or ())
     correction_times = [
         float(row["sample_ts"])
         for row in labels
         if row.get("sample_ts") is not None
     ]
+    current_ids = (
+        {int(value) for value in current_label_ids}
+        if current_label_ids is not None
+        else {int(row["id"]) for row in labels if row.get("id") is not None}
+    )
     replay_specs, holdout_specs = _experience_rows(
         manager.store, candidate["id"], correction_times
     )
@@ -308,7 +352,11 @@ def _reconstruct_dataset(manager, parent, candidate, mask, labels, actions):
             desired = float(label["desired"])
         except (KeyError, TypeError, ValueError):
             continue
-        requests.append(("correct", ts, label))
+        requests.append((
+            "correct_current" if int(label.get("id") or -1) in current_ids else "correct_prior",
+            ts,
+            label,
+        ))
         for offset in offsets:
             if ts + offset > 0:
                 requests.append(("nearby", ts + offset, {"source_ts": ts}))
@@ -338,6 +386,7 @@ def _reconstruct_dataset(manager, parent, candidate, mask, labels, actions):
     )
     corrections = []
     replay = []
+    prior_correct_replay = []
     holdout = []
     nearby = []
     sample_audit = []
@@ -356,7 +405,7 @@ def _reconstruct_dataset(manager, parent, candidate, mask, labels, actions):
                     parent,
                 )
             except Exception as exc:
-                if kind == "correct":
+                if kind == "correct_current":
                     sample_audit.append({
                         "label_id": source.get("id"),
                         "sample_ts": float(timestamp),
@@ -373,7 +422,7 @@ def _reconstruct_dataset(manager, parent, candidate, mask, labels, actions):
             # human Correct must never invent values for a source model feature. Replay
             # rows may be skipped; selected Correct points are retained as unusable audit.
             if missing:
-                if kind == "correct":
+                if kind == "correct_current":
                     sample_audit.append({
                         "label_id": source.get("id"),
                         "sample_ts": float(timestamp),
@@ -385,7 +434,7 @@ def _reconstruct_dataset(manager, parent, candidate, mask, labels, actions):
                     })
                 continue
 
-            if kind == "correct":
+            if kind in ("correct_current", "correct_prior"):
                 desired = float(source["desired"])
                 item = {
                     "label_id": source.get("id"),
@@ -395,16 +444,20 @@ def _reconstruct_dataset(manager, parent, candidate, mask, labels, actions):
                     "weight": 1.0,
                     "source": "manual_correct",
                 }
-                corrections.append(item)
-                sample_audit.append({
-                    "label_id": source.get("id"),
-                    "sample_ts": float(timestamp),
-                    "original_decision": source.get("previous_desired"),
-                    "desired": desired,
-                    "observation": observation,
-                    "usable": True,
-                    "unusable_reason": None,
-                })
+                if kind == "correct_current":
+                    corrections.append(item)
+                    sample_audit.append({
+                        "label_id": source.get("id"),
+                        "sample_ts": float(timestamp),
+                        "original_decision": source.get("previous_desired"),
+                        "desired": desired,
+                        "observation": observation,
+                        "usable": True,
+                        "unusable_reason": None,
+                    })
+                else:
+                    item["source"] = "prior_manual_correct_replay"
+                    prior_correct_replay.append(item)
             elif kind == "replay":
                 item = dict(source)
                 item["observation"] = observation
@@ -423,7 +476,9 @@ def _reconstruct_dataset(manager, parent, candidate, mask, labels, actions):
 
     return {
         "corrections": corrections,
-        "replay": replay,
+        "replay": prior_correct_replay + replay,
+        "prior_correct_replay": prior_correct_replay,
+        "historical_replay": replay,
         "holdout": holdout,
         "nearby": nearby,
         "sample_audit": sample_audit,
@@ -431,11 +486,11 @@ def _reconstruct_dataset(manager, parent, candidate, mask, labels, actions):
     }
 
 
-def _create_batch(manager, row, source_generation, backend, mask):
+def _create_batch(manager, row, source_generation, backend, mask, *, batch_id=None):
     child_generation = lineage._row(
         manager.store, agent_id=str(row["candidate_id"])
     )
-    batch_id = str(uuid.uuid4())
+    batch_id = str(batch_id or uuid.uuid4())
     now = time.time()
     raw = backend.serialize()
     with manager.store.lock, manager.store.conn() as c:
@@ -600,6 +655,7 @@ def _gate_payload(report, dataset, batch_id):
             1 for row in dataset.get("sample_audit") or () if not row.get("usable")
         ),
         "replay_training_samples": len(dataset.get("replay") or ()),
+        "prior_correct_replay_samples": len(dataset.get("prior_correct_replay") or ()),
         "tracker": dataset.get("tracker") or {},
         "automatic_physical_switch": False,
         "physical_authority": False,
@@ -717,11 +773,26 @@ def install(manager):
             candidate = conservative._copy_parent_snapshot(
                 manager, parent["id"], candidate["id"]
             )
+            # Keep the exact selected parent generation as the source of truth
+            # for Manual Correct labels. _sync_feedback still mirrors them to the child
+            # for the established Ridge/fallback lifecycle, but child label row IDs are
+            # not used as provenance for the neural operation.
+            labels = conservative._teach_rows(manager.engine.rl_teaching, parent)
+            operation = _correct_operation(manager, source_generation, row)
+            current_label_ids = (
+                list(operation.get("label_ids") or ())
+                if operation is not None
+                else [int(label["id"]) for label in labels if label.get("id") is not None]
+            )
             synced = manager._sync_feedback(parent, candidate)
             candidate = manager.store.get_agent_config(candidate["id"]) or candidate
-            labels = conservative._teach_rows(manager.engine.rl_teaching, candidate)
             batch_id = _create_batch(
-                manager, row, source_generation, parent_backend, mask
+                manager,
+                row,
+                source_generation,
+                parent_backend,
+                mask,
+                batch_id=(operation or {}).get("operation_id"),
             )
 
             conservative._set_candidate_work(
@@ -734,7 +805,13 @@ def install(manager):
                 policy_backend=TinyMLPBackend.BACKEND,
             )
             dataset = _reconstruct_dataset(
-                manager, parent, candidate, mask, labels, parent_backend.actions
+                manager,
+                parent,
+                candidate,
+                mask,
+                labels,
+                parent_backend.actions,
+                current_label_ids=current_label_ids,
             )
             _save_sample_audit(
                 manager, batch_id, dataset.get("sample_audit") or ()
@@ -928,6 +1005,10 @@ def install(manager):
                     "batch_id": batch_id,
                     "dataset": {
                         "corrections": len(dataset.get("corrections") or ()),
+                        "correct_operation_id": batch_id,
+                        "current_operation_label_ids": list(current_label_ids),
+                        "prior_correct_replay": len(dataset.get("prior_correct_replay") or ()),
+                        "historical_replay": len(dataset.get("historical_replay") or ()),
                         "replay": len(dataset.get("replay") or ()),
                         "holdout": len(dataset.get("holdout") or ()),
                         "nearby": len(dataset.get("nearby") or ()),
