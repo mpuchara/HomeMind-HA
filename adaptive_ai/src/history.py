@@ -2054,7 +2054,10 @@ class HistoryManager(threading.Thread):
             # Optional upstream ON cue: neighbouring-room sensors may legitimately fire
             # a few seconds before the dedicated local sensor. Teach that cue weakly so
             # it can accelerate ON, but never let it define OFF/occupancy persistence.
-            upstream_ts = float(old.get("upstream_anchor_ts", old["ts"]))
+            raw_upstream_ts = old.get("upstream_anchor_ts")
+            upstream_ts = float(
+                old["ts"] if raw_upstream_ts is None else raw_upstream_ts
+            )
             if (
                 neural_enabled
                 and float(reward) > 0.0
