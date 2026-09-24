@@ -24,11 +24,8 @@ import uuid
 
 import agent_candidate_conservative_correct as conservative
 import agent_candidate_lineage as lineage
-from observation_space import (
-    ObservationMask,
-    global_observation_catalog,
-    observation_as_of,
-)
+from observation_space import ObservationMask, observation_as_of
+from context import controllable_context_exclusions, electrical_context_exclusions
 from policy_tiny_mlp import TinyMLPBackend
 from policy_tiny_mlp_correct import (
     incremental_correct_finetune,
@@ -187,16 +184,17 @@ def _validate_source(manager, parent, record):
         raise StructuralRebuildRequired("feature_mask_incompatible", str(exc))
 
     registry = manager.engine.context.resolved_registry()
-    catalog = global_observation_catalog(
-        manager.engine.state_map,
-        registry,
+    state_map = manager.engine.state_map
+    excluded_control, _ = controllable_context_exclusions(state_map, registry)
+    excluded_electrical, _ = electrical_context_exclusions(state_map, registry)
+    forbidden = sorted(
+        set(mask.selected_entities)
+        & (set(excluded_control) | set(excluded_electrical))
     )
-    eligible = set(catalog.get("eligible_entities") or ())
-    forbidden = sorted(set(mask.selected_entities) - eligible)
     if forbidden:
         raise StructuralRebuildRequired(
             "feature_mask_changed",
-            "Persisted neural mask now contains excluded entities: "
+            "Persisted neural mask now contains hard-excluded entities: "
             + ",".join(forbidden[:8]),
         )
 
