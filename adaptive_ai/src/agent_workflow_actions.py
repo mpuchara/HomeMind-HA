@@ -538,6 +538,46 @@ def install(manager):
         operation_id = str(request_id or uuid.uuid4())
         now = time.time()
 
+        # A durable request may be replayed after a crash between Candidate creation
+        # and workflow-request completion. Return the already committed operation
+        # instead of requiring new labels or creating another generation action.
+        if request_id is not None:
+            with manager.store.conn() as c:
+                existing_operation = c.execute(
+                    "SELECT * FROM agent_correct_operations WHERE operation_id=?",
+                    (operation_id,),
+                ).fetchone()
+            if existing_operation:
+                existing_operation = dict(existing_operation)
+                if str(existing_operation.get("parent_generation_id")) != str(generation["generation_id"]):
+                    raise ValueError("Correct operation ID belongs to a different generation")
+                if (
+                    str(existing_operation.get("status") or "") == "committed"
+                    and existing_operation.get("child_generation_id")
+                ):
+                    detail = _json(existing_operation.get("detail_json"), {})
+                    child_generation_id = str(existing_operation["child_generation_id"])
+                    child_status = (
+                        manager.lineage_status(child_generation_id)
+                        if hasattr(manager, "lineage_status") else None
+                    )
+                    return {
+                        "ok": True,
+                        "action": "correct",
+                        "action_id": detail.get("action_id"),
+                        "coalesced": bool(detail.get("coalesced")),
+                        "parent_generation_id": str(generation["generation_id"]),
+                        "child_generation_id": child_generation_id,
+                        "child": child_status,
+                        "correct_operation_id": operation_id,
+                        "correct_label_ids": [
+                            int(value) for value in json.loads(
+                                existing_operation.get("label_ids_json") or "[]"
+                            )
+                        ],
+                        "idempotent_replay": True,
+                    }
+
         # A Correct operation consists of labels created/edited since the preceding
         # committed Correct operation on this exact generation. The first post-upgrade
         # operation adopts existing active labels for backward compatibility.
@@ -619,6 +659,7 @@ def install(manager):
                         json.dumps({
                             "label_count": len(label_ids),
                             "coalesced": bool((result or {}).get("coalesced")),
+                            "action_id": (result or {}).get("action_id"),
                         }, separators=(",", ":")),
                         operation_id,
                     ),
