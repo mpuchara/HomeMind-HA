@@ -186,6 +186,18 @@ def _missing_entity(state, entity_id, agent):
     return state is None or context_scalar(entity_id, state, agent) is None
 
 
+def _selection_reference_ts(state_map):
+    """Stable snapshot watermark used only by the Stage-2 feature-mask selector."""
+    stamps = []
+    for state in (state_map or {}).values():
+        if not state:
+            continue
+        stamp = parse_ts(state.get("last_updated")) or parse_ts(state.get("last_changed"))
+        if stamp is not None:
+            stamps.append(float(stamp))
+    return max(stamps) if stamps else 0.0
+
+
 def select_observation_mask(agent, state_map, registry, hint_entities, relevance_scores=None, *, max_features=None):
     """Build deterministic feature-level mask by reusing established entity ranking."""
     catalog = global_observation_catalog(state_map, registry)
@@ -193,9 +205,11 @@ def select_observation_mask(agent, state_map, registry, hint_entities, relevance
     max_features = max(16, min(128, max_features))
     reserved = len(GLOBAL_FEATURES) + len(HOME_FEATURES)
     entity_budget = max(1, (max_features - reserved) // len(ENTITY_DESCRIPTORS))
+    selection_reference_ts = _selection_reference_ts(state_map)
     selected_entities, meta = select_context_entities(
         agent, state_map, registry, hint_entities,
         max_entities=entity_budget, relevance_scores=relevance_scores,
+        reference_ts=selection_reference_ts,
     )
     catalog_by_id = {row["id"]: row for row in catalog["features"]}
     rows = []
@@ -264,6 +278,7 @@ def select_observation_mask(agent, state_map, registry, hint_entities, relevance
         "considered_entities": int(meta.get("considered_entities") or 0),
         "selection_profile": "feature-level-v1",
         "selection_target_range": [32, 128],
+        "selection_reference_ts": selection_reference_ts,
         "entity_selection": meta,
         "hot_path_active": False,
     }
