@@ -430,7 +430,7 @@ def install(manager):
                             surrogate_id = str(candidate["id"])
                             for table in (
                                 "teaching_rl_labels", "teaching_rl_jobs", "manual_context_feedback",
-                                "teaching_labels", "decision_history",
+                                "teaching_labels", "decision_history", "tiny_mlp_shadow_models",
                             ):
                                 if _table_exists(c, table):
                                     c.execute(f"DELETE FROM {table} WHERE agent_id=?", (surrogate_id,))
