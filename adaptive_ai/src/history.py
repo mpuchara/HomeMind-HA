@@ -85,6 +85,7 @@ class HistoryManager(threading.Thread):
         self.training_schema_cache_misses = 0
         self.training_replay_cache_status = {}
         self.training_home_context_cache_status = {}
+        self.neural_training_artifacts = {}
         self.training_process_status = {
             "enabled": bool(OPTIONS.get("training_process_isolation", True)),
             "state": "idle",
@@ -153,6 +154,10 @@ class HistoryManager(threading.Thread):
                 "training_home_context_cache": dict(
                     getattr(self, "training_home_context_cache_status", {}) or {}
                 ),
+                "tiny_mlp_training": {
+                    "enabled": bool(OPTIONS.get("tiny_mlp_supervised_training_enabled", True)),
+                    "artifact_agents": sorted((getattr(self, "neural_training_artifacts", {}) or {}).keys()),
+                },
                 "training_process": dict(
                     getattr(self, "training_process_status", {}) or {}
                 ),
