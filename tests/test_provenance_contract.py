@@ -1,6 +1,7 @@
 import copy
 from datetime import datetime, timezone
 import tempfile
+import threading
 import time
 import unittest
 from pathlib import Path
@@ -150,6 +151,20 @@ class ProvenanceJournalTests(unittest.TestCase):
             self.assertEqual(decision["dispatch_reason"], "observed only")
         self.assertEqual(self.journal.record_decisions_batch(rows), 0)
 
+    def test_ack_batch_matches_repeated_mark_ack_semantics(self):
+        self.journal.record_decision(
+            decision_id="ack-batch", created_time=1.0, agent_id="a",
+            feature_manifest={"features": {}}, allowed_actions=[0, 1],
+        )
+        written = self.journal.mark_acks_batch([
+            {"decision_id": "ack-batch", "event_id": "event-1", "ack_time": 10.0},
+            {"decision_id": "ack-batch", "event_id": "event-2", "ack_time": 11.0},
+        ])
+        self.assertEqual(written, 2)
+        row = self.journal.decision("ack-batch")
+        self.assertEqual(row["ack_event_id"], "event-2")
+        self.assertEqual(row["ack_time"], 10.0)
+
     def test_manual_experience_survives_journal_restart(self):
         st = state('light.kitchen', 'off') | {
             'context': {'id': 'manual-ctx', 'parent_id': None, 'user_id': 'human'}
@@ -231,6 +246,76 @@ class ProvenanceRuntimeIntegrationTests(unittest.TestCase):
             f.store.get_agent_config = original_get_agent
             f.e.provenance.record_decision = original_single
             f.e.provenance.record_decisions_batch = original_batch
+
+    def test_live_command_ack_does_not_wait_for_store_writer_mutex(self):
+        f = self.fixture
+        intent = f.intent()
+        result = f.e.executor.submit(intent, {0: 1.0}, 1)
+        self.assertEqual(result["status"], "ACCEPTED")
+
+        ack = self._stamp(state("light.kitchen", "on"))
+        ack["context"] = {"id": "ctx-own-ack-lock", "parent_id": None, "user_id": None}
+
+        lock_held = threading.Event()
+        release_lock = threading.Event()
+
+        def hold_writer_lock():
+            with f.store.lock:
+                lock_held.set()
+                release_lock.wait(2.0)
+
+        holder = threading.Thread(target=hold_writer_lock, daemon=True)
+        holder.start()
+        self.assertTrue(lock_held.wait(1.0))
+
+        finished = threading.Event()
+        errors = []
+
+        def deliver():
+            try:
+                f.e.on_state_changed({
+                    "entity_id": "light.kitchen",
+                    "new_state": ack,
+                })
+            except Exception as exc:
+                errors.append(exc)
+            finally:
+                finished.set()
+
+        worker = threading.Thread(target=deliver, daemon=True)
+        worker.start()
+        try:
+            self.assertTrue(
+                finished.wait(0.40),
+                "HA state_changed waited behind the SQLite writer mutex",
+            )
+            self.assertEqual(errors, [])
+        finally:
+            release_lock.set()
+            holder.join(1.0)
+            worker.join(1.0)
+
+        # Explicit provenance reads remain strongly consistent: decision() forces any
+        # queued acknowledgement durable before SELECT.
+        decision = f.e.provenance.decision(intent.intent_id)
+        self.assertIsNotNone(decision["ack_event_id"])
+        self.assertIsNotNone(decision["ack_time"])
+
+    def test_explicit_decision_read_flushes_deferred_ack(self):
+        f = self.fixture
+        intent = f.intent()
+        result = f.e.executor.submit(intent, {0: 1.0}, 1)
+        self.assertEqual(result["status"], "ACCEPTED")
+
+        ack = self._stamp(state("light.kitchen", "on"))
+        ack["context"] = {"id": "ctx-own-ack-read", "parent_id": None, "user_id": None}
+        f.e.on_state_changed({"entity_id": "light.kitchen", "new_state": ack})
+
+        decision = f.e.provenance.decision(intent.intent_id)
+        self.assertIsNotNone(decision["ack_event_id"])
+        self.assertIsNotNone(decision["ack_time"])
+        snapshot = f.e.provenance_deferred_snapshot()
+        self.assertEqual(snapshot["acknowledgements"]["pending"], 0)
 
     def test_process_agent_reuses_in_memory_event_origin_without_select(self):
         f = self.fixture
