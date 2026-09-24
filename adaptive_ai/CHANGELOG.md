@@ -7,6 +7,7 @@
 - Bound Raspberry Pi memory by default to 32 snapshots / 8192 source-weighted units; the LRU exists only for one training job and is never persisted.
 - Expose cache hits, misses, evictions and actual RoomBelief render executions through historical-training diagnostics.
 - Add a deterministic profile matrix for 1/5/20 synthetic agent timelines, 8/32/64 context sensors and static/dynamic histories. CI gates exact forecast parity and render-work reduction; process CPU time is measured directly; wall-clock/RSS remain informational host measurements.
+- Final CI profile: all cases preserve exact forecast parity and reduce duplicate RoomBelief renders by 25%. In the representative dynamic 20-agent/64-sensor case CPU falls from 5.7755 s to 4.4976 s (1.284× speedup), with 25% cache hit-rate and 4768/8192 cache units used. Tiny fully-static cases remain sub-second and can be neutral/slightly slower due to snapshot bookkeeping.
 - No changes to replay rewards, learned samples, policy update order, Candidate lineage, Correct, ActionIntent, Executor or physical HA dispatch.
 - Full suite target: 1176 tests.
 
