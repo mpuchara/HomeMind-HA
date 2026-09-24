@@ -1012,8 +1012,25 @@ def install(core):
         agent, rt, reward, reason,
         user_id=None, experience=None,
     ):
+        pending = (
+            experience
+            if experience is not None
+            else rt.get("pending")
+        )
+        if not pending:
+            return None
+        # Experiment/teaching pending items already have separate established contracts.
+        # Their base handler does not inject the counterfactual action as ordinary policy
+        # feedback, so preserve that lifecycle. Automatic Correct owns ordinary delayed
+        # outcome rewards and deliberately stops scalar reward learning at Stage 6.
+        if pending.get("experiment") or pending.get("teaching_id"):
+            return original_reward_pending(
+                agent, rt, reward, reason,
+                user_id, experience,
+            )
+        resolved = None
         try:
-            service.resolve_runtime(
+            resolved = service.resolve_runtime(
                 agent, rt, reward, reason,
                 user_id, experience,
             )
@@ -1031,10 +1048,55 @@ def install(core):
                     "reason": str(reason),
                 },
             )
-        return original_reward_pending(
-            agent, rt, reward, reason,
-            user_id, experience,
+
+        # Preserve runtime observability and close the existing pending-action lifecycle,
+        # but intentionally do NOT call the legacy live-feedback handler: it performs
+        # policy.update + save_model + add_feedback. Stage 6 must only collect evidence.
+        rt["last_reward_components"] = rt.pop(
+            "reward_components_pending", {}
         )
+        rt["last_reward"] = reward
+        rt["last_reward_reason"] = (
+            "Automatic Correct proposal: " + str(reason)
+        )
+        if rt.get("pending") is pending:
+            rt["pending"] = None
+
+        decision_id = pending.get("decision_id")
+        provenance = getattr(engine, "provenance", None)
+        if decision_id and provenance is not None:
+            provenance.mark_outcome(
+                decision_id, reward, str(reason)
+            )
+        core.STORE.event(
+            agent["id"],
+            (
+                "info"
+                if resolved
+                and resolved.get("status") == "trusted"
+                else "warning"
+            ),
+            "automatic_correct_outcome",
+            (
+                "Automatic Correct trusted outcome"
+                if resolved
+                and resolved.get("status") == "trusted"
+                else "Automatic Correct outcome kept out of learning"
+            ),
+            {
+                "proposed_reward": reward,
+                "reason": str(reason),
+                "status": (
+                    (resolved or {}).get("status")
+                    or "unknown"
+                ),
+                "resolution_key": (
+                    (resolved or {}).get("resolution_key")
+                ),
+                "policy_updated": False,
+            },
+        )
+        return bool(resolved)
 
     engine._reward_pending = reward_pending
 
