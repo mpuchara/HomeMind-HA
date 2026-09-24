@@ -231,6 +231,16 @@ class AutomaticCorrectIntegrationTests(unittest.TestCase):
         )
         return event_id
 
+    def test_teaching_intent_is_not_reinterpreted_as_automatic_reward(self):
+        intent = self.fixture.intent(teaching_id="teach-explicit")
+        result = self.service.start_action(
+            intent, {"status": "ACCEPTED"}
+        )
+        self.assertIsNone(result)
+        self.assertEqual(
+            self.service.recent(self.a["id"]), []
+        )
+
     def test_accepted_action_captures_stage2_observation_and_weak_reward_does_not_update_policy(self):
         intent = self.fixture.intent()
         result = self.e.executor.submit(intent, {0: 1.0}, 1)
