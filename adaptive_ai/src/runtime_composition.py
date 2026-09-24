@@ -70,6 +70,11 @@ class RuntimeCompositionRoot:
                 "source_of_truth": "promotion_validations[]",
             },
             "execution": {"owner": "engine.executor", "contract": "ActionIntent_to_Executor_only_physical_dispatch"},
+            "automatic_correct": {
+                "contract": getattr(engine, "automatic_correct_contract", None),
+                "learning": "observer_only_reward_buffer_no_policy_update",
+                "http": "/api/agents/{agent_id}/automatic-correct",
+            },
             "neural_shadow": (
                 {
                     **engine.tiny_mlp_shadow.diagnostics(),
@@ -148,6 +153,10 @@ class RuntimeCompositionRoot:
         from tiny_mlp_shadow import install as install_tiny_mlp_shadow
         from candidate_neural_shadow import install as install_candidate_neural_shadow
         from trial_knowledge import install as install_trial_knowledge
+        from automatic_correct_rewards import (
+            install as install_automatic_correct_rewards,
+            register_routes as register_automatic_correct_routes,
+        )
 
         # Existing fast + preference + episode composition is the characterized base.
         self.base_prepare_engine_extensions()
@@ -176,6 +185,7 @@ class RuntimeCompositionRoot:
 
         # Trial knowledge intentionally wraps generation-aware Explore.
         manager = install_trial_knowledge(manager)
+        install_automatic_correct_rewards(self.core)
         manager = install_confidence_contract(manager)
         install_runtime_semantics(engine, manager.confidence_probability_journal)
         manager = install_cold_start_drift(manager)
@@ -190,6 +200,7 @@ class RuntimeCompositionRoot:
         register_feedback_routes(router, self.core)
         register_promotion_routes(router, self.core, manager)
         register_correct_learning_debug_route(router, self.core, manager)
+        register_automatic_correct_routes(router, self.core)
         register_runtime_debug_routes(router, self.core, manager)
 
         # Stage 3 observer is installed after all established policy/Candidate/Correct
@@ -215,6 +226,17 @@ class RuntimeCompositionRoot:
                 "rollback": getattr(manager, "trial_rollback_contract", None),
                 "install_order": "after_agent_explore_before_workers",
                 "action_boundary": "existing_experiments_to_actionintent_to_executor_only",
+            },
+        )
+        self.core.STORE.event(
+            None, "info", "automatic_correct_ready",
+            "Trusted Automatic Correct reward attribution is active",
+            {
+                "contract": getattr(engine, "automatic_correct_contract", None),
+                "install_order": "after_trial_knowledge_before_confidence_contract",
+                "manual_correct": "unchanged_supervised_chart_flow",
+                "reward_learning": False,
+                "action_boundary": "observer_only_no_dispatch",
             },
         )
         self.core.STORE.event(
