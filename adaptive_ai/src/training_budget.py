@@ -35,6 +35,11 @@ class CooperativeTrainingBudget:
         self._thread_prefixes = ("adaptive-ai-index-",)
         self._interactive_until = 0.0
         self._interactive_started_at = None
+        # Monotonic priority epoch. A worker yields strictly once per burst, then
+        # resumes ordinary short duty-cycle slices even while the window remains open.
+        # This prevents N tiny checkpoints from turning one realtime event into N sleeps.
+        self._interactive_epoch = 0
+        self._interactive_class = None
         # Continuous HA sensor traffic must not starve offline training forever. A burst
         # may keep strict realtime priority only for a bounded interval, followed by a
         # short cooldown in which the training worker is guaranteed a scheduling slice.
@@ -59,6 +64,8 @@ class CooperativeTrainingBudget:
             "interactive_preemptions": 0,
             "interactive_sleep_seconds": 0.0,
             "interactive_requests_suppressed": 0,
+            "interactive_priority_epochs": 0,
+            "interactive_epoch_escalations": 0,
         }
 
     @staticmethod
@@ -105,19 +112,20 @@ class CooperativeTrainingBudget:
         return any(name.startswith(prefix) for prefix in self._thread_prefixes)
 
     def request_interactive_window(self, seconds=0.75, reason="interactive"):
-        """Temporarily give HTTP/realtime inference strict priority over training.
+        """Temporarily give HTTP/realtime inference priority over training.
 
-        Realtime priority is deliberately burst-bounded. Hundreds of Home Assistant
-        entities can produce state changes more often than once per second; extending the
-        deadline on every event used to keep an adaptive-ai-index worker asleep forever.
-        A burst can extend only up to the configured burst cap and is followed by a short
-        cooldown in which new priority requests are ignored. The training worker is still
-        capped to its normal short cooperative slice, so realtime latency remains protected
-        without starving the FIFO.
+        Priority is represented as a bounded *burst epoch*.  A training worker performs
+        one strict scheduler yield per epoch, then continues with the normal short
+        duty-cycle slices.  Repeated state_changed events may extend the same epoch up to
+        its cap, but they do not create one extra sleep at every tiny replay checkpoint.
+
+        This keeps realtime responsive while guaranteeing offline work can make progress
+        under sustained 2/4/10 Hz sensor traffic.
         """
         duration = self._clamp(float(seconds), 0.05, 3.0)
         reason = str(reason or "interactive")
         realtime_reason = reason in {"ha_state_changed", "realtime_inference"}
+        priority_class = "realtime" if realtime_reason else "user"
         now = self._clock()
         with self._lock:
             max_burst = (
@@ -136,7 +144,19 @@ class CooperativeTrainingBudget:
                 return float(self._interactive_until or 0.0)
 
             active = now < float(self._interactive_until or 0.0)
-            if active:
+            # Escalating from background realtime traffic to an explicit user action
+            # deserves a fresh immediate yield, but ordinary event extensions stay in the
+            # same epoch and therefore cannot multiply sleeps by checkpoint count.
+            escalated = active and self._interactive_class == "realtime" and priority_class == "user"
+            if not active or escalated:
+                self._interactive_started_at = now
+                self._interactive_epoch += 1
+                self._interactive_class = priority_class
+                self._stats["interactive_priority_epochs"] += 1
+                if escalated:
+                    self._stats["interactive_epoch_escalations"] += 1
+                until = now + min(duration, max_burst)
+            else:
                 started = float(
                     self._interactive_started_at
                     if self._interactive_started_at is not None else now
@@ -146,16 +166,13 @@ class CooperativeTrainingBudget:
                     cap,
                     max(float(self._interactive_until or 0.0), now + duration),
                 )
-            else:
-                self._interactive_started_at = now
-                until = now + min(duration, max_burst)
 
             self._interactive_until = until
             self._interactive_cooldown_until = max(
                 float(self._interactive_cooldown_until or 0.0),
                 until + cooldown,
             )
-            self._interactive_reason = str(reason or "interactive")
+            self._interactive_reason = reason
             return until
 
     def begin(self, *, thread_name=None):
@@ -170,10 +187,12 @@ class CooperativeTrainingBudget:
         self._local.slice_started = None
 
     def checkpoint(self, label=None, *, force=False, thread_name=None):
-        """Yield CPU if the current training slice exhausted its wall-clock allowance.
+        """Yield at most once per priority burst, then enforce the normal work quantum.
 
-        Returns the sleep duration. The first checkpoint on a worker starts accounting so
-        callers are safe even if begin() was not called explicitly.
+        The old implementation slept again at every checkpoint while an interactive
+        window remained open.  Fine-grained replay loops could therefore pay hundreds of
+        milliseconds repeatedly for one burst.  The epoch contract below separates
+        "give realtime a turn now" from ordinary wall-clock duty-cycle accounting.
         """
         if not self._eligible(thread_name):
             return 0.0
@@ -182,18 +201,33 @@ class CooperativeTrainingBudget:
         with self._lock:
             interactive_until = float(self._interactive_until or 0.0)
             interactive_reason = self._interactive_reason
+            interactive_epoch = int(self._interactive_epoch)
+            max_slice = float(self._max_slice_seconds)
+            duty = float(self._duty_cycle)
+            max_sleep = float(self._max_sleep_seconds)
+
         if now < interactive_until:
-            pause = min(0.25, max(0.001, interactive_until - now))
-            self._sleep(pause)
-            with self._lock:
-                self._stats["interactive_preemptions"] += 1
-                self._stats["interactive_sleep_seconds"] += pause
-                self._stats["last_label"] = (
-                    "interactive:" + str(interactive_reason or "priority")
-                )
-            self._local.slice_started = self._clock()
-            self._local.active = True
-            return pause
+            served_epoch = int(getattr(self._local, "interactive_epoch", -1))
+            if served_epoch != interactive_epoch:
+                # One explicit scheduler hand-off per burst.  The same quantum used to
+                # bound training work also bounds this pause, so priority cost is not a
+                # function of how many micro-checkpoints the replay code contains.
+                remaining = max(0.0, interactive_until - now)
+                pause = min(max_slice, remaining)
+                if pause > 0.0:
+                    self._sleep(pause)
+                with self._lock:
+                    self._stats["interactive_preemptions"] += 1
+                    self._stats["interactive_sleep_seconds"] += pause
+                    self._stats["last_label"] = (
+                        "interactive:" + str(interactive_reason or "priority")
+                    )
+                self._local.interactive_epoch = interactive_epoch
+                self._local.slice_started = self._clock()
+                self._local.active = True
+                return pause
+            # This burst already received its strict yield. Continue below and account
+            # actual worker time normally; max_slice still bounds continuous work.
 
         started = getattr(self._local, "slice_started", None)
         if started is None:
@@ -202,10 +236,6 @@ class CooperativeTrainingBudget:
             return 0.0
 
         active = max(0.0, now - float(started))
-        with self._lock:
-            max_slice = self._max_slice_seconds
-            duty = self._duty_cycle
-            max_sleep = self._max_sleep_seconds
 
         if not force and active < max_slice:
             return 0.0
@@ -265,6 +295,13 @@ class CooperativeTrainingBudget:
             "interactive_preemptions": int(stats["interactive_preemptions"]),
             "interactive_sleep_seconds": round(float(stats["interactive_sleep_seconds"]), 3),
             "interactive_requests_suppressed": int(stats["interactive_requests_suppressed"]),
+            "interactive_priority_epochs": int(stats["interactive_priority_epochs"]),
+            "interactive_epoch_escalations": int(stats["interactive_epoch_escalations"]),
+            "interactive_yield_quantum_ms": round(max_slice * 1000.0, 1),
+            "training_wall_duty_cycle_target": duty,
+            "effective_training_wall_duty_cycle": (
+                None if effective is None else round(effective, 4)
+            ),
             "interactive_max_burst_seconds": float(self._interactive_max_burst_seconds),
             "interactive_cooldown_seconds": float(self._interactive_cooldown_seconds),
             "realtime_max_burst_seconds": float(self._realtime_max_burst_seconds),
