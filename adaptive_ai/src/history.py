@@ -2532,6 +2532,37 @@ class HistoryManager(threading.Thread):
                  "qualification": qualification_summary,
                  "temporal_replay": _publish_temporal_replay_stats()},
             )
+        if self.neural_training_artifacts and not self.worker_mode:
+            from tiny_mlp_shadow import publish_training_artifact
+            service = getattr(self.engine, "tiny_mlp_shadow", None)
+            for aid, artifact in list(self.neural_training_artifacts.items()):
+                try:
+                    published = publish_training_artifact(STORE, artifact)
+                    if service is not None and callable(getattr(service, "invalidate", None)):
+                        service.invalidate(aid)
+                    STORE.event(
+                        aid,
+                        "info",
+                        "tiny_mlp_supervised_tournament",
+                        "Offline supervised Tiny MLP tournament completed; physical authority unchanged",
+                        {
+                            "selected_backend": published.get("selected_backend"),
+                            "trained": published.get("trained"),
+                            "tournament": artifact.get("tournament"),
+                            "trainer": artifact.get("trainer"),
+                            "shadow_only": True,
+                            "physical_authority": False,
+                        },
+                    )
+                except Exception as exc:
+                    STORE.event(
+                        aid,
+                        "warning",
+                        "tiny_mlp_supervised_publish_failed",
+                        "Ridge training completed but the optional Tiny MLP Shadow artifact was not published",
+                        {"error": f"{type(exc).__name__}: {exc}", "physical_authority": False},
+                    )
+
         heldout_updates.close()
         _publish_temporal_replay_stats()
         self.training_replay_cache_status = replay_query_cache.status()
