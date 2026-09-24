@@ -128,17 +128,22 @@ class SharedHistoricalContextTests(unittest.TestCase):
             first_forecast = self.signature(
                 first.history.home_context.forecast(self.target, ts)
             )
-            first_state = first.state_map[self.radar]["state"]
+            first_seed_id = first._home_seed_rows[self.radar]["id"]
         finally:
             first.close()
 
+        # RoomBelief's causal window starts at ts-30. A fast-journal event received
+        # *after* that cutoff is intentionally not part of the RoomBelief seed even if
+        # policy feature history can see it later. To test cache invalidation itself,
+        # inject a genuinely late packet (receipt > event time) that is nevertheless
+        # causally visible by the cutoff and therefore changes the seed input.
         journal.record(
             self.radar,
-            state(self.radar, "off", device_class="occupancy"),
-            event_time=ts - 5,
-            received_time=ts - 1,
+            state(self.radar, "on", device_class="occupancy"),
+            event_time=self.base + 1,
+            received_time=self.base + 4,
             source="late-test",
-            event_key="late-visible",
+            event_key="late-visible-before-cutoff",
         )
 
         # Authoritative reference after the late packet: no shared home-context cache.
@@ -150,10 +155,10 @@ class SharedHistoricalContextTests(unittest.TestCase):
         )
         try:
             reference.advance(ts)
-            reference_state = reference.state_map[self.radar]["state"]
             reference_forecast = self.signature(
                 reference.history.home_context.forecast(self.target, ts)
             )
+            reference_seed = dict(reference._home_seed_rows[self.radar])
         finally:
             reference.close()
 
@@ -172,9 +177,14 @@ class SharedHistoricalContextTests(unittest.TestCase):
             self.assertEqual(second.stats()["home_context_cache_misses"], 1)
             self.assertEqual(cache.status()["hits"], 0)
             self.assertEqual(cache.status()["misses"], 2)
-            self.assertNotEqual(first_state, reference_state)
-            self.assertNotEqual(first_forecast, reference_forecast)
-            self.assertEqual(second.state_map[self.radar]["state"], reference_state)
+            self.assertNotEqual(first_seed_id, reference_seed["id"])
+            self.assertEqual(
+                float(reference_seed.get("_feature_received_time") or 0.0),
+                self.base + 4,
+            )
+            self.assertEqual(
+                second._home_seed_rows[self.radar]["id"], reference_seed["id"]
+            )
             self.assertEqual(second_forecast, reference_forecast)
         finally:
             second.close()
