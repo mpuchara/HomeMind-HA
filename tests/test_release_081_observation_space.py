@@ -1,9 +1,13 @@
 """0.14.81 Stage-2 observation-space, mask and historical causality contracts."""
 import copy
 import json
+from pathlib import Path
+import tempfile
 import unittest
 
 from context import HistoricalTemporalTracker, TemporalHistory
+from context_engine import ContextEngine
+from observation_contract import FeatureJournal, ObservationSQLiteTemporalTracker
 from observation_space import (
     ENTITY_DESCRIPTORS,
     GLOBAL_FEATURES,
@@ -15,6 +19,8 @@ from observation_space import (
     select_observation_mask,
 )
 from policy import MultiHorizonPolicy
+from settings import DEFAULT_OPTIONS
+from storage import Store
 from support import agent, state
 
 
@@ -244,6 +250,58 @@ class HistoricalObservationTests(unittest.TestCase):
             result["missing_feature_ids"],
         )
         self.assertGreaterEqual(result["missing_feature_count"], 5)
+
+
+class ReceivedTimeCausalityTests(unittest.TestCase):
+    def test_feature_received_in_future_is_invisible_until_receipt(self):
+        temp = tempfile.TemporaryDirectory(prefix="hm-observation-asof-")
+        try:
+            store = Store(Path(temp.name) / "observation.db")
+            target = "light.kitchen"
+            motion = "binary_sensor.motion"
+            states = {
+                target: state(target, "off"),
+                motion: state(motion, "off", device_class="motion"),
+            }
+            registry = {
+                target: {"area_id": "kitchen", "device_id": "lamp"},
+                motion: {"area_id": "kitchen", "device_id": "pir"},
+            }
+            a = agent(target_entity=target, input_entities=["*"])
+            mask, _ = select_observation_mask(
+                a, states, registry, [motion],
+                relevance_scores={motion: .95},
+                max_features=64,
+            )
+            store.archive_batch([
+                (motion, BASE, "off", {"device_class": "motion"}, None, "test"),
+            ])
+            journal = FeatureJournal(store)
+            journal.record(
+                motion,
+                state(motion, "on", device_class="motion"),
+                event_time=BASE + 10,
+                received_time=BASE + 30,
+                source="late-test",
+                event_key="late-on",
+            )
+            ctx = ContextEngine(DEFAULT_OPTIONS)
+            ctx.configure(states, entities=registry)
+            tracker = ObservationSQLiteTemporalTracker(
+                store, [motion], ctx, BASE, BASE + 60
+            )
+            try:
+                before = observation_as_of(mask, states, tracker, BASE + 20, a)
+                after = observation_as_of(mask, states, tracker, BASE + 35, a)
+            finally:
+                tracker.close()
+            fid = f"entity:{motion}:value"
+            before_value = before["values"][before["feature_ids"].index(fid)]
+            after_value = after["values"][after["feature_ids"].index(fid)]
+            self.assertEqual(before_value, -1.0)
+            self.assertEqual(after_value, 1.0)
+        finally:
+            temp.cleanup()
 
 
 class RidgeIsolationTests(unittest.TestCase):
