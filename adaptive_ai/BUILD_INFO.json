@@ -40,7 +40,7 @@
   "migration": "no destructive migration; existing agents, models, feedback, raw archive, historical experiences, candidate lineage, rollback and generation state preserved",
   "physical_control": "unchanged; repaired agents return to Shadow and Control still requires qualified state plus all existing guards",
   "pi4": "0.14.38 targets the long-soak Raspberry Pi failure: drift analysis is coalesced on a throttled background observer, REST /states reconciliation is delta-only after bootstrap, websocket outage fallback reconciles every 10 s, and HA core-state health is tracked separately from unrelated REST errors.",
-  "ci_status": "0.14.79 validation pending.",
+  "ci_status": "0.14.79 branch validation passed: Validate HomeMind run #3343 (Python 3.11/3.13, 1176 tests each, Correct scaling, training QoS, HA-ingress decoupling, shared-context CPU/RSS profile, Stage 17/18, source smoke, simulations, Docker smoke).",
   "training_slice_budget": "adaptive-ai-index workers call a shared CooperativeTrainingBudget; expensive temporal tracker loops yield between entities/events and finalization is no longer outside the throttle",
   "finalization_lifeline": "HEAVY_JOBS remains owned through final gc.collect(), so /api/status and /api/agents stay on lightweight lifeline reads until the worker is actually finished",
   "finalization_progress": "post-replay UI now exposes bounded stages: replay complete, policy serialization, benchmark save, qualification, checkpoint complete",
@@ -289,5 +289,23 @@
   "shared_historical_context_memory_079": "Default limit is 32 snapshots and 8192 source-weighted units; cache lifetime is one heavy training job and nothing is persisted to SQLite.",
   "shared_historical_context_semantics_079": "Cache miss runs the pre-0.14.79 30-second causal RoomBelief rebuild unchanged; late packets, rewinds, topology changes and feature-contract changes are explicit regression cases.",
   "shared_historical_context_profile_079": "CI profiles 1/5/20 synthetic agent timelines, 8/32/64 context sensors and static/dynamic history, comparing cache disabled versus enabled with exact forecast parity; process CPU time is measured directly while wall-clock/RSS are host-local diagnostics.",
-  "shared_historical_context_safety_079": "No rewards, policy updates, Candidate lineage, Correct behavior, ActionIntent, Executor or physical Home Assistant control semantics are changed."
+  "shared_historical_context_safety_079": "No rewards, policy updates, Candidate lineage, Correct behavior, ActionIntent, Executor or physical Home Assistant control semantics are changed.",
+  "shared_historical_context_profile_summary_079": {
+    "run": 3343,
+    "semantic_parity": true,
+    "average_render_reduction": 0.25,
+    "representative_case": "dynamic history, 20 synthetic agent timelines, 64 context sensors",
+    "baseline_cpu_seconds": 5.7755,
+    "cached_cpu_seconds": 4.4976,
+    "cpu_speedup": 1.284,
+    "baseline_wall_seconds": 5.7761,
+    "cached_wall_seconds": 4.4981,
+    "wall_speedup": 1.284,
+    "cache_hit_rate": 0.25,
+    "cache_units": 4768,
+    "cache_max_units": 8192,
+    "cached_python_peak_mb": 8.785,
+    "cached_process_rss_after_mb": 31.434,
+    "note": "Host synthetic profile; process CPU/render reduction are algorithmic evidence, RSS/wall-clock are machine-local. Small fully-static contexts can be neutral/slightly slower in absolute sub-second work, while every dynamic matrix case improved."
+  }
 }
