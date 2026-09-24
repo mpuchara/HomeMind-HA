@@ -1,10 +1,10 @@
 {
-  "version": "0.14.75",
+  "version": "0.14.76",
   "release_date": "2026-09-24",
-  "base_version": "0.14.74",
-  "base_commit": "32e9848bf999bd646e1c25d9853fb796f77363b4",
-  "release_status": "release-0.14.75-policy-backend-foundation",
-  "tests_passed": 1150,
+  "base_version": "0.14.75",
+  "base_commit": "a308f3d0611c31cd5ef145ff70cf24f16ce00f91",
+  "release_status": "release-0.14.76-correct-hotpath",
+  "tests_passed": 1160,
   "profile": "rpi4-low-memory-complete-discovery-manual-agent-selection",
   "manual_agent_training": true,
   "max_concurrent_training_jobs": 1,
@@ -40,7 +40,7 @@
   "migration": "no destructive migration; existing agents, models, feedback, raw archive, historical experiences, candidate lineage, rollback and generation state preserved",
   "physical_control": "unchanged; repaired agents return to Shadow and Control still requires qualified state plus all existing guards",
   "pi4": "0.14.38 targets the long-soak Raspberry Pi failure: drift analysis is coalesced on a throttled background observer, REST /states reconciliation is delta-only after bootstrap, websocket outage fallback reconciles every 10 s, and HA core-state health is tracked separately from unrelated REST errors.",
-  "ci_status": "0.14.75 PR validation passed: Validate HomeMind run #3258 (Python 3.11/3.13, 1150 tests each, compileall, JS, Stage 17/18, source smoke, simulations, Docker smoke).",
+  "ci_status": "0.14.76 validation pending.",
   "training_slice_budget": "adaptive-ai-index workers call a shared CooperativeTrainingBudget; expensive temporal tracker loops yield between entities/events and finalization is no longer outside the throttle",
   "finalization_lifeline": "HEAVY_JOBS remains owned through final gc.collect(), so /api/status and /api/agents stay on lightweight lifeline reads until the worker is actually finished",
   "finalization_progress": "post-replay UI now exposes bounded stages: replay complete, policy serialization, benchmark save, qualification, checkpoint complete",
@@ -270,5 +270,9 @@
   "stage1_backend_compatibility": "Persisted models without policy_backend remain diagonal_linucb; explicit unknown or not-yet-implemented backends are rejected rather than silently reinterpreted.",
   "stage1_tiny_mlp": "tiny_mlp is a reserved non-active capability descriptor only; no neural runtime/training/control path exists in 0.14.75.",
   "stage1_correct_regression_gate": "Existing Agent/Candidate chart-based Correct, direct-parent lineage and discarded-candidate protections remain authoritative and run in the full regression suite.",
-  "stage1_backend_benchmark": "Diagnostics-only benchmark harness reports inference p50/p95/p99, bounded update cost, serialized/deep model size, 20/50-agent memory projections, serialization/deserialization and projected event-to-intent inference overhead."
+  "stage1_backend_benchmark": "Diagnostics-only benchmark harness reports inference p50/p95/p99, bounded update cost, serialized/deep model size, 20/50-agent memory projections, serialization/deserialization and projected event-to-intent inference overhead.",
+  "correct_history_hotpath_076": "Live Correct merges the ordered observed Desired and Current streams in one forward pass; repeated full timestamp-list construction per chart point is removed.",
+  "correct_history_read_path_076": "Correct/Teach history GETs are read-only: no forced Teaching.flush() and no schema DDL in ordinary reads; SQLite rows are merged with bounded before/after RAM snapshots to tolerate a concurrent background flush.",
+  "correct_history_semantics_076": "Observed runtime Desired, physical Current, direct-parent Candidate lineage, seed behavior, duplicate timestamp resolution, None values and the 95 s stale-gap contract remain unchanged.",
+  "correct_history_scaling_076": "CI benchmarks 1k/2k/4k/8k rows per stream; semantic parity is exact and deterministic lookup-work scaling is gated as linear while legacy timestamp-scan work remains quadratic. Wall-clock results are informational only."
 }
