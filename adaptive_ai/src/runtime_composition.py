@@ -90,6 +90,7 @@ class RuntimeCompositionRoot:
                 "optimizer": getattr(manager, "correct_optimizer_contract", None),
                 "base": getattr(manager, "correct_base_contract", None),
                 "schema_evolution": getattr(manager, "correct_schema_evolution_contract", None),
+                "neural_manual_correct": getattr(manager, "candidate_neural_correct_contract", None),
                 "hot_path": False,
             },
             "correct_learning_debug": {
