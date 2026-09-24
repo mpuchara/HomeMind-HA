@@ -10,7 +10,9 @@ import json
 import math
 import uuid
 
-from policy_backend import PolicyBackend
+from policy_backend import (
+    PolicyBackend, require_backend, serialize_backend_model, verify_model_checksum,
+)
 from settings import OPTIONS, clamp, now_ts
 
 
@@ -294,17 +296,23 @@ class FullRidgeLinUCBBackend(PolicyBackend):
         self.heads[int(horizon)].validate(action_idx, features, reward, sample_ts)
 
     def serialize(self):
-        return json.loads(json.dumps({
+        raw = json.loads(json.dumps({
             "format": "homemind-policy-backend-v1", "backend": self.BACKEND,
             "version": self.VERSION, "model_revision": self.model_revision,
             "actions": self.actions, "horizons": self.horizons,
             "feature_indices": self.feature_indices, "alpha": self.alpha, "ridge": self.ridge,
             "heads": {str(h): head.export() for h, head in self.heads.items()},
         }, allow_nan=False))
+        return serialize_backend_model(
+            raw, policy_backend=self.BACKEND, backend_version=self.VERSION
+        )
 
     @classmethod
     def deserialize(cls, raw, **kwargs):
-        if raw.get("backend") != cls.BACKEND or int(raw.get("version", 0)) != cls.VERSION:
+        require_backend(raw, expected=cls.BACKEND)
+        if not verify_model_checksum(raw):
+            raise ValueError("NEEDS_RETRAIN: full-ridge model checksum mismatch")
+        if int(raw.get("version", 0)) != cls.VERSION:
             raise ValueError("NEEDS_RETRAIN: incompatible full-ridge backend version")
         return cls(actions=raw["actions"], horizons=raw["horizons"],
                    feature_indices=raw["feature_indices"], alpha=raw.get("alpha", 0.65),

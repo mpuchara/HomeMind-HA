@@ -1,3 +1,14 @@
+# 0.14.75 — 2026-09-24
+
+- Lock the current chart-based **Correct** and Candidate direct-parent behavior as permanent Stage-1 regression contracts; no Correct UX, reward, promotion, ActionIntent or Executor semantics are changed.
+- Add a common persisted policy envelope with explicit `policy_backend`, backend/model-format version, feature-schema ID, feature-mask ID and model checksum.
+- Preserve all legacy persisted agents: models without an explicit backend remain `diagonal_linucb` and do not require Rebuild merely because the envelope was introduced.
+- Reject explicit unknown or unavailable backend identifiers instead of silently loading their payload as the current policy family.
+- Align the existing Full Ridge shadow challenger with the same backend envelope while keeping it non-production and non-dispatching.
+- Reserve `tiny_mlp` in backend capabilities for later stages only. 0.14.75 contains no neural training, neural inference in the product path or neural physical authority.
+- Add a diagnostics-only Pi-oriented backend benchmark harness for inference p50/p95/p99, bounded update cost, model memory, 20/50-agent projections, serialization/deserialization and projected event→intent inference overhead.
+- Add nine Stage-1 regression tests; full suite target: 1150 tests.
+
 # 0.14.74 — 2026-09-23
 
 - Fix the missing **Runtime debug log** section in Diagnostics & technical details.
