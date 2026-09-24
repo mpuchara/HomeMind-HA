@@ -290,6 +290,68 @@ class HistoricalCorrectReconstructionTests(unittest.TestCase):
             self.assertEqual(audit["desired"], 1.0)
             self.assertEqual(audit["original_decision"], 0.0)
 
+    def test_current_operation_is_strong_signal_and_prior_correct_moves_to_replay(self):
+        with tempfile.TemporaryDirectory(prefix="hm-stage5-op-scope-") as root:
+            store = Store(Path(root) / "stage5.db")
+            feature_id = "time:hour_sin"
+            mask = ObservationMask(
+                schema_id=observation_schema_id(),
+                mask_version=1,
+                feature_ids=(feature_id,),
+                features=({
+                    "id": feature_id, "name": feature_id, "kind": "global",
+                    "entity_id": None, "area_id": None,
+                    "descriptor": "hour_sin", "lag_seconds": 0.0,
+                },),
+                selected_entities=(),
+                global_feature_count=1,
+                missing_feature_count=0,
+            )
+            manager = SimpleNamespace(
+                store=store,
+                engine=SimpleNamespace(context=_NoHomeContext()),
+            )
+            labels = [
+                {
+                    "id": 1, "sample_ts": 30_000.0, "desired": 0.0,
+                    "previous_desired": 1.0,
+                },
+                {
+                    "id": 2, "sample_ts": 30_030.0, "desired": 1.0,
+                    "previous_desired": 0.0,
+                },
+            ]
+            with patch.dict(neural_correct.OPTIONS, {
+                "tiny_mlp_correct_replay_samples": 0,
+                "tiny_mlp_correct_holdout_samples": 0,
+                "tiny_mlp_correct_nearby_seconds": "",
+            }, clear=False):
+                dataset = neural_correct._reconstruct_dataset(
+                    manager,
+                    dict(AGENT),
+                    dict(AGENT),
+                    mask,
+                    labels,
+                    (0.0, 1.0),
+                    current_label_ids=[2],
+                )
+            self.assertEqual(
+                [row["label_id"] for row in dataset["corrections"]],
+                [2],
+            )
+            self.assertEqual(
+                [row["label_id"] for row in dataset["prior_correct_replay"]],
+                [1],
+            )
+            self.assertEqual(
+                [row["label_id"] for row in dataset["sample_audit"]],
+                [2],
+            )
+            self.assertEqual(
+                dataset["prior_correct_replay"][0]["source"],
+                "prior_manual_correct_replay",
+            )
+
     def test_missing_source_feature_is_audited_unusable_not_fabricated(self):
         with tempfile.TemporaryDirectory(prefix="hm-stage5-missing-") as root:
             store = Store(Path(root) / "stage5.db")
