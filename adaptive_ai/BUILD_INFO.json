@@ -1,10 +1,10 @@
 {
-  "version": "0.14.81",
+  "version": "0.14.82",
   "release_date": "2026-09-24",
-  "base_version": "0.14.80",
-  "base_commit": "efcb3e74e95e3c26a845ba454db1f895328b7705",
-  "release_status": "release-0.14.81-observation-space-selector",
-  "tests_passed": 1202,
+  "base_version": "0.14.81",
+  "base_commit": "6350f78aae7e55f9d7c67ec36b91a3c20222d44c",
+  "release_status": "stage3-tiny-mlp-shadow-ci-green",
+  "tests_passed": 1213,
   "profile": "rpi4-low-memory-complete-discovery-manual-agent-selection",
   "manual_agent_training": true,
   "max_concurrent_training_jobs": 1,
@@ -40,7 +40,7 @@
   "migration": "no destructive migration; existing agents, models, feedback, raw archive, historical experiences, candidate lineage, rollback and generation state preserved",
   "physical_control": "unchanged; repaired agents return to Shadow and Control still requires qualified state plus all existing guards",
   "pi4": "0.14.38 targets the long-soak Raspberry Pi failure: drift analysis is coalesced on a throttled background observer, REST /states reconciliation is delta-only after bootstrap, websocket outage fallback reconciles every 10 s, and HA core-state health is tracked separately from unrelated REST errors.",
-  "ci_status": "0.14.81 final functional release code passed Validate HomeMind #3418: Python 3.11/3.13 with 1202 tests, deterministic snapshot-mask regression, 775-entity observation-space benchmark, historical/received-time causality regressions, existing performance suite, Stage 17/18, source smoke, simulations and Docker.",
+  "ci_status": "PR #167 green on Python 3.11 + 3.13, Docker image smoke, compile/JS, historical benchmarks and 0.14.82 tiny MLP benchmark",
   "training_slice_budget": "adaptive-ai-index workers call a shared CooperativeTrainingBudget; expensive temporal tracker loops yield between entities/events and finalization is no longer outside the throttle",
   "finalization_lifeline": "HEAVY_JOBS remains owned through final gc.collect(), so /api/status and /api/agents stay on lightweight lifeline reads until the worker is actually finished",
   "finalization_progress": "post-replay UI now exposes bounded stages: replay complete, policy serialization, benchmark save, qualification, checkpoint complete",
@@ -349,5 +349,11 @@
     "mask_id": "7576b2d6bf4513972349f8c995370c5e1ba4fa22d79fcd7382ed11c0eb7c6489",
     "note": "GitHub-host synthetic scale benchmark, not Raspberry Pi 4. Mask materialization is outside active Ridge event->intent; timing ratio is only the comparable >10% investigation gate."
   },
-  "observation_space_determinism_081": "Stage-2 selection uses the state snapshot's max last_updated/last_changed timestamp as a stable reference for recency scoring, so identical snapshots produce identical masks across process restarts/wall-clock time. Existing Ridge selection keeps its prior default now_ts behavior."
+  "observation_space_determinism_081": "Stage-2 selection uses the state snapshot's max last_updated/last_changed timestamp as a stable reference for recency scoring, so identical snapshots produce identical masks across process restarts/wall-clock time. Existing Ridge selection keeps its prior default now_ts behavior.",
+  "tiny_mlp_stage3": "real inference/persistence only; selected_features->32->16->existing action values; float32 parameters; no training",
+  "tiny_mlp_authority": "hard-gated to agent mode=shadow; zero Control calls; no ActionIntent/Executor/HA dispatch path",
+  "tiny_mlp_persistence": "additive isolated tiny_mlp_shadow_models table; checksum/schema/mask/feature-order/action-space guarded restart",
+  "tiny_mlp_training": "disabled; update() rejects learning; historical training and Ridge/MLP tournament deferred to Stage 4",
+  "tiny_mlp_failure_semantics": "observer runs after authoritative Ridge process_agent; neural errors update diagnostics only and preserve Ridge result",
+  "tiny_mlp_benchmark": "GitHub Linux/Python 3.11 synthetic host: 96->32->16->2, 3666 params, inference p50 0.323 ms / p95 0.332 ms / p99 0.342 ms, serialized 76189 B, restart identical; 50 loaded models p95 0.345 ms and +1277952 B RSS vs probe baseline. Not a Raspberry Pi 4 measurement."
 }

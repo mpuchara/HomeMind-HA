@@ -30,12 +30,16 @@ class PolicyBackendFoundationTests(unittest.TestCase):
         with self.assertRaises(UnsupportedPolicyBackendError):
             require_backend({"policy_backend": "mystery_net"})
 
-    def test_tiny_mlp_is_reserved_but_not_runtime_implemented(self):
+    def test_tiny_mlp_stage3_is_implemented_but_never_production_active(self):
         self.assertIn("tiny_mlp", BACKEND_CAPABILITIES)
-        self.assertFalse(BACKEND_CAPABILITIES["tiny_mlp"]["implemented"])
+        self.assertTrue(BACKEND_CAPABILITIES["tiny_mlp"]["implemented"])
         self.assertFalse(BACKEND_CAPABILITIES["tiny_mlp"]["production_active_capable"])
-        with self.assertRaises(UnsupportedPolicyBackendError):
-            require_backend({"policy_backend": "tiny_mlp"})
+        self.assertTrue(BACKEND_CAPABILITIES["tiny_mlp"]["shadow_only"])
+        self.assertFalse(BACKEND_CAPABILITIES["tiny_mlp"]["historical_training"])
+        self.assertEqual(
+            require_backend({"policy_backend": "tiny_mlp"}),
+            "tiny_mlp",
+        )
 
     def test_checksum_ignores_store_bookkeeping_but_detects_model_change(self):
         raw = serialize_backend_model(
