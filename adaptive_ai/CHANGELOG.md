@@ -4,7 +4,7 @@
 - Upgrade the packaged Pi profiler to `pi_training_profile_v2` with host identity, Pi-4 detection, temperature, available-memory and load sampling, status-probe failure accounting, probe-loop timing and direct training-worker concurrency observation from `/proc`.
 - Keep CPU semantics explicit: one-core CPU and whole-host CPU remain separate so a four-core Pi cannot hide a saturated core behind ambiguous percentages.
 - Add `pi4_release_gate_v1`, which requires the same real Raspberry Pi 4 and same release across idle, training, Correct and training+Correct traces. CI/laptop profiles are intentionally rejected as Pi evidence.
-- Gate local status responsiveness, Correct history responsiveness, `event_to_intent` p95, training-vs-idle realtime degradation, status failures, one-heavy-worker concurrency, combined CPU/RSS, free memory and temperature.
+- Gate local status responsiveness, Correct history responsiveness, `event_to_intent` p95, training-vs-idle realtime degradation, local status failures, HA/websocket disconnect samples, one-heavy-worker concurrency, Adaptive-AI CPU/RSS, whole-Pi `/proc/stat` CPU saturation, free memory and temperature.
 - Default performance targets are Correct/status p95 <= 500 ms, status/Correct p99 <= 1000 ms, `event_to_intent` p95 <= 500 ms and no more than 2x realtime p95 degradation during training.
 - Require actual training evidence in the training scenarios and actual HA event traffic for realtime latency evidence. Missing evidence is `inconclusive`, never a synthetic pass.
 - Add the packaged evaluator CLI plus deterministic Stage-9 gate regressions and a reproducible Pi validation procedure in `STAGE9_PI4_VALIDATION.md`.
