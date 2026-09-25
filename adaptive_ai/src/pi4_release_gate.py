@@ -27,6 +27,9 @@ DEFAULT_THRESHOLDS = {
     "max_status_failure_rate": 0.01,
     "max_consecutive_status_failures": 1,
     "max_combined_host_cpu_percent": 50.0,
+    "max_system_cpu_p95_percent": 90.0,
+    "max_disconnect_rate": 0.01,
+    "max_consecutive_disconnect_samples": 1,
     "max_combined_rss_p95_mb": 768.0,
     "max_training_workers": 1,
     "min_available_memory_mb": 256.0,
@@ -130,21 +133,57 @@ def evaluate_reports(reports, thresholds=None):
         detail=("all required scenarios present" if not missing else "missing: " + ", ".join(missing)),
     )
 
-    versions = sorted({v for r in reports.values() for v in _versions(r)})
-    if len(versions) == 1:
-        _check(checks, "single_release_version", "pass", value=versions[0])
-    elif versions:
-        _check(checks, "single_release_version", "fail", value=versions, detail="all profiles must measure the same release")
-    else:
-        _check(checks, "single_release_version", "inconclusive", detail="release version was not recorded")
+    profile_contracts = {
+        scenario: str(report.get("contract") or "")
+        for scenario, report in reports.items()
+    }
+    bad_contracts = {
+        scenario: value for scenario, value in profile_contracts.items()
+        if value != "pi_training_profile_v2"
+    }
+    _check(
+        checks,
+        "profile_contract_v2",
+        "pass" if not bad_contracts else "inconclusive",
+        value=profile_contracts,
+        detail=None if not bad_contracts else "all Stage-9 reports must use pi_training_profile_v2",
+    )
 
-    models = sorted({m for r in reports.values() if (m := _pi4_model(r))})
-    if models and all("raspberry pi 4" in m.lower() for m in models):
-        _check(checks, "raspberry_pi_4_hardware", "pass", value=models)
-    elif models:
-        _check(checks, "raspberry_pi_4_hardware", "fail", value=models, detail="Stage 9 gate is specific to Raspberry Pi 4")
+    version_rows = {
+        scenario: _versions(report) for scenario, report in reports.items()
+    }
+    versions = sorted({v for values in version_rows.values() for v in values})
+    complete_versions = bool(version_rows) and all(len(values) == 1 for values in version_rows.values())
+    if complete_versions and len(versions) == 1:
+        _check(checks, "single_release_version", "pass", value=versions[0])
+    elif versions and complete_versions:
+        _check(checks, "single_release_version", "fail", value=version_rows, detail="all profiles must measure the same release")
     else:
-        _check(checks, "raspberry_pi_4_hardware", "inconclusive", detail="profiler host.model missing")
+        _check(checks, "single_release_version", "inconclusive", value=version_rows, detail="every profile must record exactly one release version")
+
+    model_rows = {scenario: _pi4_model(report) for scenario, report in reports.items()}
+    models = sorted({model for model in model_rows.values() if model})
+    if model_rows and all(
+        model and "raspberry pi 4" in model.lower() for model in model_rows.values()
+    ):
+        _check(checks, "raspberry_pi_4_hardware", "pass", value=model_rows)
+    elif all(model_rows.values()):
+        _check(checks, "raspberry_pi_4_hardware", "fail", value=model_rows, detail="Stage 9 gate is specific to Raspberry Pi 4")
+    else:
+        _check(checks, "raspberry_pi_4_hardware", "inconclusive", value=model_rows, detail="every profiler report must identify host.model")
+
+    scenario_mismatches = {
+        expected: str(report.get("scenario") or "")
+        for expected, report in reports.items()
+        if str(report.get("scenario") or "") != expected
+    }
+    _check(
+        checks,
+        "scenario_identity",
+        "pass" if not scenario_mismatches else "fail",
+        value=scenario_mismatches or None,
+        detail=None if not scenario_mismatches else "profile scenario labels do not match gate inputs",
+    )
 
     for scenario in REQUIRED_SCENARIOS:
         report = reports.get(scenario)
@@ -205,6 +244,43 @@ def evaluate_reports(reports, thresholds=None):
             )
         else:
             _check(checks, f"{scenario}.combined_host_cpu", "inconclusive")
+
+        system_cpu = _number(_nested(report, "host_runtime", "system_cpu_percent_p95"))
+        _check(
+            checks,
+            f"{scenario}.system_cpu_p95",
+            "inconclusive" if system_cpu is None else (
+                "pass" if system_cpu <= thresholds["max_system_cpu_p95_percent"] else "fail"
+            ),
+            value=system_cpu,
+            limit={"max_percent": thresholds["max_system_cpu_p95_percent"]},
+        )
+
+        for kind in ("ha", "realtime"):
+            rate = _number(_nested(report, "connectivity", f"{kind}_disconnect_rate"))
+            consecutive = _number(
+                _nested(report, "connectivity", f"{kind}_max_consecutive_disconnect_samples")
+            )
+            _check(
+                checks,
+                f"{scenario}.{kind}_disconnect_rate",
+                "inconclusive" if rate is None else (
+                    "pass" if rate <= thresholds["max_disconnect_rate"] else "fail"
+                ),
+                value=rate,
+                limit={"max": thresholds["max_disconnect_rate"]},
+            )
+            _check(
+                checks,
+                f"{scenario}.{kind}_max_consecutive_disconnect_samples",
+                "inconclusive" if consecutive is None else (
+                    "pass"
+                    if consecutive <= thresholds["max_consecutive_disconnect_samples"]
+                    else "fail"
+                ),
+                value=consecutive,
+                limit={"max": thresholds["max_consecutive_disconnect_samples"]},
+            )
 
         rss = _number(_nested(report, "combined", "rss_p95_mb_sum"))
         _check(
