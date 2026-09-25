@@ -30,10 +30,7 @@ from agent_candidate_conservative_correct import (
 from observation_space import ObservationMask
 from policy_tiny_mlp import TinyMLPBackend
 from policy_tiny_mlp_correct import nearest_action
-from policy_tiny_mlp_offline_rl import (
-    offline_rl_gate,
-    train_conservative_offline_rl,
-)
+from offline_rl_process import run_isolated_offline_rl
 from policy_tiny_mlp_training import build_training_artifact
 from settings import OPTIONS
 from telemetry import HEAVY_JOBS
@@ -42,11 +39,9 @@ from tiny_mlp_shadow import (
     publish_training_artifact,
     restore_training_record,
 )
-from training_budget import TRAINING_BUDGET
 
 
 REASON = "offline_rl"
-_BUDGET_THREAD_NAME = "adaptive-ai-candidate-offline-rl"
 
 
 def _json(value, default=None):
@@ -606,7 +601,6 @@ def install(manager):
             )
             return False
 
-        TRAINING_BUDGET.begin(thread_name=_BUDGET_THREAD_NAME)
         run_id = None
         previous_child_record = load_training_record(
             manager.store, candidate["id"]
@@ -681,159 +675,134 @@ def install(manager):
                 holdout_samples=len(holdout_rows),
                 policy_backend=TinyMLPBackend.BACKEND,
             )
-            child_backend, trainer = train_conservative_offline_rl(
-                source["backend"],
-                train_rows,
-                manual_samples=manual,
-                max_samples=int(
+            _set_candidate_work(
+                manager,
+                parent["id"],
+                state="active",
+                phase="offline_rl_isolated_worker",
+                progress=0.45,
+                labels_total=len(train_rows),
+                replay_samples=len(train_rows),
+                holdout_samples=len(holdout_rows),
+                policy_backend=TinyMLPBackend.BACKEND,
+            )
+            trainer_options = {
+                "max_samples": int(
                     OPTIONS.get("offline_rl_max_train_samples", 384) or 384
                 ),
-                max_epochs=int(
+                "max_epochs": int(
                     OPTIONS.get("offline_rl_max_epochs", 6) or 6
                 ),
-                batch_size=int(
+                "batch_size": int(
                     OPTIONS.get("offline_rl_batch_size", 16) or 16
                 ),
-                learning_rate=float(
-                    OPTIONS.get("offline_rl_learning_rate", 0.0015)
-                    or 0.0015
+                "learning_rate": float(
+                    OPTIONS.get("offline_rl_learning_rate", 0.0015) or 0.0015
                 ),
-                reward_clip=float(
+                "reward_clip": float(
                     OPTIONS.get("offline_rl_reward_clip", 1.0) or 1.0
                 ),
-                advantage_clip=float(
+                "advantage_clip": float(
                     OPTIONS.get("offline_rl_advantage_clip", 1.5) or 1.5
                 ),
-                kl_beta=float(
+                "kl_beta": float(
                     OPTIONS.get("offline_rl_kl_beta", 2.0) or 2.0
                 ),
-                parent_l2=float(
+                "parent_l2": float(
                     OPTIONS.get("offline_rl_parent_l2", 0.002) or 0.002
                 ),
-                manual_weight=float(
+                "manual_weight": float(
                     OPTIONS.get("offline_rl_manual_weight", 4.0) or 4.0
                 ),
-                gradient_clip=float(
+                "gradient_clip": float(
                     OPTIONS.get("offline_rl_gradient_clip", 0.5) or 0.5
                 ),
-                max_parent_relative_l2=float(
-                    OPTIONS.get(
-                        "offline_rl_max_parent_relative_l2", 0.08
-                    )
-                    or 0.08
+                "max_parent_relative_l2": float(
+                    OPTIONS.get("offline_rl_max_parent_relative_l2", 0.08) or 0.08
                 ),
-                min_action_support=int(
+                "min_action_support": int(
                     OPTIONS.get("offline_rl_min_action_support", 4) or 4
                 ),
-                early_stop_patience=int(
+                "early_stop_patience": int(
                     OPTIONS.get("offline_rl_early_stop_patience", 2) or 2
                 ),
-                early_stop_min_delta=float(
-                    OPTIONS.get("offline_rl_early_stop_min_delta", 0.0001)
-                    or 0.0001
+                "early_stop_min_delta": float(
+                    OPTIONS.get("offline_rl_early_stop_min_delta", 0.0001) or 0.0001
                 ),
-                checkpoint=lambda name, force=False: TRAINING_BUDGET.checkpoint(
-                    name,
-                    force=force,
-                    thread_name=_BUDGET_THREAD_NAME,
+            }
+            gate_options = {
+                "min_total_samples": min_total,
+                "min_holdout_samples": min_holdout,
+                "min_supported_actions": int(
+                    OPTIONS.get("offline_rl_min_supported_actions", 2) or 2
+                ),
+                "min_action_support": int(
+                    OPTIONS.get("offline_rl_min_action_support", 4) or 4
+                ),
+                "min_effective_sample_size": float(
+                    OPTIONS.get("offline_rl_min_effective_sample_size", 4.0) or 4.0
+                ),
+                "min_reward_gain": float(
+                    OPTIONS.get("offline_rl_min_reward_gain", 0.0) or 0.0
+                ),
+                "min_parent_agreement": float(
+                    OPTIONS.get("offline_rl_min_parent_agreement", 0.80) or 0.80
+                ),
+                "max_mean_tv": float(
+                    OPTIONS.get("offline_rl_max_mean_tv", 0.10) or 0.10
+                ),
+                "max_max_tv": float(
+                    OPTIONS.get("offline_rl_max_max_tv", 0.25) or 0.25
+                ),
+                "max_parent_relative_l2": float(
+                    OPTIONS.get("offline_rl_max_parent_relative_l2", 0.08) or 0.08
+                ),
+                "max_unsupported_probability_lift": float(
+                    OPTIONS.get("offline_rl_max_unsupported_probability_lift", 0.02) or 0.02
+                ),
+                "max_regression_fraction": float(
+                    OPTIONS.get("offline_rl_max_regression_fraction", 0.10) or 0.10
+                ),
+                "max_unseen_context_rate": float(
+                    OPTIONS.get("offline_rl_max_unseen_context_rate", 0.75) or 0.75
+                ),
+                "reward_clip": float(
+                    OPTIONS.get("offline_rl_reward_clip", 1.0) or 1.0
+                ),
+                "context_threshold": float(
+                    OPTIONS.get("offline_rl_context_distance_threshold", 1.5) or 1.5
+                ),
+            }
+            child_backend, trainer, gate = run_isolated_offline_rl(
+                source["backend"],
+                train_rows=train_rows,
+                holdout_rows=holdout_rows,
+                manual_rows=manual,
+                trainer_options=trainer_options,
+                gate_options=gate_options,
+                stop_event=getattr(manager, "stop_event", None),
+                memory_limit_mb=float(
+                    OPTIONS.get("training_worker_memory_limit_mb", 520) or 520
+                ),
+                timeout_seconds=float(
+                    OPTIONS.get("offline_rl_worker_timeout_seconds", 120) or 120
+                ),
+                worker_nice=int(
+                    OPTIONS.get("training_worker_nice", 10) or 10
+                ),
+                poll_seconds=max(
+                    .05,
+                    float(OPTIONS.get("training_worker_poll_ms", 200) or 200) / 1000.0,
                 ),
             )
-            if not trainer.get("trained"):
-                gate = {
-                    "contract": "tiny_mlp_offline_rl_gate_v1",
-                    "status": "insufficient_evidence",
-                    "passed": False,
-                    "reasons": [str(trainer.get("reason") or "offline_rl_not_trained")],
-                    "samples_total": len(rows),
-                    "train_samples": len(train_rows),
-                    "holdout_samples": len(holdout_rows),
-                    "online_exploration": False,
-                    "physical_authority": False,
-                }
-            else:
-                _set_candidate_work(
-                    manager,
-                    parent["id"],
-                    state="active",
-                    phase="offline_rl_gate",
-                    progress=0.82,
-                    policy_backend=TinyMLPBackend.BACKEND,
-                )
-                gate = offline_rl_gate(
-                    source["backend"],
-                    child_backend,
-                    train_rows=train_rows,
-                    holdout_rows=holdout_rows,
-                    manual_samples=manual,
-                    min_total_samples=min_total,
-                    min_holdout_samples=min_holdout,
-                    min_supported_actions=int(
-                        OPTIONS.get("offline_rl_min_supported_actions", 2)
-                        or 2
-                    ),
-                    min_action_support=int(
-                        OPTIONS.get("offline_rl_min_action_support", 4)
-                        or 4
-                    ),
-                    min_effective_sample_size=float(
-                        OPTIONS.get(
-                            "offline_rl_min_effective_sample_size", 4.0
-                        )
-                        or 4.0
-                    ),
-                    min_reward_gain=float(
-                        OPTIONS.get("offline_rl_min_reward_gain", 0.0)
-                        or 0.0
-                    ),
-                    min_parent_agreement=float(
-                        OPTIONS.get(
-                            "offline_rl_min_parent_agreement", 0.80
-                        )
-                        or 0.80
-                    ),
-                    max_mean_tv=float(
-                        OPTIONS.get("offline_rl_max_mean_tv", 0.10)
-                        or 0.10
-                    ),
-                    max_max_tv=float(
-                        OPTIONS.get("offline_rl_max_max_tv", 0.25)
-                        or 0.25
-                    ),
-                    max_parent_relative_l2=float(
-                        OPTIONS.get(
-                            "offline_rl_max_parent_relative_l2", 0.08
-                        )
-                        or 0.08
-                    ),
-                    max_unsupported_probability_lift=float(
-                        OPTIONS.get(
-                            "offline_rl_max_unsupported_probability_lift",
-                            0.02,
-                        )
-                        or 0.02
-                    ),
-                    max_regression_fraction=float(
-                        OPTIONS.get(
-                            "offline_rl_max_regression_fraction", 0.10
-                        )
-                        or 0.10
-                    ),
-                    max_unseen_context_rate=float(
-                        OPTIONS.get(
-                            "offline_rl_max_unseen_context_rate", 0.75
-                        )
-                        or 0.75
-                    ),
-                    reward_clip=float(
-                        OPTIONS.get("offline_rl_reward_clip", 1.0) or 1.0
-                    ),
-                    context_threshold=float(
-                        OPTIONS.get(
-                            "offline_rl_context_distance_threshold", 1.5
-                        )
-                        or 1.5
-                    ),
-                )
+            _set_candidate_work(
+                manager,
+                parent["id"],
+                state="active",
+                phase="offline_rl_gate",
+                progress=0.82,
+                policy_backend=TinyMLPBackend.BACKEND,
+            )
 
             fresh = manager._candidate_row(parent["id"]) or row
             if (
@@ -1029,7 +998,6 @@ def install(manager):
             manager._fail(row, f"{type(exc).__name__}: {exc}")
             return True
         finally:
-            TRAINING_BUDGET.end()
             HEAVY_JOBS.release(owner)
 
     def enrich(result):
