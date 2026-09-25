@@ -104,9 +104,12 @@ class History:
 store=Store(); history=History(store)
 queue=TrainingQueue(history,store,Engine(),poll_seconds=.02)
 # Deliberately DO NOT queue.start(). A user Train must still launch when the slot is idle.
-result=queue.enqueue('fresh',rebuild=True,reason='training')
+result=queue.enqueue(
+    'fresh', rebuild=True, reason='training', rebuild_reason='initial_model_build'
+)
 assert history.started == [('fresh',True)], history.started
 assert result['state'] == 'active', result
+assert result['rebuild_reason'] == 'initial_model_build', result
 assert store.row['training_state'] == 'training', store.row
 ''')
 
