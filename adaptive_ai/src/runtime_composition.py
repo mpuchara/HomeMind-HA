@@ -75,6 +75,13 @@ class RuntimeCompositionRoot:
                 "learning": "observer_only_reward_buffer_no_policy_update",
                 "http": "/api/agents/{agent_id}/automatic-correct",
             },
+            "offline_rl": {
+                "contract": getattr(manager, "candidate_offline_rl_contract", None),
+                "source": "trusted Stage-6 experiences only",
+                "lifecycle": "Candidate -> offline gate -> Shadow A/B",
+                "online_exploration": False,
+                "automatic_live_switch": False,
+            },
             "neural_shadow": (
                 {
                     **engine.tiny_mlp_shadow.diagnostics(),
@@ -157,6 +164,7 @@ class RuntimeCompositionRoot:
             install as install_automatic_correct_rewards,
             register_routes as register_automatic_correct_routes,
         )
+        from candidate_offline_rl import register_routes as register_offline_rl_routes
 
         # Existing fast + preference + episode composition is the characterized base.
         self.base_prepare_engine_extensions()
@@ -201,6 +209,7 @@ class RuntimeCompositionRoot:
         register_promotion_routes(router, self.core, manager)
         register_correct_learning_debug_route(router, self.core, manager)
         register_automatic_correct_routes(router, self.core)
+        register_offline_rl_routes(router, self.core, manager)
         register_runtime_debug_routes(router, self.core, manager)
 
         # Stage 3 observer is installed after all established policy/Candidate/Correct
