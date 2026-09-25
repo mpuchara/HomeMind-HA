@@ -66,7 +66,7 @@ options:
   agent_candidate_backup_hours: 24
   agent_training_chunk_hours: 6
   agent_training_overlap_hours: 6
-agent_training_stateful_continuation: true
+  agent_training_stateful_continuation: true
   agent_training_history_days: 7
   agent_training_pause_ms: 0
   min_historical_support: 0.20
@@ -244,6 +244,7 @@ schema:
   agent_candidate_backup_hours: "int(1,168)"
   agent_training_chunk_hours: "int(6,168)"
   agent_training_overlap_hours: "int(0,48)"
+  agent_training_stateful_continuation: "bool"
   agent_training_history_days: "float(1,30)"
   agent_training_pause_ms: "int(0,3000)"
   min_historical_support: "float(0.0,1.0)"
