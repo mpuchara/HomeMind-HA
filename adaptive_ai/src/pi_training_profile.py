@@ -353,31 +353,54 @@ def summarize_process(samples, elapsed, cpu_count):
     valid = [x for x in samples if x and x.get("cpu_seconds") is not None]
     if not valid:
         return None
-    first, last = valid[0], valid[-1]
-    cpu_delta = max(0.0, float(last["cpu_seconds"]) - float(first["cpu_seconds"]))
+
+    by_pid = {}
+    for sample in valid:
+        by_pid.setdefault(int(sample["pid"]), []).append(sample)
+
+    cpu_delta = 0.0
+    read_delta = 0
+    write_delta = 0
+    have_read = False
+    have_write = False
+    for pid_samples in by_pid.values():
+        first, last = pid_samples[0], pid_samples[-1]
+        cpu_delta += max(
+            0.0, float(last["cpu_seconds"]) - float(first["cpu_seconds"])
+        )
+        if first.get("read_bytes") is not None and last.get("read_bytes") is not None:
+            read_delta += max(
+                0, int(last["read_bytes"]) - int(first["read_bytes"])
+            )
+            have_read = True
+        if first.get("write_bytes") is not None and last.get("write_bytes") is not None:
+            write_delta += max(
+                0, int(last["write_bytes"]) - int(first["write_bytes"])
+            )
+            have_write = True
+
     one_core = cpu_delta / max(float(elapsed), 1e-9) * 100.0
     rss = [float(x["rss_mb"]) for x in valid if x.get("rss_mb") is not None]
-    read_delta = None
-    write_delta = None
-    if first.get("read_bytes") is not None and last.get("read_bytes") is not None:
-        read_delta = max(0, int(last["read_bytes"]) - int(first["read_bytes"]))
-    if first.get("write_bytes") is not None and last.get("write_bytes") is not None:
-        write_delta = max(0, int(last["write_bytes"]) - int(first["write_bytes"]))
+    threads = [int(x["threads"]) for x in valid if x.get("threads") is not None]
+    pids = sorted(by_pid)
     return {
-        "pid": int(last["pid"]),
+        "pid": pids[-1],
+        "pids": pids,
+        "processes_seen": len(pids),
         "cpu_seconds_delta": round(cpu_delta, 3),
         "cpu_one_core_percent": round(one_core, 2),
         "cpu_host_percent": round(one_core / max(1, int(cpu_count)), 2),
         "cpu_normalization": (
-            "one_core_percent=CPU_seconds/wall_seconds*100; "
+            "one_core_percent=sum(per-PID CPU delta)/wall_seconds*100; "
             "host_percent=one_core_percent/logical_cpu_count"
         ),
         "rss_mb_p50": None if not rss else round(percentile(rss, .50), 3),
         "rss_mb_p95": None if not rss else round(percentile(rss, .95), 3),
         "rss_mb_max": None if not rss else round(max(rss), 3),
-        "read_bytes_delta": read_delta,
-        "write_bytes_delta": write_delta,
-        "threads_last": last.get("threads"),
+        "read_bytes_delta": read_delta if have_read else None,
+        "write_bytes_delta": write_delta if have_write else None,
+        "threads_last": valid[-1].get("threads"),
+        "threads_max": max(threads) if threads else None,
     }
 
 
@@ -428,6 +451,8 @@ def run(args):
         scanned = find_training_worker_pids()
         scanned_worker_pids.update(scanned)
         worker_count_samples.append(len(scanned))
+        for worker_pid in scanned:
+            worker_samples.append(proc_snapshot(worker_pid))
         status_attempts += 1
         try:
             status, latency = fetch_status(args.base_url, timeout=args.timeout)
@@ -472,7 +497,8 @@ def run(args):
                 try:
                     pid = int(pid)
                     worker_pids.add(pid)
-                    worker_samples.append(proc_snapshot(pid))
+                    if pid not in scanned:
+                        worker_samples.append(proc_snapshot(pid))
                 except (TypeError, ValueError):
                     pass
         except Exception as exc:
