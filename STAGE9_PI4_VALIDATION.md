@@ -74,14 +74,18 @@ Exit codes:
 - `event_to_intent` p95 <= 500 ms;
 - training and training+Correct `event_to_intent` p95 <= 2x idle;
 - <= 1% local status probe failures and no more than one consecutive failure;
+- <= 1% HA/realtime disconnect samples and no more than one consecutive disconnected sample;
 - never more than one training worker;
-- combined average host CPU <= 50% of the whole Pi (not one-core-normalized CPU);
+- Adaptive AI runtime+worker average CPU <= 50% of the Pi's total CPU capacity;
+- whole-system CPU p95 <= 90%;
 - combined runtime+worker p95 RSS <= 768 MB;
 - at least 256 MB MemAvailable;
 - temperature <= 80 C when the thermal sensor is exposed to the container.
 
 CPU semantics are explicit: `cpu_one_core_percent=100` means one fully occupied core;
-`cpu_host_percent` divides by the logical CPU count.
+`cpu_host_percent` divides Adaptive AI CPU by the logical CPU count. Separately,
+`host_runtime.system_cpu_percent_*` is sampled from `/proc/stat` and represents the whole Pi,
+including Home Assistant and other processes visible to the add-on container.
 
 ## Interpretation
 
