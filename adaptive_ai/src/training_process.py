@@ -473,8 +473,33 @@ def run_isolated_training_chunk(history, start_ts, end_ts, **kwargs):
         if cancelled:
             raise InterruptedError("Isolated training worker cancelled")
         if memory_exceeded:
+            worker_status = _read_json(job["status_path"], {}) or {}
+            phase = str(worker_status.get("phase") or "unknown")
+            progress = worker_status.get("progress")
+            message = str(worker_status.get("message") or "").strip()
+            failure_context = {
+                "phase": phase,
+                "progress": progress,
+                "message": message or None,
+                "peak_rss_mb": round(peak_rss, 3),
+                "rss_mb": latest_metrics.get("rss_mb"),
+                "job_descriptor_bytes": history.training_process_status.get(
+                    "job_descriptor_bytes"
+                ),
+                "context_snapshot": history.training_process_status.get(
+                    "context_snapshot"
+                ),
+            }
+            history.training_process_status["memory_failure_context"] = failure_context
+            progress_text = (
+                f" at {float(progress):.0%}" if progress is not None else ""
+            )
+            detail_text = f" during {phase}{progress_text}"
+            if message:
+                detail_text += f" · {message}"
             raise MemoryError(
                 f"Isolated training worker exceeded {memory_limit:.0f} MB RSS"
+                + detail_text
             )
         if return_code != 0 or not isinstance(result, dict) or not result.get("ok"):
             detail = (result or {}).get("error") if isinstance(result, dict) else None
@@ -483,6 +508,10 @@ def run_isolated_training_chunk(history, start_ts, end_ts, **kwargs):
                 raise StaleTrainingJob(
                     detail or "isolated worker rejected stale training job",
                     preserve_lifecycle=True,
+                )
+            if error_type == "MemoryError":
+                raise MemoryError(
+                    detail or "isolated worker exceeded its memory budget"
                 )
             raise RuntimeError(
                 detail or f"isolated training worker exited with code {return_code}"
