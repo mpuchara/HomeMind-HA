@@ -66,7 +66,8 @@ def install(manager):
             # The withdrawn feedback row/label has already been retired in the journal,
             # so replay cannot accidentally bake it back into the child policy.
             queued, queue_claim = manager._claim_candidate_training_job(
-                candidate["id"], rebuild=True, reason="full_rebuild"
+                candidate["id"], rebuild=True, reason="full_rebuild",
+                rebuild_reason="feedback_history_retraction",
             )
             if queued is None:
                 return False
@@ -82,7 +83,8 @@ def install(manager):
                 row["parent_agent_id"], "info", "agent_candidate_full_rebuild_started",
                 "Candidate full historical rebuild started while the Live agent keeps serving",
                 {"candidate_id": candidate["id"], "generation": row.get("generation"),
-                 "queue": queued, "queue_claim": queue_claim, "reason": reason},
+                 "queue": queued, "queue_claim": queue_claim, "reason": reason,
+                 "rebuild_reason": "feedback_history_retraction"},
             )
             return True
         except Exception as exc:
