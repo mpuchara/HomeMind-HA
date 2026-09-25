@@ -10,7 +10,7 @@ import traceback
 from urllib.parse import parse_qs
 
 from settings import (APP_VERSION, OPTIONS, STATIC_DIR, SUPPORTED_TARGETS, clamp, now_ts)
-from training_request_semantics import train_request_mode
+from training_request_semantics import train_request_decision
 
 # Runtime-heavy modules are imported only after the Ingress HTTP server is listening.
 ENGINE = None
@@ -478,13 +478,27 @@ class Handler(BaseHTTPRequestHandler):
                     self._release_before_heavy_job(agent, "training")
                 except Exception as exc:
                     return self.send_json(502, {"error": f"Could not release Control before training: {exc}"})
-                rebuild, resumed = train_request_mode(
+                decision = train_request_decision(
                     agent, STORE.get_model(agent_id) is not None
                 )
-                started = HISTORY.request_agent_rebuild(agent_id) if rebuild else HISTORY.request_agent_resume(agent_id)
+                rebuild = bool(decision["rebuild"])
+                resumed = bool(decision["resumed"])
+                started = (
+                    HISTORY.request_agent_rebuild(
+                        agent_id,
+                        rebuild_reason=decision.get("rebuild_reason"),
+                    )
+                    if rebuild else HISTORY.request_agent_resume(agent_id)
+                )
                 if not started:
                     return self.send_json(409, {"error": "another training job is already active; low-memory mode allows one at a time"})
-                return self.send_json(202, {"ok": True, "state": "training", "resumed": resumed, "message": "Per-agent training started in low-memory mode"})
+                return self.send_json(202, {
+                    "ok": True, "state": "training", "resumed": resumed,
+                    "rebuild": rebuild,
+                    "rebuild_reason": decision.get("rebuild_reason"),
+                    "learning_path": decision.get("learning_path"),
+                    "message": "Per-agent training started in low-memory mode",
+                })
             if path.startswith("/api/agents/") and path.endswith("/resume"):
                 agent_id = path.split("/")[3]
                 agent = STORE.get_agent(agent_id)
@@ -620,9 +634,16 @@ class Handler(BaseHTTPRequestHandler):
                     self._release_before_heavy_job(agent, "full_rebuild")
                 except Exception as exc:
                     return self.send_json(502, {"error": f"Could not release Control before rebuild: {exc}"})
-                if not HISTORY.request_agent_rebuild(agent_id):
+                if not HISTORY.request_agent_rebuild(
+                    agent_id, rebuild_reason="explicit_manual_rebuild"
+                ):
                     return self.send_json(409, {"error": "Another heavy job is active"})
-                return self.send_json(202, {"ok": True, "state": "training", "message": "Full rebuild scheduled from the beginning of local history"})
+                return self.send_json(202, {
+                    "ok": True, "state": "training", "rebuild": True,
+                    "rebuild_reason": "explicit_manual_rebuild",
+                    "learning_path": "rebuild",
+                    "message": "Full rebuild scheduled from the beginning of local history",
+                })
             if path.startswith("/api/agents/"):
                 agent_id = path.split("/")[3]
                 agent = STORE.get_agent(agent_id)

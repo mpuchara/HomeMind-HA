@@ -8,7 +8,7 @@ import traceback
 
 import main as core
 from training_queue import TrainingQueue
-from training_request_semantics import train_request_mode
+from training_request_semantics import train_request_decision
 
 
 TRAINING_QUEUE = None
@@ -122,14 +122,18 @@ def do_get(self):
     return _original_do_get(self)
 
 
-def _queue_agent(self, agent_id, *, rebuild, reason, resumed=False):
+def _queue_agent(self, agent_id, *, rebuild, reason, resumed=False,
+                 rebuild_reason=None, learning_path=None):
     if TRAINING_QUEUE is None:
         return self.send_json(409, {"error": "Training queue is not ready"})
     agent = core.STORE.get_agent(agent_id)
     if not agent or core.HISTORY is None:
         return self.send_json(404, {"error": "agent/history engine not found"})
     try:
-        queued = TRAINING_QUEUE.enqueue(agent_id, rebuild=rebuild, reason=reason)
+        queued = TRAINING_QUEUE.enqueue(
+            agent_id, rebuild=rebuild, reason=reason,
+            rebuild_reason=rebuild_reason,
+        )
     except ValueError as exc:
         return self.send_json(404, {"error": str(exc)})
     except Exception as exc:
@@ -144,6 +148,10 @@ def _queue_agent(self, agent_id, *, rebuild, reason, resumed=False):
         "queue_position": position,
         "ahead": int(queued.get("ahead") or 0),
         "rebuild": bool(queued.get("rebuild")),
+        "rebuild_reason": queued.get("rebuild_reason"),
+        "learning_path": learning_path or (
+            "rebuild" if queued.get("rebuild") else "incremental_replay"
+        ),
         "resumed": bool(resumed),
         "message": message,
     })
@@ -175,7 +183,10 @@ def do_post(self):
                 report = service.prepare_retrain(agent)
                 if TRAINING_QUEUE is None:
                     raise RuntimeError("Training queue is not ready")
-                queued = TRAINING_QUEUE.enqueue(agent_id, rebuild=True, reason="teach_rl")
+                queued = TRAINING_QUEUE.enqueue(
+                    agent_id, rebuild=True, reason="teach_rl",
+                    rebuild_reason="feature_mask_change",
+                )
                 return self.send_json(202, {"ok": True, "report": report, "training_queue": queued})
             if busy:
                 return self.send_json(409, {"error": "Poczekaj na zakończenie Teach RL przed zmianą punktów", "training_queue": busy})
@@ -199,11 +210,17 @@ def do_post(self):
         agent = core.STORE.get_agent(agent_id)
         if not agent:
             return self.send_json(404, {"error": "agent/history engine not found"})
-        rebuild, resumed = train_request_mode(
+        decision = train_request_decision(
             agent, core.STORE.get_model(agent_id) is not None
         )
-        return _queue_agent(self, agent_id, rebuild=rebuild,
-                            reason="training", resumed=resumed)
+        return _queue_agent(
+            self, agent_id,
+            rebuild=bool(decision["rebuild"]),
+            reason="training",
+            resumed=bool(decision["resumed"]),
+            rebuild_reason=decision.get("rebuild_reason"),
+            learning_path=decision.get("learning_path"),
+        )
 
     if TRAINING_QUEUE is not None and path.startswith("/api/agents/") and path.endswith("/resume"):
         if not self.require_trusted_client() or not self.require_runtime():
@@ -214,8 +231,15 @@ def do_post(self):
             return self.send_json(404, {"error": "agent/history engine not found"})
         existing = TRAINING_QUEUE.status_for(agent_id)
         if existing:
-            return _queue_agent(self, agent_id, rebuild=bool(existing.get("rebuild")),
-                                reason="resume_training", resumed=True)
+            return _queue_agent(
+                self, agent_id, rebuild=bool(existing.get("rebuild")),
+                reason="resume_training", resumed=True,
+                rebuild_reason=existing.get("rebuild_reason"),
+                learning_path=(
+                    "rebuild" if existing.get("rebuild")
+                    else "incremental_replay"
+                ),
+            )
         if agent.get("training_state") not in ("paused", "waiting", "training"):
             return self.send_json(409, {"error": "Resume is available only for paused/waiting training"})
         return _queue_agent(self, agent_id, rebuild=False,
@@ -243,7 +267,10 @@ def do_delete(self):
         if not self.require_trusted_client() or not self.require_runtime():
             return
         agent_id = path.split("/")[3]
-        return _queue_agent(self, agent_id, rebuild=True, reason="full_rebuild", resumed=False)
+        return _queue_agent(
+            self, agent_id, rebuild=True, reason="full_rebuild", resumed=False,
+            rebuild_reason="explicit_manual_rebuild", learning_path="rebuild",
+        )
 
     if TRAINING_QUEUE is not None and path.startswith("/api/agents/"):
         if not self.require_trusted_client() or not self.require_runtime():

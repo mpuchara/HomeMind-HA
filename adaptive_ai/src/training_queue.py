@@ -12,11 +12,29 @@ between Recorder requests, then reschedules a complete discovery pass once the e
 queue becomes idle. User-requested Home bootstrap is never preempted.
 """
 from collections import deque
+import inspect
 import json
 import threading
 import time
 
 from telemetry import HEAVY_JOBS
+from learning_lifecycle import INITIAL_MODEL_BUILD, normalize_rebuild_reason
+
+
+def _queue_rebuild_reason(rebuild, reason, rebuild_reason=None):
+    if not rebuild:
+        return None
+    if rebuild_reason:
+        if str(rebuild_reason) == INITIAL_MODEL_BUILD:
+            return INITIAL_MODEL_BUILD
+        return normalize_rebuild_reason(rebuild_reason, explicit=str(reason) == "full_rebuild")
+    if str(reason) == "initial_training":
+        return INITIAL_MODEL_BUILD
+    if str(reason) == "teach_rl":
+        return "feature_mask_change"
+    if str(reason) == "full_rebuild":
+        return "explicit_manual_rebuild"
+    return "incompatible_persisted_model"
 
 
 PRIORITY_INTERACTIVE = 0
@@ -37,6 +55,22 @@ def training_priority_for_reason(reason):
     if reason in ("maintenance", "background", "discovery"):
         return PRIORITY_MAINTENANCE
     return PRIORITY_USER
+
+
+def _call_rebuild_compat(history, agent_id, rebuild_reason):
+    """Call Stage-8 rebuild API while preserving extension/test adapters from older releases."""
+    method = history.request_agent_rebuild
+    try:
+        params = inspect.signature(method).parameters
+        supports_reason = (
+            "rebuild_reason" in params
+            or any(p.kind == inspect.Parameter.VAR_KEYWORD for p in params.values())
+        )
+    except (TypeError, ValueError):
+        supports_reason = True
+    if supports_reason:
+        return method(agent_id, rebuild_reason=rebuild_reason)
+    return method(agent_id)
 
 
 def training_priority_class(priority):
@@ -240,18 +274,21 @@ class TrainingQueue(threading.Thread):
             ),
         ))
 
-    def _upgrade_pending_job_locked(self, existing, *, rebuild, reason, requested_priority):
+    def _upgrade_pending_job_locked(self, existing, *, rebuild, reason, requested_priority, rebuild_reason=None):
         old_priority = int(existing.get("priority", training_priority_for_reason(existing.get("reason"))))
+        requested_rebuild_reason = _queue_rebuild_reason(rebuild, reason, rebuild_reason)
         changed = False
         if str(reason) == "teach_rl":
             if existing.get("reason") != "teach_rl" or not existing.get("rebuild"):
                 changed = True
             existing["rebuild"] = True
             existing["reason"] = "teach_rl"
+            existing["rebuild_reason"] = requested_rebuild_reason or "feature_mask_change"
         elif rebuild and not existing.get("rebuild"):
             existing["rebuild"] = True
             if existing.get("reason") != "teach_rl":
                 existing["reason"] = "full_rebuild"
+            existing["rebuild_reason"] = requested_rebuild_reason
             changed = True
 
         if int(requested_priority) < old_priority:
@@ -265,11 +302,12 @@ class TrainingQueue(threading.Thread):
         self._resort_jobs_locked()
         return changed, old_priority
 
-    def enqueue(self, agent_id, rebuild=False, reason="training"):
+    def enqueue(self, agent_id, rebuild=False, reason="training", rebuild_reason=None):
         agent = self.store.get_agent(agent_id)
         if not agent:
             raise ValueError("agent not found")
         requested_priority = training_priority_for_reason(reason)
+        requested_rebuild_reason = _queue_rebuild_reason(rebuild, reason, rebuild_reason)
 
         with self.cv:
             if self.active and self.active["agent_id"] == agent_id:
@@ -278,12 +316,14 @@ class TrainingQueue(threading.Thread):
             if agent_id in self._history_active_ids():
                 self._request_training_priority()
                 return {"state": "active", "position": 0, "ahead": 0,
-                        "rebuild": bool(rebuild), "agent_id": agent_id}
+                        "rebuild": bool(rebuild), "rebuild_reason": requested_rebuild_reason,
+                        "agent_id": agent_id}
             existing = self.pending.get(agent_id)
             if existing:
                 changed, old_priority = self._upgrade_pending_job_locked(
                     existing, rebuild=rebuild, reason=reason,
                     requested_priority=requested_priority,
+                    rebuild_reason=requested_rebuild_reason,
                 )
                 if changed:
                     self.store.event(
@@ -292,6 +332,7 @@ class TrainingQueue(threading.Thread):
                         {
                             "reason": existing.get("reason"),
                             "rebuild": bool(existing.get("rebuild")),
+                            "rebuild_reason": existing.get("rebuild_reason"),
                             "priority": int(existing.get("priority", requested_priority)),
                             "priority_class": existing.get("priority_class"),
                             "previous_priority": old_priority,
@@ -311,6 +352,7 @@ class TrainingQueue(threading.Thread):
             "agent_id": agent_id,
             "rebuild": bool(rebuild),
             "reason": str(reason),
+            "rebuild_reason": requested_rebuild_reason,
             "queued_at": time.time(),
             "priority": int(requested_priority),
             "priority_class": training_priority_class(requested_priority),
@@ -325,6 +367,7 @@ class TrainingQueue(threading.Thread):
                 changed, old_priority = self._upgrade_pending_job_locked(
                     existing, rebuild=rebuild, reason=reason,
                     requested_priority=requested_priority,
+                    rebuild_reason=requested_rebuild_reason,
                 )
                 if changed:
                     self.store.event(
@@ -333,6 +376,7 @@ class TrainingQueue(threading.Thread):
                         {
                             "reason": existing.get("reason"),
                             "rebuild": bool(existing.get("rebuild")),
+                            "rebuild_reason": existing.get("rebuild_reason"),
                             "priority": int(existing.get("priority", requested_priority)),
                             "priority_class": existing.get("priority_class"),
                             "previous_priority": old_priority,
@@ -356,6 +400,7 @@ class TrainingQueue(threading.Thread):
                     "position": position,
                     "rebuild": bool(rebuild),
                     "reason": str(reason),
+                    "rebuild_reason": requested_rebuild_reason,
                     "priority": int(requested_priority),
                     "priority_class": training_priority_class(requested_priority),
                 },
@@ -392,6 +437,7 @@ class TrainingQueue(threading.Thread):
                     "state": "active", "position": 0, "ahead": 0,
                     "rebuild": bool(self.active.get("rebuild")),
                     "reason": self.active.get("reason"),
+                    "rebuild_reason": self.active.get("rebuild_reason"),
                     "priority": self.active.get("priority"),
                     "priority_class": self.active.get("priority_class"),
                     "queued_at": self.active.get("queued_at"),
@@ -410,6 +456,7 @@ class TrainingQueue(threading.Thread):
                         "ahead": index + (1 if self.active or active_ids else 0),
                         "rebuild": bool(job.get("rebuild")),
                         "reason": job.get("reason"),
+                        "rebuild_reason": job.get("rebuild_reason"),
                         "priority": job.get("priority"),
                         "priority_class": job.get("priority_class"),
                         "queued_at": job.get("queued_at"),
@@ -475,9 +522,13 @@ class TrainingQueue(threading.Thread):
             if service is not None and service.needs_context_selection(job["agent_id"]):
                 service.prepare_context_selection(agent)
                 agent = self.store.get_agent(job["agent_id"]) or agent
-            started = (self.history.request_agent_rebuild(job["agent_id"])
-                       if job.get("rebuild") else
-                       self.history.request_agent_resume(job["agent_id"]))
+            started = (
+                _call_rebuild_compat(
+                    self.history, job["agent_id"], job.get("rebuild_reason")
+                )
+                if job.get("rebuild")
+                else self.history.request_agent_resume(job["agent_id"])
+            )
         except Exception as exc:
             if service is not None:
                 try:
@@ -514,7 +565,8 @@ class TrainingQueue(threading.Thread):
             self.store.event(job["agent_id"], "info", "training_queue_started",
                              "Queued training started automatically",
                              {"wait_seconds": max(0.0, job["started_at"] - job["queued_at"]),
-                              "rebuild": bool(job.get("rebuild")), "reason": job.get("reason")})
+                              "rebuild": bool(job.get("rebuild")), "reason": job.get("reason"),
+                              "rebuild_reason": job.get("rebuild_reason")})
             self.cv.notify_all()
         return True
 
@@ -549,7 +601,8 @@ class TrainingQueue(threading.Thread):
                 self.cv.notify_all()
         self.store.event(job["agent_id"], "info", "training_queue_finished",
                          "Training slot released; next queued job may start",
-                         {"training_state": (agent or {}).get("training_state"), "reason": job.get("reason")})
+                         {"training_state": (agent or {}).get("training_state"), "reason": job.get("reason"),
+                          "rebuild_reason": job.get("rebuild_reason")})
         self._release_training_priority_if_idle()
         return True
 

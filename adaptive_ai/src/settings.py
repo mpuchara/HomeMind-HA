@@ -15,7 +15,7 @@ try:
 except Exception:
     ws_connect = None
 
-APP_VERSION = "0.14.86"
+APP_VERSION = "0.14.87"
 HISTORY_BOOTSTRAP_REVISION = "target-attrs-v2"
 TRAINING_REVISION = "shared-home-intents-v19"
 DATA_DIR = Path(os.environ.get("ADAPTIVE_AI_DATA", "/data"))
@@ -77,7 +77,10 @@ DEFAULT_OPTIONS = {
     "candidate_benchmark_threshold": 0.78,
     "candidate_benchmark_min_samples": 12,
     "agent_training_chunk_hours": 6,
+    # Stage 8 keeps the overlap as a logical equivalence window, but skips rescanning
+    # it after reconstructing the minimal open-dwell state at each chunk boundary.
     "agent_training_overlap_hours": 6,
+    "agent_training_stateful_continuation": True,
     "agent_training_history_days": 7,
     "agent_training_pause_ms": 0,
     "min_historical_support": 0.20,

@@ -18,6 +18,42 @@ from replay import (
 from training_budget import TRAINING_BUDGET
 from policy import MultiHorizonPolicy
 
+def stateful_continuation_seed_rows(store, agents, target_map, start_ts, boundary_ts):
+    """Return the exact open-target transition state the legacy overlap would leave.
+
+    Only target rows are scanned. Context/temporal features are reconstructed later by
+    SQLiteTemporalTracker as-of the selected transition, so no unrelated overlap history
+    is reprocessed and rows at/after the boundary cannot leak into the seed.
+    """
+    if float(boundary_ts) <= float(start_ts):
+        return {}, 0
+    values = {}
+    seeds = {}
+    scanned = 0
+    for row in store.archive_iter(
+        float(start_ts), float(boundary_ts), target_map.keys(), chunk_size=256
+    ):
+        if float(row["ts"]) >= float(boundary_ts):
+            continue
+        scanned += 1
+        state = archived_state(row)
+        for agent in target_map.get(row["entity_id"], ()):
+            aid = agent["id"]
+            value = target_value(state, agent["target_property"])
+            if value is None:
+                continue
+            previous = values.get(aid)
+            if (
+                previous is not None
+                and abs(float(value) - float(previous))
+                    <= max(0.01, float(agent["deadband"]) * 0.05)
+            ):
+                continue
+            values[aid] = float(value)
+            seeds[aid] = (dict(row), float(value))
+    return seeds, scanned
+
+
 class HistoryManager(threading.Thread):
     """Bootstraps HA Recorder history, keeps a longer local archive, discovers active targets,
     and turns logged trajectories into offline contextual-RL experiences."""
@@ -77,6 +113,8 @@ class HistoryManager(threading.Thread):
         self.training_job_started_at = None
         self.training_job_start_progress = 0.0
         self.training_overall_eta_seconds = None
+        self.training_rebuild_reason = None
+        self.training_stateful_replay_status = {}
         # Rebuild resets learned heads, not the expensive sensor-selection result.
         # Keep a tiny schema-only seed in RAM so repeated training does not rescan the
         # whole house archive merely because rl_models was intentionally cleared.
@@ -168,6 +206,8 @@ class HistoryManager(threading.Thread):
                     (self.work_done / self.work_total) if self.work_total else None
                 ),
                 "training_stage_eta_seconds": self.stage_eta_seconds,
+                "training_rebuild_reason": self.training_rebuild_reason,
+                "stateful_replay": dict(self.training_stateful_replay_status or {}),
                 "temporal_replay": dict(self.temporal_replay_stats),
                 "discovery_job_active": bool(self.discovery_job_active),
                 "discovery_job_started_at": self.discovery_job_started_at,
@@ -259,7 +299,7 @@ class HistoryManager(threading.Thread):
         self.training_schema_cache_hits += 1
         return item.get("model")
 
-    def _start_agent_job(self, agent_id, rebuild=False):
+    def _start_agent_job(self, agent_id, rebuild=False, rebuild_reason=None):
         agent = STORE.get_agent_config(agent_id)
         if not agent:
             return False
@@ -313,6 +353,8 @@ class HistoryManager(threading.Thread):
                 self.training_job_started_at = started_at
                 self.training_job_start_progress = start_progress
                 self.training_overall_eta_seconds = None
+                self.training_rebuild_reason = rebuild_reason if rebuild else None
+                self.training_stateful_replay_status = {}
         except Exception:
             with self.agent_jobs_lock:
                 self.agent_jobs.discard(agent_id)
@@ -322,7 +364,9 @@ class HistoryManager(threading.Thread):
         def worker():
             TRAINING_BUDGET.begin()
             try:
-                self._run_agent_indexing(agent_id, rebuild=rebuild)
+                self._run_agent_indexing(
+                    agent_id, rebuild=rebuild, rebuild_reason=rebuild_reason
+                )
             except Exception as exc:
                 STORE.event(agent_id, "error", "agent_index_failed", str(exc), {"trace": traceback.format_exc(limit=6)})
                 # A stale isolated job can mean the user/configuration changed while
@@ -357,6 +401,7 @@ class HistoryManager(threading.Thread):
                         self.stage_eta_seconds = None
                         self.eta_seconds = None
                         self.training_overall_eta_seconds = None
+                        self.training_rebuild_reason = None
                         self.work_done = 0
                         self.work_total = 0
                         self.work_unit = None
@@ -526,7 +571,7 @@ class HistoryManager(threading.Thread):
             # locally available archive and leave a diagnostic event.
             STORE.event(agent["id"], "warning", "agent_history_refresh_partial", str(exc), None)
 
-    def _run_agent_indexing(self, agent_id, rebuild=False):
+    def _run_agent_indexing(self, agent_id, rebuild=False, rebuild_reason=None):
         agent = STORE.get_agent_config(agent_id)
         if not agent:
             return
@@ -548,7 +593,8 @@ class HistoryManager(threading.Thread):
         STORE.event(agent_id, "info", "agent_rebuild_started" if rebuild else "agent_resume_started",
                     "Full historical rebuild started from archive beginning" if rebuild else
                     "Training resumed from saved historical cursor",
-                    {"start_ts": start_ts, "cursor_ts": cursor, "end_ts": target_end})
+                    {"start_ts": start_ts, "cursor_ts": cursor, "end_ts": target_end,
+                     "rebuild_reason": rebuild_reason if rebuild else None})
 
         if cursor >= target_end - 0.5:
             # Nothing new to index. A completed persisted model returns to Shadow even
@@ -567,9 +613,29 @@ class HistoryManager(threading.Thread):
 
         chunk_s = max(6.0, float(OPTIONS.get("agent_training_chunk_hours", 48))) * 3600.0
         overlap_s = max(0.0, min(chunk_s * 0.5, float(OPTIONS.get("agent_training_overlap_hours", 12)) * 3600.0))
+        stateful_continuation = bool(
+            OPTIONS.get("agent_training_stateful_continuation", True)
+        )
+        replay_summary = {
+            "contract": "stateful_chunk_continuation_v1",
+            "enabled": stateful_continuation,
+            "chunks": 0,
+            "logical_hours": 0.0,
+            "unique_hours_scanned": 0.0,
+            "overlap_hours_avoided": 0.0,
+            "continuation_seed_target_rows": 0,
+            "continuation_seed_agents": 0,
+        }
+        self.training_stateful_replay_status = dict(replay_summary)
         while cursor < target_end - 0.5 and not self.stop_event.is_set():
+            boundary_ts = float(cursor)
             chunk_end = min(target_end, cursor + chunk_s)
             chunk_start = max(start_ts, cursor - overlap_s) if cursor > start_ts else start_ts
+            continuation_from_ts = (
+                boundary_ts
+                if stateful_continuation and boundary_ts > chunk_start + 0.5
+                else None
+            )
             final = chunk_end >= target_end - 0.5
             self._run_training_chunk(
                 chunk_start, chunk_end, qualify=final, agent_ids={agent_id}, include_candidates=True,
@@ -577,12 +643,41 @@ class HistoryManager(threading.Thread):
                 progress_lo=(cursor-start_ts)/max(1,target_end-start_ts),
                 progress_hi=(chunk_end-start_ts)/max(1,target_end-start_ts),
                 progress_label=f"Training {agent['name']}",
+                continuation_from_ts=continuation_from_ts,
             )
+            replay_summary["chunks"] += 1
+            replay_summary["logical_hours"] += max(
+                0.0, float(chunk_end) - float(chunk_start)
+            ) / 3600.0
+            scan_start = (
+                float(continuation_from_ts)
+                if continuation_from_ts is not None else float(chunk_start)
+            )
+            replay_summary["unique_hours_scanned"] += max(
+                0.0, float(chunk_end) - scan_start
+            ) / 3600.0
+            replay_summary["overlap_hours_avoided"] += max(
+                0.0, scan_start - float(chunk_start)
+            ) / 3600.0
+            continuation_stats = dict(
+                (self.temporal_replay_stats or {}).get("continuation") or {}
+            )
+            replay_summary["continuation_seed_target_rows"] += int(
+                continuation_stats.get("seed_target_rows_scanned") or 0
+            )
+            replay_summary["continuation_seed_agents"] += int(
+                continuation_stats.get("seed_agents") or 0
+            )
+            self.training_stateful_replay_status = dict(replay_summary)
             cursor = chunk_end
             STORE.set_training_progress(agent_id, start_ts, cursor, target_end)
             STORE.event(agent_id, "info", "agent_index_checkpoint",
                         f"Historical indexing checkpoint {((cursor-start_ts)/max(1.0,target_end-start_ts)):.0%}",
-                        {"cursor_ts": cursor, "end_ts": target_end, "final": final})
+                        {"cursor_ts": cursor, "end_ts": target_end, "final": final,
+                         "stateful_continuation": continuation_from_ts is not None,
+                         "logical_chunk_start_ts": chunk_start,
+                         "scan_start_ts": scan_start,
+                         "overlap_hours_avoided": max(0.0, scan_start - float(chunk_start)) / 3600.0})
             if not final:
                 pause_ms = max(0.0, float(OPTIONS.get("agent_training_pause_ms", 0) or 0))
                 if pause_ms:
@@ -597,8 +692,10 @@ class HistoryManager(threading.Thread):
             self, start_ts, end_ts, **kwargs
         )
 
-    def request_agent_rebuild(self, agent_id):
-        return self._start_agent_job(agent_id, rebuild=True)
+    def request_agent_rebuild(self, agent_id, rebuild_reason="explicit_manual_rebuild"):
+        return self._start_agent_job(
+            agent_id, rebuild=True, rebuild_reason=rebuild_reason
+        )
 
     def request_agent_resume(self, agent_id):
         agent = STORE.get_agent_config(agent_id)
@@ -1320,7 +1417,7 @@ class HistoryManager(threading.Thread):
                 self.engine.models.pop(aid, None)
             raise
 
-    def _train_from_archive(self, start_ts, end_ts, *, qualify=False, agent_ids=None, include_candidates=False, benchmark=None, accumulate_benchmark=False, progress_lo=None, progress_hi=None, progress_label=None):
+    def _train_from_archive(self, start_ts, end_ts, *, qualify=False, agent_ids=None, include_candidates=False, benchmark=None, accumulate_benchmark=False, progress_lo=None, progress_hi=None, progress_label=None, continuation_from_ts=None):
         benchmark = bool(qualify) if benchmark is None else bool(benchmark)
         self.temporal_replay_stats = {}
         agents = [a for a in STORE.list_agent_configs() if a["enabled"]]
@@ -1336,6 +1433,14 @@ class HistoryManager(threading.Thread):
         target_map = {}
         for a in agents:
             target_map.setdefault(a["target_entity"], []).append(a)
+
+        logical_start_ts = float(start_ts)
+        scan_start_ts = float(start_ts)
+        if continuation_from_ts is not None:
+            scan_start_ts = max(
+                float(start_ts),
+                min(float(end_ts), float(continuation_from_ts)),
+            )
 
         # Feature screening is only needed while the policy schema is unresolved.
         # Once a model checkpoint exists, its explicit schema is authoritative for later
@@ -1744,7 +1849,7 @@ class HistoryManager(threading.Thread):
         horizons = sorted({h for p in policies.values() for h in p.horizons})
         watched_entities = {eid for p in policies.values() for eid in p.schema.entities}
         replay_entities = set(watched_entities) | set(target_map.keys())
-        rows = STORE.archive_iter(start_ts, end_ts, replay_entities, chunk_size=256)
+        rows = STORE.archive_iter(scan_start_ts, end_ts, replay_entities, chunk_size=256)
         # Separate onset/anticipation and dwell-persistence cursors. 0.14.24 used one
         # mutable as-of tracker for both roles, so persistence sampling near the end of a
         # dwell was immediately followed by a rewind to the next action's precursor.
@@ -1811,6 +1916,8 @@ class HistoryManager(threading.Thread):
         pending = {}
         last_value = {}
         new_count = 0
+        continuation_seed_target_rows = 0
+        continuation_seed_agents = 0
 
         # Replay used to commit one SQLite transaction per completed dwell.  Keep the
         # same uniqueness semantics in memory, then persist bounded batches.  A failed
@@ -1883,6 +1990,20 @@ class HistoryManager(threading.Thread):
                 "persistence": persistence,
                 "totals": totals,
                 "home_context_cache": replay_home_context_cache.status(),
+                "continuation": {
+                    "contract": "stateful_chunk_continuation_v1",
+                    "enabled": bool(scan_start_ts > logical_start_ts + 0.5),
+                    "logical_start_ts": logical_start_ts,
+                    "scan_start_ts": scan_start_ts,
+                    "end_ts": float(end_ts),
+                    "overlap_seconds_avoided": max(
+                        0.0, scan_start_ts - logical_start_ts
+                    ),
+                    "seed_target_rows_scanned": int(
+                        continuation_seed_target_rows
+                    ),
+                    "seed_agents": int(continuation_seed_agents),
+                },
             }
             return self.temporal_replay_stats
 
@@ -2149,9 +2270,111 @@ class HistoryManager(threading.Thread):
             new_count += 1
             return True
 
+        def _pending_from_row(agent, policy, row, value):
+            """Reconstruct exactly the open dwell state produced by the legacy overlap."""
+            anchor_ts, upstream_anchor_ts = _fast_anchor(
+                agent, policy, value, float(row["ts"])
+            )
+            upstream_valid = (
+                upstream_anchor_ts is not None
+                and upstream_anchor_ts < anchor_ts
+                and anchor_ts - upstream_anchor_ts
+                    <= float(OPTIONS.get("fast_upstream_lead_seconds", 4))
+            )
+            early_times = {}
+            query_times = {float(anchor_ts)}
+            if upstream_valid:
+                query_times.add(float(upstream_anchor_ts))
+            if is_fast_reactive_agent(agent) and value >= .5:
+                for h in policy.horizons:
+                    early_ts = float(anchor_ts) - max(1, int(h))
+                    early_times[int(h)] = early_ts
+                    query_times.add(early_ts)
+
+            snapshots = {}
+            neural_snapshots = {}
+            for query_ts in sorted(query_times):
+                timeline.advance(query_ts)
+                features, _, meta = policy.features(
+                    timeline.state_map, timeline.history, at_ts=query_ts
+                )
+                snapshots[query_ts] = (dict(features), dict(meta or {}))
+                if neural_enabled:
+                    neural_snapshots[query_ts] = neural_observation(
+                        agent, timeline, query_ts
+                    )
+
+            anchor_features = snapshots[float(anchor_ts)][0]
+            features_by_horizon = {
+                h: dict(anchor_features) for h in policy.horizons
+            }
+            upstream_features_by_horizon = {}
+            if upstream_valid:
+                upstream_features = snapshots[float(upstream_anchor_ts)][0]
+                for h in policy.horizons:
+                    upstream_features_by_horizon[h] = dict(upstream_features)
+
+            if early_times:
+                for h in policy.horizons:
+                    early_ts = early_times[int(h)]
+                    early, early_meta = snapshots[early_ts]
+                    forecast = early_meta.get("home_forecast", {})
+                    if (
+                        forecast.get("arrival_probability", 0) > .1
+                        and forecast.get("occupancy_now", 0) < .5
+                    ):
+                        upstream_features_by_horizon[h] = dict(early)
+                        upstream_anchor_ts = early_ts
+
+            actions = policy.actions
+            action_idx = min(
+                range(len(actions)),
+                key=lambda i: abs(actions[i] - float(value)),
+            )
+            return {
+                "history_id": row["id"],
+                "ts": float(row["ts"]),
+                "anchor_ts": anchor_ts,
+                "upstream_anchor_ts": upstream_anchor_ts,
+                "features_by_horizon": features_by_horizon,
+                "upstream_features_by_horizon": upstream_features_by_horizon,
+                "neural_anchor_observation": neural_snapshots.get(float(anchor_ts)),
+                "neural_upstream_observation": (
+                    neural_snapshots.get(float(upstream_anchor_ts))
+                    if upstream_anchor_ts is not None else None
+                ),
+                "action_idx": action_idx,
+                "action_value": actions[action_idx],
+                "user_id": row.get("context_user_id"),
+            }
+
+        if scan_start_ts > logical_start_ts + 0.5:
+            # The previous implementation replayed every context entity in the overlap
+            # solely so the final open target dwell survived the chunk boundary. Rebuild
+            # that minimal state from target rows only; temporal trackers reconstruct the
+            # selected features causally as-of the last effective transition.
+            seed_rows, continuation_seed_target_rows = (
+                stateful_continuation_seed_rows(
+                    STORE, agents, target_map,
+                    logical_start_ts, scan_start_ts,
+                )
+            )
+
+            for seed_agent in agents:
+                seed_aid = seed_agent["id"]
+                item = seed_rows.get(seed_aid)
+                if item is None:
+                    continue
+                seed_row, seed_value = item
+                pending[seed_aid] = _pending_from_row(
+                    seed_agent, policies[seed_aid], seed_row, seed_value
+                )
+                last_value[seed_aid] = float(seed_value)
+                continuation_seed_agents += 1
+
         replay_started = now_ts()
         replay_last_report = replay_started
-        replay_total = max(1, STORE.archive_count(start_ts, end_ts, replay_entities))
+        replay_total = max(1, STORE.archive_count(scan_start_ts, end_ts, replay_entities))
         replay_done = 0
         if progress_enabled:
             screening_end = float(progress_lo) + (float(progress_hi) - float(progress_lo)) * 0.20
@@ -2195,77 +2418,9 @@ class HistoryManager(threading.Thread):
                     old = pending[aid]
                     replay_completed_dwell(agent, policy, old, float(row["ts"]), row.get("context_user_id"))
 
-                anchor_ts, upstream_anchor_ts = _fast_anchor(
-                    agent, policy, value, float(row["ts"])
+                pending[aid] = _pending_from_row(
+                    agent, policy, row, value
                 )
-                upstream_valid = (
-                    upstream_anchor_ts is not None
-                    and upstream_anchor_ts < anchor_ts
-                    and anchor_ts - upstream_anchor_ts
-                        <= float(OPTIONS.get("fast_upstream_lead_seconds", 4))
-                )
-                early_times = {}
-                query_times = {float(anchor_ts)}
-                if upstream_valid:
-                    query_times.add(float(upstream_anchor_ts))
-                if is_fast_reactive_agent(agent) and value >= .5:
-                    for h in policy.horizons:
-                        early_ts = float(anchor_ts) - max(1, int(h))
-                        early_times[int(h)] = early_ts
-                        query_times.add(early_ts)
-
-                # policy.features is observation-only. Capture each unique causal
-                # timestamp once, oldest -> newest, so the onset cursor can stay
-                # incremental instead of anchor -> upstream -> early rewinds.
-                snapshots = {}
-                neural_snapshots = {}
-                for query_ts in sorted(query_times):
-                    timeline.advance(query_ts)
-                    features, _, meta = policy.features(
-                        timeline.state_map, timeline.history, at_ts=query_ts
-                    )
-                    snapshots[query_ts] = (dict(features), dict(meta or {}))
-                    if neural_enabled:
-                        neural_snapshots[query_ts] = neural_observation(
-                            agent, timeline, query_ts
-                        )
-
-                anchor_features = snapshots[float(anchor_ts)][0]
-                features_by_horizon = {
-                    h: dict(anchor_features) for h in policy.horizons
-                }
-                upstream_features_by_horizon = {}
-                if upstream_valid:
-                    upstream_features = snapshots[float(upstream_anchor_ts)][0]
-                    for h in policy.horizons:
-                        upstream_features_by_horizon[h] = dict(upstream_features)
-
-                # Preserve the existing per-head early-cue rule and its global
-                # upstream_anchor_ts compatibility field; only the query order changed.
-                if early_times:
-                    for h in policy.horizons:
-                        early_ts = early_times[int(h)]
-                        early, early_meta = snapshots[early_ts]
-                        forecast = early_meta.get("home_forecast", {})
-                        if (
-                            forecast.get("arrival_probability", 0) > .1
-                            and forecast.get("occupancy_now", 0) < .5
-                        ):
-                            upstream_features_by_horizon[h] = dict(early)
-                            upstream_anchor_ts = early_ts
-                actions = policy.actions
-                action_idx = min(range(len(actions)), key=lambda i: abs(actions[i] - float(value)))
-                pending[aid] = {
-                    "history_id": row["id"], "ts": float(row["ts"]), "anchor_ts": anchor_ts,
-                    "upstream_anchor_ts": upstream_anchor_ts, "features_by_horizon": features_by_horizon,
-                    "upstream_features_by_horizon": upstream_features_by_horizon,
-                    "neural_anchor_observation": neural_snapshots.get(float(anchor_ts)),
-                    "neural_upstream_observation": (
-                        neural_snapshots.get(float(upstream_anchor_ts))
-                        if upstream_anchor_ts is not None else None
-                    ),
-                    "action_idx": action_idx, "action_value": actions[action_idx], "user_id": row.get("context_user_id"),
-                }
                 last_value[aid] = float(value)
 
         for agent in agents:

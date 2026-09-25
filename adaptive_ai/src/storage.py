@@ -336,9 +336,29 @@ class Store:
                 c.execute(f"UPDATE agents SET {', '.join(updates)} WHERE id=?", values)
         if reset_model:
             # Configuration edits invalidate inference but do not start a phantom job.
-            self.set_training_state(agent_id, 'needs_retrain', detail={'reason': 'Context or action range changed; press Train'})
+            # Stage 8 makes the structural cause explicit so the next Train/Rebuild
+            # cannot silently collapse all incompatibilities into one generic replay.
+            action_space_changed = any(k in payload for k in ("min_value", "max_value"))
+            feature_mask_changed = "input_entities" in payload
+            rebuild_reason = (
+                "action_space_change"
+                if action_space_changed
+                else "feature_mask_change"
+            )
+            detail = {
+                "reason": "Context or action range changed; press Train",
+                "rebuild_reason": rebuild_reason,
+                "feature_mask_changed": bool(feature_mask_changed),
+                "action_space_changed": bool(action_space_changed),
+            }
+            self.set_training_state(
+                agent_id, "needs_retrain", detail=detail
+            )
             with self.conn() as c:
-                c.execute('UPDATE agents SET training_cursor_ts=NULL,training_progress=0 WHERE id=?', (agent_id,))
+                c.execute(
+                    'UPDATE agents SET training_cursor_ts=NULL,training_progress=0 WHERE id=?',
+                    (agent_id,),
+                )
         if updates:
             self.touch_agent_index()
         self.event(agent_id, "info", "agent_updated", "Agent settings updated", payload)

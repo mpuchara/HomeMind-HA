@@ -11,6 +11,7 @@ arrives during a long build, that build may finish but is never promotable: the 
 candidate is queued for another rebuild from the newer revision.
 """
 from contextlib import contextmanager
+import inspect
 import json
 import math
 import threading
@@ -332,7 +333,27 @@ class AgentCandidateManager(threading.Thread):
     def _queue(self):
         return getattr(self.core, "TRAINING_QUEUE", None)
 
-    def _claim_candidate_training_job(self, candidate_id, *, rebuild, reason):
+    def _enqueue_training_compat(
+        self, queue, candidate_id, *, rebuild, reason, rebuild_reason=None
+    ):
+        """Preserve queue adapters from older releases while carrying Stage-8 diagnostics."""
+        method = queue.enqueue
+        try:
+            params = inspect.signature(method).parameters
+            supports_reason = (
+                "rebuild_reason" in params
+                or any(p.kind == inspect.Parameter.VAR_KEYWORD for p in params.values())
+            )
+        except (TypeError, ValueError):
+            supports_reason = True
+        kwargs = {"rebuild": bool(rebuild), "reason": str(reason)}
+        if supports_reason:
+            kwargs["rebuild_reason"] = rebuild_reason
+        return method(candidate_id, **kwargs)
+
+    def _claim_candidate_training_job(
+        self, candidate_id, *, rebuild, reason, rebuild_reason=None
+    ):
         """Own exactly one queued Candidate job without deadlocking lifecycle state.
 
         A Candidate can briefly acquire a TrainingQueue entry before AgentCandidateManager
@@ -356,12 +377,15 @@ class AgentCandidateManager(threading.Thread):
         if existing and str(existing.get("state") or "") == "queued":
             existing_reason = str(existing.get("reason") or "")
             existing_rebuild = bool(existing.get("rebuild"))
+            existing_rebuild_reason = existing.get("rebuild_reason")
             desired_rebuild = bool(rebuild)
+            desired_rebuild_reason = rebuild_reason
 
             if reason == "teach_rl":
                 # TrainingQueue has an explicit atomic pending-job upgrade for Teach RL.
-                queued = queue.enqueue(
-                    candidate_id, rebuild=True, reason="teach_rl"
+                queued = self._enqueue_training_compat(
+                    queue, candidate_id, rebuild=True, reason="teach_rl",
+                    rebuild_reason=rebuild_reason or "feature_mask_change",
                 )
                 return queued, (
                     "adopted_pending_teach_rl"
@@ -369,7 +393,15 @@ class AgentCandidateManager(threading.Thread):
                     else "upgraded_pending_to_teach_rl"
                 )
 
-            if existing_reason == reason and existing_rebuild == desired_rebuild:
+            if (
+                existing_reason == reason
+                and existing_rebuild == desired_rebuild
+                and (
+                    not desired_rebuild
+                    or desired_rebuild_reason is None
+                    or existing_rebuild_reason == desired_rebuild_reason
+                )
+            ):
                 return existing, "adopted_matching_pending_job"
 
             # Full rebuild / autonomous continuation semantics cannot safely be inferred
@@ -377,8 +409,9 @@ class AgentCandidateManager(threading.Thread):
             # it with the exact lifecycle request.
             queue.cancel(candidate_id)
 
-        queued = queue.enqueue(
-            candidate_id, rebuild=bool(rebuild), reason=reason
+        queued = self._enqueue_training_compat(
+            queue, candidate_id, rebuild=bool(rebuild), reason=reason,
+            rebuild_reason=rebuild_reason,
         )
         return queued, "enqueued_candidate_job"
 
