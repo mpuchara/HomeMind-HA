@@ -577,9 +577,29 @@ class HistoryManager(threading.Thread):
 
         chunk_s = max(6.0, float(OPTIONS.get("agent_training_chunk_hours", 48))) * 3600.0
         overlap_s = max(0.0, min(chunk_s * 0.5, float(OPTIONS.get("agent_training_overlap_hours", 12)) * 3600.0))
+        stateful_continuation = bool(
+            OPTIONS.get("agent_training_stateful_continuation", True)
+        )
+        replay_summary = {
+            "contract": "stateful_chunk_continuation_v1",
+            "enabled": stateful_continuation,
+            "chunks": 0,
+            "logical_hours": 0.0,
+            "unique_hours_scanned": 0.0,
+            "overlap_hours_avoided": 0.0,
+            "continuation_seed_target_rows": 0,
+            "continuation_seed_agents": 0,
+        }
+        self.training_stateful_replay_status = dict(replay_summary)
         while cursor < target_end - 0.5 and not self.stop_event.is_set():
+            boundary_ts = float(cursor)
             chunk_end = min(target_end, cursor + chunk_s)
             chunk_start = max(start_ts, cursor - overlap_s) if cursor > start_ts else start_ts
+            continuation_from_ts = (
+                boundary_ts
+                if stateful_continuation and boundary_ts > chunk_start + 0.5
+                else None
+            )
             final = chunk_end >= target_end - 0.5
             self._run_training_chunk(
                 chunk_start, chunk_end, qualify=final, agent_ids={agent_id}, include_candidates=True,
@@ -587,12 +607,41 @@ class HistoryManager(threading.Thread):
                 progress_lo=(cursor-start_ts)/max(1,target_end-start_ts),
                 progress_hi=(chunk_end-start_ts)/max(1,target_end-start_ts),
                 progress_label=f"Training {agent['name']}",
+                continuation_from_ts=continuation_from_ts,
             )
+            replay_summary["chunks"] += 1
+            replay_summary["logical_hours"] += max(
+                0.0, float(chunk_end) - float(chunk_start)
+            ) / 3600.0
+            scan_start = (
+                float(continuation_from_ts)
+                if continuation_from_ts is not None else float(chunk_start)
+            )
+            replay_summary["unique_hours_scanned"] += max(
+                0.0, float(chunk_end) - scan_start
+            ) / 3600.0
+            replay_summary["overlap_hours_avoided"] += max(
+                0.0, scan_start - float(chunk_start)
+            ) / 3600.0
+            continuation_stats = dict(
+                (self.temporal_replay_stats or {}).get("continuation") or {}
+            )
+            replay_summary["continuation_seed_target_rows"] += int(
+                continuation_stats.get("seed_target_rows_scanned") or 0
+            )
+            replay_summary["continuation_seed_agents"] += int(
+                continuation_stats.get("seed_agents") or 0
+            )
+            self.training_stateful_replay_status = dict(replay_summary)
             cursor = chunk_end
             STORE.set_training_progress(agent_id, start_ts, cursor, target_end)
             STORE.event(agent_id, "info", "agent_index_checkpoint",
                         f"Historical indexing checkpoint {((cursor-start_ts)/max(1.0,target_end-start_ts)):.0%}",
-                        {"cursor_ts": cursor, "end_ts": target_end, "final": final})
+                        {"cursor_ts": cursor, "end_ts": target_end, "final": final,
+                         "stateful_continuation": continuation_from_ts is not None,
+                         "logical_chunk_start_ts": chunk_start,
+                         "scan_start_ts": scan_start,
+                         "overlap_hours_avoided": max(0.0, scan_start - float(chunk_start)) / 3600.0})
             if not final:
                 pause_ms = max(0.0, float(OPTIONS.get("agent_training_pause_ms", 0) or 0))
                 if pause_ms:
