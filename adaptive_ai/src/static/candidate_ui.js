@@ -69,7 +69,7 @@
   };
 
   function card(c,draft){
-    const m=c.comparison||{},q=c.queue||{},gate=c.offline_gate||{},correct=c.correct_learning||{};
+    const m=c.comparison||{},q=c.queue||{},gate=c.offline_gate||{},correct=c.correct_learning||{},offlineRl=c.offline_rl||{},offlineRlCandidate=c.offline_rl_candidate||{};
     const progress=c.state==='building'?Math.max(0,Math.min(100,Math.round((c.training_progress||0)*100))):null;
     const queueText=q.state==='queued'?` · queue #${q.position||1}`:q.state==='active'?' · active':'';
     const perAction=m.required_future_samples_per_action||20;
@@ -119,6 +119,12 @@
         <div><span>Rebuild reason</span><b>${esc(rebuildReason||'—')}</b></div>
         <div><span>Parent agreement after Correct</span><b>${pct(correct.parent_child_agreement)}</b></div>
         <div><span>Neural parent distance</span><b>${correct.parent_relative_l2==null?'—':Number(correct.parent_relative_l2).toFixed(4)}</b></div>
+        <div><span>Offline RL status</span><b>${esc(offlineRl.status||'—')}</b></div>
+        <div><span>Offline RL trusted / train / holdout</span><b>${offlineRl.compatible_total??'—'} / ${offlineRl.train_samples??'—'} / ${offlineRl.holdout_samples??'—'}</b></div>
+        <div><span>Offline RL reward gain proxy</span><b>${offlineRlCandidate.reward_improvement_estimate==null?'—':Number(offlineRlCandidate.reward_improvement_estimate).toFixed(4)}</b></div>
+        <div><span>Offline RL parent agreement</span><b>${pct(offlineRlCandidate.parent_action_agreement)}</b></div>
+        <div><span>Offline RL action drift</span><b>${offlineRlCandidate.action_drift_mean_tv==null?'—':Number(offlineRlCandidate.action_drift_mean_tv).toFixed(4)}</b></div>
+        <div><span>Offline RL unseen context</span><b>${offlineRlCandidate.unseen_context_rate==null?'—':pct(offlineRlCandidate.unseen_context_rate)}</b></div>
         <div><span>Offline gate reason</span><b>${esc(gateReason)}</b></div>
         <div><span>Parent accuracy</span><b>${pct(m.live_accuracy)}</b></div>
         <div><span>Candidate accuracy</span><b>${pct(m.candidate_accuracy)}</b></div>
@@ -141,7 +147,7 @@
         <button class="ghost" data-promote-custom ${customEligible?'':'disabled'}>Promote</button>
       </div>
       ${ownershipDetails(c)}</details>
-      <div class="actions candidate-workflow-actions"><button class="ghost" data-wf="auto">Autonomous</button><button class="primary" data-wf="correct">Correct</button><button class="ghost" data-wf="explore">Explore</button><button class="ghost" data-wf="change">Change decision</button><button class="ghost" data-wf="settings">Settings</button><button class="ghost" data-wf="debug">Export debug</button></div>
+      <div class="actions candidate-workflow-actions"><button class="ghost" data-wf="auto">Autonomous</button><button class="primary" data-wf="correct">Correct</button><button class="ghost" data-wf="offline-rl" title="Trusted Automatic Correct → conservative Offline RL child">Offline RL</button><button class="ghost" data-wf="explore">Explore</button><button class="ghost" data-wf="change">Change decision</button><button class="ghost" data-wf="settings">Settings</button><button class="ghost" data-wf="debug">Export debug</button></div>
       <div class="candidate-actions candidate-lifecycle-actions">
         <select data-promote-mode aria-label="Promotion target mode"><option value="shadow" ${targetMode==='shadow'?'selected':''}>Promote as Shadow</option><option value="control" ${targetMode==='control'?'selected':''}>Promote as Control</option></select>
         <button class="primary" data-promote ${c.promotable?'':'disabled'}>Promote</button><button class="ghost" data-discard>Discard</button>
@@ -186,6 +192,7 @@
         });
         el.querySelector('[data-wf=auto]').onclick=e=>window.workflowAutonomous?.(ref,e.currentTarget);
         el.querySelector('[data-wf=correct]').onclick=()=>window.openWorkflowCorrect?.(ref);
+        el.querySelector('[data-wf=offline-rl]').onclick=e=>window.workflowOfflineRL?.(ref,e.currentTarget);
         el.querySelector('[data-wf=explore]').onclick=()=>window.openExplore?.(ref);
         el.querySelector('[data-wf=change]').onclick=e=>window.workflowChangeDecision?.(ref,e.currentTarget);
         el.querySelector('[data-wf=settings]').onclick=()=>window.workflowSettings?.(ref);
