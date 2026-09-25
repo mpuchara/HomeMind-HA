@@ -12,6 +12,7 @@ between Recorder requests, then reschedules a complete discovery pass once the e
 queue becomes idle. User-requested Home bootstrap is never preempted.
 """
 from collections import deque
+import inspect
 import json
 import threading
 import time
@@ -54,6 +55,22 @@ def training_priority_for_reason(reason):
     if reason in ("maintenance", "background", "discovery"):
         return PRIORITY_MAINTENANCE
     return PRIORITY_USER
+
+
+def _call_rebuild_compat(history, agent_id, rebuild_reason):
+    """Call Stage-8 rebuild API while preserving extension/test adapters from older releases."""
+    method = history.request_agent_rebuild
+    try:
+        params = inspect.signature(method).parameters
+        supports_reason = (
+            "rebuild_reason" in params
+            or any(p.kind == inspect.Parameter.VAR_KEYWORD for p in params.values())
+        )
+    except (TypeError, ValueError):
+        supports_reason = True
+    if supports_reason:
+        return method(agent_id, rebuild_reason=rebuild_reason)
+    return method(agent_id)
 
 
 def training_priority_class(priority):
@@ -505,10 +522,13 @@ class TrainingQueue(threading.Thread):
             if service is not None and service.needs_context_selection(job["agent_id"]):
                 service.prepare_context_selection(agent)
                 agent = self.store.get_agent(job["agent_id"]) or agent
-            started = (self.history.request_agent_rebuild(
-                           job["agent_id"], rebuild_reason=job.get("rebuild_reason"))
-                       if job.get("rebuild") else
-                       self.history.request_agent_resume(job["agent_id"]))
+            started = (
+                _call_rebuild_compat(
+                    self.history, job["agent_id"], job.get("rebuild_reason")
+                )
+                if job.get("rebuild")
+                else self.history.request_agent_resume(job["agent_id"])
+            )
         except Exception as exc:
             if service is not None:
                 try:
