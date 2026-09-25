@@ -15,6 +15,7 @@
 - Keep the physical authority boundary unchanged: Stage 6 creates no ActionIntent, never calls Executor for dispatch and has no direct Home Assistant service path.
 - Add functional regressions for deduplication, restart recovery, weak acceptance, exact-target reversal, same-area presence, cross-room false attribution, unrelated binary sources, missing area mapping, trial outcome-source isolation, Stage-2 action snapshot capture, Manual/Automatic Correct separation and the no-reward-learning boundary.
 - Add a packaged synthetic Automatic Correct journal benchmark. Host SQLite timings are informational and must not be presented as Raspberry Pi 4 measurements.
+- Green CI benchmark on the 0.14.85 implementation: 512 durable rows (128 trusted / 384 unknown), insert p95 1.67 ms, resolve p95 1.97 ms, RAM summary p95 2.24 µs and ~436 KiB RSS delta on the GitHub Linux runner. These are host-local synthetic measurements, not Raspberry Pi 4 acceptance numbers.
 
 # 0.14.84 — 2026-09-24
 
