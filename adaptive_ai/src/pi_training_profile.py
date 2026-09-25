@@ -25,6 +25,7 @@ import json
 import math
 import os
 from pathlib import Path
+import platform
 import statistics
 import time
 from urllib.request import Request, urlopen
@@ -104,6 +105,115 @@ def find_runtime_pid():
         return None
     candidates.sort(reverse=True)
     return candidates[0][1]
+
+
+def _read_text(path):
+    try:
+        return Path(path).read_text(encoding="utf-8", errors="replace").strip("\x00\n ")
+    except OSError:
+        return None
+
+
+def _meminfo():
+    out = {}
+    try:
+        for line in Path("/proc/meminfo").read_text(encoding="utf-8").splitlines():
+            key, _, raw = line.partition(":")
+            value = raw.strip().split()
+            if value:
+                out[key] = float(value[0]) / 1024.0
+    except (OSError, ValueError):
+        pass
+    return out
+
+
+def host_facts():
+    mem = _meminfo()
+    model = (
+        _read_text("/sys/firmware/devicetree/base/model")
+        or _read_text("/proc/device-tree/model")
+    )
+    return {
+        "model": model,
+        "is_raspberry_pi_4": bool(model and "raspberry pi 4" in model.lower()),
+        "machine": platform.machine(),
+        "platform": platform.platform(),
+        "python": platform.python_version(),
+        "logical_cpu_count": max(1, int(os.cpu_count() or 1)),
+        "mem_total_mb": mem.get("MemTotal"),
+    }
+
+
+def host_cpu_times():
+    try:
+        fields = Path("/proc/stat").read_text(encoding="utf-8").splitlines()[0].split()
+        if not fields or fields[0] != "cpu":
+            return None
+        values = [float(value) for value in fields[1:]]
+        if len(values) < 4:
+            return None
+        idle = values[3] + (values[4] if len(values) > 4 else 0.0)
+        return sum(values), idle
+    except (OSError, ValueError, IndexError):
+        return None
+
+
+def host_cpu_percent(previous, current):
+    if not previous or not current:
+        return None
+    total = float(current[0]) - float(previous[0])
+    idle = float(current[1]) - float(previous[1])
+    if total <= 0.0:
+        return None
+    return max(0.0, min(100.0, (total - idle) / total * 100.0))
+
+
+def host_runtime_snapshot():
+    mem = _meminfo()
+    temp = None
+    try:
+        temp = float(Path("/sys/class/thermal/thermal_zone0/temp").read_text().strip()) / 1000.0
+    except (OSError, ValueError):
+        pass
+    load1 = None
+    try:
+        load1 = float(Path("/proc/loadavg").read_text().split()[0])
+    except (OSError, ValueError, IndexError):
+        pass
+    return {
+        "temperature_c": temp,
+        "mem_available_mb": mem.get("MemAvailable"),
+        "load1": load1,
+    }
+
+
+def find_training_worker_pids():
+    pids = []
+    for entry in Path("/proc").iterdir():
+        if not entry.name.isdigit():
+            continue
+        try:
+            raw = (entry / "cmdline").read_bytes().replace(b"\0", b" ").decode(
+                "utf-8", "replace"
+            )
+        except OSError:
+            continue
+        if "training_process.py" in raw and "--worker" in raw:
+            pids.append(int(entry.name))
+    return sorted(set(pids))
+
+
+def _summary(values):
+    values = [float(v) for v in values if isinstance(v, (int, float))]
+    if not values:
+        return {"p50": None, "p95": None, "p99": None, "max": None, "samples": 0}
+    return {
+        "p50": round(percentile(values, .50), 3),
+        "p95": round(percentile(values, .95), 3),
+        "p99": round(percentile(values, .99), 3),
+        "max": round(max(values), 3),
+        "samples": len(values),
+    }
 
 
 def fetch_status(base_url, timeout=3.0):
@@ -243,31 +353,54 @@ def summarize_process(samples, elapsed, cpu_count):
     valid = [x for x in samples if x and x.get("cpu_seconds") is not None]
     if not valid:
         return None
-    first, last = valid[0], valid[-1]
-    cpu_delta = max(0.0, float(last["cpu_seconds"]) - float(first["cpu_seconds"]))
+
+    by_pid = {}
+    for sample in valid:
+        by_pid.setdefault(int(sample["pid"]), []).append(sample)
+
+    cpu_delta = 0.0
+    read_delta = 0
+    write_delta = 0
+    have_read = False
+    have_write = False
+    for pid_samples in by_pid.values():
+        first, last = pid_samples[0], pid_samples[-1]
+        cpu_delta += max(
+            0.0, float(last["cpu_seconds"]) - float(first["cpu_seconds"])
+        )
+        if first.get("read_bytes") is not None and last.get("read_bytes") is not None:
+            read_delta += max(
+                0, int(last["read_bytes"]) - int(first["read_bytes"])
+            )
+            have_read = True
+        if first.get("write_bytes") is not None and last.get("write_bytes") is not None:
+            write_delta += max(
+                0, int(last["write_bytes"]) - int(first["write_bytes"])
+            )
+            have_write = True
+
     one_core = cpu_delta / max(float(elapsed), 1e-9) * 100.0
     rss = [float(x["rss_mb"]) for x in valid if x.get("rss_mb") is not None]
-    read_delta = None
-    write_delta = None
-    if first.get("read_bytes") is not None and last.get("read_bytes") is not None:
-        read_delta = max(0, int(last["read_bytes"]) - int(first["read_bytes"]))
-    if first.get("write_bytes") is not None and last.get("write_bytes") is not None:
-        write_delta = max(0, int(last["write_bytes"]) - int(first["write_bytes"]))
+    threads = [int(x["threads"]) for x in valid if x.get("threads") is not None]
+    pids = sorted(by_pid)
     return {
-        "pid": int(last["pid"]),
+        "pid": pids[-1],
+        "pids": pids,
+        "processes_seen": len(pids),
         "cpu_seconds_delta": round(cpu_delta, 3),
         "cpu_one_core_percent": round(one_core, 2),
         "cpu_host_percent": round(one_core / max(1, int(cpu_count)), 2),
         "cpu_normalization": (
-            "one_core_percent=CPU_seconds/wall_seconds*100; "
+            "one_core_percent=sum(per-PID CPU delta)/wall_seconds*100; "
             "host_percent=one_core_percent/logical_cpu_count"
         ),
         "rss_mb_p50": None if not rss else round(percentile(rss, .50), 3),
         "rss_mb_p95": None if not rss else round(percentile(rss, .95), 3),
         "rss_mb_max": None if not rss else round(max(rss), 3),
-        "read_bytes_delta": read_delta,
-        "write_bytes_delta": write_delta,
-        "threads_last": last.get("threads"),
+        "read_bytes_delta": read_delta if have_read else None,
+        "write_bytes_delta": write_delta if have_write else None,
+        "threads_last": valid[-1].get("threads"),
+        "threads_max": max(threads) if threads else None,
     }
 
 
@@ -289,15 +422,57 @@ def run(args):
     versions = set()
     worker_pids = set()
     failures = []
+    status_attempts = 0
+    status_successes = 0
+    consecutive_failures = 0
+    max_consecutive_failures = 0
+    host_samples = []
+    host_cpu_samples = []
+    host_cpu_previous = host_cpu_times()
+    worker_count_samples = []
+    ha_connected_samples = []
+    realtime_connected_samples = []
+    ha_disconnect_run = 0
+    realtime_disconnect_run = 0
+    max_ha_disconnect_run = 0
+    max_realtime_disconnect_run = 0
+    scanned_worker_pids = set()
+    loop_durations_ms = []
 
     while time.monotonic() < deadline:
         loop_started = time.monotonic()
         runtime_samples.append(proc_snapshot(runtime_pid))
+        host_samples.append(host_runtime_snapshot())
+        host_cpu_current = host_cpu_times()
+        host_cpu_value = host_cpu_percent(host_cpu_previous, host_cpu_current)
+        if host_cpu_value is not None:
+            host_cpu_samples.append(host_cpu_value)
+        host_cpu_previous = host_cpu_current
+        scanned = find_training_worker_pids()
+        scanned_worker_pids.update(scanned)
+        worker_count_samples.append(len(scanned))
+        for worker_pid in scanned:
+            worker_samples.append(proc_snapshot(worker_pid))
+        status_attempts += 1
         try:
             status, latency = fetch_status(args.base_url, timeout=args.timeout)
+            status_successes += 1
+            consecutive_failures = 0
             status_latencies.append(latency)
             versions.add(str(status.get("version")))
             status_metrics.append(recursive_metrics(status))
+            ha_connected = bool(status.get("ha_connected"))
+            realtime_connected = bool((status.get("realtime") or {}).get("connected"))
+            ha_connected_samples.append(ha_connected)
+            realtime_connected_samples.append(realtime_connected)
+            ha_disconnect_run = 0 if ha_connected else ha_disconnect_run + 1
+            realtime_disconnect_run = (
+                0 if realtime_connected else realtime_disconnect_run + 1
+            )
+            max_ha_disconnect_run = max(max_ha_disconnect_run, ha_disconnect_run)
+            max_realtime_disconnect_run = max(
+                max_realtime_disconnect_run, realtime_disconnect_run
+            )
             if (
                 args.correct_path
                 and time.monotonic() - last_correct_probe >= float(args.correct_interval)
@@ -322,13 +497,17 @@ def run(args):
                 try:
                     pid = int(pid)
                     worker_pids.add(pid)
-                    worker_samples.append(proc_snapshot(pid))
+                    if pid not in scanned:
+                        worker_samples.append(proc_snapshot(pid))
                 except (TypeError, ValueError):
                     pass
         except Exception as exc:
+            consecutive_failures += 1
+            max_consecutive_failures = max(max_consecutive_failures, consecutive_failures)
             failures.append(f"{type(exc).__name__}: {exc}")
 
         spent = time.monotonic() - loop_started
+        loop_durations_ms.append(spent * 1000.0)
         time.sleep(max(0.0, float(args.interval) - spent))
 
     elapsed = time.monotonic() - started
@@ -378,17 +557,75 @@ def run(args):
         ),
     }
 
+    temperatures = [
+        row.get("temperature_c") for row in host_samples
+        if isinstance(row.get("temperature_c"), (int, float))
+    ]
+    mem_available = [
+        row.get("mem_available_mb") for row in host_samples
+        if isinstance(row.get("mem_available_mb"), (int, float))
+    ]
+    load1 = [
+        row.get("load1") for row in host_samples
+        if isinstance(row.get("load1"), (int, float))
+    ]
+    status_failures = max(0, status_attempts - status_successes)
+    all_worker_pids = sorted(set(worker_pids) | scanned_worker_pids)
+
     report = {
-        "contract": "pi_training_profile_v1",
+        "contract": "pi_training_profile_v2",
         "scenario": args.scenario,
         "release_versions_seen": sorted(versions),
         "duration_seconds": round(elapsed, 3),
         "interval_seconds": float(args.interval),
         "logical_cpu_count": cpu_count,
+        "host": host_facts(),
+        "host_runtime": {
+            "temperature_c_p95": None if not temperatures else round(percentile(temperatures, .95), 3),
+            "temperature_c_max": None if not temperatures else round(max(temperatures), 3),
+            "mem_available_mb_p05": None if not mem_available else round(percentile(mem_available, .05), 3),
+            "mem_available_mb_min": None if not mem_available else round(min(mem_available), 3),
+            "load1_p95": None if not load1 else round(percentile(load1, .95), 3),
+            "load1_max": None if not load1 else round(max(load1), 3),
+            "system_cpu_percent_p50": None if not host_cpu_samples else round(percentile(host_cpu_samples, .50), 3),
+            "system_cpu_percent_p95": None if not host_cpu_samples else round(percentile(host_cpu_samples, .95), 3),
+            "system_cpu_percent_max": None if not host_cpu_samples else round(max(host_cpu_samples), 3),
+        },
+        "connectivity": {
+            "samples": len(ha_connected_samples),
+            "ha_connected_false_samples": sum(1 for value in ha_connected_samples if not value),
+            "ha_disconnect_rate": (
+                sum(1 for value in ha_connected_samples if not value) / len(ha_connected_samples)
+                if ha_connected_samples else None
+            ),
+            "ha_max_consecutive_disconnect_samples": max_ha_disconnect_run,
+            "realtime_connected_false_samples": sum(
+                1 for value in realtime_connected_samples if not value
+            ),
+            "realtime_disconnect_rate": (
+                sum(1 for value in realtime_connected_samples if not value)
+                / len(realtime_connected_samples)
+                if realtime_connected_samples else None
+            ),
+            "realtime_max_consecutive_disconnect_samples": max_realtime_disconnect_run,
+        },
+        "status_probe": {
+            "attempts": status_attempts,
+            "successes": status_successes,
+            "failures": status_failures,
+            "failure_rate": (status_failures / status_attempts) if status_attempts else None,
+            "max_consecutive_failures": max_consecutive_failures,
+        },
+        "probe_loop_latency_ms": _summary(loop_durations_ms),
         "runtime": runtime_summary,
         "worker": worker_summary,
         "combined": combined,
-        "worker_pids_seen": sorted(worker_pids),
+        "worker_pids_seen": all_worker_pids,
+        "worker_concurrency": {
+            "max": max(worker_count_samples) if worker_count_samples else 0,
+            "samples_over_one": sum(1 for value in worker_count_samples if value > 1),
+            "pids_seen": all_worker_pids,
+        },
         "http_status_latency_ms": {
             "p50": percentile(status_latencies, .50),
             "p95": percentile(status_latencies, .95),
@@ -416,6 +653,9 @@ def run(args):
             "steady-events and burst are observational labels: generate real HA sensor traffic during collection.",
             "correct and training-correct: open/use the normal Correct UI during collection.",
             "No synthetic HA service calls are generated by this tool.",
+            "Stage-9 gate requires host.model to identify a real Raspberry Pi 4 and real HA event traffic for event_to_intent evidence.",
+            "host_runtime.system_cpu_percent_* measures whole-host /proc/stat CPU, separate from Adaptive AI runtime+worker CPU.",
+            "connectivity tracks both HA health and the realtime websocket during the measured scenario.",
         ],
     }
     if args.baseline:
