@@ -137,6 +137,7 @@ jobs:
                       prefix+'src/automatic_correct_rewards.py',
                       prefix+'src/automatic_correct_benchmark.py',
                       prefix+'src/policy_tiny_mlp_offline_rl.py',
+                      prefix+'src/offline_rl_process.py',
                       prefix+'src/candidate_offline_rl.py',
                       prefix+'src/offline_rl_benchmark.py',
                       prefix+'src/static/polling_guard.js',
