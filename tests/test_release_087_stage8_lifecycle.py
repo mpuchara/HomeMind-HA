@@ -58,6 +58,34 @@ class FinalLearningLifecycleTests(unittest.TestCase):
         self.assertEqual(initial["learning_path"], "initial_build")
         self.assertEqual(initial["rebuild_reason"], "initial_model_build")
 
+    def test_config_invalidation_persists_structural_rebuild_reason(self):
+        with tempfile.TemporaryDirectory(prefix="hm-stage8-lifecycle-") as root:
+            store = Store(Path(root) / "lifecycle.db")
+            agent = store.create_agent({
+                "name": "Lifecycle",
+                "target_entity": "switch.lifecycle",
+                "target_property": "power",
+                "min_value": 0, "max_value": 1,
+                "deadband": .5, "exploration_step": 1,
+                "confidence_threshold": .78, "action_interval": 30,
+                "input_entities": ["binary_sensor.motion"],
+            })
+            store.save_model(agent["id"], {"version": 1, "value": "old"})
+            store.update_agent(
+                agent["id"],
+                {"input_entities": ["binary_sensor.motion", "sensor.lux"]},
+            )
+            current = store.get_agent_config(agent["id"])
+            self.assertEqual(
+                current["benchmark_detail"]["rebuild_reason"],
+                "feature_mask_change",
+            )
+            decision = training_request_decision(current, has_model=True)
+            self.assertTrue(decision["rebuild"])
+            self.assertEqual(
+                decision["rebuild_reason"], "feature_mask_change"
+            )
+
     def test_manual_correct_defaults_to_incremental_supervised_path(self):
         normal = correct_learning_path()
         self.assertFalse(normal["rebuild"])
