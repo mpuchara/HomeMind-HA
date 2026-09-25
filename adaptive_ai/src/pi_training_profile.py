@@ -25,6 +25,7 @@ import json
 import math
 import os
 from pathlib import Path
+import platform
 import statistics
 import time
 from urllib.request import Request, urlopen
@@ -104,6 +105,88 @@ def find_runtime_pid():
         return None
     candidates.sort(reverse=True)
     return candidates[0][1]
+
+
+def _read_text(path):
+    try:
+        return Path(path).read_text(encoding="utf-8", errors="replace").strip("\\x00\\n ")
+    except OSError:
+        return None
+
+
+def _meminfo():
+    out = {}
+    try:
+        for line in Path("/proc/meminfo").read_text(encoding="utf-8").splitlines():
+            key, _, raw = line.partition(":")
+            value = raw.strip().split()
+            if value:
+                out[key] = float(value[0]) / 1024.0
+    except (OSError, ValueError):
+        pass
+    return out
+
+
+def host_facts():
+    mem = _meminfo()
+    model = _read_text("/sys/firmware/devicetree/base/model")
+    return {
+        "model": model,
+        "is_raspberry_pi_4": bool(model and "raspberry pi 4" in model.lower()),
+        "machine": platform.machine(),
+        "platform": platform.platform(),
+        "python": platform.python_version(),
+        "logical_cpu_count": max(1, int(os.cpu_count() or 1)),
+        "mem_total_mb": mem.get("MemTotal"),
+    }
+
+
+def host_runtime_snapshot():
+    mem = _meminfo()
+    temp = None
+    try:
+        temp = float(Path("/sys/class/thermal/thermal_zone0/temp").read_text().strip()) / 1000.0
+    except (OSError, ValueError):
+        pass
+    load1 = None
+    try:
+        load1 = float(Path("/proc/loadavg").read_text().split()[0])
+    except (OSError, ValueError, IndexError):
+        pass
+    return {
+        "temperature_c": temp,
+        "mem_available_mb": mem.get("MemAvailable"),
+        "load1": load1,
+    }
+
+
+def find_training_worker_pids():
+    pids = []
+    for entry in Path("/proc").iterdir():
+        if not entry.name.isdigit():
+            continue
+        try:
+            raw = (entry / "cmdline").read_bytes().replace(b"\\0", b" ").decode(
+                "utf-8", "replace"
+            )
+        except OSError:
+            continue
+        if "training_process.py" in raw and "--worker" in raw:
+            pids.append(int(entry.name))
+    return sorted(set(pids))
+
+
+def _summary(values):
+    values = [float(v) for v in values if isinstance(v, (int, float))]
+    if not values:
+        return {"p50": None, "p95": None, "p99": None, "max": None, "samples": 0}
+    return {
+        "p50": round(percentile(values, .50), 3),
+        "p95": round(percentile(values, .95), 3),
+        "p99": round(percentile(values, .99), 3),
+        "max": round(max(values), 3),
+        "samples": len(values),
+    }
 
 
 def fetch_status(base_url, timeout=3.0):
@@ -289,12 +372,27 @@ def run(args):
     versions = set()
     worker_pids = set()
     failures = []
+    status_attempts = 0
+    status_successes = 0
+    consecutive_failures = 0
+    max_consecutive_failures = 0
+    host_samples = []
+    worker_count_samples = []
+    scanned_worker_pids = set()
+    loop_durations_ms = []
 
     while time.monotonic() < deadline:
         loop_started = time.monotonic()
         runtime_samples.append(proc_snapshot(runtime_pid))
+        host_samples.append(host_runtime_snapshot())
+        scanned = find_training_worker_pids()
+        scanned_worker_pids.update(scanned)
+        worker_count_samples.append(len(scanned))
+        status_attempts += 1
         try:
             status, latency = fetch_status(args.base_url, timeout=args.timeout)
+            status_successes += 1
+            consecutive_failures = 0
             status_latencies.append(latency)
             versions.add(str(status.get("version")))
             status_metrics.append(recursive_metrics(status))
@@ -326,9 +424,12 @@ def run(args):
                 except (TypeError, ValueError):
                     pass
         except Exception as exc:
+            consecutive_failures += 1
+            max_consecutive_failures = max(max_consecutive_failures, consecutive_failures)
             failures.append(f"{type(exc).__name__}: {exc}")
 
         spent = time.monotonic() - loop_started
+        loop_durations_ms.append(spent * 1000.0)
         time.sleep(max(0.0, float(args.interval) - spent))
 
     elapsed = time.monotonic() - started
@@ -378,17 +479,54 @@ def run(args):
         ),
     }
 
+    temperatures = [
+        row.get("temperature_c") for row in host_samples
+        if isinstance(row.get("temperature_c"), (int, float))
+    ]
+    mem_available = [
+        row.get("mem_available_mb") for row in host_samples
+        if isinstance(row.get("mem_available_mb"), (int, float))
+    ]
+    load1 = [
+        row.get("load1") for row in host_samples
+        if isinstance(row.get("load1"), (int, float))
+    ]
+    status_failures = max(0, status_attempts - status_successes)
+    all_worker_pids = sorted(set(worker_pids) | scanned_worker_pids)
+
     report = {
-        "contract": "pi_training_profile_v1",
+        "contract": "pi_training_profile_v2",
         "scenario": args.scenario,
         "release_versions_seen": sorted(versions),
         "duration_seconds": round(elapsed, 3),
         "interval_seconds": float(args.interval),
         "logical_cpu_count": cpu_count,
+        "host": host_facts(),
+        "host_runtime": {
+            "temperature_c_p95": None if not temperatures else round(percentile(temperatures, .95), 3),
+            "temperature_c_max": None if not temperatures else round(max(temperatures), 3),
+            "mem_available_mb_p05": None if not mem_available else round(percentile(mem_available, .05), 3),
+            "mem_available_mb_min": None if not mem_available else round(min(mem_available), 3),
+            "load1_p95": None if not load1 else round(percentile(load1, .95), 3),
+            "load1_max": None if not load1 else round(max(load1), 3),
+        },
+        "status_probe": {
+            "attempts": status_attempts,
+            "successes": status_successes,
+            "failures": status_failures,
+            "failure_rate": (status_failures / status_attempts) if status_attempts else None,
+            "max_consecutive_failures": max_consecutive_failures,
+        },
+        "probe_loop_latency_ms": _summary(loop_durations_ms),
         "runtime": runtime_summary,
         "worker": worker_summary,
         "combined": combined,
-        "worker_pids_seen": sorted(worker_pids),
+        "worker_pids_seen": all_worker_pids,
+        "worker_concurrency": {
+            "max": max(worker_count_samples) if worker_count_samples else 0,
+            "samples_over_one": sum(1 for value in worker_count_samples if value > 1),
+            "pids_seen": all_worker_pids,
+        },
         "http_status_latency_ms": {
             "p50": percentile(status_latencies, .50),
             "p95": percentile(status_latencies, .95),
@@ -416,6 +554,7 @@ def run(args):
             "steady-events and burst are observational labels: generate real HA sensor traffic during collection.",
             "correct and training-correct: open/use the normal Correct UI during collection.",
             "No synthetic HA service calls are generated by this tool.",
+            "Stage-9 gate requires host.model to identify a real Raspberry Pi 4 and real HA event traffic for event_to_intent evidence.",
         ],
     }
     if args.baseline:
