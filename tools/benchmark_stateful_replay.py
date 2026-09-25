@@ -9,6 +9,12 @@ import json
 from pathlib import Path
 import tempfile
 import time
+import sys
+
+ROOT = Path(__file__).resolve().parents[1]
+SRC = ROOT / "adaptive_ai" / "src"
+if str(SRC) not in sys.path:
+    sys.path.insert(0, str(SRC))
 
 from history import stateful_continuation_seed_rows
 from storage import Store
