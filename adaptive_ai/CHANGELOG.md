@@ -1,3 +1,11 @@
+# 0.14.89 — 2026-09-25
+
+- Fix fresh-agent **Train** failing with `Could not queue training safely: install.<locals>.enqueue() got an unexpected keyword argument 'rebuild_reason'`.
+- Keep the final packaged `startup_train_guard` queue wrapper signature aligned with Stage-8 `TrainingQueue.enqueue(..., rebuild_reason=...)` and forward the reason unchanged.
+- Preserve `initial_model_build` provenance through immediate first-Train admission.
+- Extend the packaged-entrypoint regression so this wrapper mismatch cannot silently return.
+- No model, Candidate, Correct, reward, Offline-RL, or physical-control semantics are changed.
+
 # 0.14.88 — 2026-09-25
 
 - Start **Stage 9: real Raspberry Pi 4 profiling and final runtime performance gates**.
