@@ -39,9 +39,10 @@ def percentile(values, q):
 
 
 def observation(feature_ids, x, index):
-    values = [float(x)]
-    for col in range(1, len(feature_ids)):
-        values.append((((index * (col + 7)) % 23) - 11) * 0.0015)
+    # Keep non-signal dimensions neutral. The benchmark is intended to verify
+    # conservative reward improvement on a stationary supported distribution, not
+    # accidental generalization across synthetic index aliases.
+    values = [float(x)] + [0.0] * max(0, len(feature_ids) - 1)
     return {"feature_ids": list(feature_ids), "values": values}
 
 
@@ -62,7 +63,8 @@ def reward_rows(feature_ids, contexts):
     out = []
     ts = 10_000.0
     for idx in range(int(contexts)):
-        x = -0.95 + 1.9 * (idx % 64) / 63.0
+        context_slot = (idx * 17) % 64
+        x = -0.95 + 1.9 * context_slot / 63.0
         for action in (0, 1):
             good = (x < 0.0 and action == 0) or (x >= 0.0 and action == 1)
             out.append({
