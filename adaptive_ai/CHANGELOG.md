@@ -1,3 +1,16 @@
+# 0.14.88 — 2026-09-25
+
+- Start **Stage 9: real Raspberry Pi 4 profiling and final runtime performance gates**.
+- Upgrade the packaged Pi profiler to `pi_training_profile_v2` with host identity, Pi-4 detection, temperature, available-memory and load sampling, status-probe failure accounting, probe-loop timing and direct training-worker concurrency observation from `/proc`.
+- Keep CPU semantics explicit: one-core CPU and whole-host CPU remain separate so a four-core Pi cannot hide a saturated core behind ambiguous percentages.
+- Add `pi4_release_gate_v1`, which requires the same real Raspberry Pi 4 and same release across idle, training, Correct and training+Correct traces. CI/laptop profiles are intentionally rejected as Pi evidence.
+- Gate local status responsiveness, Correct history responsiveness, `event_to_intent` p95, training-vs-idle realtime degradation, status failures, one-heavy-worker concurrency, combined CPU/RSS, free memory and temperature.
+- Default performance targets are Correct/status p95 <= 500 ms, status/Correct p99 <= 1000 ms, `event_to_intent` p95 <= 500 ms and no more than 2x realtime p95 degradation during training.
+- Require actual training evidence in the training scenarios and actual HA event traffic for realtime latency evidence. Missing evidence is `inconclusive`, never a synthetic pass.
+- Add the packaged evaluator CLI plus deterministic Stage-9 gate regressions and a reproducible Pi validation procedure in `STAGE9_PI4_VALIDATION.md`.
+- **Safety remains unchanged:** a green Stage-9 runtime gate only makes the release eligible for a later explicit canary-rollout change. Stage-7 Offline-RL Candidate promotion to physical Control remains blocked in 0.14.88.
+- No Raspberry Pi 4 performance numbers are claimed by CI; real Pi measurements are required after installation.
+
 # 0.14.87 — 2026-09-25
 
 - Complete **Stage 8: final learning lifecycle + stateful Rebuild replay continuation** from the Tiny Neural Policy / Correct / Offline-RL master plan.
