@@ -109,7 +109,7 @@ def find_runtime_pid():
 
 def _read_text(path):
     try:
-        return Path(path).read_text(encoding="utf-8", errors="replace").strip("\\x00\\n ")
+        return Path(path).read_text(encoding="utf-8", errors="replace").strip("\x00\n ")
     except OSError:
         return None
 
@@ -166,7 +166,7 @@ def find_training_worker_pids():
         if not entry.name.isdigit():
             continue
         try:
-            raw = (entry / "cmdline").read_bytes().replace(b"\\0", b" ").decode(
+            raw = (entry / "cmdline").read_bytes().replace(b"\0", b" ").decode(
                 "utf-8", "replace"
             )
         except OSError:
