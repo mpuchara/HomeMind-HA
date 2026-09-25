@@ -74,13 +74,35 @@ def _terminate(process, grace=2.0):
 
 
 def _deserialize(raw):
+    raw = dict(raw or {})
+    schema_id = str(
+        raw.get("observation_schema_id")
+        or raw.get("feature_schema_id")
+        or ""
+    )
+    mask_id = str(
+        raw.get("observation_mask_id")
+        or raw.get("feature_mask_id")
+        or ""
+    )
+    if not schema_id or not mask_id:
+        raise ValueError(
+            "Offline-RL TinyMLP transport is missing schema/mask identity"
+        )
+    feature_ids = tuple(str(x) for x in (raw.get("feature_ids") or ()))
+    actions = tuple(float(x) for x in (raw.get("actions") or ()))
+    horizons = tuple(int(x) for x in (raw.get("horizons") or ()))
+    if not feature_ids or not actions or not horizons:
+        raise ValueError(
+            "Offline-RL TinyMLP transport is missing feature/action/horizon contract"
+        )
     return TinyMLPBackend.deserialize(
         raw,
-        expected_schema_id=str(raw["schema_id"]),
-        expected_mask_id=str(raw["mask_id"]),
-        expected_feature_ids=tuple(str(x) for x in raw["feature_ids"]),
-        expected_actions=tuple(float(x) for x in raw["actions"]),
-        expected_horizons=tuple(int(x) for x in raw["horizons"]),
+        expected_schema_id=schema_id,
+        expected_mask_id=mask_id,
+        expected_feature_ids=feature_ids,
+        expected_actions=actions,
+        expected_horizons=horizons,
     )
 
 
