@@ -174,15 +174,32 @@ def _read_json(path, default=None):
 
 def _proc_metrics(pid):
     result = {
-        "rss_mb": None, "cpu_seconds": None,
-        "read_bytes": None, "write_bytes": None,
+        "rss_mb": None,
+        "rss_anon_mb": None,
+        "rss_file_mb": None,
+        "rss_shmem_mb": None,
+        "vm_size_mb": None,
+        "cpu_seconds": None,
+        "read_bytes": None,
+        "write_bytes": None,
     }
     try:
         status = Path(f"/proc/{int(pid)}/status").read_text(encoding="utf-8")
+        wanted = {
+            "VmRSS": "rss_mb",
+            "RssAnon": "rss_anon_mb",
+            "RssFile": "rss_file_mb",
+            "RssShmem": "rss_shmem_mb",
+            "VmSize": "vm_size_mb",
+        }
         for line in status.splitlines():
-            if line.startswith("VmRSS:"):
-                result["rss_mb"] = float(line.split()[1]) / 1024.0
-                break
+            key, _, raw = line.partition(":")
+            field = wanted.get(key)
+            if field is None:
+                continue
+            parts = raw.split()
+            if parts:
+                result[field] = float(parts[0]) / 1024.0
     except (OSError, ValueError, IndexError):
         pass
     try:
@@ -481,8 +498,13 @@ def run_isolated_training_chunk(history, start_ts, end_ts, **kwargs):
                 "phase": phase,
                 "progress": progress,
                 "message": message or None,
+                "bootstrap_stage": worker_status.get("bootstrap_stage"),
                 "peak_rss_mb": round(peak_rss, 3),
                 "rss_mb": latest_metrics.get("rss_mb"),
+                "rss_anon_mb": latest_metrics.get("rss_anon_mb"),
+                "rss_file_mb": latest_metrics.get("rss_file_mb"),
+                "rss_shmem_mb": latest_metrics.get("rss_shmem_mb"),
+                "vm_size_mb": latest_metrics.get("vm_size_mb"),
                 "job_descriptor_bytes": history.training_process_status.get(
                     "job_descriptor_bytes"
                 ),
@@ -497,6 +519,17 @@ def run_isolated_training_chunk(history, start_ts, end_ts, **kwargs):
             detail_text = f" during {phase}{progress_text}"
             if message:
                 detail_text += f" · {message}"
+            memory_parts = []
+            for label, key in (
+                ("rss", "rss_mb"),
+                ("anon", "rss_anon_mb"),
+                ("file", "rss_file_mb"),
+            ):
+                value = latest_metrics.get(key)
+                if value is not None:
+                    memory_parts.append(f"{label}={float(value):.0f}MB")
+            if memory_parts:
+                detail_text += " · " + ", ".join(memory_parts)
             raise MemoryError(
                 f"Isolated training worker exceeded {memory_limit:.0f} MB RSS"
                 + detail_text
@@ -688,6 +721,29 @@ def _worker_configure_budget():
     return TRAINING_BUDGET
 
 
+def _worker_boot_status(job, message, *, stage, progress=None):
+    """Write a tiny heartbeat before HistoryManager exists.
+
+    This deliberately avoids importing or serializing the runtime status graph so a
+    bootstrap RSS failure can be localized even if the child dies during imports,
+    Store attachment, ContextEngine setup, or HistoryManager construction.
+    """
+    payload = {
+        "phase": "worker_bootstrap",
+        "progress": (
+            float(progress)
+            if progress is not None
+            else float((job.get("train_kwargs") or {}).get("progress_lo") or 0.0)
+        ),
+        "message": str(message),
+        "phase_detail": str(stage),
+        "worker_pid": os.getpid(),
+        "updated_at": now_ts(),
+        "bootstrap_stage": str(stage),
+    }
+    _atomic_json(job["status_path"], payload)
+
+
 def _worker_status_writer(history, status_path):
     original = history.set_status
 
@@ -715,6 +771,12 @@ def worker_main(job_path):
     if job.get("training_revision") != TRAINING_REVISION:
         raise RuntimeError("isolated training revision mismatch")
 
+    _worker_boot_status(
+        job,
+        "Training worker descriptor loaded",
+        stage="descriptor_validated",
+    )
+
     # Descriptor options are the authoritative versioned job view.
     OPTIONS.clear()
     OPTIONS.update(dict(job.get("options") or {}))
@@ -728,13 +790,33 @@ def worker_main(job_path):
     except (AttributeError, OSError):
         pass
 
+    _worker_boot_status(
+        job,
+        "Importing training modules",
+        stage="before_training_imports",
+    )
     from history import HistoryManager
     from storage import STORE
     from training_budget import TRAINING_BUDGET
+    _worker_boot_status(
+        job,
+        "Training modules loaded; attaching compact worker context",
+        stage="training_imports_complete",
+    )
 
     STORE.checkpointed_archive_reads = True
     engine = TrainingWorkerEngine(job, STORE)
+    _worker_boot_status(
+        job,
+        "Compact worker context initialized",
+        stage="engine_initialized",
+    )
     history = HistoryManager(engine, worker_mode=True)
+    _worker_boot_status(
+        job,
+        "Worker history manager initialized without global archive scan",
+        stage="history_manager_initialized",
+    )
     engine.history_manager = history
     aid = str(job["agent_id"])
 
@@ -790,6 +872,12 @@ def worker_main(job_path):
     }
     try:
         kwargs = dict(job.get("train_kwargs") or {})
+        _worker_boot_status(
+            job,
+            "Worker ready; entering historical training",
+            stage="before_train_from_archive",
+            progress=kwargs.get("progress_lo"),
+        )
         value = history.train_from_archive(
             float(job["start_ts"]),
             float(job["end_ts"]),
