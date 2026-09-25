@@ -129,7 +129,10 @@ def _meminfo():
 
 def host_facts():
     mem = _meminfo()
-    model = _read_text("/sys/firmware/devicetree/base/model")
+    model = (
+        _read_text("/sys/firmware/devicetree/base/model")
+        or _read_text("/proc/device-tree/model")
+    )
     return {
         "model": model,
         "is_raspberry_pi_4": bool(model and "raspberry pi 4" in model.lower()),
@@ -139,6 +142,30 @@ def host_facts():
         "logical_cpu_count": max(1, int(os.cpu_count() or 1)),
         "mem_total_mb": mem.get("MemTotal"),
     }
+
+
+def host_cpu_times():
+    try:
+        fields = Path("/proc/stat").read_text(encoding="utf-8").splitlines()[0].split()
+        if not fields or fields[0] != "cpu":
+            return None
+        values = [float(value) for value in fields[1:]]
+        if len(values) < 4:
+            return None
+        idle = values[3] + (values[4] if len(values) > 4 else 0.0)
+        return sum(values), idle
+    except (OSError, ValueError, IndexError):
+        return None
+
+
+def host_cpu_percent(previous, current):
+    if not previous or not current:
+        return None
+    total = float(current[0]) - float(previous[0])
+    idle = float(current[1]) - float(previous[1])
+    if total <= 0.0:
+        return None
+    return max(0.0, min(100.0, (total - idle) / total * 100.0))
 
 
 def host_runtime_snapshot():
@@ -377,7 +404,15 @@ def run(args):
     consecutive_failures = 0
     max_consecutive_failures = 0
     host_samples = []
+    host_cpu_samples = []
+    host_cpu_previous = host_cpu_times()
     worker_count_samples = []
+    ha_connected_samples = []
+    realtime_connected_samples = []
+    ha_disconnect_run = 0
+    realtime_disconnect_run = 0
+    max_ha_disconnect_run = 0
+    max_realtime_disconnect_run = 0
     scanned_worker_pids = set()
     loop_durations_ms = []
 
@@ -385,6 +420,11 @@ def run(args):
         loop_started = time.monotonic()
         runtime_samples.append(proc_snapshot(runtime_pid))
         host_samples.append(host_runtime_snapshot())
+        host_cpu_current = host_cpu_times()
+        host_cpu_value = host_cpu_percent(host_cpu_previous, host_cpu_current)
+        if host_cpu_value is not None:
+            host_cpu_samples.append(host_cpu_value)
+        host_cpu_previous = host_cpu_current
         scanned = find_training_worker_pids()
         scanned_worker_pids.update(scanned)
         worker_count_samples.append(len(scanned))
@@ -396,6 +436,18 @@ def run(args):
             status_latencies.append(latency)
             versions.add(str(status.get("version")))
             status_metrics.append(recursive_metrics(status))
+            ha_connected = bool(status.get("ha_connected"))
+            realtime_connected = bool((status.get("realtime") or {}).get("connected"))
+            ha_connected_samples.append(ha_connected)
+            realtime_connected_samples.append(realtime_connected)
+            ha_disconnect_run = 0 if ha_connected else ha_disconnect_run + 1
+            realtime_disconnect_run = (
+                0 if realtime_connected else realtime_disconnect_run + 1
+            )
+            max_ha_disconnect_run = max(max_ha_disconnect_run, ha_disconnect_run)
+            max_realtime_disconnect_run = max(
+                max_realtime_disconnect_run, realtime_disconnect_run
+            )
             if (
                 args.correct_path
                 and time.monotonic() - last_correct_probe >= float(args.correct_interval)
@@ -509,6 +561,27 @@ def run(args):
             "mem_available_mb_min": None if not mem_available else round(min(mem_available), 3),
             "load1_p95": None if not load1 else round(percentile(load1, .95), 3),
             "load1_max": None if not load1 else round(max(load1), 3),
+            "system_cpu_percent_p50": None if not host_cpu_samples else round(percentile(host_cpu_samples, .50), 3),
+            "system_cpu_percent_p95": None if not host_cpu_samples else round(percentile(host_cpu_samples, .95), 3),
+            "system_cpu_percent_max": None if not host_cpu_samples else round(max(host_cpu_samples), 3),
+        },
+        "connectivity": {
+            "samples": len(ha_connected_samples),
+            "ha_connected_false_samples": sum(1 for value in ha_connected_samples if not value),
+            "ha_disconnect_rate": (
+                sum(1 for value in ha_connected_samples if not value) / len(ha_connected_samples)
+                if ha_connected_samples else None
+            ),
+            "ha_max_consecutive_disconnect_samples": max_ha_disconnect_run,
+            "realtime_connected_false_samples": sum(
+                1 for value in realtime_connected_samples if not value
+            ),
+            "realtime_disconnect_rate": (
+                sum(1 for value in realtime_connected_samples if not value)
+                / len(realtime_connected_samples)
+                if realtime_connected_samples else None
+            ),
+            "realtime_max_consecutive_disconnect_samples": max_realtime_disconnect_run,
         },
         "status_probe": {
             "attempts": status_attempts,
@@ -555,6 +628,8 @@ def run(args):
             "correct and training-correct: open/use the normal Correct UI during collection.",
             "No synthetic HA service calls are generated by this tool.",
             "Stage-9 gate requires host.model to identify a real Raspberry Pi 4 and real HA event traffic for event_to_intent evidence.",
+            "host_runtime.system_cpu_percent_* measures whole-host /proc/stat CPU, separate from Adaptive AI runtime+worker CPU.",
+            "connectivity tracks both HA health and the realtime websocket during the measured scenario.",
         ],
     }
     if args.baseline:
