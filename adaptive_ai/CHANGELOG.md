@@ -1,3 +1,14 @@
+# 0.14.93 — 2026-09-25
+
+- Fix a fresh **Full Rebuild** on 0.14.92 reaching the isolated-worker 520 MB RSS guard at 0% before the first normal training heartbeat (`phase=unknown`).
+- Root cause: `HistoryManager(worker_mode=True)` still ran a global `archive_stats()` scan while constructing every child. That full-table COUNT/MIN/MAX/COUNT(DISTINCT)/GROUP BY pass is useful to the realtime UI cache but unnecessary inside an isolated training process, and on a large archive can fault a large SQLite working set before training even starts.
+- Isolated workers now skip that global archive-statistics scan entirely. The realtime parent keeps the existing archive-cache behavior unchanged.
+- Add tiny bootstrap heartbeats before heavy imports, after training-module import, after compact ContextEngine initialization, after HistoryManager initialization and immediately before `train_from_archive()`. A future bootstrap failure can therefore identify its exact stage instead of reporting `unknown`.
+- Extend worker process telemetry with total RSS, anonymous RSS, file-backed RSS, shared-memory RSS and virtual size so a future 520 MB event shows whether Python heap or file-backed SQLite pages are responsible.
+- Keep the 520 MB hard RSS ceiling unchanged.
+- Add regressions proving worker-mode HistoryManager never calls global `archive_stats()` and that the early heartbeat exists independently of HistoryManager/runtime status.
+- No reward semantics, feature selection, Candidate/Correct lineage, Offline-RL policy math or physical-control authority are changed.
+
 # 0.14.92 — 2026-09-25
 
 - Fix the remaining isolated-training RSS failure seen on 0.14.91: the first chunk completed and checkpointed (~4%), then the next continuation worker could exceed the unchanged 520 MB RSS safety ceiling.
