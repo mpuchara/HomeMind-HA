@@ -300,6 +300,11 @@ class SQLiteTemporalTracker:
     # CPU core/SQLite connection long enough to starve Ingress despite a good average
     # training duty cycle. Python already merges/sorts the bounded result afterwards.
     SQL_ENTITY_CHUNK = 32
+    # Forward RoomBelief state only depends on the latest pre-window seed plus the exact
+    # last 30 seconds of events. Scanning every home-source row across a multi-minute/hour
+    # gap is therefore wasted work and can materialize hundreds of MB on chatty HA homes.
+    # For a large jump, rebuild the exact as-of 30 s view instead of accumulating the gap.
+    HOME_FORWARD_REBUILD_GAP_SECONDS = 60.0
 
     def __init__(self, store, watched, context, start, end, query_cache=None,
                  home_context_cache=None, context_cache_contract=None):
@@ -338,6 +343,8 @@ class SQLiteTemporalTracker:
             "home_context_cache_misses": 0,
             "home_cache_full_rebuilds": 0,
             "home_cache_forward_updates": 0,
+            "home_gap_rebuilds": 0,
+            "max_home_forward_gap_seconds": 0.0,
             "legacy_asof_queries_estimate": 0,
         }
         try:
@@ -658,10 +665,28 @@ class SQLiteTemporalTracker:
         self._render_home_cache(ts)
 
     def _forward_home_cache(self, lo, hi):
-        """Advance the 30-second Room Belief source window without re-reading seeds."""
+        """Advance the exact 30-second Room Belief view with bounded peak memory.
+
+        A long forward jump does not need every intermediate home-source event. The final
+        causal view is completely determined by one latest row per source at hi-30 s and
+        raw events in (hi-30 s, hi]. For gaps above the bounded incremental threshold,
+        rebuild that exact view directly. This is semantically equivalent to advancing
+        through the entire gap, but prevents one unbounded SQLite fetch/list allocation.
+        """
+        lo, hi = float(lo), float(hi)
+        gap = max(0.0, hi - lo)
+        self._metrics["max_home_forward_gap_seconds"] = max(
+            float(self._metrics.get("max_home_forward_gap_seconds") or 0.0), gap
+        )
+        if gap > float(self.HOME_FORWARD_REBUILD_GAP_SECONDS):
+            self._metrics["home_gap_rebuilds"] += 1
+            self._rebuild_home_cache(hi)
+            TRAINING_BUDGET.checkpoint("temporal_home_gap_rebuild")
+            return
+
         ids = self.home_entities
-        old_cutoff = float(lo) - 30.0
-        cutoff = float(hi) - 30.0
+        old_cutoff = lo - 30.0
+        cutoff = hi - 30.0
         new_rows = (
             self._home_interval_rows(ids, lo, hi) if ids and float(hi) > float(lo) else []
         )

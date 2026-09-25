@@ -1,9 +1,9 @@
 {
-  "version": "0.14.91",
+  "version": "0.14.92",
   "release_date": "2026-09-25",
-  "base_version": "0.14.90",
-  "base_commit": "227c18fdc7bc22683284cd347ebd269c800862c1",
-  "release_status": "hotfix-isolated-training-worker-memory",
+  "base_version": "0.14.91",
+  "base_commit": "94f9fa812be898e76f6e2fac56aab903d156b8c6",
+  "release_status": "hotfix-bounded-home-context-forward-replay",
   "pi4_profile_contract": "pi_training_profile_v2",
   "pi4_release_gate_contract": "pi4_release_gate_v1",
   "pi4_real_hardware_required": true,
@@ -535,5 +535,14 @@
     "neural_samples": "historical Tiny MLP queues retain shared feature-id tuples plus float32 dense values instead of live-debug observation payloads",
     "memory_limit_mb": 520,
     "safety": "memory ceiling unchanged; physical authority and learning semantics unchanged"
+  },
+  "hotfix_01492": {
+    "observed_failure": "0.14.91 completed the first isolated chunk (~4%) then the next worker exceeded the unchanged 520 MB RSS ceiling",
+    "root_path": "long temporal forward jumps could materialize every RoomBelief source row across the entire gap even though the final feature contract needs only one pre-window seed per source plus the final 30 s causal window",
+    "replay_fix": "forward gaps over 60 s rebuild the exact bounded as-of RoomBelief view instead of accumulating the gap",
+    "worker_cache_profile": "isolated worker caps replay query cache at 4096 rows / 512 rows per entry and shared home-context cache at 8 entries / 2048 units; realtime parent configuration unchanged",
+    "diagnostics": "memory failures now retain the last worker phase/progress/message and worker-side 500 MB replay guard raises MemoryError explicitly",
+    "memory_limit_mb": 520,
+    "safety": "no reward, schema selection, Correct/Candidate lineage, Offline-RL math or physical-control authority change"
   }
 }

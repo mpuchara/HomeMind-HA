@@ -1,3 +1,14 @@
+# 0.14.92 — 2026-09-25
+
+- Fix the remaining isolated-training RSS failure seen on 0.14.91: the first chunk completed and checkpointed (~4%), then the next continuation worker could exceed the unchanged 520 MB RSS safety ceiling.
+- Root cause is in temporal RoomBelief replay, not the initial HA job descriptor: a forward cursor jump could fetch **every** home-context row across a multi-minute/hour gap even though the exact final feature state only needs the latest pre-window seed per source plus the final 30-second causal window.
+- Forward RoomBelief gaps above 60 s now rebuild that exact bounded as-of view directly. Short forward gaps keep the existing incremental path.
+- Preserve causal semantics: the large-gap result is checked against a fresh exact as-of rebuild and remains identical for occupancy/arrival/departure/trajectory features.
+- Use conservative cache capacities only inside the isolated worker: replay query cache <=4096 rows / <=512 rows per entry; shared historical home-context cache <=8 entries / <=2048 units. Realtime-parent settings are unchanged.
+- Keep the worker RSS ceiling at 520 MB; this release reduces peak allocations rather than hiding the problem with a larger limit.
+- Improve failure diagnostics: an RSS kill records the last worker phase/progress/message, and the worker-side 500 MB replay guard is now classified as a MemoryError rather than a generic interruption.
+- No reward semantics, feature-selection semantics, Correct/Candidate lineage, Offline-RL policy math or physical-control authority are changed.
+
 # 0.14.91 — 2026-09-25
 
 - Fix isolated historical training being killed at the 520 MB RSS safety ceiling immediately after a full rebuild starts on large Home Assistant installations.

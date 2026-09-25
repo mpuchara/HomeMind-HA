@@ -1870,20 +1870,37 @@ class HistoryManager(threading.Thread):
         # dwell was immediately followed by a rewind to the next action's precursor.
         # Incremental cursors stay forward-moving far more often when these roles do not
         # fight over one timestamp.
+        replay_cache_rows = int(
+            OPTIONS.get("training_replay_ram_cache_rows", 8192) or 0
+        )
+        replay_cache_entry_rows = int(
+            OPTIONS.get("training_replay_ram_cache_entry_rows", 1024) or 1024
+        )
+        home_cache_entries = int(
+            OPTIONS.get("training_home_context_cache_entries", 32) or 0
+        )
+        home_cache_units = int(
+            OPTIONS.get("training_home_context_cache_units", 8192) or 0
+        )
+        if self.worker_mode:
+            # The isolated worker has a hard 520 MB RSS gate. Cache capacity is only a
+            # performance hint, never part of learning semantics, so use a conservative
+            # per-process profile and leave the realtime parent's configured values alone.
+            replay_cache_rows = min(replay_cache_rows, 4096)
+            replay_cache_entry_rows = min(replay_cache_entry_rows, 512)
+            home_cache_entries = min(home_cache_entries, 8)
+            home_cache_units = min(home_cache_units, 2048)
+
         replay_query_cache = ReplayQueryCache(
-            max_rows=int(OPTIONS.get("training_replay_ram_cache_rows", 8192) or 0),
-            max_entry_rows=int(OPTIONS.get("training_replay_ram_cache_entry_rows", 1024) or 1024),
+            max_rows=replay_cache_rows,
+            max_entry_rows=replay_cache_entry_rows,
         )
         # RoomBelief/AdaptivePresence reconstruction is identical for trackers that ask
         # for the same causal home state. Share only immutable exact-as-of snapshots; the
         # onset and persistence cursors still own separate mutable tracker/model state.
         replay_home_context_cache = HistoricalContextCache(
-            max_entries=int(
-                OPTIONS.get("training_home_context_cache_entries", 32) or 0
-            ),
-            max_units=int(
-                OPTIONS.get("training_home_context_cache_units", 8192) or 0
-            ),
+            max_entries=home_cache_entries,
+            max_units=home_cache_units,
         )
         context_cache_contract = "|".join(sorted({
             "policy:%s:schema:%s:dims:%s:feature:%s" % (
@@ -2407,8 +2424,13 @@ class HistoryManager(threading.Thread):
         for row in rows:
             if replay_done % 256 == 0:
                 memory = rss_mb()
-                if self.stop_event.is_set() or (memory is not None and memory > 500):
-                    raise InterruptedError("Training interrupted or 500 MB memory limit reached")
+                if self.stop_event.is_set():
+                    raise InterruptedError("Training interrupted")
+                if memory is not None and memory > 500:
+                    raise MemoryError(
+                        f"Training replay exceeded 500 MB RSS at row "
+                        f"{replay_done}/{replay_total}"
+                    )
                 self.stop_event.wait(.001)
             replay_done += 1
             now_report = now_ts()

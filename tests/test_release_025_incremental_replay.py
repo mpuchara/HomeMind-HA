@@ -187,6 +187,99 @@ class IncrementalTemporalReplayTests(unittest.TestCase):
                 msg=key,
             )
 
+    def test_large_home_context_forward_gap_rebuilds_exact_30_second_view(self):
+        motion = "binary_sensor.kitchen_motion"
+        radar = "binary_sensor.kitchen_presence"
+        target = "light.kitchen"
+        states = {
+            motion: state(motion, "off", device_class="motion"),
+            radar: state(radar, "off", device_class="occupancy"),
+            target: state(target, "off"),
+        }
+        registry = {
+            motion: {"area_id": "kitchen"},
+            radar: {"area_id": "kitchen"},
+            target: {"area_id": "kitchen"},
+        }
+        ctx = self.context(states, registry)
+
+        rows = []
+        for offset in range(0, 601, 5):
+            rows.append((
+                motion, self.base + offset,
+                "on" if (offset // 20) % 2 else "off",
+                {"device_class": "motion"}, None, "test",
+            ))
+            rows.append((
+                radar, self.base + offset,
+                "on" if (offset // 30) % 2 else "off",
+                {"device_class": "occupancy"}, None, "test",
+            ))
+        self.store.archive_batch(rows)
+
+        class RecordingTracker(SQLiteTemporalTracker):
+            def __init__(self, *args, **kwargs):
+                self.home_interval_spans = []
+                self.home_seed_interval_spans = []
+                super().__init__(*args, **kwargs)
+
+            def _home_interval_rows(self, entity_ids, lo, hi):
+                self.home_interval_spans.append(float(hi) - float(lo))
+                return super()._home_interval_rows(entity_ids, lo, hi)
+
+            def _home_seed_interval_rows(self, entity_ids, lo, hi):
+                self.home_seed_interval_spans.append(float(hi) - float(lo))
+                return super()._home_seed_interval_rows(entity_ids, lo, hi)
+
+        tracker = RecordingTracker(
+            self.store, [motion, radar], ctx,
+            self.base, self.base + 700,
+        )
+        try:
+            tracker.advance(self.base + 20)
+            tracker.advance(self.base + 600)
+            stats = tracker.stats()
+            actual = tracker.history.home_context.forecast(
+                target, self.base + 600
+            )
+            self.assertEqual(stats["home_gap_rebuilds"], 1)
+            self.assertEqual(stats["home_cache_full_rebuilds"], 2)
+            self.assertEqual(stats["home_cache_forward_updates"], 0)
+            self.assertGreater(
+                stats["max_home_forward_gap_seconds"],
+                SQLiteTemporalTracker.HOME_FORWARD_REBUILD_GAP_SECONDS,
+            )
+            # The old path queried every home-source event across the ~10 minute jump.
+            # The bounded path only asks for the exact final 30 s window.
+            self.assertLessEqual(max(tracker.home_interval_spans), 30.000001)
+            self.assertEqual(tracker.home_seed_interval_spans, [])
+        finally:
+            tracker.close()
+
+        reference = SQLiteTemporalTracker(
+            self.store, [motion, radar], ctx,
+            self.base, self.base + 700,
+        )
+        try:
+            reference.advance(self.base + 600)
+            expected = reference.history.home_context.forecast(
+                target, self.base + 600
+            )
+        finally:
+            reference.close()
+
+        for key in (
+            "occupancy_now", "occupancy_in_1s", "occupancy_in_3s",
+            "occupancy_in_5s", "arrival_probability", "departure_probability",
+            "trajectory_confidence",
+        ):
+            self.assertAlmostEqual(
+                float(actual.get(key) or 0.0),
+                float(expected.get(key) or 0.0),
+                places=9,
+                msg=key,
+            )
+
     def test_same_timestamp_base_rows_keep_numeric_history_id_order(self):
         eid = "sensor.tie"
         self.store.archive_batch([
