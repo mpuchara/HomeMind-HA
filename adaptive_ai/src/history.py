@@ -1381,7 +1381,7 @@ class HistoryManager(threading.Thread):
                 self.engine.models.pop(aid, None)
             raise
 
-    def _train_from_archive(self, start_ts, end_ts, *, qualify=False, agent_ids=None, include_candidates=False, benchmark=None, accumulate_benchmark=False, progress_lo=None, progress_hi=None, progress_label=None):
+    def _train_from_archive(self, start_ts, end_ts, *, qualify=False, agent_ids=None, include_candidates=False, benchmark=None, accumulate_benchmark=False, progress_lo=None, progress_hi=None, progress_label=None, continuation_from_ts=None):
         benchmark = bool(qualify) if benchmark is None else bool(benchmark)
         self.temporal_replay_stats = {}
         agents = [a for a in STORE.list_agent_configs() if a["enabled"]]
@@ -1397,6 +1397,14 @@ class HistoryManager(threading.Thread):
         target_map = {}
         for a in agents:
             target_map.setdefault(a["target_entity"], []).append(a)
+
+        logical_start_ts = float(start_ts)
+        scan_start_ts = float(start_ts)
+        if continuation_from_ts is not None:
+            scan_start_ts = max(
+                float(start_ts),
+                min(float(end_ts), float(continuation_from_ts)),
+            )
 
         # Feature screening is only needed while the policy schema is unresolved.
         # Once a model checkpoint exists, its explicit schema is authoritative for later
@@ -1805,7 +1813,7 @@ class HistoryManager(threading.Thread):
         horizons = sorted({h for p in policies.values() for h in p.horizons})
         watched_entities = {eid for p in policies.values() for eid in p.schema.entities}
         replay_entities = set(watched_entities) | set(target_map.keys())
-        rows = STORE.archive_iter(start_ts, end_ts, replay_entities, chunk_size=256)
+        rows = STORE.archive_iter(scan_start_ts, end_ts, replay_entities, chunk_size=256)
         # Separate onset/anticipation and dwell-persistence cursors. 0.14.24 used one
         # mutable as-of tracker for both roles, so persistence sampling near the end of a
         # dwell was immediately followed by a rewind to the next action's precursor.
@@ -1872,6 +1880,8 @@ class HistoryManager(threading.Thread):
         pending = {}
         last_value = {}
         new_count = 0
+        continuation_seed_target_rows = 0
+        continuation_seed_agents = 0
 
         # Replay used to commit one SQLite transaction per completed dwell.  Keep the
         # same uniqueness semantics in memory, then persist bounded batches.  A failed
@@ -1944,6 +1954,20 @@ class HistoryManager(threading.Thread):
                 "persistence": persistence,
                 "totals": totals,
                 "home_context_cache": replay_home_context_cache.status(),
+                "continuation": {
+                    "contract": "stateful_chunk_continuation_v1",
+                    "enabled": bool(scan_start_ts > logical_start_ts + 0.5),
+                    "logical_start_ts": logical_start_ts,
+                    "scan_start_ts": scan_start_ts,
+                    "end_ts": float(end_ts),
+                    "overlap_seconds_avoided": max(
+                        0.0, scan_start_ts - logical_start_ts
+                    ),
+                    "seed_target_rows_scanned": int(
+                        continuation_seed_target_rows
+                    ),
+                    "seed_agents": int(continuation_seed_agents),
+                },
             }
             return self.temporal_replay_stats
 
@@ -2212,7 +2236,7 @@ class HistoryManager(threading.Thread):
 
         replay_started = now_ts()
         replay_last_report = replay_started
-        replay_total = max(1, STORE.archive_count(start_ts, end_ts, replay_entities))
+        replay_total = max(1, STORE.archive_count(scan_start_ts, end_ts, replay_entities))
         replay_done = 0
         if progress_enabled:
             screening_end = float(progress_lo) + (float(progress_hi) - float(progress_lo)) * 0.20
