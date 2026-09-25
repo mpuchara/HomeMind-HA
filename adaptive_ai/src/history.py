@@ -18,6 +18,42 @@ from replay import (
 from training_budget import TRAINING_BUDGET
 from policy import MultiHorizonPolicy
 
+def stateful_continuation_seed_rows(store, agents, target_map, start_ts, boundary_ts):
+    """Return the exact open-target transition state the legacy overlap would leave.
+
+    Only target rows are scanned. Context/temporal features are reconstructed later by
+    SQLiteTemporalTracker as-of the selected transition, so no unrelated overlap history
+    is reprocessed and rows at/after the boundary cannot leak into the seed.
+    """
+    if float(boundary_ts) <= float(start_ts):
+        return {}, 0
+    values = {}
+    seeds = {}
+    scanned = 0
+    for row in store.archive_iter(
+        float(start_ts), float(boundary_ts), target_map.keys(), chunk_size=256
+    ):
+        if float(row["ts"]) >= float(boundary_ts):
+            continue
+        scanned += 1
+        state = archived_state(row)
+        for agent in target_map.get(row["entity_id"], ()):
+            aid = agent["id"]
+            value = target_value(state, agent["target_property"])
+            if value is None:
+                continue
+            previous = values.get(aid)
+            if (
+                previous is not None
+                and abs(float(value) - float(previous))
+                    <= max(0.01, float(agent["deadband"]) * 0.05)
+            ):
+                continue
+            values[aid] = float(value)
+            seeds[aid] = (dict(row), float(value))
+    return seeds, scanned
+
+
 class HistoryManager(threading.Thread):
     """Bootstraps HA Recorder history, keeps a longer local archive, discovers active targets,
     and turns logged trajectories into offline contextual-RL experiences."""
@@ -2317,40 +2353,12 @@ class HistoryManager(threading.Thread):
             # solely so the final open target dwell survived the chunk boundary. Rebuild
             # that minimal state from target rows only; temporal trackers reconstruct the
             # selected features causally as-of the last effective transition.
-            seed_values = {}
-            seed_rows = {}
-            for seed_row in STORE.archive_iter(
-                logical_start_ts,
-                scan_start_ts,
-                target_map.keys(),
-                chunk_size=256,
-            ):
-                if float(seed_row["ts"]) >= scan_start_ts:
-                    continue
-                continuation_seed_target_rows += 1
-                seed_agents = target_map.get(seed_row["entity_id"], ())
-                if not seed_agents:
-                    continue
-                seed_state = archived_state(seed_row)
-                for seed_agent in seed_agents:
-                    seed_aid = seed_agent["id"]
-                    seed_value = target_value(
-                        seed_state, seed_agent["target_property"]
-                    )
-                    if seed_value is None:
-                        continue
-                    previous = seed_values.get(seed_aid)
-                    if (
-                        previous is not None
-                        and abs(float(seed_value) - float(previous))
-                            <= max(
-                                0.01,
-                                float(seed_agent["deadband"]) * 0.05,
-                            )
-                    ):
-                        continue
-                    seed_values[seed_aid] = float(seed_value)
-                    seed_rows[seed_aid] = (dict(seed_row), float(seed_value))
+            seed_rows, continuation_seed_target_rows = (
+                stateful_continuation_seed_rows(
+                    STORE, agents, target_map,
+                    logical_start_ts, scan_start_ts,
+                )
+            )
 
             for seed_agent in agents:
                 seed_aid = seed_agent["id"]
