@@ -88,6 +88,7 @@ class TrainingProcessContractTests(unittest.TestCase):
                     "device_class": "temperature",
                     "unit_of_measurement": "°C",
                     "friendly_name": "Rich temperature",
+                    "temperature": 23.4,
                     "huge_vendor_blob": blob,
                     "forecast": [blob, blob],
                 },
@@ -101,6 +102,7 @@ class TrainingProcessContractTests(unittest.TestCase):
         self.assertEqual(row["attributes"]["device_class"], "temperature")
         self.assertEqual(row["attributes"]["unit_of_measurement"], "°C")
         self.assertEqual(row["attributes"]["friendly_name"], "Rich temperature")
+        self.assertEqual(row["attributes"]["temperature"], 23.4)
         self.assertNotIn("huge_vendor_blob", row["attributes"])
         self.assertNotIn("forecast", row["attributes"])
         self.assertLess(len(json.dumps(compact)), 2000)
@@ -133,6 +135,7 @@ class TrainingProcessContractTests(unittest.TestCase):
                     "device_class": "temperature",
                     "unit_of_measurement": "°C",
                     "friendly_name": "Room temperature",
+                    "temperature": 20.0,
                     "huge_blob": "a" * 100000,
                 },
             }
@@ -144,6 +147,7 @@ class TrainingProcessContractTests(unittest.TestCase):
                     "device_class": "temperature",
                     "unit_of_measurement": "°C",
                     "friendly_name": "Room temperature",
+                    "temperature": 99.0,
                     "huge_blob": "b" * 200000,
                 },
             }
