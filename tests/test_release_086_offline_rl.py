@@ -239,17 +239,6 @@ class OfflineRLMathTests(unittest.TestCase):
         )
 
 
-class _NoBudget:
-    def begin(self, **kwargs):
-        return None
-
-    def checkpoint(self, *args, **kwargs):
-        return None
-
-    def end(self):
-        return None
-
-
 class _HeavySlot:
     owner = None
 
