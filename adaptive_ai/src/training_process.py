@@ -39,9 +39,14 @@ AGENT_CONFIG_KEYS = (
 STATE_METADATA_KEYS = (
     "device_class", "unit_of_measurement", "friendly_name", "supported_features",
     "supported_color_modes", "options", "min", "max", "step",
+    "min_temp", "max_temp", "target_temp_step", "min_humidity", "max_humidity",
+)
+TRAINING_STATE_ATTRIBUTE_KEYS = STATE_METADATA_KEYS + (
+    # Current target-property attributes are needed to interpret the snapshot, but they
+    # are deliberately excluded from runtime_context_fingerprint: normal device changes
+    # during a multi-minute replay must not make a finished worker stale.
     "brightness", "temperature", "current_position", "percentage", "volume_level",
-    "humidity", "min_temp", "max_temp", "target_temp_step",
-    "min_humidity", "max_humidity",
+    "humidity",
 )
 REGISTRY_METADATA_KEYS = ("device_id", "area_id", "platform", "integration")
 
@@ -83,7 +88,7 @@ def _compact_training_state_map(state_map):
         state = dict(state or {})
         attrs = dict(state.get("attributes") or {})
         compact_attrs = {
-            key: attrs.get(key) for key in STATE_METADATA_KEYS if key in attrs
+            key: attrs.get(key) for key in TRAINING_STATE_ATTRIBUTE_KEYS if key in attrs
         }
         out[str(entity_id)] = {
             "entity_id": str(state.get("entity_id") or entity_id),
