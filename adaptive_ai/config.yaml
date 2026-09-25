@@ -166,6 +166,7 @@ options:
   offline_rl_max_regression_fraction: 0.10
   offline_rl_max_unseen_context_rate: 0.75
   offline_rl_context_distance_threshold: 1.5
+  offline_rl_worker_timeout_seconds: 120.0
   training_process_isolation: true
   training_worker_nice: 10
   training_worker_memory_limit_mb: 520
@@ -342,6 +343,7 @@ schema:
   offline_rl_max_regression_fraction: "float(0.0,1.0)"
   offline_rl_max_unseen_context_rate: "float(0.0,1.0)"
   offline_rl_context_distance_threshold: "float(0.01,10.0)"
+  offline_rl_worker_timeout_seconds: "float(5.0,600.0)"
   training_process_isolation: "bool"
   training_worker_nice: "int(0,19)"
   training_worker_memory_limit_mb: "int(128,2048)"
