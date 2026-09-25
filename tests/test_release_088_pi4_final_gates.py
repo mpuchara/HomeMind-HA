@@ -10,6 +10,7 @@ if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
 from pi4_release_gate import evaluate_reports
+from pi_training_profile import summarize_process
 
 
 def profile(scenario, *, event_ms=180.0, correct=False, worker=False):
@@ -164,6 +165,26 @@ class Release088Pi4GateTests(unittest.TestCase):
         result = evaluate_reports(suite)
         self.assertEqual(result["decision"], "inconclusive")
         self.assertIn("raspberry_pi_4_hardware", result["inconclusive"])
+
+    def test_profiler_sums_cpu_across_sequential_worker_pids(self):
+        samples = [
+            {"pid": 101, "cpu_seconds": 1.0, "rss_mb": 100.0,
+             "read_bytes": 100, "write_bytes": 200, "threads": 1},
+            {"pid": 101, "cpu_seconds": 3.0, "rss_mb": 120.0,
+             "read_bytes": 300, "write_bytes": 500, "threads": 1},
+            {"pid": 202, "cpu_seconds": 5.0, "rss_mb": 130.0,
+             "read_bytes": 1000, "write_bytes": 2000, "threads": 1},
+            {"pid": 202, "cpu_seconds": 8.0, "rss_mb": 140.0,
+             "read_bytes": 1600, "write_bytes": 2600, "threads": 1},
+        ]
+        result = summarize_process(samples, elapsed=10.0, cpu_count=4)
+        self.assertEqual(result["pids"], [101, 202])
+        self.assertEqual(result["processes_seen"], 2)
+        self.assertEqual(result["cpu_seconds_delta"], 5.0)
+        self.assertEqual(result["cpu_one_core_percent"], 50.0)
+        self.assertEqual(result["cpu_host_percent"], 12.5)
+        self.assertEqual(result["read_bytes_delta"], 800)
+        self.assertEqual(result["write_bytes_delta"], 900)
 
     def test_source_and_workflow_ship_stage9_tools(self):
         profiler = (SRC / "pi_training_profile.py").read_text(encoding="utf-8")
