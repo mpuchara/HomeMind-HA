@@ -15,7 +15,7 @@ try:
 except Exception:
     ws_connect = None
 
-APP_VERSION = "0.14.85"
+APP_VERSION = "0.14.86"
 HISTORY_BOOTSTRAP_REVISION = "target-attrs-v2"
 TRAINING_REVISION = "shared-home-intents-v19"
 DATA_DIR = Path(os.environ.get("ADAPTIVE_AI_DATA", "/data"))
@@ -164,6 +164,35 @@ DEFAULT_OPTIONS = {
     # performs no policy update from reward experiences.
     "automatic_correct_min_confidence": 0.80,
     "automatic_correct_min_source_reliability": 0.80,
+    # Stage-7 conservative Offline RL. Trusted Stage-6 rows are the only reward input.
+    "offline_rl_min_trusted_samples": 24,
+    "offline_rl_max_trusted_samples": 512,
+    "offline_rl_holdout_fraction": 0.25,
+    "offline_rl_min_holdout_samples": 8,
+    "offline_rl_max_train_samples": 384,
+    "offline_rl_min_supported_actions": 2,
+    "offline_rl_min_action_support": 4,
+    "offline_rl_max_epochs": 6,
+    "offline_rl_batch_size": 16,
+    "offline_rl_learning_rate": 0.0015,
+    "offline_rl_reward_clip": 1.0,
+    "offline_rl_advantage_clip": 1.5,
+    "offline_rl_kl_beta": 2.0,
+    "offline_rl_parent_l2": 0.002,
+    "offline_rl_manual_weight": 4.0,
+    "offline_rl_gradient_clip": 0.5,
+    "offline_rl_max_parent_relative_l2": 0.08,
+    "offline_rl_early_stop_patience": 2,
+    "offline_rl_early_stop_min_delta": 0.0001,
+    "offline_rl_min_effective_sample_size": 4.0,
+    "offline_rl_min_reward_gain": 0.0,
+    "offline_rl_min_parent_agreement": 0.80,
+    "offline_rl_max_mean_tv": 0.10,
+    "offline_rl_max_max_tv": 0.25,
+    "offline_rl_max_unsupported_probability_lift": 0.02,
+    "offline_rl_max_regression_fraction": 0.10,
+    "offline_rl_max_unseen_context_rate": 0.75,
+    "offline_rl_context_distance_threshold": 1.5,
     # CPU-heavy historical replay runs in one child process. The parent remains the
     # authority for HA ingress/HTTP/queue/control and supervises RSS/CPU/I/O.
     "training_process_isolation": True,
