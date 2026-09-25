@@ -363,11 +363,13 @@ class HistoryManager(threading.Thread):
 
         def worker():
             TRAINING_BUDGET.begin()
+            failure_text = None
             try:
                 self._run_agent_indexing(
                     agent_id, rebuild=rebuild, rebuild_reason=rebuild_reason
                 )
             except Exception as exc:
+                failure_text = f"{type(exc).__name__}: {exc}"
                 STORE.event(agent_id, "error", "agent_index_failed", str(exc), {"trace": traceback.format_exc(limit=6)})
                 # A stale isolated job can mean the user/configuration changed while
                 # training was running. Preserve that newer needs_retrain/lifecycle
@@ -392,12 +394,26 @@ class HistoryManager(threading.Thread):
                     final_agent = STORE.get_agent_config(agent_id)
                     final_progress = clamp(float((final_agent or {}).get("training_progress") or self.progress or 0.0), 0.0, 1.0)
                     final_state = str((final_agent or {}).get("training_state") or "paused")
+                    completed = (
+                        final_progress >= 0.999
+                        and final_state in ("qualified", "paused")
+                        and failure_text is None
+                    )
                     with self.lock:
                         self.progress = final_progress
                         self.phase = "ready"
                         self.phase_started_at = now_ts()
-                        self.message = f"Training finished: {self.training_job_name or agent_id}"
-                        self.phase_detail = f"Agent training finished in state {final_state}"
+                        if completed:
+                            self.message = f"Training finished: {self.training_job_name or agent_id}"
+                            self.phase_detail = f"Agent training finished in state {final_state}"
+                            self.eta_source = "complete"
+                        else:
+                            self.message = f"Training stopped before completion: {self.training_job_name or agent_id}"
+                            self.phase_detail = (
+                                f"Agent training stopped at {final_progress:.0%} in state {final_state}"
+                                + (f": {failure_text}" if failure_text else "")
+                            )
+                            self.eta_source = "incomplete"
                         self.stage_eta_seconds = None
                         self.eta_seconds = None
                         self.training_overall_eta_seconds = None
@@ -405,7 +421,6 @@ class HistoryManager(threading.Thread):
                         self.work_done = 0
                         self.work_total = 0
                         self.work_unit = None
-                        self.eta_source = "complete"
                         self.training_rows_per_second = 0.0
                         self.training_job_agent_id = None
                         self.training_job_name = None
