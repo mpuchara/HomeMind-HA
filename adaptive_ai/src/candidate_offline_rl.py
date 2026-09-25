@@ -771,6 +771,10 @@ def install(manager):
                         OPTIONS.get("offline_rl_min_supported_actions", 2)
                         or 2
                     ),
+                    min_action_support=int(
+                        OPTIONS.get("offline_rl_min_action_support", 4)
+                        or 4
+                    ),
                     min_effective_sample_size=float(
                         OPTIONS.get(
                             "offline_rl_min_effective_sample_size", 4.0
