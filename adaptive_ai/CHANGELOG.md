@@ -16,6 +16,7 @@
 - Add Candidate diagnostics for RL run status, trusted/train/holdout samples, reward-gain proxy, parent agreement, action drift and unseen-context rate.
 - Add regressions for immutable parent, hard distance limit, Manual Correct dominance over conflicting reward, unsupported-action gating, required comparison metrics, trusted-only Stage-6 input, full Candidate lineage/build/persistence, existing neural Shadow routing and no-online-exploration/no-dispatch source boundaries.
 - Add a packaged synthetic Stage-7 Offline-RL benchmark; host metrics are informational and must not be presented as Raspberry Pi 4 or real-world reward-performance measurements.
+- Green CI benchmark on the 0.14.86 implementation: 192 train + 64 holdout trusted-reward rows, 2 Manual Correct anchors, holdout reward-gain proxy +0.0420, 100% parent action agreement, mean TV drift 0.00363, relative-L2 distance 0.00339, zero unsupported argmax/regressions, ~2.90 s trainer / 3.45 s end-to-end benchmark, ~320 KiB RSS delta and 418 µs inference p95 on the GitHub Linux runner. These are synthetic host-local metrics, not Raspberry Pi 4 measurements and not evidence of real-world energy/reward improvement.
 
 # 0.14.85 — 2026-09-24
 
