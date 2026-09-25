@@ -1,3 +1,13 @@
+# 0.14.90 — 2026-09-25
+
+- Fix process-isolated historical training aborting part-way through with `database is locked` under concurrent realtime/Candidate SQLite activity.
+- Isolated replay workers now attach to the parent's already-initialized WAL database and **do not rerun schema DDL, migrations or recent-event warmup for every training chunk**.
+- Mark worker subprocesses explicitly with `ADAPTIVE_AI_TRAINING_WORKER=1`; direct worker CLI execution uses the same contract.
+- Keep the realtime parent SQLite wait bound at 30 s while allowing the lower-priority training child up to 60 s for transient WAL-writer contention.
+- Add a regression that holds a parent `BEGIN IMMEDIATE` writer while a worker Store boots; worker bootstrap must remain read-only and complete without waiting for schema-write access.
+- Correct lifecycle reporting: a job that stops at partial progress now emits `training_queue_interrupted` and the history status says **Training stopped before completion**, rather than implying a successful finish when the queue slot is merely released.
+- No learning targets, rewards, Candidate lineage, Correct semantics, Offline-RL policy math or physical-control authority are changed.
+
 # 0.14.89 — 2026-09-25
 
 - Fix fresh-agent **Train** failing with `Could not queue training safely: install.<locals>.enqueue() got an unexpected keyword argument 'rebuild_reason'`.
