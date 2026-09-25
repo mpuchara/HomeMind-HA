@@ -332,7 +332,9 @@ class AgentCandidateManager(threading.Thread):
     def _queue(self):
         return getattr(self.core, "TRAINING_QUEUE", None)
 
-    def _claim_candidate_training_job(self, candidate_id, *, rebuild, reason):
+    def _claim_candidate_training_job(
+        self, candidate_id, *, rebuild, reason, rebuild_reason=None
+    ):
         """Own exactly one queued Candidate job without deadlocking lifecycle state.
 
         A Candidate can briefly acquire a TrainingQueue entry before AgentCandidateManager
@@ -361,7 +363,8 @@ class AgentCandidateManager(threading.Thread):
             if reason == "teach_rl":
                 # TrainingQueue has an explicit atomic pending-job upgrade for Teach RL.
                 queued = queue.enqueue(
-                    candidate_id, rebuild=True, reason="teach_rl"
+                    candidate_id, rebuild=True, reason="teach_rl",
+                    rebuild_reason=rebuild_reason or "feature_mask_change",
                 )
                 return queued, (
                     "adopted_pending_teach_rl"
@@ -378,7 +381,8 @@ class AgentCandidateManager(threading.Thread):
             queue.cancel(candidate_id)
 
         queued = queue.enqueue(
-            candidate_id, rebuild=bool(rebuild), reason=reason
+            candidate_id, rebuild=bool(rebuild), reason=reason,
+            rebuild_reason=rebuild_reason,
         )
         return queued, "enqueued_candidate_job"
 
