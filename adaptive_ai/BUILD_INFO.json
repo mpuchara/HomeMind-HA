@@ -1,10 +1,10 @@
 {
-  "version": "0.14.84",
+  "version": "0.14.85",
   "release_date": "2026-09-24",
-  "base_version": "0.14.83",
-  "base_commit": "3c0a1c97d88a041157867282fd61a9b1f5dd8506",
-  "release_status": "stage5-neural-correct-ci-green",
-  "tests_passed": 1236,
+  "base_version": "0.14.84",
+  "base_commit": "3bebae9f1307bd4f152c1e00919e309dafb9f913",
+  "release_status": "stage6-trusted-automatic-correct-green",
+  "tests_passed": 1253,
   "profile": "rpi4-low-memory-complete-discovery-manual-agent-selection",
   "manual_agent_training": true,
   "max_concurrent_training_jobs": 1,
@@ -40,7 +40,7 @@
   "migration": "no destructive migration; existing agents, models, feedback, raw archive, historical experiences, candidate lineage, rollback and generation state preserved",
   "physical_control": "unchanged; repaired agents return to Shadow and Control still requires qualified state plus all existing guards",
   "pi4": "0.14.38 targets the long-soak Raspberry Pi failure: drift analysis is coalesced on a throttled background observer, REST /states reconciliation is delta-only after bootstrap, websocket outage fallback reconciles every 10 s, and HA core-state health is tracked separately from unrelated REST errors.",
-  "ci_status": "0.14.84 Stage-5 final branch validation target: 1236-test suite on Python 3.11/3.13, Docker image smoke and incremental neural Manual Correct benchmark green before merge.",
+  "ci_status": "0.14.85 exact-head CI green on Python 3.11/3.13, JS checks, Docker/image smoke, Stage 17/18 product benchmarks and the Stage-6 Automatic Correct reward-buffer benchmark.",
   "training_slice_budget": "adaptive-ai-index workers call a shared CooperativeTrainingBudget; expensive temporal tracker loops yield between entities/events and finalization is no longer outside the throttle",
   "finalization_lifeline": "HEAVY_JOBS remains owned through final gc.collect(), so /api/status and /api/agents stay on lightweight lifeline reads until the worker is actually finished",
   "finalization_progress": "post-replay UI now exposes bounded stages: replay complete, policy serialization, benchmark save, qualification, checkpoint complete",
@@ -423,5 +423,43 @@
     "physical_authority": false,
     "note": "The Stage-5 benchmark step also passed on later branch runs after operation-batch changes; these timings are machine-local CI evidence, not Pi4 acceptance."
   },
-  "stage5_tests_passed": 1236
+  "stage5_tests_passed": 1236,
+  "automatic_correct_stage6": "trusted outcome/reward evidence buffer only; scalar reward does not update policy",
+  "automatic_correct_separation": "Manual Correct remains explicit timestamp+desired-action supervised learning; Automatic Correct stores observed consequence/reward evidence for later Offline RL",
+  "automatic_correct_attribution": "trusted only for exact-target explicit user reversal or verified same-area presence transition inside the exact observation window; unknown/cross-area/unrelated signals are not positive reward",
+  "automatic_correct_persistence": "one durable resolution per decision/trial with observation, action timestamp, observation window, area, outcome/reward sources, confidence, attribution reason and source reliability",
+  "automatic_correct_learning": "disabled in Stage 6; ordinary delayed scalar rewards no longer call policy.update/save_model/add_feedback",
+  "automatic_correct_authority": "observer/audit only; no ActionIntent creation, Executor bypass or Home Assistant service path",
+  "automatic_correct_ui": "agent runtime diagnostics expose proposed/trusted reward, outcome, source, confidence/reliability, attribution, trial/action timestamp, observation window and unknown/rejected reason",
+  "stage6_tests_passed": 1253,
+  "stage6_ci_run": 36064728797,
+  "stage6_ci_head": "96496205606cafc24e5dbe18973ea0e232654451",
+  "stage6_automatic_correct_benchmark": {
+    "contract": "automatic_correct_stage6_buffer_benchmark_v1",
+    "rows": 512,
+    "trusted_rows": 128,
+    "unknown_rows": 384,
+    "durable_rows": 512,
+    "wall_seconds": 1.6210306790000004,
+    "rss_delta_bytes": 446464,
+    "start_us": {
+      "p50": 1276.952,
+      "p95": 1667.2752,
+      "p99": 3327.87279
+    },
+    "resolve_us": {
+      "p50": 1667.597,
+      "p95": 1967.35395,
+      "p99": 4271.11234
+    },
+    "ram_summary_us": {
+      "p50": 2.133,
+      "p95": 2.243,
+      "p99": 2.6444,
+      "mean": 2.184493
+    },
+    "policy_updates": false,
+    "physical_authority": false,
+    "environment_note": "GitHub-host synthetic SQLite timing; not Raspberry Pi 4 acceptance."
+  }
 }

@@ -15,7 +15,7 @@ try:
 except Exception:
     ws_connect = None
 
-APP_VERSION = "0.14.84"
+APP_VERSION = "0.14.85"
 HISTORY_BOOTSTRAP_REVISION = "target-attrs-v2"
 TRAINING_REVISION = "shared-home-intents-v19"
 DATA_DIR = Path(os.environ.get("ADAPTIVE_AI_DATA", "/data"))
@@ -159,6 +159,11 @@ DEFAULT_OPTIONS = {
     "tiny_mlp_correct_max_regression_fraction": 0.10,
     "tiny_mlp_correct_max_parent_relative_l2": 0.20,
     "tiny_mlp_correct_min_correction_fit": 0.95,
+    # Stage-6 Automatic Correct: collect/audit trusted outcome rewards only.
+    # These values gate what may enter the future Offline-RL buffer; Stage 6 itself
+    # performs no policy update from reward experiences.
+    "automatic_correct_min_confidence": 0.80,
+    "automatic_correct_min_source_reliability": 0.80,
     # CPU-heavy historical replay runs in one child process. The parent remains the
     # authority for HA ingress/HTTP/queue/control and supervises RSS/CPU/I/O.
     "training_process_isolation": True,
