@@ -36,6 +36,14 @@ def profile(scenario, *, event_ms=180.0, correct=False, worker=False):
         "host_runtime": {
             "temperature_c_max": 61.0,
             "mem_available_mb_min": 2200.0,
+            "system_cpu_percent_p95": 42.0 if worker else 18.0,
+        },
+        "connectivity": {
+            "samples": 240,
+            "ha_disconnect_rate": 0.0,
+            "ha_max_consecutive_disconnect_samples": 0,
+            "realtime_disconnect_rate": 0.0,
+            "realtime_max_consecutive_disconnect_samples": 0,
         },
         "status_probe": {
             "attempts": 240,
@@ -135,12 +143,36 @@ class Release088Pi4GateTests(unittest.TestCase):
         self.assertEqual(result["decision"], "fail")
         self.assertIn("training.single_training_worker", result["failures"])
 
+    def test_realtime_disconnects_fail_gate(self):
+        suite = green_suite()
+        suite["training"]["connectivity"]["realtime_disconnect_rate"] = 0.05
+        suite["training"]["connectivity"]["realtime_max_consecutive_disconnect_samples"] = 4
+        result = evaluate_reports(suite)
+        self.assertEqual(result["decision"], "fail")
+        self.assertIn("training.realtime_disconnect_rate", result["failures"])
+
+    def test_whole_host_cpu_saturation_fails_gate(self):
+        suite = green_suite()
+        suite["training-correct"]["host_runtime"]["system_cpu_percent_p95"] = 96.0
+        result = evaluate_reports(suite)
+        self.assertEqual(result["decision"], "fail")
+        self.assertIn("training-correct.system_cpu_p95", result["failures"])
+
+    def test_one_missing_hardware_identity_is_inconclusive(self):
+        suite = green_suite()
+        suite["training"]["host"]["model"] = None
+        result = evaluate_reports(suite)
+        self.assertEqual(result["decision"], "inconclusive")
+        self.assertIn("raspberry_pi_4_hardware", result["inconclusive"])
+
     def test_source_and_workflow_ship_stage9_tools(self):
         profiler = (SRC / "pi_training_profile.py").read_text(encoding="utf-8")
         workflow = (ROOT / ".github/workflows/validate.yml").read_text(encoding="utf-8")
         self.assertIn('"pi_training_profile_v2"', profiler)
         self.assertIn('"host_runtime"', profiler)
         self.assertIn('"worker_concurrency"', profiler)
+        self.assertIn('"connectivity"', profiler)
+        self.assertIn("system_cpu_percent_p95", profiler)
         self.assertIn("tools/evaluate_pi4_release.py", workflow)
 
 
