@@ -6,6 +6,7 @@ a target-only continuation seed and unique forward scanning.
 """
 import argparse
 import json
+import os
 from pathlib import Path
 import tempfile
 import time
@@ -15,6 +16,11 @@ ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "adaptive_ai" / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
+
+# Production modules create their process-local Store at import time. Keep this synthetic
+# probe hermetic on CI/developer hosts instead of touching the add-on's /data path.
+_IMPORT_SCRATCH = tempfile.TemporaryDirectory(prefix="hm-stage8-import-")
+os.environ.setdefault("ADAPTIVE_AI_DATA", _IMPORT_SCRATCH.name)
 
 from history import stateful_continuation_seed_rows
 from storage import Store
