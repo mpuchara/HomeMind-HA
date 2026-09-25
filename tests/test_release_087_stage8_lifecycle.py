@@ -1,4 +1,5 @@
 """0.14.87 Stage-8 final lifecycle and stateful replay contracts."""
+import json
 import threading
 import tempfile
 import unittest
@@ -7,7 +8,10 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 import history as history_module
+import test_executor as executor_fixtures
 from history import HistoryManager, stateful_continuation_seed_rows
+from context import ExplicitFeatureSchema
+from support import state
 from learning_lifecycle import (
     correct_learning_path,
     training_request_decision,
@@ -176,6 +180,162 @@ class StatefulContinuationSeedTests(unittest.TestCase):
 
         self.assertEqual(int(row["id"]), int(legacy_row["id"]))
         self.assertEqual(value, legacy_value)
+
+
+class StatefulReplayEquivalenceTests(unittest.TestCase):
+    @staticmethod
+    def _run_path(stateful):
+        fixture = executor_fixtures.ExecutorTests(methodName="test_control_dispatch")
+        fixture.setUp()
+        try:
+            agent_id = fixture.a["id"]
+            target = fixture.a["target_entity"]
+            motion = "binary_sensor.motion"
+            registry = {
+                target: {"area_id": "stage8_room"},
+                motion: {"area_id": "stage8_room"},
+            }
+            fixture.e.state_map[motion] = state(
+                motion, "off", device_class="motion"
+            )
+            fixture.e.entity_registry = dict(registry)
+            fixture.e.context.configure(
+                fixture.e.state_map, entities=registry
+            )
+            fixture.model.schema = ExplicitFeatureSchema(
+                fixture.model.dims, [motion]
+            )
+            fixture.store.save_model(agent_id, fixture.model.serialize())
+            fixture.store.update_agent(agent_id, {"mode": "shadow"})
+
+            base = 1_700_000_000.0
+            target_edges = [
+                (0.0, "off"),
+                (1.0, "on"),
+                (2.0, "off"),
+                (4.0, "on"),
+                (5.0, "off"),
+                # Open dwell crossing the 6 h checkpoint:
+                (5.5, "on"),
+                (7.0, "off"),
+                (8.5, "on"),
+                (10.0, "off"),
+                (11.5, "on"),
+            ]
+            rows = []
+            for index, (hour, target_state) in enumerate(target_edges):
+                ts = base + hour * 3600.0
+                rows.append((
+                    motion,
+                    ts - 90.0,
+                    "on" if index % 2 else "off",
+                    {"device_class": "motion"},
+                    None,
+                    "stage8_equivalence",
+                ))
+                rows.append((
+                    target, ts, target_state, {}, None,
+                    "stage8_equivalence",
+                ))
+            fixture.store.archive_batch(rows)
+
+            manager = HistoryManager(fixture.e, worker_mode=True)
+            options = {
+                **history_module.OPTIONS,
+                "tiny_mlp_supervised_training_enabled": False,
+                "training_cpu_duty_cycle": 1.0,
+            }
+            with patch.object(history_module, "OPTIONS", options), \
+                 patch.object(
+                     history_module.AUTOMATION_KNOWLEDGE,
+                     "hints_for_target",
+                     return_value=(set(), []),
+                 ):
+                first = manager.train_from_archive(
+                    base, base + 6 * 3600.0,
+                    qualify=False, agent_ids={agent_id},
+                    benchmark=True, accumulate_benchmark=True,
+                )
+                second = manager.train_from_archive(
+                    base + 3 * 3600.0, base + 12 * 3600.0,
+                    qualify=False, agent_ids={agent_id},
+                    benchmark=True, accumulate_benchmark=True,
+                    continuation_from_ts=(
+                        base + 6 * 3600.0 if stateful else None
+                    ),
+                )
+
+            experiences = fixture.store.list_historical_experiences(
+                agent_id, limit=10000
+            )
+            canonical_experiences = sorted(
+                [
+                    {
+                        "target_history_id": int(row["target_history_id"]),
+                        "action_index": int(row["action_index"]),
+                        "action_value": float(row["action_value"]),
+                        "reward": float(row["reward"]),
+                        "dwell_seconds": float(row["dwell_seconds"]),
+                        "features": {
+                            str(k): float(v)
+                            for k, v in sorted(row["features"].items())
+                        },
+                    }
+                    for row in experiences
+                ],
+                key=lambda row: row["target_history_id"],
+            )
+            trained = fixture.store.get_agent_config(agent_id)
+            model = fixture.store.get_model(agent_id) or {}
+            counts = dict(model.get("_benchmark_counts") or {})
+            policy = fixture.e.policy(trained)
+            probe_features = [
+                row["features"] for row in canonical_experiences[-4:]
+            ]
+            predictions = [
+                float(policy.predict(features)[0]["value"])
+                for features in probe_features
+            ]
+            return {
+                "new_count": int(first) + int(second),
+                "experiences": canonical_experiences,
+                "benchmark_counts": json.loads(
+                    json.dumps(counts, sort_keys=True)
+                ),
+                "benchmark_score": trained.get("benchmark_score"),
+                "benchmark_samples": int(
+                    trained.get("benchmark_samples") or 0
+                ),
+                "predictions": predictions,
+            }
+        finally:
+            fixture.tearDown()
+
+    def test_stateful_continuation_matches_legacy_overlap_training_semantics(self):
+        legacy = self._run_path(False)
+        stateful_result = self._run_path(True)
+
+        self.assertEqual(
+            stateful_result["new_count"], legacy["new_count"]
+        )
+        self.assertEqual(
+            stateful_result["experiences"], legacy["experiences"]
+        )
+        self.assertEqual(
+            stateful_result["benchmark_counts"],
+            legacy["benchmark_counts"],
+        )
+        self.assertEqual(
+            stateful_result["benchmark_samples"],
+            legacy["benchmark_samples"],
+        )
+        self.assertEqual(
+            stateful_result["benchmark_score"],
+            legacy["benchmark_score"],
+        )
+        self.assertEqual(
+            stateful_result["predictions"], legacy["predictions"]
+        )
 
 
 class StatefulChunkSchedulingTests(unittest.TestCase):
