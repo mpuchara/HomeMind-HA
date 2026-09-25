@@ -406,7 +406,13 @@ class OfflineRLCandidateLifecycleTests(unittest.TestCase):
         child_record = load_training_record(
             self.store, child_id
         )
-        self.assertIsNotNone(child_record)
+        if child_record is None:
+            failed_row = self.manager._candidate_row(self.root["id"]) or {}
+            self.fail(
+                "Offline-RL child artifact missing; "
+                f"state={failed_row.get('state')} "
+                f"last_error={failed_row.get('last_error')}"
+            )
         self.assertEqual(
             child_record["selected_backend"], "tiny_mlp"
         )
