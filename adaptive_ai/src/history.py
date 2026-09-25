@@ -81,10 +81,23 @@ class HistoryManager(threading.Thread):
         # could sit on “Connecting…” because /api/status waited for a COUNT() on the
         # archive while a large write transaction held the Store lock. Keep a cache
         # instead and refresh it only at safe checkpoints.
-        try:
-            self.archive_cache = STORE.archive_stats()
-        except Exception:
-            self.archive_cache = {"n": 0, "min_ts": None, "max_ts": None, "entities": 0, "days": 0.0, "by_source": {}}
+        #
+        # An isolated training worker does not serve the UI and does not need global
+        # archive totals. Running COUNT/MIN/MAX/COUNT(DISTINCT)/GROUP BY over the full
+        # entity_history table during every child bootstrap can fault a large SQLite
+        # working set into that process before its first status heartbeat. On real Pi
+        # archives this can trip the worker RSS guard at 0% with phase=unknown.
+        if self.worker_mode:
+            self.archive_cache = {
+                "n": 0, "min_ts": None, "max_ts": None,
+                "entities": 0, "days": 0.0, "by_source": {},
+                "worker_bootstrap_skipped_global_scan": True,
+            }
+        else:
+            try:
+                self.archive_cache = STORE.archive_stats()
+            except Exception:
+                self.archive_cache = {"n": 0, "min_ts": None, "max_ts": None, "entities": 0, "days": 0.0, "by_source": {}}
         self.cycle_started_at = None
         self.phase_started_at = None
         self.eta_seconds = None
