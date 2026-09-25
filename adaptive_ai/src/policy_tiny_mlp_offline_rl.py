@@ -697,6 +697,7 @@ def offline_rl_gate(
     min_total_samples=24,
     min_holdout_samples=8,
     min_supported_actions=2,
+    min_action_support=4,
     min_effective_sample_size=4.0,
     min_reward_gain=0.0,
     min_parent_agreement=0.80,
@@ -715,7 +716,7 @@ def offline_rl_gate(
     support_counts = _support_counts(train_rows, len(parent.actions))
     supported = {
         idx for idx, count in enumerate(support_counts)
-        if count > 0
+        if count >= max(1, int(min_action_support))
     }
     train_metrics = offline_policy_metrics(
         parent,
@@ -745,7 +746,10 @@ def offline_rl_gate(
         reasons.append("insufficient_trusted_reward_samples")
     if len(holdout_rows) < int(min_holdout_samples):
         reasons.append("insufficient_offline_holdout")
-    supported_count = sum(1 for value in support_counts if value > 0)
+    supported_count = sum(
+        1 for value in support_counts
+        if value >= max(1, int(min_action_support))
+    )
     if supported_count < min(int(min_supported_actions), len(parent.actions)):
         reasons.append("insufficient_action_support")
 
@@ -833,6 +837,7 @@ def offline_rl_gate(
             "min_total_samples": int(min_total_samples),
             "min_holdout_samples": int(min_holdout_samples),
             "min_supported_actions": int(min_supported_actions),
+            "min_action_support": int(min_action_support),
             "min_effective_sample_size": float(min_effective_sample_size),
             "min_reward_gain": float(min_reward_gain),
             "min_parent_agreement": float(min_parent_agreement),
