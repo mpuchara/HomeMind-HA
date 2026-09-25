@@ -66,6 +66,7 @@ options:
   agent_candidate_backup_hours: 24
   agent_training_chunk_hours: 6
   agent_training_overlap_hours: 6
+agent_training_stateful_continuation: true
   agent_training_history_days: 7
   agent_training_pause_ms: 0
   min_historical_support: 0.20
