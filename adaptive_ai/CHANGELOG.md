@@ -1,3 +1,22 @@
+# 0.14.87 — 2026-09-25
+
+- Complete **Stage 8: final learning lifecycle + stateful Rebuild replay continuation** from the Tiny Neural Policy / Correct / Offline-RL master plan.
+- Make incremental learning the normal path: compatible Manual Correct remains a bounded supervised TinyMLP Candidate fine-tune; Stage-7 trusted Automatic Correct remains a bounded conservative Offline-RL child Candidate update.
+- Add an explicit lifecycle decision contract with `learning_path` and `rebuild_reason`. Ordinary compatible incremental learning carries no rebuild reason; first model build is identified separately as `initial_model_build`.
+- Restrict full Rebuild to explicit/structural causes and expose a stable taxonomy including feature schema/mask changes, backend/action-space changes, corrupted/incompatible persisted models, major drift, repeated incremental failure, feedback-history retraction and explicit manual Rebuild.
+- Persist structural causes when agent configuration invalidates a model. Changing selected inputs records `feature_mask_change`; changing the action range records `action_space_change`.
+- Propagate `rebuild_reason` through TrainingQueue admission, active/queued status, HTTP responses, HistoryManager diagnostics and lifecycle events while preserving compatibility with older extension/test adapters.
+- Keep Candidate lineage rules unchanged. Correct/Rebuild never substitutes a different Live parent or resurrects a discarded Candidate.
+- Preserve the Stage-5 Correct chart, multi-point correction batch and as-of reconstruction path; structural neural Correct continues to surface an explicit rebuild reason instead of silently rebuilding.
+- Preserve Stage-7 safety: an Offline-RL result remains a Candidate routed through offline gate and Shadow. Stage-7 neural/RL promotion remains blocked until Stage 9 controlled rollout.
+- Replace physical multi-hour chunk overlap with **stateful chunk continuation**. The logical overlap remains available for equivalent validation semantics, while already-committed context history is not rescanned.
+- Reconstruct only the minimum open-dwell boundary state from target history, then rebuild causal temporal features as-of the actual transition using the existing indexed temporal trackers. Rows at or after the boundary are excluded from the seed to prevent future leakage.
+- Preserve Recorder coverage reuse, tail refresh, replay RAM caches, onset/persistence cursor separation, provenance filtering and the one-heavy-training-job contract.
+- Add replay diagnostics for logical hours, unique hours scanned, overlap hours avoided, target-only continuation seed rows and seed agents.
+- Add deterministic equivalence regressions for effective target-transition selection, duplicate states and exact boundary handling, plus lifecycle tests for incremental/default paths and structural reasons.
+- Add a packaged Stage-8 synthetic replay benchmark comparing legacy overlap rows with stateful forward scanning + target-only boundary seed. It is a repository/CI cost probe, not a Raspberry Pi 4 performance claim.
+- Raspberry Pi 4 wall-clock, CPU/RSS, websocket responsiveness and full-system profiling remain deliberately deferred to **Stage 9**.
+
 # 0.14.86 — 2026-09-25
 
 - Continue the Tiny Neural Policy / Correct / Offline-RL master plan with **Stage 7: conservative Offline-RL Candidate**.
