@@ -100,8 +100,10 @@ def install(runtime):
             return None
         return original_thread_start(self)
 
-    def enqueue(self, agent_id, rebuild=False, reason="training"):
-        result = original_enqueue(self, agent_id, rebuild=rebuild, reason=reason)
+    def enqueue(self, agent_id, rebuild=False, reason="training", rebuild_reason=None):
+        result = original_enqueue(
+            self, agent_id, rebuild=rebuild, reason=reason, rebuild_reason=rebuild_reason
+        )
         # Teach-RL owns a context-selection preflight and remains worker-driven. Plain
         # Train/Rebuild/Resume can safely claim an idle slot immediately because the
         # HistoryManager itself performs the expensive replay in its own worker thread.
