@@ -193,6 +193,7 @@ DEFAULT_OPTIONS = {
     "offline_rl_max_regression_fraction": 0.10,
     "offline_rl_max_unseen_context_rate": 0.75,
     "offline_rl_context_distance_threshold": 1.5,
+    "offline_rl_worker_timeout_seconds": 120.0,
     # CPU-heavy historical replay runs in one child process. The parent remains the
     # authority for HA ingress/HTTP/queue/control and supervises RSS/CPU/I/O.
     "training_process_isolation": True,
