@@ -383,7 +383,8 @@ class OfflineRLCandidateLifecycleTests(unittest.TestCase):
             "offline_rl_max_unseen_context_rate": 1.0,
         }
         import candidate_offline_rl as module
-        with patch.dict(module.OPTIONS, options, clear=False),              patch.object(module, "TRAINING_BUDGET", _NoBudget()),              patch.object(module, "HEAVY_JOBS", _HeavySlot()):
+        with patch.dict(module.OPTIONS, options, clear=False), \
+             patch.object(module, "HEAVY_JOBS", _HeavySlot()):
             result = workflow_offline_rl(
                 self.manager, self.root["id"]
             )
