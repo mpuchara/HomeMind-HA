@@ -350,6 +350,7 @@ class TrainingQueue(threading.Thread):
                 changed, old_priority = self._upgrade_pending_job_locked(
                     existing, rebuild=rebuild, reason=reason,
                     requested_priority=requested_priority,
+                    rebuild_reason=requested_rebuild_reason,
                 )
                 if changed:
                     self.store.event(
@@ -358,6 +359,7 @@ class TrainingQueue(threading.Thread):
                         {
                             "reason": existing.get("reason"),
                             "rebuild": bool(existing.get("rebuild")),
+                            "rebuild_reason": existing.get("rebuild_reason"),
                             "priority": int(existing.get("priority", requested_priority)),
                             "priority_class": existing.get("priority_class"),
                             "previous_priority": old_priority,
