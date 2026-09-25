@@ -1912,6 +1912,7 @@ class HistoryManager(threading.Thread):
         )
 
         if neural_enabled:
+            from array import array
             from observation_space import observation_as_of
 
         def neural_observation(agent, tracker, sample_ts):
@@ -1920,13 +1921,22 @@ class HistoryManager(threading.Thread):
             mask = neural_masks.get(str(agent["id"]))
             if mask is None:
                 return None
-            return observation_as_of(
+            raw = observation_as_of(
                 mask,
                 tracker.state_map,
                 tracker,
                 float(sample_ts),
                 agent,
             )
+            # Historical supervised queues only consume feature order + dense values.
+            # Do not retain the live-debug sparse map, missing-id list and repeated
+            # Python float/list structures for thousands of samples. The mask tuple is
+            # shared and float32 arrays cut retained sample memory by an order of magnitude
+            # without changing the numeric inputs seen by TinyMLPBackend.
+            return {
+                "feature_ids": mask.feature_ids,
+                "values": array("f", (float(x) for x in raw.get("values") or ())),
+            }
 
         pending = {}
         last_value = {}

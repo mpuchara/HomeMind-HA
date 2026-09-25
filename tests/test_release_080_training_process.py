@@ -18,6 +18,8 @@ from training_process import (
     agent_config_fingerprint,
     descriptor_checksum,
     runtime_context_fingerprint,
+    _compact_training_state_map,
+    _compact_training_registry,
     _process_start_token,
     _same_process_alive,
 )
@@ -74,6 +76,93 @@ class TrainingProcessContractTests(unittest.TestCase):
         self.assertNotEqual(
             runtime_context_fingerprint(states_a, registry, options),
             runtime_context_fingerprint(states_a, registry, {**options, "x": 2}),
+        )
+
+    def test_worker_context_snapshot_drops_large_irrelevant_ha_attributes(self):
+        blob = "x" * 250000
+        raw = {
+            "sensor.rich": {
+                "entity_id": "sensor.rich",
+                "state": "23.4",
+                "attributes": {
+                    "device_class": "temperature",
+                    "unit_of_measurement": "°C",
+                    "friendly_name": "Rich temperature",
+                    "temperature": 23.4,
+                    "huge_vendor_blob": blob,
+                    "forecast": [blob, blob],
+                },
+                "last_changed": "2026-09-25T10:00:00+00:00",
+                "last_updated": "2026-09-25T10:00:01+00:00",
+            }
+        }
+        compact = _compact_training_state_map(raw)
+        row = compact["sensor.rich"]
+        self.assertEqual(row["state"], "23.4")
+        self.assertEqual(row["attributes"]["device_class"], "temperature")
+        self.assertEqual(row["attributes"]["unit_of_measurement"], "°C")
+        self.assertEqual(row["attributes"]["friendly_name"], "Rich temperature")
+        self.assertEqual(row["attributes"]["temperature"], 23.4)
+        self.assertNotIn("huge_vendor_blob", row["attributes"])
+        self.assertNotIn("forecast", row["attributes"])
+        self.assertLess(len(json.dumps(compact)), 2000)
+
+    def test_worker_registry_snapshot_keeps_only_training_topology(self):
+        raw = {
+            "binary_sensor.motion": {
+                "device_id": "dev-1",
+                "area_id": "kitchen",
+                "platform": "esphome",
+                "integration": "esphome",
+                "capabilities": {"blob": "x" * 100000},
+                "original_name": "Vendor detail",
+            }
+        }
+        compact = _compact_training_registry(raw)
+        self.assertEqual(compact["binary_sensor.motion"], {
+            "device_id": "dev-1",
+            "area_id": "kitchen",
+            "platform": "esphome",
+            "integration": "esphome",
+        })
+        self.assertLess(len(json.dumps(compact)), 300)
+
+    def test_runtime_fingerprint_ignores_irrelevant_large_payload_but_keeps_semantic_metadata(self):
+        base = {
+            "sensor.temp": {
+                "state": "20",
+                "attributes": {
+                    "device_class": "temperature",
+                    "unit_of_measurement": "°C",
+                    "friendly_name": "Room temperature",
+                    "temperature": 20.0,
+                    "huge_blob": "a" * 100000,
+                },
+            }
+        }
+        changed_blob = {
+            "sensor.temp": {
+                "state": "99",
+                "attributes": {
+                    "device_class": "temperature",
+                    "unit_of_measurement": "°C",
+                    "friendly_name": "Room temperature",
+                    "temperature": 99.0,
+                    "huge_blob": "b" * 200000,
+                },
+            }
+        }
+        registry = {"sensor.temp": {"device_id": "d", "area_id": "room", "platform": "esphome"}}
+        options = {"feature_dimensions": 128}
+        self.assertEqual(
+            runtime_context_fingerprint(base, registry, options),
+            runtime_context_fingerprint(changed_blob, registry, options),
+        )
+        changed_name = json.loads(json.dumps(base))
+        changed_name["sensor.temp"]["attributes"]["friendly_name"] = "Outdoor temperature"
+        self.assertNotEqual(
+            runtime_context_fingerprint(base, registry, options),
+            runtime_context_fingerprint(changed_name, registry, options),
         )
 
     def test_parent_process_identity_uses_pid_plus_start_token(self):

@@ -1,9 +1,9 @@
 {
-  "version": "0.14.90",
+  "version": "0.14.91",
   "release_date": "2026-09-25",
-  "base_version": "0.14.89",
-  "base_commit": "731391b2ac9cdb512d9ab7d3d4e736618fca0b89",
-  "release_status": "hotfix-isolated-training-sqlite-contention",
+  "base_version": "0.14.90",
+  "base_commit": "227c18fdc7bc22683284cd347ebd269c800862c1",
+  "release_status": "hotfix-isolated-training-worker-memory",
   "pi4_profile_contract": "pi_training_profile_v2",
   "pi4_release_gate_contract": "pi4_release_gate_v1",
   "pi4_real_hardware_required": true,
@@ -528,5 +528,12 @@
     "parent_busy_timeout_ms": 30000,
     "queue_failure_semantics": "paused/needs_retrain/waiting below 99.9% emits training_queue_interrupted instead of training_queue_finished",
     "history_failure_semantics": "aborted replay reports stopped before completion rather than finished"
+  },
+  "hotfix_01491": {
+    "worker_context": "isolated jobs carry compact scalar/timestamp/training metadata instead of the full Home Assistant attribute payload",
+    "registry_context": "worker registry keeps only device_id, area_id, platform and integration",
+    "neural_samples": "historical Tiny MLP queues retain shared feature-id tuples plus float32 dense values instead of live-debug observation payloads",
+    "memory_limit_mb": 520,
+    "safety": "memory ceiling unchanged; physical authority and learning semantics unchanged"
   }
 }

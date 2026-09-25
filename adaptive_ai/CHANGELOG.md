@@ -1,3 +1,14 @@
+# 0.14.91 — 2026-09-25
+
+- Fix isolated historical training being killed at the 520 MB RSS safety ceiling immediately after a full rebuild starts on large Home Assistant installations.
+- Isolated workers no longer receive the full realtime Home Assistant state/attribute payload. The job descriptor now carries only scalar state, timestamps and metadata actually consumed by offline feature selection/replay.
+- Worker Entity Registry snapshots are reduced to the topology fields used by training: `device_id`, `area_id`, `platform` and `integration`.
+- Runtime-context fingerprints use the same semantic registry contract, so irrelevant vendor/diagnostic metadata changes cannot invalidate a training result.
+- Historical Tiny MLP supervised queues now retain only shared feature order plus float32 dense values instead of full live-debug observation dictionaries for thousands of samples.
+- The 520 MB worker memory ceiling remains unchanged; this is a memory-footprint fix, not a relaxation of the Raspberry Pi safety gate.
+- Add regressions proving very large irrelevant HA attributes are excluded while training-relevant state and topology metadata remain intact.
+- No reward semantics, Correct/Candidate lineage, Offline-RL policy math or physical-control authority are changed.
+
 # 0.14.90 — 2026-09-25
 
 - Fix process-isolated historical training aborting part-way through with `database is locked` under concurrent realtime/Candidate SQLite activity.
