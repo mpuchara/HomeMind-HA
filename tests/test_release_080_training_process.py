@@ -22,6 +22,7 @@ from training_process import (
     _compact_training_registry,
     _process_start_token,
     _same_process_alive,
+    _worker_boot_status,
 )
 
 
@@ -164,6 +165,25 @@ class TrainingProcessContractTests(unittest.TestCase):
             runtime_context_fingerprint(base, registry, options),
             runtime_context_fingerprint(changed_name, registry, options),
         )
+
+    def test_worker_boot_status_exists_before_history_manager_runtime(self):
+        with tempfile.TemporaryDirectory(prefix="hm-worker-status-") as root:
+            path = Path(root) / "status.json"
+            job = {
+                "status_path": str(path),
+                "train_kwargs": {"progress_lo": 0.125},
+            }
+            _worker_boot_status(
+                job,
+                "descriptor ready",
+                stage="descriptor_validated",
+            )
+            payload = json.loads(path.read_text(encoding="utf-8"))
+            self.assertEqual(payload["phase"], "worker_bootstrap")
+            self.assertEqual(payload["bootstrap_stage"], "descriptor_validated")
+            self.assertAlmostEqual(payload["progress"], 0.125)
+            self.assertEqual(payload["message"], "descriptor ready")
+            self.assertEqual(payload["worker_pid"], os.getpid())
 
     def test_parent_process_identity_uses_pid_plus_start_token(self):
         token = _process_start_token(os.getpid())
@@ -601,10 +621,22 @@ class SupervisorRollbackContracts(unittest.TestCase):
             source=None, detail={"worker": "active"},
         )
         fake_engine = SimpleNamespace()
-        with patch.object(history_module, "STORE", self.store):
-            history_module.HistoryManager(fake_engine, worker_mode=True)
+        with (
+            patch.object(history_module, "STORE", self.store),
+            patch.object(
+                self.store,
+                "archive_stats",
+                side_effect=AssertionError(
+                    "isolated worker must not scan global archive stats"
+                ),
+            ),
+        ):
+            history = history_module.HistoryManager(fake_engine, worker_mode=True)
         current = self.store.get_agent_config(self.agent["id"])
         self.assertEqual(current["training_state"], "training")
+        self.assertTrue(
+            history.archive_cache["worker_bootstrap_skipped_global_scan"]
+        )
 
     def test_parent_mode_history_init_keeps_existing_restart_pause_contract(self):
         import history as history_module
