@@ -473,11 +473,12 @@ class OfflineRLCandidateLifecycleTests(unittest.TestCase):
             unknown_reason="silence",
         )
         import candidate_offline_rl as module
-        generation = module.lineage._row(
-            self.store, agent_id=self.root["id"]
+        from agent_workflow_actions import _resolve_generation
+        generation, agent = _resolve_generation(
+            self.manager, self.root["id"]
         )
         info = module.readiness(
-            self.manager, generation, self.root
+            self.manager, generation, agent
         )
         self.assertEqual(info["trusted_total"], 40)
         self.assertEqual(info["compatible_total"], 40)
