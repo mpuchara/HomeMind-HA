@@ -1,9 +1,9 @@
 {
-  "version": "0.14.88",
+  "version": "0.14.89",
   "release_date": "2026-09-25",
-  "base_version": "0.14.87",
-  "base_commit": "a7b1610b53ff0ce63a35635ee88895b93cd98a52",
-  "release_status": "stage9-pi4-final-profile-gates",
+  "base_version": "0.14.88",
+  "base_commit": "1b02501fc06a0c56f297a7801074393da5125a31",
+  "release_status": "hotfix-training-queue-rebuild-reason",
   "pi4_profile_contract": "pi_training_profile_v2",
   "pi4_release_gate_contract": "pi4_release_gate_v1",
   "pi4_real_hardware_required": true,
@@ -520,5 +520,6 @@
   "stage8_replay_safety": "boundary seed excludes rows at/after cursor; temporal features are reconstructed causally as-of the effective target transition with existing indexed trackers",
   "stage8_recorder_contract": "Recorder coverage reuse, delta/tail refresh and RAM caches preserved",
   "stage8_promotion_guard": "Stage-7 neural/Offline-RL Candidates remain Shadow-only and promotion-blocked until Stage 9 controlled rollout",
-  "stage8_pi4_scope": "CI uses deterministic synthetic equivalence/cost probes; target Raspberry Pi 4 CPU/RSS/latency profiling remains Stage 9"
+  "stage8_pi4_scope": "CI uses deterministic synthetic equivalence/cost probes; target Raspberry Pi 4 CPU/RSS/latency profiling remains Stage 9",
+  "hotfix_01489": "startup_train_guard now mirrors and forwards TrainingQueue.enqueue rebuild_reason; fresh initial Train preserves initial_model_build through immediate admission"
 }
