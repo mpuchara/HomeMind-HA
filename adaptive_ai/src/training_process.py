@@ -345,6 +345,7 @@ def run_isolated_training_chunk(history, start_ts, end_ts, **kwargs):
     )
     env = dict(os.environ)
     env["ADAPTIVE_AI_DATA"] = str(DATA_DIR)
+    env["ADAPTIVE_AI_TRAINING_WORKER"] = "1"
     env["PYTHONUNBUFFERED"] = "1"
 
     log_handle = open(job["log_path"], "ab", buffering=0)
@@ -755,6 +756,9 @@ def main():
     args = parser.parse_args()
     if not args.worker:
         parser.error("--worker is required")
+    # Direct CLI/test invocation must use the same existing-database bootstrap contract
+    # as subprocesses created by run_isolated_training_chunk().
+    os.environ["ADAPTIVE_AI_TRAINING_WORKER"] = "1"
     raise SystemExit(worker_main(args.worker))
 
 
