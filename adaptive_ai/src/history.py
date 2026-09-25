@@ -77,6 +77,8 @@ class HistoryManager(threading.Thread):
         self.training_job_started_at = None
         self.training_job_start_progress = 0.0
         self.training_overall_eta_seconds = None
+        self.training_rebuild_reason = None
+        self.training_stateful_replay_status = {}
         # Rebuild resets learned heads, not the expensive sensor-selection result.
         # Keep a tiny schema-only seed in RAM so repeated training does not rescan the
         # whole house archive merely because rl_models was intentionally cleared.
@@ -168,6 +170,8 @@ class HistoryManager(threading.Thread):
                     (self.work_done / self.work_total) if self.work_total else None
                 ),
                 "training_stage_eta_seconds": self.stage_eta_seconds,
+                "training_rebuild_reason": self.training_rebuild_reason,
+                "stateful_replay": dict(self.training_stateful_replay_status or {}),
                 "temporal_replay": dict(self.temporal_replay_stats),
                 "discovery_job_active": bool(self.discovery_job_active),
                 "discovery_job_started_at": self.discovery_job_started_at,
@@ -259,7 +263,7 @@ class HistoryManager(threading.Thread):
         self.training_schema_cache_hits += 1
         return item.get("model")
 
-    def _start_agent_job(self, agent_id, rebuild=False):
+    def _start_agent_job(self, agent_id, rebuild=False, rebuild_reason=None):
         agent = STORE.get_agent_config(agent_id)
         if not agent:
             return False
@@ -313,6 +317,8 @@ class HistoryManager(threading.Thread):
                 self.training_job_started_at = started_at
                 self.training_job_start_progress = start_progress
                 self.training_overall_eta_seconds = None
+                self.training_rebuild_reason = rebuild_reason if rebuild else None
+                self.training_stateful_replay_status = {}
         except Exception:
             with self.agent_jobs_lock:
                 self.agent_jobs.discard(agent_id)
@@ -322,7 +328,9 @@ class HistoryManager(threading.Thread):
         def worker():
             TRAINING_BUDGET.begin()
             try:
-                self._run_agent_indexing(agent_id, rebuild=rebuild)
+                self._run_agent_indexing(
+                    agent_id, rebuild=rebuild, rebuild_reason=rebuild_reason
+                )
             except Exception as exc:
                 STORE.event(agent_id, "error", "agent_index_failed", str(exc), {"trace": traceback.format_exc(limit=6)})
                 # A stale isolated job can mean the user/configuration changed while
@@ -357,6 +365,7 @@ class HistoryManager(threading.Thread):
                         self.stage_eta_seconds = None
                         self.eta_seconds = None
                         self.training_overall_eta_seconds = None
+                        self.training_rebuild_reason = None
                         self.work_done = 0
                         self.work_total = 0
                         self.work_unit = None
@@ -526,7 +535,7 @@ class HistoryManager(threading.Thread):
             # locally available archive and leave a diagnostic event.
             STORE.event(agent["id"], "warning", "agent_history_refresh_partial", str(exc), None)
 
-    def _run_agent_indexing(self, agent_id, rebuild=False):
+    def _run_agent_indexing(self, agent_id, rebuild=False, rebuild_reason=None):
         agent = STORE.get_agent_config(agent_id)
         if not agent:
             return
@@ -548,7 +557,8 @@ class HistoryManager(threading.Thread):
         STORE.event(agent_id, "info", "agent_rebuild_started" if rebuild else "agent_resume_started",
                     "Full historical rebuild started from archive beginning" if rebuild else
                     "Training resumed from saved historical cursor",
-                    {"start_ts": start_ts, "cursor_ts": cursor, "end_ts": target_end})
+                    {"start_ts": start_ts, "cursor_ts": cursor, "end_ts": target_end,
+                     "rebuild_reason": rebuild_reason if rebuild else None})
 
         if cursor >= target_end - 0.5:
             # Nothing new to index. A completed persisted model returns to Shadow even
@@ -597,8 +607,10 @@ class HistoryManager(threading.Thread):
             self, start_ts, end_ts, **kwargs
         )
 
-    def request_agent_rebuild(self, agent_id):
-        return self._start_agent_job(agent_id, rebuild=True)
+    def request_agent_rebuild(self, agent_id, rebuild_reason="explicit_manual_rebuild"):
+        return self._start_agent_job(
+            agent_id, rebuild=True, rebuild_reason=rebuild_reason
+        )
 
     def request_agent_resume(self, agent_id):
         agent = STORE.get_agent_config(agent_id)
