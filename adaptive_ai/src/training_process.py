@@ -245,6 +245,7 @@ def _build_job(history, start_ts, end_ts, kwargs):
             "progress_lo": kwargs.get("progress_lo"),
             "progress_hi": kwargs.get("progress_hi"),
             "progress_label": kwargs.get("progress_label"),
+            "continuation_from_ts": kwargs.get("continuation_from_ts"),
         },
         "status_path": str(root / f"{job_id}.status.json"),
         "result_path": str(root / f"{job_id}.result.json"),
