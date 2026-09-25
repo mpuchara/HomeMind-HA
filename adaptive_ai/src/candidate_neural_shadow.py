@@ -110,6 +110,20 @@ def install(manager):
     original_promote = manager.promote
     original_promote_custom = getattr(manager, "promote_custom", None)
 
+    def promotion_veto(record):
+        tournament = dict((record or {}).get("tournament") or {})
+        if str(tournament.get("contract") or "").startswith("offline_rl_"):
+            return {
+                "reason": "offline_rl_stage7_shadow_only",
+                "message": "Offline RL Stage 7 Candidate is Shadow-only and cannot be promoted yet",
+                "custom_override": "never",
+            }
+        return {
+            "reason": "neural_stage4_shadow_only",
+            "message": "Tiny MLP Stage 4 Candidate is Shadow-only and cannot be promoted yet",
+            "custom_override": "never",
+        }
+
     def enrich(result):
         if not isinstance(result, dict):
             return result
@@ -138,12 +152,12 @@ def install(manager):
         if neural_active:
             result["promotable"] = False
             vetoes = list(result.get("promotion_vetoes") or [])
-            if not any(str(item.get("reason") or "") == "neural_stage4_shadow_only" for item in vetoes if isinstance(item, dict)):
-                vetoes.append({
-                    "reason": "neural_stage4_shadow_only",
-                    "message": "Tiny MLP Stage 4 Candidate is Shadow-only and cannot be promoted yet",
-                    "custom_override": "never",
-                })
+            veto = promotion_veto(record)
+            if not any(
+                str(item.get("reason") or "") == str(veto["reason"])
+                for item in vetoes if isinstance(item, dict)
+            ):
+                vetoes.append(veto)
             result["promotion_vetoes"] = vetoes
         return result
 
@@ -171,10 +185,11 @@ def install(manager):
             except Exception:
                 candidate_id = None
         if candidate_id:
-            eligible, _record, _gate = neural_eligible(candidate_id)
+            eligible, record, _gate = neural_eligible(candidate_id)
             if eligible:
                 raise ValueError(
-                    "Tiny MLP Stage 4 Candidate is Shadow-only; neural promotion to Live/Control is not enabled"
+                    promotion_veto(record)["message"]
+                    + "; neural promotion to Live/Control is not enabled"
                 )
 
     def promote(parent_id, *args, **kwargs):

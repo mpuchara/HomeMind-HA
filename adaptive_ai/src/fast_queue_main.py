@@ -114,6 +114,7 @@ def prepare_engine_extensions():
     from agent_candidate_user_promotion import install as install_candidate_user_promotion
     from agent_candidate_blocked_shadow_evidence import install as install_candidate_blocked_shadow_evidence
     from candidate_neural_correct import install as install_candidate_neural_correct
+    from candidate_offline_rl import install as install_candidate_offline_rl
 
     core.ENGINE.teaching._candidate_feedback_hook = True
     core.ENGINE.rl_teaching._candidate_feedback_hook = True
@@ -138,6 +139,9 @@ def prepare_engine_extensions():
     # Stage 5 is installed before the Candidate worker starts so a queued neural Correct
     # recovered on boot cannot race through the older Ridge-only build path.
     candidates = install_candidate_neural_correct(candidates)
+    # Stage 7 must own queued Offline-RL recovery before the Candidate worker starts;
+    # otherwise an after-restart RL child could fall through to the historical rebuild.
+    candidates = install_candidate_offline_rl(candidates)
 
     # One listener contract owns all Teaching/Teach-RL -> Candidate transitions. Adding a
     # correction keeps the conservative direct-parent Candidate path. Undo is different:
@@ -223,6 +227,7 @@ def prepare_engine_extensions():
             "candidate_manual_rebuild": getattr(candidates, "candidate_manual_rebuild_contract", "legacy"),
             "candidate_correct": getattr(candidates, "candidate_correct_contract", "legacy"),
             "candidate_neural_correct": getattr(candidates, "candidate_neural_correct_contract", None),
+            "candidate_offline_rl": getattr(candidates, "candidate_offline_rl_contract", None),
             "candidate_offline_gate": getattr(candidates, "candidate_offline_gate_contract", "legacy"),
             "candidate_offline_gate_observation": getattr(candidates, "candidate_offline_gate_observation_contract", "legacy"),
             "candidate_custom_promotion": getattr(candidates, "candidate_custom_promotion_contract", "legacy"),

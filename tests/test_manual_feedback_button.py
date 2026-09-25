@@ -13,7 +13,7 @@ class ManualFeedbackButtonContract(unittest.TestCase):
         template = next((value for value in templates if 'data-wf="auto"' in value), None)
         self.assertIsNotNone(template, "model-ready generation workflow action template missing")
         actions = re.findall(r'data-wf="([^"]+)"', template)
-        self.assertEqual(actions, ["auto", "correct", "explore", "change", "settings", "debug"])
+        self.assertEqual(actions, ["auto", "correct", "offline-rl", "explore", "change", "settings", "debug"])
         self.assertIn(">Autonomous<", template)
         self.assertIn(">Correct<", template)
         self.assertIn(">Explore<", template)

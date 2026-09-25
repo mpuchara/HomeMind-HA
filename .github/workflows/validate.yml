@@ -17,7 +17,7 @@ jobs:
         with:
           node-version: '22'
       - run: python -m unittest discover -s tests -v
-      - run: python -m compileall -q adaptive_ai/src tools/benchmark_product_runtime.py tools/run_product_runtime_benchmark.py tools/benchmark_correct_history.py tools/benchmark_training_qos.py tools/benchmark_ha_ingress.py tools/benchmark_shared_context.py tools/benchmark_observation_space.py tools/benchmark_tiny_mlp.py tools/benchmark_tiny_mlp_training.py tools/benchmark_tiny_mlp_correct.py tools/benchmark_automatic_correct.py tools/profile_pi_training.py tools/smoke_entrypoint.py
+      - run: python -m compileall -q adaptive_ai/src tools/benchmark_product_runtime.py tools/run_product_runtime_benchmark.py tools/benchmark_correct_history.py tools/benchmark_training_qos.py tools/benchmark_ha_ingress.py tools/benchmark_shared_context.py tools/benchmark_observation_space.py tools/benchmark_tiny_mlp.py tools/benchmark_tiny_mlp_training.py tools/benchmark_tiny_mlp_correct.py tools/benchmark_automatic_correct.py tools/benchmark_offline_rl.py tools/profile_pi_training.py tools/smoke_entrypoint.py
       - run: node --check adaptive_ai/src/static/app.js && node --check adaptive_ai/src/static/debug_export_ui.js && node --check adaptive_ai/src/static/home.js && node --check adaptive_ai/src/static/polling_guard.js && node --check adaptive_ai/src/static/settings.js && node --check adaptive_ai/src/static/p0.js && node --check adaptive_ai/src/static/automation_baseline_ui.js && node --check adaptive_ai/src/static/queue.js && node --check adaptive_ai/src/static/experiments.js && node --check adaptive_ai/src/static/manual_feedback.js && node --check adaptive_ai/src/static/teach_observed_ui.js && node --check adaptive_ai/src/static/candidate_ui.js && node --check adaptive_ai/src/static/candidate_preference_ui.js && node --check adaptive_ai/src/static/agent_workflow_ui.js && node --check adaptive_ai/src/static/explore_ui.js && node --check adaptive_ai/src/static/promotion_lifecycle_ui.js && node --check adaptive_ai/src/static/confidence_contract_ui.js && node --check adaptive_ai/src/static/simple_agent_names.js && node --check adaptive_ai/src/static/runtime_activity_ui.js && node --check adaptive_ai/src/static/runtime_debug_ui.js
       - name: Stage 17 synthetic history-cost benchmark smoke
         if: matrix.python == '3.11'
@@ -52,6 +52,9 @@ jobs:
       - name: 0.14.85 trusted Automatic Correct reward-buffer benchmark
         if: matrix.python == '3.11'
         run: python tools/benchmark_automatic_correct.py --rows 512 --summaries 2000 --compact
+      - name: 0.14.86 conservative Offline-RL Candidate benchmark
+        if: matrix.python == '3.11'
+        run: python tools/benchmark_offline_rl.py --features 96 --parent-samples 384 --reward-contexts 128 --epochs 4 --compact
       - name: Stage 18 deterministic product runtime benchmark
         if: matrix.python == '3.11'
         env:
@@ -133,6 +136,10 @@ jobs:
                       prefix+'src/tiny_mlp_correct_benchmark.py',
                       prefix+'src/automatic_correct_rewards.py',
                       prefix+'src/automatic_correct_benchmark.py',
+                      prefix+'src/policy_tiny_mlp_offline_rl.py',
+                      prefix+'src/offline_rl_process.py',
+                      prefix+'src/candidate_offline_rl.py',
+                      prefix+'src/offline_rl_benchmark.py',
                       prefix+'src/static/polling_guard.js',
                       prefix+'src/static/debug_export_ui.js',
                       prefix+'src/static/runtime_activity_ui.js',

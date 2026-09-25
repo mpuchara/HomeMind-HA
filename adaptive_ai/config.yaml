@@ -1,5 +1,5 @@
 name: "Adaptive AI"
-version: "0.14.85"
+version: "0.14.86"
 slug: "adaptive_ai"
 description: >-
   History-first local reinforcement-learning policies for Home Assistant. Imports
@@ -138,6 +138,35 @@ options:
   tiny_mlp_correct_min_correction_fit: 0.95
   automatic_correct_min_confidence: 0.80
   automatic_correct_min_source_reliability: 0.80
+  offline_rl_min_trusted_samples: 24
+  offline_rl_max_trusted_samples: 512
+  offline_rl_holdout_fraction: 0.25
+  offline_rl_min_holdout_samples: 8
+  offline_rl_max_train_samples: 384
+  offline_rl_min_supported_actions: 2
+  offline_rl_min_action_support: 4
+  offline_rl_max_epochs: 6
+  offline_rl_batch_size: 16
+  offline_rl_learning_rate: 0.0015
+  offline_rl_reward_clip: 1.0
+  offline_rl_advantage_clip: 1.5
+  offline_rl_kl_beta: 2.0
+  offline_rl_parent_l2: 0.002
+  offline_rl_manual_weight: 4.0
+  offline_rl_gradient_clip: 0.5
+  offline_rl_max_parent_relative_l2: 0.08
+  offline_rl_early_stop_patience: 2
+  offline_rl_early_stop_min_delta: 0.0001
+  offline_rl_min_effective_sample_size: 4.0
+  offline_rl_min_reward_gain: 0.0
+  offline_rl_min_parent_agreement: 0.80
+  offline_rl_max_mean_tv: 0.10
+  offline_rl_max_max_tv: 0.25
+  offline_rl_max_unsupported_probability_lift: 0.02
+  offline_rl_max_regression_fraction: 0.10
+  offline_rl_max_unseen_context_rate: 0.75
+  offline_rl_context_distance_threshold: 1.5
+  offline_rl_worker_timeout_seconds: 120.0
   training_process_isolation: true
   training_worker_nice: 10
   training_worker_memory_limit_mb: 520
@@ -286,6 +315,35 @@ schema:
   tiny_mlp_correct_min_correction_fit: "float(0.0,1.0)"
   automatic_correct_min_confidence: "float(0.0,1.0)"
   automatic_correct_min_source_reliability: "float(0.0,1.0)"
+  offline_rl_min_trusted_samples: "int(8,4096)"
+  offline_rl_max_trusted_samples: "int(16,8192)"
+  offline_rl_holdout_fraction: "float(0.10,0.40)"
+  offline_rl_min_holdout_samples: "int(4,512)"
+  offline_rl_max_train_samples: "int(8,4096)"
+  offline_rl_min_supported_actions: "int(1,16)"
+  offline_rl_min_action_support: "int(1,256)"
+  offline_rl_max_epochs: "int(1,24)"
+  offline_rl_batch_size: "int(1,64)"
+  offline_rl_learning_rate: "float(0.000001,0.05)"
+  offline_rl_reward_clip: "float(0.1,10.0)"
+  offline_rl_advantage_clip: "float(0.1,10.0)"
+  offline_rl_kl_beta: "float(0.0,20.0)"
+  offline_rl_parent_l2: "float(0.0,1.0)"
+  offline_rl_manual_weight: "float(1.0,20.0)"
+  offline_rl_gradient_clip: "float(0.0001,10.0)"
+  offline_rl_max_parent_relative_l2: "float(0.0,1.0)"
+  offline_rl_early_stop_patience: "int(1,10)"
+  offline_rl_early_stop_min_delta: "float(0.0,0.1)"
+  offline_rl_min_effective_sample_size: "float(1.0,4096.0)"
+  offline_rl_min_reward_gain: "float(-1.0,1.0)"
+  offline_rl_min_parent_agreement: "float(0.0,1.0)"
+  offline_rl_max_mean_tv: "float(0.0,1.0)"
+  offline_rl_max_max_tv: "float(0.0,1.0)"
+  offline_rl_max_unsupported_probability_lift: "float(0.0,1.0)"
+  offline_rl_max_regression_fraction: "float(0.0,1.0)"
+  offline_rl_max_unseen_context_rate: "float(0.0,1.0)"
+  offline_rl_context_distance_threshold: "float(0.01,10.0)"
+  offline_rl_worker_timeout_seconds: "float(5.0,600.0)"
   training_process_isolation: "bool"
   training_worker_nice: "int(0,19)"
   training_worker_memory_limit_mb: "int(128,2048)"

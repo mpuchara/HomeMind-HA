@@ -9,6 +9,7 @@
   const refresh=async()=>{try{await window.refreshCandidates?.();}catch(_){}try{window.renderAgents?.();}catch(_){}};
   const post=(ref,action,body={})=>api(`api/agent-workflow/${encodeURIComponent(ref)}/${action}`,{method:'POST',body:JSON.stringify(body)});
   const status=ref=>api(`api/agent-workflow/${encodeURIComponent(ref)}/status`);
+  const offlineRlStatus=ref=>api(`api/agent-workflow/${encodeURIComponent(ref)}/offline-rl-status`);
   // app.js declares lastAgents with top-level `let`, which is a global lexical binding,
   // not a window property. Read that binding directly so the workflow layer decorates
   // the actual current Live cards after every normal render.
@@ -35,6 +36,36 @@
       const s=await status(ref);
       if(!confirm(`Autonomous: utworzyć Gen ${Number(s.generation_number)+1} jako child Gen ${s.generation_number}?\n\nParent pozostanie bez zmian; child zachowa jego model i będzie kontynuował naukę tylko na nowej historii.`))return;
       const out=await post(ref,'autonomous');
+      await refresh();
+      return out;
+    }catch(e){notifyError(e);}finally{if(button)button.disabled=false;}
+  };
+
+  window.workflowOfflineRL=async(ref,button)=>{
+    if(button)button.disabled=true;
+    try{
+      const s=await offlineRlStatus(ref);
+      if(!s.ready){
+        alert(`Offline RL nie jest jeszcze gotowy dla tej generacji.
+
+Powód: ${s.reason||'insufficient trusted evidence'}
+Trusted: ${s.trusted_total||0}
+Compatible: ${s.compatible_total||0}
+Train/Holdout: ${s.train_samples||0}/${s.holdout_samples||0}
+Manual anchors: ${s.manual_samples||0}
+
+Nie uruchamiamy live exploration; trzeba zebrać więcej zaufanych outcome/reward z Automatic Correct.`);
+        return;
+      }
+      if(!confirm(`Offline RL: utworzyć child Candidate z Gen ${s.parent_generation_id||ref}?
+
+Trusted experiences: ${s.compatible_total}
+Train/Holdout: ${s.train_samples}/${s.holdout_samples}
+Manual Correct anchors: ${s.manual_samples}
+Action support: ${JSON.stringify(s.action_support||{})}
+
+Parent pozostaje bez zmian. Wynik przejdzie offline gate i Shadow A/B; nie dostanie automatycznie Live/Control.`))return;
+      const out=await post(ref,'offline-rl');
       await refresh();
       return out;
     }catch(e){notifyError(e);}finally{if(button)button.disabled=false;}
@@ -327,11 +358,12 @@
 
     const resume=state.paused?'<button class="ghost resume" data-wf="resume">Resume training</button>':'';
     const shadow=a.mode==='paused'?'<button class="primary" data-wf="shadow">Start Shadow</button>':a.mode==='shadow'?'<button class="ghost" data-wf="shadow">Pause Shadow</button>':'';
-    actions.innerHTML=`${shadow}${resume}<button class="ghost" data-wf="auto">Autonomous</button><button class="primary" data-wf="correct">Correct</button><button class="ghost" data-wf="explore" disabled title="Explore będzie aktywowane przez warstwę Explore">Explore</button><button class="ghost" data-wf="change">Change decision</button><button class="ghost" data-wf="settings">Settings</button><button class="ghost" data-wf="debug">Export debug</button>`;
+    actions.innerHTML=`${shadow}${resume}<button class="ghost" data-wf="auto">Autonomous</button><button class="primary" data-wf="correct">Correct</button><button class="ghost" data-wf="offline-rl" title="Trusted Automatic Correct → conservative Offline RL Candidate">Offline RL</button><button class="ghost" data-wf="explore" disabled title="Explore będzie aktywowane przez warstwę Explore">Explore</button><button class="ghost" data-wf="change">Change decision</button><button class="ghost" data-wf="settings">Settings</button><button class="ghost" data-wf="debug">Export debug</button>`;
     if(actions.querySelector('[data-wf=shadow]'))actions.querySelector('[data-wf=shadow]').onclick=()=>window.setMode?.(a.id,a.mode==='shadow'?'paused':'shadow');
     if(state.paused)actions.querySelector('[data-wf=resume]').onclick=()=>window.resumeLearning?.(a.id);
     actions.querySelector('[data-wf=auto]').onclick=e=>workflowAutonomous(a.id,e.currentTarget);
     actions.querySelector('[data-wf=correct]').onclick=()=>openWorkflowCorrect(a.id);
+    actions.querySelector('[data-wf=offline-rl]').onclick=e=>workflowOfflineRL(a.id,e.currentTarget);
     actions.querySelector('[data-wf=change]').onclick=e=>workflowChangeDecision(a.id,e.currentTarget);
     actions.querySelector('[data-wf=settings]').onclick=()=>liveSettings(a);
     actions.querySelector('[data-wf=debug]').onclick=e=>window.exportCorrectLearningDebug?.(a.id,e.currentTarget);
