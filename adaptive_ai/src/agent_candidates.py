@@ -358,7 +358,9 @@ class AgentCandidateManager(threading.Thread):
         if existing and str(existing.get("state") or "") == "queued":
             existing_reason = str(existing.get("reason") or "")
             existing_rebuild = bool(existing.get("rebuild"))
+            existing_rebuild_reason = existing.get("rebuild_reason")
             desired_rebuild = bool(rebuild)
+            desired_rebuild_reason = rebuild_reason
 
             if reason == "teach_rl":
                 # TrainingQueue has an explicit atomic pending-job upgrade for Teach RL.
@@ -372,7 +374,15 @@ class AgentCandidateManager(threading.Thread):
                     else "upgraded_pending_to_teach_rl"
                 )
 
-            if existing_reason == reason and existing_rebuild == desired_rebuild:
+            if (
+                existing_reason == reason
+                and existing_rebuild == desired_rebuild
+                and (
+                    not desired_rebuild
+                    or desired_rebuild_reason is None
+                    or existing_rebuild_reason == desired_rebuild_reason
+                )
+            ):
                 return existing, "adopted_matching_pending_job"
 
             # Full rebuild / autonomous continuation semantics cannot safely be inferred
