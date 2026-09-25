@@ -37,9 +37,13 @@ AGENT_CONFIG_KEYS = (
     "manual_hold_seconds",
 )
 STATE_METADATA_KEYS = (
-    "device_class", "unit_of_measurement", "supported_features",
+    "device_class", "unit_of_measurement", "friendly_name", "supported_features",
     "supported_color_modes", "options", "min", "max", "step",
+    "brightness", "temperature", "current_position", "percentage", "volume_level",
+    "humidity", "min_temp", "max_temp", "target_temp_step",
+    "min_humidity", "max_humidity",
 )
+REGISTRY_METADATA_KEYS = ("device_id", "area_id", "platform", "integration")
 
 
 class StaleTrainingJob(RuntimeError):
@@ -66,6 +70,41 @@ def agent_config_fingerprint(agent):
     return _digest({key: agent.get(key) for key in AGENT_CONFIG_KEYS})
 
 
+def _compact_training_state_map(state_map):
+    """Keep only fields consumed by offline feature selection/replay.
+
+    Home Assistant state attributes can contain very large payloads (maps, media metadata,
+    forecasts, device-specific blobs). Shipping the full realtime state snapshot into each
+    isolated 6 h worker duplicates those payloads in JSON and again in Python objects.
+    The trainer only needs the scalar state, timestamps and the small metadata set below.
+    """
+    out = {}
+    for entity_id, state in (state_map or {}).items():
+        state = dict(state or {})
+        attrs = dict(state.get("attributes") or {})
+        compact_attrs = {
+            key: attrs.get(key) for key in STATE_METADATA_KEYS if key in attrs
+        }
+        out[str(entity_id)] = {
+            "entity_id": str(state.get("entity_id") or entity_id),
+            "state": state.get("state"),
+            "attributes": compact_attrs,
+            "last_changed": state.get("last_changed"),
+            "last_updated": state.get("last_updated"),
+        }
+    return out
+
+
+def _compact_training_registry(registry):
+    out = {}
+    for entity_id, row in (registry or {}).items():
+        row = dict(row or {})
+        out[str(entity_id)] = {
+            key: row.get(key) for key in REGISTRY_METADATA_KEYS if row.get(key) is not None
+        }
+    return out
+
+
 def _state_contract(state_map):
     out = {}
     for entity_id, state in sorted((state_map or {}).items()):
@@ -80,7 +119,7 @@ def runtime_context_fingerprint(state_map, registry, options):
     """Fingerprint structural training inputs, deliberately ignoring live state values."""
     return _digest({
         "state_metadata": _state_contract(state_map),
-        "registry": registry or {},
+        "registry": _compact_training_registry(registry),
         # A changed option set is conservative invalidation. Training is rare and a
         # versioned job must never silently publish under a different configuration.
         "options": options or {},
@@ -190,8 +229,8 @@ def _prune_job_files(keep=12):
 
 def _snapshot_parent_context(history, agent_id):
     with history.engine.lock:
-        state_map = dict(history.engine.state_map)
-        registry = dict(history.engine.entity_registry)
+        state_map = _compact_training_state_map(history.engine.state_map)
+        registry = _compact_training_registry(history.engine.entity_registry)
         relevance = dict(history.engine.context_relevance.get(agent_id) or {})
     return state_map, registry, relevance
 
@@ -235,6 +274,11 @@ def _build_job(history, start_ts, end_ts, kwargs):
         "automation_hints": list(hints or ()),
         "schema_cache_item": schema_item,
         "options": dict(OPTIONS),
+        "context_snapshot": {
+            "state_entities": len(state_map),
+            "registry_entities": len(registry),
+            "contract": "compact_training_context_v1",
+        },
         "start_ts": float(start_ts),
         "end_ts": float(end_ts),
         "train_kwargs": {
@@ -378,6 +422,8 @@ def run_isolated_training_chunk(history, start_ts, end_ts, **kwargs):
         "worker_nice": int(OPTIONS.get("training_worker_nice", 10) or 10),
         "memory_limit_mb": memory_limit,
         "checkpointed_wal_reads": True,
+        "context_snapshot": dict(job.get("context_snapshot") or {}),
+        "job_descriptor_bytes": int(job_path.stat().st_size) if job_path.exists() else None,
     }
 
     try:
