@@ -277,7 +277,7 @@ class StatefulReplayEquivalenceTests(unittest.TestCase):
                         "reward": float(row["reward"]),
                         "dwell_seconds": float(row["dwell_seconds"]),
                         "features": {
-                            str(k): float(v)
+                            int(k): float(v)
                             for k, v in sorted(row["features"].items())
                         },
                     }
