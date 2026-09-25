@@ -1,3 +1,22 @@
+# 0.14.86 — 2026-09-25
+
+- Continue the Tiny Neural Policy / Correct / Offline-RL master plan with **Stage 7: conservative Offline-RL Candidate**.
+- Consume **only trusted Stage-6 Automatic Correct experiences**. Unknown/rejected outcomes, lack-of-override evidence and incompatible feature-mask rows are excluded from RL training.
+- Add a small pure-Python reward-weighted policy-improvement trainer for the existing TinyMLP instead of introducing Torch/TensorFlow or a second heavyweight value network.
+- Keep the exact parent TinyMLP immutable. The child update is bounded by sample/epoch/batch caps, reward and advantage clipping, gradient clipping, early stopping, KL regularization to the parent, parameter-distance regularization and a hard parent-relative-L2 projection.
+- Treat Manual Correct as the stronger direct signal. Usable Stage-5 timestamp+desired-action samples for the selected parent are replayed every RL update with an explicit higher supervised weight.
+- Require repeated trusted support before an action is considered RL-supported. Offline gates block material probability lift or a new argmax on unsupported actions.
+- Use a chronological untouched holdout for the offline gate. Record average trusted reward, parent-relative logged-action reward proxy, estimated reward gain, effective sample-size proxy, parent action agreement, mean/max total-variation drift, unseen-context rate, per-action reward/Q proxy calibration, regression count and training time.
+- Explicitly label reward evaluation as a **parent-relative logged-action proxy, not unbiased IPS/OPE** because Stage 6 did not persist the full behavior propensity of the Ridge controller.
+- Route Stage-7 output through the existing lifecycle: **Offline RL → child Candidate → offline gate → ordinary TinyMLP Shadow A/B**. No RL result can go directly to Active/Live/Control.
+- Add an explicit **Offline RL** generation action for both Live and Candidate parents. The action first shows readiness: trusted/compatible samples, train/holdout split, Manual Correct anchors and action support. Insufficient evidence is rejected before a child is created.
+- Preserve direct-parent lineage. A parent model/checksum change or new manual feedback during RL invalidates the pending publication; the child is requeued instead of publishing a stale update.
+- Keep one heavy learning slot and TrainingBudget checkpoints. The RL update remains bounded and shares the existing Candidate worker/Shadow lifecycle.
+- Keep promotion blocked for neural/RL Candidates in Stage 7. Diagnostics now report an explicit `offline_rl_stage7_shadow_only` veto rather than mislabelling an RL Candidate as Stage 4.
+- Add Candidate diagnostics for RL run status, trusted/train/holdout samples, reward-gain proxy, parent agreement, action drift and unseen-context rate.
+- Add regressions for immutable parent, hard distance limit, Manual Correct dominance over conflicting reward, unsupported-action gating, required comparison metrics, trusted-only Stage-6 input, full Candidate lineage/build/persistence, existing neural Shadow routing and no-online-exploration/no-dispatch source boundaries.
+- Add a packaged synthetic Stage-7 Offline-RL benchmark; host metrics are informational and must not be presented as Raspberry Pi 4 or real-world reward-performance measurements.
+
 # 0.14.85 — 2026-09-24
 
 - Continue the Tiny Neural Policy / Correct / Offline-RL master plan with **Stage 6: trusted Automatic Correct outcome/reward pipeline only**.
