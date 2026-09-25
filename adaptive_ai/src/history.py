@@ -2234,6 +2234,136 @@ class HistoryManager(threading.Thread):
             new_count += 1
             return True
 
+        def _pending_from_row(agent, policy, row, value):
+            """Reconstruct exactly the open dwell state produced by the legacy overlap."""
+            anchor_ts, upstream_anchor_ts = _fast_anchor(
+                agent, policy, value, float(row["ts"])
+            )
+            upstream_valid = (
+                upstream_anchor_ts is not None
+                and upstream_anchor_ts < anchor_ts
+                and anchor_ts - upstream_anchor_ts
+                    <= float(OPTIONS.get("fast_upstream_lead_seconds", 4))
+            )
+            early_times = {}
+            query_times = {float(anchor_ts)}
+            if upstream_valid:
+                query_times.add(float(upstream_anchor_ts))
+            if is_fast_reactive_agent(agent) and value >= .5:
+                for h in policy.horizons:
+                    early_ts = float(anchor_ts) - max(1, int(h))
+                    early_times[int(h)] = early_ts
+                    query_times.add(early_ts)
+
+            snapshots = {}
+            neural_snapshots = {}
+            for query_ts in sorted(query_times):
+                timeline.advance(query_ts)
+                features, _, meta = policy.features(
+                    timeline.state_map, timeline.history, at_ts=query_ts
+                )
+                snapshots[query_ts] = (dict(features), dict(meta or {}))
+                if neural_enabled:
+                    neural_snapshots[query_ts] = neural_observation(
+                        agent, timeline, query_ts
+                    )
+
+            anchor_features = snapshots[float(anchor_ts)][0]
+            features_by_horizon = {
+                h: dict(anchor_features) for h in policy.horizons
+            }
+            upstream_features_by_horizon = {}
+            if upstream_valid:
+                upstream_features = snapshots[float(upstream_anchor_ts)][0]
+                for h in policy.horizons:
+                    upstream_features_by_horizon[h] = dict(upstream_features)
+
+            if early_times:
+                for h in policy.horizons:
+                    early_ts = early_times[int(h)]
+                    early, early_meta = snapshots[early_ts]
+                    forecast = early_meta.get("home_forecast", {})
+                    if (
+                        forecast.get("arrival_probability", 0) > .1
+                        and forecast.get("occupancy_now", 0) < .5
+                    ):
+                        upstream_features_by_horizon[h] = dict(early)
+                        upstream_anchor_ts = early_ts
+
+            actions = policy.actions
+            action_idx = min(
+                range(len(actions)),
+                key=lambda i: abs(actions[i] - float(value)),
+            )
+            return {
+                "history_id": row["id"],
+                "ts": float(row["ts"]),
+                "anchor_ts": anchor_ts,
+                "upstream_anchor_ts": upstream_anchor_ts,
+                "features_by_horizon": features_by_horizon,
+                "upstream_features_by_horizon": upstream_features_by_horizon,
+                "neural_anchor_observation": neural_snapshots.get(float(anchor_ts)),
+                "neural_upstream_observation": (
+                    neural_snapshots.get(float(upstream_anchor_ts))
+                    if upstream_anchor_ts is not None else None
+                ),
+                "action_idx": action_idx,
+                "action_value": actions[action_idx],
+                "user_id": row.get("context_user_id"),
+            }
+
+        if scan_start_ts > logical_start_ts + 0.5:
+            # The previous implementation replayed every context entity in the overlap
+            # solely so the final open target dwell survived the chunk boundary. Rebuild
+            # that minimal state from target rows only; temporal trackers reconstruct the
+            # selected features causally as-of the last effective transition.
+            seed_values = {}
+            seed_rows = {}
+            for seed_row in STORE.archive_iter(
+                logical_start_ts,
+                scan_start_ts,
+                target_map.keys(),
+                chunk_size=256,
+            ):
+                if float(seed_row["ts"]) >= scan_start_ts:
+                    continue
+                continuation_seed_target_rows += 1
+                seed_agents = target_map.get(seed_row["entity_id"], ())
+                if not seed_agents:
+                    continue
+                seed_state = archived_state(seed_row)
+                for seed_agent in seed_agents:
+                    seed_aid = seed_agent["id"]
+                    seed_value = target_value(
+                        seed_state, seed_agent["target_property"]
+                    )
+                    if seed_value is None:
+                        continue
+                    previous = seed_values.get(seed_aid)
+                    if (
+                        previous is not None
+                        and abs(float(seed_value) - float(previous))
+                            <= max(
+                                0.01,
+                                float(seed_agent["deadband"]) * 0.05,
+                            )
+                    ):
+                        continue
+                    seed_values[seed_aid] = float(seed_value)
+                    seed_rows[seed_aid] = (dict(seed_row), float(seed_value))
+
+            for seed_agent in agents:
+                seed_aid = seed_agent["id"]
+                item = seed_rows.get(seed_aid)
+                if item is None:
+                    continue
+                seed_row, seed_value = item
+                pending[seed_aid] = _pending_from_row(
+                    seed_agent, policies[seed_aid], seed_row, seed_value
+                )
+                last_value[seed_aid] = float(seed_value)
+                continuation_seed_agents += 1
+
         replay_started = now_ts()
         replay_last_report = replay_started
         replay_total = max(1, STORE.archive_count(scan_start_ts, end_ts, replay_entities))
@@ -2280,77 +2410,9 @@ class HistoryManager(threading.Thread):
                     old = pending[aid]
                     replay_completed_dwell(agent, policy, old, float(row["ts"]), row.get("context_user_id"))
 
-                anchor_ts, upstream_anchor_ts = _fast_anchor(
-                    agent, policy, value, float(row["ts"])
+                pending[aid] = _pending_from_row(
+                    agent, policy, row, value
                 )
-                upstream_valid = (
-                    upstream_anchor_ts is not None
-                    and upstream_anchor_ts < anchor_ts
-                    and anchor_ts - upstream_anchor_ts
-                        <= float(OPTIONS.get("fast_upstream_lead_seconds", 4))
-                )
-                early_times = {}
-                query_times = {float(anchor_ts)}
-                if upstream_valid:
-                    query_times.add(float(upstream_anchor_ts))
-                if is_fast_reactive_agent(agent) and value >= .5:
-                    for h in policy.horizons:
-                        early_ts = float(anchor_ts) - max(1, int(h))
-                        early_times[int(h)] = early_ts
-                        query_times.add(early_ts)
-
-                # policy.features is observation-only. Capture each unique causal
-                # timestamp once, oldest -> newest, so the onset cursor can stay
-                # incremental instead of anchor -> upstream -> early rewinds.
-                snapshots = {}
-                neural_snapshots = {}
-                for query_ts in sorted(query_times):
-                    timeline.advance(query_ts)
-                    features, _, meta = policy.features(
-                        timeline.state_map, timeline.history, at_ts=query_ts
-                    )
-                    snapshots[query_ts] = (dict(features), dict(meta or {}))
-                    if neural_enabled:
-                        neural_snapshots[query_ts] = neural_observation(
-                            agent, timeline, query_ts
-                        )
-
-                anchor_features = snapshots[float(anchor_ts)][0]
-                features_by_horizon = {
-                    h: dict(anchor_features) for h in policy.horizons
-                }
-                upstream_features_by_horizon = {}
-                if upstream_valid:
-                    upstream_features = snapshots[float(upstream_anchor_ts)][0]
-                    for h in policy.horizons:
-                        upstream_features_by_horizon[h] = dict(upstream_features)
-
-                # Preserve the existing per-head early-cue rule and its global
-                # upstream_anchor_ts compatibility field; only the query order changed.
-                if early_times:
-                    for h in policy.horizons:
-                        early_ts = early_times[int(h)]
-                        early, early_meta = snapshots[early_ts]
-                        forecast = early_meta.get("home_forecast", {})
-                        if (
-                            forecast.get("arrival_probability", 0) > .1
-                            and forecast.get("occupancy_now", 0) < .5
-                        ):
-                            upstream_features_by_horizon[h] = dict(early)
-                            upstream_anchor_ts = early_ts
-                actions = policy.actions
-                action_idx = min(range(len(actions)), key=lambda i: abs(actions[i] - float(value)))
-                pending[aid] = {
-                    "history_id": row["id"], "ts": float(row["ts"]), "anchor_ts": anchor_ts,
-                    "upstream_anchor_ts": upstream_anchor_ts, "features_by_horizon": features_by_horizon,
-                    "upstream_features_by_horizon": upstream_features_by_horizon,
-                    "neural_anchor_observation": neural_snapshots.get(float(anchor_ts)),
-                    "neural_upstream_observation": (
-                        neural_snapshots.get(float(upstream_anchor_ts))
-                        if upstream_anchor_ts is not None else None
-                    ),
-                    "action_idx": action_idx, "action_value": actions[action_idx], "user_id": row.get("context_user_id"),
-                }
                 last_value[aid] = float(value)
 
         for agent in agents:
