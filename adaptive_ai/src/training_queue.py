@@ -599,10 +599,32 @@ class TrainingQueue(threading.Thread):
                 self.active = None
                 self._bump_revision_locked()
                 self.cv.notify_all()
-        self.store.event(job["agent_id"], "info", "training_queue_finished",
-                         "Training slot released; next queued job may start",
-                         {"training_state": (agent or {}).get("training_state"), "reason": job.get("reason"),
-                          "rebuild_reason": job.get("rebuild_reason")})
+        state = str((agent or {}).get("training_state") or "")
+        progress_raw = (agent or {}).get("training_progress")
+        progress = None if progress_raw is None else max(0.0, min(1.0, float(progress_raw)))
+        interrupted = (
+            state in ("paused", "needs_retrain", "waiting")
+            and progress is not None and progress < 0.999
+        )
+        detail = {
+            "training_state": state,
+            "training_progress": progress,
+            "reason": job.get("reason"),
+            "rebuild_reason": job.get("rebuild_reason"),
+            "failure_reason": ((agent or {}).get("benchmark_detail") or {}).get("reason"),
+        }
+        if interrupted:
+            self.store.event(
+                job["agent_id"], "warning", "training_queue_interrupted",
+                f"Training stopped at {progress:.0%}; slot released for the next queued job",
+                detail,
+            )
+        else:
+            self.store.event(
+                job["agent_id"], "info", "training_queue_finished",
+                "Training slot released; next queued job may start",
+                detail,
+            )
         self._release_training_priority_if_idle()
         return True
 

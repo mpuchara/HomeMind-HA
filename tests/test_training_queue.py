@@ -20,6 +20,9 @@ class FakeStore:
         row = self.agents.get(agent_id)
         return dict(row) if row else None
 
+    def get_agent_config(self, agent_id):
+        return self.get_agent(agent_id)
+
     def set_training_state(self, agent_id, state, score=None, samples=0, source=None, detail=None):
         self.agents[agent_id]['training_state'] = state
         self.agents[agent_id]['benchmark_score'] = score
@@ -113,10 +116,11 @@ class FakeHistory:
     def request_agent_rebuild(self, agent_id):
         return self._start(agent_id, True)
 
-    def complete(self, agent_id, state='qualified'):
+    def complete(self, agent_id, state='qualified', progress=1.0):
         with self.agent_jobs_lock:
             self.agent_jobs.discard(agent_id)
         self.store.agents[agent_id]['training_state'] = state
+        self.store.agents[agent_id]['training_progress'] = progress
 
 
 class TrainingQueueTests(unittest.TestCase):
@@ -156,6 +160,18 @@ class TrainingQueueTests(unittest.TestCase):
         self.history.complete('a')
         self.assertTrue(self.wait_for(lambda: self.history.started == [('a', False), ('b', True)]))
         self.assertEqual(self.queue.status_for('b')['state'], 'active')
+
+    def test_incomplete_paused_job_is_reported_as_interrupted_not_finished(self):
+        self.queue.enqueue('a', rebuild=True, reason='training')
+        self.assertTrue(self.wait_for(lambda: self.history.started == [('a', True)]))
+        self.history.complete('a', state='paused', progress=.32)
+        self.store.agents['a']['benchmark_detail'] = {'reason': 'database is locked'}
+        self.assertTrue(self.wait_for(lambda: self.queue.status_for('a') is None))
+        interrupted = [event for event in self.store.events if event[2] == 'training_queue_interrupted']
+        self.assertEqual(len(interrupted), 1, self.store.events)
+        self.assertIn('32%', interrupted[0][3])
+        self.assertEqual(interrupted[0][4]['failure_reason'], 'database is locked')
+        self.assertFalse(any(event[2] == 'training_queue_finished' for event in self.store.events))
 
     def test_busy_slot_queues_instead_of_rejecting(self):
         self.history.blocked = True

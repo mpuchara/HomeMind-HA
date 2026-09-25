@@ -2,6 +2,7 @@ from itertools import islice
 from contextlib import contextmanager
 from collections import deque
 import json
+import os
 import sqlite3
 import threading
 import time
@@ -34,10 +35,21 @@ class Store:
         # realtime process keeps the ordinary Store contract unchanged.
         self.training_publish_guard = None
         self.checkpointed_archive_reads = False
-        self._init()
-        self._load_meta_cache()
-        self._load_recent_events()
-        self.migrate_models()
+        # Isolated historical workers attach to an already-initialized parent database.
+        # Re-running schema DDL/migrations for every 6 h replay chunk competes with the
+        # realtime writer across processes and can turn normal WAL contention into
+        # sqlite3.OperationalError("database is locked"). Worker bootstrap is therefore
+        # read-only: the authoritative realtime parent owns schema/migration startup.
+        self.training_worker_process = (
+            str(os.environ.get("ADAPTIVE_AI_TRAINING_WORKER", "")).strip() == "1"
+        )
+        if self.training_worker_process:
+            self._load_meta_cache()
+        else:
+            self._init()
+            self._load_meta_cache()
+            self._load_recent_events()
+            self.migrate_models()
 
     def touch_agent_index(self):
         # Lightweight in-process invalidation for the realtime routing cache.
@@ -48,8 +60,13 @@ class Store:
 
     @contextmanager
     def conn(self):
-        c = sqlite3.connect(self.path, timeout=30)
+        # Child training is deliberately lower priority than realtime, so let it wait
+        # longer for the single WAL writer instead of aborting a multi-minute replay on
+        # a transient parent commit. Parent/UI semantics keep the historical 30 s bound.
+        busy_timeout_ms = 60000 if self.training_worker_process else 30000
+        c = sqlite3.connect(self.path, timeout=busy_timeout_ms / 1000.0)
         c.row_factory = sqlite3.Row
+        c.execute(f"PRAGMA busy_timeout={busy_timeout_ms}")
         c.execute("PRAGMA synchronous=NORMAL")
         # Raspberry Pi deployments commonly run from microSD. Keep SQLite temp work and
         # a useful page working set in RAM instead of generating avoidable card traffic.
