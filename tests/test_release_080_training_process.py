@@ -2,6 +2,7 @@
 import json
 import os
 from pathlib import Path
+import sqlite3
 import subprocess
 import sys
 import tempfile
@@ -191,6 +192,44 @@ class StoreIsolationContracts(unittest.TestCase):
             "action_interval": 30,
             "input_entities": ["binary_sensor.motion"],
         })
+
+    def test_worker_store_bootstrap_does_not_run_migrations_while_parent_writer_is_active(self):
+        self.store.meta_set("worker_bootstrap_probe", "ready")
+        holder = sqlite3.connect(str(Path(self.temp.name) / "adaptive_ai.db"), timeout=1)
+        try:
+            holder.execute("PRAGMA journal_mode=WAL")
+            holder.execute("BEGIN IMMEDIATE")
+            holder.execute(
+                "UPDATE app_meta SET value=value WHERE key='worker_bootstrap_probe'"
+            )
+            env = dict(os.environ)
+            env["ADAPTIVE_AI_DATA"] = self.temp.name
+            env["ADAPTIVE_AI_TRAINING_WORKER"] = "1"
+            env["PYTHONPATH"] = str(
+                Path(__file__).resolve().parents[1] / "adaptive_ai" / "src"
+            )
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    "-c",
+                    (
+                        "import storage; "
+                        "assert storage.STORE.training_worker_process is True; "
+                        "assert storage.STORE.meta_get('worker_bootstrap_probe') == 'ready'; "
+                        "print('worker-bootstrap-ok')"
+                    ),
+                ],
+                cwd=Path(__file__).resolve().parents[1],
+                env=env,
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertIn("worker-bootstrap-ok", result.stdout)
+        finally:
+            holder.rollback()
+            holder.close()
 
     def test_checkpointed_archive_reader_has_exact_order_and_rows(self):
         rows = []
@@ -589,6 +628,7 @@ class ActualWorkerSmoke(unittest.TestCase):
             import training_process
             env = dict(os.environ)
             env["ADAPTIVE_AI_DATA"] = root
+            env["ADAPTIVE_AI_TRAINING_WORKER"] = "1"
             completed = subprocess.run(
                 [sys.executable, training_process.__file__, "--worker", str(job_path)],
                 env=env,
