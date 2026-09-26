@@ -397,20 +397,27 @@ def load_options():
             # HA realtime requests on Raspberry Pi. Preserve explicit custom values.
             if data.get("history_background_start_delay_seconds") == 10:
                 options["history_background_start_delay_seconds"] = 60
-            # 0.14.27: migrate only defaults shipped by earlier releases.
-            # Explicit custom budgets stay untouched.
-            if data.get("training_cpu_duty_cycle") in (0.20, 0.25, 0.55):
-                options["training_cpu_duty_cycle"] = 0.65
+            # Migrate only defaults shipped by earlier releases. Explicit custom
+            # budgets stay untouched; 0.14.96 intentionally raises the former 65%
+            # training default while preserving the 35 ms realtime-friendly slice.
+            if data.get("training_cpu_duty_cycle") in (0.20, 0.25, 0.55, 0.65):
+                options["training_cpu_duty_cycle"] = 0.85
             if data.get("training_max_continuous_work_ms") in (75, 50):
                 options["training_max_continuous_work_ms"] = 35
             if data.get("training_throttle_max_sleep_seconds") == 2.0:
                 options["training_throttle_max_sleep_seconds"] = 0.50
-            # 0.14.73: migrate only the previous shipped replay-throughput defaults.
-            # Explicitly tuned installations keep their chosen values.
             if data.get("training_experience_batch_rows") == 64:
                 options["training_experience_batch_rows"] = 128
-            if data.get("training_replay_ram_cache_rows") == 8192:
-                options["training_replay_ram_cache_rows"] = 16384
+            if data.get("training_replay_ram_cache_rows") in (8192, 16384):
+                options["training_replay_ram_cache_rows"] = 65536
+            if data.get("training_replay_ram_cache_entry_rows") == 1024:
+                options["training_replay_ram_cache_entry_rows"] = 2048
+            if data.get("training_home_context_cache_entries") == 32:
+                options["training_home_context_cache_entries"] = 64
+            if data.get("training_home_context_cache_units") == 8192:
+                options["training_home_context_cache_units"] = 32768
+            if data.get("training_worker_memory_limit_mb") == 520:
+                options["training_worker_memory_limit_mb"] = 1024
     except Exception as exc:
         print(f"[options] Failed to read options: {exc}", flush=True)
     # 0.9 never starts heavy replay implicitly, including installations with the
