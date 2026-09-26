@@ -51,6 +51,34 @@ TRAINING_STATE_ATTRIBUTE_KEYS = STATE_METADATA_KEYS + (
 )
 REGISTRY_METADATA_KEYS = ("device_id", "area_id", "platform", "integration")
 
+# These knobs affect only worker scheduling/cache pressure. Changing them while a job is
+# running must not invalidate a semantically identical model at publication time.
+NON_SEMANTIC_TRAINING_OPTION_KEYS = frozenset({
+    "background_cpu_duty_cycle",
+    "history_background_pause_ms",
+    "process_nice",
+    "training_archive_batch_rows",
+    "training_cpu_duty_cycle",
+    "training_experience_batch_rows",
+    "training_home_context_cache_entries",
+    "training_home_context_cache_units",
+    "training_max_continuous_work_ms",
+    "training_process_isolation",
+    "training_replay_ram_cache_entry_rows",
+    "training_replay_ram_cache_rows",
+    "training_sqlite_cache_mb",
+    "training_throttle_max_sleep_seconds",
+    "training_worker_memory_available_fraction",
+    "training_worker_memory_floor_mb",
+    "training_worker_memory_limit_mb",
+    "training_worker_memory_reserve_mb",
+    "training_worker_memory_total_fraction",
+    "training_worker_memory_unknown_fallback_mb",
+    "training_worker_nice",
+    "training_worker_poll_ms",
+    "training_worker_terminate_grace_seconds",
+})
+
 
 class StaleTrainingJob(RuntimeError):
     preserve_training_state = True
@@ -126,11 +154,120 @@ def runtime_context_fingerprint(state_map, registry, options):
     return _digest({
         "state_metadata": _state_contract(state_map),
         "registry": _compact_training_registry(registry),
-        # A changed option set is conservative invalidation. Training is rare and a
-        # versioned job must never silently publish under a different configuration.
+        # Full descriptor fingerprint retained for diagnostics/backward compatibility.
         "options": options or {},
         "training_revision": TRAINING_REVISION,
     })
+
+
+def _semantic_training_options(options):
+    out = dict(options or {})
+    for key in list(out):
+        if (
+            key in NON_SEMANTIC_TRAINING_OPTION_KEYS
+            or str(key).startswith("training_worker_effective_")
+        ):
+            out.pop(key, None)
+    return out
+
+
+def training_options_fingerprint(options):
+    return _digest({
+        "options": _semantic_training_options(options),
+        "training_revision": TRAINING_REVISION,
+    })
+
+
+def _payload_training_entities(payload):
+    payload = dict(payload or {})
+    out = set()
+    schema = dict(payload.get("schema") or {})
+    out.update(str(x) for x in (schema.get("entities") or ()) if x)
+    mask = dict(payload.get("mask") or {})
+    out.update(str(x) for x in (mask.get("selected_entities") or ()) if x)
+    out.update(str(x) for x in (payload.get("selected_entities") or ()) if x)
+    model = payload.get("model")
+    if isinstance(model, dict) and model is not payload:
+        out.update(_payload_training_entities(model))
+    return out
+
+
+def training_relevant_entities(agent, model=None, schema_item=None, neural_artifact=None):
+    """Entities whose structural topology can affect the model being published."""
+    agent = dict(agent or {})
+    out = set()
+    target = agent.get("target_entity")
+    if target:
+        out.add(str(target))
+    out.update(
+        str(x) for x in (agent.get("input_entities") or ())
+        if x and str(x) != "*"
+    )
+    out.update(_payload_training_entities(model))
+    out.update(_payload_training_entities(schema_item))
+    out.update(_payload_training_entities(neural_artifact))
+    return out
+
+
+def _expand_topology_scope(entity_ids, *registries):
+    """Include device siblings because actuator exclusion is device-level."""
+    scope = {str(x) for x in (entity_ids or ()) if x}
+    device_ids = set()
+    compact_registries = []
+    for registry in registries:
+        compact = _compact_training_registry(registry)
+        compact_registries.append(compact)
+        for entity_id in list(scope):
+            device_id = (compact.get(entity_id) or {}).get("device_id")
+            if device_id:
+                device_ids.add(str(device_id))
+    if device_ids:
+        for compact in compact_registries:
+            for entity_id, row in compact.items():
+                if str((row or {}).get("device_id") or "") in device_ids:
+                    scope.add(str(entity_id))
+    return scope
+
+
+def runtime_topology_fingerprint(state_map, registry, entity_ids):
+    scope = sorted({str(x) for x in (entity_ids or ()) if x})
+    state_map = dict(state_map or {})
+    registry = _compact_training_registry(registry)
+    return _digest({
+        "entity_ids": scope,
+        "state_metadata": {
+            entity_id: _state_contract({
+                entity_id: state_map.get(entity_id)
+            }).get(entity_id)
+            for entity_id in scope
+        },
+        "registry": {
+            entity_id: registry.get(entity_id)
+            for entity_id in scope
+        },
+        "training_revision": TRAINING_REVISION,
+    })
+
+
+def topology_changed_entities(before_state, before_registry, after_state, after_registry, entity_ids):
+    changed = []
+    before_state = dict(before_state or {})
+    after_state = dict(after_state or {})
+    before_registry = _compact_training_registry(before_registry)
+    after_registry = _compact_training_registry(after_registry)
+    for entity_id in sorted({str(x) for x in (entity_ids or ()) if x}):
+        before_contract = _state_contract({
+            entity_id: before_state.get(entity_id)
+        }).get(entity_id)
+        after_contract = _state_contract({
+            entity_id: after_state.get(entity_id)
+        }).get(entity_id)
+        if (
+            before_contract != after_contract
+            or before_registry.get(entity_id) != after_registry.get(entity_id)
+        ):
+            changed.append(entity_id)
+    return changed
 
 
 def descriptor_checksum(payload):
@@ -440,6 +577,7 @@ def _build_job(history, start_ts, end_ts, kwargs):
         "context_fingerprint": runtime_context_fingerprint(
             state_map, registry, dict(OPTIONS)
         ),
+        "options_fingerprint": training_options_fingerprint(dict(OPTIONS)),
         "state_map": state_map,
         "entity_registry": registry,
         "context_relevance": relevance,
@@ -719,14 +857,73 @@ def run_isolated_training_chunk(history, start_ts, end_ts, **kwargs):
                 preserve_lifecycle=True,
             )
         current_state, current_registry, _ = _snapshot_parent_context(history, agent_id)
-        current_context = runtime_context_fingerprint(
-            current_state, current_registry, dict(OPTIONS)
-        )
-        if current_context != job["context_fingerprint"]:
+
+        expected_options = job.get("options_fingerprint")
+        if expected_options is None:
+            expected_options = training_options_fingerprint(
+                job.get("options") or dict(OPTIONS)
+            )
+        current_options = training_options_fingerprint(dict(OPTIONS))
+        if current_options != expected_options:
             raise StaleTrainingJob(
-                "runtime topology/options changed while isolated training was running",
+                "training-semantic options changed while isolated training was running",
                 preserve_lifecycle=False,
             )
+
+        # Long Pi training jobs routinely overlap harmless HA Entity Registry refreshes.
+        # Validate only topology that can affect the model actually produced by this
+        # worker, plus device siblings used by controllable-context exclusion.
+        model_after = STORE.get_model(agent_id) or {}
+        schema_item_after = result.get("schema_cache_item") or {}
+        neural_artifact = (
+            (dict(result.get("neural_training_artifacts") or {})).get(agent_id)
+            or {}
+        )
+        relevant_entities = training_relevant_entities(
+            current_agent,
+            model=model_after,
+            schema_item=schema_item_after,
+            neural_artifact=neural_artifact,
+        )
+        if relevant_entities and "state_map" in job and "entity_registry" in job:
+            scope = _expand_topology_scope(
+                relevant_entities, job.get("entity_registry"), current_registry
+            )
+            before_topology = runtime_topology_fingerprint(
+                job.get("state_map"), job.get("entity_registry"), scope
+            )
+            after_topology = runtime_topology_fingerprint(
+                current_state, current_registry, scope
+            )
+            changed_entities = topology_changed_entities(
+                job.get("state_map"), job.get("entity_registry"),
+                current_state, current_registry, scope,
+            )
+            history.training_process_status["context_validation"] = {
+                "mode": "selected_entities_plus_device_siblings",
+                "relevant_entities": len(relevant_entities),
+                "scope_entities": len(scope),
+                "changed_entities": changed_entities[:32],
+                "unrelated_registry_refreshes_tolerated": True,
+            }
+            if before_topology != after_topology:
+                detail = ",".join(changed_entities[:8]) or "unknown"
+                raise StaleTrainingJob(
+                    "training-relevant topology changed while isolated training was "
+                    f"running: {detail}",
+                    preserve_lifecycle=False,
+                )
+        else:
+            # Compatibility fallback for hand-built/legacy descriptors that do not carry
+            # the snapshot needed for scoped validation.
+            current_context = runtime_context_fingerprint(
+                current_state, current_registry, dict(OPTIONS)
+            )
+            if current_context != job["context_fingerprint"]:
+                raise StaleTrainingJob(
+                    "runtime topology/options changed while isolated training was running",
+                    preserve_lifecycle=False,
+                )
 
         # Child writes are durable, but all parent runtime caches are process-local.
         history.engine.models.pop(agent_id, None)
