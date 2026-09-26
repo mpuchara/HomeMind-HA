@@ -1,3 +1,15 @@
+# 0.14.96 — 2026-09-26
+
+- Switch explicit historical Train/Rebuild to a **RAM-first** resource profile while keeping one isolated heavy worker, `nice=10`, the 35 ms continuous-work slice and bounded realtime preemption.
+- Raise the shipped cooperative training target from 65% to **85%** (configurable up to 90%). This changes scheduling only; learning/reward/Candidate semantics are unchanged.
+- Raise the configured worker RSS ceiling from 520 MB to **1024 MB**, but derive the effective per-job limit from Linux `MemTotal` / `MemAvailable`: 30% of total RAM, 50% of currently available RAM and a 512 MB parent/HA reserve all cap the worker. Low-memory hosts automatically select smaller profiles.
+- Scale replay RAM caches by that effective budget: up to **65,536 cached replay rows**, 2,048 rows per entry, **64 exact home-context snapshots / 32,768 units**, and **32 MB SQLite page cache per temporal tracker**. User-configured lower caps remain authoritative.
+- Remove the fixed isolated-worker cache clamp introduced in 0.14.92. The parent now passes explicit effective cache limits into the child descriptor; direct worker/test invocation without that descriptor still falls back to the previous conservative caps.
+- Add worker diagnostics for the chosen memory tier, host total/available RAM, effective RSS limit, effective cache bounds, SQLite cache size and replay-cache hit rate.
+- Keep the single-heavy-job gate and existing RSS supervisor. Exceeding the effective budget still terminates the child and rolls back the uncommitted training chunk.
+- Add deterministic 0.14.96 regressions for large/medium/small RAM profiles, user caps, 85% duty-cycle acceptance, cache hit-rate telemetry and packaged resource-profile wiring.
+- Real Raspberry Pi timing remains a post-install measurement: the change is designed to turn free RAM into fewer SQLite reads/reconstructions rather than merely consume more memory.
+
 # 0.14.95 — 2026-09-26
 
 - Fix Apply Correct reporting `Correct modified the parent model in place` after the core Correct operation had already created/coalesced the child Candidate successfully.
