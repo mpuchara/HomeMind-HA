@@ -62,6 +62,7 @@ class ReplayQueryCache:
             self.evictions += 1
 
     def status(self):
+        requests = self.hits + self.misses
         return {
             "rows": int(self.rows),
             "entries": len(self.data),
@@ -69,6 +70,8 @@ class ReplayQueryCache:
             "misses": int(self.misses),
             "evictions": int(self.evictions),
             "max_rows": int(self.max_rows),
+            "max_entry_rows": int(self.max_entry_rows),
+            "hit_rate": (float(self.hits) / requests) if requests else None,
         }
 
 
@@ -310,7 +313,16 @@ class SQLiteTemporalTracker:
                  home_context_cache=None, context_cache_contract=None):
         self.conn = sqlite3.connect(store.path, timeout=30)
         self.conn.row_factory = sqlite3.Row
-        self.conn.execute('PRAGMA cache_size=-2048')
+        context_options = dict(getattr(context, "options", {}) or {})
+        sqlite_cache_mb = int(
+            context_options.get(
+                "training_worker_effective_sqlite_cache_mb",
+                context_options.get("training_sqlite_cache_mb", 32),
+            ) or 2
+        )
+        sqlite_cache_mb = max(2, min(64, sqlite_cache_mb))
+        self.sqlite_cache_kib = sqlite_cache_mb * 1024
+        self.conn.execute(f'PRAGMA cache_size=-{self.sqlite_cache_kib}')
         self.watched = sorted(set(watched or ()))
         self.context = context
         self.query_cache = query_cache
@@ -346,6 +358,7 @@ class SQLiteTemporalTracker:
             "home_gap_rebuilds": 0,
             "max_home_forward_gap_seconds": 0.0,
             "legacy_asof_queries_estimate": 0,
+            "sqlite_cache_kib": int(self.sqlite_cache_kib),
         }
         try:
             row = self.conn.execute(
