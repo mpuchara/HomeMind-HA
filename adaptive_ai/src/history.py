@@ -1896,13 +1896,26 @@ class HistoryManager(threading.Thread):
             OPTIONS.get("training_home_context_cache_units", 8192) or 0
         )
         if self.worker_mode:
-            # The isolated worker has a hard 520 MB RSS gate. Cache capacity is only a
-            # performance hint, never part of learning semantics, so use a conservative
-            # per-process profile and leave the realtime parent's configured values alone.
-            replay_cache_rows = min(replay_cache_rows, 4096)
-            replay_cache_entry_rows = min(replay_cache_entry_rows, 512)
-            home_cache_entries = min(home_cache_entries, 8)
-            home_cache_units = min(home_cache_units, 2048)
+            # 0.14.96 receives a bounded RAM-first resource profile from the parent
+            # supervisor. Cache capacity is a performance hint only: causal replay,
+            # labels, rewards and model publication are unchanged. Direct worker/test
+            # invocation without a profile falls back to the former conservative caps.
+            replay_cache_rows = int(OPTIONS.get(
+                "training_worker_effective_replay_cache_rows",
+                min(replay_cache_rows, 4096),
+            ) or 0)
+            replay_cache_entry_rows = int(OPTIONS.get(
+                "training_worker_effective_replay_cache_entry_rows",
+                min(replay_cache_entry_rows, 512),
+            ) or 512)
+            home_cache_entries = int(OPTIONS.get(
+                "training_worker_effective_home_context_cache_entries",
+                min(home_cache_entries, 8),
+            ) or 0)
+            home_cache_units = int(OPTIONS.get(
+                "training_worker_effective_home_context_cache_units",
+                min(home_cache_units, 2048),
+            ) or 0)
 
         replay_query_cache = ReplayQueryCache(
             max_rows=replay_cache_rows,
