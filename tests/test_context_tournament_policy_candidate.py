@@ -18,6 +18,7 @@ from context_tournament_policy_candidate import (
 )
 from manual_context_learning import _migrate_schema
 from policy import MultiHorizonPolicy
+from policy_backend import verify_model_checksum
 from storage import Store
 
 
@@ -205,6 +206,93 @@ class ExactPolicyPromotionTests(unittest.TestCase):
 
         def _eligible_entities(self, agent, active):
             return set()
+
+    def test_corrupted_shadow_candidate_checksum_is_rebuilt_without_runtime_error(self):
+        temp = tempfile.TemporaryDirectory(prefix='stage09-checksum-repair-')
+        old_chooser = promotion._choose_schema_after_promotion
+        old_migrate = promotion._migrate_schema
+        try:
+            store = Store(Path(temp.name) / 'stage09.db')
+            a = store.create_agent(agent(name='checksum repair'))
+            challenger = 'binary_sensor.precursor'
+            active = ['binary_sensor.primary']
+            states = {
+                'light.kitchen': state('light.kitchen', 'off'),
+                active[0]: state(active[0], 'off', device_class='occupancy'),
+                challenger: state(challenger, 'on', device_class='occupancy'),
+            }
+            live = MultiHorizonPolicy(a, states, {}, set())
+            live.schema = ExplicitFeatureSchema(live.dims, active)
+            live.selection_meta = {'selection_reasons': {active[0]: ['historical']}}
+
+            target_schema = active + [challenger]
+            candidate = MultiHorizonPolicy(a, states, {}, set(), model=live.serialize())
+            meta = dict(candidate.selection_meta)
+            meta['sensor_tournament_promoted'] = challenger
+            _migrate_schema(candidate, target_schema, meta)
+            corrupted = candidate.serialize()
+            corrupted['model_revision'] = 'mutated-after-checksum'
+            self.assertFalse(verify_model_checksum(corrupted))
+
+            tournament = {
+                'agent_id': a['id'],
+                'active_features': list(active),
+                'challenger_features': [challenger],
+                'feature_scores': {challenger: 0.9},
+                'schema_revision': 1,
+                'previous_schema': [],
+            }
+            shadow_model = {
+                'version': 1,
+                'action_count': 2,
+                'counts': {},
+                'samples': 0,
+                'active_correct': 0,
+                'shadow_correct': 0,
+                'last_scored_ts': None,
+                'candidate_contract_version': CONTRACT_VERSION,
+                'candidate_source_model_revision': live.model_revision,
+                'candidate_target_schema': list(target_schema),
+                'candidate_replaced_entity': None,
+                'candidate_policy': corrupted,
+                'candidate_training_samples': 5,
+                'evaluation_champion_revision': live.model_revision,
+            }
+            engine = SimpleNamespace(
+                models={a['id']: live},
+                state_map=states,
+                entity_registry={},
+                context_relevance={},
+                context=None,
+                temporal_history=SimpleNamespace(),
+                state_revision=10,
+                runtime={a['id']: {'last_prediction': 0.0, 'last_change_origin': 'external'}},
+                lock=threading.RLock(),
+            )
+            service = self.FakeService(store, engine, tournament, shadow_model)
+
+            # Make the captured base observer exercise the dynamically wrapped load/predict
+            # path while install_policy_candidates has current_context populated.
+            def base_observe(agent_obj, state_map=None, changed_entities=None):
+                model = service._load_shadow_model(agent_obj['id'], challenger, 2)
+                idx = service._shadow_predict_index(model, 0, 0)
+                return {'predictions': [idx], 'scored': 0}
+
+            service.observe_shadow = base_observe
+            install_policy_candidates(service)
+            result = service.observe_shadow(a, states, [])
+            self.assertEqual(result['predictions'], [0])
+            repaired = service._model.get('candidate_policy')
+            self.assertIsInstance(repaired, dict)
+            self.assertTrue(verify_model_checksum(repaired))
+            self.assertEqual(
+                service._model.get('candidate_blocked_reason'),
+                'candidate_policy_checksum_reset',
+            )
+        finally:
+            promotion._choose_schema_after_promotion = old_chooser
+            promotion._migrate_schema = old_migrate
+            temp.cleanup()
 
     def test_promotion_copies_trained_candidate_weights_not_zero_column(self):
         temp = tempfile.TemporaryDirectory(prefix='stage09-exact-policy-')
