@@ -58,9 +58,9 @@ assert _budget_pause(2.0, 0.25, 2.0) == 2.0
         source = (ROOT / "adaptive_ai/src/rpi_low_power_runtime.py").read_text(encoding="utf-8")
         budget_source = (ROOT / "adaptive_ai/src/training_budget.py").read_text(encoding="utf-8")
         self.assertIn("DEFAULT_ARCHIVE_BATCH_ROWS = 16", source)
-        self.assertIn("DEFAULT_TRAINING_DUTY_CYCLE = 0.65", source)
+        self.assertIn("DEFAULT_TRAINING_DUTY_CYCLE = 0.85", source)
         self.assertIn("DEFAULT_MAX_THROTTLE_SLEEP_SECONDS = 0.50", source)
-        self.assertIn('current_duty in (0.20, 0.25, 0.55)', source)
+        self.assertIn('current_duty in (0.20, 0.25, 0.55, 0.65)', source)
         self.assertIn('core.OPTIONS["training_cpu_duty_cycle"] = DEFAULT_TRAINING_DUTY_CYCLE', source)
         self.assertIn('effective_training_duty_cycle', budget_source)
 
@@ -89,13 +89,13 @@ assert _budget_pause(2.0, 0.25, 2.0) == 2.0
         config = (ROOT / "adaptive_ai/config.yaml").read_text(encoding="utf-8")
         settings = (ROOT / "adaptive_ai/src/settings.py").read_text(encoding="utf-8")
         self.assertRegex(config, r'version: "0\.14\.\d+"')
-        self.assertIn("training_cpu_duty_cycle: 0.65", config)
+        self.assertIn("training_cpu_duty_cycle: 0.85", config)
         self.assertIn("training_archive_batch_rows: 16", config)
         self.assertIn("training_throttle_max_sleep_seconds: 0.50", config)
         self.assertIn("training_max_continuous_work_ms: 35", config)
-        self.assertIn('training_cpu_duty_cycle: "float(0.15,0.70)"', config)
+        self.assertIn('training_cpu_duty_cycle: "float(0.15,0.90)"', config)
         self.assertRegex(settings, r'APP_VERSION = "0\.14\.\d+"')
-        self.assertIn('if data.get("training_cpu_duty_cycle") in (0.20, 0.25, 0.55):', settings)
+        self.assertIn('if data.get("training_cpu_duty_cycle") in (0.20, 0.25, 0.55, 0.65):', settings)
         self.assertIn('if data.get("training_max_continuous_work_ms") in (75, 50):', settings)
 
     def test_ui_surfaces_active_training_budget_instead_of_system_ready(self):

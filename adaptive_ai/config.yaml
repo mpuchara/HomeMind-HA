@@ -1,5 +1,5 @@
 name: "Adaptive AI"
-version: "0.14.95"
+version: "0.14.96"
 slug: "adaptive_ai"
 description: >-
   History-first local reinforcement-learning policies for Home Assistant. Imports
@@ -93,11 +93,14 @@ options:
   history_background_start_delay_seconds: 60
   background_cpu_duty_cycle: 0.20
   process_nice: 10
-  training_cpu_duty_cycle: 0.65
+  training_cpu_duty_cycle: 0.85
   training_archive_batch_rows: 16
   training_experience_batch_rows: 128
-  training_replay_ram_cache_rows: 16384
-  training_replay_ram_cache_entry_rows: 1024
+  training_replay_ram_cache_rows: 65536
+  training_replay_ram_cache_entry_rows: 2048
+  training_home_context_cache_entries: 64
+  training_home_context_cache_units: 32768
+  training_sqlite_cache_mb: 32
   observation_selected_features: 96
   observation_freshness_tau_seconds: 300
   tiny_mlp_shadow_enabled: true
@@ -170,7 +173,12 @@ options:
   offline_rl_worker_timeout_seconds: 120.0
   training_process_isolation: true
   training_worker_nice: 10
-  training_worker_memory_limit_mb: 520
+  training_worker_memory_limit_mb: 1024
+  training_worker_memory_floor_mb: 256
+  training_worker_memory_total_fraction: 0.30
+  training_worker_memory_available_fraction: 0.50
+  training_worker_memory_reserve_mb: 512
+  training_worker_memory_unknown_fallback_mb: 520
   training_worker_poll_ms: 200
   training_worker_terminate_grace_seconds: 2.0
   training_throttle_max_sleep_seconds: 0.50
@@ -271,11 +279,14 @@ schema:
   history_background_start_delay_seconds: "int(0,300)"
   background_cpu_duty_cycle: "float(0.10,0.60)"
   process_nice: "int(0,19)"
-  training_cpu_duty_cycle: "float(0.15,0.70)"
+  training_cpu_duty_cycle: "float(0.15,0.90)"
   training_archive_batch_rows: "int(8,128)"
   training_experience_batch_rows: "int(8,512)"
   training_replay_ram_cache_rows: "int(0,65536)"
   training_replay_ram_cache_entry_rows: "int(64,4096)"
+  training_home_context_cache_entries: "int(0,128)"
+  training_home_context_cache_units: "int(0,65536)"
+  training_sqlite_cache_mb: "int(2,64)"
   observation_selected_features: "int(16,128)"
   observation_freshness_tau_seconds: "int(1,86400)"
   tiny_mlp_shadow_enabled: "bool"
@@ -349,6 +360,11 @@ schema:
   training_process_isolation: "bool"
   training_worker_nice: "int(0,19)"
   training_worker_memory_limit_mb: "int(128,2048)"
+  training_worker_memory_floor_mb: "int(128,1024)"
+  training_worker_memory_total_fraction: "float(0.10,0.50)"
+  training_worker_memory_available_fraction: "float(0.20,0.80)"
+  training_worker_memory_reserve_mb: "int(128,2048)"
+  training_worker_memory_unknown_fallback_mb: "int(128,2048)"
   training_worker_poll_ms: "int(50,2000)"
   training_worker_terminate_grace_seconds: "float(0.2,10.0)"
   training_throttle_max_sleep_seconds: "float(0.25,5.0)"

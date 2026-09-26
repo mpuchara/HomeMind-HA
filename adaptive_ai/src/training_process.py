@@ -28,6 +28,7 @@ JOB_FORMAT = "homemind-isolated-training-job"
 JOB_VERSION = 1
 RESULT_FORMAT = "homemind-isolated-training-result"
 RESULT_VERSION = 1
+RESOURCE_PROFILE_CONTRACT = "adaptive_ram_first_worker_profile_v1"
 
 AGENT_CONFIG_KEYS = (
     "id", "enabled", "input_entities", "target_entity", "target_property",
@@ -170,6 +171,155 @@ def _read_json(path, default=None):
         return json.loads(Path(path).read_text(encoding="utf-8"))
     except (OSError, ValueError, TypeError):
         return default
+
+
+def _host_memory_mb(path="/proc/meminfo"):
+    """Return Linux MemTotal/MemAvailable in MB without importing psutil."""
+    result = {"total_mb": None, "available_mb": None}
+    try:
+        for line in Path(path).read_text(encoding="utf-8").splitlines():
+            key, _, raw = line.partition(":")
+            if key not in ("MemTotal", "MemAvailable"):
+                continue
+            value = raw.strip().split()
+            if not value:
+                continue
+            mb = float(value[0]) / 1024.0
+            if key == "MemTotal":
+                result["total_mb"] = mb
+            else:
+                result["available_mb"] = mb
+    except (OSError, ValueError):
+        pass
+    return result
+
+
+def resolve_training_resource_profile(options=None, memory=None):
+    """Resolve a bounded RAM-first worker profile from current host headroom.
+
+    The configured values remain hard ceilings. The effective worker RSS limit is also
+    capped by fractions of MemTotal/MemAvailable, leaving explicit memory for HA and the
+    realtime parent. Cache sizes are performance-only hints and scale in four tiers.
+    """
+    options = dict(options or {})
+    memory = dict(memory or _host_memory_mb())
+
+    ceiling = max(
+        128.0, float(options.get("training_worker_memory_limit_mb", 1024) or 1024)
+    )
+    floor = max(
+        128.0, min(
+            ceiling,
+            float(options.get("training_worker_memory_floor_mb", 256) or 256),
+        )
+    )
+    total_fraction = max(
+        0.10, min(
+            0.50,
+            float(options.get("training_worker_memory_total_fraction", 0.30) or 0.30),
+        )
+    )
+    available_fraction = max(
+        0.20, min(
+            0.80,
+            float(
+                options.get("training_worker_memory_available_fraction", 0.50)
+                or 0.50
+            ),
+        )
+    )
+    reserve = max(
+        128.0, float(options.get("training_worker_memory_reserve_mb", 512) or 512)
+    )
+    unknown_fallback = max(
+        floor, min(
+            ceiling,
+            float(
+                options.get("training_worker_memory_unknown_fallback_mb", 520)
+                or 520
+            ),
+        )
+    )
+
+    total_mb = memory.get("total_mb")
+    available_mb = memory.get("available_mb")
+    candidates = [ceiling]
+    if isinstance(total_mb, (int, float)) and float(total_mb) > 0.0:
+        candidates.append(max(floor, float(total_mb) * total_fraction))
+    if isinstance(available_mb, (int, float)) and float(available_mb) > 0.0:
+        available = float(available_mb)
+        by_fraction = available * available_fraction
+        by_reserve = max(floor, available - reserve)
+        candidates.append(max(floor, min(by_fraction, by_reserve)))
+    elif not (isinstance(total_mb, (int, float)) and float(total_mb) > 0.0):
+        candidates.append(unknown_fallback)
+
+    effective = int(max(floor, min(candidates)))
+
+    if effective >= 896:
+        tier = "large"
+        target = {
+            "replay_rows": 65536, "replay_entry_rows": 2048,
+            "home_entries": 64, "home_units": 32768, "sqlite_mb": 32,
+        }
+    elif effective >= 640:
+        tier = "medium_plus"
+        target = {
+            "replay_rows": 32768, "replay_entry_rows": 1536,
+            "home_entries": 32, "home_units": 16384, "sqlite_mb": 24,
+        }
+    elif effective >= 448:
+        tier = "medium"
+        target = {
+            "replay_rows": 16384, "replay_entry_rows": 1024,
+            "home_entries": 16, "home_units": 8192, "sqlite_mb": 16,
+        }
+    else:
+        tier = "small"
+        target = {
+            "replay_rows": 8192, "replay_entry_rows": 512,
+            "home_entries": 8, "home_units": 4096, "sqlite_mb": 8,
+        }
+
+    def bounded_int(key, default, target_value, *, minimum=0):
+        configured = int(options.get(key, default) or 0)
+        if configured <= 0 and minimum <= 0:
+            return 0
+        return max(minimum, min(configured, int(target_value)))
+
+    worker_options = {
+        "training_worker_effective_memory_limit_mb": int(effective),
+        "training_worker_effective_replay_cache_rows": bounded_int(
+            "training_replay_ram_cache_rows", 65536, target["replay_rows"]
+        ),
+        "training_worker_effective_replay_cache_entry_rows": bounded_int(
+            "training_replay_ram_cache_entry_rows", 2048, target["replay_entry_rows"],
+            minimum=64,
+        ),
+        "training_worker_effective_home_context_cache_entries": bounded_int(
+            "training_home_context_cache_entries", 64, target["home_entries"]
+        ),
+        "training_worker_effective_home_context_cache_units": bounded_int(
+            "training_home_context_cache_units", 32768, target["home_units"]
+        ),
+        "training_worker_effective_sqlite_cache_mb": bounded_int(
+            "training_sqlite_cache_mb", 32, target["sqlite_mb"], minimum=2
+        ),
+    }
+    return {
+        "contract": RESOURCE_PROFILE_CONTRACT,
+        "tier": tier,
+        "host_memory_mb": {
+            "total": None if total_mb is None else round(float(total_mb), 1),
+            "available": (
+                None if available_mb is None else round(float(available_mb), 1)
+            ),
+        },
+        "configured_memory_ceiling_mb": round(ceiling, 1),
+        "effective_memory_limit_mb": int(effective),
+        "reserved_for_parent_mb": round(reserve, 1),
+        "worker_options": worker_options,
+    }
 
 
 def _proc_metrics(pid):
@@ -389,6 +539,12 @@ def run_isolated_training_chunk(history, start_ts, end_ts, **kwargs):
 
     job = _build_job(history, start_ts, end_ts, kwargs)
     job_path = Path(job.pop("job_path"))
+    resource_profile = resolve_training_resource_profile(OPTIONS)
+    job["resource_profile"] = resource_profile
+    # _build_job checksums the semantic descriptor before transport metadata is added.
+    # Recompute after adding the non-semantic resource profile so the worker also verifies
+    # that its RAM/SQLite limits were not corrupted in transit.
+    job["checksum"] = descriptor_checksum(job)
     _atomic_json(job_path, job)
     _prune_job_files()
 
@@ -404,7 +560,7 @@ def run_isolated_training_chunk(history, start_ts, end_ts, **kwargs):
         0.05, float(OPTIONS.get("training_worker_poll_ms", 200) or 200) / 1000.0
     )
     memory_limit = max(
-        128.0, float(OPTIONS.get("training_worker_memory_limit_mb", 520) or 520)
+        128.0, float(resource_profile.get("effective_memory_limit_mb") or 128.0)
     )
     grace = max(
         0.2, float(OPTIONS.get("training_worker_terminate_grace_seconds", 2.0) or 2.0)
@@ -443,6 +599,7 @@ def run_isolated_training_chunk(history, start_ts, end_ts, **kwargs):
         "started_at": now_ts(),
         "worker_nice": int(OPTIONS.get("training_worker_nice", 10) or 10),
         "memory_limit_mb": memory_limit,
+        "resource_profile": dict(resource_profile),
         "checkpointed_wal_reads": True,
         "context_snapshot": dict(job.get("context_snapshot") or {}),
         "job_descriptor_bytes": int(job_path.stat().st_size) if job_path.exists() else None,
@@ -510,6 +667,9 @@ def run_isolated_training_chunk(history, start_ts, end_ts, **kwargs):
                 ),
                 "context_snapshot": history.training_process_status.get(
                     "context_snapshot"
+                ),
+                "resource_profile": history.training_process_status.get(
+                    "resource_profile"
                 ),
             }
             history.training_process_status["memory_failure_context"] = failure_context
@@ -777,9 +937,12 @@ def worker_main(job_path):
         stage="descriptor_validated",
     )
 
-    # Descriptor options are the authoritative versioned job view.
+    # Descriptor options are the authoritative semantic job view. The resource profile
+    # is scheduling/cache-only and deliberately excluded from runtime_context_fingerprint.
     OPTIONS.clear()
     OPTIONS.update(dict(job.get("options") or {}))
+    resource_profile = dict(job.get("resource_profile") or {})
+    OPTIONS.update(dict(resource_profile.get("worker_options") or {}))
 
     nice_value = int(OPTIONS.get("training_worker_nice", 10) or 10)
     nice_applied = False
@@ -900,6 +1063,7 @@ def worker_main(job_path):
                 history.neural_training_artifacts or {}
             ),
             "training_budget": TRAINING_BUDGET.snapshot(),
+            "resource_profile": dict(job.get("resource_profile") or {}),
             "elapsed_seconds": round(time.monotonic() - started, 3),
         })
         _atomic_json(job["result_path"], result)
