@@ -19,7 +19,7 @@ from training_process import (
 
 class Release096ResourceProfileTests(unittest.TestCase):
     def test_release_defaults_are_ram_first_but_keep_single_worker_and_nice(self):
-        self.assertEqual(APP_VERSION, "0.14.96")
+        self.assertGreaterEqual(tuple(map(int, APP_VERSION.split("."))), (0, 14, 96))
         self.assertEqual(DEFAULT_OPTIONS["training_cpu_duty_cycle"], 0.85)
         self.assertEqual(DEFAULT_OPTIONS["training_worker_memory_limit_mb"], 1024)
         self.assertEqual(DEFAULT_OPTIONS["training_replay_ram_cache_rows"], 65536)

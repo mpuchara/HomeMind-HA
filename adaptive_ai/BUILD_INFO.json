@@ -1,14 +1,14 @@
 {
-  "version": "0.14.96",
+  "version": "0.14.97",
   "release_date": "2026-09-26",
-  "base_version": "0.14.95",
-  "base_commit": "0179511b583b621b70f34b06ed817b46b4713033",
-  "release_status": "ram-first-adaptive-training-resources",
+  "base_version": "0.14.96",
+  "base_commit": "4a904cee0b46ecbe4d802d15a9a77329b7ec5bbd",
+  "release_status": "hotfix-scoped-isolated-training-topology-validation",
   "pi4_profile_contract": "pi_training_profile_v2",
   "pi4_release_gate_contract": "pi4_release_gate_v1",
   "pi4_real_hardware_required": true,
   "stage7_offline_rl_control_unlock": false,
-  "tests_passed": 1302,
+  "tests_passed": 1307,
   "profile": "rpi4-ram-first-complete-discovery-manual-agent-selection",
   "manual_agent_training": true,
   "max_concurrent_training_jobs": 1,
@@ -579,5 +579,11 @@
     "max_concurrent_training_jobs": 1,
     "safety": "resource scheduling/cache only; causal replay, rewards, Correct/Candidate lineage, Offline-RL policy math and physical-control authority unchanged",
     "unit_tests": 1302
+  },
+  "release_01497": {
+    "cause": "long isolated training used a whole-home runtime fingerprint; any unrelated Entity Registry refresh among ~1300 entities could make a completed chunk stale",
+    "fix": "publication validates semantic options plus only the entities selected by the trained model, its target/explicit inputs, and device siblings used by controllable-context exclusion",
+    "resource_options": "CPU/RAM/cache scheduling knobs no longer count as semantic model changes during an already-running job",
+    "safety": "selected-entity metadata, target/input configuration, device-sibling topology and learning-semantic options still invalidate stale results"
   }
 }
