@@ -1,9 +1,9 @@
 {
-  "version": "0.14.94",
+  "version": "0.14.95",
   "release_date": "2026-09-26",
-  "base_version": "0.14.93",
-  "base_commit": "e9cc23acb7cdc0a42ecfabd003035bf93c25aee4",
-  "release_status": "hotfix-correct-request-id-wrapper",
+  "base_version": "0.14.94",
+  "base_commit": "2545b940fdc9b245351270970b04a045d88be150",
+  "release_status": "hotfix-correct-bookkeeping-guard-and-tournament-checksum",
   "pi4_profile_contract": "pi_training_profile_v2",
   "pi4_release_gate_contract": "pi4_release_gate_v1",
   "pi4_real_hardware_required": true,
@@ -559,5 +559,12 @@
     "fix": "wrapper now accepts request_id and forwards it unchanged to agent_workflow_actions.workflow_correct_commit",
     "regression": "unit test installs the feedback wrapper and asserts request_id is propagated to the wrapped Correct commit",
     "safety": "no label semantics, Candidate lineage, parent-model immutability, learning math or physical-control behavior changed"
+  },
+  "hotfix_01495": {
+    "correct_failure": "Apply Correct could succeed in the core generation workflow, then the manual-feedback adapter compared raw model JSON and falsely raised 'Correct modified the parent model in place' when Store-owned bookkeeping fields changed",
+    "correct_fix": "remove the redundant destructive raw-JSON rollback guard from the journal adapter; authoritative semantic parent immutability remains enforced inside agent_workflow_actions",
+    "tournament_failure": "Sensor Tournament shadow candidate policies could be deserialized by reference; lazy decay/training mutated the nested persisted payload behind its checksum, causing recurring NEEDS_RETRAIN checksum mismatch warnings",
+    "tournament_fix": "deep-copy nested candidate policy payloads before policy construction and self-heal already-corrupt shadow candidate payloads from the current champion instead of propagating NEEDS_RETRAIN",
+    "safety": "no Correct labels, Candidate lineage, live parent policy semantics, Offline-RL math or physical-control authority changed"
   }
 }

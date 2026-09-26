@@ -1,3 +1,13 @@
+# 0.14.95 — 2026-09-26
+
+- Fix Apply Correct reporting `Correct modified the parent model in place` after the core Correct operation had already created/coalesced the child Candidate successfully.
+- Root cause: the stage-06 manual-feedback adapter added a second raw-JSON equality check around `agent_workflow_actions`. Store-owned bookkeeping such as `_history_watermark` / `_benchmark_counts` is deliberately outside policy identity and may change without changing the parent policy; the adapter then attempted a destructive rollback and raised a false failure.
+- Remove that redundant raw-JSON rollback guard for Correct and Change decision. The authoritative semantic parent-model immutability checks remain inside `agent_workflow_actions`, which owns generation creation and policy identity.
+- Fix recurring Sensor Tournament `NEEDS_RETRAIN: policy model checksum mismatch` warnings. Nested Tournament Candidate policies were being deserialized by reference, so lazy decay/training could mutate the persisted shadow payload behind its checksum.
+- Deep-copy Tournament Candidate policy payloads before constructing `MultiHorizonPolicy`; already-corrupt shadow-only Candidate payloads are discarded and rebuilt from the current champion instead of surfacing NEEDS_RETRAIN to runtime.
+- Add regressions for bookkeeping-only parent changes during Correct and for self-healing an already-corrupt Tournament Candidate checksum.
+- No Correct-label semantics, Candidate lineage, parent Live policy learning, Offline-RL math or physical-control authority are changed.
+
 # 0.14.94 — 2026-09-26
 
 - Fix Apply Correct failing after durable admission with `TypeError: install.<locals>.correct_commit() got an unexpected keyword argument 'request_id'`.

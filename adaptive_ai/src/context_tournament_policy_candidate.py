@@ -12,6 +12,7 @@ in this module.
 """
 from __future__ import annotations
 
+import copy
 import json
 import math
 import threading
@@ -24,6 +25,7 @@ from context_tournament_metrics import PREQUENTIAL_EPOCH_VERSION, metric_row
 from context_tournament_primary_protection import primary_feature_ids, primary_replacement_gain
 from manual_context_learning import _migrate_schema
 from policy import MultiHorizonPolicy
+from policy_backend import verify_model_checksum
 from settings import OPTIONS
 
 
@@ -531,9 +533,22 @@ def install_policy_candidates(service):
             return None
         expected_revision = str(model.get("evaluation_champion_revision") or getattr(policy, "model_revision", "") or "")
         raw = model.get("candidate_policy") if isinstance(model.get("candidate_policy"), dict) else None
-        valid = bool(raw and list((raw.get("schema") or {}).get("entities") or []) == target_schema
+        checksum_valid = bool(raw and verify_model_checksum(raw))
+        valid = bool(checksum_valid
+                     and list((raw.get("schema") or {}).get("entities") or []) == target_schema
                      and str(model.get("candidate_source_model_revision") or "") == expected_revision
                      and int(model.get("candidate_contract_version") or 0) == CONTRACT_VERSION)
+        if raw and not checksum_valid:
+            # Older builds could deserialize the nested Candidate payload by reference.
+            # Lazy decay/training then mutated the persisted dict behind its checksum.
+            # Treat that shadow-only payload as disposable and rebuild it from the
+            # champion; never propagate NEEDS_RETRAIN to the live agent.
+            model.pop("candidate_policy", None)
+            model["candidate_model_revision"] = None
+            model["candidate_training_samples"] = 0
+            model["candidate_blocked_reason"] = "candidate_policy_checksum_reset"
+            candidate_cache.pop((aid, str(challenger)), None)
+            raw = None
         key = (aid, str(challenger))
         with getattr(service.engine, "lock", threading.RLock()):
             states = dict(getattr(service.engine, "state_map", {}) or {})
@@ -542,8 +557,10 @@ def install_policy_candidates(service):
             cached = candidate_cache.get(key)
             if cached is not None and str(cached.model_revision) == str(raw.get("model_revision") or ""):
                 return cached
-            candidate = MultiHorizonPolicy(agent, states, registry, set(), model=raw,
-                                           relevance_scores=None, context_engine=getattr(service.engine, "context", None))
+            candidate = MultiHorizonPolicy(
+                agent, states, registry, set(), model=copy.deepcopy(raw),
+                relevance_scores=None, context_engine=getattr(service.engine, "context", None)
+            )
             candidate_cache[key] = candidate
             return candidate
         candidate = MultiHorizonPolicy(agent, states, registry, set(), model=policy.serialize(),
@@ -739,13 +756,16 @@ def install_policy_candidates(service):
         actions = [float(x) for x in action_values(policy.agent)]
         model = original_load(aid, challenger, len(actions)) if actions else {}
         raw = model.get("candidate_policy") if isinstance(model.get("candidate_policy"), dict) else None
-        if not raw or list((raw.get("schema") or {}).get("entities") or []) != list(new_entities):
+        if (not raw or not verify_model_checksum(raw)
+                or list((raw.get("schema") or {}).get("entities") or []) != list(new_entities)):
             return base_migrate(policy, new_entities, new_meta)
         with getattr(service.engine, "lock", threading.RLock()):
             states = dict(getattr(service.engine, "state_map", {}) or {})
             registry = dict(getattr(service.engine, "entity_registry", {}) or {})
-        candidate = MultiHorizonPolicy(policy.agent, states, registry, set(), model=raw,
-                                       relevance_scores=None, context_engine=getattr(service.engine, "context", None))
+        candidate = MultiHorizonPolicy(
+            policy.agent, states, registry, set(), model=copy.deepcopy(raw),
+            relevance_scores=None, context_engine=getattr(service.engine, "context", None)
+        )
         old_entities = list(policy.schema.entities)
         policy.schema, policy.heads = candidate.schema, candidate.heads
         policy.model_revision = candidate.model_revision
