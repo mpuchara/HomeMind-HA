@@ -314,11 +314,10 @@ class SQLiteTemporalTracker:
         self.conn = sqlite3.connect(store.path, timeout=30)
         self.conn.row_factory = sqlite3.Row
         context_options = dict(getattr(context, "options", {}) or {})
+        # Keep the realtime/parent tracker at the historical 2 MB cache. Only an
+        # isolated worker receives the larger effective value from its resource profile.
         sqlite_cache_mb = int(
-            context_options.get(
-                "training_worker_effective_sqlite_cache_mb",
-                context_options.get("training_sqlite_cache_mb", 32),
-            ) or 2
+            context_options.get("training_worker_effective_sqlite_cache_mb", 2) or 2
         )
         sqlite_cache_mb = max(2, min(64, sqlite_cache_mb))
         self.sqlite_cache_kib = sqlite_cache_mb * 1024
