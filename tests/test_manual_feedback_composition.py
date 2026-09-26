@@ -6,8 +6,48 @@ must not define another process_agent wrapper of its own.
 """
 import inspect
 import unittest
+from types import SimpleNamespace
+from unittest.mock import Mock, patch
 
 import manual_feedback_live_isolation
+import manual_feedback_workflow
+
+
+class ManualFeedbackWorkflowSignatureTests(unittest.TestCase):
+    def test_correct_wrapper_preserves_durable_request_id_keyword(self):
+        original_commit = Mock(return_value={
+            "ok": True,
+            "child_generation_id": "candidate:g1",
+        })
+        manager = SimpleNamespace(
+            workflow_add_correct_label=Mock(),
+            workflow_undo_correct_label=Mock(),
+            workflow_correct_commit=original_commit,
+            workflow_change_decision=Mock(),
+            workflow_correct_point=Mock(),
+            store=SimpleNamespace(get_model=lambda _agent_id: {"version": 1}),
+            engine=SimpleNamespace(models={}, manual_feedback_journal=None),
+        )
+        generation = {
+            "generation_id": "live:g0",
+            "root_agent_id": "agent-1",
+        }
+        agent = {"id": "agent-1"}
+
+        with patch.object(
+            manual_feedback_workflow,
+            "_resolve_generation",
+            return_value=(generation, agent),
+        ):
+            manual_feedback_workflow.install(manager)
+            result = manager.workflow_correct_commit(
+                "live:g0", request_id="req-correct-1"
+            )
+
+        original_commit.assert_called_once_with(
+            "live:g0", request_id="req-correct-1"
+        )
+        self.assertEqual(result["child_generation_id"], "candidate:g1")
 
 
 class ManualFeedbackCompositionTests(unittest.TestCase):
