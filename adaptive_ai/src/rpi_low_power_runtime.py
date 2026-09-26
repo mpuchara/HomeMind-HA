@@ -19,10 +19,10 @@ import time
 from training_budget import TRAINING_BUDGET
 
 
-CONTRACT_VERSION = 6
+CONTRACT_VERSION = 7
 DEFAULT_ARCHIVE_BATCH_ROWS = 16
 DEFAULT_EXPERIENCE_BATCH_ROWS = 128
-DEFAULT_TRAINING_DUTY_CYCLE = 0.65
+DEFAULT_TRAINING_DUTY_CYCLE = 0.85
 DEFAULT_MAX_THROTTLE_SLEEP_SECONDS = 0.50
 DEFAULT_MAX_CONTINUOUS_WORK_MS = 35
 DEFAULT_REALTIME_MAX_BURST_SECONDS = 0.45
@@ -38,7 +38,7 @@ def _clamp(value, low, high):
 def _budget_pause(active_seconds, duty_cycle, max_sleep_seconds):
     """Return cooperative sleep needed for active/(active+sleep) ~= duty_cycle."""
     active = max(0.0, float(active_seconds))
-    duty = _clamp(float(duty_cycle), 0.15, 0.70)
+    duty = _clamp(float(duty_cycle), 0.15, 0.90)
     max_sleep = _clamp(float(max_sleep_seconds), 0.25, 5.0)
     return _clamp(active * (1.0 - duty) / max(duty, 1e-6), 0.005, max_sleep)
 
@@ -53,14 +53,37 @@ def install(core, manager):
         core.OPTIONS["agent_training_chunk_hours"] = 6
     if int(core.OPTIONS.get("history_background_pause_ms", 500) or 0) == 500:
         core.OPTIONS["history_background_pause_ms"] = 1500
-    current_duty = float(core.OPTIONS.get("training_cpu_duty_cycle", 0.65) or 0.65)
-    if current_duty in (0.20, 0.25, 0.55):
+    current_duty = float(
+        core.OPTIONS.get("training_cpu_duty_cycle", DEFAULT_TRAINING_DUTY_CYCLE)
+        or DEFAULT_TRAINING_DUTY_CYCLE
+    )
+    if current_duty in (0.20, 0.25, 0.55, 0.65):
         core.OPTIONS["training_cpu_duty_cycle"] = DEFAULT_TRAINING_DUTY_CYCLE
     core.OPTIONS.setdefault("training_cpu_duty_cycle", DEFAULT_TRAINING_DUTY_CYCLE)
     core.OPTIONS.setdefault("training_archive_batch_rows", DEFAULT_ARCHIVE_BATCH_ROWS)
     if int(core.OPTIONS.get("training_experience_batch_rows", DEFAULT_EXPERIENCE_BATCH_ROWS) or DEFAULT_EXPERIENCE_BATCH_ROWS) == 64:
         core.OPTIONS["training_experience_batch_rows"] = DEFAULT_EXPERIENCE_BATCH_ROWS
     core.OPTIONS.setdefault("training_experience_batch_rows", DEFAULT_EXPERIENCE_BATCH_ROWS)
+
+    # 0.14.96 RAM-first migration. Only values that were shipped defaults are raised;
+    # explicit lower user limits remain authoritative.
+    if int(core.OPTIONS.get("training_replay_ram_cache_rows", 65536) or 0) == 16384:
+        core.OPTIONS["training_replay_ram_cache_rows"] = 65536
+    if int(core.OPTIONS.get("training_replay_ram_cache_entry_rows", 2048) or 0) == 1024:
+        core.OPTIONS["training_replay_ram_cache_entry_rows"] = 2048
+    if int(core.OPTIONS.get("training_home_context_cache_entries", 64) or 0) == 32:
+        core.OPTIONS["training_home_context_cache_entries"] = 64
+    if int(core.OPTIONS.get("training_home_context_cache_units", 32768) or 0) == 8192:
+        core.OPTIONS["training_home_context_cache_units"] = 32768
+    if int(core.OPTIONS.get("training_worker_memory_limit_mb", 1024) or 0) == 520:
+        core.OPTIONS["training_worker_memory_limit_mb"] = 1024
+    core.OPTIONS.setdefault("training_sqlite_cache_mb", 32)
+    core.OPTIONS.setdefault("training_worker_memory_floor_mb", 256)
+    core.OPTIONS.setdefault("training_worker_memory_total_fraction", 0.30)
+    core.OPTIONS.setdefault("training_worker_memory_available_fraction", 0.50)
+    core.OPTIONS.setdefault("training_worker_memory_reserve_mb", 512)
+    core.OPTIONS.setdefault("training_worker_memory_unknown_fallback_mb", 520)
+
     core.OPTIONS.setdefault(
         "training_throttle_max_sleep_seconds", DEFAULT_MAX_THROTTLE_SLEEP_SECONDS
     )
@@ -79,7 +102,7 @@ def install(core, manager):
     duty = _clamp(
         float(core.OPTIONS.get("training_cpu_duty_cycle", DEFAULT_TRAINING_DUTY_CYCLE)),
         0.15,
-        0.70,
+        0.90,
     )
     batch_rows = int(
         _clamp(
@@ -203,6 +226,19 @@ def install(core, manager):
             "realtime_cooldown_seconds": realtime_cooldown,
             "candidate_idle_poll_seconds": DEFAULT_CANDIDATE_IDLE_POLL_SECONDS,
             "maintenance_interval_seconds": MAINTENANCE_INTERVAL_SECONDS,
+            "training_memory_strategy": "adaptive_ram_first_worker_profile_v1",
+            "training_memory_ceiling_mb": int(
+                core.OPTIONS.get("training_worker_memory_limit_mb", 1024) or 1024
+            ),
+            "training_replay_ram_cache_rows": int(
+                core.OPTIONS.get("training_replay_ram_cache_rows", 65536) or 0
+            ),
+            "training_home_context_cache_entries": int(
+                core.OPTIONS.get("training_home_context_cache_entries", 64) or 0
+            ),
+            "training_sqlite_cache_mb": int(
+                core.OPTIONS.get("training_sqlite_cache_mb", 32) or 32
+            ),
             **budget,
         }
 
