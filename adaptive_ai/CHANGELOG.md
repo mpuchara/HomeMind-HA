@@ -1,3 +1,12 @@
+# 0.14.94 — 2026-09-26
+
+- Fix Apply Correct failing after durable admission with `TypeError: install.<locals>.correct_commit() got an unexpected keyword argument 'request_id'`.
+- Root cause: `manual_feedback_workflow` wrapped the newer `workflow_correct_commit(ref, request_id=None)` API with an older/narrower `correct_commit(ref)` signature, so the async durable Correct queue could not pass its idempotency key through the adapter.
+- The wrapper now accepts `request_id` and forwards it unchanged to `agent_workflow_actions.workflow_correct_commit`.
+- Preserve the existing durable request/idempotency contract: one accepted Apply Correct request remains one correction operation and cannot create duplicate child Candidates on replay.
+- Add a regression test that installs the manual-feedback wrapper and verifies the durable request ID reaches the wrapped commit method.
+- No Correct-label semantics, Candidate lineage, parent-model immutability, training math or physical-control authority are changed.
+
 # 0.14.93 — 2026-09-25
 
 - Fix a fresh **Full Rebuild** on 0.14.92 reaching the isolated-worker 520 MB RSS guard at 0% before the first normal training heartbeat (`phase=unknown`).

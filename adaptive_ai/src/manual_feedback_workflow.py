@@ -219,10 +219,13 @@ def install(manager):
             "ui_message": journal.ui_summary(feedback),
         }
 
-    def correct_commit(ref):
+    def correct_commit(ref, request_id=None):
         generation, agent = _resolve_generation(manager, ref)
         before = _model_snapshot(manager, agent["id"])
-        result = original_commit(ref)
+        # The durable Correct queue owns request_id idempotency. This adapter must
+        # preserve that public workflow signature when wrapping agent_workflow_actions;
+        # otherwise the async queue fails after admission with an unexpected keyword.
+        result = original_commit(ref, request_id=request_id)
         after = _model_snapshot(manager, agent["id"])
         if before != after:
             _restore_parent(manager, agent["id"], before)

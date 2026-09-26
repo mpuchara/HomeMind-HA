@@ -1,9 +1,9 @@
 {
-  "version": "0.14.93",
-  "release_date": "2026-09-25",
-  "base_version": "0.14.92",
-  "base_commit": "4d7b05c9564024a103e7398273bf9371dc885b45",
-  "release_status": "hotfix-isolated-worker-bootstrap-memory",
+  "version": "0.14.94",
+  "release_date": "2026-09-26",
+  "base_version": "0.14.93",
+  "base_commit": "e9cc23acb7cdc0a42ecfabd003035bf93c25aee4",
+  "release_status": "hotfix-correct-request-id-wrapper",
   "pi4_profile_contract": "pi_training_profile_v2",
   "pi4_release_gate_contract": "pi4_release_gate_v1",
   "pi4_real_hardware_required": true,
@@ -552,5 +552,12 @@
     "diagnostics": "worker writes tiny bootstrap heartbeats before training imports, after imports, after context engine initialization, after HistoryManager initialization and immediately before train_from_archive; /proc telemetry now records total, anonymous, file-backed and shmem RSS",
     "memory_limit_mb": 520,
     "safety": "memory limit unchanged; no learning, reward, Candidate/Correct, Offline-RL or control semantics changed"
+  },
+  "hotfix_01494": {
+    "observed_failure": "Apply Correct was durably accepted, then async processing failed with TypeError: install.<locals>.correct_commit() got an unexpected keyword argument 'request_id'",
+    "root_cause": "manual_feedback_workflow wrapped workflow_correct_commit(ref, request_id=None) with a narrower correct_commit(ref) signature and dropped the durable request ID contract introduced by the async Correct queue",
+    "fix": "wrapper now accepts request_id and forwards it unchanged to agent_workflow_actions.workflow_correct_commit",
+    "regression": "unit test installs the feedback wrapper and asserts request_id is propagated to the wrapped Correct commit",
+    "safety": "no label semantics, Candidate lineage, parent-model immutability, learning math or physical-control behavior changed"
   }
 }
