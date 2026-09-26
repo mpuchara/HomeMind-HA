@@ -10,7 +10,6 @@ creation remains owned by agent_workflow_actions and the parent model stays immu
 """
 from __future__ import annotations
 
-import copy
 import time
 
 from agent_workflow_actions import _resolve_generation
@@ -19,17 +18,6 @@ from manual_feedback_unified import latest_feedback_since
 from teaching_rl import fingerprint as rl_fingerprint
 from training_budget import TRAINING_BUDGET
 
-
-def _model_snapshot(manager, agent_id):
-    model = manager.store.get_model(str(agent_id))
-    return copy.deepcopy(model) if model is not None else None
-
-
-def _restore_parent(manager, agent_id, model):
-    if model is None:
-        return
-    manager.store.save_model(str(agent_id), copy.deepcopy(model))
-    manager.engine.models.pop(str(agent_id), None)
 
 
 def _linked_feedback_for_label(manager, label_id):
@@ -221,15 +209,14 @@ def install(manager):
 
     def correct_commit(ref, request_id=None):
         generation, agent = _resolve_generation(manager, ref)
-        before = _model_snapshot(manager, agent["id"])
         # The durable Correct queue owns request_id idempotency. This adapter must
-        # preserve that public workflow signature when wrapping agent_workflow_actions;
-        # otherwise the async queue fails after admission with an unexpected keyword.
+        # preserve that public workflow signature when wrapping agent_workflow_actions.
+        # Parent-model immutability is already enforced inside agent_workflow_actions
+        # using the semantic model identity around child creation. Do not compare the
+        # raw persisted JSON here: Store-owned bookkeeping fields (_history_watermark,
+        # _benchmark_counts) may legitimately change without changing the policy, and
+        # rolling those changes back would discard valid concurrent runtime bookkeeping.
         result = original_commit(ref, request_id=request_id)
-        after = _model_snapshot(manager, agent["id"])
-        if before != after:
-            _restore_parent(manager, agent["id"], before)
-            raise RuntimeError("Correct modified the parent model in place")
         feedback_ids = _mark_correct_candidate(manager, generation, agent, result)
         if feedback_ids:
             result = dict(result)
@@ -239,15 +226,13 @@ def install(manager):
 
     def change_decision(ref, desired_value=None):
         generation, agent = _resolve_generation(manager, ref)
-        before = _model_snapshot(manager, agent["id"])
         journal = getattr(manager.engine, "manual_feedback_journal", None)
         previous_feedback = journal.latest(agent["id"], include_undone=True) if journal is not None else None
         started = time.time()
+        # agent_workflow_actions performs the authoritative semantic parent-model guard.
+        # This journal adapter must not add a second raw-JSON equality guard because
+        # Store-owned bookkeeping is intentionally outside policy identity.
         result = original_change(ref, desired_value)
-        after = _model_snapshot(manager, agent["id"])
-        if before != after:
-            _restore_parent(manager, agent["id"], before)
-            raise RuntimeError("Change decision modified the parent model in place")
 
         feedback = latest_feedback_since(
             journal, agent["id"], started - 0.01,
