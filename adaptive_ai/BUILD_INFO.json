@@ -8,7 +8,7 @@
   "pi4_release_gate_contract": "pi4_release_gate_v1",
   "pi4_real_hardware_required": true,
   "stage7_offline_rl_control_unlock": false,
-  "tests_passed": 1262,
+  "tests_passed": 1302,
   "profile": "rpi4-ram-first-complete-discovery-manual-agent-selection",
   "manual_agent_training": true,
   "max_concurrent_training_jobs": 1,
@@ -577,6 +577,7 @@
     "max_continuous_work_ms": 35,
     "worker_nice": 10,
     "max_concurrent_training_jobs": 1,
-    "safety": "resource scheduling/cache only; causal replay, rewards, Correct/Candidate lineage, Offline-RL policy math and physical-control authority unchanged"
+    "safety": "resource scheduling/cache only; causal replay, rewards, Correct/Candidate lineage, Offline-RL policy math and physical-control authority unchanged",
+    "unit_tests": 1302
   }
 }
