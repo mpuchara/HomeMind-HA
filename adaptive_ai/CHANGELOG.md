@@ -1,3 +1,14 @@
+# 0.14.97 — 2026-09-26
+
+- Fix long historical training stopping at a chunk boundary with `StaleTrainingJob: runtime topology/options changed while isolated training was running` after ordinary Home Assistant Entity Registry refreshes.
+- Root cause: the parent compared a **whole-home** structural fingerprint after every isolated chunk. On a home with ~1,300 registry entries, a change to any unrelated entity could reject an otherwise valid model even when the trained agent's selected inputs were unchanged.
+- Publication now validates only the target, explicit inputs, entities actually selected by the trained model / neural mask, and their device siblings (needed for device-level controllable-context exclusion).
+- A structural change to one of those training-relevant entities still rejects the result. Agent configuration changes and learning-semantic option changes still reject the result as before.
+- RAM/CPU/cache scheduling controls introduced in 0.14.96 are treated as non-semantic for an already-running job, so tuning worker memory or duty cycle cannot discard learned results by itself.
+- Add diagnostics listing the scoped validation size and any changed relevant entity IDs.
+- Add regressions for unrelated registry changes, selected-entity changes, device-sibling topology, non-semantic resource knobs and semantic learning options.
+- No Correct semantics, Candidate lineage, reward math, Offline-RL policy math or physical-control authority changed.
+
 # 0.14.96 — 2026-09-26
 
 - Switch explicit historical Train/Rebuild to a **RAM-first** resource profile while keeping one isolated heavy worker, `nice=10`, the 35 ms continuous-work slice and bounded realtime preemption.
