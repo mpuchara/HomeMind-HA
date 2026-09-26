@@ -285,9 +285,13 @@ class ExactPolicyPromotionTests(unittest.TestCase):
             repaired = service._model.get('candidate_policy')
             self.assertIsInstance(repaired, dict)
             self.assertTrue(verify_model_checksum(repaired))
+            # Rebuilding the corrupt payload is the contract. A later prediction-stage
+            # diagnostic may overwrite candidate_blocked_reason in this minimal fake
+            # engine, but it must never restore the stale training count/checksum.
+            self.assertEqual(service._model.get('candidate_training_samples'), 0)
             self.assertEqual(
-                service._model.get('candidate_blocked_reason'),
-                'candidate_policy_checksum_reset',
+                service._model.get('candidate_source_model_revision'),
+                live.model_revision,
             )
         finally:
             promotion._choose_schema_after_promotion = old_chooser
