@@ -110,13 +110,18 @@ class CandidateShadowDeferredTests(unittest.TestCase):
         self.assertEqual(len(self.executed), 1)
         self.assertEqual(self.executed[0]["state_revision"], 2)
 
-    def test_queue_is_bounded_and_drops_oldest_root(self):
+    def test_queue_is_bounded_and_worker_self_wakes_for_remaining_backlog(self):
         for idx in range(5):
             self.queue.enqueue(self.job(root=f"root-{idx}", revision=idx + 1))
         diag = self.queue.diagnostics()
         self.assertEqual(diag["queue_depth"], 4)
         self.assertEqual(diag["dropped"], 1)
         self.assertNotIn("root-0", diag["pending_roots"])
+        self.assertEqual(self.wake.calls, 1)
+
+        self.assertEqual(self.queue.drain(max_roots=2), 2)
+        self.assertEqual(self.queue.diagnostics()["queue_depth"], 2)
+        self.assertEqual(self.wake.calls, 2)
 
     def test_lineage_revision_change_keeps_gap_instead_of_mismatched_inference(self):
         self.queue.enqueue(self.job(generation_revision=7))
