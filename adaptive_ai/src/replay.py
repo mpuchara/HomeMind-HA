@@ -406,25 +406,33 @@ class SQLiteTemporalTracker:
             yield ids[offset:offset + cls.SQL_ENTITY_CHUNK]
 
     @staticmethod
-    def _row_order(row):
-        # entity_history ordering is (ts,id) with an integer primary key. Keep that exact
-        # tie-breaker in the base tracker; observation-contract v12 overrides this with
-        # its historical string-id merge ordering for archive + fast-journal rows.
+    def _availability_time(row):
+        value = row.get("_feature_received_time")
+        if value is None:
+            value = row.get("received_ts")
+        if value is None:
+            value = row.get("ts")
+        return float(value or 0.0)
+
+    @classmethod
+    def _row_order(cls, row):
+        # Feature vectors remain event-time ordered; receive time is only the causal
+        # availability tie-breaker. Legacy archive rows fall back to event time.
+        raw_id = row.get("id")
+        received = cls._availability_time(row)
+        try:
+            return (float(row.get("ts") or 0.0), received, 0, int(raw_id))
+        except (TypeError, ValueError):
+            return (float(row.get("ts") or 0.0), received, 1, str(raw_id or ""))
+
+    @classmethod
+    def _home_causal_order(cls, row):
         raw_id = row.get("id")
         try:
-            return (
-                float(row.get("ts") or 0.0),
-                float(row.get("_feature_received_time") or 0.0),
-                0,
-                int(raw_id),
-            )
+            suffix = (0, int(raw_id))
         except (TypeError, ValueError):
-            return (
-                float(row.get("ts") or 0.0),
-                float(row.get("_feature_received_time") or 0.0),
-                1,
-                str(raw_id or ""),
-            )
+            suffix = (1, str(raw_id or ""))
+        return (cls._availability_time(row), float(row.get("ts") or 0.0), *suffix)
 
     def _fetch_rows(self, sql, params):
         if self.query_cache is not None:
