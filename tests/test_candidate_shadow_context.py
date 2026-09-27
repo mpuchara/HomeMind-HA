@@ -140,12 +140,16 @@ class CandidateShadowExactContextTests(unittest.TestCase):
         self.engine.runtime[self.root["id"]]["last_inference_ts"] = 20.0
         policy = self.engine.policy(self.root)
         policy.features(exact, None, at_ts=20.25)
-        bundle = self.manager.after_live_process(self.root, outer)
+        receipt = self.manager.after_live_process(self.root, outer)
 
-        self.assertIsNotNone(bundle)
-        self.assertEqual(bundle["current"], 0.0)
-        self.assertEqual(bundle["ts"], 20.25)
-        self.assertEqual(bundle["results"][self.generation_id]["desired"], 1.0)
+        self.assertTrue(receipt["deferred"])
+        self.assertEqual(self.manager.candidate_shadow_async_diagnostics()["queue_depth"], 1)
+        self.assertEqual(self.manager.drain_deferred_candidate_shadow(max_roots=1), 1)
+        hot = self.manager.candidate_latest_runtime(self.generation_id)
+        self.assertIsNotNone(hot)
+        self.assertEqual(hot["current"], 0.0)
+        self.assertEqual(hot["ts"], 20.25)
+        self.assertEqual(hot["desired"], 1.0)
         with self.store.conn() as c:
             row = dict(c.execute(
                 "SELECT * FROM candidate_generation_decisions WHERE generation_id=? ORDER BY ts DESC LIMIT 1",
@@ -160,6 +164,8 @@ class CandidateShadowExactContextTests(unittest.TestCase):
         self.manager.before_live_process(self.root, outer)
         result = self.manager.after_live_process(self.root, outer)
         self.assertIsNone(result)
+        self.assertEqual(self.manager.candidate_shadow_async_diagnostics()["queue_depth"], 0)
+        self.assertEqual(self.manager.drain_deferred_candidate_shadow(max_roots=1), 0)
         with self.store.conn() as c:
             n = c.execute("SELECT COUNT(*) FROM candidate_generation_decisions WHERE generation_id=?",
                           (self.generation_id,)).fetchone()[0]
