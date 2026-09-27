@@ -160,6 +160,9 @@ DEFAULT_OPTIONS = {
     # test on the identical rows. Small numerical wins no longer replace Ridge.
     "tiny_mlp_tournament_min_gain": 0.03,
     "tiny_mlp_tournament_significance_alpha": 0.05,
+    # Eight discordant rows is the smallest n where a 7:1 paired advantage can
+    # pass alpha=.05 (9/256 ~= .035), avoiding promotion on a handful of perfect wins.
+    "tiny_mlp_tournament_min_discordant_pairs": 8,
     "tiny_mlp_max_parameters": 50000,
     "tiny_mlp_max_serialized_bytes": 524288,
     # Stage-5 Manual Correct: incremental neural fine-tune. Explicit labels remain

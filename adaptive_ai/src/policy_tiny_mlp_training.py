@@ -419,6 +419,7 @@ def tournament_result(
     minimum_samples,
     minimum_gain=0.03,
     significance_alpha=0.05,
+    minimum_discordant_pairs=8,
     parameter_count=None,
     serialized_bytes=None,
     max_parameters=50000,
@@ -450,14 +451,19 @@ def tournament_result(
     min_gain = max(0.0, min(1.0, float(minimum_gain)))
     gain_passed = bool(gain + 1e-12 >= min_gain)
     alpha = max(1e-6, min(0.50, float(significance_alpha)))
+    min_discordant = max(1, min(4096, int(minimum_discordant_pairs)))
     mlp_only = int(paired.get("mlp_only_correct") or 0)
     ridge_only = int(paired.get("ridge_only_correct") or 0)
+    discordant = mlp_only + ridge_only
+    discordant_pairs_passed = bool(
+        paired_complete and discordant >= min_discordant
+    )
     p_value = (
         exact_paired_mlp_win_p_value(mlp_only, ridge_only)
         if paired_complete else None
     )
     significance_passed = bool(
-        paired_complete
+        discordant_pairs_passed
         and mlp_only > ridge_only
         and p_value is not None
         and p_value <= alpha
@@ -485,13 +491,15 @@ def tournament_result(
         reason = "mlp_resource_gate_failed"
     elif not gain_passed:
         reason = "mlp_gain_below_practical_minimum"
+    elif not discordant_pairs_passed:
+        reason = "mlp_holdout_discordant_pairs_insufficient"
     elif not significance_passed:
         reason = "mlp_paired_improvement_not_significant"
     else:
         reason = "mlp_meaningfully_and_significantly_better_on_identical_holdout"
     return {
-        "contract": "ridge_vs_tiny_mlp_paired_holdout_v2",
-        "selection_bias": "same_rows_same_metric_practical_gain_plus_exact_paired_significance_required",
+        "contract": "ridge_vs_tiny_mlp_paired_holdout_v3",
+        "selection_bias": "same_rows_same_metric_practical_gain_min_discordant_plus_exact_paired_significance_required",
         "automatic_physical_switch": False,
         "samples": mlp_samples,
         "same_holdout_rows": same_rows,
@@ -502,6 +510,9 @@ def tournament_result(
         "gain_passed": gain_passed,
         "significance_test": "exact_one_sided_mcnemar_binomial",
         "significance_alpha": float(alpha),
+        "minimum_discordant_pairs": int(min_discordant),
+        "discordant_pairs": int(discordant),
+        "discordant_pairs_passed": discordant_pairs_passed,
         "significance_p_value": p_value,
         "significance_passed": significance_passed,
         "paired_comparison": paired,

@@ -3060,6 +3060,10 @@ class HistoryManager(threading.Thread):
                     significance_alpha=float(
                         OPTIONS.get("tiny_mlp_tournament_significance_alpha", 0.05)
                     ),
+                    minimum_discordant_pairs=int(
+                        OPTIONS.get("tiny_mlp_tournament_min_discordant_pairs", 8)
+                        or 8
+                    ),
                     parameter_count=backend.parameter_count,
                     serialized_bytes=serialized_bytes,
                     max_parameters=int(
