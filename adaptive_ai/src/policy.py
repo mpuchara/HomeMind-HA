@@ -210,9 +210,16 @@ class DiagonalLinUCB:
         if correct:
             self.validation_pred_correct_weight[predicted] += weight
 
-    def update(self, action_idx, x, reward, sample_ts=None):
+    def update(self, action_idx, x, reward, sample_ts=None, sample_mass=1.0):
         self.decay()
-        weight = self.sample_weight(sample_ts)
+        try:
+            sample_mass = float(sample_mass)
+        except (TypeError, ValueError):
+            sample_mass = 1.0
+        if not math.isfinite(sample_mass):
+            sample_mass = 1.0
+        sample_mass = max(0.0, sample_mass)
+        weight = self.sample_weight(sample_ts) * sample_mass
         reward = clamp(float(reward), -1.0, 1.0)
         aa, bb = self.a[action_idx], self.b[action_idx]
         ss, sq = self.ctx_sum[action_idx], self.ctx_sq[action_idx]
@@ -349,19 +356,23 @@ class MultiHorizonPolicy(PolicyBackend):
         _, horizon, chosen, conf, arms = candidates[0]
         return chosen, conf, arms, horizon, chosen.get("support", 0.0), chosen.get("novelty", 1.0)
 
-    def update(self, horizon, action_idx, features, reward, sample_ts=None):
+    def update(self, horizon, action_idx, features, reward, sample_ts=None, sample_mass=1.0):
         with self.lock:
-            self.heads[int(horizon)].update(action_idx, features, reward, sample_ts)
+            self.heads[int(horizon)].update(
+                action_idx, features, reward, sample_ts, sample_mass=sample_mass
+            )
             # Online feedback changes the live model provenance but not the identity of
             # the champion being evaluated by Context Tournament. Prequential paired
             # evidence remains valid while the active policy learns online. A fresh
             # Train/Rebuild policy instance receives a new tournament_revision.
             self.model_revision = str(uuid.uuid4())
 
-    def update_all(self, action_idx, features_by_horizon, reward):
+    def update_all(self, action_idx, features_by_horizon, reward, sample_mass=1.0):
         for h, features in features_by_horizon.items():
             if int(h) in self.heads:
-                self.heads[int(h)].update(action_idx, features, reward)
+                self.heads[int(h)].update(
+                    action_idx, features, reward, sample_mass=sample_mass
+                )
 
     def export(self):
         return {"model_revision": self.model_revision, "tournament_revision": self.tournament_revision,
