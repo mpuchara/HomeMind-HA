@@ -75,15 +75,15 @@ class Stage6TournamentTests(unittest.TestCase):
         self.assertEqual(exact_paired_mlp_win_p_value(0, 0), 1.0)
 
     def test_large_accuracy_gain_without_paired_significance_keeps_ridge(self):
-        ridge = counts(20, [7, 8], [10, 10])
+        ridge = counts(20, [7, 7], [10, 10])
         mlp = mlp_metrics(
             .90, 20, [9, 9], [10, 10],
             {
-                "both_correct": 14,
-                "mlp_only_correct": 4,
-                "ridge_only_correct": 1,
-                "both_wrong": 1,
-                "discordant": 5,
+                "both_correct": 12,
+                "mlp_only_correct": 6,
+                "ridge_only_correct": 2,
+                "both_wrong": 0,
+                "discordant": 8,
             },
         )
         result = self.result(ridge, mlp)
