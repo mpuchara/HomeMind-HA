@@ -88,6 +88,11 @@ class RuntimeCompositionRoot:
                     "candidate_contract": getattr(
                         manager, "candidate_neural_shadow_contract", None
                     ),
+                    "hybrid": (
+                        engine.hybrid_policy.diagnostics()
+                        if getattr(engine, "hybrid_policy", None) is not None
+                        else None
+                    ),
                 }
                 if getattr(engine, "tiny_mlp_shadow", None) is not None
                 else None
@@ -158,6 +163,7 @@ class RuntimeCompositionRoot:
         from runtime_http import install_dispatch, register_feedback_routes, register_promotion_routes
         from runtime_debug_log import register_runtime_debug_routes
         from tiny_mlp_shadow import install as install_tiny_mlp_shadow
+        from hybrid_policy_runtime import install as install_hybrid_policy_runtime
         from candidate_neural_shadow import install as install_candidate_neural_shadow
         from trial_knowledge import install as install_trial_knowledge
         from automatic_correct_rewards import (
@@ -216,6 +222,7 @@ class RuntimeCompositionRoot:
         # composition. It wraps the completed Shadow inference result only and has no
         # ActionIntent/Executor path.
         install_tiny_mlp_shadow(self.core)
+        install_hybrid_policy_runtime(self.core)
         manager = install_candidate_neural_shadow(manager)
         engine.agent_candidates = manager
 
