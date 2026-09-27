@@ -79,7 +79,11 @@ class ExplicitRouteRegistry:
             "fallback": "legacy_handler_chain_for_unmigrated_routes",
             "idempotency": "method+route_name_replaces_in_place_without_stacking",
             "mutable_module_globals": False,
-            def _make_dispatch(base, http_method, fallback_registry):
+            "binding": dict(self._binding),
+        }
+
+
+def _make_dispatch(base, http_method, fallback_registry):
     def dispatched(http):
         # Production ownership is attached to the concrete ThreadingHTTPServer. This
         # prevents another runtime using the same base Handler class from rebinding us.
