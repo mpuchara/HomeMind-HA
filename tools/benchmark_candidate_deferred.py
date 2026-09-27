@@ -150,6 +150,7 @@ def run(iterations=800, roots=8):
         "expected_drained": roots,
         "latest_revision_parity": actual_latest == expected_latest,
         "wake_calls": wake.calls,
+        "expected_wake_calls": 1,
     }
     off_summary = summary(off)
     active_summary = summary(active)
@@ -174,6 +175,7 @@ def run(iterations=800, roots=8):
             and before["dropped"] == 0
             and drained == roots
             and actual_latest == expected_latest
+            and wake.calls == 1
         ),
     }
 
