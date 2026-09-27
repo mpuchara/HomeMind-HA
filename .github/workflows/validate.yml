@@ -45,7 +45,10 @@ jobs:
         run: python tools/benchmark_tiny_mlp.py --iterations 200 --compact
       - name: 0.14.99 full Hybrid + Candidate hot-path baseline
         if: matrix.python == '3.11'
-        run: python tools/benchmark_hybrid_inference.py --iterations 80 --entities 8 --compact | tee hybrid-hot-path-baseline.json
+        run: |
+          python tools/benchmark_hybrid_inference.py --iterations 80 --entities 8 --compact > hybrid-hot-path-baseline.json
+          test -s hybrid-hot-path-baseline.json
+          cat hybrid-hot-path-baseline.json
       - name: Upload 0.14.99 Hybrid hot-path baseline
         if: matrix.python == '3.11'
         uses: actions/upload-artifact@v4
