@@ -59,6 +59,7 @@ class HybridPolicyService:
         ridge_support,
         ridge_novelty,
         metric_prefix="",
+        home_provider=None,
     ):
         base = {
             "evaluated": True,
@@ -108,6 +109,8 @@ class HybridPolicyService:
             }
             if metric_prefix:
                 predict_kwargs["metric_prefix"] = metric_prefix
+            if home_provider is not None:
+                predict_kwargs["home_provider"] = home_provider
             result = self.neural.predict_persisted(
                 agent,
                 policy,
