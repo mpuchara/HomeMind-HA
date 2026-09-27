@@ -980,6 +980,23 @@ def install(manager):
                 ):
                     row["ts"] = new_ts
                     changed += 1
+            # _decorate_result stores desired_since_ts in the per-root generation state.
+            # If a decision edge began on this deferred event, re-anchor that state too;
+            # otherwise the next unchanged Candidate observation would resurrect worker
+            # execution time and bias paired lead-time evidence.
+            root_rt = shadow_runtime.get(root_id)
+            if root_rt is not None:
+                for state in (root_rt.get("generation_state") or {}).values():
+                    try:
+                        if abs(float(state.get("desired_since_ts")) - old_ts) <= 1e-6:
+                            state["desired_since_ts"] = new_ts
+                    except (TypeError, ValueError):
+                        pass
+                try:
+                    if abs(float(root_rt.get("last_persist") or 0.0) - old_ts) <= 1e-6:
+                        root_rt["last_persist"] = new_ts
+                except (TypeError, ValueError):
+                    pass
         return changed
 
     def _latest_shadow(generation_id):
