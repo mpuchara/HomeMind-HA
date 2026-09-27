@@ -439,6 +439,7 @@ class Engine(threading.Thread):
         new_state = data.get("new_state")
         if not entity_id:
             return
+        received_ts = now_ts()
         with self.lock:
             old_state = self.state_map.get(entity_id)
             if old_state == new_state:
@@ -454,7 +455,7 @@ class Engine(threading.Thread):
             else:
                 self.state_map[entity_id] = new_state
             self.last_state_count = len(self.state_map)
-            self.last_ws_event = now_ts()
+            self.last_ws_event = received_ts
             self.last_event_monotonic = time.monotonic()
             self.last_trigger_entity = entity_id
             self.dirty_entities.add(entity_id)
@@ -466,12 +467,17 @@ class Engine(threading.Thread):
                 float(OPTIONS.get("training_realtime_event_priority_seconds", 0.30)),
                 reason="ha_state_changed",
             )
-            self.context.observe(entity_id, new_state, now_ts())
-        HA.last_ok = now_ts(); HA.last_error = None
+            event_ts = parse_ts((new_state or {}).get("last_updated") or
+                                (new_state or {}).get("last_changed")) or received_ts
+            self.context.observe(
+                entity_id, new_state, received_ts,
+                event_ts=event_ts, received_ts=received_ts,
+            )
+        HA.last_ok = received_ts; HA.last_error = None
         if new_state is not None:
-            ts = parse_ts(new_state.get("last_updated") or new_state.get("last_changed")) or now_ts()
+            ts = parse_ts(new_state.get("last_updated") or new_state.get("last_changed")) or received_ts
             self.temporal_history.add(entity_id, ts, self._temporal_state(new_state))
-            self._queue_archive_state(new_state)
+            self._queue_archive_state(new_state, received_ts=received_ts)
         # A state transition can be the precursor to an action; wake inference now instead
         # of waiting for a whole-state REST poll.
         self.wake_event.set()
@@ -496,11 +502,11 @@ class Engine(threading.Thread):
             "last_changed": st.get("last_changed"), "last_updated": st.get("last_updated"),
         }
 
-    def _queue_archive_state(self, st, force=False):
+    def _queue_archive_state(self, st, force=False, received_ts=None):
         entity_id = st.get("entity_id")
         if not entity_id:
             return
-        now = now_ts()
+        now = float(received_ts if received_ts is not None else now_ts())
         compact_attrs = self._compact_attrs(st)
         fingerprint = json.dumps([st.get("state"), compact_attrs], sort_keys=True, separators=(",", ":"), default=str)
         with self.lock:
@@ -512,7 +518,7 @@ class Engine(threading.Thread):
                 return
             ts = parse_ts(st.get("last_updated") or st.get("last_changed")) or now
             user_id = (st.get("context") or {}).get("user_id")
-            self.pending_archive.append((entity_id, ts, st.get("state"), compact_attrs, user_id, "live"))
+            self.pending_archive.append((entity_id, ts, st.get("state"), compact_attrs, user_id, "live", now))
             self.archive_seen[entity_id] = fingerprint
             self.archive_last_ts[entity_id] = now
 
@@ -560,6 +566,7 @@ class Engine(threading.Thread):
             raise
 
         state_map = {s["entity_id"]: s for s in (states or [])}
+        poll_received_ts = now_ts()
         with self.lock:
             # A REST request may finish after newer websocket events. Never rewind them.
             for eid, old in self.state_map.items():
@@ -586,11 +593,16 @@ class Engine(threading.Thread):
             if topology_changed:
                 self.context.configure(state_map)
 
-            event_ts = now_ts()
             for eid in changed_eids:
                 self.state_revision += 1
                 self.entity_revisions[eid] = self.state_revision
-                self.context.observe(eid, state_map.get(eid), event_ts, learn=not initial)
+                current_state = state_map.get(eid)
+                event_ts = parse_ts((current_state or {}).get("last_updated") or
+                                    (current_state or {}).get("last_changed")) or poll_received_ts
+                self.context.observe(
+                    eid, current_state, poll_received_ts, learn=not initial,
+                    event_ts=event_ts, received_ts=poll_received_ts,
+                )
                 # The initial REST snapshot is not a realtime transition. Marking
                 # thousands of startup entities dirty causes an immediate all-agent
                 # burst and defeats HTTP-first startup. A proactive pass after the
@@ -619,9 +631,9 @@ class Engine(threading.Thread):
             st = state_map.get(eid)
             if st is None:
                 continue
-            ts = parse_ts(st.get("last_updated") or st.get("last_changed")) or now_ts()
+            ts = parse_ts(st.get("last_updated") or st.get("last_changed")) or poll_received_ts
             self.temporal_history.add(eid, ts, self._temporal_state(st))
-            self._queue_archive_state(st)
+            self._queue_archive_state(st, received_ts=poll_received_ts)
         self.flush_archive(force=False)
         if initial or changed_eids:
             self.wake_event.set()
