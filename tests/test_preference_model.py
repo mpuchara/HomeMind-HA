@@ -104,7 +104,7 @@ class LightingPreferenceModelTests(unittest.TestCase):
 
     def test_predict_skips_context_signature_when_no_feedback_exists(self):
         policy = SimpleNamespace(actions=[0.0, 1.0])
-        with patch("preference_model.signature", side_effect=AssertionError("signature must stay off no-feedback hot path")):
+        with patch("teaching.signature", side_effect=AssertionError("signature must stay off no-feedback hot path")):
             result = self.model.predict(self.agent, policy, {}, None, self.now)
         self.assertFalse(result["applied"])
         self.assertEqual(result["reason"], "no_matching_explicit_preference")
