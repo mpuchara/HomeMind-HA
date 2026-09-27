@@ -112,20 +112,24 @@ def install(manager):
                 ridge_novelty,
             ) = ridge
             hybrid_started_ns = time.perf_counter_ns()
+            hybrid_kwargs = {
+                "timestamp": float(event_ts),
+                "ridge_chosen": ridge_chosen,
+                "ridge_confidence": ridge_confidence,
+                "ridge_arms": ridge_arms,
+                "ridge_horizon": ridge_horizon,
+                "ridge_support": ridge_support,
+                "ridge_novelty": ridge_novelty,
+                "metric_prefix": "candidate_",
+            }
+            if home_provider is not None:
+                hybrid_kwargs["home_provider"] = home_provider
             selected = hybrid.evaluate(
                 agent,
                 policy,
                 state_map,
                 temporal,
-                timestamp=float(event_ts),
-                ridge_chosen=ridge_chosen,
-                ridge_confidence=ridge_confidence,
-                ridge_arms=ridge_arms,
-                ridge_horizon=ridge_horizon,
-                ridge_support=ridge_support,
-                ridge_novelty=ridge_novelty,
-                metric_prefix="candidate_",
-                home_provider=home_provider,
+                **hybrid_kwargs,
             )
             observe_elapsed(manager.engine, "candidate_hybrid_policy_total", hybrid_started_ns)
             if not bool((selected or {}).get("applied")):
@@ -158,15 +162,19 @@ def install(manager):
 
         # Compatibility for non-final entrypoints that have not installed the hybrid
         # service yet: retain the previous neural Shadow observation behavior.
+        predict_kwargs = {
+            "timestamp": float(event_ts),
+            "require_selected": True,
+            "metric_prefix": "candidate_",
+        }
+        if home_provider is not None:
+            predict_kwargs["home_provider"] = home_provider
         result = service.predict_persisted(
             agent,
             policy,
             state_map,
             temporal,
-            timestamp=float(event_ts),
-            require_selected=True,
-            metric_prefix="candidate_",
-            home_provider=home_provider,
+            **predict_kwargs,
         )
         if result is None:
             raise RuntimeError("selected neural Candidate model is unavailable")
