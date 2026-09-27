@@ -631,7 +631,7 @@ class TinyMLPShadowService:
 
     def predict_persisted(
         self, agent, policy, state_map, temporal, *, timestamp,
-        require_selected=False, metric_prefix="",
+        require_selected=False, metric_prefix="", home_provider=None,
     ):
         aid = str(agent["id"])
         source_policy_revision = self._source_policy_revision(policy)
@@ -677,7 +677,7 @@ class TinyMLPShadowService:
         observation_started_ns = time.perf_counter_ns()
         observation = observation_as_of(
             mask, state_map, temporal, float(timestamp), agent,
-            home_provider=self.engine.context,
+            home_provider=home_provider or self.engine.context,
         )
         observe_elapsed(self.engine, str(metric_prefix or "") + "mlp_observation_construction", observation_started_ns)
         forward_started_ns = time.perf_counter_ns()
