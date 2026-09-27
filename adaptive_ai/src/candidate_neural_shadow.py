@@ -83,11 +83,21 @@ def install(manager):
                 raise RuntimeError("selected neural Candidate Ridge baseline is unavailable")
             policy = manager.engine.policy(agent)
 
+        temporal_provider = getattr(manager, "candidate_shadow_temporal", None)
+        temporal = (
+            temporal_provider()
+            if callable(temporal_provider) else manager.engine.temporal_history
+        )
+        home_provider_getter = getattr(manager, "candidate_shadow_home_provider", None)
+        home_provider = (
+            home_provider_getter() if callable(home_provider_getter) else None
+        )
+
         hybrid = getattr(manager.engine, "hybrid_policy", None)
         if hybrid is not None:
             stage_started_ns = time.perf_counter_ns()
             features, _, _ = policy.features(
-                state_map, manager.engine.temporal_history, at_ts=float(event_ts)
+                state_map, temporal, at_ts=float(event_ts)
             )
             observe_elapsed(manager.engine, "candidate_feature_construction", stage_started_ns)
             stage_started_ns = time.perf_counter_ns()
@@ -106,7 +116,7 @@ def install(manager):
                 agent,
                 policy,
                 state_map,
-                manager.engine.temporal_history,
+                temporal,
                 timestamp=float(event_ts),
                 ridge_chosen=ridge_chosen,
                 ridge_confidence=ridge_confidence,
@@ -115,6 +125,7 @@ def install(manager):
                 ridge_support=ridge_support,
                 ridge_novelty=ridge_novelty,
                 metric_prefix="candidate_",
+                home_provider=home_provider,
             )
             observe_elapsed(manager.engine, "candidate_hybrid_policy_total", hybrid_started_ns)
             if not bool((selected or {}).get("applied")):
@@ -151,10 +162,11 @@ def install(manager):
             agent,
             policy,
             state_map,
-            manager.engine.temporal_history,
+            temporal,
             timestamp=float(event_ts),
             require_selected=True,
             metric_prefix="candidate_",
+            home_provider=home_provider,
         )
         if result is None:
             raise RuntimeError("selected neural Candidate model is unavailable")
