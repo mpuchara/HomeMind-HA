@@ -91,6 +91,7 @@ class DeferredCandidateShadowQueue:
         job["queued_monotonic"] = time.monotonic()
 
         with self.lock:
+            was_empty = not self.pending
             previous = self.pending.get(root_id)
             if self._same_event(previous, job):
                 self.stats["deduplicated"] += 1
@@ -116,10 +117,12 @@ class DeferredCandidateShadowQueue:
             self.stats["max_depth"] = max(self.stats["max_depth"], len(self.pending))
             depth = len(self.pending)
 
-        # Reuse the already-running Candidate lifecycle worker. Waking it is O(1) and
-        # Live never waits for the deferred policy evaluation itself.
+        # The existing Candidate worker needs one edge-trigger when work appears. Repeated
+        # set() calls while the queue is already non-empty add hot-path traffic but cannot
+        # make Event wake "more". If >max_roots are pending, the already-set event causes
+        # the worker to loop immediately and drain the next bounded batch.
         wake = getattr(self.manager, "wake_event", None)
-        if wake is not None and callable(getattr(wake, "set", None)):
+        if was_empty and wake is not None and callable(getattr(wake, "set", None)):
             wake.set()
         return {
             "deferred": True,
