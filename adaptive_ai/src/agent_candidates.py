@@ -18,6 +18,7 @@ import threading
 import time
 
 from telemetry import RUNTIME_DEBUG
+from inference_hot_path_metrics import observe_elapsed
 
 
 _TLS = threading.local()
@@ -1043,9 +1044,15 @@ class AgentCandidateManager(threading.Thread):
         original = self.engine.process_agent
 
         def process(agent, state_map, changed_entities=None):
+            wrapper_started_ns = time.perf_counter_ns()
+            stage_started_ns = time.perf_counter_ns()
             self.before_live_process(agent, state_map)
+            observe_elapsed(self.engine, "candidate_before_live", stage_started_ns)
             result = original(agent, state_map, changed_entities)
+            stage_started_ns = time.perf_counter_ns()
             self.after_live_process(agent, state_map)
+            observe_elapsed(self.engine, "candidate_shadow_total", stage_started_ns)
+            observe_elapsed(self.engine, "candidate_wrapper_total", wrapper_started_ns)
             return result
 
         self.engine.process_agent = process
