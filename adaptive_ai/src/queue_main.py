@@ -37,6 +37,8 @@ def initialize_runtime():
 
 def status_payload(self):
     payload = _original_status_payload(self)
+    metrics = getattr(core.ENGINE, "inference_hot_path_metrics", None) if core.ENGINE is not None else None
+    payload["inference_hot_path"] = metrics.snapshot() if metrics is not None else None
     payload["training_queue"] = (TRAINING_QUEUE.snapshot() if TRAINING_QUEUE else
                                  {"active": None, "queued": [], "queued_count": 0})
     return payload
