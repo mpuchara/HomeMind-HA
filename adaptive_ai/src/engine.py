@@ -1170,10 +1170,72 @@ class Engine(threading.Thread):
         rt["context_meta"] = context_meta
         teaching_revision = self.teaching.revision(aid)
         chosen, confidence, arms, horizon, support, novelty = policy.predict(features)
+
+        # Ridge is always evaluated first and remains the safety authority. A selected
+        # Tiny MLP may replace only the proposed action index; confidence, support,
+        # novelty and horizon are recomputed/retained from Ridge for that exact action.
+        ridge_chosen = dict(chosen)
+        ridge_confidence = float(confidence)
+        ridge_support = float(support)
+        ridge_novelty = float(novelty)
+        ridge_horizon = int(horizon)
+        rt["ridge_policy_prediction"] = float(ridge_chosen["value"])
+        hybrid_dependencies = ()
+        base_decision_source = "historical_policy_bootstrap"
+        hybrid = getattr(self, "hybrid_policy", None)
+        if hybrid is not None:
+            try:
+                hybrid_result = hybrid.evaluate(
+                    agent,
+                    policy,
+                    state_map,
+                    self.temporal_history,
+                    timestamp=now_ts(),
+                    ridge_chosen=ridge_chosen,
+                    ridge_confidence=ridge_confidence,
+                    ridge_arms=arms,
+                    ridge_horizon=ridge_horizon,
+                    ridge_support=ridge_support,
+                    ridge_novelty=ridge_novelty,
+                )
+            except Exception as exc:
+                hybrid_result = {
+                    "evaluated": True,
+                    "applied": False,
+                    "backend": "tiny_mlp_action+ridge_guard",
+                    "reason": "hybrid_service_error",
+                    "error": f"{type(exc).__name__}: {exc}"[:400],
+                }
+            hybrid_public = {
+                key: value for key, value in dict(hybrid_result or {}).items()
+                if key != "chosen"
+            }
+            hybrid_public["evaluated_ts"] = float(rt["last_inference_ts"])
+            rt["hybrid_policy"] = hybrid_public
+            if bool((hybrid_result or {}).get("applied")):
+                chosen = dict(hybrid_result["chosen"])
+                confidence = float(hybrid_result["confidence"])
+                support = float(hybrid_result["support"])
+                novelty = float(hybrid_result["novelty"])
+                horizon = int(hybrid_result["horizon"])
+                hybrid_dependencies = tuple(
+                    str(x) for x in (hybrid_result.get("dependencies") or ())
+                )
+                base_decision_source = str(
+                    hybrid_result.get("decision_source")
+                    or "hybrid_tiny_mlp_ridge_guard"
+                )
+        else:
+            rt["hybrid_policy"] = {
+                "evaluated": False,
+                "applied": False,
+                "reason": "hybrid_service_unavailable",
+            }
+
         composer = self.decision_composer
         preference = None
         instruction = None
-        decision_source = "historical_policy_bootstrap"
+        decision_source = base_decision_source
         if composer is not None:
             composed = composer.compose(
                 agent=agent, policy=policy, state_map=state_map, temporal=self.temporal_history,
@@ -1193,6 +1255,8 @@ class Engine(threading.Thread):
             preference = composed.get("preference")
             trial = composed["trial"]
             decision_source = composed["source"]
+            if decision_source == "historical_policy_bootstrap":
+                decision_source = base_decision_source
         else:
             # Compatibility path for non-final entrypoints. Stage 07 changes only the
             # shipped preference_queue_main composition and does not reinterpret old data.
@@ -1207,6 +1271,13 @@ class Engine(threading.Thread):
                 chosen = dict(chosen, value=trial['value'], index=trial['index'])
                 support, novelty = trial['support'], trial['novelty']
                 decision_source = "experiment"
+
+        # Explicit instruction/preference/experiment has higher authority than the base
+        # hybrid selector. Once such an override wins, MLP-only feature freshness must
+        # not block the resulting intent.
+        if decision_source != "hybrid_tiny_mlp_ridge_guard":
+            hybrid_dependencies = ()
+
         raw_prediction = float(chosen["value"])
         forecast = context_meta.get('home_forecast', {})
         assist_idx = fast_light_on_assist_action(
@@ -1290,11 +1361,13 @@ class Engine(threading.Thread):
             reason=(f"User instruction #{teaching['id']} ({rt.get('instruction_scope') or 'legacy'}): Desired {chosen['value']}" if teaching else
                 f"Explicit preference model: Desired {chosen['value']} from {preference_count} independent feedback fact(s)" if preference and preference.get('applied') else
                 f"Context experiment ({trial['focus']}): {baseline_value} → {chosen['value']}; baseline confidence {confidence:.0%}" if trial else
+                f"Hybrid Tiny MLP action {chosen['value']} accepted by Ridge guard; confidence {confidence:.0%}, support {support:.0%}, novelty {novelty:.0%}" if decision_source == "hybrid_tiny_mlp_ridge_guard" else
                 f"Historical policy bootstrap desires {chosen['value']}; confidence {confidence:.0%}, support {support:.0%}, novelty {novelty:.0%}"),
             experiment_token=trial['token'] if trial else '',
             contributors=tuple((x['feature'], x['contribution']) for x in rt['top_context']),
             context_dependencies=self._intent_dependencies(
-                policy, trial, snapshot_revisions
+                policy, trial, snapshot_revisions,
+                extra_entities=hybrid_dependencies,
             ))
         rt['last_intent'] = intent.export()
         rt['behavior_summary'] = self.behavior_summary(agent, rt)
@@ -1305,10 +1378,13 @@ class Engine(threading.Thread):
         self._schedule_next_inference(agent, rt)
         return self.executor.submit(intent, features, chosen['index'])
 
-    def _intent_dependencies(self, policy, trial, snapshot_revisions=None):
+    def _intent_dependencies(
+        self, policy, trial, snapshot_revisions=None, extra_entities=None
+    ):
         entities = sorted(
             set(policy.schema.entities)
             | set((trial or {}).get("snapshot") or ())
+            | set(extra_entities or ())
         )
         if snapshot_revisions is not None:
             return tuple((eid, snapshot_revisions.get(eid, 0)) for eid in entities)
@@ -1378,6 +1454,8 @@ class Engine(threading.Thread):
             "baseline_prediction": rt.get('baseline_prediction'),
             "last_prediction": rt.get("last_prediction"),
             "raw_policy_prediction": rt.get("raw_policy_prediction"),
+            "ridge_policy_prediction": rt.get("ridge_policy_prediction"),
+            "hybrid_policy": dict(rt.get("hybrid_policy") or {}),
             "fast_off_confirmation_active": bool(rt.get("fast_off_confirmation_active")),
             "fast_off_confirmation_elapsed": float(rt.get("fast_off_confirmation_elapsed") or 0.0),
             "fast_off_confirmation_required": float(rt.get("fast_off_confirmation_required") or 0.0),
@@ -1434,7 +1512,7 @@ class Engine(threading.Thread):
             "benchmark_samples": int(agent.get("benchmark_samples") or 0),
             "benchmark_source": agent.get("benchmark_source"),
             "benchmark_detail": agent.get("benchmark_detail") or {},
-            "model": "Shared home state + scoped instruction + explicit light preference + diagonal LinUCB bootstrap → ActionIntent → Executor",
+            "model": "Tiny MLP action selector (when tournament-selected) + Ridge safety/confidence fallback → scoped instruction/preference → ActionIntent → Executor",
             "intent": rt.get('intent'), "last_intent": rt.get('last_intent'),
             "home_forecast": self.context.forecast(agent['target_entity'], now_ts()),
             "behavior_summary": rt.get('behavior_summary'),

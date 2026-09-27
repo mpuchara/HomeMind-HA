@@ -137,6 +137,7 @@ jobs:
                       prefix+'src/policy_tiny_mlp_training.py',
                       prefix+'src/policy_tiny_mlp_correct.py',
                       prefix+'src/tiny_mlp_shadow.py',
+                      prefix+'src/hybrid_policy_runtime.py',
                       prefix+'src/candidate_neural_shadow.py',
                       prefix+'src/tiny_mlp_benchmark.py',
                       prefix+'src/tiny_mlp_training_benchmark.py',

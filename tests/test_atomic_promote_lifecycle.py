@@ -14,6 +14,7 @@ from agent_candidate_atomic_promote import install as install_atomic_promote
 from agent_candidate_lineage import _ensure_root, _register_generation, ensure_lineage_tables
 from control_handoff import ControlHandoff
 from lease_journal import LeaseJournal
+from tiny_mlp_shadow import ensure_tables as ensure_tiny_mlp_tables
 
 
 class FakeHandler:
@@ -133,6 +134,7 @@ class AtomicPromoteTests(unittest.TestCase):
         self.store = storage.Store(Path(self.temp.name) / "atomic-promote.db")
         ensure_tables(self.store)
         ensure_lineage_tables(self.store)
+        ensure_tiny_mlp_tables(self.store)
         self.root = self.store.create_agent({
             "name": "Atomic light", "target_entity": "light.atomic", "target_property": "power",
             "min_value": 0, "max_value": 1, "deadband": .5, "action_interval": .25,
@@ -190,10 +192,11 @@ class AtomicPromoteTests(unittest.TestCase):
              "target_entities": ["light.atomic"], "config_status": "cached"},
         ])
         self.executor = FakeExecutor(self.store, self.states, self.knowledge)
+        self.neural = SimpleNamespace(invalidate=Mock())
         self.engine = SimpleNamespace(
             executor=self.executor, models={self.root["id"]: object()}, runtime={}, state_map=self.states,
             lock=threading.RLock(), wake_event=SimpleNamespace(set=lambda: None),
-            runtime_for=lambda agent: {},
+            runtime_for=lambda agent: {}, tiny_mlp_shadow=self.neural,
         )
         self.manager = install_atomic_promote(FakeManager(self.store, self.engine, self.root["id"]))
 
@@ -221,6 +224,44 @@ class AtomicPromoteTests(unittest.TestCase):
         self.assertEqual(root_lineage["model_revision"], "candidate-r1")
         self.executor.take_control.assert_not_called()
         self.executor.release_control.assert_not_called()
+
+    def test_promote_moves_candidate_neural_artifact_to_root_and_retires_old_one(self):
+        self.set_root_mode("shadow")
+        now = time.time()
+        with self.store.lock, self.store.conn() as c:
+            for agent_id, model_revision in (
+                (self.root["id"], "old-root-mlp"),
+                (self.candidate["id"], "candidate-mlp"),
+            ):
+                c.execute(
+                    """INSERT OR REPLACE INTO tiny_mlp_shadow_models
+                       (agent_id,backend,backend_version,feature_schema_id,feature_mask_id,
+                        model_json,mask_json,source_policy_revision,training_json,tournament_json,
+                        selected_backend,created_ts,updated_ts)
+                       VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                    (
+                        agent_id, "tiny_mlp", 1, "obs", "mask",
+                        json.dumps({"trained": True, "model_revision": model_revision}),
+                        json.dumps({"mask_id": "mask", "selected_entities": []}),
+                        "candidate-ridge-generation", "{}", json.dumps({"passed": True}),
+                        "tiny_mlp", now, now,
+                    ),
+                )
+
+        self.manager.promote(self.root["id"])
+
+        with self.store.conn() as c:
+            rows = c.execute(
+                "SELECT agent_id,model_json FROM tiny_mlp_shadow_models ORDER BY agent_id"
+            ).fetchall()
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(str(rows[0]["agent_id"]), str(self.root["id"]))
+        self.assertEqual(
+            json.loads(rows[0]["model_json"])["model_revision"],
+            "candidate-mlp",
+        )
+        self.neural.invalidate.assert_any_call(str(self.root["id"]))
+        self.neural.invalidate.assert_any_call(str(self.candidate["id"]))
 
     def test_control_promote_preserves_control_and_exact_lease(self):
         self.set_root_mode("control")

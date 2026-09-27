@@ -233,6 +233,10 @@ class TinyMLPShadowService:
         self.lock = threading.RLock()
         # agent_id -> exact model-lifecycle bundle. Nothing here changes Ridge state.
         self.cache = {}
+        # Persisted record metadata is event-hot once hybrid routing is enabled. Cache
+        # both selected and non-selected tournament results; every writer already calls
+        # invalidate(), so steady-state inference never needs an SQLite read.
+        self.record_cache = {}
         ensure_tables(store)
 
     @staticmethod
@@ -273,7 +277,14 @@ class TinyMLPShadowService:
         ) & 0x7FFFFFFFFFFFFFFF
 
     def _load_record(self, agent_id):
-        return load_training_record(self.store, agent_id)
+        aid = str(agent_id)
+        with self.lock:
+            if aid in self.record_cache:
+                return dict(self.record_cache[aid])
+        record = dict(load_training_record(self.store, aid) or {})
+        with self.lock:
+            self.record_cache[aid] = dict(record)
+        return dict(record)
 
     def _persist(self, agent_id, backend, mask, source_policy_revision):
         raw = backend.serialize()
@@ -323,6 +334,8 @@ class TinyMLPShadowService:
                 ),
             )
         backend.persisted_checksum = raw.get("model_checksum")
+        with self.lock:
+            self.record_cache.pop(str(agent_id), None)
         return raw
 
     def _new_backend(self, agent, policy, mask):
@@ -608,25 +621,51 @@ class TinyMLPShadowService:
 
     def invalidate(self, agent_id):
         with self.lock:
-            self.cache.pop(str(agent_id), None)
+            aid = str(agent_id)
+            self.cache.pop(aid, None)
+            self.record_cache.pop(aid, None)
 
     def predict_persisted(self, agent, policy, state_map, temporal, *, timestamp, require_selected=False):
-        record = self._load_record(agent["id"])
+        aid = str(agent["id"])
+        source_policy_revision = self._source_policy_revision(policy)
+        record = self._load_record(aid)
         if not record or not record.get("model") or not record.get("mask"):
+            return None
+        if record.get("source_policy_revision") != source_policy_revision:
             return None
         if require_selected and record.get("selected_backend") != TinyMLPBackend.BACKEND:
             return None
-        backend = TinyMLPBackend.deserialize(
-            record["model"],
-            expected_schema_id=record["mask"].get("schema_id"),
-            expected_mask_id=record["mask"].get("mask_id"),
-            expected_feature_ids=record["mask"].get("feature_ids"),
-            expected_actions=policy.actions,
-            expected_horizons=policy.horizons,
-        )
+
+        mask = ObservationMask.from_export(record["mask"])
+        signature = self._signature(mask, policy)
+        with self.lock:
+            cached = self.cache.get(aid)
+            backend = (
+                cached.get("backend")
+                if cached
+                and cached.get("signature") == signature
+                and cached.get("source_policy_revision") == source_policy_revision
+                else None
+            )
+        if backend is None:
+            backend = TinyMLPBackend.deserialize(
+                record["model"],
+                expected_schema_id=mask.schema_id,
+                expected_mask_id=mask.mask_id,
+                expected_feature_ids=mask.feature_ids,
+                expected_actions=policy.actions,
+                expected_horizons=policy.horizons,
+            )
+            with self.lock:
+                self.cache[aid] = {
+                    "signature": signature,
+                    "source_policy_revision": source_policy_revision,
+                    "mask": mask,
+                    "backend": backend,
+                }
         if require_selected and not backend.trained:
             return None
-        mask = ObservationMask.from_export(record["mask"])
+
         observation = observation_as_of(
             mask, state_map, temporal, float(timestamp), agent,
             home_provider=self.engine.context,
@@ -703,6 +742,49 @@ def install(core):
             )
         if after <= before:
             return result
+
+        # Hybrid routing may already have run the selected Tiny MLP for this exact
+        # inference. Reuse that result instead of paying for a second observation
+        # reconstruction + forward pass in Shadow.
+        with engine.lock:
+            hybrid = dict(
+                (engine.runtime.get(aid) or {}).get("hybrid_policy") or {}
+            )
+        if (
+            hybrid.get("mlp_action_index") is not None
+            and abs(float(hybrid.get("evaluated_ts") or 0.0) - after) <= 1e-9
+        ):
+            row = {
+                "contract_version": service.CONTRACT_VERSION,
+                "enabled": True,
+                "mode": "shadow",
+                "shadow_only": True,
+                "dispatch_capability": False,
+                "physical_authority": False,
+                "reused_hybrid_inference": True,
+                "timestamp": after,
+                "backend": TinyMLPBackend.BACKEND,
+                "model_revision": hybrid.get("mlp_model_revision"),
+                "mask_id": hybrid.get("mlp_mask_id"),
+                "chosen_index": int(hybrid["mlp_action_index"]),
+                "chosen_value": float(hybrid["mlp_action_value"]),
+                "confidence": float(
+                    hybrid.get("mlp_decision_strength") or 0.0
+                ),
+                "support": float(hybrid.get("ridge_guard_support") or 0.0),
+                "novelty": float(
+                    hybrid.get("ridge_guard_novelty")
+                    if hybrid.get("ridge_guard_novelty") is not None
+                    else 1.0
+                ),
+                "hybrid_applied": bool(hybrid.get("applied")),
+                "hybrid_reason": hybrid.get("reason"),
+                "note": "Tiny MLP inference reused from hybrid Ridge-guard evaluation",
+            }
+            with engine.lock:
+                engine.runtime.setdefault(aid, {})["tiny_mlp_shadow"] = row
+            return result
+
         try:
             policy = engine.policy(agent)
             service.observe(

@@ -1,13 +1,13 @@
-"""Stage-4 Candidate Shadow backend selector for supervised Tiny MLP.
+"""Candidate Shadow routing for the Tiny MLP + Ridge hybrid policy.
 
-A neural backend may replace the Candidate's *observed Shadow prediction* only after:
-1) the established Candidate offline gate has passed, and
-2) the neutral Ridge-vs-MLP tournament selected tiny_mlp on identical holdout rows.
+A supervised Tiny MLP may propose the Candidate action only after the established
+offline gate and neutral Ridge-vs-MLP tournament pass. Candidate A/B then uses the same
+Ridge confidence/support/novelty guard as the promoted Live hybrid. If that guard rejects
+the neural proposal, the ordinary Candidate Ridge path remains the observed fallback.
 
-This module never changes the Root Live model, never creates ActionIntent and never
-invokes Executor/Home Assistant.  If a selected neural backend fails at inference, the
-Candidate observation is intentionally left as a gap rather than silently mixing Ridge
-evidence into the neural A/B stream.
+This module never creates ActionIntent and never invokes Executor/Home Assistant.
+Offline-RL neural candidates remain Shadow-only until their separate authority contract
+is promoted in a later stage.
 """
 from __future__ import annotations
 
@@ -81,6 +81,62 @@ def install(manager):
                 raise RuntimeError("selected neural Candidate Ridge baseline is unavailable")
             policy = manager.engine.policy(agent)
 
+        hybrid = getattr(manager.engine, "hybrid_policy", None)
+        if hybrid is not None:
+            features, _, _ = policy.features(
+                state_map, manager.engine.temporal_history, at_ts=float(event_ts)
+            )
+            ridge = policy.predict(features)
+            (
+                ridge_chosen,
+                ridge_confidence,
+                ridge_arms,
+                ridge_horizon,
+                ridge_support,
+                ridge_novelty,
+            ) = ridge
+            selected = hybrid.evaluate(
+                agent,
+                policy,
+                state_map,
+                manager.engine.temporal_history,
+                timestamp=float(event_ts),
+                ridge_chosen=ridge_chosen,
+                ridge_confidence=ridge_confidence,
+                ridge_arms=ridge_arms,
+                ridge_horizon=ridge_horizon,
+                ridge_support=ridge_support,
+                ridge_novelty=ridge_novelty,
+            )
+            if not bool((selected or {}).get("applied")):
+                # Returning None intentionally delegates to the established Candidate
+                # Ridge path, matching the post-promotion Live fallback semantics.
+                return None
+            chosen = dict(selected["chosen"])
+            return {
+                "generation_id": generation["generation_id"],
+                "agent_id": str(candidate_id),
+                "desired": float(chosen["value"]),
+                "confidence": float(selected["confidence"]),
+                "model_revision": (
+                    "hybrid:"
+                    + str(getattr(policy, "model_revision", "") or "")
+                    + ":"
+                    + str(selected.get("mlp_model_revision") or "")
+                ),
+                "schema_revision": (
+                    "hybrid:"
+                    + str((getattr(policy, "schema", None) or {}).export().get("version")
+                          if getattr(policy, "schema", None) is not None else "")
+                    + ":"
+                    + str(selected.get("mlp_mask_id") or "")
+                ),
+                "policy_backend": "tiny_mlp_action+ridge_guard",
+                "confidence_kind": "ridge_action_specific_calibration",
+            }
+
+        # Compatibility for non-final entrypoints that have not installed the hybrid
+        # service yet: retain the previous neural Shadow observation behavior.
         result = service.predict_persisted(
             agent,
             policy,
@@ -118,11 +174,7 @@ def install(manager):
                 "message": "Offline RL Stage 7 Candidate is Shadow-only and cannot be promoted yet",
                 "custom_override": "never",
             }
-        return {
-            "reason": "neural_stage4_shadow_only",
-            "message": "Tiny MLP Stage 4 Candidate is Shadow-only and cannot be promoted yet",
-            "custom_override": "never",
-        }
+        return None
 
     def enrich(result):
         if not isinstance(result, dict):
@@ -144,15 +196,19 @@ def install(manager):
         )
         result["policy_backend_tournament"] = tournament
         result["candidate_policy_backend"] = (
-            TinyMLPBackend.BACKEND if neural_active else "diagonal_linucb"
+            "tiny_mlp_action+ridge_guard" if neural_active else "diagonal_linucb"
         )
         result["candidate_neural_shadow_active"] = neural_active
         result["candidate_neural_physical_authority"] = False
-        result["candidate_neural_promotable"] = False if neural_active else None
-        if neural_active:
+        result["candidate_hybrid_ridge_guard_ready"] = bool(neural_active)
+        veto = promotion_veto(record) if neural_active else None
+        result["candidate_neural_promotable"] = (
+            bool(result.get("promotable")) if neural_active and veto is None
+            else False if neural_active else None
+        )
+        if veto is not None:
             result["promotable"] = False
             vetoes = list(result.get("promotion_vetoes") or [])
-            veto = promotion_veto(record)
             if not any(
                 str(item.get("reason") or "") == str(veto["reason"])
                 for item in vetoes if isinstance(item, dict)
@@ -186,11 +242,9 @@ def install(manager):
                 candidate_id = None
         if candidate_id:
             eligible, record, _gate = neural_eligible(candidate_id)
-            if eligible:
-                raise ValueError(
-                    promotion_veto(record)["message"]
-                    + "; neural promotion to Live/Control is not enabled"
-                )
+            veto = promotion_veto(record) if eligible else None
+            if veto is not None:
+                raise ValueError(veto["message"])
 
     def promote(parent_id, *args, **kwargs):
         _assert_not_neural_selected(parent_id)
@@ -210,6 +264,6 @@ def install(manager):
         manager.promote_custom = promote_custom
     manager._candidate_neural_shadow_installed = True
     manager.candidate_neural_shadow_contract = (
-        "offline_gate_plus_identical_holdout_tournament_selects_shadow_backend_only_no_live_promotion"
+        "offline_gate_plus_identical_holdout_tournament_selects_mlp_action_with_ridge_guard_and_ridge_fallback"
     )
     return manager

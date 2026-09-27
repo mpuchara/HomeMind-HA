@@ -423,14 +423,28 @@ def install(manager):
                                 (root_id,),
                             )
 
-                            # The hidden surrogate has become the logical Root generation;
-                            # remove only its duplicate physical-agent storage inside this
-                            # same transaction. Generation decision/pair history is keyed by
-                            # generation_id and is deliberately retained.
+                            # The hidden surrogate has become the logical Root generation.
+                            # Move the selected neural artifact with the generation so the
+                            # promoted hybrid keeps the exact Candidate MLP. Any previous
+                            # Root neural artifact belonged to the retired Ridge generation
+                            # and must not survive under the same logical agent id.
                             surrogate_id = str(candidate["id"])
+                            if _table_exists(c, "tiny_mlp_shadow_models"):
+                                c.execute(
+                                    "DELETE FROM tiny_mlp_shadow_models WHERE agent_id=?",
+                                    (root_id,),
+                                )
+                                c.execute(
+                                    """UPDATE tiny_mlp_shadow_models
+                                       SET agent_id=?,updated_ts=? WHERE agent_id=?""",
+                                    (root_id, now, surrogate_id),
+                                )
+
+                            # Remove only duplicate surrogate storage. Generation
+                            # decision/pair history is keyed by generation_id and retained.
                             for table in (
                                 "teaching_rl_labels", "teaching_rl_jobs", "manual_context_feedback",
-                                "teaching_labels", "decision_history", "tiny_mlp_shadow_models",
+                                "teaching_labels", "decision_history",
                             ):
                                 if _table_exists(c, table):
                                     c.execute(f"DELETE FROM {table} WHERE agent_id=?", (surrogate_id,))
@@ -466,6 +480,12 @@ def install(manager):
 
                     manager.engine.models.pop(root_id, None)
                     manager.engine.models.pop(str(candidate["id"]), None)
+                    neural_service = getattr(manager.engine, "tiny_mlp_shadow", None)
+                    if neural_service is not None and callable(
+                        getattr(neural_service, "invalidate", None)
+                    ):
+                        neural_service.invalidate(root_id)
+                        neural_service.invalidate(str(candidate["id"]))
                     manager.engine.runtime.pop(str(candidate["id"]), None)
                     rt.pop("last_prediction", None)
                     rt.pop("last_confidence", None)
