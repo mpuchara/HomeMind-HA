@@ -742,6 +742,49 @@ def install(core):
             )
         if after <= before:
             return result
+
+        # Hybrid routing may already have run the selected Tiny MLP for this exact
+        # inference. Reuse that result instead of paying for a second observation
+        # reconstruction + forward pass in Shadow.
+        with engine.lock:
+            hybrid = dict(
+                (engine.runtime.get(aid) or {}).get("hybrid_policy") or {}
+            )
+        if (
+            hybrid.get("mlp_action_index") is not None
+            and abs(float(hybrid.get("evaluated_ts") or 0.0) - after) <= 1e-9
+        ):
+            row = {
+                "contract_version": service.CONTRACT_VERSION,
+                "enabled": True,
+                "mode": "shadow",
+                "shadow_only": True,
+                "dispatch_capability": False,
+                "physical_authority": False,
+                "reused_hybrid_inference": True,
+                "timestamp": after,
+                "backend": TinyMLPBackend.BACKEND,
+                "model_revision": hybrid.get("mlp_model_revision"),
+                "mask_id": hybrid.get("mlp_mask_id"),
+                "chosen_index": int(hybrid["mlp_action_index"]),
+                "chosen_value": float(hybrid["mlp_action_value"]),
+                "confidence": float(
+                    hybrid.get("mlp_decision_strength") or 0.0
+                ),
+                "support": float(hybrid.get("ridge_guard_support") or 0.0),
+                "novelty": float(
+                    hybrid.get("ridge_guard_novelty")
+                    if hybrid.get("ridge_guard_novelty") is not None
+                    else 1.0
+                ),
+                "hybrid_applied": bool(hybrid.get("applied")),
+                "hybrid_reason": hybrid.get("reason"),
+                "note": "Tiny MLP inference reused from hybrid Ridge-guard evaluation",
+            }
+            with engine.lock:
+                engine.runtime.setdefault(aid, {})["tiny_mlp_shadow"] = row
+            return result
+
         try:
             policy = engine.policy(agent)
             service.observe(
