@@ -102,14 +102,18 @@ class HybridPolicyService:
             }
 
         try:
+            predict_kwargs = {
+                "timestamp": float(timestamp),
+                "require_selected": True,
+            }
+            if metric_prefix:
+                predict_kwargs["metric_prefix"] = metric_prefix
             result = self.neural.predict_persisted(
                 agent,
                 policy,
                 state_map,
                 temporal,
-                timestamp=float(timestamp),
-                require_selected=True,
-                metric_prefix=metric_prefix,
+                **predict_kwargs,
             )
         except Exception as exc:
             return {
