@@ -222,10 +222,9 @@ class DeferredCandidateShadowQueue:
             queued = float(job.get("queued_monotonic") or time.monotonic())
             lag_ms = max(0.0, (time.monotonic() - queued) * 1000.0)
             self.stats["last_queue_lag_ms"] = lag_ms
-            observe_elapsed(
-                self.engine, "candidate_shadow_queue_lag",
-                time.perf_counter_ns() - int(lag_ms * 1_000_000.0),
-            )
+            metrics = getattr(self.engine, "inference_hot_path_metrics", None)
+            if metrics is not None:
+                metrics.observe("candidate_shadow_queue_lag", lag_ms)
             started = time.perf_counter_ns()
             try:
                 self._execute(job)
