@@ -130,6 +130,18 @@ class LightingPreferenceModelTests(unittest.TestCase):
         self.assertFalse(after_restart["applied"])
         self.assertEqual(after_restart["independent_evidence_count"], 0)
 
+    def test_predict_uses_final_runtime_teaching_signature_contract(self):
+        row = self.record(1.0, rejected=0.0)
+        policy = SimpleNamespace(actions=[0.0, 1.0])
+        with patch("teaching.signature", return_value=dict(self.context)) as runtime_signature:
+            result = self.model.predict(
+                self.agent, policy, {"sensor.any": {}}, object(), self.now
+            )
+        runtime_signature.assert_called_once()
+        self.assertTrue(result["applied"])
+        self.assertEqual(result["action_value"], 1.0)
+        self.assertEqual(result["evidence_ids"], [row["feedback_id"]])
+
     def test_held_out_adaptation_needs_one_correction_and_does_not_regress_untouched_context(self):
         # Bootstrap imitates the old automation and says OFF in both held-out contexts.
         adapted = dict(self.context)
