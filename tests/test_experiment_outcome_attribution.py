@@ -95,6 +95,33 @@ class PresenceOutcomeAttributionTests(unittest.TestCase):
         outcome = f.e.status(f.a['id'])['last_outcome']
         self.assertIsNone(outcome['reward'])
 
+    def test_name_only_presence_helper_can_predict_but_cannot_confirm(self):
+        f = self.f
+        f.states['binary_sensor.presence_helper'] = {
+            'entity_id': 'binary_sensor.presence_helper', 'state': 'off',
+            'attributes': {'friendly_name': 'Presence helper'},
+        }
+        labels = dict(f.labels)
+        labels[8] = ['binary_sensor.presence_helper:value']
+        features = {**f.features, 8: -1.0}
+        f.policy.heads[1].b[1][8] = 1.0
+        registry = self.registry | {
+            'binary_sensor.presence_helper': {'area_id': 'kitchen', 'platform': 'template'},
+        }
+
+        trial = f.start(labels=labels, features=features, registry=registry)
+        self.assertIn('binary_sensor.presence_helper', trial['prediction_inputs'])
+        self.assertNotIn('binary_sensor.presence_helper', trial['outcome_sources'])
+        f.ack()
+        f.now += 1
+        f.states['binary_sensor.presence_helper']['state'] = 'on'
+        f.states['binary_sensor.presence_helper']['last_changed'] = f.now
+        f.e.observe(f.a, f.states, 1.)
+
+        outcome = f.e.status(f.a['id'])['last_outcome']
+        self.assertIsNone(outcome['reward'])
+        self.assertEqual(outcome['reason'], 'context changed; ordinary control resumes')
+
     def test_change_before_trial_is_rebased_and_never_confirms_arrival(self):
         f = self.f
         trial = f.propose(registry=self.registry)
