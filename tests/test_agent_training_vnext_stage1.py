@@ -152,5 +152,66 @@ class TrainingBalanceAuditTests(unittest.TestCase):
         self.assertEqual(summary["samples"]["onset"]["total"], 2)
 
 
+    def test_short_long_long_short_and_symmetric_dwell_fixtures(self):
+        policy = FakePolicy()
+        fixtures = {
+            "short_on_long_off": ((1, 10.0), (0, 300.0)),
+            "long_on_short_off": ((1, 300.0), (0, 10.0)),
+            "symmetric": ((1, 120.0), (0, 120.0)),
+        }
+        expected = {
+            "short_on_long_off": 10.0 / 300.0,
+            "long_on_short_off": 300.0 / 10.0,
+            "symmetric": 1.0,
+        }
+        for name, dwells in fixtures.items():
+            with self.subTest(name=name):
+                audit = TrainingBalanceAudit({"id": name}, policy)
+                for action_idx, seconds in dwells:
+                    audit.record_dwell(action_idx, seconds)
+                summary = audit.finalize(policy)
+                ratio = summary["derived"]["action_time_ratio"]
+                # Binary ratio is action[1] / action[0].
+                self.assertEqual(ratio["status"], "ok")
+                self.assertAlmostEqual(ratio["value"], expected[name])
+
+    def test_non_binary_target_smoke(self):
+        class NonBinaryPolicy:
+            def __init__(self):
+                self.actions = [18.0, 20.0, 22.0]
+                self.agent = {"target_property": "temperature"}
+                self.heads = {
+                    1: FakeHead(
+                        counts=(2.0, 3.0, 1.0),
+                        reward_sums=(1.0, 2.0, 0.5),
+                        total_updates=6.0,
+                    )
+                }
+
+        policy = NonBinaryPolicy()
+        audit = TrainingBalanceAudit({"id": "setpoint"}, policy)
+        for idx, duration in enumerate((90.0, 120.0, 60.0)):
+            audit.record_dwell(idx, duration)
+            audit.record_sample(
+                "onset", idx, 1.0, 100.0, policy.heads[1],
+                provenance="manual", horizon=1,
+            )
+        summary = audit.finalize(
+            policy,
+            benchmark={
+                "samples": 3,
+                "correct": 2,
+                "per_action": {
+                    "18.0": {"samples": 1, "correct": 1},
+                    "20.0": {"samples": 1, "correct": 1},
+                    "22.0": {"samples": 1, "correct": 0},
+                },
+            },
+        )
+        self.assertEqual(summary["ridge"]["action_count"], 3)
+        self.assertIsNone(summary["qualification"]["balanced_accuracy"])
+        self.assertEqual(summary["samples"]["onset"]["total"], 3)
+
+
 if __name__ == "__main__":
     unittest.main()
