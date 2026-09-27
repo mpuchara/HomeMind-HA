@@ -17,6 +17,7 @@ from replay import (
 )
 from training_budget import TRAINING_BUDGET
 from policy import MultiHorizonPolicy
+from training_balance_audit import TrainingBalanceAudit
 
 def stateful_continuation_seed_rows(store, agents, target_map, start_ts, boundary_ts):
     """Return the exact open-target transition state the legacy overlap would leave.
@@ -1743,8 +1744,11 @@ class HistoryManager(threading.Thread):
             for a in agents
         }
         benchmark_stats = {}
+        prior_models = {}
         for a in agents:
-            prior = ((STORE.get_model(a['id']) or {}).get('_benchmark_counts') or (a.get("benchmark_detail") or {}).get("counts") or {}) if accumulate_benchmark else {}
+            prior_model = STORE.get_model(a["id"]) or {} if accumulate_benchmark else {}
+            prior_models[str(a["id"])] = prior_model
+            prior = (prior_model.get("_benchmark_counts") or (a.get("benchmark_detail") or {}).get("counts") or {}) if accumulate_benchmark else {}
             benchmark_stats[a["id"]] = {
                 "samples": int(prior.get("samples") or 0),
                 "correct": int(prior.get("correct") or 0),
@@ -2031,6 +2035,16 @@ class HistoryManager(threading.Thread):
         validation_fraction = clamp(float(OPTIONS.get("confidence_validation_fraction", 0.20)), 0.05, 0.40)
         validation_span = max(1800.0, (float(end_ts) - float(start_ts)) * validation_fraction)
         validation_start = max(float(start_ts), float(end_ts) - validation_span)
+        training_audits = {}
+        for a in agents:
+            aid = str(a["id"])
+            prior_audit = (
+                (prior_models.get(aid) or {}).get("_training_balance_audit_state")
+                if accumulate_benchmark else None
+            )
+            audit = TrainingBalanceAudit(a, policies[a["id"]], prior_state=prior_audit)
+            audit.begin_chunk()
+            training_audits[aid] = audit
 
         def _publish_temporal_replay_stats():
             onset = timeline.stats()
@@ -2202,6 +2216,12 @@ class HistoryManager(threading.Thread):
                 "origin": "unknown", "source": "unknown", "event_id": None,
             })
             origin = str(provenance.get("origin") or "unknown")
+            audit = training_audits.get(str(agent["id"]))
+            if audit is not None:
+                audit.record_dwell(
+                    old["action_idx"], dwell,
+                    excluded_reason="own_command" if origin == "own_command" else None,
+                )
             experience_batch.append({
                 "agent_id": agent["id"],
                 "target_history_id": target_history_id,
@@ -2248,7 +2268,16 @@ class HistoryManager(threading.Thread):
                 })
             for h, features in old["features_by_horizon"].items():
                 if crosses_validation:
+                    if audit is not None:
+                        audit.record_excluded("validation_boundary")
                     continue  # purge rewards whose outcomes cross the validation boundary
+                if audit is not None:
+                    audit.record_sample(
+                        "onset", old["action_idx"], reward, anchor_sample_ts,
+                        policy.heads[int(h)],
+                        split="validation" if anchor_sample_ts >= validation_start else "train",
+                        provenance=origin, horizon=h,
+                    )
                 learn_or_validate(policy, h, old["action_idx"], features, reward, anchor_sample_ts)
 
             # Optional upstream ON cue: neighbouring-room sensors may legitimately fire
@@ -2272,6 +2301,15 @@ class HistoryManager(threading.Thread):
                     "source": "upstream",
                 })
             for h, features in (old.get("upstream_features_by_horizon") or {}).items():
+                if audit is not None:
+                    # Mirror the current Ridge semantics exactly: upstream weakens reward
+                    # to 0.35 but still contributes one full time-decayed support update.
+                    audit.record_sample(
+                        "upstream", old["action_idx"], float(reward) * 0.35, float(old["ts"]),
+                        policy.heads[int(h)],
+                        split="deferred_train" if upstream_ts >= validation_start else "train",
+                        provenance=origin, horizon=h,
+                    )
                 if upstream_ts >= validation_start:
                     heldout_updates.append((policy, int(h), old["action_idx"], features, float(reward) * 0.35, float(old["ts"])))
                 else:
@@ -2315,7 +2353,16 @@ class HistoryManager(threading.Thread):
                     at_ts=context_ts,
                 )
                 if target_time < validation_start <= effective_end:
+                    if audit is not None:
+                        audit.record_excluded("validation_boundary")
                     continue
+                if audit is not None:
+                    audit.record_sample(
+                        "persistence", old["action_idx"], reward, target_time,
+                        policy.heads[int(h)],
+                        split="deferred_train" if target_time >= validation_start else "train",
+                        provenance=origin, horizon=h,
+                    )
                 if target_time >= validation_start:
                     # Correlated samples within a dwell are training evidence,
                     # not independent validation trials. Validate onset only.
@@ -2658,12 +2705,26 @@ class HistoryManager(threading.Thread):
                             work_unit="finalization", eta_source="bounded finalization",
                             phase_detail="Replay complete · applying bounded model checkpoint")
 
+        training_audit_summaries = {}
         for agent in agents:
             TRAINING_BUDGET.checkpoint("before_policy_serialize")
             policy = policies[agent["id"]]
+            aid = str(agent["id"])
+            audit = training_audits.get(aid)
+            audit_summary = audit.finalize(
+                policy,
+                benchmark=benchmark_stats.get(agent["id"]) or {},
+                neural_train_rows=list(neural_train_samples.get(aid) or ()) if neural_enabled else (),
+                neural_holdout_rows=list(neural_holdout_samples.get(aid) or ()) if neural_enabled else (),
+                neural_artifact=self.neural_training_artifacts.get(aid),
+            ) if audit is not None else {}
+            training_audit_summaries[aid] = audit_summary
             exported = policy.serialize()
             TRAINING_BUDGET.checkpoint("after_policy_serialize")
             exported['_benchmark_counts'] = benchmark_stats.get(agent['id'], {})
+            if audit is not None:
+                exported['_training_balance_audit_state'] = audit.export_state()
+                exported['_training_balance_audit'] = audit_summary
             STORE.save_model(agent["id"], exported)
             self._remember_training_schema(agent, exported)
             TRAINING_BUDGET.checkpoint("after_model_save")
@@ -2725,6 +2786,7 @@ class HistoryManager(threading.Thread):
                     "per_action_accuracy": per_action_accuracy,
                     "automation_rules": automation_rules,
                     "origin_counts": origin_counts,
+                    "training_balance_audit": training_audit_summaries.get(str(agent["id"])) or {},
                     "counts": {"samples": samples, "correct": int(stat.get("correct") or 0),
                                "per_action": stat.get("per_action") or {},
                                "automation_rules": automation_rules,
