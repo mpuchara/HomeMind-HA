@@ -12,7 +12,9 @@ is promoted in a later stage.
 from __future__ import annotations
 
 import json
+import time
 
+from inference_hot_path_metrics import increment_counter, observe_elapsed
 from policy_tiny_mlp import TinyMLPBackend
 
 
@@ -83,10 +85,14 @@ def install(manager):
 
         hybrid = getattr(manager.engine, "hybrid_policy", None)
         if hybrid is not None:
+            stage_started_ns = time.perf_counter_ns()
             features, _, _ = policy.features(
                 state_map, manager.engine.temporal_history, at_ts=float(event_ts)
             )
+            observe_elapsed(manager.engine, "candidate_feature_construction", stage_started_ns)
+            stage_started_ns = time.perf_counter_ns()
             ridge = policy.predict(features)
+            observe_elapsed(manager.engine, "candidate_ridge_predict", stage_started_ns)
             (
                 ridge_chosen,
                 ridge_confidence,
@@ -95,6 +101,7 @@ def install(manager):
                 ridge_support,
                 ridge_novelty,
             ) = ridge
+            hybrid_started_ns = time.perf_counter_ns()
             selected = hybrid.evaluate(
                 agent,
                 policy,
@@ -107,8 +114,11 @@ def install(manager):
                 ridge_horizon=ridge_horizon,
                 ridge_support=ridge_support,
                 ridge_novelty=ridge_novelty,
+                metric_prefix="candidate_",
             )
+            observe_elapsed(manager.engine, "candidate_hybrid_policy_total", hybrid_started_ns)
             if not bool((selected or {}).get("applied")):
+                increment_counter(manager.engine, "candidate_hybrid_fallbacks")
                 # Returning None intentionally delegates to the established Candidate
                 # Ridge path, matching the post-promotion Live fallback semantics.
                 return None
@@ -144,6 +154,7 @@ def install(manager):
             manager.engine.temporal_history,
             timestamp=float(event_ts),
             require_selected=True,
+            metric_prefix="candidate_",
         )
         if result is None:
             raise RuntimeError("selected neural Candidate model is unavailable")
