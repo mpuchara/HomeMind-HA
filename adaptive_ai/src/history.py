@@ -2258,6 +2258,8 @@ class HistoryManager(threading.Thread):
                         "weight": float(reward),
                         "timestamp": float(old.get("anchor_ts", old["ts"])),
                         "source": "heldout_onset",
+                        "ridge_correct": bool(frozen_correct),
+                        "paired_holdout_id": int(old.get("history_id") or 0),
                     })
             infos = automation_infos_by_agent.get(agent["id"]) or []
             origin = "manual" if old.get("user_id") else ("automation_assisted" if infos else "anonymous_external")
@@ -3053,7 +3055,10 @@ class HistoryManager(threading.Thread):
                     threshold=tournament_threshold,
                     minimum_samples=tournament_min_samples,
                     minimum_gain=float(
-                        OPTIONS.get("tiny_mlp_tournament_min_gain", 0.0) or 0.0
+                        OPTIONS.get("tiny_mlp_tournament_min_gain", 0.03)
+                    ),
+                    significance_alpha=float(
+                        OPTIONS.get("tiny_mlp_tournament_significance_alpha", 0.05)
                     ),
                     parameter_count=backend.parameter_count,
                     serialized_bytes=serialized_bytes,

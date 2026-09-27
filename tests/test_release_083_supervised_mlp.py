@@ -118,23 +118,33 @@ class NeutralTournamentTests(unittest.TestCase):
             "max_value": 1,
         }
         self.ridge = {
-            "samples": 20,
-            "correct": 15,
+            "samples": 40,
+            "correct": 30,
             "per_action": {
-                "0": {"samples": 10, "correct": 7},
-                "1": {"samples": 10, "correct": 8},
+                "0": {"samples": 20, "correct": 15},
+                "1": {"samples": 20, "correct": 15},
             },
         }
         self.mlp = {
-            "samples": 20,
-            "correct": 18,
+            "samples": 40,
+            "correct": 38,
             "per_action": {
-                "0": {"samples": 10, "correct": 9},
-                "1": {"samples": 10, "correct": 9},
+                "0": {"samples": 20, "correct": 19},
+                "1": {"samples": 20, "correct": 19},
             },
-            "score": .90,
+            "score": .95,
             "class_coverage": True,
-            "per_action_accuracy": {"0": .9, "1": .9},
+            "per_action_accuracy": {"0": .95, "1": .95},
+            "paired_comparison": {
+                "contract": "paired_holdout_correctness_v1",
+                "samples": 40,
+                "complete": True,
+                "both_correct": 30,
+                "mlp_only_correct": 8,
+                "ridge_only_correct": 0,
+                "both_wrong": 2,
+                "discordant": 8,
+            },
         }
 
     def result(self, **changes):
@@ -146,30 +156,48 @@ class NeutralTournamentTests(unittest.TestCase):
             mlp_metrics=mlp,
             threshold=changes.pop("threshold", .78),
             minimum_samples=changes.pop("minimum_samples", 12),
-            minimum_gain=changes.pop("minimum_gain", 0.0),
+            minimum_gain=changes.pop("minimum_gain", 0.03),
+            significance_alpha=changes.pop("significance_alpha", 0.05),
             parameter_count=changes.pop("parameter_count", 4000),
             serialized_bytes=changes.pop("serialized_bytes", 80000),
             **changes,
         )
 
-    def test_mlp_wins_only_when_strictly_better_on_same_holdout(self):
+    def test_mlp_wins_only_when_meaningfully_and_significantly_better_on_same_holdout(self):
         result = self.result()
         self.assertTrue(result["passed"])
         self.assertEqual(result["selected_backend"], "tiny_mlp")
         self.assertTrue(result["same_holdout_rows"])
-        self.assertGreater(result["gain"], 0)
+        self.assertGreaterEqual(result["gain"], .03)
+        self.assertTrue(result["significance_passed"])
+        self.assertLessEqual(result["significance_p_value"], .05)
 
     def test_equal_or_worse_mlp_keeps_ridge(self):
         result = self.result(
             threshold=.70,
             mlp={
+                "correct": 30,
+                "per_action": {
+                    "0": {"samples": 20, "correct": 15},
+                    "1": {"samples": 20, "correct": 15},
+                },
                 "score": .75,
                 "per_action_accuracy": {"0": .75, "1": .75},
+                "paired_comparison": {
+                    "contract": "paired_holdout_correctness_v1",
+                    "samples": 40,
+                    "complete": True,
+                    "both_correct": 30,
+                    "mlp_only_correct": 0,
+                    "ridge_only_correct": 0,
+                    "both_wrong": 10,
+                    "discordant": 0,
+                },
             },
         )
         self.assertFalse(result["passed"])
         self.assertEqual(result["selected_backend"], "diagonal_linucb")
-        self.assertEqual(result["reason"], "ridge_equal_or_better_on_identical_holdout")
+        self.assertEqual(result["reason"], "mlp_gain_below_practical_minimum")
 
     def test_holdout_mismatch_or_resource_failure_can_never_select_mlp(self):
         mismatch = self.result(mlp={"samples": 19})

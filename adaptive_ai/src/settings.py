@@ -155,7 +155,11 @@ DEFAULT_OPTIONS = {
     "tiny_mlp_gradient_clip": 1.0,
     "tiny_mlp_early_stop_patience": 3,
     "tiny_mlp_early_stop_min_delta": 0.001,
-    "tiny_mlp_tournament_min_gain": 0.0,
+    # Agent Training vNext Stage 6: a neural challenger must improve balanced/overall
+    # frozen-holdout accuracy by a practical margin and win an exact paired correctness
+    # test on the identical rows. Small numerical wins no longer replace Ridge.
+    "tiny_mlp_tournament_min_gain": 0.03,
+    "tiny_mlp_tournament_significance_alpha": 0.05,
     "tiny_mlp_max_parameters": 50000,
     "tiny_mlp_max_serialized_bytes": 524288,
     # Stage-5 Manual Correct: incremental neural fine-tune. Explicit labels remain

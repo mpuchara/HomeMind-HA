@@ -316,8 +316,48 @@ def _score_from_counts(agent, actions, stats):
     return float(score), bool(class_coverage), per_action_accuracy, bool(binary)
 
 
+def exact_paired_mlp_win_p_value(mlp_only_correct, ridge_only_correct):
+    """One-sided exact McNemar/sign-test tail on paired correctness disagreements.
+
+    Under the null, either model is equally likely to own each discordant holdout row.
+    The returned probability is P(X >= mlp_only_correct | X~Binomial(n, 0.5)).
+    No asymptotic approximation is used; holdouts are bounded to a few thousand rows.
+    """
+    mlp_only = max(0, int(mlp_only_correct or 0))
+    ridge_only = max(0, int(ridge_only_correct or 0))
+    discordant = mlp_only + ridge_only
+    if discordant <= 0:
+        return 1.0
+    if mlp_only <= 0:
+        return 1.0
+    if mlp_only > discordant:
+        return 0.0
+    denominator = 1 << discordant
+    # Sum the shorter exact tail and use integer arithmetic until final conversion.
+    if mlp_only > discordant // 2:
+        numerator = sum(
+            math.comb(discordant, value)
+            for value in range(mlp_only, discordant + 1)
+        )
+    else:
+        lower = sum(
+            math.comb(discordant, value)
+            for value in range(0, mlp_only)
+        )
+        numerator = denominator - lower
+    return min(1.0, max(0.0, float(numerator / denominator)))
+
+
 def evaluate_supervised(backend, agent, samples):
     stats = {"samples": 0, "correct": 0, "per_action": {}}
+    paired = {
+        "contract": "paired_holdout_correctness_v1",
+        "samples": 0,
+        "both_correct": 0,
+        "mlp_only_correct": 0,
+        "ridge_only_correct": 0,
+        "both_wrong": 0,
+    }
     tolerance = max(
         float(agent.get("deadband") or 0.0),
         (float(agent.get("max_value") or 0.0) - float(agent.get("min_value") or 0.0)) * 0.03,
@@ -337,8 +377,27 @@ def evaluate_supervised(backend, agent, samples):
         slot = stats["per_action"].setdefault(str(target), {"samples": 0, "correct": 0})
         slot["samples"] += 1
         slot["correct"] += int(correct)
+        if "ridge_correct" in row:
+            ridge_correct = bool(row.get("ridge_correct"))
+            paired["samples"] += 1
+            if correct and ridge_correct:
+                paired["both_correct"] += 1
+            elif correct and not ridge_correct:
+                paired["mlp_only_correct"] += 1
+            elif ridge_correct:
+                paired["ridge_only_correct"] += 1
+            else:
+                paired["both_wrong"] += 1
     score, coverage, per_action_accuracy, binary = _score_from_counts(
         agent, backend.actions, stats
+    )
+    paired["discordant"] = (
+        int(paired["mlp_only_correct"]) + int(paired["ridge_only_correct"])
+    )
+    paired["complete"] = int(paired["samples"]) == int(stats["samples"])
+    paired["mlp_win_rate_on_discordant"] = (
+        float(paired["mlp_only_correct"]) / paired["discordant"]
+        if paired["discordant"] else None
     )
     return {
         **stats,
@@ -346,6 +405,7 @@ def evaluate_supervised(backend, agent, samples):
         "class_coverage": coverage,
         "per_action_accuracy": per_action_accuracy,
         "balanced": binary,
+        "paired_comparison": paired,
     }
 
 
@@ -357,7 +417,8 @@ def tournament_result(
     mlp_metrics,
     threshold,
     minimum_samples,
-    minimum_gain=0.0,
+    minimum_gain=0.03,
+    significance_alpha=0.05,
     parameter_count=None,
     serialized_bytes=None,
     max_parameters=50000,
@@ -370,7 +431,15 @@ def tournament_result(
     mlp_coverage = bool(mlp_metrics.get("class_coverage"))
     ridge_samples = int((ridge_stats or {}).get("samples") or 0)
     mlp_samples = int(mlp_metrics.get("samples") or 0)
-    same_rows = ridge_samples == mlp_samples
+    paired = dict(mlp_metrics.get("paired_comparison") or {})
+    paired_samples = int(paired.get("samples") or 0)
+    sample_count_match = ridge_samples == mlp_samples
+    paired_complete = bool(
+        paired.get("complete")
+        and paired_samples == mlp_samples
+        and paired_samples == ridge_samples
+    )
+    same_rows = bool(sample_count_match and paired_complete)
     enough = mlp_samples >= int(minimum_samples) and mlp_coverage
     threshold_passed = bool(enough and mlp_score > float(threshold))
     resource_passed = (
@@ -378,16 +447,34 @@ def tournament_result(
         and (serialized_bytes is None or int(serialized_bytes) <= int(max_serialized_bytes))
     )
     gain = mlp_score - ridge_score
+    min_gain = max(0.0, min(1.0, float(minimum_gain)))
+    gain_passed = bool(gain + 1e-12 >= min_gain)
+    alpha = max(1e-6, min(0.50, float(significance_alpha)))
+    mlp_only = int(paired.get("mlp_only_correct") or 0)
+    ridge_only = int(paired.get("ridge_only_correct") or 0)
+    p_value = (
+        exact_paired_mlp_win_p_value(mlp_only, ridge_only)
+        if paired_complete else None
+    )
+    significance_passed = bool(
+        paired_complete
+        and mlp_only > ridge_only
+        and p_value is not None
+        and p_value <= alpha
+    )
     wins = bool(
         same_rows
         and ridge_coverage
         and threshold_passed
         and resource_passed
-        and gain > float(minimum_gain)
+        and gain_passed
+        and significance_passed
     )
     selected = TinyMLPBackend.BACKEND if wins else "diagonal_linucb"
-    if not same_rows:
+    if not sample_count_match:
         reason = "holdout_sample_mismatch"
+    elif not paired_complete:
+        reason = "paired_holdout_evidence_missing_or_incomplete"
     elif not ridge_coverage:
         reason = "ridge_holdout_class_coverage_insufficient"
     elif not enough:
@@ -396,20 +483,28 @@ def tournament_result(
         reason = "mlp_below_existing_candidate_threshold"
     elif not resource_passed:
         reason = "mlp_resource_gate_failed"
-    elif not wins:
-        reason = "ridge_equal_or_better_on_identical_holdout"
+    elif not gain_passed:
+        reason = "mlp_gain_below_practical_minimum"
+    elif not significance_passed:
+        reason = "mlp_paired_improvement_not_significant"
     else:
-        reason = "mlp_strictly_better_on_identical_holdout_and_all_gates_passed"
+        reason = "mlp_meaningfully_and_significantly_better_on_identical_holdout"
     return {
-        "contract": "ridge_vs_tiny_mlp_identical_holdout_v1",
-        "selection_bias": "none_same_rows_same_metric_strict_gain_required_to_replace_baseline",
+        "contract": "ridge_vs_tiny_mlp_paired_holdout_v2",
+        "selection_bias": "same_rows_same_metric_practical_gain_plus_exact_paired_significance_required",
         "automatic_physical_switch": False,
         "samples": mlp_samples,
         "same_holdout_rows": same_rows,
         "balanced": binary,
         "threshold": float(threshold),
         "minimum_samples": int(minimum_samples),
-        "minimum_gain": float(minimum_gain),
+        "minimum_gain": float(min_gain),
+        "gain_passed": gain_passed,
+        "significance_test": "exact_one_sided_mcnemar_binomial",
+        "significance_alpha": float(alpha),
+        "significance_p_value": p_value,
+        "significance_passed": significance_passed,
+        "paired_comparison": paired,
         "ridge_score": float(ridge_score),
         "ridge_class_coverage": ridge_coverage,
         "ridge_per_action_accuracy": ridge_per_action,

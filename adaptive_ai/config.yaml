@@ -125,7 +125,8 @@ options:
   tiny_mlp_gradient_clip: 1.0
   tiny_mlp_early_stop_patience: 3
   tiny_mlp_early_stop_min_delta: 0.001
-  tiny_mlp_tournament_min_gain: 0.0
+  tiny_mlp_tournament_min_gain: 0.03
+  tiny_mlp_tournament_significance_alpha: 0.05
   tiny_mlp_max_parameters: 50000
   tiny_mlp_max_serialized_bytes: 524288
   tiny_mlp_correct_fraction: 0.25
@@ -320,6 +321,7 @@ schema:
   tiny_mlp_early_stop_patience: "int(1,20)"
   tiny_mlp_early_stop_min_delta: "float(0.0,1.0)"
   tiny_mlp_tournament_min_gain: "float(0.0,1.0)"
+  tiny_mlp_tournament_significance_alpha: "float(0.001,0.50)"
   tiny_mlp_max_parameters: "int(100,500000)"
   tiny_mlp_max_serialized_bytes: "int(16384,4194304)"
   tiny_mlp_correct_fraction: "float(0.20,0.30)"
