@@ -18,6 +18,7 @@ from replay import (
 from training_budget import TRAINING_BUDGET
 from policy import MultiHorizonPolicy
 from training_balance_audit import TrainingBalanceAudit
+from training_evidence import normalized_dwell_sample_mass
 
 def stateful_continuation_seed_rows(store, agents, target_map, start_ts, boundary_ts):
     """Return the exact open-target transition state the legacy overlap would leave.
@@ -2341,10 +2342,22 @@ class HistoryManager(threading.Thread):
                     seen.add(key)
                     persistence_tasks.append((float(target_time), h))
 
+            # Correlated persistence contexts share one bounded mass budget per dwell/head.
+            # We keep all selected contexts, but 1/2/3 samples contribute 1/.5/~.333 each
+            # instead of allowing a long dwell to gain weight from sample count alone.
+            persistence_count_by_horizon = {}
+            for _target_time, h in persistence_tasks:
+                persistence_count_by_horizon[h] = int(
+                    persistence_count_by_horizon.get(h) or 0
+                ) + 1
+
             # Heads are independent. Sorting their observation timestamps does not change
             # reward/order within any head, but avoids artificial cursor rewinds between
             # horizons of the same dwell.
             for target_time, h in sorted(persistence_tasks, key=lambda item: (item[0], item[1])):
+                sample_mass = normalized_dwell_sample_mass(
+                    persistence_count_by_horizon.get(h, 0)
+                )
                 context_ts = target_time
                 persistence_timeline.advance(context_ts)
                 features, _, _ = policy.features(
@@ -2361,14 +2374,20 @@ class HistoryManager(threading.Thread):
                         "persistence", old["action_idx"], reward, target_time,
                         policy.heads[int(h)],
                         split="deferred_train" if target_time >= validation_start else "train",
-                        provenance=origin, horizon=h,
+                        provenance=origin, horizon=h, raw_mass=sample_mass,
                     )
                 if target_time >= validation_start:
                     # Correlated samples within a dwell are training evidence,
                     # not independent validation trials. Validate onset only.
-                    heldout_updates.append((policy, h, old["action_idx"], features, float(reward), float(target_time)))
+                    heldout_updates.append((
+                        policy, h, old["action_idx"], features, float(reward),
+                        float(target_time), sample_mass,
+                    ))
                 else:
-                    policy.update(h, old["action_idx"], features, reward, target_time)
+                    policy.update(
+                        h, old["action_idx"], features, reward, target_time,
+                        sample_mass=sample_mass,
+                    )
                     if neural_enabled and float(reward) > 0.0:
                         observation = neural_observation(
                             agent, persistence_timeline, target_time
@@ -2377,7 +2396,8 @@ class HistoryManager(threading.Thread):
                             neural_train_samples[str(agent["id"])].append({
                                 "observation": observation,
                                 "action_idx": int(old["action_idx"]),
-                                "weight": float(reward),
+                                "weight": float(reward) * sample_mass,
+                                "sample_mass": sample_mass,
                                 "timestamp": float(target_time),
                                 "source": "persistence",
                             })
