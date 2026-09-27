@@ -261,13 +261,17 @@ class TrainingArtifactPersistenceTests(unittest.TestCase):
 
 
 class CandidateNeuralShadowTests(unittest.TestCase):
-    def manager(self, *, offline_passed=True, selected=True):
+    def manager(self, *, offline_passed=True, selected=True, offline_rl=False):
         calls = []
         record = {
             "model": {"trained": True},
             "mask": {"mask_id": "m"},
             "selected_backend": "tiny_mlp" if selected else "diagonal_linucb",
-            "tournament": {"passed": bool(selected), "selected_backend": "tiny_mlp"},
+            "tournament": {
+                "passed": bool(selected),
+                "selected_backend": "tiny_mlp",
+                "contract": "offline_rl_stage7" if offline_rl else "ridge_vs_tiny_mlp_identical_holdout_v1",
+            },
         }
 
         class Service:
@@ -334,11 +338,21 @@ class CandidateNeuralShadowTests(unittest.TestCase):
         self.assertTrue(status["candidate_neural_shadow_active"])
         self.assertFalse(status["candidate_neural_physical_authority"])
 
-    def test_selected_neural_candidate_cannot_be_promoted_to_live_or_control(self):
+    def test_selected_supervised_neural_candidate_can_promote_via_hybrid_contract(self):
         manager, _calls = self.manager(offline_passed=True, selected=True)
-        with self.assertRaisesRegex(ValueError, "Shadow-only"):
+        self.assertEqual(manager.promote("candidate-1"), {"promoted": "candidate-1"})
+        self.assertEqual(
+            manager.promote_custom("candidate-1"),
+            {"custom_promoted": "candidate-1"},
+        )
+
+    def test_offline_rl_neural_candidate_remains_shadow_only(self):
+        manager, _calls = self.manager(
+            offline_passed=True, selected=True, offline_rl=True
+        )
+        with self.assertRaisesRegex(ValueError, "Offline RL Stage 7"):
             manager.promote("candidate-1")
-        with self.assertRaisesRegex(ValueError, "Shadow-only"):
+        with self.assertRaisesRegex(ValueError, "Offline RL Stage 7"):
             manager.promote_custom("candidate-1")
 
     def test_failed_offline_gate_or_ridge_tournament_keeps_existing_candidate_backend(self):
