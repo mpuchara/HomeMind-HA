@@ -202,7 +202,16 @@ class ContextEngine:
         except ValueError:
             return None
 
-    def observe(self, eid, state, ts, learn=True):
+    def observe(self, eid, state, ts, learn=True, *, event_ts=None, received_ts=None):
+        """Observe with an explicit causal receive clock and HA event clock.
+
+        Legacy callers may pass only ts; then both clocks are identical. Live runtime
+        supplies both so a late packet is not treated as fresh state and cannot rewind
+        anonymous movement hypotheses.
+        """
+        processing_ts = float(received_ts if received_ts is not None else ts)
+        event_ts = float(event_ts if event_ts is not None else ts)
+        received_ts = float(received_ts if received_ts is not None else processing_ts)
         with self.lock:
             self._discard_orphan_movement_state()
             if eid not in self.admitted:
