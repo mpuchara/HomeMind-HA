@@ -82,6 +82,12 @@ DEFAULT_OPTIONS = {
     "agent_training_overlap_hours": 6,
     "agent_training_stateful_continuation": True,
     "agent_training_history_days": 7,
+    # Agent Training vNext Stage 5: full-resolution recent replay stays at 7 days;
+    # older target history is sampled deterministically and reconstructed only for the
+    # bounded selected dwells under the current schema.
+    "agent_training_long_memory_days": 35,
+    "agent_training_long_memory_max_samples": 96,
+    "agent_training_long_memory_max_mass_ratio": 0.50,
     "agent_training_pause_ms": 0,
     "min_historical_support": 0.20,
     "max_context_novelty": 0.85,

@@ -23,6 +23,10 @@ from frozen_validation import (
     FrozenRidgeSnapshot, empty_holdout_counts, holdout_summary,
     prediction_is_correct, record_holdout_result,
 )
+from long_memory import (
+    collect_sparse_dwells, count_completed_dwells, filter_unseen_candidates,
+    selected_history_provenance,
+)
 
 def stateful_continuation_seed_rows(store, agents, target_map, start_ts, boundary_ts):
     """Return the exact open-target transition state the legacy overlap would leave.
@@ -678,6 +682,9 @@ class HistoryManager(threading.Thread):
                 progress_hi=(chunk_end-start_ts)/max(1,target_end-start_ts),
                 progress_label=f"Training {agent['name']}",
                 continuation_from_ts=continuation_from_ts,
+                include_long_memory=(boundary_ts <= start_ts + 0.5),
+                long_memory_recent_start_ts=start_ts,
+                long_memory_reference_end_ts=target_end,
             )
             replay_summary["chunks"] += 1
             replay_summary["logical_hours"] += max(
@@ -1451,7 +1458,7 @@ class HistoryManager(threading.Thread):
                 self.engine.models.pop(aid, None)
             raise
 
-    def _train_from_archive(self, start_ts, end_ts, *, qualify=False, agent_ids=None, include_candidates=False, benchmark=None, accumulate_benchmark=False, progress_lo=None, progress_hi=None, progress_label=None, continuation_from_ts=None):
+    def _train_from_archive(self, start_ts, end_ts, *, qualify=False, agent_ids=None, include_candidates=False, benchmark=None, accumulate_benchmark=False, progress_lo=None, progress_hi=None, progress_label=None, continuation_from_ts=None, include_long_memory=False, long_memory_recent_start_ts=None, long_memory_reference_end_ts=None):
         benchmark = bool(qualify) if benchmark is None else bool(benchmark)
         self.temporal_replay_stats = {}
         agents = [a for a in STORE.list_agent_configs() if a["enabled"]]
@@ -2126,7 +2133,8 @@ class HistoryManager(threading.Thread):
             meta = policy.selection_meta or {}
             return meta.get("primary_occupancy_sensor") or meta.get("primary_local_sensor") or next(iter(meta.get("primary_local_sensors") or []), None)
 
-        def _fast_anchor(agent, policy, action_value, action_ts):
+        def _fast_anchor(agent, policy, action_value, action_ts, tracker=None):
+            tracker = tracker or timeline
             if not is_fast_reactive_agent(agent):
                 return float(action_ts), None
             positive = float(action_value) >= 0.5
@@ -2134,16 +2142,17 @@ class HistoryManager(threading.Thread):
             local_ts = None
             if primary:
                 window = float(OPTIONS.get("fast_precursor_on_seconds", 8) if positive else OPTIONS.get("fast_precursor_off_seconds", 120))
-                local_ts = timeline.directional_transition_before(primary, action_ts, positive, window)
+                local_ts = tracker.directional_transition_before(primary, action_ts, positive, window)
             upstream_ts = None
             if positive:
                 for eid in (policy.selection_meta or {}).get("upstream_sensors") or []:
-                    ts = timeline.directional_transition_before(eid, action_ts, True, float(OPTIONS.get("fast_precursor_on_seconds", 8)))
+                    ts = tracker.directional_transition_before(eid, action_ts, True, float(OPTIONS.get("fast_precursor_on_seconds", 8)))
                     if ts is not None and (upstream_ts is None or ts > upstream_ts):
                         upstream_ts = ts
             return float(local_ts if local_ts is not None else action_ts), upstream_ts
 
-        def _effective_fast_dwell_end(agent, policy, action_value, start_ts, end_ts):
+        def _effective_fast_dwell_end(agent, policy, action_value, start_ts, end_ts, tracker=None):
+            tracker = tracker or timeline
             if not is_fast_reactive_agent(agent):
                 return float(end_ts)
             primary = _primary_occupancy_sensor(policy)
@@ -2153,7 +2162,7 @@ class HistoryManager(threading.Thread):
             # vacant, and stop reinforcing OFF when it becomes occupied. This removes
             # inherited one-minute automation delays from desired-state learning.
             opposite_positive = float(action_value) < 0.5
-            edge = timeline.first_directional_transition_after(primary, start_ts, end_ts, opposite_positive)
+            edge = tracker.first_directional_transition_after(primary, start_ts, end_ts, opposite_positive)
             return min(float(end_ts), float(edge)) if edge is not None else float(end_ts)
 
         def learn_or_validate(
@@ -2487,10 +2496,11 @@ class HistoryManager(threading.Thread):
             new_count += 1
             return True
 
-        def _pending_from_row(agent, policy, row, value):
-            """Reconstruct exactly the open dwell state produced by the legacy overlap."""
+        def _pending_from_row(agent, policy, row, value, tracker=None):
+            """Reconstruct an open dwell from the current schema at one causal timestamp."""
+            tracker = tracker or timeline
             anchor_ts, upstream_anchor_ts = _fast_anchor(
-                agent, policy, value, float(row["ts"])
+                agent, policy, value, float(row["ts"]), tracker=tracker
             )
             upstream_valid = (
                 upstream_anchor_ts is not None
@@ -2511,14 +2521,14 @@ class HistoryManager(threading.Thread):
             snapshots = {}
             neural_snapshots = {}
             for query_ts in sorted(query_times):
-                timeline.advance(query_ts)
+                tracker.advance(query_ts)
                 features, _, meta = policy.features(
-                    timeline.state_map, timeline.history, at_ts=query_ts
+                    tracker.state_map, tracker.history, at_ts=query_ts
                 )
                 snapshots[query_ts] = (dict(features), dict(meta or {}))
                 if neural_enabled:
                     neural_snapshots[query_ts] = neural_observation(
-                        agent, timeline, query_ts
+                        agent, tracker, query_ts
                     )
 
             anchor_features = snapshots[float(anchor_ts)][0]
@@ -2564,6 +2574,273 @@ class HistoryManager(threading.Thread):
                 "action_value": actions[action_idx],
                 "user_id": row.get("context_user_id"),
             }
+
+
+        # Stage 5: use older history only as bounded train evidence. Selection scans
+        # target transitions alone; expensive feature/home reconstruction happens only
+        # for the selected dwells under the *current* schema. It never enters validation.
+        self.training_long_memory_status = {
+            "contract": "sparse_long_memory_v1",
+            "enabled": bool(include_long_memory),
+            "agents": {},
+        }
+        if include_long_memory:
+            reference_end = float(
+                long_memory_reference_end_ts
+                if long_memory_reference_end_ts is not None else end_ts
+            )
+            recent_start = float(
+                long_memory_recent_start_ts
+                if long_memory_recent_start_ts is not None else logical_start_ts
+            )
+            recent_days = max(
+                1.0,
+                float(OPTIONS.get("agent_training_history_days", 7) or 7),
+            )
+            long_days = max(
+                recent_days,
+                min(
+                    90.0,
+                    float(OPTIONS.get("agent_training_long_memory_days", 35) or 35),
+                ),
+            )
+            max_long_samples = max(
+                0,
+                min(
+                    1024,
+                    int(OPTIONS.get("agent_training_long_memory_max_samples", 96) or 0),
+                ),
+            )
+            max_mass_ratio = clamp(
+                float(
+                    OPTIONS.get(
+                        "agent_training_long_memory_max_mass_ratio", 0.50
+                    ) or 0.0
+                ),
+                0.0,
+                1.0,
+            )
+            long_start = max(0.0, reference_end - long_days * 86400.0)
+            long_end = min(recent_start, reference_end)
+
+            if max_long_samples > 0 and long_end > long_start + 1.0:
+                for agent in agents:
+                    aid = str(agent["id"])
+                    policy = policies[agent["id"]]
+                    selected, selection = collect_sparse_dwells(
+                        STORE,
+                        agent,
+                        policy.actions,
+                        long_start,
+                        long_end - 1e-6,
+                        reference_end,
+                        max_long_samples,
+                        checkpoint=TRAINING_BUDGET.checkpoint,
+                    )
+                    recent_scan = count_completed_dwells(
+                        STORE,
+                        agent,
+                        policy.actions,
+                        recent_start,
+                        reference_end,
+                        checkpoint=TRAINING_BUDGET.checkpoint,
+                    )
+                    seen = existing_experience_ids.setdefault(agent["id"], set())
+                    unseen = filter_unseen_candidates(selected, seen)
+                    provenance = selected_history_provenance(
+                        STORE, [row["history_id"] for row in unseen]
+                    )
+                    eligible = []
+                    own_command_excluded = 0
+                    for candidate in unseen:
+                        item = dict(
+                            provenance.get(int(candidate["history_id"])) or {}
+                        )
+                        if str(item.get("origin") or "unknown") == "own_command":
+                            own_command_excluded += 1
+                            audit = training_audits.get(aid)
+                            if audit is not None:
+                                audit.record_excluded("own_command")
+                            continue
+                        eligible.append((candidate, item))
+
+                    # Recent full-resolution replay remains dominant before time decay:
+                    # older onset mass is capped to a fraction of the number of recent
+                    # completed dwells. With no recent transitions, allow at most one
+                    # unit of sparse evidence so old history can seed rather than rule.
+                    recent_dwells = int(recent_scan.get("completed_dwells") or 0)
+                    long_mass_budget = min(
+                        float(len(eligible)),
+                        max(
+                            1.0 if eligible else 0.0,
+                            float(recent_dwells) * max_mass_ratio,
+                        ),
+                    )
+                    per_sample_mass = (
+                        long_mass_budget / len(eligible) if eligible else 0.0
+                    )
+
+                    trained_dwells = 0
+                    long_tracker = None
+                    before_advances = 0
+                    try:
+                        if eligible:
+                            guard_seconds = max(
+                                300.0,
+                                max(
+                                    [float(value) for value in policy.horizons]
+                                    or [1.0]
+                                ),
+                                float(OPTIONS.get("fast_precursor_off_seconds", 120) or 120),
+                            )
+                            long_tracker = SQLiteTemporalTracker(
+                                STORE,
+                                watched_entities,
+                                self.engine.context,
+                                max(0.0, long_start - guard_seconds),
+                                long_end,
+                                query_cache=replay_query_cache,
+                                home_context_cache=replay_home_context_cache,
+                                context_cache_contract=context_cache_contract,
+                            )
+                            before_advances = int(
+                                long_tracker.stats().get("advances") or 0
+                            )
+
+                        for candidate, prov in eligible:
+                            target_history_id = int(candidate["history_id"])
+                            if target_history_id in seen:
+                                continue
+                            old = _pending_from_row(
+                                agent,
+                                policy,
+                                candidate["row"],
+                                candidate["action_value"],
+                                tracker=long_tracker,
+                            )
+                            effective_end = _effective_fast_dwell_end(
+                                agent,
+                                policy,
+                                old["action_value"],
+                                old["ts"],
+                                candidate["end_ts"],
+                                tracker=long_tracker,
+                            )
+                            dwell = max(0.0, float(effective_end) - float(old["ts"]))
+                            reward = historical_reward(
+                                agent,
+                                dwell,
+                                candidate.get("user_id"),
+                                candidate.get("next_user_id"),
+                            )
+                            origin = str(prov.get("origin") or "unknown")
+                            evidence = evidence_weight_for(origin, "onset")
+                            primary_h = min(old["features_by_horizon"])
+
+                            experience_batch.append({
+                                "agent_id": agent["id"],
+                                "target_history_id": target_history_id,
+                                "action_index": old["action_idx"],
+                                "action_value": old["action_value"],
+                                "reward": reward,
+                                "dwell_seconds": dwell,
+                                "features": old["features_by_horizon"][primary_h],
+                                "user_id": candidate.get("user_id"),
+                                "_provenance": prov,
+                            })
+                            seen.add(target_history_id)
+                            flush_experience_batch()
+
+                            audit = training_audits.get(aid)
+                            for horizon, features in old["features_by_horizon"].items():
+                                policy.update(
+                                    horizon,
+                                    old["action_idx"],
+                                    features,
+                                    reward,
+                                    old["anchor_ts"],
+                                    sample_mass=per_sample_mass,
+                                    evidence_weight=evidence,
+                                )
+                                if audit is not None:
+                                    audit.record_sample(
+                                        "long_memory_onset",
+                                        old["action_idx"],
+                                        reward,
+                                        old["anchor_ts"],
+                                        policy.heads[int(horizon)],
+                                        split="train",
+                                        provenance=origin,
+                                        horizon=horizon,
+                                        raw_mass=per_sample_mass,
+                                        evidence_weight=evidence,
+                                        memory_tier="long_memory",
+                                        memory_meta=candidate.get("stratum_meta"),
+                                    )
+
+                            if (
+                                neural_enabled
+                                and float(reward) > 0.0
+                                and old.get("neural_anchor_observation") is not None
+                            ):
+                                time_decay = policy.heads[int(primary_h)].sample_weight(
+                                    old["anchor_ts"]
+                                )
+                                neural_train_samples[aid].append({
+                                    "observation": old["neural_anchor_observation"],
+                                    "action_idx": int(old["action_idx"]),
+                                    "weight": (
+                                        float(per_sample_mass)
+                                        * float(evidence)
+                                        * float(time_decay)
+                                    ),
+                                    "reward": float(reward),
+                                    "evidence_weight": float(evidence),
+                                    "timestamp": float(old["anchor_ts"]),
+                                    "source": "long_memory_onset",
+                                })
+                            trained_dwells += 1
+                            new_count += 1
+                            TRAINING_BUDGET.checkpoint(
+                                "long_memory_selected_dwell"
+                            )
+                    finally:
+                        tracker_stats = (
+                            long_tracker.stats() if long_tracker is not None else {}
+                        )
+                        if long_tracker is not None:
+                            long_tracker.close()
+
+                    selection = {
+                        **dict(selection or {}),
+                        "recent_full_days": float(recent_days),
+                        "long_memory_days": float(long_days),
+                        "recent_target_rows_scanned": int(
+                            recent_scan.get("target_rows_scanned") or 0
+                        ),
+                        "recent_completed_dwells": recent_dwells,
+                        "already_learned": len(selected) - len(unseen),
+                        "own_command_excluded": int(own_command_excluded),
+                        "eligible_dwells": len(eligible),
+                        "trained_dwells": int(trained_dwells),
+                        "raw_mass_budget": float(long_mass_budget),
+                        "per_selected_dwell_mass": float(per_sample_mass),
+                        "max_mass_ratio_to_recent_dwell_count": float(max_mass_ratio),
+                        "context_reconstructions": max(
+                            0,
+                            int(tracker_stats.get("advances") or 0) - before_advances,
+                        ),
+                        "context_sql_queries": int(
+                            tracker_stats.get("sql_queries") or 0
+                        ),
+                        "train_only": True,
+                        "validation_rows": 0,
+                        "current_schema_reconstruction": True,
+                    }
+                    self.training_long_memory_status["agents"][aid] = selection
+                    audit = training_audits.get(aid)
+                    if audit is not None:
+                        audit.record_long_memory_selection(selection)
 
         if scan_start_ts > logical_start_ts + 0.5:
             # The previous implementation replayed every context entity in the overlap
@@ -2988,7 +3265,8 @@ class HistoryManager(threading.Thread):
                  "feature_dimensions": int(OPTIONS.get("feature_dimensions", 128)),
                  "validation_fraction": validation_fraction, "heldout_updates": len(heldout_updates),
                  "qualification": qualification_summary,
-                 "temporal_replay": _publish_temporal_replay_stats()},
+                 "temporal_replay": _publish_temporal_replay_stats(),
+                 "long_memory": dict(self.training_long_memory_status or {})},
             )
         if self.neural_training_artifacts and not self.worker_mode:
             from tiny_mlp_shadow import publish_training_artifact

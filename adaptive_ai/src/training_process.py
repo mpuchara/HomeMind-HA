@@ -600,6 +600,9 @@ def _build_job(history, start_ts, end_ts, kwargs):
             "progress_hi": kwargs.get("progress_hi"),
             "progress_label": kwargs.get("progress_label"),
             "continuation_from_ts": kwargs.get("continuation_from_ts"),
+            "include_long_memory": bool(kwargs.get("include_long_memory", False)),
+            "long_memory_recent_start_ts": kwargs.get("long_memory_recent_start_ts"),
+            "long_memory_reference_end_ts": kwargs.get("long_memory_reference_end_ts"),
         },
         "status_path": str(root / f"{job_id}.status.json"),
         "result_path": str(root / f"{job_id}.result.json"),
@@ -931,6 +934,9 @@ def run_isolated_training_chunk(history, start_ts, end_ts, **kwargs):
         if isinstance(relevance, dict):
             history.engine.context_relevance[agent_id] = relevance
         history.temporal_replay_stats = dict(result.get("temporal_replay") or {})
+        history.training_long_memory_status = dict(
+            result.get("training_long_memory") or {}
+        )
         history.training_replay_cache_status = dict(
             result.get("training_replay_cache") or {}
         )
@@ -1249,6 +1255,9 @@ def worker_main(job_path):
             "return_value": int(value or 0),
             "context_relevance": dict(engine.context_relevance.get(aid) or {}),
             "temporal_replay": dict(history.temporal_replay_stats or {}),
+            "training_long_memory": dict(
+                getattr(history, "training_long_memory_status", {}) or {}
+            ),
             "training_replay_cache": dict(history.training_replay_cache_status or {}),
             "training_home_context_cache": dict(
                 history.training_home_context_cache_status or {}

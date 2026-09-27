@@ -114,6 +114,25 @@ class TrainingBalanceAudit:
         self.mass_by_action = {key: _mass_bucket() for key in self.action_keys}
         self.sample_count_by_action = {key: 0 for key in self.action_keys}
         self.per_horizon = {}
+        self.memory = {
+            "recent": {
+                "samples": 0,
+                "raw_sample_mass": 0.0,
+                "effective_update_mass": 0.0,
+            },
+            "long_memory": {
+                "samples": 0,
+                "raw_sample_mass": 0.0,
+                "effective_update_mass": 0.0,
+                "action_distribution": {},
+                "age_distribution": {},
+                "daypart_distribution": {},
+                "day_kind_distribution": {},
+                "dwell_distribution": {},
+                "strata": {},
+                "selection": {},
+            },
+        }
         self.chunks = 0
 
         prior = dict(prior_state or {})
@@ -170,6 +189,32 @@ class TrainingBalanceAudit:
             ).items():
                 self.sample_count_by_action[str(key)] = int(value or 0)
             self.per_horizon = dict(prior.get("per_horizon") or {})
+            prior_memory = dict(prior.get("memory") or {})
+            for tier in ("recent", "long_memory"):
+                raw_tier = dict(prior_memory.get(tier) or {})
+                target = self.memory[tier]
+                target["samples"] = int(raw_tier.get("samples") or 0)
+                target["raw_sample_mass"] = _finite(
+                    raw_tier.get("raw_sample_mass")
+                )
+                target["effective_update_mass"] = _finite(
+                    raw_tier.get("effective_update_mass")
+                )
+                if tier == "long_memory":
+                    for field in (
+                        "action_distribution", "age_distribution",
+                        "daypart_distribution", "day_kind_distribution",
+                        "dwell_distribution", "strata",
+                    ):
+                        target[field] = {
+                            str(key): int(value or 0)
+                            for key, value in dict(
+                                raw_tier.get(field) or {}
+                            ).items()
+                        }
+                    target["selection"] = dict(
+                        raw_tier.get("selection") or {}
+                    )
 
     def begin_chunk(self):
         self.chunks += 1
@@ -187,6 +232,7 @@ class TrainingBalanceAudit:
             "mass_by_action": self.mass_by_action,
             "sample_count_by_action": self.sample_count_by_action,
             "per_horizon": self.per_horizon,
+            "memory": self.memory,
         }
 
     def _action_key(self, action_idx):
@@ -233,6 +279,9 @@ class TrainingBalanceAudit:
         reason = str(reason)
         self.excluded[reason] = int(self.excluded.get(reason) or 0) + int(count)
 
+    def record_long_memory_selection(self, diagnostics):
+        self.memory["long_memory"]["selection"] = dict(diagnostics or {})
+
     @staticmethod
     def _add_mass(bucket, *, raw, decay, evidence_weight, reward):
         time_decay_mass = raw * decay
@@ -265,6 +314,8 @@ class TrainingBalanceAudit:
         horizon=None,
         raw_mass=1.0,
         evidence_weight=1.0,
+        memory_tier="recent",
+        memory_meta=None,
     ):
         source = str(source)
         split = str(split)
@@ -275,6 +326,31 @@ class TrainingBalanceAudit:
         reward = max(-1.0, min(1.0, _finite(reward)))
         evidence_weight = max(0.0, _finite(evidence_weight, 1.0))
         decay = max(0.0, _finite(head.sample_weight(sample_ts), 1.0))
+        effective = raw * decay * evidence_weight
+
+        tier = "long_memory" if str(memory_tier) == "long_memory" else "recent"
+        memory_slot = self.memory[tier]
+        memory_slot["samples"] = int(memory_slot.get("samples") or 0) + 1
+        memory_slot["raw_sample_mass"] = (
+            _finite(memory_slot.get("raw_sample_mass")) + raw
+        )
+        memory_slot["effective_update_mass"] = (
+            _finite(memory_slot.get("effective_update_mass")) + effective
+        )
+        if tier == "long_memory":
+            meta = dict(memory_meta or {})
+            action_key = self._action_key(action_idx)
+            distributions = (
+                ("action_distribution", action_key),
+                ("age_distribution", str(meta.get("age_bucket") or "unknown")),
+                ("daypart_distribution", str(meta.get("daypart") or "unknown")),
+                ("day_kind_distribution", str(meta.get("day_kind") or "unknown")),
+                ("dwell_distribution", str(meta.get("dwell_bucket") or "unknown")),
+                ("strata", str(meta.get("stratum") or "unknown")),
+            )
+            for field, key in distributions:
+                bucket = memory_slot[field]
+                bucket[key] = int(bucket.get(key) or 0) + 1
 
         sample_slot = self.samples.setdefault(source, _sample_bucket())
         sample_slot["total"] += 1
@@ -513,6 +589,30 @@ class TrainingBalanceAudit:
         persistence_raw = source_raw.get("persistence", 0.0)
         upstream_raw = source_raw.get("upstream", 0.0)
 
+        recent_memory = dict(self.memory.get("recent") or {})
+        long_memory = dict(self.memory.get("long_memory") or {})
+        recent_samples = int(recent_memory.get("samples") or 0)
+        long_samples = int(long_memory.get("samples") or 0)
+        recent_effective = _finite(recent_memory.get("effective_update_mass"))
+        long_effective = _finite(long_memory.get("effective_update_mass"))
+        total_memory_samples = recent_samples + long_samples
+        total_memory_effective = recent_effective + long_effective
+        memory_summary = {
+            "recent": recent_memory,
+            "long_memory": long_memory,
+            "long_memory_sample_share": (
+                float(long_samples) / total_memory_samples
+                if total_memory_samples else 0.0
+            ),
+            "long_memory_effective_mass_share": (
+                float(long_effective) / total_memory_effective
+                if total_memory_effective > 0.0 else 0.0
+            ),
+            "recent_effective_mass_dominates": (
+                recent_effective >= long_effective
+            ),
+        }
+
         return {
             "contract": self.CONTRACT,
             "diagnostic_only": True,
@@ -572,6 +672,7 @@ class TrainingBalanceAudit:
                 "balanced_accuracy": balanced_accuracy,
             },
             "tiny_mlp": mlp,
+            "memory": memory_summary,
             "derived": {
                 "effective_update_ratio": _ordered_action_ratio(
                     action_effective, self.action_keys
