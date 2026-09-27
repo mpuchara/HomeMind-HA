@@ -965,6 +965,23 @@ def install(manager):
             "contract": "same_prediction_event_same_future_outcome",
         }
 
+    def align_candidate_shadow_event_timestamp(root_id, event_id, old_ts, new_ts):
+        root_id = str(root_id)
+        event_id = str(event_id)
+        old_ts = float(old_ts)
+        new_ts = float(new_ts)
+        changed = 0
+        with manager.lock:
+            for row in latest_generation_runtime.values():
+                if (
+                    str(row.get("root_agent_id") or "") == root_id
+                    and str(row.get("event_id") or "") == event_id
+                    and abs(float(row.get("ts") or 0.0) - old_ts) <= 1e-6
+                ):
+                    row["ts"] = new_ts
+                    changed += 1
+        return changed
+
     def _latest_shadow(generation_id):
         """Return the last actually observed decision, even when it is no longer fresh.
 
@@ -1265,6 +1282,7 @@ def install(manager):
     manager.drain_candidate_shadow_events = drain_candidate_shadow_events
     manager.candidate_live_runtime_snapshots = candidate_live_runtime_snapshots
     manager.candidate_latest_runtime = lambda generation_id: _latest_shadow(generation_id)
+    manager.align_candidate_shadow_event_timestamp = align_candidate_shadow_event_timestamp
     manager.candidate_dependency_roots = candidate_dependency_roots
     manager.rebuild_candidate_dependency_index = _rebuild_candidate_dependency_index
     if callable(original_on_state_changed):
