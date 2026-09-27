@@ -186,10 +186,6 @@ def install_dispatch(core, registry=None):
     core._explicit_http_dispatch_installed = True
     return registry
 
-atch_installed = True
-    return registry
-
-
 def _feedback_action(core, action):
     from manual_feedback import apply_ui_correction, record_negative_feedback, teach_desired
 
