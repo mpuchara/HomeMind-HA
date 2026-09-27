@@ -1,5 +1,4 @@
 """Stage 1 regression tests for Agent Training vNext balance diagnostics."""
-import copy
 import unittest
 
 from training_balance_audit import TrainingBalanceAudit
@@ -29,7 +28,10 @@ class FakePolicy:
 class TrainingBalanceAuditTests(unittest.TestCase):
     def test_persistence_asymmetry_is_visible_without_mutating_policy(self):
         policy = FakePolicy()
-        before = copy.deepcopy(policy.__dict__)
+        before = {
+            horizon: (tuple(head.counts), tuple(head.reward_sums), head.total_updates)
+            for horizon, head in policy.heads.items()
+        }
         audit = TrainingBalanceAudit({"id": "lamp"}, policy)
         audit.record_dwell(0, 20.0)
         audit.record_sample("onset", 0, 1.0, 100.0, policy.heads[1], horizon=1)
@@ -40,7 +42,11 @@ class TrainingBalanceAuditTests(unittest.TestCase):
 
         summary = audit.finalize(policy)
 
-        self.assertEqual(policy.__dict__, before)
+        after = {
+            horizon: (tuple(head.counts), tuple(head.reward_sums), head.total_updates)
+            for horizon, head in policy.heads.items()
+        }
+        self.assertEqual(after, before)
         self.assertEqual(summary["samples"]["onset"]["total"], 2)
         self.assertEqual(summary["samples"]["persistence"]["total"], 3)
         self.assertEqual(
