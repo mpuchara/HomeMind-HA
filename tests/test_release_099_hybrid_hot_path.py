@@ -39,12 +39,12 @@ class HybridHotPathBaselineTests(unittest.TestCase):
         self.assertIn("candidate_mlp_forward",s["D_hybrid_plus_hybrid_candidate"]["stages"])
         guard=s["D_hybrid_plus_hybrid_candidate"]["guard_metrics"]
         self.assertIn("hybrid_ridge_guard",guard); self.assertIn("candidate_hybrid_ridge_guard",guard)
-    def test_current_candidate_wrapper_is_synchronous(self):
-        order=[]; engine=SimpleNamespace()
+    def test_candidate_wrapper_runs_only_lightweight_post_live_hook_before_return(self):
+        order=[]; engine=SimpleNamespace(inference_hot_path_metrics=None)
         engine.process_agent=lambda *a,**k:(order.append("live") or {"ok":True})
         manager=SimpleNamespace(engine=engine,before_live_process=lambda *a,**k:order.append("before"),
-                                after_live_process=lambda *a,**k:order.append("candidate"))
+                                after_live_process=lambda *a,**k:order.append("enqueue"))
         AgentCandidateManager._install_process_wrapper(manager)
         result=engine.process_agent({"id":"a"},{},{"sensor.x"})
-        self.assertEqual(result,{"ok":True}); self.assertEqual(order,["before","live","candidate"])
+        self.assertEqual(result,{"ok":True}); self.assertEqual(order,["before","live","enqueue"])
 if __name__=="__main__": unittest.main()
