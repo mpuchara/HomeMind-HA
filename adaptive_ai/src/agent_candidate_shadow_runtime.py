@@ -20,6 +20,7 @@ from urllib.parse import parse_qs, unquote, urlsplit
 from context import target_value
 from fast_runtime import is_fast_target
 from settings import parse_ts
+from inference_hot_path_metrics import observe_elapsed
 
 
 DECISION_STALE_SECONDS = 95.0
@@ -165,8 +166,12 @@ def _predict_candidate(manager, generation, state_map, event_ts):
             if not agent or manager.store.get_model(str(agent_id)) is None:
                 return None
             policy = manager.engine.policy(agent)
+        stage_started_ns = time.perf_counter_ns()
         features, _, _ = policy.features(state_map, manager.engine.temporal_history, at_ts=event_ts)
+        observe_elapsed(manager.engine, "candidate_feature_construction", stage_started_ns)
+        stage_started_ns = time.perf_counter_ns()
         result = policy.predict(features)
+        observe_elapsed(manager.engine, "candidate_ridge_predict", stage_started_ns)
         chosen = result[0]
         confidence = result[1] if len(result) > 1 else None
         desired = float(chosen["value"])
