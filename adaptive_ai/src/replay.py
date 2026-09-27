@@ -233,8 +233,21 @@ class DeferredUpdates:
                 int(horizon), int(action), features, float(reward), float(ts),
                 sample_mass=float(sample_mass),
             )
+        elif len(update) == 8:
+            (
+                policy, horizon, action, features, reward, ts,
+                sample_mass, evidence_weight,
+            ) = update
+            policy.update(
+                int(horizon), int(action), features, float(reward), float(ts),
+                sample_mass=float(sample_mass),
+                evidence_weight=float(evidence_weight),
+            )
         else:
-            raise ValueError("Deferred update must have 6 legacy fields or 7 fields with sample_mass")
+            raise ValueError(
+                "Deferred update must have 6 legacy fields, 7 fields with sample_mass, "
+                "or 8 fields with sample_mass and evidence_weight"
+            )
         self.count += 1
 
     def __len__(self):

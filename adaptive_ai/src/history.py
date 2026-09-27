@@ -18,7 +18,7 @@ from replay import (
 from training_budget import TRAINING_BUDGET
 from policy import MultiHorizonPolicy
 from training_balance_audit import TrainingBalanceAudit
-from training_evidence import normalized_dwell_sample_mass
+from training_evidence import evidence_weight_for, normalized_dwell_sample_mass
 
 def stateful_continuation_seed_rows(store, agents, target_map, start_ts, boundary_ts):
     """Return the exact open-target transition state the legacy overlap would leave.
@@ -2124,13 +2124,25 @@ class HistoryManager(threading.Thread):
             edge = timeline.first_directional_transition_after(primary, start_ts, end_ts, opposite_positive)
             return min(float(end_ts), float(edge)) if edge is not None else float(end_ts)
 
-        def learn_or_validate(policy, horizon, action_idx, features, reward, sample_ts):
+        def learn_or_validate(
+            policy, horizon, action_idx, features, reward, sample_ts,
+            *, sample_mass=1.0, evidence_weight=1.0,
+        ):
             head = policy.heads[int(horizon)]
             if float(sample_ts) >= validation_start:
-                head.validate(action_idx, features, reward, sample_ts)
-                heldout_updates.append((policy, int(horizon), int(action_idx), features, float(reward), float(sample_ts)))
+                head.validate(
+                    action_idx, features, reward, sample_ts,
+                    sample_mass=sample_mass, evidence_weight=evidence_weight,
+                )
+                heldout_updates.append((
+                    policy, int(horizon), int(action_idx), features, float(reward),
+                    float(sample_ts), float(sample_mass), float(evidence_weight),
+                ))
             else:
-                policy.update(horizon, action_idx, features, reward, sample_ts)
+                policy.update(
+                    horizon, action_idx, features, reward, sample_ts,
+                    sample_mass=sample_mass, evidence_weight=evidence_weight,
+                )
 
         def record_behavior_benchmark(agent, policy, old, reward):
             """Chronological held-out benchmark against the target's recorded behaviour.
@@ -2217,6 +2229,9 @@ class HistoryManager(threading.Thread):
                 "origin": "unknown", "source": "unknown", "event_id": None,
             })
             origin = str(provenance.get("origin") or "unknown")
+            onset_evidence_weight = evidence_weight_for(origin, "onset")
+            upstream_evidence_weight = evidence_weight_for(origin, "upstream")
+            persistence_evidence_weight = evidence_weight_for(origin, "persistence")
             audit = training_audits.get(str(agent["id"]))
             if audit is not None:
                 audit.record_dwell(
@@ -2263,7 +2278,9 @@ class HistoryManager(threading.Thread):
                 neural_train_samples[str(agent["id"])].append({
                     "observation": old["neural_anchor_observation"],
                     "action_idx": int(old["action_idx"]),
-                    "weight": float(reward),
+                    "weight": onset_evidence_weight,
+                    "reward": float(reward),
+                    "evidence_weight": onset_evidence_weight,
                     "timestamp": anchor_sample_ts,
                     "source": "onset",
                 })
@@ -2278,8 +2295,12 @@ class HistoryManager(threading.Thread):
                         policy.heads[int(h)],
                         split="validation" if anchor_sample_ts >= validation_start else "train",
                         provenance=origin, horizon=h,
+                        evidence_weight=onset_evidence_weight,
                     )
-                learn_or_validate(policy, h, old["action_idx"], features, reward, anchor_sample_ts)
+                learn_or_validate(
+                    policy, h, old["action_idx"], features, reward, anchor_sample_ts,
+                    evidence_weight=onset_evidence_weight,
+                )
 
             # Optional upstream ON cue: neighbouring-room sensors may legitimately fire
             # a few seconds before the dedicated local sensor. Teach that cue weakly so
@@ -2297,24 +2318,34 @@ class HistoryManager(threading.Thread):
                 neural_train_samples[str(agent["id"])].append({
                     "observation": old["neural_upstream_observation"],
                     "action_idx": int(old["action_idx"]),
-                    "weight": float(reward) * 0.35,
+                    "weight": upstream_evidence_weight,
+                    "reward": float(reward),
+                    "evidence_weight": upstream_evidence_weight,
                     "timestamp": upstream_ts,
                     "source": "upstream",
                 })
             for h, features in (old.get("upstream_features_by_horizon") or {}).items():
                 if audit is not None:
-                    # Mirror the current Ridge semantics exactly: upstream weakens reward
-                    # to 0.35 but still contributes one full time-decayed support update.
+                    # Keep utility intact and express the precursor's weaker reliability
+                    # only as evidence. b keeps the old 0.35*reward influence while
+                    # counts/support now correctly see 0.35 of a sample.
                     audit.record_sample(
-                        "upstream", old["action_idx"], float(reward) * 0.35, float(old["ts"]),
+                        "upstream", old["action_idx"], float(reward), float(old["ts"]),
                         policy.heads[int(h)],
                         split="deferred_train" if upstream_ts >= validation_start else "train",
                         provenance=origin, horizon=h,
+                        evidence_weight=upstream_evidence_weight,
                     )
                 if upstream_ts >= validation_start:
-                    heldout_updates.append((policy, int(h), old["action_idx"], features, float(reward) * 0.35, float(old["ts"])))
+                    heldout_updates.append((
+                        policy, int(h), old["action_idx"], features, float(reward),
+                        float(old["ts"]), 1.0, upstream_evidence_weight,
+                    ))
                 else:
-                    policy.update(h, old["action_idx"], features, float(reward) * 0.35, old["ts"])
+                    policy.update(
+                        h, old["action_idx"], features, float(reward), old["ts"],
+                        evidence_weight=upstream_evidence_weight,
+                    )
 
             # 2) Persistence samples: learn what should remain true while the state is
             # accepted. Limit to three samples/head so a six-hour dwell cannot dominate
@@ -2375,18 +2406,20 @@ class HistoryManager(threading.Thread):
                         policy.heads[int(h)],
                         split="deferred_train" if target_time >= validation_start else "train",
                         provenance=origin, horizon=h, raw_mass=sample_mass,
+                        evidence_weight=persistence_evidence_weight,
                     )
                 if target_time >= validation_start:
                     # Correlated samples within a dwell are training evidence,
                     # not independent validation trials. Validate onset only.
                     heldout_updates.append((
                         policy, h, old["action_idx"], features, float(reward),
-                        float(target_time), sample_mass,
+                        float(target_time), sample_mass, persistence_evidence_weight,
                     ))
                 else:
                     policy.update(
                         h, old["action_idx"], features, reward, target_time,
                         sample_mass=sample_mass,
+                        evidence_weight=persistence_evidence_weight,
                     )
                     if neural_enabled and float(reward) > 0.0:
                         observation = neural_observation(
@@ -2396,8 +2429,10 @@ class HistoryManager(threading.Thread):
                             neural_train_samples[str(agent["id"])].append({
                                 "observation": observation,
                                 "action_idx": int(old["action_idx"]),
-                                "weight": float(reward) * sample_mass,
+                                "weight": sample_mass * persistence_evidence_weight,
+                                "reward": float(reward),
                                 "sample_mass": sample_mass,
+                                "evidence_weight": persistence_evidence_weight,
                                 "timestamp": float(target_time),
                                 "source": "persistence",
                             })

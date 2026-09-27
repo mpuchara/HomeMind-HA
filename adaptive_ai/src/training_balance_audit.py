@@ -66,7 +66,11 @@ def _percentile(sorted_values, fraction):
 def _mass_bucket():
     return {
         "raw_sample_mass": 0.0,
+        "dwell_sample_mass": 0.0,
+        "evidence_mass": 0.0,
+        "time_decay_mass": 0.0,
         "time_decayed_sample_mass": 0.0,
+        "final_effective_update_mass": 0.0,
         "positive_reward_mass": 0.0,
         "negative_reward_mass": 0.0,
         "absolute_reward_mass": 0.0,
@@ -230,10 +234,18 @@ class TrainingBalanceAudit:
         self.excluded[reason] = int(self.excluded.get(reason) or 0) + int(count)
 
     @staticmethod
-    def _add_mass(bucket, *, raw, decayed, reward):
+    def _add_mass(bucket, *, raw, decay, evidence_weight, reward):
+        time_decay_mass = raw * decay
+        evidence_mass = raw * evidence_weight
+        effective = time_decay_mass * evidence_weight
         bucket["raw_sample_mass"] += raw
-        bucket["time_decayed_sample_mass"] += decayed
-        weighted_reward = decayed * reward
+        bucket["dwell_sample_mass"] += raw
+        bucket["evidence_mass"] += evidence_mass
+        bucket["time_decay_mass"] += time_decay_mass
+        # Legacy key retained as the time-decay-only diagnostic from Stage 1.
+        bucket["time_decayed_sample_mass"] += time_decay_mass
+        bucket["final_effective_update_mass"] += effective
+        weighted_reward = effective * reward
         if weighted_reward >= 0.0:
             bucket["positive_reward_mass"] += weighted_reward
         else:
@@ -252,6 +264,7 @@ class TrainingBalanceAudit:
         provenance="unknown",
         horizon=None,
         raw_mass=1.0,
+        evidence_weight=1.0,
     ):
         source = str(source)
         split = str(split)
@@ -260,8 +273,8 @@ class TrainingBalanceAudit:
         if raw <= 0.0:
             return
         reward = max(-1.0, min(1.0, _finite(reward)))
+        evidence_weight = max(0.0, _finite(evidence_weight, 1.0))
         decay = max(0.0, _finite(head.sample_weight(sample_ts), 1.0))
-        decayed = raw * decay
 
         sample_slot = self.samples.setdefault(source, _sample_bucket())
         sample_slot["total"] += 1
@@ -283,7 +296,8 @@ class TrainingBalanceAudit:
             self.mass_by_provenance[provenance],
         ):
             self._add_mass(
-                bucket, raw=raw, decayed=decayed, reward=reward
+                bucket, raw=raw, decay=decay,
+                evidence_weight=evidence_weight, reward=reward,
             )
 
         if horizon is not None:
@@ -308,13 +322,13 @@ class TrainingBalanceAudit:
             hsample[split] += 1
             h["mass_by_action"].setdefault(action_key, _mass_bucket())
             self._add_mass(
-                h["mass"], raw=raw, decayed=decayed, reward=reward
+                h["mass"], raw=raw, decay=decay,
+                evidence_weight=evidence_weight, reward=reward,
             )
             self._add_mass(
                 h["mass_by_action"][action_key],
-                raw=raw,
-                decayed=decayed,
-                reward=reward,
+                raw=raw, decay=decay,
+                evidence_weight=evidence_weight, reward=reward,
             )
 
     @staticmethod
@@ -476,7 +490,7 @@ class TrainingBalanceAudit:
         action_effective = {
             key: _finite(
                 (self.mass_by_action.get(key) or {}).get(
-                    "time_decayed_sample_mass"
+                    "final_effective_update_mass"
                 )
             )
             for key in self.action_keys

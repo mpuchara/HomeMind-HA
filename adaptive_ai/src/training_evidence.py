@@ -35,3 +35,29 @@ def normalized_dwell_sample_mass(
     if count <= 0:
         return 0.0
     return bounded_mass(total_budget) / float(count)
+
+
+USER_EVIDENCE_ORIGINS = frozenset({
+    "user", "user_intent", "manual", "manual_feedback", "manual_demonstration",
+})
+
+
+def evidence_weight_for(origin, source):
+    """Reliability of one historical observation, independent of reward utility.
+
+    Direct accepted onsets are authoritative target observations. Persistence from an
+    explicit user action is equally strong; ambiguous external/automation persistence is
+    slightly weaker. Upstream precursor cues are deliberately weak evidence. Our own
+    command echoes remain excluded entirely by the replay provenance gate.
+    """
+    origin = str(origin or "unknown")
+    source = str(source or "onset")
+    if origin == "own_command":
+        return 0.0
+    if source == "upstream":
+        return 0.35
+    if source == "onset":
+        return 1.0
+    if origin in USER_EVIDENCE_ORIGINS:
+        return 1.0
+    return 0.8
