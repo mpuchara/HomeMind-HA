@@ -251,6 +251,16 @@ class DeferredCandidateShadowQueue:
             finally:
                 observe_elapsed(self.engine, "candidate_shadow_total", started)
                 self.stats["last_root_agent_id"] = job.get("root_agent_id")
+
+        # If the bounded worker batch did not empty the queue, re-arm the Event from the
+        # worker side. Live producers still signal only empty->non-empty; backlog draining
+        # therefore never waits for poll_seconds and never needs repeated producer wakeups.
+        with self.lock:
+            backlog = bool(self.pending)
+        if backlog:
+            wake = getattr(self.manager, "wake_event", None)
+            if wake is not None and callable(getattr(wake, "set", None)):
+                wake.set()
         return completed
 
     def diagnostics(self):
