@@ -1,3 +1,14 @@
+# 0.14.99 — 2026-09-27
+
+- Add a bounded **Training Balance Audit** that exposes dwell/action/source counts, effective update/reward/evidence mass, Ridge support statistics, qualification metrics and Tiny MLP class/tournament diagnostics without adding history scans to realtime inference.
+- Normalize persistence with a **per-dwell training budget**: onset remains full evidence while all retained persistence contexts share one bounded mass budget, consistently across Ridge and supervised Tiny MLP learning.
+- Separate **reward utility** from **evidence weight**. Provenance reliability now changes support/update mass explicitly; upstream cues keep their utility label while carrying weaker evidence, and own-command evidence remains excluded.
+- Keep the existing prequential validation and add an immutable **frozen holdout** so post-train generalization can be measured without validation leakage. Insufficient class coverage is reported explicitly rather than hidden by majority accuracy.
+- Keep the full-resolution recent window at 7 days and add bounded deterministic **sparse long-term replay memory** through 35 days. Older samples are train-only, time-decayed, stratified without ML clustering and cannot dominate recent evidence.
+- Harden the **Tiny MLP tournament**: default minimum gain is 3 percentage points, the challenger must win an exact one-sided paired McNemar/binomial comparison at alpha 0.05, and at least 8 discordant holdout pairs are required. Inconclusive challengers remain Ridge.
+- Preserve Correct selection/history workflow, Candidate isolation, Ridge safety/confidence/support/novelty fallback, Offline-RL Shadow-only authority, Executor-only physical dispatch and the single-heavy-training-job contract.
+- Full pre-release regression on the final functional Stage-6 head: **1358 tests** on Python 3.11 and 3.13 plus Docker image smoke, Correct/QoS/HA ingress/shared-context, Tiny MLP, Automatic Correct, Offline-RL, stateful replay, sparse long-memory, Pi4 gate, product-runtime benchmark and simulators.
+
 # 0.14.97 — 2026-09-26
 
 - Fix long historical training stopping at a chunk boundary with `StaleTrainingJob: runtime topology/options changed while isolated training was running` after ordinary Home Assistant Entity Registry refreshes.

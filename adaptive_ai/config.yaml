@@ -1,5 +1,5 @@
 name: "Adaptive AI"
-version: "0.14.98"
+version: "0.14.99"
 slug: "adaptive_ai"
 description: >-
   History-first local reinforcement-learning policies for Home Assistant. Imports
@@ -68,6 +68,9 @@ options:
   agent_training_overlap_hours: 6
   agent_training_stateful_continuation: true
   agent_training_history_days: 7
+  agent_training_long_memory_days: 35
+  agent_training_long_memory_max_samples: 96
+  agent_training_long_memory_max_mass_ratio: 0.50
   agent_training_pause_ms: 0
   min_historical_support: 0.20
   max_context_novelty: 0.85
@@ -122,7 +125,9 @@ options:
   tiny_mlp_gradient_clip: 1.0
   tiny_mlp_early_stop_patience: 3
   tiny_mlp_early_stop_min_delta: 0.001
-  tiny_mlp_tournament_min_gain: 0.0
+  tiny_mlp_tournament_min_gain: 0.03
+  tiny_mlp_tournament_significance_alpha: 0.05
+  tiny_mlp_tournament_min_discordant_pairs: 8
   tiny_mlp_max_parameters: 50000
   tiny_mlp_max_serialized_bytes: 524288
   tiny_mlp_correct_fraction: 0.25
@@ -259,6 +264,9 @@ schema:
   agent_training_overlap_hours: "int(0,48)"
   agent_training_stateful_continuation: "bool"
   agent_training_history_days: "float(1,30)"
+  agent_training_long_memory_days: "float(7,90)"
+  agent_training_long_memory_max_samples: "int(0,1024)"
+  agent_training_long_memory_max_mass_ratio: "float(0.0,1.0)"
   agent_training_pause_ms: "int(0,3000)"
   min_historical_support: "float(0.0,1.0)"
   max_context_novelty: "float(0.0,1.0)"
@@ -314,6 +322,8 @@ schema:
   tiny_mlp_early_stop_patience: "int(1,20)"
   tiny_mlp_early_stop_min_delta: "float(0.0,1.0)"
   tiny_mlp_tournament_min_gain: "float(0.0,1.0)"
+  tiny_mlp_tournament_significance_alpha: "float(0.001,0.50)"
+  tiny_mlp_tournament_min_discordant_pairs: "int(1,4096)"
   tiny_mlp_max_parameters: "int(100,500000)"
   tiny_mlp_max_serialized_bytes: "int(16384,4194304)"
   tiny_mlp_correct_fraction: "float(0.20,0.30)"

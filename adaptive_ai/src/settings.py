@@ -15,7 +15,7 @@ try:
 except Exception:
     ws_connect = None
 
-APP_VERSION = "0.14.98"
+APP_VERSION = "0.14.99"
 HISTORY_BOOTSTRAP_REVISION = "target-attrs-v2"
 TRAINING_REVISION = "shared-home-intents-v19"
 DATA_DIR = Path(os.environ.get("ADAPTIVE_AI_DATA", "/data"))
@@ -82,11 +82,21 @@ DEFAULT_OPTIONS = {
     "agent_training_overlap_hours": 6,
     "agent_training_stateful_continuation": True,
     "agent_training_history_days": 7,
+    # Agent Training vNext Stage 5: full-resolution recent replay stays at 7 days;
+    # older target history is sampled deterministically and reconstructed only for the
+    # bounded selected dwells under the current schema.
+    "agent_training_long_memory_days": 35,
+    "agent_training_long_memory_max_samples": 96,
+    "agent_training_long_memory_max_mass_ratio": 0.50,
     "agent_training_pause_ms": 0,
     "min_historical_support": 0.20,
     "max_context_novelty": 0.85,
     "confidence_validation_fraction": 0.20,
     "confidence_min_validation_samples": 12,
+    # vNext Stage 4: frozen future-holdout is reported beside the established
+    # prequential score. Keep the new qualification gate audit-only until real-home
+    # sample coverage has been observed; enabling it requires both gates to pass.
+    "candidate_frozen_holdout_gate_enabled": False,
     "block_control_on_automation_conflict": True,
     "action_bins": 31,
     "rl_alpha": 0.65,
@@ -145,7 +155,14 @@ DEFAULT_OPTIONS = {
     "tiny_mlp_gradient_clip": 1.0,
     "tiny_mlp_early_stop_patience": 3,
     "tiny_mlp_early_stop_min_delta": 0.001,
-    "tiny_mlp_tournament_min_gain": 0.0,
+    # Agent Training vNext Stage 6: a neural challenger must improve balanced/overall
+    # frozen-holdout accuracy by a practical margin and win an exact paired correctness
+    # test on the identical rows. Small numerical wins no longer replace Ridge.
+    "tiny_mlp_tournament_min_gain": 0.03,
+    "tiny_mlp_tournament_significance_alpha": 0.05,
+    # Eight discordant rows is the smallest n where a 7:1 paired advantage can
+    # pass alpha=.05 (9/256 ~= .035), avoiding promotion on a handful of perfect wins.
+    "tiny_mlp_tournament_min_discordant_pairs": 8,
     "tiny_mlp_max_parameters": 50000,
     "tiny_mlp_max_serialized_bytes": 524288,
     # Stage-5 Manual Correct: incremental neural fine-tune. Explicit labels remain

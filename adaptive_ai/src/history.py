@@ -17,6 +17,16 @@ from replay import (
 )
 from training_budget import TRAINING_BUDGET
 from policy import MultiHorizonPolicy
+from training_balance_audit import TrainingBalanceAudit
+from training_evidence import evidence_weight_for, normalized_dwell_sample_mass
+from frozen_validation import (
+    FrozenRidgeSnapshot, empty_holdout_counts, holdout_summary,
+    prediction_is_correct, record_holdout_result,
+)
+from long_memory import (
+    collect_sparse_dwells, count_completed_dwells, filter_unseen_candidates,
+    selected_history_provenance,
+)
 
 def stateful_continuation_seed_rows(store, agents, target_map, start_ts, boundary_ts):
     """Return the exact open-target transition state the legacy overlap would leave.
@@ -672,6 +682,9 @@ class HistoryManager(threading.Thread):
                 progress_hi=(chunk_end-start_ts)/max(1,target_end-start_ts),
                 progress_label=f"Training {agent['name']}",
                 continuation_from_ts=continuation_from_ts,
+                include_long_memory=(boundary_ts <= start_ts + 0.5),
+                long_memory_recent_start_ts=start_ts,
+                long_memory_reference_end_ts=target_end,
             )
             replay_summary["chunks"] += 1
             replay_summary["logical_hours"] += max(
@@ -1445,7 +1458,7 @@ class HistoryManager(threading.Thread):
                 self.engine.models.pop(aid, None)
             raise
 
-    def _train_from_archive(self, start_ts, end_ts, *, qualify=False, agent_ids=None, include_candidates=False, benchmark=None, accumulate_benchmark=False, progress_lo=None, progress_hi=None, progress_label=None, continuation_from_ts=None):
+    def _train_from_archive(self, start_ts, end_ts, *, qualify=False, agent_ids=None, include_candidates=False, benchmark=None, accumulate_benchmark=False, progress_lo=None, progress_hi=None, progress_label=None, continuation_from_ts=None, include_long_memory=False, long_memory_recent_start_ts=None, long_memory_reference_end_ts=None):
         benchmark = bool(qualify) if benchmark is None else bool(benchmark)
         self.temporal_replay_stats = {}
         agents = [a for a in STORE.list_agent_configs() if a["enabled"]]
@@ -1743,8 +1756,13 @@ class HistoryManager(threading.Thread):
             for a in agents
         }
         benchmark_stats = {}
+        frozen_benchmark_stats = {}
+        frozen_chunk_stats = {}
+        prior_models = {}
         for a in agents:
-            prior = ((STORE.get_model(a['id']) or {}).get('_benchmark_counts') or (a.get("benchmark_detail") or {}).get("counts") or {}) if accumulate_benchmark else {}
+            prior_model = STORE.get_model(a["id"]) or {} if accumulate_benchmark else {}
+            prior_models[str(a["id"])] = prior_model
+            prior = (prior_model.get("_benchmark_counts") or (a.get("benchmark_detail") or {}).get("counts") or {}) if accumulate_benchmark else {}
             benchmark_stats[a["id"]] = {
                 "samples": int(prior.get("samples") or 0),
                 "correct": int(prior.get("correct") or 0),
@@ -1753,6 +1771,13 @@ class HistoryManager(threading.Thread):
                 "automation_rules": max(int(prior.get("automation_rules") or 0), len(automation_infos_by_agent[a["id"]])),
                 "origin_counts": {str(k): int(v or 0) for k, v in (prior.get("origin_counts") or {}).items()},
             }
+            prior_frozen = (
+                prior_model.get("_frozen_holdout_counts")
+                or ((a.get("benchmark_detail") or {}).get("frozen_holdout") or {}).get("counts")
+                or {}
+            ) if accumulate_benchmark else {}
+            frozen_benchmark_stats[str(a["id"])] = empty_holdout_counts(prior_frozen)
+            frozen_chunk_stats[str(a["id"])] = empty_holdout_counts()
 
         # Stage 4 trains a tiny supervised challenger beside the established Ridge model.
         # It is deliberately tied to explicit benchmarked historical training only:
@@ -2032,6 +2057,35 @@ class HistoryManager(threading.Thread):
         validation_span = max(1800.0, (float(end_ts) - float(start_ts)) * validation_fraction)
         validation_start = max(float(start_ts), float(end_ts) - validation_span)
 
+        # Keep the established prequential test-then-learn validation intact, but also
+        # freeze Ridge exactly at the train/validation boundary. The frozen snapshot is
+        # read-only and never receives validation updates; it therefore measures genuine
+        # future generalization while the live policy remains free to adapt prequentially.
+        frozen_policy_snapshots = {}
+        frozen_boundary_captured = False
+
+        def capture_frozen_validation_boundary():
+            nonlocal frozen_boundary_captured
+            if frozen_boundary_captured:
+                return
+            for frozen_agent in agents:
+                frozen_aid = str(frozen_agent["id"])
+                frozen_policy_snapshots[frozen_aid] = FrozenRidgeSnapshot(
+                    policies[frozen_agent["id"]]
+                )
+            frozen_boundary_captured = True
+
+        training_audits = {}
+        for a in agents:
+            aid = str(a["id"])
+            prior_audit = (
+                (prior_models.get(aid) or {}).get("_training_balance_audit_state")
+                if accumulate_benchmark else None
+            )
+            audit = TrainingBalanceAudit(a, policies[a["id"]], prior_state=prior_audit)
+            audit.begin_chunk()
+            training_audits[aid] = audit
+
         def _publish_temporal_replay_stats():
             onset = timeline.stats()
             persistence = persistence_timeline.stats()
@@ -2079,7 +2133,8 @@ class HistoryManager(threading.Thread):
             meta = policy.selection_meta or {}
             return meta.get("primary_occupancy_sensor") or meta.get("primary_local_sensor") or next(iter(meta.get("primary_local_sensors") or []), None)
 
-        def _fast_anchor(agent, policy, action_value, action_ts):
+        def _fast_anchor(agent, policy, action_value, action_ts, tracker=None):
+            tracker = tracker or timeline
             if not is_fast_reactive_agent(agent):
                 return float(action_ts), None
             positive = float(action_value) >= 0.5
@@ -2087,16 +2142,17 @@ class HistoryManager(threading.Thread):
             local_ts = None
             if primary:
                 window = float(OPTIONS.get("fast_precursor_on_seconds", 8) if positive else OPTIONS.get("fast_precursor_off_seconds", 120))
-                local_ts = timeline.directional_transition_before(primary, action_ts, positive, window)
+                local_ts = tracker.directional_transition_before(primary, action_ts, positive, window)
             upstream_ts = None
             if positive:
                 for eid in (policy.selection_meta or {}).get("upstream_sensors") or []:
-                    ts = timeline.directional_transition_before(eid, action_ts, True, float(OPTIONS.get("fast_precursor_on_seconds", 8)))
+                    ts = tracker.directional_transition_before(eid, action_ts, True, float(OPTIONS.get("fast_precursor_on_seconds", 8)))
                     if ts is not None and (upstream_ts is None or ts > upstream_ts):
                         upstream_ts = ts
             return float(local_ts if local_ts is not None else action_ts), upstream_ts
 
-        def _effective_fast_dwell_end(agent, policy, action_value, start_ts, end_ts):
+        def _effective_fast_dwell_end(agent, policy, action_value, start_ts, end_ts, tracker=None):
+            tracker = tracker or timeline
             if not is_fast_reactive_agent(agent):
                 return float(end_ts)
             primary = _primary_occupancy_sensor(policy)
@@ -2106,16 +2162,28 @@ class HistoryManager(threading.Thread):
             # vacant, and stop reinforcing OFF when it becomes occupied. This removes
             # inherited one-minute automation delays from desired-state learning.
             opposite_positive = float(action_value) < 0.5
-            edge = timeline.first_directional_transition_after(primary, start_ts, end_ts, opposite_positive)
+            edge = tracker.first_directional_transition_after(primary, start_ts, end_ts, opposite_positive)
             return min(float(end_ts), float(edge)) if edge is not None else float(end_ts)
 
-        def learn_or_validate(policy, horizon, action_idx, features, reward, sample_ts):
+        def learn_or_validate(
+            policy, horizon, action_idx, features, reward, sample_ts,
+            *, sample_mass=1.0, evidence_weight=1.0,
+        ):
             head = policy.heads[int(horizon)]
             if float(sample_ts) >= validation_start:
-                head.validate(action_idx, features, reward, sample_ts)
-                heldout_updates.append((policy, int(horizon), int(action_idx), features, float(reward), float(sample_ts)))
+                head.validate(
+                    action_idx, features, reward, sample_ts,
+                    sample_mass=sample_mass, evidence_weight=evidence_weight,
+                )
+                heldout_updates.append((
+                    policy, int(horizon), int(action_idx), features, float(reward),
+                    float(sample_ts), float(sample_mass), float(evidence_weight),
+                ))
             else:
-                policy.update(horizon, action_idx, features, reward, sample_ts)
+                policy.update(
+                    horizon, action_idx, features, reward, sample_ts,
+                    sample_mass=sample_mass, evidence_weight=evidence_weight,
+                )
 
         def record_behavior_benchmark(agent, policy, old, reward):
             """Chronological held-out benchmark against the target's recorded behaviour.
@@ -2158,23 +2226,40 @@ class HistoryManager(threading.Thread):
             slot = stat["per_action"].setdefault(str(actual), {"samples": 0, "correct": 0})
             slot["samples"] += 1
             slot["correct"] += 1 if correct else 0
+
+            aid = str(agent["id"])
+            frozen = frozen_policy_snapshots.get(aid)
+            if frozen is None:
+                # Normally captured globally on the first archive row at/after the
+                # boundary. Keep this lazy guard for sparse/filtered replay fixtures.
+                frozen = FrozenRidgeSnapshot(policy)
+                frozen_policy_snapshots[aid] = frozen
+            frozen_predicted = frozen.predict(h, features)
+            frozen_correct = prediction_is_correct(
+                agent, policy.actions, frozen_predicted, actual
+            )
+            record_holdout_result(
+                frozen_benchmark_stats[aid], actual, frozen_correct
+            )
+            record_holdout_result(
+                frozen_chunk_stats[aid], actual, frozen_correct
+            )
+
             if neural_enabled:
-                chunk = neural_chunk_benchmark[str(agent["id"])]
-                chunk["samples"] += 1
-                chunk["correct"] += 1 if correct else 0
-                chunk_slot = chunk["per_action"].setdefault(
-                    str(actual), {"samples": 0, "correct": 0}
-                )
-                chunk_slot["samples"] += 1
-                chunk_slot["correct"] += 1 if correct else 0
                 observation = old.get("neural_anchor_observation")
                 if observation is not None:
-                    neural_holdout_samples[str(agent["id"])].append({
+                    # Ridge and MLP tournament rows must be identical. Score the frozen
+                    # Ridge snapshot only for rows that have the exact MLP observation.
+                    chunk = neural_chunk_benchmark[aid]
+                    record_holdout_result(chunk, actual, frozen_correct)
+                    neural_holdout_samples[aid].append({
                         "observation": observation,
                         "action_idx": actual,
                         "weight": float(reward),
                         "timestamp": float(old.get("anchor_ts", old["ts"])),
                         "source": "heldout_onset",
+                        "ridge_correct": bool(frozen_correct),
+                        "paired_holdout_id": int(old.get("history_id") or 0),
                     })
             infos = automation_infos_by_agent.get(agent["id"]) or []
             origin = "manual" if old.get("user_id") else ("automation_assisted" if infos else "anonymous_external")
@@ -2202,6 +2287,15 @@ class HistoryManager(threading.Thread):
                 "origin": "unknown", "source": "unknown", "event_id": None,
             })
             origin = str(provenance.get("origin") or "unknown")
+            onset_evidence_weight = evidence_weight_for(origin, "onset")
+            upstream_evidence_weight = evidence_weight_for(origin, "upstream")
+            persistence_evidence_weight = evidence_weight_for(origin, "persistence")
+            audit = training_audits.get(str(agent["id"]))
+            if audit is not None:
+                audit.record_dwell(
+                    old["action_idx"], dwell,
+                    excluded_reason="own_command" if origin == "own_command" else None,
+                )
             experience_batch.append({
                 "agent_id": agent["id"],
                 "target_history_id": target_history_id,
@@ -2242,14 +2336,29 @@ class HistoryManager(threading.Thread):
                 neural_train_samples[str(agent["id"])].append({
                     "observation": old["neural_anchor_observation"],
                     "action_idx": int(old["action_idx"]),
-                    "weight": float(reward),
+                    "weight": onset_evidence_weight,
+                    "reward": float(reward),
+                    "evidence_weight": onset_evidence_weight,
                     "timestamp": anchor_sample_ts,
                     "source": "onset",
                 })
             for h, features in old["features_by_horizon"].items():
                 if crosses_validation:
+                    if audit is not None:
+                        audit.record_excluded("validation_boundary")
                     continue  # purge rewards whose outcomes cross the validation boundary
-                learn_or_validate(policy, h, old["action_idx"], features, reward, anchor_sample_ts)
+                if audit is not None:
+                    audit.record_sample(
+                        "onset", old["action_idx"], reward, anchor_sample_ts,
+                        policy.heads[int(h)],
+                        split="validation" if anchor_sample_ts >= validation_start else "train",
+                        provenance=origin, horizon=h,
+                        evidence_weight=onset_evidence_weight,
+                    )
+                learn_or_validate(
+                    policy, h, old["action_idx"], features, reward, anchor_sample_ts,
+                    evidence_weight=onset_evidence_weight,
+                )
 
             # Optional upstream ON cue: neighbouring-room sensors may legitimately fire
             # a few seconds before the dedicated local sensor. Teach that cue weakly so
@@ -2267,15 +2376,34 @@ class HistoryManager(threading.Thread):
                 neural_train_samples[str(agent["id"])].append({
                     "observation": old["neural_upstream_observation"],
                     "action_idx": int(old["action_idx"]),
-                    "weight": float(reward) * 0.35,
+                    "weight": upstream_evidence_weight,
+                    "reward": float(reward),
+                    "evidence_weight": upstream_evidence_weight,
                     "timestamp": upstream_ts,
                     "source": "upstream",
                 })
             for h, features in (old.get("upstream_features_by_horizon") or {}).items():
+                if audit is not None:
+                    # Keep utility intact and express the precursor's weaker reliability
+                    # only as evidence. b keeps the old 0.35*reward influence while
+                    # counts/support now correctly see 0.35 of a sample.
+                    audit.record_sample(
+                        "upstream", old["action_idx"], float(reward), float(old["ts"]),
+                        policy.heads[int(h)],
+                        split="deferred_train" if upstream_ts >= validation_start else "train",
+                        provenance=origin, horizon=h,
+                        evidence_weight=upstream_evidence_weight,
+                    )
                 if upstream_ts >= validation_start:
-                    heldout_updates.append((policy, int(h), old["action_idx"], features, float(reward) * 0.35, float(old["ts"])))
+                    heldout_updates.append((
+                        policy, int(h), old["action_idx"], features, float(reward),
+                        float(old["ts"]), 1.0, upstream_evidence_weight,
+                    ))
                 else:
-                    policy.update(h, old["action_idx"], features, float(reward) * 0.35, old["ts"])
+                    policy.update(
+                        h, old["action_idx"], features, float(reward), old["ts"],
+                        evidence_weight=upstream_evidence_weight,
+                    )
 
             # 2) Persistence samples: learn what should remain true while the state is
             # accepted. Limit to three samples/head so a six-hour dwell cannot dominate
@@ -2303,10 +2431,22 @@ class HistoryManager(threading.Thread):
                     seen.add(key)
                     persistence_tasks.append((float(target_time), h))
 
+            # Correlated persistence contexts share one bounded mass budget per dwell/head.
+            # We keep all selected contexts, but 1/2/3 samples contribute 1/.5/~.333 each
+            # instead of allowing a long dwell to gain weight from sample count alone.
+            persistence_count_by_horizon = {}
+            for _target_time, h in persistence_tasks:
+                persistence_count_by_horizon[h] = int(
+                    persistence_count_by_horizon.get(h) or 0
+                ) + 1
+
             # Heads are independent. Sorting their observation timestamps does not change
             # reward/order within any head, but avoids artificial cursor rewinds between
             # horizons of the same dwell.
             for target_time, h in sorted(persistence_tasks, key=lambda item: (item[0], item[1])):
+                sample_mass = normalized_dwell_sample_mass(
+                    persistence_count_by_horizon.get(h, 0)
+                )
                 context_ts = target_time
                 persistence_timeline.advance(context_ts)
                 features, _, _ = policy.features(
@@ -2315,13 +2455,30 @@ class HistoryManager(threading.Thread):
                     at_ts=context_ts,
                 )
                 if target_time < validation_start <= effective_end:
+                    if audit is not None:
+                        audit.record_excluded("validation_boundary")
                     continue
+                if audit is not None:
+                    audit.record_sample(
+                        "persistence", old["action_idx"], reward, target_time,
+                        policy.heads[int(h)],
+                        split="deferred_train" if target_time >= validation_start else "train",
+                        provenance=origin, horizon=h, raw_mass=sample_mass,
+                        evidence_weight=persistence_evidence_weight,
+                    )
                 if target_time >= validation_start:
                     # Correlated samples within a dwell are training evidence,
                     # not independent validation trials. Validate onset only.
-                    heldout_updates.append((policy, h, old["action_idx"], features, float(reward), float(target_time)))
+                    heldout_updates.append((
+                        policy, h, old["action_idx"], features, float(reward),
+                        float(target_time), sample_mass, persistence_evidence_weight,
+                    ))
                 else:
-                    policy.update(h, old["action_idx"], features, reward, target_time)
+                    policy.update(
+                        h, old["action_idx"], features, reward, target_time,
+                        sample_mass=sample_mass,
+                        evidence_weight=persistence_evidence_weight,
+                    )
                     if neural_enabled and float(reward) > 0.0:
                         observation = neural_observation(
                             agent, persistence_timeline, target_time
@@ -2330,7 +2487,10 @@ class HistoryManager(threading.Thread):
                             neural_train_samples[str(agent["id"])].append({
                                 "observation": observation,
                                 "action_idx": int(old["action_idx"]),
-                                "weight": float(reward),
+                                "weight": sample_mass * persistence_evidence_weight,
+                                "reward": float(reward),
+                                "sample_mass": sample_mass,
+                                "evidence_weight": persistence_evidence_weight,
                                 "timestamp": float(target_time),
                                 "source": "persistence",
                             })
@@ -2338,10 +2498,11 @@ class HistoryManager(threading.Thread):
             new_count += 1
             return True
 
-        def _pending_from_row(agent, policy, row, value):
-            """Reconstruct exactly the open dwell state produced by the legacy overlap."""
+        def _pending_from_row(agent, policy, row, value, tracker=None):
+            """Reconstruct an open dwell from the current schema at one causal timestamp."""
+            tracker = tracker or timeline
             anchor_ts, upstream_anchor_ts = _fast_anchor(
-                agent, policy, value, float(row["ts"])
+                agent, policy, value, float(row["ts"]), tracker=tracker
             )
             upstream_valid = (
                 upstream_anchor_ts is not None
@@ -2362,14 +2523,14 @@ class HistoryManager(threading.Thread):
             snapshots = {}
             neural_snapshots = {}
             for query_ts in sorted(query_times):
-                timeline.advance(query_ts)
+                tracker.advance(query_ts)
                 features, _, meta = policy.features(
-                    timeline.state_map, timeline.history, at_ts=query_ts
+                    tracker.state_map, tracker.history, at_ts=query_ts
                 )
                 snapshots[query_ts] = (dict(features), dict(meta or {}))
                 if neural_enabled:
                     neural_snapshots[query_ts] = neural_observation(
-                        agent, timeline, query_ts
+                        agent, tracker, query_ts
                     )
 
             anchor_features = snapshots[float(anchor_ts)][0]
@@ -2415,6 +2576,273 @@ class HistoryManager(threading.Thread):
                 "action_value": actions[action_idx],
                 "user_id": row.get("context_user_id"),
             }
+
+
+        # Stage 5: use older history only as bounded train evidence. Selection scans
+        # target transitions alone; expensive feature/home reconstruction happens only
+        # for the selected dwells under the *current* schema. It never enters validation.
+        self.training_long_memory_status = {
+            "contract": "sparse_long_memory_v1",
+            "enabled": bool(include_long_memory),
+            "agents": {},
+        }
+        if include_long_memory:
+            reference_end = float(
+                long_memory_reference_end_ts
+                if long_memory_reference_end_ts is not None else end_ts
+            )
+            recent_start = float(
+                long_memory_recent_start_ts
+                if long_memory_recent_start_ts is not None else logical_start_ts
+            )
+            recent_days = max(
+                1.0,
+                float(OPTIONS.get("agent_training_history_days", 7) or 7),
+            )
+            long_days = max(
+                recent_days,
+                min(
+                    90.0,
+                    float(OPTIONS.get("agent_training_long_memory_days", 35) or 35),
+                ),
+            )
+            max_long_samples = max(
+                0,
+                min(
+                    1024,
+                    int(OPTIONS.get("agent_training_long_memory_max_samples", 96) or 0),
+                ),
+            )
+            max_mass_ratio = clamp(
+                float(
+                    OPTIONS.get(
+                        "agent_training_long_memory_max_mass_ratio", 0.50
+                    ) or 0.0
+                ),
+                0.0,
+                1.0,
+            )
+            long_start = max(0.0, reference_end - long_days * 86400.0)
+            long_end = min(recent_start, reference_end)
+
+            if max_long_samples > 0 and long_end > long_start + 1.0:
+                for agent in agents:
+                    aid = str(agent["id"])
+                    policy = policies[agent["id"]]
+                    selected, selection = collect_sparse_dwells(
+                        STORE,
+                        agent,
+                        policy.actions,
+                        long_start,
+                        long_end - 1e-6,
+                        reference_end,
+                        max_long_samples,
+                        checkpoint=TRAINING_BUDGET.checkpoint,
+                    )
+                    recent_scan = count_completed_dwells(
+                        STORE,
+                        agent,
+                        policy.actions,
+                        recent_start,
+                        reference_end,
+                        checkpoint=TRAINING_BUDGET.checkpoint,
+                    )
+                    seen = existing_experience_ids.setdefault(agent["id"], set())
+                    unseen = filter_unseen_candidates(selected, seen)
+                    provenance = selected_history_provenance(
+                        STORE, [row["history_id"] for row in unseen]
+                    )
+                    eligible = []
+                    own_command_excluded = 0
+                    for candidate in unseen:
+                        item = dict(
+                            provenance.get(int(candidate["history_id"])) or {}
+                        )
+                        if str(item.get("origin") or "unknown") == "own_command":
+                            own_command_excluded += 1
+                            audit = training_audits.get(aid)
+                            if audit is not None:
+                                audit.record_excluded("own_command")
+                            continue
+                        eligible.append((candidate, item))
+
+                    # Recent full-resolution replay remains dominant before time decay:
+                    # older onset mass is capped to a fraction of the number of recent
+                    # completed dwells. With no recent transitions, allow at most one
+                    # unit of sparse evidence so old history can seed rather than rule.
+                    recent_dwells = int(recent_scan.get("completed_dwells") or 0)
+                    long_mass_budget = min(
+                        float(len(eligible)),
+                        max(
+                            1.0 if eligible else 0.0,
+                            float(recent_dwells) * max_mass_ratio,
+                        ),
+                    )
+                    per_sample_mass = (
+                        long_mass_budget / len(eligible) if eligible else 0.0
+                    )
+
+                    trained_dwells = 0
+                    long_tracker = None
+                    before_advances = 0
+                    try:
+                        if eligible:
+                            guard_seconds = max(
+                                300.0,
+                                max(
+                                    [float(value) for value in policy.horizons]
+                                    or [1.0]
+                                ),
+                                float(OPTIONS.get("fast_precursor_off_seconds", 120) or 120),
+                            )
+                            long_tracker = SQLiteTemporalTracker(
+                                STORE,
+                                watched_entities,
+                                self.engine.context,
+                                max(0.0, long_start - guard_seconds),
+                                long_end,
+                                query_cache=replay_query_cache,
+                                home_context_cache=replay_home_context_cache,
+                                context_cache_contract=context_cache_contract,
+                            )
+                            before_advances = int(
+                                long_tracker.stats().get("advances") or 0
+                            )
+
+                        for candidate, prov in eligible:
+                            target_history_id = int(candidate["history_id"])
+                            if target_history_id in seen:
+                                continue
+                            old = _pending_from_row(
+                                agent,
+                                policy,
+                                candidate["row"],
+                                candidate["action_value"],
+                                tracker=long_tracker,
+                            )
+                            effective_end = _effective_fast_dwell_end(
+                                agent,
+                                policy,
+                                old["action_value"],
+                                old["ts"],
+                                candidate["end_ts"],
+                                tracker=long_tracker,
+                            )
+                            dwell = max(0.0, float(effective_end) - float(old["ts"]))
+                            reward = historical_reward(
+                                agent,
+                                dwell,
+                                candidate.get("user_id"),
+                                candidate.get("next_user_id"),
+                            )
+                            origin = str(prov.get("origin") or "unknown")
+                            evidence = evidence_weight_for(origin, "onset")
+                            primary_h = min(old["features_by_horizon"])
+
+                            experience_batch.append({
+                                "agent_id": agent["id"],
+                                "target_history_id": target_history_id,
+                                "action_index": old["action_idx"],
+                                "action_value": old["action_value"],
+                                "reward": reward,
+                                "dwell_seconds": dwell,
+                                "features": old["features_by_horizon"][primary_h],
+                                "user_id": candidate.get("user_id"),
+                                "_provenance": prov,
+                            })
+                            seen.add(target_history_id)
+                            flush_experience_batch()
+
+                            audit = training_audits.get(aid)
+                            for horizon, features in old["features_by_horizon"].items():
+                                policy.update(
+                                    horizon,
+                                    old["action_idx"],
+                                    features,
+                                    reward,
+                                    old["anchor_ts"],
+                                    sample_mass=per_sample_mass,
+                                    evidence_weight=evidence,
+                                )
+                                if audit is not None:
+                                    audit.record_sample(
+                                        "long_memory_onset",
+                                        old["action_idx"],
+                                        reward,
+                                        old["anchor_ts"],
+                                        policy.heads[int(horizon)],
+                                        split="train",
+                                        provenance=origin,
+                                        horizon=horizon,
+                                        raw_mass=per_sample_mass,
+                                        evidence_weight=evidence,
+                                        memory_tier="long_memory",
+                                        memory_meta=candidate.get("stratum_meta"),
+                                    )
+
+                            if (
+                                neural_enabled
+                                and float(reward) > 0.0
+                                and old.get("neural_anchor_observation") is not None
+                            ):
+                                time_decay = policy.heads[int(primary_h)].sample_weight(
+                                    old["anchor_ts"]
+                                )
+                                neural_train_samples[aid].append({
+                                    "observation": old["neural_anchor_observation"],
+                                    "action_idx": int(old["action_idx"]),
+                                    "weight": (
+                                        float(per_sample_mass)
+                                        * float(evidence)
+                                        * float(time_decay)
+                                    ),
+                                    "reward": float(reward),
+                                    "evidence_weight": float(evidence),
+                                    "timestamp": float(old["anchor_ts"]),
+                                    "source": "long_memory_onset",
+                                })
+                            trained_dwells += 1
+                            new_count += 1
+                            TRAINING_BUDGET.checkpoint(
+                                "long_memory_selected_dwell"
+                            )
+                    finally:
+                        tracker_stats = (
+                            long_tracker.stats() if long_tracker is not None else {}
+                        )
+                        if long_tracker is not None:
+                            long_tracker.close()
+
+                    selection = {
+                        **dict(selection or {}),
+                        "recent_full_days": float(recent_days),
+                        "long_memory_days": float(long_days),
+                        "recent_target_rows_scanned": int(
+                            recent_scan.get("target_rows_scanned") or 0
+                        ),
+                        "recent_completed_dwells": recent_dwells,
+                        "already_learned": len(selected) - len(unseen),
+                        "own_command_excluded": int(own_command_excluded),
+                        "eligible_dwells": len(eligible),
+                        "trained_dwells": int(trained_dwells),
+                        "raw_mass_budget": float(long_mass_budget),
+                        "per_selected_dwell_mass": float(per_sample_mass),
+                        "max_mass_ratio_to_recent_dwell_count": float(max_mass_ratio),
+                        "context_reconstructions": max(
+                            0,
+                            int(tracker_stats.get("advances") or 0) - before_advances,
+                        ),
+                        "context_sql_queries": int(
+                            tracker_stats.get("sql_queries") or 0
+                        ),
+                        "train_only": True,
+                        "validation_rows": 0,
+                        "current_schema_reconstruction": True,
+                    }
+                    self.training_long_memory_status["agents"][aid] = selection
+                    audit = training_audits.get(aid)
+                    if audit is not None:
+                        audit.record_long_memory_selection(selection)
 
         if scan_start_ts > logical_start_ts + 0.5:
             # The previous implementation replayed every context entity in the overlap
@@ -2473,6 +2901,11 @@ class HistoryManager(threading.Thread):
                                 work_unit="history rows", eta_source="measured replay throughput",
                                 phase_detail=f"Chronological reward replay for {len(agents)} agent(s) · {rate:,.0f} rows/s")
                 replay_last_report = now_report
+            if (
+                not frozen_boundary_captured
+                and float(row["ts"]) >= validation_start
+            ):
+                capture_frozen_validation_boundary()
             agents_for_target = target_map.get(row["entity_id"], [])
             if not agents_for_target:
                 continue
@@ -2622,7 +3055,14 @@ class HistoryManager(threading.Thread):
                     threshold=tournament_threshold,
                     minimum_samples=tournament_min_samples,
                     minimum_gain=float(
-                        OPTIONS.get("tiny_mlp_tournament_min_gain", 0.0) or 0.0
+                        OPTIONS.get("tiny_mlp_tournament_min_gain", 0.03)
+                    ),
+                    significance_alpha=float(
+                        OPTIONS.get("tiny_mlp_tournament_significance_alpha", 0.05)
+                    ),
+                    minimum_discordant_pairs=int(
+                        OPTIONS.get("tiny_mlp_tournament_min_discordant_pairs", 8)
+                        or 8
                     ),
                     parameter_count=backend.parameter_count,
                     serialized_bytes=serialized_bytes,
@@ -2658,12 +3098,27 @@ class HistoryManager(threading.Thread):
                             work_unit="finalization", eta_source="bounded finalization",
                             phase_detail="Replay complete · applying bounded model checkpoint")
 
+        training_audit_summaries = {}
         for agent in agents:
             TRAINING_BUDGET.checkpoint("before_policy_serialize")
             policy = policies[agent["id"]]
+            aid = str(agent["id"])
+            audit = training_audits.get(aid)
+            audit_summary = audit.finalize(
+                policy,
+                benchmark=benchmark_stats.get(agent["id"]) or {},
+                neural_train_rows=list(neural_train_samples.get(aid) or ()) if neural_enabled else (),
+                neural_holdout_rows=list(neural_holdout_samples.get(aid) or ()) if neural_enabled else (),
+                neural_artifact=self.neural_training_artifacts.get(aid),
+            ) if audit is not None else {}
+            training_audit_summaries[aid] = audit_summary
             exported = policy.serialize()
             TRAINING_BUDGET.checkpoint("after_policy_serialize")
             exported['_benchmark_counts'] = benchmark_stats.get(agent['id'], {})
+            exported['_frozen_holdout_counts'] = frozen_benchmark_stats.get(aid, {})
+            if audit is not None:
+                exported['_training_balance_audit_state'] = audit.export_state()
+                exported['_training_balance_audit'] = audit_summary
             STORE.save_model(agent["id"], exported)
             self._remember_training_schema(agent, exported)
             TRAINING_BUDGET.checkpoint("after_model_save")
@@ -2710,14 +3165,52 @@ class HistoryManager(threading.Thread):
                 else:
                     score = float(stat.get("correct") or 0) / samples if samples else 0.0
                 enough = samples >= min_samples and class_coverage
-                passed = bool(enough and score > threshold)
+                prequential_summary = holdout_summary(
+                    agent, policies[agent["id"]].actions, stat,
+                    minimum_samples=min_samples,
+                )
+                frozen_summary = holdout_summary(
+                    agent, policies[agent["id"]].actions,
+                    frozen_benchmark_stats.get(str(agent["id"])) or {},
+                    minimum_samples=min_samples,
+                )
+                frozen_gate_enabled = bool(
+                    OPTIONS.get("candidate_frozen_holdout_gate_enabled", False)
+                )
+                frozen_score = frozen_summary.get("score")
+                frozen_gate_passed = bool(
+                    frozen_summary.get("status") == "ok"
+                    and frozen_score is not None
+                    and float(frozen_score) > threshold
+                )
+                passed = bool(
+                    enough
+                    and score > threshold
+                    and (not frozen_gate_enabled or frozen_gate_passed)
+                )
                 state = "qualified" if passed else "paused"
                 origin_counts = {str(k): int(v or 0) for k, v in (stat.get("origin_counts") or {}).items()}
                 automation_rules = int(stat.get("automation_rules") or 0)
-                reason = (
-                    "recorded-behaviour benchmark passed" if passed else
-                    f"insufficient held-out behaviour samples ({samples}/{min_samples})" if not enough else
-                    f"recorded-behaviour benchmark {score:.1%} below {threshold:.0%}"
+                if passed:
+                    reason = "recorded-behaviour benchmark passed"
+                elif not enough:
+                    reason = f"insufficient held-out behaviour samples ({samples}/{min_samples})"
+                elif score <= threshold:
+                    reason = f"recorded-behaviour benchmark {score:.1%} below {threshold:.0%}"
+                elif frozen_gate_enabled and frozen_summary.get("status") != "ok":
+                    reason = "frozen holdout has insufficient evidence"
+                elif frozen_gate_enabled:
+                    reason = (
+                        f"frozen holdout {float(frozen_score or 0.0):.1%} "
+                        f"below {threshold:.0%}"
+                    )
+                else:
+                    reason = "recorded-behaviour benchmark did not qualify"
+                prequential_score = prequential_summary.get("score")
+                validation_delta = (
+                    float(prequential_score) - float(frozen_score)
+                    if prequential_score is not None and frozen_score is not None
+                    else None
                 )
                 detail = {
                     "threshold": threshold, "minimum_samples": min_samples,
@@ -2725,10 +3218,19 @@ class HistoryManager(threading.Thread):
                     "per_action_accuracy": per_action_accuracy,
                     "automation_rules": automation_rules,
                     "origin_counts": origin_counts,
+                    "training_balance_audit": training_audit_summaries.get(str(agent["id"])) or {},
                     "counts": {"samples": samples, "correct": int(stat.get("correct") or 0),
                                "per_action": stat.get("per_action") or {},
                                "automation_rules": automation_rules,
                                "origin_counts": origin_counts},
+                    "prequential_holdout": prequential_summary,
+                    "frozen_holdout": frozen_summary,
+                    "prequential_minus_frozen": validation_delta,
+                    "frozen_holdout_gate": {
+                        "enabled": frozen_gate_enabled,
+                        "passed": frozen_gate_passed if frozen_gate_enabled else None,
+                        "mode": "qualification_gate" if frozen_gate_enabled else "audit_only",
+                    },
                     "reason": reason,
                 }
                 detail["mode_after_training"] = "shadow"
@@ -2772,7 +3274,8 @@ class HistoryManager(threading.Thread):
                  "feature_dimensions": int(OPTIONS.get("feature_dimensions", 128)),
                  "validation_fraction": validation_fraction, "heldout_updates": len(heldout_updates),
                  "qualification": qualification_summary,
-                 "temporal_replay": _publish_temporal_replay_stats()},
+                 "temporal_replay": _publish_temporal_replay_stats(),
+                 "long_memory": dict(self.training_long_memory_status or {})},
             )
         if self.neural_training_artifacts and not self.worker_mode:
             from tiny_mlp_shadow import publish_training_artifact

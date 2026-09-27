@@ -56,10 +56,13 @@ class Release048CorrectTrainingCacheTests(unittest.TestCase):
         self.assertLessEqual(status["rows"], 3)
         self.assertGreaterEqual(status["evictions"], 1)
 
-    def test_two_replay_trackers_share_one_job_cache(self):
+    def test_all_replay_trackers_share_one_job_cache(self):
         source = inspect.getsource(HistoryManager._train_from_archive)
         self.assertIn("replay_query_cache = ReplayQueryCache", source)
-        self.assertEqual(source.count("query_cache=replay_query_cache"), 2)
+        # Onset + persistence remain the two full-resolution trackers. Stage-5 may add
+        # one bounded sparse long-memory tracker, and it must reuse the same job cache.
+        self.assertEqual(source.count("query_cache=replay_query_cache"), 3)
+        self.assertIn("long_tracker = SQLiteTemporalTracker", source)
         self.assertIn("self.training_replay_cache_status = replay_query_cache.status()", source)
 
 
