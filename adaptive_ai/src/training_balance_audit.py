@@ -82,7 +82,7 @@ class TrainingBalanceAudit:
 
     CONTRACT = "training_balance_audit_v1"
 
-    def __init__(self, agent, policy, *, dwell_sample_cap=4096, prior_state=None):
+    def __init__(self, agent, policy, *, dwell_sample_cap=256, prior_state=None):
         self.agent_id = str(agent.get("id") or "")
         self.actions = [float(value) for value in getattr(policy, "actions", ())]
         self.action_keys = [str(value) for value in self.actions]
