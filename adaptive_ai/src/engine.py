@@ -20,6 +20,7 @@ from experiments import Experiments
 from telemetry import TELEMETRY, HEAVY_JOBS, RUNTIME_DEBUG
 from fast_runtime import fast_light_on_assist_action, is_fast_target, stabilize_fast_light_power_decision
 from training_budget import TRAINING_BUDGET
+from inference_hot_path_metrics import InferenceHotPathMetrics, observe_elapsed
 
 class HAEventStream(threading.Thread):
     """Near-real-time state_changed stream plus Entity Registry metadata.
@@ -121,6 +122,7 @@ class Engine(threading.Thread):
         self.inference_enabled = threading.Event()
         self.startup_inference_not_before = 0.0
         self.runtime = {}
+        self.inference_hot_path_metrics = InferenceHotPathMetrics()
         self.inference_scheduler = {
             "event_passes": 0,
             "timer_passes": 0,
@@ -1128,6 +1130,7 @@ class Engine(threading.Thread):
             rt["decision_reason"] = "Agent is paused"
             return
         inference_started = time.perf_counter()
+        inference_started_ns = time.perf_counter_ns()
         snapshot_revisions = getattr(self._inference_tls, "entity_revisions", None)
         snapshot_context_revision = getattr(self._inference_tls, "context_revision", None)
         if snapshot_revisions is None:
@@ -1147,7 +1150,9 @@ class Engine(threading.Thread):
         rt["last_inference_ts"] = now_ts()
 
         policy = self.policy(agent)
+        stage_started_ns = time.perf_counter_ns()
         features, labels, context_meta = policy.features(state_map, self.temporal_history, at_ts=now_ts())
+        observe_elapsed(self, "ridge_feature_construction", stage_started_ns)
         context_meta.update(policy.selection_meta or {})
         automation_scan_marker = getattr(AUTOMATION_KNOWLEDGE, "last_scan", None)
         if rt.get("_automation_scan_marker") != automation_scan_marker:
@@ -1169,7 +1174,9 @@ class Engine(threading.Thread):
         context_meta["upstream_sensors"] = list((policy.selection_meta or {}).get("upstream_sensors") or [])
         rt["context_meta"] = context_meta
         teaching_revision = self.teaching.revision(aid)
+        stage_started_ns = time.perf_counter_ns()
         chosen, confidence, arms, horizon, support, novelty = policy.predict(features)
+        observe_elapsed(self, "ridge_predict", stage_started_ns)
 
         # Ridge is always evaluated first and remains the safety authority. A selected
         # Tiny MLP may replace only the proposed action index; confidence, support,
@@ -1184,6 +1191,7 @@ class Engine(threading.Thread):
         base_decision_source = "historical_policy_bootstrap"
         hybrid = getattr(self, "hybrid_policy", None)
         if hybrid is not None:
+            hybrid_started_ns = time.perf_counter_ns()
             try:
                 hybrid_result = hybrid.evaluate(
                     agent,
@@ -1206,6 +1214,7 @@ class Engine(threading.Thread):
                     "reason": "hybrid_service_error",
                     "error": f"{type(exc).__name__}: {exc}"[:400],
                 }
+            observe_elapsed(self, "hybrid_policy_total", hybrid_started_ns)
             hybrid_public = {
                 key: value for key, value in dict(hybrid_result or {}).items()
                 if key != "chosen"
@@ -1237,12 +1246,14 @@ class Engine(threading.Thread):
         instruction = None
         decision_source = base_decision_source
         if composer is not None:
+            composer_started_ns = time.perf_counter_ns()
             composed = composer.compose(
                 agent=agent, policy=policy, state_map=state_map, temporal=self.temporal_history,
                 timestamp=now_ts(), features=features, labels=labels, chosen=chosen,
                 confidence=confidence, arms=arms, horizon=horizon, support=support,
                 novelty=novelty, runtime=rt, registry=self.context.resolved_registry,
             )
+            observe_elapsed(self, "decision_composer", composer_started_ns)
             chosen = composed["chosen"]
             confidence = composed["confidence"]
             arms = composed["arms"]
@@ -1371,6 +1382,7 @@ class Engine(threading.Thread):
             ))
         rt['last_intent'] = intent.export()
         rt['behavior_summary'] = self.behavior_summary(agent, rt)
+        observe_elapsed(self, "live_inference_total", inference_started_ns)
         TELEMETRY.observe('inference', (time.perf_counter()-inference_started)*1000)
         received = getattr(self, 'last_event_received', None)
         if changed_entities and received:
