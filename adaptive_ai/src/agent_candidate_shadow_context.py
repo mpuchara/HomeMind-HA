@@ -191,6 +191,9 @@ def install(manager):
         except (KeyError, TypeError, ValueError):
             return bundle
         bundle["ts"] = context_ts
+        align_runtime = getattr(manager, "align_candidate_shadow_event_timestamp", None)
+        if callable(align_runtime):
+            align_runtime(agent["id"], bundle["event_id"], old_ts, context_ts)
         for result in (bundle.get("results") or {}).values():
             try:
                 if abs(float(result.get("desired_since_ts")) - old_ts) <= 1e-6:
