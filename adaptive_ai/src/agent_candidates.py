@@ -1051,7 +1051,7 @@ class AgentCandidateManager(threading.Thread):
             result = original(agent, state_map, changed_entities)
             stage_started_ns = time.perf_counter_ns()
             self.after_live_process(agent, state_map)
-            observe_elapsed(self.engine, "candidate_shadow_total", stage_started_ns)
+            observe_elapsed(self.engine, "candidate_shadow_enqueue", stage_started_ns)
             observe_elapsed(self.engine, "candidate_wrapper_total", wrapper_started_ns)
             return result
 
