@@ -81,14 +81,20 @@ def install(manager):
                 raise RuntimeError("selected neural Candidate Ridge baseline is unavailable")
             policy = manager.engine.policy(agent)
 
-        features, _, _ = policy.features(
-            state_map, manager.engine.temporal_history, at_ts=float(event_ts)
-        )
-        ridge = policy.predict(features)
-        ridge_chosen, ridge_confidence, ridge_arms, ridge_horizon, ridge_support, ridge_novelty = ridge
-
         hybrid = getattr(manager.engine, "hybrid_policy", None)
         if hybrid is not None:
+            features, _, _ = policy.features(
+                state_map, manager.engine.temporal_history, at_ts=float(event_ts)
+            )
+            ridge = policy.predict(features)
+            (
+                ridge_chosen,
+                ridge_confidence,
+                ridge_arms,
+                ridge_horizon,
+                ridge_support,
+                ridge_novelty,
+            ) = ridge
             selected = hybrid.evaluate(
                 agent,
                 policy,
