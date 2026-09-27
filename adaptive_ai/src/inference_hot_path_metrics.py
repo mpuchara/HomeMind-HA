@@ -20,6 +20,8 @@ STAGES = (
     "hybrid_ridge_guard",
     "decision_composer",
     "candidate_before_live",
+    "candidate_shadow_enqueue",
+    "candidate_shadow_queue_lag",
     "candidate_shadow_total",
     "candidate_feature_construction",
     "candidate_ridge_predict",
@@ -76,6 +78,13 @@ class InferenceHotPathMetrics:
             "mlp_model_deserialize": 0,
             "candidate_hybrid_fallbacks": 0,
             "shadow_mlp_fallback_observes": 0,
+            "candidate_shadow_queued": 0,
+            "candidate_shadow_coalesced": 0,
+            "candidate_shadow_deduplicated": 0,
+            "candidate_shadow_dropped": 0,
+            "candidate_shadow_processed": 0,
+            "candidate_shadow_stale_generation_dropped": 0,
+            "candidate_shadow_errors": 0,
         }
     def observe(self, stage, elapsed_ms):
         metric = self._stages.get(str(stage))
