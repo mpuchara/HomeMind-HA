@@ -8,7 +8,7 @@
   "pi4_release_gate_contract": "pi4_release_gate_v1",
   "pi4_real_hardware_required": true,
   "stage7_offline_rl_control_unlock": false,
-  "tests_passed": 1307,
+  "tests_passed": 1314,
   "profile": "rpi4-ram-first-complete-discovery-manual-agent-selection",
   "manual_agent_training": true,
   "max_concurrent_training_jobs": 1,
@@ -585,5 +585,9 @@
     "fix": "publication validates semantic options plus only the entities selected by the trained model, its target/explicit inputs, and device siblings used by controllable-context exclusion",
     "resource_options": "CPU/RAM/cache scheduling knobs no longer count as semantic model changes during an already-running job",
     "safety": "selected-entity metadata, target/input configuration, device-sibling topology and learning-semantic options still invalidate stale results"
-  }
+  },
+  "hybrid_policy_contract": "tiny_mlp_action_selector_plus_ridge_action_specific_confidence_support_novelty_guard_with_ridge_fallback",
+  "hybrid_policy_authority": "Tiny MLP may propose the action only after tournament selection; Ridge remains safety/confidence authority and Executor remains the only physical dispatch boundary",
+  "hybrid_policy_hot_path": "RAM-first persisted neural record/model/mask; selected neural Shadow observation reuses the hybrid forward pass",
+  "hybrid_policy_fallback": "any missing/stale neural artifact, inference failure, low Ridge confidence/support, high novelty or weak MLP decision strength falls back to unchanged Ridge"
 }
