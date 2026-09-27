@@ -15,7 +15,7 @@ try:
 except Exception:
     ws_connect = None
 
-APP_VERSION = "0.14.97"
+APP_VERSION = "0.14.98"
 HISTORY_BOOTSTRAP_REVISION = "target-attrs-v2"
 TRAINING_REVISION = "shared-home-intents-v19"
 DATA_DIR = Path(os.environ.get("ADAPTIVE_AI_DATA", "/data"))
@@ -124,6 +124,14 @@ DEFAULT_OPTIONS = {
     # Stage-3 neural policy is inference/persistence only and hard-gated to Shadow.
     # Hidden sizes remain deliberately tiny for Raspberry Pi class hosts.
     "tiny_mlp_shadow_enabled": True,
+    # Hybrid authority: Tiny MLP may select an action only when Ridge independently
+    # supports that exact arm. Ridge still owns confidence, support, novelty, horizon,
+    # ActionIntent freshness and Executor safety checks; every failure falls back to Ridge.
+    "hybrid_policy_enabled": True,
+    "hybrid_policy_min_ridge_confidence": 0.60,
+    "hybrid_policy_min_ridge_support": 0.20,
+    "hybrid_policy_max_ridge_novelty": 0.85,
+    "hybrid_policy_min_mlp_decision_strength": 0.55,
     "tiny_mlp_hidden_layers": "32,16",
     "tiny_mlp_init_seed": 1482,
     "tiny_mlp_supervised_training_enabled": True,
