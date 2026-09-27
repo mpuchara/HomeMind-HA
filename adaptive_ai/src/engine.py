@@ -1271,6 +1271,13 @@ class Engine(threading.Thread):
                 chosen = dict(chosen, value=trial['value'], index=trial['index'])
                 support, novelty = trial['support'], trial['novelty']
                 decision_source = "experiment"
+
+        # Explicit instruction/preference/experiment has higher authority than the base
+        # hybrid selector. Once such an override wins, MLP-only feature freshness must
+        # not block the resulting intent.
+        if decision_source != "hybrid_tiny_mlp_ridge_guard":
+            hybrid_dependencies = ()
+
         raw_prediction = float(chosen["value"])
         forecast = context_meta.get('home_forecast', {})
         assist_idx = fast_light_on_assist_action(
