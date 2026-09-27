@@ -87,6 +87,10 @@ DEFAULT_OPTIONS = {
     "max_context_novelty": 0.85,
     "confidence_validation_fraction": 0.20,
     "confidence_min_validation_samples": 12,
+    # vNext Stage 4: frozen future-holdout is reported beside the established
+    # prequential score. Keep the new qualification gate audit-only until real-home
+    # sample coverage has been observed; enabling it requires both gates to pass.
+    "candidate_frozen_holdout_gate_enabled": False,
     "block_control_on_automation_conflict": True,
     "action_bins": 31,
     "rl_alpha": 0.65,

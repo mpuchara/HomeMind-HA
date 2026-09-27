@@ -19,6 +19,10 @@ from training_budget import TRAINING_BUDGET
 from policy import MultiHorizonPolicy
 from training_balance_audit import TrainingBalanceAudit
 from training_evidence import evidence_weight_for, normalized_dwell_sample_mass
+from frozen_validation import (
+    FrozenRidgeSnapshot, empty_holdout_counts, holdout_summary,
+    prediction_is_correct, record_holdout_result,
+)
 
 def stateful_continuation_seed_rows(store, agents, target_map, start_ts, boundary_ts):
     """Return the exact open-target transition state the legacy overlap would leave.
@@ -1745,6 +1749,8 @@ class HistoryManager(threading.Thread):
             for a in agents
         }
         benchmark_stats = {}
+        frozen_benchmark_stats = {}
+        frozen_chunk_stats = {}
         prior_models = {}
         for a in agents:
             prior_model = STORE.get_model(a["id"]) or {} if accumulate_benchmark else {}
@@ -1758,6 +1764,13 @@ class HistoryManager(threading.Thread):
                 "automation_rules": max(int(prior.get("automation_rules") or 0), len(automation_infos_by_agent[a["id"]])),
                 "origin_counts": {str(k): int(v or 0) for k, v in (prior.get("origin_counts") or {}).items()},
             }
+            prior_frozen = (
+                prior_model.get("_frozen_holdout_counts")
+                or ((a.get("benchmark_detail") or {}).get("frozen_holdout") or {}).get("counts")
+                or {}
+            ) if accumulate_benchmark else {}
+            frozen_benchmark_stats[str(a["id"])] = empty_holdout_counts(prior_frozen)
+            frozen_chunk_stats[str(a["id"])] = empty_holdout_counts()
 
         # Stage 4 trains a tiny supervised challenger beside the established Ridge model.
         # It is deliberately tied to explicit benchmarked historical training only:
@@ -2036,6 +2049,25 @@ class HistoryManager(threading.Thread):
         validation_fraction = clamp(float(OPTIONS.get("confidence_validation_fraction", 0.20)), 0.05, 0.40)
         validation_span = max(1800.0, (float(end_ts) - float(start_ts)) * validation_fraction)
         validation_start = max(float(start_ts), float(end_ts) - validation_span)
+
+        # Keep the established prequential test-then-learn validation intact, but also
+        # freeze Ridge exactly at the train/validation boundary. The frozen snapshot is
+        # read-only and never receives validation updates; it therefore measures genuine
+        # future generalization while the live policy remains free to adapt prequentially.
+        frozen_policy_snapshots = {}
+        frozen_boundary_captured = False
+
+        def capture_frozen_validation_boundary():
+            nonlocal frozen_boundary_captured
+            if frozen_boundary_captured:
+                return
+            for frozen_agent in agents:
+                frozen_aid = str(frozen_agent["id"])
+                frozen_policy_snapshots[frozen_aid] = FrozenRidgeSnapshot(
+                    policies[frozen_agent["id"]]
+                )
+            frozen_boundary_captured = True
+
         training_audits = {}
         for a in agents:
             aid = str(a["id"])
@@ -2185,18 +2217,33 @@ class HistoryManager(threading.Thread):
             slot = stat["per_action"].setdefault(str(actual), {"samples": 0, "correct": 0})
             slot["samples"] += 1
             slot["correct"] += 1 if correct else 0
+
+            aid = str(agent["id"])
+            frozen = frozen_policy_snapshots.get(aid)
+            if frozen is None:
+                # Normally captured globally on the first archive row at/after the
+                # boundary. Keep this lazy guard for sparse/filtered replay fixtures.
+                frozen = FrozenRidgeSnapshot(policy)
+                frozen_policy_snapshots[aid] = frozen
+            frozen_predicted = frozen.predict(h, features)
+            frozen_correct = prediction_is_correct(
+                agent, policy.actions, frozen_predicted, actual
+            )
+            record_holdout_result(
+                frozen_benchmark_stats[aid], actual, frozen_correct
+            )
+            record_holdout_result(
+                frozen_chunk_stats[aid], actual, frozen_correct
+            )
+
             if neural_enabled:
-                chunk = neural_chunk_benchmark[str(agent["id"])]
-                chunk["samples"] += 1
-                chunk["correct"] += 1 if correct else 0
-                chunk_slot = chunk["per_action"].setdefault(
-                    str(actual), {"samples": 0, "correct": 0}
-                )
-                chunk_slot["samples"] += 1
-                chunk_slot["correct"] += 1 if correct else 0
                 observation = old.get("neural_anchor_observation")
                 if observation is not None:
-                    neural_holdout_samples[str(agent["id"])].append({
+                    # Ridge and MLP tournament rows must be identical. Score the frozen
+                    # Ridge snapshot only for rows that have the exact MLP observation.
+                    chunk = neural_chunk_benchmark[aid]
+                    record_holdout_result(chunk, actual, frozen_correct)
+                    neural_holdout_samples[aid].append({
                         "observation": observation,
                         "action_idx": actual,
                         "weight": float(reward),
@@ -2575,6 +2622,11 @@ class HistoryManager(threading.Thread):
                                 work_unit="history rows", eta_source="measured replay throughput",
                                 phase_detail=f"Chronological reward replay for {len(agents)} agent(s) · {rate:,.0f} rows/s")
                 replay_last_report = now_report
+            if (
+                not frozen_boundary_captured
+                and float(row["ts"]) >= validation_start
+            ):
+                capture_frozen_validation_boundary()
             agents_for_target = target_map.get(row["entity_id"], [])
             if not agents_for_target:
                 continue
@@ -2777,6 +2829,7 @@ class HistoryManager(threading.Thread):
             exported = policy.serialize()
             TRAINING_BUDGET.checkpoint("after_policy_serialize")
             exported['_benchmark_counts'] = benchmark_stats.get(agent['id'], {})
+            exported['_frozen_holdout_counts'] = frozen_benchmark_stats.get(aid, {})
             if audit is not None:
                 exported['_training_balance_audit_state'] = audit.export_state()
                 exported['_training_balance_audit'] = audit_summary
@@ -2826,14 +2879,52 @@ class HistoryManager(threading.Thread):
                 else:
                     score = float(stat.get("correct") or 0) / samples if samples else 0.0
                 enough = samples >= min_samples and class_coverage
-                passed = bool(enough and score > threshold)
+                prequential_summary = holdout_summary(
+                    agent, policies[agent["id"]].actions, stat,
+                    minimum_samples=min_samples,
+                )
+                frozen_summary = holdout_summary(
+                    agent, policies[agent["id"]].actions,
+                    frozen_benchmark_stats.get(str(agent["id"])) or {},
+                    minimum_samples=min_samples,
+                )
+                frozen_gate_enabled = bool(
+                    OPTIONS.get("candidate_frozen_holdout_gate_enabled", False)
+                )
+                frozen_score = frozen_summary.get("score")
+                frozen_gate_passed = bool(
+                    frozen_summary.get("status") == "ok"
+                    and frozen_score is not None
+                    and float(frozen_score) > threshold
+                )
+                passed = bool(
+                    enough
+                    and score > threshold
+                    and (not frozen_gate_enabled or frozen_gate_passed)
+                )
                 state = "qualified" if passed else "paused"
                 origin_counts = {str(k): int(v or 0) for k, v in (stat.get("origin_counts") or {}).items()}
                 automation_rules = int(stat.get("automation_rules") or 0)
-                reason = (
-                    "recorded-behaviour benchmark passed" if passed else
-                    f"insufficient held-out behaviour samples ({samples}/{min_samples})" if not enough else
-                    f"recorded-behaviour benchmark {score:.1%} below {threshold:.0%}"
+                if passed:
+                    reason = "recorded-behaviour benchmark passed"
+                elif not enough:
+                    reason = f"insufficient held-out behaviour samples ({samples}/{min_samples})"
+                elif score <= threshold:
+                    reason = f"recorded-behaviour benchmark {score:.1%} below {threshold:.0%}"
+                elif frozen_gate_enabled and frozen_summary.get("status") != "ok":
+                    reason = "frozen holdout has insufficient evidence"
+                elif frozen_gate_enabled:
+                    reason = (
+                        f"frozen holdout {float(frozen_score or 0.0):.1%} "
+                        f"below {threshold:.0%}"
+                    )
+                else:
+                    reason = "recorded-behaviour benchmark did not qualify"
+                prequential_score = prequential_summary.get("score")
+                validation_delta = (
+                    float(prequential_score) - float(frozen_score)
+                    if prequential_score is not None and frozen_score is not None
+                    else None
                 )
                 detail = {
                     "threshold": threshold, "minimum_samples": min_samples,
@@ -2846,6 +2937,14 @@ class HistoryManager(threading.Thread):
                                "per_action": stat.get("per_action") or {},
                                "automation_rules": automation_rules,
                                "origin_counts": origin_counts},
+                    "prequential_holdout": prequential_summary,
+                    "frozen_holdout": frozen_summary,
+                    "prequential_minus_frozen": validation_delta,
+                    "frozen_holdout_gate": {
+                        "enabled": frozen_gate_enabled,
+                        "passed": frozen_gate_passed if frozen_gate_enabled else None,
+                        "mode": "qualification_gate" if frozen_gate_enabled else "audit_only",
+                    },
                     "reason": reason,
                 }
                 detail["mode_after_training"] = "shadow"
