@@ -11,7 +11,7 @@ import storage
 from policy_backend import PolicyBackend
 from policy_full_ridge import FullRidgeLinUCBBackend
 from policy_backend_benchmark import (
-    _FullRidgeBenchmarkBackend, _learn_episode, _metrics, run_benchmark,
+    _FullRidgeBenchmarkBackend, _learn_episode, _metrics, persist_result, run_benchmark,
     semantic_feature_indices, split_future, trial_records_to_episodes,
 )
 from policy_backend_shadow import PolicyBackendShadowService
@@ -166,6 +166,17 @@ class TrialAndShadowTests(unittest.TestCase):
     def tearDown(self):
         self.temp.cleanup()
 
+    def support_shadow(self, agent_id='a1', indices=(0, 1), ridge=1.0, alpha=.65):
+        result = {
+            'run_id': 'bench-' + str(agent_id),
+            'candidate_status': 'shadow_candidate_supported',
+            'feature_selection': {'indices': list(indices)},
+            'hyperparameter_selection': {'ridge': ridge, 'alpha': alpha},
+        }
+        persist_result(self.store, result, agent_id=agent_id)
+        return result
+
+
     def test_trial_records_preserve_action_set_propensities_and_only_executed_reward(self):
         now = time.time()
         with self.store.lock, self.store.conn() as c:
@@ -188,7 +199,21 @@ class TrialAndShadowTests(unittest.TestCase):
         self.assertNotIn('counterfactual_rewards', rows[0])
         self.assertEqual(rows[0]['feature_labels'], {})
 
+    def test_enabled_shadow_waits_for_supported_benchmark(self):
+        service = PolicyBackendShadowService(self.store, enabled=True)
+        agent = {'id': 'a1', 'target_entity': 'light.kitchen'}
+        policy = SimpleNamespace(actions=[0.0, 1.0], horizons=[1])
+        result = service.observe_decision(
+            agent, policy, {0: 1, 1: .8},
+            {0: ['bias'], 1: ['sensor.kitchen:value']}, [0, 1],
+        )
+        self.assertEqual(result['evaluation'], 'shadow_waiting_for_supported_benchmark')
+        self.assertEqual(result['reason'], 'no_persisted_benchmark')
+        self.assertNotIn('a1', service.backends)
+        self.assertFalse(result['dispatch_capability'])
+
     def test_shadow_is_flagged_non_controlling_and_reward_updates_logged_action_only(self):
+        self.support_shadow()
         service = PolicyBackendShadowService(self.store, enabled=True)
         agent = {'id': 'a1', 'target_entity': 'light.kitchen'}
         policy = SimpleNamespace(actions=[0.0, 1.0], horizons=[1])
@@ -204,6 +229,7 @@ class TrialAndShadowTests(unittest.TestCase):
         self.assertEqual(diag['mode'], 'shadow')
 
     def test_trial_record_reward_is_exactly_once_in_shadow(self):
+        self.support_shadow()
         service = PolicyBackendShadowService(self.store, enabled=True)
         agent = {'id': 'a1', 'target_entity': 'light.kitchen'}
         policy = SimpleNamespace(actions=[0.0, 1.0], horizons=[1])
