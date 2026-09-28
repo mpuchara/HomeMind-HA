@@ -17,6 +17,7 @@ from confidence_contract import (
     contract_descriptor,
     paired_future_quality_report,
     probability_calibration,
+    record_independent_candidate_label,
 )
 
 
@@ -34,6 +35,10 @@ def pair(i, outcome, correct=True, confidence=.9, scope='room-a', cluster=None,
         'child_confidence': float(confidence),
         'evidence_kind': evidence_kind,
         'calibration_eligible': 1 if eligible else 0,
+        'calibration_outcome': float(outcome) if eligible else None,
+        'calibration_parent_correct': (1 if parent_correct else 0) if eligible else None,
+        'calibration_child_correct': (1 if correct else 0) if eligible else None,
+        'calibration_source_id': f'label-{i}' if eligible else None,
         'dependency_cluster': cluster or f'cluster-{i}',
     }
 
@@ -211,6 +216,86 @@ class FixedFutureEvaluationTests(unittest.TestCase):
         second = self.epochs.ensure('g0', 'g1', 'rev-b', 'full_ridge_linucb:v1', selection)
         self.assertIsNotNone(second)
         self.assertNotEqual(first['model_revision'], second['model_revision'])
+
+
+class IndependentCandidateLabelTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory(prefix='confidence-label-')
+        self.store = Store(Path(self.tmp.name) / 'test.db')
+        with self.store.lock, self.store.conn() as db:
+            db.execute(
+                """CREATE TABLE candidate_generation_pairs (
+                   root_agent_id TEXT NOT NULL,
+                   parent_generation_id TEXT NOT NULL,
+                   child_generation_id TEXT NOT NULL,
+                   prediction_event_id TEXT NOT NULL,
+                   prediction_ts REAL NOT NULL,
+                   outcome_ts REAL NOT NULL,
+                   outcome REAL NOT NULL,
+                   parent_prediction REAL NOT NULL,
+                   child_prediction REAL NOT NULL,
+                   parent_confidence REAL,
+                   child_confidence REAL,
+                   parent_correct INTEGER NOT NULL,
+                   child_correct INTEGER NOT NULL,
+                   paired_result TEXT NOT NULL,
+                   evidence_kind TEXT NOT NULL DEFAULT 'legacy_unclassified',
+                   calibration_eligible INTEGER NOT NULL DEFAULT 0,
+                   dependency_cluster TEXT,
+                   calibration_outcome REAL,
+                   calibration_parent_correct INTEGER,
+                   calibration_child_correct INTEGER,
+                   calibration_source_id TEXT,
+                   parent_lead_seconds REAL,
+                   child_lead_seconds REAL,
+                   lead_gain_seconds REAL,
+                   PRIMARY KEY(parent_generation_id,child_generation_id,outcome_ts)
+                )"""
+            )
+            db.execute(
+                """INSERT INTO candidate_generation_pairs
+                   (root_agent_id,parent_generation_id,child_generation_id,prediction_event_id,
+                    prediction_ts,outcome_ts,outcome,parent_prediction,child_prediction,
+                    parent_correct,child_correct,paired_result)
+                   VALUES(?,?,?,?,?,?,?,?,?,?,?,?)""",
+                ('a','g0','g1','event-1',1,2,0,0,1,1,0,'parent_win'),
+            )
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_independent_episode_label_does_not_rewrite_raw_transition(self):
+        self.assertTrue(record_independent_candidate_label(
+            self.store,
+            parent_generation_id='g0', child_generation_id='g1',
+            prediction_event_id='event-1', desired_action=1,
+            source_kind='episode_evaluator_independent',
+            source_id='episode-light-1', dependency_cluster='light-need-1',
+        ))
+        with self.store.conn() as db:
+            row = dict(db.execute('SELECT * FROM candidate_generation_pairs').fetchone())
+        self.assertEqual(row['outcome'], 0)
+        self.assertEqual(row['parent_correct'], 1)
+        self.assertEqual(row['child_correct'], 0)
+        self.assertEqual(row['calibration_outcome'], 1)
+        self.assertEqual(row['calibration_parent_correct'], 0)
+        self.assertEqual(row['calibration_child_correct'], 1)
+        self.assertEqual(row['evidence_kind'], 'episode_evaluator_independent')
+        self.assertEqual(row['calibration_source_id'], 'episode-light-1')
+
+    def test_different_second_label_cannot_overwrite_first_independent_fact(self):
+        self.assertTrue(record_independent_candidate_label(
+            self.store,
+            parent_generation_id='g0', child_generation_id='g1',
+            prediction_event_id='event-1', desired_action=1,
+            source_kind='episode_evaluator_independent', source_id='episode-light-1',
+        ))
+        self.assertFalse(record_independent_candidate_label(
+            self.store,
+            parent_generation_id='g0', child_generation_id='g1',
+            prediction_event_id='event-1', desired_action=0,
+            source_kind='episode_evaluator_independent', source_id='episode-light-2',
+        ))
 
 
 class ContractParityTests(unittest.TestCase):
