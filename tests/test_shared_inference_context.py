@@ -41,6 +41,10 @@ class SharedInferenceContextParityTests(unittest.TestCase):
         self.assertEqual(diag["forecast_hits"], 1)
         self.assertGreater(diag["sample_misses"], 0)
         self.assertGreater(diag["sample_hits"], 0)
+        # Ridge owns the causal-as-of cache. MLP consumes overlapping t/t-1/t-10
+        # observations without changing the resulting dense observation.
+        self.assertGreater(diag["causal_asof_hits"], 0)
+        self.assertGreater(diag["previous_hits"], 0)
 
     def test_shared_context_is_scoped_to_exact_timestamp(self):
         _states, temporal, home, _live, _candidate, _mask, _lm, _cm, ts = fixture(4)
@@ -51,6 +55,17 @@ class SharedInferenceContextParityTests(unittest.TestCase):
         self.assertIs(same, first)
         self.assertIsNot(later, first)
         self.assertAlmostEqual(later.timestamp, ts + 0.001)
+
+    def test_mlp_cannot_publish_into_ridge_causal_cache(self):
+        _states, temporal, home, _live, _candidate, _mask, _lm, _cm, ts = fixture(4)
+        shared = shared_inference_temporal(temporal, ts, home_provider=home)
+
+        # A raw MLP-style previous() lookup may memoize its own answer but must not create
+        # an authoritative Ridge causal-as-of entry.
+        self.assertIsNotNone(shared.previous("sensor.context_00", ts))
+        hit, value = shared.causal_asof("sensor.context_00", ts)
+        self.assertFalse(hit)
+        self.assertIsNone(value)
 
     def test_forecast_cache_returns_isolated_dict_copies(self):
         _states, temporal, home, _live, _candidate, _mask, _lm, _cm, ts = fixture(4)
