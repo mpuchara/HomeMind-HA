@@ -824,6 +824,7 @@ class RoomBeliefModel:
         with self.lock:
             return {
                 'version': self.VERSION,
+                'time_contract_version': self.TIME_CONTRACT_VERSION,
                 'model': 'RoomBeliefModel',
                 'updates': self.updated,
                 'last_decay_ts': self.last_decay_ts,
@@ -920,6 +921,8 @@ class RoomBeliefModel:
                 'model': 'RoomBeliefModel',
                 'version': self.VERSION,
                 'migrated_from': self.migrated_from,
+                'time_contract_version': self.TIME_CONTRACT_VERSION,
+                'time_contract_loaded': self.time_contract_loaded,
                 'areas': len(self.values),
                 'edges': len(transitions),
                 'updates': self.updated,
