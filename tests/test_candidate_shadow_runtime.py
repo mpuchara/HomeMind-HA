@@ -204,6 +204,42 @@ class CandidateShadowRuntimeTests(unittest.TestCase):
         self.engine.runtime[self.root["id"]] = {"last_prediction": 0.0, "last_confidence": .82}
         return self.manager.after_live_process(self.root, states)
 
+    def test_pair_evidence_migration_is_additive_and_legacy_rows_are_not_promoted_to_calibration(self):
+        other = Path(self.temp.name) / "legacy-pairs.db"
+        store = storage.Store(other)
+        with store.lock, store.conn() as db:
+            db.execute(
+                """CREATE TABLE candidate_generation_pairs (
+                   root_agent_id TEXT NOT NULL, parent_generation_id TEXT NOT NULL,
+                   child_generation_id TEXT NOT NULL, prediction_event_id TEXT NOT NULL,
+                   prediction_ts REAL NOT NULL, outcome_ts REAL NOT NULL, outcome REAL NOT NULL,
+                   parent_prediction REAL NOT NULL, child_prediction REAL NOT NULL,
+                   parent_confidence REAL, child_confidence REAL,
+                   parent_correct INTEGER NOT NULL, child_correct INTEGER NOT NULL,
+                   paired_result TEXT NOT NULL, parent_lead_seconds REAL,
+                   child_lead_seconds REAL, lead_gain_seconds REAL,
+                   PRIMARY KEY(parent_generation_id,child_generation_id,outcome_ts))"""
+            )
+            db.execute(
+                """INSERT INTO candidate_generation_pairs
+                   (root_agent_id,parent_generation_id,child_generation_id,prediction_event_id,
+                    prediction_ts,outcome_ts,outcome,parent_prediction,child_prediction,
+                    parent_confidence,child_confidence,parent_correct,child_correct,paired_result)
+                   VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                ("a","g0","g1","ev",1,2,1,0,1,.8,.9,0,1,"child_win"),
+            )
+        ensure_shadow_tables(store)
+        with store.conn() as db:
+            row = dict(db.execute("SELECT * FROM candidate_generation_pairs").fetchone())
+            columns = {x["name"] for x in db.execute("PRAGMA table_info(candidate_generation_pairs)").fetchall()}
+        self.assertIn("evidence_kind", columns)
+        self.assertIn("calibration_eligible", columns)
+        self.assertIn("dependency_cluster", columns)
+        self.assertEqual(row["paired_result"], "child_win")
+        self.assertEqual(row["evidence_kind"], "legacy_unclassified")
+        self.assertEqual(row["calibration_eligible"], 0)
+        self.assertIsNone(row["dependency_cluster"])
+
     def test_no_candidate_means_no_candidate_shadow_bundle_or_decision_write(self):
         bundle = self._run_shadow()
         self.assertIsNone(bundle)
