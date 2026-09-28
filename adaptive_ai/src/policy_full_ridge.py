@@ -65,8 +65,7 @@ def _solve_spd(matrix, rhs):
 
 
 class FullRidgeLinUCBHead:
-    VERSION = 2
-    FEATURE_CONTRACT = "semantic_projection_v2"
+    VERSION = 1
 
     def __init__(self, feature_indices, actions, alpha=0.65, ridge=1.0, model=None):
         self.feature_indices = [int(x) for x in feature_indices]
@@ -257,7 +256,8 @@ class FullRidgeLinUCBHead:
 class FullRidgeLinUCBBackend(PolicyBackend):
     """PolicyBackend-compatible multi-horizon full-ridge challenger."""
     BACKEND = "full_ridge_linucb"
-    VERSION = 1
+    VERSION = 2
+    FEATURE_CONTRACT = "semantic_projection_v2"
 
     def __init__(self, actions, horizons, feature_indices, alpha=0.65, ridge=1.0, model=None):
         self.actions = [float(x) for x in actions]
