@@ -20,7 +20,7 @@ from urllib.parse import urlsplit
 from fast_runtime import is_fast_target
 
 
-CONTRACT_VERSION = 1
+CONTRACT_VERSION = 2
 PROBABILITY_BINS = 10
 DEFAULT_SELECTION_EPISODES = 12
 DEFAULT_FINAL_EPISODES = 12
@@ -28,6 +28,8 @@ DEFAULT_MIN_PER_ACTION = 4
 DEFAULT_DEPENDENCY_WINDOW_SECONDS = 30.0
 DEFAULT_HALF_LIFE_EPISODES = 40.0
 DEFAULT_OVERCONFIDENCE_GAP = 0.15
+DEFAULT_FINAL_MAX_REGRESSION = 0.03
+FINAL_CALIBRATION_EVIDENCE_KINDS = {"manual_user_target_change", "independent_preference_label", "episode_evaluator_independent"}
 EVALUATION_REVISION_SEPARATOR = "::backend="
 
 METRIC_SEMANTICS = {
@@ -35,7 +37,7 @@ METRIC_SEMANTICS = {
     "forecast_uncertainty": "uncertainty_score_0_to_1_not_probability_of_failure",
     "expected_action_utility": "expected_reward_or_utility_not_probability",
     "data_coverage": "effective_independent_evidence_fraction_not_quality",
-    "empirical_policy_quality": "future_episode_observed_quality_with_interval",
+    "empirical_policy_quality": "fixed_future_paired_observed_quality_with_interval_not_probability",
     "preference_alignment": "weighted_alignment_lower_bound_not_comfort_probability",
     "decision_strength": "legacy_structural_gate_score_not_probability",
 }
@@ -259,18 +261,45 @@ def probability_calibration(rows, *, scope_id=None, model_key=None,
     }
 
 
+def _eligible_calibration_row(row):
+    kind = str(row.get("evidence_kind") or "")
+    return bool(
+        row.get("calibration_eligible")
+        and kind in FINAL_CALIBRATION_EVIDENCE_KINDS
+        and _finite(row.get("calibration_outcome")) is not None
+        and row.get("calibration_parent_correct") is not None
+        and row.get("calibration_child_correct") is not None
+    )
+
+
+def _calibration_view(row):
+    out = dict(row or {})
+    if _eligible_calibration_row(out):
+        out["outcome"] = float(out["calibration_outcome"])
+        out["parent_correct"] = int(out["calibration_parent_correct"])
+        out["child_correct"] = int(out["calibration_child_correct"])
+    return out
+
+
 def action_quality_report(rows, *, scope_id=None, end_ts=None,
                           min_total=DEFAULT_FINAL_EPISODES,
                           min_per_action=DEFAULT_MIN_PER_ACTION,
-                          half_life=DEFAULT_HALF_LIFE_EPISODES):
-    """Independent future action quality. Confidence-like policy scores are diagnostics only."""
+                          half_life=DEFAULT_HALF_LIFE_EPISODES,
+                          correct_key="child_correct",
+                          confidence_key="child_confidence",
+                          require_calibration_eligible=False):
+    """Episode-level action quality; never interprets confidence as a probability."""
     selected = []
+    source_counts = defaultdict(int)
     for raw in rows or ():
         row = dict(raw or {})
         if scope_id is not None:
             candidate_scope = row.get("scope_id") or row.get("root_agent_id")
             if str(candidate_scope) != str(scope_id):
                 continue
+        if require_calibration_eligible and not _eligible_calibration_row(row):
+            continue
+        source_counts[str(row.get("evidence_kind") or "unclassified")] += 1
         selected.append(row)
     rows = independent_episode_rows(selected, end_ts=end_ts)
     weights = dependency_adjusted_weights(
@@ -285,12 +314,12 @@ def action_quality_report(rows, *, scope_id=None, end_ts=None,
     strengths_weight = 0.0
     for row, weight in zip(rows, weights):
         outcome = 1 if float(row.get("outcome") or 0.0) >= .5 else 0
-        correct = bool(row.get("child_correct"))
+        correct = bool(row.get(correct_key))
         name = "ON" if outcome else "OFF"
         by_action[name].append((row, correct, weight))
         all_weight += weight
         all_success += weight if correct else 0.0
-        strength = _finite(row.get("child_confidence"))
+        strength = _finite(row.get(confidence_key))
         if strength is not None:
             strengths_num += max(0.0, min(1.0, strength)) * weight
             strengths_weight += weight
@@ -327,6 +356,10 @@ def action_quality_report(rows, *, scope_id=None, end_ts=None,
     return {
         "metric": "future_episode_action_quality",
         "probability_claim": False,
+        "correctness_key": str(correct_key),
+        "confidence_key": str(confidence_key),
+        "calibration_eligible_only": bool(require_calibration_eligible),
+        "evidence_kinds": dict(source_counts),
         "episodes": len(rows),
         "effective_n": total_eff,
         "accuracy": overall["mean"],
@@ -341,6 +374,160 @@ def action_quality_report(rows, *, scope_id=None, end_ts=None,
         "sufficient_evidence": ready,
         "recommendation": "evaluate" if ready else "abstain_insufficient_independent_evidence",
     }
+
+
+def _paired_delta_interval(rows, weights, *, max_regression):
+    if not rows:
+        return {
+            "mean_delta": None, "lower": None, "upper": None, "effective_n": 0.0,
+            "non_regression_passed": False, "max_allowed_regression": float(max_regression),
+        }
+    deltas = [
+        (1.0 if bool(row.get("child_correct")) else 0.0)
+        - (1.0 if bool(row.get("parent_correct")) else 0.0)
+        for row in rows
+    ]
+    total = sum(weights)
+    n_eff = dependency_effective_sample_size(rows, weights)
+    if total <= 1e-12 or n_eff <= 1e-12:
+        return {
+            "mean_delta": None, "lower": None, "upper": None, "effective_n": n_eff,
+            "non_regression_passed": False, "max_allowed_regression": float(max_regression),
+        }
+    mean = sum(w * d for w, d in zip(weights, deltas)) / total
+    variance = sum(w * ((d - mean) ** 2) for w, d in zip(weights, deltas)) / total
+    se = math.sqrt(max(0.0, variance) / max(1.0, n_eff))
+    lower = max(-1.0, mean - 1.96 * se)
+    upper = min(1.0, mean + 1.96 * se)
+    return {
+        "mean_delta": mean,
+        "lower": lower,
+        "upper": upper,
+        "effective_n": n_eff,
+        "max_allowed_regression": float(max_regression),
+        "non_regression_passed": bool(lower >= -float(max_regression)),
+        "interval": "paired_weighted_normal_95pct",
+    }
+
+
+def paired_future_quality_report(rows, *, scope_id=None, end_ts=None,
+                                 min_total=DEFAULT_FINAL_EPISODES,
+                                 min_per_action=DEFAULT_MIN_PER_ACTION,
+                                 max_regression=DEFAULT_FINAL_MAX_REGRESSION):
+    """Fixed future comparison on the same independent labelled episodes for parent/child."""
+    selected = []
+    for raw in rows or ():
+        row = dict(raw or {})
+        candidate_scope = row.get("scope_id") or row.get("root_agent_id")
+        if scope_id is not None and str(candidate_scope) != str(scope_id):
+            continue
+        if not _eligible_calibration_row(row):
+            continue
+        selected.append(_calibration_view(row))
+    selected = independent_episode_rows(selected, end_ts=end_ts)
+    weights = dependency_adjusted_weights(
+        selected,
+        recent_full_weight=max(1, int(min_total)),
+    )
+    child = action_quality_report(
+        selected, scope_id=None, end_ts=end_ts,
+        min_total=min_total, min_per_action=min_per_action,
+        correct_key="child_correct", confidence_key="child_confidence",
+        require_calibration_eligible=True,
+    )
+    parent = action_quality_report(
+        selected, scope_id=None, end_ts=end_ts,
+        min_total=min_total, min_per_action=min_per_action,
+        correct_key="parent_correct", confidence_key="parent_confidence",
+        require_calibration_eligible=True,
+    )
+    overall = _paired_delta_interval(selected, weights, max_regression=max_regression)
+    per_action = {}
+    for action_name, action_value in (("OFF", 0), ("ON", 1)):
+        subset, subset_weights = [], []
+        for row, weight in zip(selected, weights):
+            outcome = 1 if float(row.get("outcome") or 0.0) >= .5 else 0
+            if outcome == action_value:
+                subset.append(row)
+                subset_weights.append(weight)
+        interval = _paired_delta_interval(subset, subset_weights, max_regression=max_regression)
+        interval["sufficient_evidence"] = bool(
+            child["per_action"][action_name]["sufficient_evidence"]
+            and parent["per_action"][action_name]["sufficient_evidence"]
+        )
+        per_action[action_name] = interval
+
+    evidence_ready = bool(child["sufficient_evidence"] and parent["sufficient_evidence"])
+    non_regression = bool(
+        evidence_ready
+        and overall["non_regression_passed"]
+        and per_action["OFF"]["sufficient_evidence"]
+        and per_action["OFF"]["non_regression_passed"]
+        and per_action["ON"]["sufficient_evidence"]
+        and per_action["ON"]["non_regression_passed"]
+    )
+    return {
+        "metric": "fixed_future_paired_policy_quality",
+        "probability_claim": False,
+        "evidence_contract": "future_explicit_independent_preference_or_episode_labels_only",
+        "episodes": len(selected),
+        "effective_n": child["effective_n"],
+        "sufficient_evidence": evidence_ready,
+        "child": child,
+        "parent": parent,
+        "paired_delta": overall,
+        "per_action_delta": per_action,
+        "promotion_quality_passed": non_regression,
+        "recommendation": (
+            "pass_paired_non_regression"
+            if non_regression else
+            "fail_paired_quality" if evidence_ready else
+            "abstain_insufficient_independent_evidence"
+        ),
+    }
+
+
+def record_independent_candidate_label(store, *, parent_generation_id, child_generation_id,
+                                       prediction_event_id, desired_action, source_kind,
+                                       source_id, dependency_cluster=None):
+    """Attach one immutable independent label without rewriting the raw target transition."""
+    kind = str(source_kind or "")
+    if kind not in FINAL_CALIBRATION_EVIDENCE_KINDS - {"manual_user_target_change"}:
+        raise ValueError("unsupported independent Candidate calibration source")
+    desired = 1.0 if float(desired_action) >= .5 else 0.0
+    with store.lock, store.conn() as c:
+        row = c.execute(
+            """SELECT parent_prediction,child_prediction,calibration_source_id
+               FROM candidate_generation_pairs
+               WHERE parent_generation_id=? AND child_generation_id=? AND prediction_event_id=?
+               ORDER BY outcome_ts DESC LIMIT 1""",
+            (str(parent_generation_id), str(child_generation_id), str(prediction_event_id)),
+        ).fetchone()
+        if not row:
+            return False
+        row = dict(row)
+        existing = row.get("calibration_source_id")
+        if existing:
+            # Immutable/idempotent: the first independent calibration fact wins.
+            return False
+        parent_ok = int((1.0 if float(row["parent_prediction"]) >= .5 else 0.0) == desired)
+        child_ok = int((1.0 if float(row["child_prediction"]) >= .5 else 0.0) == desired)
+        c.execute(
+            """UPDATE candidate_generation_pairs
+               SET evidence_kind=?,calibration_eligible=1,dependency_cluster=?,
+                   calibration_outcome=?,calibration_parent_correct=?,
+                   calibration_child_correct=?,calibration_source_id=?
+               WHERE parent_generation_id=? AND child_generation_id=? AND prediction_event_id=?
+                 AND (calibration_source_id IS NULL OR calibration_source_id=?)""",
+            (
+                kind,
+                None if dependency_cluster is None else str(dependency_cluster),
+                desired, parent_ok, child_ok, str(source_id),
+                str(parent_generation_id), str(child_generation_id), str(prediction_event_id),
+                str(source_id),
+            ),
+        )
+        return c.execute("SELECT changes()").fetchone()[0] > 0
 
 
 def ensure_tables(store):
@@ -497,11 +684,13 @@ class EvaluationEpochJournal:
             )
         return self.get(parent_gid, child_gid, evaluation_revision)
 
-    def final_report(self, epoch, pairs, *, scope_id=None):
+    def final_report(self, epoch, pairs, *, scope_id=None,
+                     max_regression=DEFAULT_FINAL_MAX_REGRESSION):
         if not epoch:
             return {
                 "status": "selection_evidence_insufficient",
                 "sufficient_evidence": False,
+                "promotion_quality_passed": False,
                 "recommendation": "abstain_selection_not_frozen",
                 "contract_version": CONTRACT_VERSION,
             }
@@ -511,21 +700,27 @@ class EvaluationEpochJournal:
             if float(row.get("outcome_ts") or 0.0) > cutoff
         ]
         end_ts = _finite(epoch.get("final_end_ts"))
-        report = action_quality_report(
+        report = paired_future_quality_report(
             rows,
             scope_id=scope_id,
             end_ts=end_ts,
             min_total=int(epoch["final_target"]),
             min_per_action=int(epoch["min_per_action"]),
+            max_regression=max_regression,
         )
+
+        # Freeze the declared test at the first point where independent evidence is
+        # sufficient, regardless of whether quality passes. A failed holdout cannot be
+        # healed by peeking at later observations.
         if end_ts is None and report["sufficient_evidence"]:
             locked_end = None
             for idx in range(1, len(rows) + 1):
-                prefix = action_quality_report(
+                prefix = paired_future_quality_report(
                     rows[:idx],
                     scope_id=scope_id,
                     min_total=int(epoch["final_target"]),
                     min_per_action=int(epoch["min_per_action"]),
+                    max_regression=max_regression,
                 )
                 if prefix["sufficient_evidence"]:
                     locked_end = float(rows[idx - 1].get("outcome_ts") or 0.0)
@@ -546,25 +741,34 @@ class EvaluationEpochJournal:
                     epoch["child_generation_id"],
                     epoch["model_revision"],
                 )
-                report = action_quality_report(
+                report = paired_future_quality_report(
                     rows,
                     scope_id=scope_id,
                     end_ts=epoch.get("final_end_ts"),
                     min_total=int(epoch["final_target"]),
                     min_per_action=int(epoch["min_per_action"]),
+                    max_regression=max_regression,
                 )
+
+        complete = bool(report.get("sufficient_evidence"))
+        passed = bool(report.get("promotion_quality_passed"))
         report.update({
-            "status": "complete" if report.get("sufficient_evidence") else "collecting_fixed_future_test",
+            "status": (
+                "complete_passed" if complete and passed else
+                "complete_failed_quality" if complete else
+                "collecting_fixed_future_test"
+            ),
             "contract_version": CONTRACT_VERSION,
             "selection_cutoff_ts": cutoff,
             "final_target": int(epoch["final_target"]),
             "min_per_action": int(epoch["min_per_action"]),
+            "max_allowed_regression": float(max_regression),
             "final_end_ts": epoch.get("final_end_ts"),
             "backend_key": epoch.get("backend_key"),
             "model_revision": _source_model_revision(epoch.get("model_revision")),
             "evaluation_revision": epoch.get("model_revision"),
             "peek_safe": True,
-            "optional_stopping_protection": "fixed_target_and_locked_final_end",
+            "optional_stopping_protection": "lock_on_evidence_completion_not_on_quality_success",
         })
         return report
 
@@ -574,21 +778,27 @@ def contract_descriptor():
         "version": CONTRACT_VERSION,
         "metric_semantics": dict(METRIC_SEMANTICS),
         "selection_min_independent_episodes": DEFAULT_SELECTION_EPISODES,
+        "selection_evidence_semantics": "behavioural_screening_may_include_external_transitions_not_final_calibration",
         "final_min_independent_episodes": DEFAULT_FINAL_EPISODES,
         "final_min_per_action": DEFAULT_MIN_PER_ACTION,
+        "final_max_allowed_regression": DEFAULT_FINAL_MAX_REGRESSION,
+        "final_calibration_evidence_kinds": sorted(FINAL_CALIBRATION_EVIDENCE_KINDS),
         "dependency_window_seconds": DEFAULT_DEPENDENCY_WINDOW_SECONDS,
         "probability_metrics": ["brier_score", "reliability_bins"],
         "action_metrics": [
             "episode_error_rate", "mean_binary_cost",
             "quality_lower_bound", "quality_upper_bound",
+            "paired_delta", "per_action_delta",
         ],
         "promotion_rule": (
             "selection evidence freezes first; promotion needs a later fixed future test "
-            "with separate ON/OFF evidence"
+            "from independent preference labels, separate ON/OFF effective evidence and "
+            "paired child-vs-parent non-regression"
         ),
         "legacy_confidence": "compatibility_only_decision_strength_not_probability",
         "backend_recalibration": "evaluation revision includes backend identity",
-        "abstain": "insufficient independent evidence keeps Shadow/fallback",
+        "automation_replay": "screening_only_not_final_calibration_evidence",
+        "abstain": "insufficient independent evidence or failed fixed holdout keeps Shadow/fallback",
     }
 
 
@@ -652,10 +862,20 @@ def _decorate_summary(manager, epochs, row, summary, parent, candidate):
         final_target=DEFAULT_FINAL_EPISODES,
         min_per_action=min_per_action,
     )
+    max_regression = DEFAULT_FINAL_MAX_REGRESSION
+    try:
+        from settings import OPTIONS
+        max_regression = max(
+            0.0,
+            float(OPTIONS.get("agent_candidate_max_accuracy_regression", DEFAULT_FINAL_MAX_REGRESSION)),
+        )
+    except Exception:
+        pass
     final = epochs.final_report(
         epoch,
         pairs,
         scope_id=str(generation.get("root_agent_id") or ""),
+        max_regression=max_regression,
     )
 
     legacy_preference = summary.get("preference_confidence")
@@ -686,13 +906,15 @@ def _decorate_summary(manager, epochs, row, summary, parent, candidate):
         old_pref["observed"] = observed
         gates["preference_evidence"] = old_pref
 
-    final_passed = bool(final.get("sufficient_evidence"))
+    final_passed = bool(final.get("promotion_quality_passed"))
     gates["independent_final_evaluation"] = {
         "passed": final_passed,
         "reason": (
-            "fixed future evaluation complete with separate ON/OFF evidence"
-            if final_passed
-            else "fixed future evaluation is incomplete; remain Shadow/fallback"
+            "fixed future independent preference evaluation passed paired child-vs-parent non-regression"
+            if final_passed else
+            "fixed future evidence is complete but Candidate failed paired quality/non-regression"
+            if final.get("sufficient_evidence") else
+            "fixed future independent preference evidence is incomplete; remain Shadow/fallback"
         ),
         "custom_override": "never",
         "metric_semantics": METRIC_SEMANTICS["empirical_policy_quality"],
@@ -804,6 +1026,9 @@ def install(manager):
         handler.static = static
 
     manager.confidence_contract = contract_descriptor()
+    manager.record_independent_candidate_label = (
+        lambda **kwargs: record_independent_candidate_label(manager.store, **kwargs)
+    )
     manager.confidence_probability_journal = probabilities
     manager.confidence_evaluation_epochs = epochs
     manager._confidence_contract_installed = True

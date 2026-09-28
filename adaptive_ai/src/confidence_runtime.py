@@ -57,7 +57,7 @@ class ConfidenceCalibrationService:
 
 def _live_semantics(payload):
     out = dict(payload or {})
-    forecast = dict(out.get("home_forecast") or {})
+    forecast = dict(out.get("home_forecast") or (out.get("context_meta") or {}).get("home_forecast") or {})
     out["decision_strength"] = out.get("last_confidence")
     out["decision_strength_semantics"] = METRIC_SEMANTICS["decision_strength"]
     out["expected_action_utility"] = out.get("last_expected_reward")
