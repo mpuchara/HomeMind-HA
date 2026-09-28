@@ -227,10 +227,20 @@ def _eligible_sample(state, event_ts, query_ts, knowledge_ts):
 
 
 def _sample_before(temporal, entity_id, query_ts, knowledge_ts):
+    cached = getattr(temporal, "causal_asof", None)
+    if callable(cached):
+        hit, result = cached(entity_id, query_ts, knowledge_ts)
+        if hit:
+            return result
+    result = (None, None)
     for ts, st in reversed(_samples(temporal, entity_id)):
         if _eligible_sample(st, float(ts), query_ts, knowledge_ts):
-            return float(ts), st
-    return None, None
+            result = (float(ts), st)
+            break
+    publish = getattr(temporal, "cache_causal_asof", None)
+    if callable(publish):
+        publish(entity_id, query_ts, knowledge_ts, result)
+    return result
 
 
 def _latest_communication(temporal, entity_id, at_ts, current=None):
