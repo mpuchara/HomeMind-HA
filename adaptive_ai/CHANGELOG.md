@@ -5,6 +5,7 @@
 - Preserve the bounded latest-per-root queue and four-root worker batch. Bursts still coalesce safely, while queued Candidate work no longer waits for periodic housekeeping.
 - Keep expensive housekeeping throttled and defer passive Candidate heartbeat work during fresh realtime activity; the hotfix only exempts already-queued deferred Candidate inference.
 - Add a regression test that combines the low-power wrapper with deferred Candidate Shadow and proves fresh HA activity or the 60 s maintenance interval cannot suppress queued Candidate work.
+- Release validation: 1433 Python tests pass on both Python 3.11 and 3.13; compileall, JS syntax, Docker image smoke and the full 3.11 benchmark/simulator gate are green.
 
 # 0.14.101 — 2026-09-28
 
