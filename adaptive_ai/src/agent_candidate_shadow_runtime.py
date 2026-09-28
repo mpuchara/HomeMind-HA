@@ -981,10 +981,6 @@ def install(manager):
                 ):
                     row["ts"] = new_ts
                     changed += 1
-            # _decorate_result stores desired_since_ts in the per-root generation state.
-            # If a decision edge began on this deferred event, re-anchor that state too;
-            # otherwise the next unchanged Candidate observation would resurrect worker
-            # execution time and bias paired lead-time evidence.
             root_rt = shadow_runtime.get(root_id)
             if root_rt is not None:
                 for state in (root_rt.get("generation_state") or {}).values():
@@ -1183,6 +1179,10 @@ def install(manager):
 
     def drain_candidate_shadow_events(*, force=False, max_roots=2):
         now = time.monotonic()
+        # Candidate heartbeat is maintenance/evidence work; recent realtime events win.
+        last_event = float(getattr(manager.engine, "last_event_monotonic", 0.0) or 0.0)
+        if not force and last_event and now - last_event < 0.50:
+            return 0
         # A 30 s heartbeat keeps persistent Candidate Shadow fresh even while Parent is
         # paused or no relevant HA entity changes. Normal Parent inference updates the
         # same monotonic timestamp and therefore suppresses this fallback.
@@ -1232,8 +1232,6 @@ def install(manager):
         return result
 
     def maintenance():
-        # Exact-context Live jobs are drained first on the existing Candidate worker. This
-        # removes Candidate policy work from event->intent without adding another thread.
         deferred_shadow.drain(max_roots=4)
         # Runtime evidence is never synthesized from history. Passive observations use
         # only the live websocket-backed state map and run on the Candidate worker, never

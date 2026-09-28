@@ -16,6 +16,7 @@ from training_request_semantics import train_request_decision
 ENGINE = None
 HISTORY = None
 EVENT_STREAM = None
+HTTP_SERVER = None
 STORE = None
 AUTOMATION_KNOWLEDGE = None
 target_options_for_state = None
@@ -687,6 +688,12 @@ def shutdown_runtime():
             ENGINE.stop_event.set()
             ENGINE.control_workers.shutdown(wait=False, cancel_futures=True)
             ENGINE.poll_worker.shutdown(wait=False, cancel_futures=True)
+            registry_worker = getattr(ENGINE, "registry_worker", None)
+            if registry_worker is not None:
+                registry_worker.shutdown(wait=False, cancel_futures=True)
+            housekeeping_worker = getattr(ENGINE, "housekeeping_worker", None)
+            if housekeeping_worker is not None:
+                housekeeping_worker.shutdown(wait=False, cancel_futures=True)
         if HISTORY is not None:
             HISTORY.stop_event.set()
         if EVENT_STREAM is not None:
@@ -706,6 +713,7 @@ def run_initialize_runtime():
 
 
 def main():
+    global HTTP_SERVER
     try:
         nice_by = int(OPTIONS.get("process_nice", 10))
         if nice_by > 0 and hasattr(os, "nice"):
@@ -715,6 +723,7 @@ def main():
         print(f"[startup] Could not adjust process niceness: {exc}", flush=True)
 
     server = ThreadingHTTPServer(("0.0.0.0", 8099), Handler)
+    HTTP_SERVER = server
     set_startup("http_ready", 0, "Web interface ready; starting Adaptive AI runtime")
     print("Adaptive AI UI listening on :8099", flush=True)
     runtime_thread = threading.Thread(target=run_initialize_runtime, name="adaptive-ai-runtime-init", daemon=True)
@@ -726,6 +735,7 @@ def main():
     finally:
         shutdown_runtime()
         server.server_close()
+        HTTP_SERVER = None
 
 
 if __name__ == "__main__":
