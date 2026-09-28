@@ -27,7 +27,7 @@ from context import archived_state, context_scalar, is_fast_reactive_agent
 from settings import OPTIONS
 
 
-CONTRACT_VERSION = 1
+CONTRACT_VERSION = 2
 FAST_STATE_VERSION = 1
 SUMMARY_CURSOR_VERSION = 1
 FAST_PAIR_CHUNK = 256
@@ -129,6 +129,12 @@ class PerformanceDiagnostics:
         self.fast_metric_bootstraps = 0
         self.fast_metric_incremental_updates = 0
         self.teach_batches = 0
+        self.confidence_selection_scans = 0
+        self.confidence_selection_cache_hits = 0
+        self.confidence_final_scans = 0
+        self.confidence_final_cache_hits = 0
+        self.confidence_probability_scans = 0
+        self.confidence_probability_cache_hits = 0
 
     def record_write(self, started):
         elapsed = max(0.0, (time.perf_counter() - float(started)) * 1000.0)
@@ -163,6 +169,12 @@ class PerformanceDiagnostics:
                 "fast_metric_bootstraps": int(self.fast_metric_bootstraps),
                 "fast_metric_incremental_updates": int(self.fast_metric_incremental_updates),
                 "teach_batches": int(self.teach_batches),
+                "confidence_selection_scans": int(self.confidence_selection_scans),
+                "confidence_selection_cache_hits": int(self.confidence_selection_cache_hits),
+                "confidence_final_scans": int(self.confidence_final_scans),
+                "confidence_final_cache_hits": int(self.confidence_final_cache_hits),
+                "confidence_probability_scans": int(self.confidence_probability_scans),
+                "confidence_probability_cache_hits": int(self.confidence_probability_cache_hits),
             }
         if training_queue is not None:
             cv = getattr(training_queue, "cv", nullcontext())
@@ -702,6 +714,20 @@ def _install_teach_batches(engine, diagnostics):
     service._f22_batched_scores_installed = True
 
 
+def _install_confidence_bounded_views(manager, diagnostics):
+    """Attach Stage-17 diagnostics to Stage-13 journals.
+
+    The journals own durable revision/cache semantics; Stage 17 only observes their
+    bounded behavior so status diagnostics and the benchmark can verify it.
+    """
+    epochs = getattr(manager, "confidence_evaluation_epochs", None)
+    probabilities = getattr(manager, "confidence_probability_journal", None)
+    if epochs is not None:
+        epochs._performance_diagnostics = diagnostics
+    if probabilities is not None:
+        probabilities._performance_diagnostics = diagnostics
+
+
 def _install_anchor_retention(manager):
     service = getattr(manager, "adaptation_service", None)
     if service is None or getattr(service, "_f22_anchor_retention_installed", False):
@@ -799,6 +825,7 @@ def install(manager, *, core=None):
     _install_incremental_summary(manager, diagnostics)
     _install_fast_metrics(manager, diagnostics)
     _install_teach_batches(manager.engine, diagnostics)
+    _install_confidence_bounded_views(manager, diagnostics)
     _install_anchor_retention(manager)
     if core is not None:
         _install_queue_backpressure(core, diagnostics)
@@ -810,6 +837,9 @@ def install(manager, *, core=None):
         "fast_metrics": "bounded_pair_batches_batched_decision_history_durable_sufficient_statistics",
         "teach_scores": "batched_asof_cte_max_24_candidates_x_256_labels",
         "regression_anchors": f"{ANCHOR_ACTIVE_LIMIT}_active_references_full_audit_rows_retained",
+        "confidence_selection": "sqlite_streamed_exact_readiness_one_python_row_plus_revision_cache",
+        "confidence_final": "calibration_only_future_rows_change_revision_cache_fixed_end_reuse",
+        "probability_calibration": "sqlite_streamed_exact_bins_plus_scope_revision_cache",
         "training_queue": "bounded_deduplicated_backpressure",
         "status": "cached_or_incremental_no_full_history_scan_after_bootstrap",
     }
