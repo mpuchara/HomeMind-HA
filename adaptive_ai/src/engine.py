@@ -596,11 +596,19 @@ class Engine(threading.Thread):
             if topology_changed:
                 self.context.configure(state_map)
 
-            event_ts = now_ts()
+            poll_received_ts = now_ts()
             for eid in changed_eids:
                 self.state_revision += 1
                 self.entity_revisions[eid] = self.state_revision
-                self.context.observe(eid, state_map.get(eid), event_ts, learn=not initial)
+                current_state = state_map.get(eid)
+                event_ts = parse_ts(
+                    (current_state or {}).get("last_updated") or
+                    (current_state or {}).get("last_changed")
+                ) or poll_received_ts
+                self.context.observe(
+                    eid, current_state, poll_received_ts, learn=not initial,
+                    event_ts=event_ts, received_ts=poll_received_ts,
+                )
                 # The initial REST snapshot is not a realtime transition. Marking
                 # thousands of startup entities dirty causes an immediate all-agent
                 # burst and defeats HTTP-first startup. A proactive pass after the
@@ -629,9 +637,9 @@ class Engine(threading.Thread):
             st = state_map.get(eid)
             if st is None:
                 continue
-            ts = parse_ts(st.get("last_updated") or st.get("last_changed")) or now_ts()
+            ts = parse_ts(st.get("last_updated") or st.get("last_changed")) or poll_received_ts
             self.temporal_history.add(eid, ts, self._temporal_state(st))
-            self._queue_archive_state(st)
+            self._queue_archive_state(st, received_ts=poll_received_ts)
         self.flush_archive(force=False)
         if initial or changed_eids:
             self.wake_event.set()
