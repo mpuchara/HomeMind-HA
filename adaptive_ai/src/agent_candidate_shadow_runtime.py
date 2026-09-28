@@ -1100,6 +1100,9 @@ def install(manager):
 
     def drain_candidate_shadow_events(*, force=False, max_roots=2):
         now = time.monotonic()
+        last_event = float(getattr(manager.engine, "last_event_monotonic", 0.0) or 0.0)
+        if not force and last_event and now - last_event < 0.50:
+            return 0
         # A 30 s heartbeat keeps persistent Candidate Shadow fresh even while Parent is
         # paused or no relevant HA entity changes. Normal Parent inference updates the
         # same monotonic timestamp and therefore suppresses this fallback.
