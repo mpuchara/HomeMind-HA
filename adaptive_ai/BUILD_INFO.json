@@ -625,5 +625,9 @@
     ],
     "needs_retrain_shadow": "blocked_until_safe_rebuild",
     "completed_rebuild_mode": "shadow"
-  }
+  },
+  "confidence_final_max_allowed_regression": 0.03,
+  "confidence_final_evidence": "manual_user_target_change",
+  "confidence_final_gate": "fixed future independent ON/OFF preference labels + paired child-vs-parent non-regression; window locks when evidence target is reached even if quality fails",
+  "confidence_automation_replay": "screening/diagnostic only; never final calibration evidence"
 }
