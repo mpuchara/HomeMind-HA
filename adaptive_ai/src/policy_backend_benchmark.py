@@ -197,8 +197,9 @@ class _DiagonalBenchmarkBackend:
     name = "diagonal_linucb"
     version = 5
 
-    def __init__(self, dims, actions, alpha=0.65, feature_indices=None):
+    def __init__(self, dims, actions, alpha=0.65, feature_indices=None, horizons=(1,)):
         self.actions = [float(x) for x in actions]
+        self.horizons = sorted(set(int(x) for x in horizons)) or [1]
         self.feature_indices = None if feature_indices is None else sorted(set(int(x) for x in feature_indices))
         if self.feature_indices is None:
             self.index_map = None
@@ -206,7 +207,10 @@ class _DiagonalBenchmarkBackend:
         else:
             self.index_map = {idx: slot for slot, idx in enumerate(self.feature_indices)}
             backend_dims = max(1, len(self.feature_indices))
-        self.head = DiagonalLinUCB(backend_dims, self.actions, float(alpha))
+        self.heads = {
+            h: DiagonalLinUCB(backend_dims, self.actions, float(alpha))
+            for h in self.horizons
+        }
 
     def _project(self, features):
         raw = _features(features)
@@ -214,19 +218,30 @@ class _DiagonalBenchmarkBackend:
             return raw
         return {self.index_map[idx]: value for idx, value in raw.items() if idx in self.index_map}
 
-    def predict(self, features, allowed_indices=None):
-        return self.head.choose(self._project(features), explore=False, allowed_indices=allowed_indices)
+    def _head(self, horizon):
+        horizon = int(horizon or self.horizons[0])
+        return self.heads[horizon if horizon in self.heads else self.horizons[0]]
 
-    def update(self, action_idx, features, reward, sample_ts=None):
-        self.head.update(int(action_idx), self._project(features), float(reward), sample_ts)
+    def predict(self, features, allowed_indices=None, horizon=1):
+        return self._head(horizon).choose(
+            self._project(features), explore=False, allowed_indices=allowed_indices
+        )
 
-    def validate(self, action_idx, features, reward, sample_ts=None):
-        self.head.validate(int(action_idx), self._project(features), float(reward), sample_ts)
+    def update(self, action_idx, features, reward, sample_ts=None, horizon=1):
+        self._head(horizon).update(
+            int(action_idx), self._project(features), float(reward), sample_ts
+        )
+
+    def validate(self, action_idx, features, reward, sample_ts=None, horizon=1):
+        self._head(horizon).validate(
+            int(action_idx), self._project(features), float(reward), sample_ts
+        )
 
     def serialize(self):
         return {
             "backend": self.name, "backend_version": self.version,
-            "feature_indices": self.feature_indices, "head": self.head.export(),
+            "feature_indices": self.feature_indices, "horizons": self.horizons,
+            "heads": {str(h): head.export() for h, head in self.heads.items()},
         }
 
 
@@ -234,20 +249,36 @@ class _FullRidgeBenchmarkBackend:
     name = FullRidgeLinUCBBackend.BACKEND
     version = FullRidgeLinUCBBackend.VERSION
 
-    def __init__(self, actions, feature_indices, alpha=0.65, ridge=1.0):
+    def __init__(self, actions, feature_indices, alpha=0.65, ridge=1.0, horizons=(1,)):
         self.actions = [float(x) for x in actions]
-        self.backend = FullRidgeLinUCBBackend(actions=actions, horizons=[1], feature_indices=feature_indices,
-                                             alpha=alpha, ridge=ridge)
+        self.horizons = sorted(set(int(x) for x in horizons)) or [1]
+        self.backend = FullRidgeLinUCBBackend(
+            actions=actions, horizons=self.horizons, feature_indices=feature_indices,
+            alpha=alpha, ridge=ridge,
+        )
 
-    def predict(self, features, allowed_indices=None):
-        chosen, confidence, arms, _h, _support, _novelty = self.backend.predict(_features(features), allowed_indices=allowed_indices)
+    def _horizon(self, horizon):
+        horizon = int(horizon or self.horizons[0])
+        return horizon if horizon in self.backend.heads else self.horizons[0]
+
+    def predict(self, features, allowed_indices=None, horizon=1):
+        h = self._horizon(horizon)
+        chosen, confidence, arms = self.backend.heads[h].choose(
+            _features(features), explore=False, allowed_indices=allowed_indices
+        )
         return chosen, confidence, arms
 
-    def update(self, action_idx, features, reward, sample_ts=None):
-        self.backend.update(1, int(action_idx), _features(features), float(reward), sample_ts)
+    def update(self, action_idx, features, reward, sample_ts=None, horizon=1):
+        self.backend.update(
+            self._horizon(horizon), int(action_idx), _features(features),
+            float(reward), sample_ts,
+        )
 
-    def validate(self, action_idx, features, reward, sample_ts=None):
-        self.backend.validate(1, int(action_idx), _features(features), float(reward), sample_ts)
+    def validate(self, action_idx, features, reward, sample_ts=None, horizon=1):
+        self.backend.validate(
+            self._horizon(horizon), int(action_idx), _features(features),
+            float(reward), sample_ts,
+        )
 
     def serialize(self):
         return self.backend.serialize()
@@ -261,13 +292,13 @@ def _learn_episode(backend, episode):
         action = episode.get("demonstration_action")
         source = str(episode.get("demonstration_source") or "")
         if action is not None and source in DEMONSTRATION_SOURCES:
-            backend.update(int(action), features, 1.0, ts)
+            backend.update(int(action), features, 1.0, ts, horizon=episode.get("horizon", 1))
         return
     if kind == "bandit":
         action = episode.get("executed_action")
         reward = _finite(episode.get("reward"))
         if action is not None and reward is not None:
-            backend.update(int(action), features, reward, ts)
+            backend.update(int(action), features, reward, ts, horizon=episode.get("horizon", 1))
 
 
 def _validate_episode(backend, episode):
@@ -276,7 +307,10 @@ def _validate_episode(backend, episode):
     action = episode.get("executed_action")
     reward = _finite(episode.get("reward"))
     if action is not None and reward is not None:
-        backend.validate(int(action), episode.get("features") or {}, reward, episode.get("timestamp"))
+        backend.validate(
+            int(action), episode.get("features") or {}, reward, episode.get("timestamp"),
+            horizon=episode.get("horizon", 1),
+        )
 
 
 def _metrics(backend, episodes):
@@ -290,7 +324,10 @@ def _metrics(backend, episodes):
     for episode in episodes:
         allowed = [int(x) for x in (episode.get("allowed_actions") or range(len(backend.actions)))]
         started = time.perf_counter_ns()
-        chosen, _confidence, arms = backend.predict(episode.get("features") or {}, allowed_indices=allowed)
+        chosen, _confidence, arms = backend.predict(
+            episode.get("features") or {}, allowed_indices=allowed,
+            horizon=episode.get("horizon", 1),
+        )
         inference_ns.append(time.perf_counter_ns() - started)
         choices.append(int(chosen["index"]))
         if str(episode.get("kind") or "") == "demonstration":
@@ -410,17 +447,20 @@ def _deep_size(value, seen=None):
 def run_benchmark(episodes, actions, *, max_features=24, alpha=0.65,
                   ridge_grid=(0.5, 1.0, 2.0), store=None, agent_id=None):
     train, validation, test = split_future(episodes)
+    horizons = sorted(set(int(row.get("horizon") or 1) for row in episodes)) or [1]
     feature_indices = semantic_feature_indices(train, max_features=max_features)
     max_index = max([0] + [idx for row in train for idx in _features(row.get("features"))])
     dims = max(1, max_index + 1)
 
     def new_production_baseline():
-        return _DiagonalBenchmarkBackend(dims=dims, actions=actions, alpha=alpha)
+        return _DiagonalBenchmarkBackend(
+            dims=dims, actions=actions, alpha=alpha, horizons=horizons
+        )
 
     def new_matched_baseline():
         return _DiagonalBenchmarkBackend(
             dims=len(feature_indices), actions=actions, alpha=alpha,
-            feature_indices=feature_indices,
+            feature_indices=feature_indices, horizons=horizons,
         )
 
     def train_backend(factory):
@@ -440,7 +480,8 @@ def run_benchmark(episodes, actions, *, max_features=24, alpha=0.65,
     candidates = []
     for ridge in ridge_grid:
         factory = lambda ridge=ridge: _FullRidgeBenchmarkBackend(
-            actions=actions, feature_indices=feature_indices, alpha=alpha, ridge=ridge
+            actions=actions, feature_indices=feature_indices, alpha=alpha, ridge=ridge,
+            horizons=horizons,
         )
         candidate, train_ns, metrics = train_backend(factory)
         candidates.append((_validation_score(metrics), float(ridge), candidate, train_ns, metrics))
@@ -504,6 +545,7 @@ def run_benchmark(episodes, actions, *, max_features=24, alpha=0.65,
             "train_end_ts": train[-1].get("timestamp"),
             "validation_end_ts": validation[-1].get("timestamp"),
             "test_start_ts": test[0].get("timestamp"),
+            "horizons": horizons,
         },
         "baseline": {
             "backend": "diagonal_linucb", "role": "production_reference_full_vector",
@@ -539,7 +581,7 @@ def run_benchmark(episodes, actions, *, max_features=24, alpha=0.65,
             "candidate": _small_correction_curve(
                 lambda: _FullRidgeBenchmarkBackend(
                     actions=actions, feature_indices=feature_indices,
-                    alpha=alpha, ridge=selected_ridge,
+                    alpha=alpha, ridge=selected_ridge, horizons=horizons,
                 ), train, validation,
             ),
         },
