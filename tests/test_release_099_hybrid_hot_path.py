@@ -23,14 +23,15 @@ class InferenceHotPathMetricsTests(unittest.TestCase):
 class HybridHotPathBaselineTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls): cls.report=run(iterations=4,entity_count=4)
-    def test_scenarios_measure_progressive_duplicate_context_work(self):
-        expected={"A_ridge_only":1.0,"B_ridge_plus_tiny_mlp_hybrid":2.0,
-                  "C_hybrid_plus_ridge_candidate":3.0,"D_hybrid_plus_hybrid_candidate":4.0}
+    def test_scenarios_share_context_within_each_live_or_candidate_decision(self):
+        expected={"A_ridge_only":1.0,"B_ridge_plus_tiny_mlp_hybrid":1.0,
+                  "C_hybrid_plus_ridge_candidate":2.0,"D_hybrid_plus_hybrid_candidate":2.0}
         for name,calls in expected.items():
             row=self.report["scenarios"][name]
             self.assertAlmostEqual(row["work"]["forecast_calls_per_inference"],calls)
             self.assertEqual(row["work"]["model_deserialize_calls_per_inference"],0.0)
             self.assertIn("p95_us",row["total"])
+        self.assertEqual(self.report["contract"],"hybrid_inference_shared_context_v2")
         self.assertTrue(self.report["pass"])
     def test_mlp_and_candidate_stages_are_explicit(self):
         s=self.report["scenarios"]
