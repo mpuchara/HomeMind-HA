@@ -198,7 +198,16 @@ def run(iterations=80,entity_count=8):
                     "model_deserialize_calls_per_inference":0.0},
             "guard_metrics":engine.inference_hot_path_metrics.snapshot()["stages"]}
     forecasts=[out[name]["work"]["forecast_calls_per_inference"] for name in SCENARIOS]
-    pass_work=all(abs(a-e)<1e-9 for a,e in zip(forecasts,(1.0,1.0,2.0,2.0)))
+    history_gets=[out[name]["work"]["history_map_gets_per_inference"] for name in SCENARIOS]
+    expected_forecasts=(1.0,1.0,2.0,2.0)
+    forecast_ok=all(abs(a-e)<1e-9 for a,e in zip(forecasts,expected_forecasts))
+    # Tiny MLP must reuse the same materialized temporal entity views as Ridge. A Hybrid
+    # decision therefore adds zero samples-map lookups inside one shared context.
+    history_reuse_ok=(
+        abs(history_gets[1]-history_gets[0])<1e-9
+        and abs(history_gets[3]-history_gets[2])<1e-9
+    )
+    pass_work=forecast_ok and history_reuse_ok
     a=out["A_ridge_only"]["total"]["p95_us"]; b=out["B_ridge_plus_tiny_mlp_hybrid"]["total"]["p95_us"]
     c=out["C_hybrid_plus_ridge_candidate"]["total"]["p95_us"]; d=out["D_hybrid_plus_hybrid_candidate"]["total"]["p95_us"]
     return {"contract":"hybrid_inference_shared_context_v2",
@@ -210,6 +219,12 @@ def run(iterations=80,entity_count=8):
         "stable_assertions":{"forecast_calls_per_inference":dict(zip(SCENARIOS,forecasts)),
             "expected_forecast_calls":{"A_ridge_only":1.0,"B_ridge_plus_tiny_mlp_hybrid":1.0,
                 "C_hybrid_plus_ridge_candidate":2.0,"D_hybrid_plus_hybrid_candidate":2.0},
+            "history_map_gets_per_inference":dict(zip(SCENARIOS,history_gets)),
+            "mlp_additional_history_map_gets":{
+                "live_hybrid_minus_ridge":history_gets[1]-history_gets[0],
+                "candidate_hybrid_minus_candidate_ridge":history_gets[3]-history_gets[2],
+            },
+            "expected_mlp_additional_history_map_gets":0.0,
             "no_model_deserialize_per_inference":True,"timing_thresholds_are_not_ci_contract":True},
         "pass":bool(pass_work)}
 
