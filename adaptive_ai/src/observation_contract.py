@@ -276,7 +276,10 @@ def _last_edge_time(temporal, entity_id, at_ts, current):
     for raw_ts, st in rows:
         ts = float(raw_ts)
         if ts > cutoff:
-            break
+            # Historical/replay adapters normally expose ordered samples, but the old
+            # implementation filtered the whole iterable. Keep that exact behavior rather
+            # than depending on ordering as an optimization precondition.
+            continue
         obs = observation_value(st)
         if not obs["valid"]:
             continue
