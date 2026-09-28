@@ -354,22 +354,23 @@ def install(core):
 
     original_queue_archive = engine._queue_archive_state
 
-    def queue_archive_state(state, force=False):
+    def queue_archive_state(state, force=False, received_ts=None):
         entity_id = (state or {}).get("entity_id")
+        received = float(received_ts if received_ts is not None else now_ts())
         if entity_id:
-            event_time = _event_time(state)
+            event_time = _event_time(state, received)
             known = journal.history_provenance(entity_id, event_time)
             if not known.get("event_id"):
                 origin, _ = _origin(journal, state)
                 event_id, _ = journal.record_event(
-                    entity_id, state, event_time=event_time, received_time=now_ts(),
+                    entity_id, state, event_time=event_time, received_time=received,
                     source="ha_poll", origin=origin,
                 )
             else:
                 event_id = known.get("event_id")
                 origin = str(known.get("origin") or UNKNOWN)
             engine._provenance_latest_events[entity_id] = (event_time, event_id, origin)
-        return original_queue_archive(state, force=force)
+        return original_queue_archive(state, force=force, received_ts=received)
 
     engine._queue_archive_state = queue_archive_state
 

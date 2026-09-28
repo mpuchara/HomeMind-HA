@@ -202,7 +202,11 @@ class ContextEngine:
         except ValueError:
             return None
 
-    def observe(self, eid, state, ts, learn=True):
+    def observe(self, eid, state, ts, learn=True, *, event_ts=None, received_ts=None):
+        """Observe with explicit HA event time and local receive/processing time."""
+        processing_ts = float(received_ts if received_ts is not None else ts)
+        event_ts = float(event_ts if event_ts is not None else ts)
+        received_ts = float(received_ts if received_ts is not None else processing_ts)
         with self.lock:
             self._discard_orphan_movement_state()
             if eid not in self.admitted:
@@ -211,26 +215,33 @@ class ContextEngine:
                     previous_role = self.home.source_role(eid)
                     evidence = {'role': previous_role} if previous_role else None
                     if self.bootstrap_delta is not None:
-                        self.bootstrap_delta.observe(eid, previous_area, None, ts, learn=False, evidence=evidence)
+                        self.bootstrap_delta.observe(
+                            eid, previous_area, None, processing_ts, learn=False,
+                            evidence=evidence, event_ts=event_ts, received_ts=received_ts,
+                        )
                     changed = self.home.observe(
-                        eid, previous_area, None, ts, learn=False, evidence=evidence
+                        eid, previous_area, None, processing_ts, learn=False,
+                        evidence=evidence, event_ts=event_ts, received_ts=received_ts,
                     )
-                    self.prepare_home_reliability(self.home, previous_area, ts)
+                    self.prepare_home_reliability(self.home, previous_area, processing_ts)
                     self._adaptive_cache.clear()
                     return changed
                 return False
             value = self.sensor_probability(eid, state)
             evidence = self.evidence_metadata(eid)
-            if self.bootstrap_delta is not None and ts > self.bootstrap_started:
-                self.bootstrap_delta.observe(eid, self.area_for(eid), value, ts,
-                                             learn=learn, evidence=evidence)
+            if self.bootstrap_delta is not None and processing_ts > self.bootstrap_started:
+                self.bootstrap_delta.observe(
+                    eid, self.area_for(eid), value, processing_ts,
+                    learn=learn, evidence=evidence,
+                    event_ts=event_ts, received_ts=received_ts,
+                )
             area = self.area_for(eid)
             changed = self.home.observe(
-                eid, area, value, ts,
-                learn=learn and ts > self.bootstrap_cutoff,
-                evidence=evidence,
+                eid, area, value, processing_ts,
+                learn=learn and processing_ts > self.bootstrap_cutoff,
+                evidence=evidence, event_ts=event_ts, received_ts=received_ts,
             )
-            self.prepare_home_reliability(self.home, area, ts)
+            self.prepare_home_reliability(self.home, area, processing_ts)
             self._adaptive_cache.clear()
             return changed
 
