@@ -38,6 +38,7 @@ import correct_data_foundation as foundation
 import correct_margin_repair as margin
 from context import ExplicitFeatureSchema, archived_state, context_scalar, is_fast_reactive_agent
 from policy import MultiHorizonPolicy
+from policy_backend import serialize_backend_model, verify_model_checksum
 from replay import SQLiteTemporalTracker
 from settings import OPTIONS, iso_now
 
@@ -66,6 +67,8 @@ def _stable_model_schema_compatible(raw_model):
     Such a Candidate is rebuilt from history in isolation before Correct is evaluated.
     """
     raw = dict(raw_model or {})
+    if not verify_model_checksum(raw):
+        return False
     schema = raw.get("schema") or {}
     try:
         dims = int(raw.get("dims") or schema.get("dims") or OPTIONS.get("feature_dimensions", 128))
@@ -572,7 +575,16 @@ def migrate_model_schema(raw_model, new_entities, evolution_meta=None):
     selection["schema_evolution"]["new_entities"] = list(new_schema.entities)
     selection["schema_evolution"]["migrated_feature_dimensions"] = len(mapping)
     raw["selection_meta"] = selection
-    return raw
+    # Schema/head/revision/selection_meta are all part of the semantic model identity.
+    # The incoming payload already carries a checksum, so returning the mutated dict
+    # unchanged would persist the old checksum and make the newly evolved Candidate
+    # fail closed on its very next load. Rebuild the common backend envelope only after
+    # every semantic mutation is complete.
+    return serialize_backend_model(
+        raw,
+        policy_backend=MultiHorizonPolicy.BACKEND,
+        backend_version=int(MultiHorizonPolicy.VERSION),
+    )
 
 
 def _schema_replay_required(policy):
