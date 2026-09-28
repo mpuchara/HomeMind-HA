@@ -19,7 +19,7 @@ import time
 from training_budget import TRAINING_BUDGET
 
 
-CONTRACT_VERSION = 8
+CONTRACT_VERSION = 9
 DEFAULT_ARCHIVE_BATCH_ROWS = 16
 DEFAULT_EXPERIENCE_BATCH_ROWS = 128
 DEFAULT_TRAINING_DUTY_CYCLE = 0.85
@@ -212,6 +212,15 @@ def install(core, manager):
         drain_deferred = getattr(manager, "drain_deferred_candidate_shadow", None)
         if callable(drain_deferred):
             drain_deferred(max_roots=4)
+
+        # Passive Candidate Shadow freshness is runtime work too. Leaving it under the
+        # 60 s housekeeping gate made quiet/paused Candidate generations appear in
+        # Correct history only about every 2 minutes on busy HA installations once the
+        # 95 s observed-decision freshness window expired. The shadow runtime itself
+        # rate-limits real observations to its heartbeat cadence and bounded root batch.
+        drain_passive = getattr(manager, "drain_candidate_shadow_events", None)
+        if callable(drain_passive):
+            drain_passive(max_roots=2)
 
         now = time.monotonic()
         if now < maintenance_state["next_at"]:
