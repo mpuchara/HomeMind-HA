@@ -84,7 +84,7 @@
   const human = a => {
     const r=a.runtime||{}, training=r.training_state||a.training_state||'paused', reason=String(r.decision_reason||''), state=String(r.decision_state||'idle');
     if(training==='training') { const eta=duration(r.training_overall_eta_seconds); return ['training',`Learning ${Math.round(Number(a.training_progress||0)*100)}%`,`Whole training pass is running${eta?` · ETA ${eta}`:''}.`]; }
-    if(training==='needs_retrain') return ['waiting','Needs training','Policy inputs changed. Press Train.'];
+    if(training==='needs_retrain') return ['waiting','Needs training','Policy/model contract changed. Press Train to rebuild; Shadow resumes automatically when training completes.'];
     if(training==='waiting') return ['waiting','Ready to train','Training has not started yet.'];
     if(training==='paused'&&a.mode==='paused') return ['paused','Paused','This agent is not making decisions.'];
     if(a.mode==='shadow') return ['shadow','Observing','Shadow calculates decisions but sends no Home Assistant services.'];

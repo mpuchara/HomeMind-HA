@@ -8,6 +8,8 @@ from support import ROOT
 
 import correct_data_foundation as foundation
 from context import ExplicitFeatureSchema
+from policy import MultiHorizonPolicy
+from policy_backend import feature_mask_id, serialize_backend_model, verify_model_checksum
 from correct_schema_evolution import (
     _anchor_pool_dispatch,
     _effective_parent_stats,
@@ -191,11 +193,22 @@ class CorrectSchemaEvolutionTests(unittest.TestCase):
                 }
             },
         }
+        raw = serialize_backend_model(
+            raw,
+            policy_backend=MultiHorizonPolicy.BACKEND,
+            backend_version=int(MultiHorizonPolicy.VERSION),
+        )
+        old_checksum = raw["model_checksum"]
+        old_mask = raw.get("feature_mask_id")
         migrated = migrate_model_schema(
             raw,
             ["sensor.a", "sensor.b", "sensor.c"],
             evolution_meta={"test": True},
         )
+        self.assertTrue(verify_model_checksum(migrated))
+        self.assertNotEqual(migrated["model_checksum"], old_checksum)
+        self.assertEqual(migrated.get("feature_mask_id"), feature_mask_id(migrated))
+        self.assertNotEqual(migrated.get("feature_mask_id"), old_mask)
         new_schema = ExplicitFeatureSchema.from_export(migrated["schema"], dims)
         new_labels = {
             labels[0]: index

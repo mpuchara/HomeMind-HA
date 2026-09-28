@@ -18,6 +18,7 @@ from context import archived_state
 from correct_data_foundation import supervision_event_id
 from manual_context_learning import manual_scores
 from policy import MultiHorizonPolicy
+from policy_backend import model_checksum, verify_model_checksum
 
 
 CONTRACT_VERSION = 2
@@ -105,6 +106,9 @@ def _model_summary(store, agent_id):
         "version": raw.get("version"),
         "model_revision": raw.get("model_revision"),
         "tournament_revision": raw.get("tournament_revision"),
+        "model_checksum": raw.get("model_checksum"),
+        "computed_model_checksum": model_checksum(raw),
+        "model_checksum_valid": verify_model_checksum(raw),
         "schema_version": schema.get("version"),
         "schema_entities": list(schema.get("entities") or []),
         "selection_meta": selection,
