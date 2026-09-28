@@ -566,6 +566,41 @@ class CandidateShadowRuntimeTests(unittest.TestCase):
         self.assertEqual(historical["points"][0]["desired"], 1.0)
         self.assertFalse(historical["policy_replay_used"])
 
+    def test_busy_ha_cannot_starve_passive_candidate_past_freshness_budget(self):
+        _, generation = self._g1(prediction=1.0, confidence=.93)
+        self.store.update_agent(self.root["id"], {"mode": "paused"})
+
+        base = 1000.0
+        self.engine.last_event_monotonic = base
+        with patch.object(shadow_runtime_module.time, "monotonic", return_value=base):
+            self.assertEqual(
+                self.manager.drain_candidate_shadow_events(force=True, max_roots=8), 1
+            )
+
+        # Ordinary realtime traffic still wins while Candidate freshness is healthy.
+        with patch.object(shadow_runtime_module.time, "monotonic", return_value=base + 31.0):
+            self.engine.last_event_monotonic = base + 31.0
+            self.assertEqual(
+                self.manager.drain_candidate_shadow_events(force=False, max_roots=8), 0
+            )
+
+        # Continuous unrelated HA traffic must not starve Candidate Shadow beyond the
+        # bounded freshness budget. Once overdue, the worker heartbeat runs anyway.
+        with patch.object(shadow_runtime_module.time, "monotonic", return_value=base + 61.0):
+            self.engine.last_event_monotonic = base + 61.0
+            self.assertEqual(
+                self.manager.drain_candidate_shadow_events(force=False, max_roots=8), 1
+            )
+
+        history = self.manager.generation_history(
+            generation["generation_id"], time.time() - 10.0, time.time() + 10.0
+        )
+        self.assertGreaterEqual(len(history["points"]), 2)
+        self.assertLess(
+            shadow_runtime_module.DECISION_HEARTBEAT_MAX_DEFER_SECONDS,
+            shadow_runtime_module.DECISION_STALE_SECONDS,
+        )
+
     def test_generation_downtime_remains_a_gap(self):
         _, g1 = self._g1(prediction=1.0)
         bundle = self._run_shadow()
