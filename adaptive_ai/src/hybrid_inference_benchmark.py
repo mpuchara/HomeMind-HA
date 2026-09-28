@@ -20,6 +20,7 @@ from observation_contract import FeatureSchemaV12, policy_features
 from observation_space import ENTITY_DESCRIPTORS, ObservationMask, observation_as_of, observation_schema_id
 from policy import MultiHorizonPolicy
 from policy_tiny_mlp import TinyMLPBackend
+from shared_inference_context import shared_inference_temporal
 
 def percentile(values, q):
     rows = sorted(float(x) for x in values)
@@ -129,9 +130,12 @@ class BenchmarkNeural:
                 "model":{"trained":True,"model_revision":self.backend.model_revision},
                 "mask":{**self.mask.export(),"selected_entities":list(self.mask.selected_entities)},
                 "tournament":{"passed":True,"selected_backend":TinyMLPBackend.BACKEND}}
-    def predict_persisted(self,agent_row,policy,state_map,temporal,*,timestamp,require_selected=False,metric_prefix=""):
+    def predict_persisted(self,agent_row,policy,state_map,temporal,*,timestamp,require_selected=False,metric_prefix="",home_provider=None):
         observation=self.sink.timed(self.prefix+"mlp_observation_construction",
-            lambda:observation_as_of(self.mask,state_map,temporal,float(timestamp),agent_row,home_provider=self.home))
+            lambda:observation_as_of(
+                self.mask,state_map,temporal,float(timestamp),agent_row,
+                home_provider=home_provider or self.home,
+            ))
         result=self.sink.timed(self.prefix+"mlp_forward",lambda:self.backend.predict(observation))
         chosen,confidence,arms,horizon,support,novelty=result
         return {"backend":self.backend,"record":self.persisted_record(agent_row["id"]),"observation":observation,
@@ -149,7 +153,8 @@ def _hybrid(service,policy,state_map,temporal,ts,ridge,sink,prefix=""):
     return sink.timed(prefix+"hybrid_policy_total",lambda:service.evaluate(
         policy.agent,policy,state_map,temporal,timestamp=ts,ridge_chosen=chosen,
         ridge_confidence=confidence,ridge_arms=arms,ridge_horizon=horizon,
-        ridge_support=support,ridge_novelty=novelty,metric_prefix=prefix))
+        ridge_support=support,ridge_novelty=novelty,metric_prefix=prefix,
+        home_provider=getattr(temporal,"home_context",None)))
 
 SCENARIOS={
     "A_ridge_only":(False,False,False),
@@ -172,12 +177,18 @@ def run(iterations=80,entity_count=8):
         totals=[]; f0=home.calls; g0=temporal.samples.get_calls; p0=temporal.previous_calls; c0=temporal.last_change_calls
         for _ in range(iterations):
             started=time.perf_counter_ns()
-            live_ridge=_ridge(live,states,temporal,ts,sink)
-            if live_hybrid: _hybrid(live_service,live,states,temporal,ts,live_ridge,sink)
+            live_temporal=shared_inference_temporal(temporal,ts,home_provider=home)
+            live_ridge=_ridge(live,states,live_temporal,ts,sink)
+            if live_hybrid:
+                _hybrid(live_service,live,states,live_temporal,ts,live_ridge,sink)
             if candidate_ridge:
-                cand_ridge=_ridge(candidate,states,temporal,ts,sink,prefix="candidate_")
+                # Candidate is off the Live critical path since ETAP 2. Model its worker
+                # as a separate per-decision context: it may not reuse Live mutable cache,
+                # but Ridge+MLP inside that Candidate job share one causal snapshot.
+                candidate_temporal=shared_inference_temporal(temporal,ts,home_provider=home)
+                cand_ridge=_ridge(candidate,states,candidate_temporal,ts,sink,prefix="candidate_")
                 if candidate_hybrid:
-                    _hybrid(candidate_service,candidate,states,temporal,ts,cand_ridge,sink,prefix="candidate_")
+                    _hybrid(candidate_service,candidate,states,candidate_temporal,ts,cand_ridge,sink,prefix="candidate_")
             totals.append((time.perf_counter_ns()-started)/1000.0)
         out[name]={"total":summary(totals),"stages":sink.snapshot(),
             "work":{"forecast_calls_per_inference":(home.calls-f0)/iterations,
@@ -187,18 +198,18 @@ def run(iterations=80,entity_count=8):
                     "model_deserialize_calls_per_inference":0.0},
             "guard_metrics":engine.inference_hot_path_metrics.snapshot()["stages"]}
     forecasts=[out[name]["work"]["forecast_calls_per_inference"] for name in SCENARIOS]
-    pass_work=all(abs(a-e)<1e-9 for a,e in zip(forecasts,(1.0,2.0,3.0,4.0)))
+    pass_work=all(abs(a-e)<1e-9 for a,e in zip(forecasts,(1.0,1.0,2.0,2.0)))
     a=out["A_ridge_only"]["total"]["p95_us"]; b=out["B_ridge_plus_tiny_mlp_hybrid"]["total"]["p95_us"]
     c=out["C_hybrid_plus_ridge_candidate"]["total"]["p95_us"]; d=out["D_hybrid_plus_hybrid_candidate"]["total"]["p95_us"]
-    return {"contract":"hybrid_inference_hot_path_baseline_v1",
-        "scope":"synthetic component-faithful baseline; no HA network, ActionIntent or Executor",
-        "candidate_baseline":"synchronous_after_live_process","iterations":iterations,
+    return {"contract":"hybrid_inference_shared_context_v2",
+        "scope":"synthetic component-faithful Ridge/Hybrid work; Candidate worker cost is reported but is outside Live critical path",
+        "candidate_baseline":"deferred_worker_separate_shared_context","iterations":iterations,
         "entity_count":max(2,min(16,int(entity_count))),"scenarios":out,
         "ratios":{"hybrid_vs_ridge_p95":b/max(a,1e-9),"ridge_candidate_vs_hybrid_p95":c/max(b,1e-9),
                   "hybrid_candidate_vs_hybrid_p95":d/max(b,1e-9)},
         "stable_assertions":{"forecast_calls_per_inference":dict(zip(SCENARIOS,forecasts)),
-            "expected_forecast_calls":{"A_ridge_only":1.0,"B_ridge_plus_tiny_mlp_hybrid":2.0,
-                "C_hybrid_plus_ridge_candidate":3.0,"D_hybrid_plus_hybrid_candidate":4.0},
+            "expected_forecast_calls":{"A_ridge_only":1.0,"B_ridge_plus_tiny_mlp_hybrid":1.0,
+                "C_hybrid_plus_ridge_candidate":2.0,"D_hybrid_plus_hybrid_candidate":2.0},
             "no_model_deserialize_per_inference":True,"timing_thresholds_are_not_ci_contract":True},
         "pass":bool(pass_work)}
 
