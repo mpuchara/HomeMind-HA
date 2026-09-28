@@ -53,6 +53,8 @@ def install(core, manager):
         core.OPTIONS["agent_training_chunk_hours"] = 6
     if int(core.OPTIONS.get("history_background_pause_ms", 500) or 0) == 500:
         core.OPTIONS["history_background_pause_ms"] = 1500
+    if int(core.OPTIONS.get("realtime_resync_seconds", 300) or 300) == 300:
+        core.OPTIONS["realtime_resync_seconds"] = 900
     current_duty = float(
         core.OPTIONS.get("training_cpu_duty_cycle", DEFAULT_TRAINING_DUTY_CYCLE)
         or DEFAULT_TRAINING_DUTY_CYCLE
@@ -202,6 +204,10 @@ def install(core, manager):
     def bounded_maintenance():
         now = time.monotonic()
         if now < maintenance_state["next_at"]:
+            return None
+        runtime_engine = getattr(core, "ENGINE", None) or getattr(manager, "engine", None)
+        last_event = float(getattr(runtime_engine, "last_event_monotonic", 0.0) or 0.0)
+        if last_event and now - last_event < 0.50:
             return None
         maintenance_state["next_at"] = now + MAINTENANCE_INTERVAL_SECONDS
         return original_maintenance()
