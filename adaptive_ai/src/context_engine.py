@@ -265,6 +265,9 @@ class ContextEngine:
                 evidence=evidence, event_ts=event_ts, received_ts=received_ts,
             )
             self.prepare_home_reliability(self.home, area, processing_ts)
+            self.calibrate_adaptive_from_home_event(
+                self.home, self.adaptive_presence, eid, area, value, event_ts, received_ts
+            )
             self._adaptive_cache.clear()
             return changed
 
@@ -290,8 +293,10 @@ class ContextEngine:
             semantic = max(
                 0.0, min(1.0, float(source.get('semantic_reliability', 1.0) or 0.0))
             )
+            metadata = dict(self.source_details.get(eid) or {})
             rows.append({
                 'entity_id': eid,
+                'device_id': source.get('device_id') or metadata.get('device_id'),
                 'role': str(source.get('role') or ''),
                 'value': source.get('value'),
                 'available': bool(source.get('available')),
@@ -300,8 +305,52 @@ class ContextEngine:
                 'semantic_reliability': semantic,
                 'semantic_reliability_detail': source.get('semantic_reliability_detail'),
                 'freshness': freshness,
+                'event_ts': source.get('event_ts'),
+                'received_ts': source.get('received_ts'),
+                'occupancy_authority': bool(metadata.get('occupancy_authority')),
             })
         return rows
+
+    def calibrate_adaptive_from_home_event(self, home, model, eid, area, probability,
+                                           event_ts, received_ts):
+        """Calibrate raw presence only from an independent direct-presence device."""
+        if not area or probability is None:
+            return []
+        metadata = dict(self.source_details.get(eid) or {})
+        role = str(
+            metadata.get('role')
+            or (getattr(home, 'sources', {}).get(eid) or {}).get('role')
+            or ''
+        )
+        observed = float(probability) >= .5
+        if role not in {'pir', 'radar_occupancy', 'occupancy_binary'}:
+            return []
+        # PIR OFF means no recent motion, not reliable absence.
+        if role == 'pir' and not observed:
+            return []
+        label_device = str(metadata.get('device_id') or '')
+        if not label_device:
+            return []
+
+        applied = []
+        for raw in self._adaptive_sources(home, area, received_ts):
+            if str(raw.get('role') or '') not in {'radar_activity', 'auxiliary'}:
+                continue
+            if not raw.get('available') or float(raw.get('quality') or 0.0) < .50:
+                continue
+            raw_device = str(raw.get('device_id') or '')
+            if not raw_device or raw_device == label_device:
+                continue
+            try:
+                result = model.record_independent_label(
+                    raw.get('entity_id'), raw.get('value'), observed, eid,
+                    ts=received_ts, label_event_ts=event_ts,
+                )
+            except ValueError:
+                continue
+            if result.get('applied'):
+                applied.append(str(raw.get('entity_id')))
+        return applied
 
     def augment_home_forecast(self, home, area, base_forecast, ts, presence_model=None, cache=None):
         """Add Stage-10 virtual presence without changing physical occupancy_now semantics."""
@@ -327,7 +376,12 @@ class ContextEngine:
             adaptive = dict(cache[key])
         else:
             sources = self._adaptive_sources(home, area, ts)
-            capability = model.capability(area, sources)
+            prior_sources = list(result.get('arrival_prior_sources') or [])
+            prior_devices = list(result.get('arrival_prior_devices') or [])
+            capability = model.capability(
+                area, sources,
+                prior_source_ids=prior_sources, prior_device_ids=prior_devices,
+            )
             arrivals = dict(result.get('arrival_probability_by_horizon') or {})
             arrival_prior = float(arrivals.get('3s', result.get('arrival_probability', 0.0)) or 0.0)
             adaptive = model.evaluate(
@@ -341,6 +395,8 @@ class ContextEngine:
                 raw_sources=sources,
                 room_calibration=(home.calibration_metrics() if hasattr(home, 'calibration_metrics') else None),
                 capability=capability,
+                prior_source_ids=prior_sources,
+                prior_device_ids=prior_devices,
             )
             if cache is not None:
                 cache.clear()
