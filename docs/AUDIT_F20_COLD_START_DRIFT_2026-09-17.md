@@ -154,3 +154,25 @@ Stage 14 v2 exposes one semantic rule instead of treating every old fact alike:
 - regression anchor: durable evaluation memory with `training_weight=0`.
 
 Thus an old statistical observation can lose training influence, while an explicit persistent instruction remains active until superseded/undone. Old anchors remain useful for regression detection without gaining unlimited optimization weight.
+
+## v2 hardening on the current Stage-13 stack
+
+The original Stage-14 implementation predated the current confidence/promotion contract. Current-stack review found three gaps:
+
+1. retained regression anchors were stored but never actually evaluated against the Candidate;
+2. recovery exposed an episode count but not the elapsed time requested by F20;
+3. cold-start status did not explicitly expose its dependency on the current Stage-13 v2 future-evidence gate.
+
+Contract v2 closes those gaps. Cold-start questions remain optional and non-dispatching; answering one does not waive promotion gates. BUILD_INFO and the final runtime-composition snapshot publish the same controlled-adaptation semantics.
+
+## Decay semantics
+
+Stage 14 v2 exposes one semantic rule instead of treating every old fact alike:
+
+- statistical training evidence: wall-clock decay using the configured policy half-life;
+- context/topology statistics: model-declared wall-clock decay;
+- Stage-13 probability/future evidence: episode-order weighting with dependency-adjusted effective N, outside a locked holdout;
+- persistent preference: no decay, because it is an instruction rather than a historical statistic;
+- regression anchor: durable evaluation memory with `training_weight=0`.
+
+Thus an old statistical observation can lose training influence, while an explicit persistent instruction remains active until superseded/undone. Old anchors remain useful for regression detection without gaining unlimited optimization weight.
