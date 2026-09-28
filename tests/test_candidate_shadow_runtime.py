@@ -442,6 +442,39 @@ class CandidateShadowRuntimeTests(unittest.TestCase):
         self.executor.service.assert_not_called()
         self.executor.release_control.assert_not_called()
 
+    def test_passive_candidate_publishes_inference_and_event_reaction_latency(self):
+        _, generation = self._g1(prediction=1.0, confidence=.93)
+        self.store.update_agent(self.root["id"], {"mode": "paused"})
+        telemetry = Mock()
+        telemetry.observe = Mock()
+
+        # Engine.on_state_changed records perf_counter in production. The test engine is
+        # deliberately minimal, so seed the same receipt timestamp before the wrapped
+        # Candidate state observer queues its passive decision.
+        self.engine.last_event_received = time.perf_counter() - 0.010
+        new_state = {
+            "entity_id": "light.shadow", "state": "on", "attributes": {},
+            "context": {}, "last_updated": "2026-09-19T20:00:00+00:00",
+        }
+        with patch.object(shadow_runtime_module, "TELEMETRY", telemetry):
+            self.engine.on_state_changed({
+                "entity_id": "light.shadow", "new_state": new_state
+            })
+            observed = self.manager.drain_candidate_shadow_events(
+                force=True, max_roots=8
+            )
+
+        self.assertEqual(observed, 1)
+        names = [call.args[0] for call in telemetry.observe.call_args_list]
+        self.assertIn("candidate_inference", names)
+        self.assertIn("candidate_event_to_decision", names)
+        for call in telemetry.observe.call_args_list:
+            if call.args[0] in ("candidate_inference", "candidate_event_to_decision"):
+                self.assertGreaterEqual(float(call.args[1]), 0.0)
+        hot = self.manager.candidate_latest_runtime(generation["generation_id"])
+        self.assertIsNotNone(hot)
+        self.executor.service.assert_not_called()
+
     def test_passive_heartbeat_reobserves_same_revision_after_30_seconds(self):
         _, generation = self._g1(prediction=1.0, confidence=.93)
         self._run_shadow()
