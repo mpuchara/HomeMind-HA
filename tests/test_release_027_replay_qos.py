@@ -193,12 +193,15 @@ class RealtimePreemptionTests(unittest.TestCase):
         self.assertIn('"training_realtime_event_priority_seconds"', source)
         self.assertIn('"training_realtime_inference_priority_seconds"', source)
 
-    def test_ui_uses_only_recent_60s_event_latency(self):
+    def test_ui_distinguishes_recent_60s_latency_from_retained_fallback(self):
         p0 = (ROOT / "adaptive_ai" / "src" / "static" / "p0.js").read_text(encoding="utf-8")
         home = (ROOT / "adaptive_ai" / "src" / "static" / "home.js").read_text(encoding="utf-8")
-        self.assertIn("const p95=latency.recent_p95_ms;", p0)
-        self.assertNotIn("recent_p95_ms??latency.p95_ms", p0)
-        self.assertIn("const inferenceP95=inf.recent_p95_ms, eventP95=latency.recent_p95_ms;", home)
+        self.assertIn("const recentP95=latency.recent_p95_ms;", p0)
+        self.assertIn("const p95=recentP95??latency.p95_ms;", p0)
+        self.assertIn("event → intent p95 · retained", p0)
+        self.assertIn("const inferenceRecentP95=inf.recent_p95_ms, eventRecentP95=latency.recent_p95_ms;", home)
+        self.assertIn("inference p95 · retained (no sample last 60 s)", home)
+        self.assertIn("event → intent p95 · retained (no sample last 60 s)", home)
 
     def test_correct_label_context_reconstruction_has_interactive_priority(self):
         source = (ROOT / "adaptive_ai" / "src" / "manual_feedback_workflow.py").read_text(encoding="utf-8")

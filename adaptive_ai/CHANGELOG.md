@@ -1,3 +1,11 @@
+# 0.14.103 — 2026-09-28
+
+- Fix the remaining Candidate Shadow freshness gap visible in Correct: passive Parent/Candidate observations no longer sit behind the Raspberry Pi 60 s housekeeping gate.
+- Bound Candidate heartbeat starvation under busy Home Assistant traffic. Fresh realtime events may defer low-priority Candidate work briefly, but cannot suppress it past 60 s; this stays below the 95 s observed-decision freshness window.
+- Preserve the 30 s Candidate heartbeat target, bounded root batches and non-controlling Shadow semantics. No Candidate path gains Executor or HA-service authority.
+- Add regression coverage for the exact failure mode: passive Candidate refresh continues while periodic housekeeping is blocked, and continuous unrelated HA traffic cannot create a stale Candidate gap.
+- Improve latency diagnostics: when no new inference/event-to-intent sample exists in the last 60 s, the UI shows the retained p95 explicitly instead of an ambiguous dash. Recent and retained measurements remain clearly distinguished.
+
 # 0.14.102 — 2026-09-28
 
 - Fix the 0.14.100 Candidate Shadow scheduling regression: deferred Candidate inference is drained on the Candidate worker wake path instead of being blocked behind the Raspberry Pi 60 s periodic-maintenance gate.
