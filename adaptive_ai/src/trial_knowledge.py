@@ -42,7 +42,7 @@ from control import legal_value, same_value, timing_for
 from settings import OPTIONS, iso_now
 
 
-TRIAL_RECORD_VERSION = 1
+TRIAL_RECORD_VERSION = 2
 SAFE_HYPOTHESES = {"earlier_on", "small_brightness_adjustment"}
 BRIGHTNESS_PROPERTIES = {"brightness", "brightness_pct", "percentage", "level", "value"}
 
@@ -106,6 +106,13 @@ def ensure_trial_tables(store):
                 ON experiment_trial_records(child_generation_id,created_ts);
             """
         )
+        columns = {str(row[1]) for row in c.execute(
+            "PRAGMA table_info(experiment_trial_records)"
+        ).fetchall()}
+        if "episode_id" not in columns:
+            c.execute("ALTER TABLE experiment_trial_records ADD COLUMN episode_id TEXT")
+        if "learning_status" not in columns:
+            c.execute("ALTER TABLE experiment_trial_records ADD COLUMN learning_status TEXT")
 
 
 class TrialJournal:
@@ -188,6 +195,14 @@ class TrialJournal:
                     _dumps(trial.get("outcome_sources") or {}), _dumps({}), now, time.time(),
                 ),
             )
+            episode_id = str(meta.get("episode_id") or (
+                "experiment:" + trial_id if str(trial.get("property") or "") == "power" else ""
+            )) or None
+            c.execute(
+                """UPDATE experiment_trial_records SET episode_id=COALESCE(episode_id,?),
+                   learning_status=COALESCE(learning_status,'pending'),updated_ts=? WHERE trial_id=?""",
+                (episode_id, time.time(), trial_id),
+            )
         return self.get(trial_id)
 
     def get(self, trial_id):
@@ -233,6 +248,9 @@ class TrialJournal:
         if self.get(trial_id) is None:
             self.start(str(trial.get("owner_agent_id") or "unknown"), trial, None)
         at = time.time() if at is None else float(at)
+        resolution = trial.get("_episode_resolution") if isinstance(trial.get("_episode_resolution"), dict) else {}
+        evaluated = resolution.get("episode") if isinstance(resolution.get("episode"), dict) else None
+        episode_id = (evaluated or {}).get("episode_id") or ("experiment:" + trial_id if str(trial.get("property") or "") == "power" else None)
         result = {
             "reward": None if reward is None else float(reward),
             "reason": str(reason),
@@ -244,14 +262,19 @@ class TrialJournal:
             "finished_at": at,
             "kind": trial.get("kind"),
             "focus": trial.get("focus"),
+            "episode_id": episode_id,
+            "episode_evaluator": evaluated,
         }
         status = "labelled" if reward is not None else "unlabelled"
+        learning_status = "eligible" if reward is not None else "no_outcome"
         with self.store.lock, self.store.conn() as c:
             c.execute(
                 """UPDATE experiment_trial_records SET reward=?,termination_reason=?,status=?,
-                   episode_result_json=?,outcome_sources_json=?,updated_ts=? WHERE trial_id=?""",
-                (None if reward is None else float(reward), str(reason), status, _dumps(result),
-                 _dumps(trial.get("outcome_sources") or {}), at, trial_id),
+                   episode_id=COALESCE(?,episode_id),episode_result_json=?,outcome_sources_json=?,
+                   learning_status=?,updated_ts=? WHERE trial_id=?""",
+                (None if reward is None else float(reward), str(reason), status,
+                 episode_id, _dumps(result), _dumps(trial.get("outcome_sources") or {}),
+                 learning_status, at, trial_id),
             )
         return self.get(trial_id)
 
@@ -440,7 +463,8 @@ def _decorate_trial(trial, ctx, experiments, session, *, information=False,
         "trial_record_version": TRIAL_RECORD_VERSION,
         "policy_version": int(getattr(policy, "VERSION", trial.get("policy_version") or 0)),
         "model_revision": str(getattr(policy, "model_revision", trial.get("model_revision") or "")),
-        "schema_version": int(getattr(getattr(policy, "schema", None), "version", 0) or 0),
+        "schema_version": int(getattr(getattr(policy, "schema", None), "VERSION",
+                                      getattr(getattr(policy, "schema", None), "version", 0)) or 0),
         "experiment_revision": int(experiments._get(agent["id"]).get("revision") or 0),
     }
     trial["trial_record"] = {
@@ -547,6 +571,22 @@ def _record_features(row):
     return out
 
 
+def _record_contract_compatible(record, parent_model):
+    """Validate only versioned interpretation, never require an identical weight revision."""
+    versions = _json(record.get("model_versions_json"), {})
+    record_version = int(record.get("record_version") or versions.get("trial_record_version") or 1)
+    if record_version < 1 or record_version > TRIAL_RECORD_VERSION:
+        return False, "unsupported_trial_record_version"
+    expected_policy = int((parent_model or {}).get("version") or 0)
+    expected_schema = int(((parent_model or {}).get("schema") or {}).get("version") or 0)
+    recorded_policy = int(versions.get("policy_version") or 0)
+    recorded_schema = int(versions.get("schema_version") or 0)
+    if expected_policy and recorded_policy and recorded_policy != expected_policy:
+        return False, "policy_version_mismatch"
+    if expected_schema and recorded_schema and recorded_schema != expected_schema:
+        return False, "schema_version_mismatch"
+    return True, None
+
 def _train_child_from_trials(manager, journal, candidate_row):
     generation = lineage_row(manager.store, agent_id=candidate_row.get("candidate_id"))
     session = _session_for_child(manager.store, (generation or {}).get("generation_id"))
@@ -561,42 +601,75 @@ def _train_child_from_trials(manager, journal, candidate_row):
         raise RuntimeError("Free Explore parent or child disappeared")
 
     records = journal.records_for_session(session["session_id"])
-    already = [r for r in records if r.get("learning_applied_generation_id") == child_generation["generation_id"]]
-    pending = [r for r in records if r.get("reward") is not None and not r.get("learning_applied_generation_id")]
+    labelled = [r for r in records if r.get("reward") is not None]
+    pending = [
+        r for r in labelled
+        if r.get("learning_applied_generation_id") != child_generation["generation_id"]
+        or str(r.get("learning_status") or "") != "applied"
+    ]
     if not pending:
-        if already:
-            return True  # restart/idempotent worker retry: exact same knowledge already applied.
+        if labelled:
+            return True  # restart/idempotent retry: current child already represents all durable facts.
         return False
 
-    # A child is always rebuilt from the exact parent snapshot before applying trial facts.
+    parent_model = manager.store.get_model(parent["id"]) or {}
+    compatible = []
+    incompatible = {}
+    for record in labelled:
+        ok, why = _record_contract_compatible(record, parent_model)
+        if ok:
+            compatible.append(record)
+        else:
+            incompatible[str(record["trial_id"])] = why
+
+    # Rebuild from the immutable parent and replay the complete compatible TrialRecord
+    # journal. Applying only newly-arrived records would erase older trial influence.
     child = _copy_parent_snapshot(manager, parent["id"], child["id"])
     manager.engine.models.pop(child["id"], None)
     policy = manager.engine.policy(child)
     applied = []
     positive = negative = 0
-    for record in pending:
+    ineligible = dict(incompatible)
+    for record in compatible:
         hypothesis = _json(record.get("hypothesis_json"), {})
+        trial_id = str(record["trial_id"])
         if str(hypothesis.get("id") or "") not in SAFE_HYPOTHESES:
+            ineligible[trial_id] = "unsupported_hypothesis"
             continue
         features = _record_features(record)
         assigned = _json(record.get("assigned_action_json"), {})
         context = _json(record.get("context_json"), {})
         if not features or assigned.get("index") is None:
+            ineligible[trial_id] = "missing_policy_context_or_action"
             continue
         horizon = _finite(context.get("horizon"))
         if horizon is None or int(horizon) not in {int(x) for x in policy.horizons}:
+            ineligible[trial_id] = "horizon_contract_mismatch"
             continue
         reward = float(record["reward"])
         action_idx = int(assigned["index"])
         if action_idx < 0 or action_idx >= len(policy.actions):
+            ineligible[trial_id] = "action_set_mismatch"
             continue
-        finished = _finite(_json(record.get("episode_result_json"), {}).get("finished_at"))
+        episode = _json(record.get("episode_result_json"), {})
+        finished = _finite(episode.get("finished_at"))
         policy.update(int(horizon), action_idx, features, reward, sample_ts=finished)
-        applied.append(str(record["trial_id"]))
+        applied.append(trial_id)
         positive += int(reward > 0)
         negative += int(reward < 0)
     if not applied:
-        return False
+        with manager.store.lock, manager.store.conn() as c:
+            for trial_id, why in ineligible.items():
+                c.execute(
+                    "UPDATE experiment_trial_records SET learning_status=?,updated_ts=? WHERE trial_id=?",
+                    ("ineligible:" + str(why), time.time(), trial_id),
+                )
+        _merge_result(
+            manager.store, session["session_id"], status="blocked",
+            patch={"message": "Labelled TrialRecords are incompatible with the selected parent contract",
+                   "trial_training": {"records_applied": 0, "ineligible": ineligible}},
+        )
+        return True
 
     model = policy.serialize()
     revision = str(getattr(policy, "model_revision", "") or "")
@@ -612,17 +685,25 @@ def _train_child_from_trials(manager, journal, candidate_row):
         for trial_id in applied:
             c.execute(
                 """UPDATE experiment_trial_records SET learning_applied_generation_id=?,
-                   learning_applied_model_revision=?,learning_applied_ts=?,updated_ts=?
-                   WHERE trial_id=? AND learning_applied_generation_id IS NULL""",
+                   learning_applied_model_revision=?,learning_applied_ts=?,learning_status='applied',updated_ts=?
+                   WHERE trial_id=?""",
                 (str(child_generation["generation_id"]), revision, now, now, trial_id),
+            )
+        for trial_id, why in ineligible.items():
+            c.execute(
+                "UPDATE experiment_trial_records SET learning_status=?,updated_ts=? WHERE trial_id=?",
+                ("ineligible:" + str(why), now, trial_id),
             )
     manager.engine.models[child["id"]] = policy
 
     report = {
         "mode": "trial_record_finetune", "trial_record_version": TRIAL_RECORD_VERSION,
         "records_applied": len(applied), "positive_records": positive, "negative_records": negative,
+        "new_records_triggering_rebuild": len(pending),
+        "ineligible_records": len(ineligible), "ineligible_reasons": ineligible,
         "unlabelled_records": sum(1 for r in records if r.get("reward") is None),
         "ordinary_history_replayed": False, "base_snapshot": str(parent.get("id")),
+        "rebuild_semantics": "parent_snapshot_plus_complete_compatible_trial_journal",
         "candidate_model_revision": revision,
     }
     fresh = manager._candidate_row(parent["id"]) or candidate_row
@@ -638,7 +719,7 @@ def _train_child_from_trials(manager, journal, candidate_row):
     )
     manager.store.event(
         parent["id"], "info", "explore_trial_knowledge_applied",
-        "Free Explore labelled trials were applied exactly once to the direct child Candidate",
+        "Free Explore durable trial journal was replayed deterministically into the direct child Candidate",
         {"session_id": session["session_id"], "child_generation_id": child_generation["generation_id"],
          "trial_ids": applied, "positive": positive, "negative": negative,
          "ordinary_history_replayed": False},
@@ -732,7 +813,8 @@ def install(manager):
     def finish(aid, reward, reason):
         aid = str(aid)
         data = experiments._get(aid)
-        trial = copy.deepcopy(data.get("active") or {})
+        active = data.get("active") or {}
+        trial = copy.deepcopy(active)
         if not trial:
             return previous_finish(aid, reward, reason)
         session = _session_for_live(manager.store, aid)
@@ -740,6 +822,30 @@ def install(manager):
         if journal.get(trial.get("trial_id")) is None:
             trial["owner_agent_id"] = aid
             journal.start(aid, trial, session)
+
+        # Resolve Stage-05 episode semantics before Agent Explore can queue child work.
+        # The inner EpisodeEvaluator wrapper reuses the runtime marker, so the same
+        # immutable episode is never evaluated twice with different timestamps.
+        evaluator = getattr(manager.engine, "episode_evaluator", None)
+        if evaluator is not None and str(active.get("property") or "") == "power":
+            try:
+                from episode_evaluator_runtime import resolve_experiment_outcome
+                _episode, reward, reason = resolve_experiment_outcome(
+                    manager.engine, evaluator, aid, active, reward, reason
+                )
+                trial = copy.deepcopy(active)
+            except Exception as exc:
+                manager.store.event(
+                    aid, "warning", "trial_episode_resolution_gap",
+                    "TrialRecord could not resolve the shared EpisodeEvaluator outcome",
+                    {"trial_id": trial.get("trial_id"),
+                     "error": f"{type(exc).__name__}: {exc}"},
+                )
+
+        # Persist the durable outcome before the Explore wrapper can wake Candidate
+        # training. This removes the old race where the worker could see a queued child
+        # before the TrialRecord reward/status was committed.
+        journal.finish(trial, reward, reason, experiments.clock())
         result = previous_finish(aid, reward, reason)
         if session is not None:
             # F19: Free Explore cannot train the Live residual owner. Restore exactly the
@@ -748,7 +854,6 @@ def install(manager):
             current = experiments._get(aid)
             current["learners"] = learner_snapshot
             experiments._save(aid)
-        journal.finish(trial, reward, reason, experiments.clock())
         return result
 
     def workflow_explore(ref, payload):
@@ -810,8 +915,8 @@ def install(manager):
     manager.workflow_explore = workflow_explore
     manager._start_build = start_build
     manager._trial_knowledge_installed = True
-    manager.trial_knowledge_contract = "trial_record_v1_explicit_child_training_exactly_once"
+    manager.trial_knowledge_contract = "trial_record_v2_parent_snapshot_plus_complete_compatible_trial_journal"
     manager.trial_hypothesis_catalog = sorted(SAFE_HYPOTHESES)
     manager.trial_off_policy_contract = "refuse_without_positive_logged_propensity_coverage"
-    manager.trial_rollback_contract = "exact_parent_snapshot_plus_trial_updates_child_only"
+    manager.trial_rollback_contract = "exact_parent_snapshot_plus_replayable_trial_journal_child_only"
     return manager
