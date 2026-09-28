@@ -16,7 +16,7 @@ import math
 import threading
 
 from settings import OPTIONS
-from teaching import distance, signature
+import teaching as teaching_module
 
 
 PREFERENCE_CONTRACT_VERSION = 1
@@ -184,7 +184,7 @@ class LightingPreferenceModel:
             previous = self._parse_signature(row)
             if not previous:
                 continue
-            rms = distance(context_signature, previous)
+            rms = teaching_module.distance(context_signature, previous)
             if rms is None:
                 continue
             matches.append((float(rms), row))
@@ -266,7 +266,7 @@ class LightingPreferenceModel:
                 agent, getattr(policy, "actions", ()),
                 {"meta:no_feedback": 0.0}, episode_id=episode_id,
             )
-        current = signature(policy, states, temporal, timestamp)
+        current = teaching_module.signature(policy, states, temporal, timestamp)
         return self.evaluate(
             agent, getattr(policy, "actions", ()), current or {}, episode_id=episode_id
         )
