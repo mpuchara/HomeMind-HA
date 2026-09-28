@@ -22,6 +22,7 @@ from candidate_shadow_deferred import DeferredCandidateShadowQueue
 from fast_runtime import is_fast_target
 from settings import parse_ts
 from inference_hot_path_metrics import observe_elapsed
+from telemetry import TELEMETRY
 
 
 DECISION_STALE_SECONDS = 95.0
@@ -1180,11 +1181,18 @@ def install(manager):
         return _decorate_status(result)
 
     def _queue_passive_root(
-        root_id, revision, *, delay_seconds=0.35, wake=True, force_observe=False
+        root_id, revision, *, delay_seconds=0.35, wake=True, force_observe=False,
+        event_received_perf=None,
     ):
         root_id = str(root_id)
         with manager.lock:
             previous = passive_pending.get(root_id) or {}
+            trigger_perf = previous.get("event_received_perf")
+            if event_received_perf is not None:
+                try:
+                    trigger_perf = float(event_received_perf)
+                except (TypeError, ValueError):
+                    trigger_perf = previous.get("event_received_perf")
             passive_pending[root_id] = {
                 "revision": max(int(previous.get("revision") or 0), int(revision or 0)),
                 "due": min(
@@ -1195,12 +1203,16 @@ def install(manager):
                 # Revision dedupe is correct for duplicate state_changed requests, but it
                 # must not suppress the periodic freshness observation itself.
                 "force_observe": bool(previous.get("force_observe")) or bool(force_observe),
+                "event_received_perf": trigger_perf,
             }
         if wake:
             manager.wake_event.set()
 
-    def _observe_passive_root(root_id, revision, *, force_observe=False):
+    def _observe_passive_root(
+        root_id, revision, *, force_observe=False, event_received_perf=None
+    ):
         root_id = str(root_id)
+        inference_started = time.perf_counter()
         if root_id not in active_candidate_parents:
             return False
         root_rt = _root_runtime(root_id)
@@ -1223,6 +1235,21 @@ def install(manager):
         )
         if not bundle or not bundle.get("results"):
             return False
+        completed_perf = time.perf_counter()
+        TELEMETRY.observe(
+            "candidate_inference",
+            max(0.0, (completed_perf - inference_started) * 1000.0),
+        )
+        if event_received_perf is not None:
+            try:
+                event_received_perf = float(event_received_perf)
+            except (TypeError, ValueError):
+                event_received_perf = None
+        if event_received_perf is not None and event_received_perf <= completed_perf:
+            TELEMETRY.observe(
+                "candidate_event_to_decision",
+                max(0.0, (completed_perf - event_received_perf) * 1000.0),
+            )
         _persist_bundle(bundle, force=True)
         root_rt["last_candidate_observed_revision"] = max(int(revision or 0), current_revision)
         root_rt["last_candidate_observed_monotonic"] = time.monotonic()
@@ -1285,14 +1312,16 @@ def install(manager):
                         root_id,
                         int(pending.get("revision") or 0),
                         bool(pending.get("force_observe")),
+                        pending.get("event_received_perf"),
                     ))
                     passive_pending.pop(root_id, None)
                     if len(ready) >= max(1, int(max_roots)):
                         break
         completed = 0
-        for root_id, revision, force_observe in ready:
+        for root_id, revision, force_observe, event_received_perf in ready:
             completed += int(_observe_passive_root(
-                root_id, revision, force_observe=force_observe
+                root_id, revision, force_observe=force_observe,
+                event_received_perf=event_received_perf,
             ))
         return completed
 
@@ -1303,8 +1332,11 @@ def install(manager):
             return result
         with manager.engine.lock:
             revision = int(getattr(manager.engine, "state_revision", 0) or 0)
+            event_received_perf = getattr(manager.engine, "last_event_received", None)
         for root_id in tuple(candidate_dependency_roots.get(entity_id, ())):
-            _queue_passive_root(root_id, revision)
+            _queue_passive_root(
+                root_id, revision, event_received_perf=event_received_perf
+            )
         return result
 
     def maintenance():

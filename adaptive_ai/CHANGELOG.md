@@ -1,3 +1,11 @@
+# 0.14.104 — 2026-09-28
+
+- Restore meaningful latency indicators while Candidate Shadow is the active observer. Passive Candidate inference now publishes bounded in-memory `candidate_inference` telemetry instead of leaving the Home Intelligence inference card empty.
+- Measure real HA-event-to-Candidate-decision latency for relevant dependency changes while the parent is paused. This is reported separately from Live `event → intent` latency so the UI does not mislabel a Shadow decision as an ActionIntent.
+- The latency cards prefer fresh Live measurements, then fresh Candidate measurements, then retained measurements from the current runtime session. They no longer show an unexplained dash when Candidate Shadow is running.
+- If no relevant HA event has occurred yet, the event-latency card says it is waiting for an event instead of fabricating a number. The Candidate inference card is refreshed by the existing passive heartbeat.
+- Candidate remains observation-only: no Executor, Home Assistant service, reward, promotion, Correct-label or model-selection semantics are changed.
+
 # 0.14.103 — 2026-09-28
 
 - Fix the remaining Candidate Shadow freshness gap visible in Correct: passive Parent/Candidate observations no longer sit behind the Raspberry Pi 60 s housekeeping gate.
