@@ -10,15 +10,22 @@ import argparse
 from collections import deque
 import json
 import math
+import os
 from pathlib import Path
 import statistics
 import sys
+import tempfile
 import time
 
 ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "adaptive_ai" / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
+
+# Production observation imports initialize Store. Keep the profiler completely isolated
+# from the add-on's /data, matching tools/benchmark_hybrid_inference.py.
+_SCRATCH = tempfile.TemporaryDirectory(prefix="homemind-hotspot-benchmark-")
+os.environ["ADAPTIVE_AI_DATA"] = _SCRATCH.name
 
 from hybrid_inference_benchmark import fixture, state
 from observation_contract import (
@@ -245,4 +252,7 @@ def main(argv=None):
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    finally:
+        _SCRATCH.cleanup()
