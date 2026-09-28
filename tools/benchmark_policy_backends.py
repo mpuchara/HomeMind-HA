@@ -20,6 +20,7 @@ if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
 from policy_backend_benchmark import run_benchmark, trial_records_to_episodes
+from observation_contract import FeatureSchemaV12
 from storage import Store
 from trial_knowledge import ensure_trial_tables
 
@@ -32,6 +33,14 @@ def _ts(value, fallback):
 
 
 def manual_demonstrations(store, agent_id, start_index=0):
+    feature_labels = {}
+    model = store.get_model(str(agent_id)) or {}
+    try:
+        schema = FeatureSchemaV12.from_export(model.get("schema") or {}, int(model.get("dims") or 128))
+        if schema is not None:
+            feature_labels = schema.labels()
+    except Exception:
+        feature_labels = {}
     with store.conn() as c:
         rows = c.execute(
             """SELECT id,created_at,action_index,reward,reason,features_json
@@ -53,6 +62,7 @@ def manual_demonstrations(store, agent_id, start_index=0):
             "id": f"feedback:{row['id']}",
             "timestamp": _ts(row.get("created_at"), start_index + offset),
             "features": features,
+            "feature_labels": {str(idx): feature_labels.get(idx, []) for idx in features if idx in feature_labels},
             "allowed_actions": None,
             "kind": "demonstration",
             "demonstration_action": action,
