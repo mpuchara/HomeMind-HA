@@ -50,34 +50,53 @@ class Executor:
         return HA.service(domain, action, data)
 
     def take_control(self, agent, refresh=False):
-        """Explicit Control transition or incumbent ownership enforcement."""
+        """Explicit Control transition or incumbent ownership enforcement.
+
+        Physical-device locking alone is insufficient for shared groups/zones.  Resolve
+        the complete resource set from fresh config and serialize ownership checks under
+        the same canonical arbiter locks used by dispatch reservations.
+        """
         with self.target_lock(agent['target_entity']):
             current = STORE.get_agent_config(agent['id'])
             if not current or not current['enabled'] or current.get('training_state') != 'qualified':
                 raise ValueError('Control requires an enabled, qualified agent')
-            device_gate = self.device_agents.control_eligibility(current)
-            if not device_gate['allowed']:
-                raise ValueError('Device contract: ' + str(device_gate['reason']))
-            qualification = assess_control_qualification(current)
-            if not qualification['passed']:
-                raise ValueError('Control qualification: ' + qualification['reason'])
-            conflicts = [a for a in STORE.list_agent_configs() if a['id'] != current['id'] and a['enabled']
-                         and a['mode'] == 'control' and self.device_agents.conflicts(a, current)]
-            if conflicts:
-                raise ValueError('Another Control agent owns this shared device/resource')
-            disabled = self.handoff.acquire(current, refresh_scan=refresh)
-            warning = AUTOMATION_KNOWLEDGE.error
-            self.engine.runtime.setdefault(agent['id'], {})['automation_scan_warning'] = warning
-            if refresh and warning:
-                STORE.event(agent['id'], 'warning', 'automation_scan_partial',
-                            'Control continues with known target automations; scan is incomplete',
-                            {'warning': warning})
-            return disabled
+            resource_keys = self.device_agents.descriptor(current)['resource_keys']
+            with self.device_agents.lock_resources(resource_keys):
+                current = STORE.get_agent_config(agent['id'])
+                if not current or not current['enabled'] or current.get('training_state') != 'qualified':
+                    raise ValueError('Control requires an enabled, qualified agent')
+                fresh_keys = self.device_agents.descriptor(current)['resource_keys']
+                if fresh_keys != resource_keys:
+                    raise ValueError('Device/resource mapping changed during Control acquisition; retry')
+                device_gate = self.device_agents.control_eligibility(current)
+                if not device_gate['allowed']:
+                    raise ValueError('Device contract: ' + str(device_gate['reason']))
+                qualification = assess_control_qualification(current)
+                if not qualification['passed']:
+                    raise ValueError('Control qualification: ' + qualification['reason'])
+                conflicts = [
+                    a for a in STORE.list_agent_configs()
+                    if a['id'] != current['id'] and a['enabled'] and a['mode'] == 'control'
+                    and self.device_agents.conflicts(a, current)
+                ]
+                if conflicts:
+                    raise ValueError('Another Control agent owns this shared device/resource')
+                disabled = self.handoff.acquire(current, refresh_scan=refresh)
+                warning = AUTOMATION_KNOWLEDGE.error
+                self.engine.runtime.setdefault(agent['id'], {})['automation_scan_warning'] = warning
+                if refresh and warning:
+                    STORE.event(agent['id'], 'warning', 'automation_scan_partial',
+                                'Control continues with known target automations; scan is incomplete',
+                                {'warning': warning})
+                return disabled
 
     def release_control(self, agent, reason='mode_change'):
         with self.target_lock(agent['target_entity']):
-            self.engine.experiments.cancel(agent['id'], reason)
-            return self.handoff.release(agent, reason)
+            current = STORE.get_agent_config(agent['id']) or agent
+            with self.device_agents.lock_resources(
+                    self.device_agents.descriptor(current)['resource_keys']):
+                self.engine.experiments.cancel(agent['id'], reason)
+                return self.handoff.release(current, reason)
 
     def reconcile_control(self):
         # Existing entity-level handoff journals remain authoritative for restoring HA
