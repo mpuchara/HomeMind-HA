@@ -6,7 +6,7 @@ Date: 2026-09-17
 
 The shipped runtime path remains:
 
-`run.sh -> trial_queue_main.py -> preference_queue_main.py -> fast_queue_main.py -> queue_main.py`
+`run.sh -> trial_queue_main.py -> preference_queue_main.py -> fast_queue_main.py -> queue_main.py -> main.py`
 
 Stage 13 is installed in `trial_queue_main.prepare_engine_extensions()` after TrialRecord/Candidate composition and before workers start. It adds diagnostics, calibration journals and promotion gates only. It does not create an `ActionIntent`, does not call Home Assistant and does not bypass `Executor`.
 
@@ -25,7 +25,7 @@ Stage 13 keeps legacy numeric fields readable for compatibility, but attaches ex
 
 ## Canonical metric vocabulary
 
-Contract version: `confidence_contract_v1`.
+Contract version: `confidence_contract_v2`.
 
 1. `presence_probability`
    - probability claim in `[0,1]`;
@@ -45,8 +45,9 @@ Contract version: `confidence_contract_v1`.
    - not action quality.
 
 5. `empirical_policy_quality`
-   - independent future episode accuracy/cost with uncertainty interval;
-   - ON and OFF evidence are kept separate.
+   - fixed future, paired child-vs-parent episode quality/cost with uncertainty intervals;
+   - ON and OFF evidence are kept separate;
+   - automation replay may screen/select but is not final calibration evidence.
 
 6. `preference_alignment`
    - weighted preference-alignment lower-bound style score;
@@ -105,13 +106,13 @@ Candidate selection and final evaluation are disjoint.
 
 The epoch is created only after the existing challenger-selection evidence reaches its required level. Its `selection_cutoff_ts` is then frozen.
 
-Only later future episodes may enter the Stage-13 final evaluation. The first prefix reaching the fixed target is locked in `final_end_ts`. Subsequent UI polling or later observations do not enlarge the declared final test. This prevents ordinary repeated peeking from opportunistically increasing the stated confidence.
+Only later future episodes with an explicitly independent calibration label may enter the Stage-13 final evaluation. The first prefix reaching the fixed evidence target is locked in `final_end_ts` **whether quality passes or fails**. Subsequent UI polling or later observations do not enlarge the declared final test. A failed holdout therefore cannot be healed by waiting for easier rows.
 
 Changing model revision creates a new epoch. The backend identity is recorded with the epoch; a backend/model change therefore requires new future evaluation rather than inheriting an old reliability claim.
 
 ## ON/OFF safety and abstention
 
-The first version requires:
+Version 2 requires:
 
 - at least 12 effective independent final episodes overall;
 - at least 4 effective independent OFF episodes;
@@ -119,7 +120,16 @@ The first version requires:
 
 These are additional to the existing Candidate gates; they do not reduce any pre-existing threshold. If the existing selection layer requires more than 12 episodes, Stage 13 waits for that larger selection requirement before freezing the cutoff.
 
-OFF-only evidence cannot qualify ON. Missing evidence produces `abstain_insufficient_independent_evidence` / Shadow fallback rather than a fabricated score. The independent final evaluation gate is a hard non-overridable promotion veto.
+OFF-only evidence cannot qualify ON. Missing evidence produces `abstain_insufficient_independent_evidence` / Shadow fallback rather than a fabricated score.
+
+Final promotion requires more than evidence count. On the exact same locked rows Stage 13 computes:
+
+- child empirical action quality;
+- parent empirical action quality;
+- paired child-minus-parent quality delta with a 95% interval;
+- separate ON and OFF paired deltas.
+
+The hard gate passes only when evidence is sufficient and the overall, ON and OFF paired lower bounds are not worse than the configured regression tolerance (default 3 percentage points). The independent final evaluation gate remains non-overridable.
 
 ## UI and compatibility
 
@@ -136,9 +146,12 @@ Live diagnostics separately show decision strength, expected action utility, dat
 Migration is additive only:
 
 - `confidence_probability_episodes`;
-- `confidence_evaluation_epochs`.
+- `confidence_evaluation_epochs`;
+- additive calibration metadata on `candidate_generation_pairs`: `evidence_kind`, `calibration_eligible`, `dependency_cluster`, `calibration_outcome`, `calibration_parent_correct`, `calibration_child_correct`, `calibration_source_id`.
 
-No existing policy vectors, schemas, TrialRecords, labels, Candidate generations, promotion backups or rollback state are reinterpreted or deleted.
+Old Candidate-pair rows are preserved and default to `legacy_unclassified` / `calibration_eligible=0`; they are never silently upgraded to independent calibration evidence.
+
+Raw transition fields (`outcome`, `parent_correct`, `child_correct`) remain immutable behaviour history. Independent labels live in the separate `calibration_*` overlay. A direct HA user transition can populate that overlay; an independent EpisodeEvaluator label may also populate it through the Stage-13 recorder. Anonymous/external target transitions remain screening-only.
 
 ## Tests
 
@@ -164,3 +177,28 @@ Deterministic tests cover:
 - Policy intervals are episode-level Wilson-style intervals using effective N; they are not a causal treatment-effect interval.
 - Existing legacy validation statistics remain visible only as diagnostics. They are not substituted for the fixed Stage-13 future promotion test.
 - No physical Home Assistant experiment or production backend switch is performed by this stage.
+
+## Current-stack hardening after Stages 05–12
+
+The original Stage-13 implementation had two current-stack gaps:
+
+1. a final test was considered passed when enough rows existed, even if the Candidate performed worse on the fixed future holdout;
+2. every external target transition in `candidate_generation_pairs` could be treated as independent policy quality, even when it was only an automation transition.
+
+Contract v2 fixes both. Candidate selection may still use broader behavioural screening, but final calibration accepts only explicit independent evidence. The shipped runtime currently classifies a direct user target change as an independent preference label. Anonymous/external transitions are not calibration evidence. The contract also accepts a separately supplied `episode_evaluator_independent` label without rewriting the raw target-transition fact.
+
+Final comparison is paired on identical future episodes. The result reports `child`, `parent`, `paired_delta` and separate `per_action_delta.OFF/ON` structures. `promotion_quality_passed` is the promotion-facing result; `sufficient_evidence` alone is never a pass.
+
+Changing the policy backend or model revision creates a new evaluation identity, so a future production move from DiagonalLinUCB to another backend cannot inherit an older final-calibration epoch.
+
+## Updated deterministic coverage
+
+In addition to the original tests, v2 covers:
+
+- anonymous automation transitions do not complete final calibration;
+- direct user transitions are classified as independent evidence;
+- raw transition history and calibration label fields remain separate;
+- legacy pair-table migration preserves rows and marks them non-calibrating;
+- a Candidate with sufficient ON/OFF evidence but worse paired future quality fails;
+- that failed window locks and later easy observations cannot heal it;
+- an independent EpisodeEvaluator label can be attached idempotently without rewriting the raw transition.
