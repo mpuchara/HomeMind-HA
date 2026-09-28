@@ -212,6 +212,9 @@ def _sample_event_time(state, fallback=None):
 
 
 def _samples(temporal, entity_id):
+    shared = getattr(temporal, "samples_for", None)
+    if callable(shared):
+        return shared(entity_id)
     dq = getattr(temporal, "samples", {}).get(entity_id)
     return list(dq or ())
 
