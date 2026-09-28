@@ -791,6 +791,7 @@ def install(manager):
         current_job = current_job() if callable(current_job) else None
         bundle = _bundle(
             agent, state_map,
+            event_ts=(current_job or {}).get("context_ts"),
             parent_observation=(current_job or {}).get("parent_observation"),
         )
         if not bundle:
