@@ -9,7 +9,7 @@ This stage reduces computation that previously grew with all retained Candidate/
 
 The shipped execution path remains:
 
-`run.sh -> trial_queue_main.py -> RuntimeCompositionRoot -> preference/fast/queue stack -> Stage 11/13/14/15/16 -> Stage 17 -> workers`
+`run.sh -> trial_queue_main.py -> preference_queue_main.py -> fast_queue_main.py -> queue_main.py -> main.py -> RuntimeCompositionRoot -> Stage 11/13/14/15/16/17 -> workers`
 
 `ActionIntent -> Executor` remains the only AI physical dispatch boundary. Stage 17 has no HA service path.
 
@@ -53,7 +53,7 @@ Before Stage 17, `RLTeaching.supervised_scores()` executed two history queries p
 
 Stage 17 uses a batched SQLite as-of query. A batch contains at most 24 candidate sensors and at most the existing 256 active Teach labels. For every `(sensor, label)` SQLite selects the indexed last `entity_history` row at or before the label timestamp. The returned working set is therefore bounded to `24 * 256 = 6144` rows per batch, independent of archive length. The calculation after state selection is unchanged: same `context_scalar`, label weights, feature evidence gate, correlation, coverage, recency and evidence factor.
 
-The existing `entity_history(entity_id, ts)` index is retained and Stage 17 adds an explicit `(entity_id, ts, id)` index for deterministic as-of tie ordering.
+The existing `entity_history(entity_id, ts)` index is retained. No redundant `(entity_id, ts, id)` index is built: `id` is the INTEGER PRIMARY KEY/rowid tie key already carried by SQLite's secondary index, and rebuilding a duplicate index on a large Pi archive would itself be an expensive upgrade operation.
 
 ### Regression anchors
 
@@ -83,7 +83,6 @@ Stage 17 adds only accelerators/metadata:
 - `candidate_fast_order_guard`
 - index `idx_candidate_pairs_edge_outcome_f22`
 - index `idx_candidate_decisions_generation_ts_f22`
-- index `idx_entity_history_entity_ts_id_f22`
 - `adaptation_regression_anchors.active`
 - `adaptation_regression_anchors.retired_ts`
 - index `idx_adaptation_anchor_active_f22`
@@ -236,3 +235,163 @@ Stage 17 is a performance layer installed explicitly by the runtime composition 
 The exceptional late/out-of-order edge intentionally prioritizes exact legacy semantics over incremental speed. It performs an exact recomputation only when relevant evidence/configuration changes and persists the result for subsequent status polls.
 
 The benchmark is synthetic. It validates scaling shape, same-data equivalence and UI/inference responsiveness under a controlled workload; it does not substitute for a multi-day Home Assistant deployment or a real Raspberry Pi measurement.
+
+
+## Current-stack hardening after Stage 13 v2
+
+A later review on the Stage-16-v2 stack found a new F22 regression introduced after the original Stage-17 work. Stage 13 v2 added fixed-future confidence/promotion metrics after PR #76, and its status decorator still loaded the complete Candidate pair edge on every request:
+
+`_decorate_summary -> _pair_rows -> EvaluationEpochJournal.ensure/final_report`.
+
+That meant the old `_fast_metrics` path was bounded, while the newer authoritative promotion metric could again grow with all retained Candidate history.
+
+Stage-17 contract v2 closes that gap without changing evidence semantics.
+
+### Selection evidence
+
+Before a fixed evaluation epoch exists, Stage 13 needs only the exact **evidence-readiness** result from the selection report. A durable per-edge revision and `confidence_selection_scan_cache` make this change-driven:
+
+- unchanged insufficient evidence returns the cached result without reading Candidate pairs;
+- a new pair increments the edge revision through an SQLite trigger;
+- only then SQLite evaluates the same episode deduplication, opportunity decay, dependency-cluster cap and separate ON/OFF effective-N rules with window functions/aggregation;
+- Python receives one aggregate row instead of materializing the entire Candidate edge;
+- once the epoch is frozen, selection history is never scanned again for that evaluation revision.
+
+The SQL work of a changed, not-yet-frozen edge can still scale with rows on disk, but it no longer creates an unbounded Python working set and it never repeats on unchanged UI/status polls.
+
+The first status after upgrading an old edge may perform one exact source scan at revision 0. No startup migration scans all edges.
+
+### Fixed future holdout
+
+The final report no longer loads screening/automation history. Its source query is constrained to:
+
+- the exact parent/child generation edge;
+- rows after `selection_cutoff_ts`;
+- `calibration_eligible=1`;
+- declared Stage-13 independent evidence kinds;
+- non-null calibration outcome and paired correctness.
+
+A durable `calibration_revision` invalidates the collecting report only when relevant independent evidence changes. Ordinary automation transitions do not invalidate this cache.
+
+Once `final_end_ts` is frozen, ordinary screening/automation history no longer invalidates the report. A new independent calibration fact still advances the calibration revision because it may have been attached retroactively to an episode whose `outcome_ts` is inside the locked window. In that case HomeMind recomputes only the bounded fixed-future window and then caches it again. This preserves the pre-optimization semantics instead of assuming that label-arrival time equals outcome time.
+
+The legacy prefix search for the first sufficient final window now starts at `final_target`; a shorter prefix cannot satisfy the declared minimum, so the skipped prefixes were provably unnecessary.
+
+### Probability calibration
+
+`ProbabilityCalibrationJournal.report()` previously reloaded every probability episode in a scope. It now has a durable scope revision and report cache. On a cache miss, SQLite computes the same decay weights, dependency-cluster cap, Brier score and reliability bins and returns at most the configured bin count (10 by default) to Python. The supported `record()` path increments the revision exactly once for a new stable episode id; duplicate records remain idempotent. Unchanged UI/report reads do not scan calibration history. Raw episodes remain retained for audit.
+
+### Additive persistence in v2
+
+Additional derived-only state:
+
+- `confidence_pair_revisions`;
+- `confidence_selection_scan_cache`;
+- `confidence_final_report_cache`;
+- `confidence_probability_revisions`;
+- `confidence_probability_report_cache`;
+- index `idx_confidence_pairs_final_window`;
+- two SQLite triggers that increment pair-edge revisions on insert/update.
+
+All of these are replaceable accelerators. Raw Candidate pairs, probability episodes, TrialRecords, manual feedback, Teach labels, EpisodeEvaluator rows and rollback state remain authoritative and are not deleted or reinterpreted.
+
+The pair index/triggers are installed lazily only after the Candidate pair schema, including Stage-13 calibration columns, exists. Probability calibration can therefore initialize before Candidate composition without imposing module-order coupling.
+
+### v2 acceptance invariants
+
+New tests require that:
+
+- streamed selection readiness matches the legacy dependency-adjusted result and materializes one aggregate row in Python;
+- an unchanged insufficient selection result does not rescan Candidate pairs;
+- optimized fixed-future output exactly matches the legacy report on the same rows;
+- twenty warm final-status polls perform zero Candidate-pair full scans;
+- growth of unrelated automation-transition history does not invalidate the final report;
+- a locked final holdout ignores unrelated history growth, while a later independent label causes at most one bounded fixed-window recomputation before warm reads are cached again;
+- the durable cache survives a new journal/runtime instance;
+- streamed probability calibration is numerically equivalent to the legacy calculation, materializes at most the reliability-bin count, and unchanged reports do not rescan source episodes.
+
+The original Stage-17 equivalence tests for fast metrics, batched Teach scoring, summary cursors, active-anchor retention and queue backpressure remain unchanged.
+
+### Benchmark extension
+
+`tools/benchmark_history_costs.py` now also measures the current Stage-13 fixed-future path. It reports:
+
+- legacy rows materialized by full `_pair_rows`;
+- optimized cold query count and maximum materialized final batch;
+- twenty warm status polls and the number of Candidate-pair full scans;
+- exact/small-floating-noise same-data metric equality;
+- streamed selection effective-N/readiness;
+- probability-calibration legacy-vs-SQL aggregation plus warm-cache scans.
+
+The benchmark still reports its actual platform and only labels results as Raspberry Pi if `/proc/device-tree/model` identifies Pi hardware. Hosted CI/desktop timings are scaling evidence, not Raspberry Pi measurements.
+
+
+### Current-stack v2 CI measurement
+
+Measured code head before this documentation-only update: `5dae6bc03a5fcb466cb13879bb42783c4573dbf7`.
+
+Workflow: `Validate HomeMind`, run `35391737737`, Python 3.11 benchmark job.
+
+Environment reported by the benchmark:
+
+- GitHub-hosted Ubuntu 24.04 / Azure x86_64;
+- Linux `6.17.0-1022-azure`;
+- Python `3.11.16`;
+- 4 logical CPUs;
+- `raspberry_pi=false`;
+- measurement scope: **non-Pi host; do not quote as Raspberry Pi performance**.
+
+Synthetic dataset:
+
+- 500 Candidate pairs;
+- 4 decision rows per pair;
+- 48 Teach sensors;
+- 12 active Teach labels;
+- 500 independent probability-calibration episodes.
+
+Current Stage-13 fixed-future path, same-data comparison:
+
+- legacy full-pair load: 512 Python rows, 2.733 ms;
+- legacy report calculation: 1.640 ms;
+- optimized cold final report: 12 Python rows max, 4 SELECTs, 0.591 ms;
+- optimized warm 20 polls: **0 Candidate-pair full scans**, 0.709 ms total, 0.0446 ms p95;
+- streamed selection: 1 Python aggregate row, 1 SELECT, 3.635 ms;
+- selection effective-N: legacy = optimized = 118.6476199418696;
+- fixed-future reports equal: true;
+- warm report equal: true.
+
+Probability calibration, same-data comparison:
+
+- legacy: 500 Python rows, 1 source SELECT, 1.108 ms load + 2.015 ms report;
+- optimized cold: at most 9 aggregate/bin rows materialized, 3 SELECTs, 4.474 ms;
+- optimized warm 20 polls: **0 source-history scans**, 0.470 ms total, 0.0344 ms p95;
+- maximum numerical difference: `1.4210854715202004e-14`;
+- report structure equal: true.
+
+Existing fast metric comparison on the same run:
+
+- legacy: 1004 SELECTs, 10.687 ms;
+- optimized cold: 8 SELECTs, 7.650 ms;
+- optimized warm 20 polls: 100 SELECTs total, 1.972 ms total, 0.119 ms p95;
+- maximum numerical difference: `5.3290705182007514e-14`.
+
+Teach scoring:
+
+- legacy: 96 SELECTs, 7.782 ms;
+- optimized: 2 SELECTs, 8.250 ms;
+- maximum score difference: 0.0;
+- maximum materialized rows in this smoke: 288.
+
+Concurrent synthetic load:
+
+- inference calls: 2800;
+- inference p50: 0.0482 ms;
+- inference p95: 0.0584 ms;
+- inference max: 0.109 ms;
+- status polls: 112;
+- status p95: 3.777 ms;
+- status max: 6.840 ms;
+- peak process RSS: 28.82 MB;
+- RSS increase from benchmark start: 5.58 MB.
+
+These values demonstrate query/memory scaling and same-data equivalence on the CI host only. The proposed Pi budgets remain acceptance targets until the benchmark is executed on the target Home Assistant Raspberry Pi hardware.
