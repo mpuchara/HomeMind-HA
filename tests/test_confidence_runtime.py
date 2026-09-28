@@ -29,7 +29,7 @@ class _Engine:
             'validation_accuracy': .75,
             'validation_lower_bound': .55,
             'validation_samples': 12,
-            'home_forecast': {'occupancy_in_3s': .70, 'uncertainty': .18},
+            'context_meta': {'home_forecast': {'occupancy_in_3s': .70, 'uncertainty': .18}},
         }
 
     def status(self):
