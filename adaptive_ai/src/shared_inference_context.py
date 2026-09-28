@@ -90,8 +90,17 @@ class SharedInferenceTemporal:
         if cached is not _MISSING:
             self.previous_hits += 1
             return cached
-        previous = getattr(self._temporal, "previous", None)
-        value = previous(entity_id, float(at_ts)) if callable(previous) else None
+
+        # Live Engine.temporal_history is append-only TemporalHistory for the duration of
+        # one process_target snapshot. Ridge already materializes this entity's deque via
+        # samples_for(); scan that same immutable tuple instead of asking TemporalHistory
+        # to look up the deque again for every MLP lag.
+        target = float(at_ts)
+        value = None
+        for ts, state in reversed(self.samples_for(entity_id)):
+            if float(ts) <= target:
+                value = state
+                break
         self._previous_cache[key] = value
         self.previous_misses += 1
         return value
