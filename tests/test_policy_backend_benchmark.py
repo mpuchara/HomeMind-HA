@@ -119,6 +119,21 @@ class BenchmarkContractTests(unittest.TestCase):
         self.assertGreater(head.counts[1], 0)
         self.assertLess(head.reward_sums[1], 0)
 
+    def test_benchmark_keeps_distinct_policy_horizons(self):
+        backend = _FullRidgeBenchmarkBackend(
+            actions=[0, 1], feature_indices=[0, 1], horizons=[1, 5]
+        )
+        one = self.episode(1, kind='bandit', executed=1, reward=1.0)
+        one['horizon'] = 1
+        five = self.episode(2, kind='bandit', executed=0, reward=-1.0)
+        five['horizon'] = 5
+        _learn_episode(backend, one)
+        _learn_episode(backend, five)
+        self.assertGreater(backend.backend.heads[1].counts[1], 0)
+        self.assertEqual(backend.backend.heads[1].counts[0], 0)
+        self.assertGreater(backend.backend.heads[5].counts[0], 0)
+        self.assertEqual(backend.backend.heads[5].counts[1], 0)
+
     def test_automation_replay_is_not_scored_as_demonstration_quality(self):
         backend = _FullRidgeBenchmarkBackend(actions=[0, 1], feature_indices=[0, 1, 2, 3])
         rows = [self.episode(i, source='automation') for i in range(6)]
