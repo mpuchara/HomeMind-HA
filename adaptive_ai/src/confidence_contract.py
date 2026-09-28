@@ -507,7 +507,8 @@ def record_independent_candidate_label(store, *, parent_generation_id, child_gen
             return False
         row = dict(row)
         existing = row.get("calibration_source_id")
-        if existing and str(existing) != str(source_id):
+        if existing:
+            # Immutable/idempotent: the first independent calibration fact wins.
             return False
         parent_ok = int((1.0 if float(row["parent_prediction"]) >= .5 else 0.0) == desired)
         child_ok = int((1.0 if float(row["child_prediction"]) >= .5 else 0.0) == desired)
