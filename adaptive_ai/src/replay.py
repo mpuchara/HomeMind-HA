@@ -615,7 +615,85 @@ class SQLiteTemporalTracker:
         for row in sorted(self._home_window_rows, key=self._home_causal_order):
             event_ts = float(row["ts"])
             received_ts = self._availability_time(row)
-            if event_ts > float(ts) or received_ts > float(ts):
+            if event_ts > ts or received_ts > ts:
+                continue
+            item = self._home_row_fingerprint(row)
+            digest.update(repr(("window", item)).encode("utf-8"))
+            event_watermark = max(event_watermark, event_ts)
+            received_watermark = max(received_watermark, received_ts)
+
+        reliability = getattr(self.context, "semantic_reliability", None)
+        reliability_revision = int(getattr(reliability, "revision", 0) or 0)
+        topology_revision = int(getattr(self.context, "registry_revision", 0) or 0)
+        return (
+            "historical_home_context_v2_causal_receive",
+            self.context_cache_contract,
+            type(self).__name__,
+            ts,
+            event_watermark,
+            received_watermark,
+            topology_revision,
+            reliability_revision,
+            self._home_checkpoint_revision,
+            int(RoomBeliefModel.VERSION),
+            int(getattr(RoomBeliefModel, "TIME_CONTRACT_VERSION", 1) or 1),
+            int(AdaptivePresenceModel.VERSION),
+            tuple(self.home_entities),
+            digest.hexdigest(),
+        )
+
+    def _render_home_cache(self, ts):
+        """Render the exact 30-second causal Room Belief view from cached rows.
+
+        Event time controls evidence freshness. Receive time controls when evidence may
+        affect movement/transition hypotheses. A late packet therefore cannot leak into
+        an as-of replay before it was locally available.
+        """
+        ts = float(ts)
+        view = self.home_view
+        self._metrics["home_rebuilds"] += 1
+        cache_key = self._historical_context_cache_key(ts)
+        if cache_key is not None:
+            snapshot = self.home_context_cache.get(cache_key)
+            if snapshot is not None:
+                snapshot.restore(view)
+                self.history.home_context = view
+                self._metrics["home_context_cache_hits"] += 1
+                return
+            self._metrics["home_context_cache_misses"] += 1
+
+        self._metrics["home_render_executes"] += 1
+        view.reset()
+        cutoff = ts - 30.0
+        ids = self.home_entities
+        seeded_areas = set()
+
+        for eid in ids:
+            row = self._home_seed_rows.get(eid)
+            if row is not None:
+                event_ts = float(row["ts"])
+                received_ts = self._availability_time(row)
+                if event_ts <= cutoff and received_ts <= cutoff:
+                    st = archived_state(row)
+                    area = self.context.area_for(eid)
+                    view.home.observe(
+                        eid, area, self.context.sensor_probability(eid, st),
+                        received_ts, learn=False,
+                        evidence=self.context.evidence_metadata(eid),
+                        event_ts=event_ts, received_ts=received_ts,
+                    )
+                    if area:
+                        seeded_areas.add(area)
+            TRAINING_BUDGET.checkpoint("temporal_home_seed")
+
+        view.home.reset_movement_state()
+        for area in sorted(seeded_areas):
+            view.observe_adaptive(area, cutoff)
+
+        for row in sorted(self._home_window_rows, key=self._home_causal_order):
+            event_ts = float(row["ts"])
+            received_ts = self._availability_time(row)
+            if event_ts > ts or received_ts > ts:
                 continue
             if event_ts <= cutoff and received_ts <= cutoff:
                 continue
@@ -628,50 +706,6 @@ class SQLiteTemporalTracker:
                 event_ts=event_ts, received_ts=received_ts,
             )
             view.observe_adaptive(area, received_ts)
-            TRAINING_BUDGET.checkpoint("temporal_home_event")
-
-        self.history.home_context = view
-                self._metrics["home_context_cache_hits"] += 1
-                return
-            self._metrics["home_context_cache_misses"] += 1
-
-        self._metrics["home_render_executes"] += 1
-        view.reset()
-        cutoff = float(ts) - 30.0
-        ids = self.home_entities
-        seeded_areas = set()
-
-        for eid in ids:
-            row = self._home_seed_rows.get(eid)
-            if row is not None:
-                st = archived_state(row)
-                area = self.context.area_for(eid)
-                event_ts = float(row["ts"])
-                received_ts = self._availability_time(row)
-                view.home.observe(
-                    eid, area, self.context.sensor_probability(eid, st),
-                    received_ts, learn=False, evidence=self.context.evidence_metadata(eid),
-                    event_ts=event_ts, received_ts=received_ts,
-                )
-                if area:
-                    seeded_areas.add(area)
-            TRAINING_BUDGET.checkpoint("temporal_home_seed")
-
-        view.home.reset_movement_state()
-        for area in sorted(seeded_areas):
-            view.observe_adaptive(area, cutoff)
-
-        for row in self._home_window_rows:
-            if float(row["ts"]) <= cutoff or float(row["ts"]) > float(ts):
-                continue
-            eid = row["entity_id"]
-            area = self.context.area_for(eid)
-            view.home.observe(
-                eid, area,
-                self.context.sensor_probability(eid, archived_state(row)), row["ts"],
-                learn=False, evidence=self.context.evidence_metadata(eid),
-            )
-            view.observe_adaptive(area, row["ts"])
             TRAINING_BUDGET.checkpoint("temporal_home_event")
 
         self.history.home_context = view
