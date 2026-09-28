@@ -369,29 +369,69 @@ class Engine(threading.Thread):
             "heavy_job": HEAVY_JOBS.owner,
         }
 
-    def update_entity_registry(self, entries):
-        registry = {e.get("entity_id"): e for e in entries if isinstance(e, dict) and e.get("entity_id")}
+    @staticmethod
+    def _registry_payload_snapshot(entries):
+        return [dict(item) if isinstance(item, dict) else item for item in (entries or [])]
+
+    def _registry_update(self, kind, entries):
+        started = time.perf_counter()
+        attr = f"_{kind}_registry_raw"
+        payload = self._registry_payload_snapshot(entries)
         with self.lock:
-            changed = registry != self.entity_registry
-            self.context.configure(self.state_map, entities=registry)
+            previous = getattr(self, attr, None)
+            if previous is not None and previous == payload:
+                self.registry_refresh_stats["duplicates"] += 1
+                return False
+            setattr(self, attr, payload)
+
+            if kind == "entity":
+                registry = {
+                    e.get("entity_id"): e
+                    for e in payload
+                    if isinstance(e, dict) and e.get("entity_id")
+                }
+                self.context.configure(self.state_map, entities=registry)
+            elif kind == "device":
+                self.context.configure(self.state_map, devices=payload)
+            elif kind == "area":
+                self.context.configure(self.state_map, areas=payload)
+            else:
+                raise ValueError(f"unsupported registry kind: {kind}")
+
             self.entity_registry = self.context.resolved_registry()
-            if changed:
-                # Context membership depends on device_id. Recreate in-memory policies so
-                # a newly detected controllable device cannot leave sibling entities in
-                # an old schema. Stored weights remain available for the history rebuild.
-                self.models.clear()
-        STORE.event(None, "info", "entity_registry", f"Loaded {len(registry)} Entity Registry entries for cleaner agent discovery", None)
+            self.registry_refresh_stats[f"{kind}_updates"] += 1
+
+            # Registry topology changes invalidate dependency routing, not trained model
+            # weights. Keeping policy objects warm avoids a burst of SQLite reloads after
+            # HA registry refresh/reconnect.
+            self.agent_index_at = 0.0
+            self.agent_index_revision = -1
+
+        elapsed_ms = (time.perf_counter() - started) * 1000.0
+        with self.lock:
+            self.registry_refresh_stats["last_duration_ms"] = elapsed_ms
+            self.registry_refresh_stats["max_duration_ms"] = max(
+                float(self.registry_refresh_stats.get("max_duration_ms") or 0.0),
+                elapsed_ms,
+            )
+        TELEMETRY.observe(f"registry_{kind}", elapsed_ms)
+        return True
+
+    def update_entity_registry(self, entries):
+        changed = self._registry_update("entity", entries)
+        if changed:
+            STORE.event(
+                None, "info", "entity_registry",
+                f"Loaded {len(self.entity_registry)} Entity Registry entries for cleaner agent discovery",
+                None,
+            )
+        return changed
 
     def update_device_registry(self, entries):
-        with self.lock:
-            self.context.configure(self.state_map, devices=entries)
-            self.entity_registry = self.context.resolved_registry()
-            self.models.clear()
+        return self._registry_update("device", entries)
 
     def update_area_registry(self, entries):
-        with self.lock:
-            self.context.configure(self.state_map, areas=entries)
-            self.models.clear()
+        return self._registry_update("area", entries)
 
     def registry_entry(self, entity_id):
         with self.lock:
