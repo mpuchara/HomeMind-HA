@@ -65,6 +65,12 @@ class SharedInferenceTemporal:
         self.samples = getattr(temporal, "samples", {})
         self._samples_cache = {}
         self._previous_cache = {}
+        # Written only by the v12 Ridge observation contract after it applies the exact
+        # event-time + received-time eligibility rule. MLP may consume overlapping reads,
+        # but never populates this cache itself.
+        self._causal_asof_cache = {}
+        self.causal_asof_hits = 0
+        self.causal_asof_misses = 0
         self._last_change_cache = {}
         self.sample_hits = 0
         self.sample_misses = 0
@@ -84,12 +90,36 @@ class SharedInferenceTemporal:
         self.sample_misses += 1
         return rows
 
+    def cache_causal_asof(self, entity_id, query_ts, knowledge_ts, result):
+        if abs(float(knowledge_ts) - self.timestamp) > 1e-9:
+            return False
+        key = (str(entity_id), float(query_ts))
+        self._causal_asof_cache[key] = result
+        return True
+
+    def causal_asof(self, entity_id, query_ts, knowledge_ts=None):
+        if knowledge_ts is not None and abs(float(knowledge_ts) - self.timestamp) > 1e-9:
+            self.causal_asof_misses += 1
+            return False, None
+        key = (str(entity_id), float(query_ts))
+        if key in self._causal_asof_cache:
+            self.causal_asof_hits += 1
+            return True, self._causal_asof_cache[key]
+        self.causal_asof_misses += 1
+        return False, None
+
     def previous(self, entity_id, at_ts):
         key = (str(entity_id), float(at_ts))
         cached = self._previous_cache.get(key, _MISSING)
         if cached is not _MISSING:
             self.previous_hits += 1
             return cached
+        causal_hit, causal = self.causal_asof(entity_id, at_ts)
+        if causal_hit:
+            self.previous_hits += 1
+            value = causal[1] if causal is not None else None
+            self._previous_cache[key] = value
+            return value
 
         # Live Engine.temporal_history is append-only TemporalHistory for the duration of
         # one process_target snapshot. Ridge already materializes this entity's deque via
@@ -140,6 +170,8 @@ class SharedInferenceTemporal:
             "sample_misses": self.sample_misses,
             "previous_hits": self.previous_hits,
             "previous_misses": self.previous_misses,
+            "causal_asof_hits": self.causal_asof_hits,
+            "causal_asof_misses": self.causal_asof_misses,
             "last_change_hits": self.last_change_hits,
             "last_change_misses": self.last_change_misses,
             "forecast_hits": int(getattr(home, "forecast_hits", 0) or 0),
