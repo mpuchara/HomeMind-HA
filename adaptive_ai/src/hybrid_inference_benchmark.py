@@ -175,12 +175,18 @@ def run(iterations=80,entity_count=8):
         candidate_neural=BenchmarkNeural(candidate_engine,candidate_mlp,mask,home,sink,prefix="candidate_")
         candidate_engine.tiny_mlp_shadow=candidate_neural; candidate_service=HybridPolicyService(candidate_engine)
         totals=[]; f0=home.calls; g0=temporal.samples.get_calls; p0=temporal.previous_calls; c0=temporal.last_change_calls
+        causal_hits=0; causal_misses=0; shared_previous_hits=0; shared_previous_misses=0
         for _ in range(iterations):
             started=time.perf_counter_ns()
             live_temporal=shared_inference_temporal(temporal,ts,home_provider=home)
             live_ridge=_ridge(live,states,live_temporal,ts,sink)
             if live_hybrid:
                 _hybrid(live_service,live,states,live_temporal,ts,live_ridge,sink)
+            live_diag=live_temporal.diagnostics()
+            causal_hits += int(live_diag.get("causal_asof_hits") or 0)
+            causal_misses += int(live_diag.get("causal_asof_misses") or 0)
+            shared_previous_hits += int(live_diag.get("previous_hits") or 0)
+            shared_previous_misses += int(live_diag.get("previous_misses") or 0)
             if candidate_ridge:
                 # Candidate is off the Live critical path since ETAP 2. Model its worker
                 # as a separate per-decision context: it may not reuse Live mutable cache,
@@ -189,12 +195,21 @@ def run(iterations=80,entity_count=8):
                 cand_ridge=_ridge(candidate,states,candidate_temporal,ts,sink,prefix="candidate_")
                 if candidate_hybrid:
                     _hybrid(candidate_service,candidate,states,candidate_temporal,ts,cand_ridge,sink,prefix="candidate_")
+                candidate_diag=candidate_temporal.diagnostics()
+                causal_hits += int(candidate_diag.get("causal_asof_hits") or 0)
+                causal_misses += int(candidate_diag.get("causal_asof_misses") or 0)
+                shared_previous_hits += int(candidate_diag.get("previous_hits") or 0)
+                shared_previous_misses += int(candidate_diag.get("previous_misses") or 0)
             totals.append((time.perf_counter_ns()-started)/1000.0)
         out[name]={"total":summary(totals),"stages":sink.snapshot(),
             "work":{"forecast_calls_per_inference":(home.calls-f0)/iterations,
                     "history_map_gets_per_inference":(temporal.samples.get_calls-g0)/iterations,
                     "temporal_previous_calls_per_inference":(temporal.previous_calls-p0)/iterations,
                     "last_change_calls_per_inference":(temporal.last_change_calls-c0)/iterations,
+                    "causal_asof_hits_per_inference":causal_hits/iterations,
+                    "causal_asof_misses_per_inference":causal_misses/iterations,
+                    "shared_previous_hits_per_inference":shared_previous_hits/iterations,
+                    "shared_previous_misses_per_inference":shared_previous_misses/iterations,
                     "model_deserialize_calls_per_inference":0.0},
             "guard_metrics":engine.inference_hot_path_metrics.snapshot()["stages"]}
     forecasts=[out[name]["work"]["forecast_calls_per_inference"] for name in SCENARIOS]
@@ -207,7 +222,12 @@ def run(iterations=80,entity_count=8):
         abs(history_gets[1]-history_gets[0])<1e-9
         and abs(history_gets[3]-history_gets[2])<1e-9
     )
-    pass_work=forecast_ok and history_reuse_ok
+    asof_hits=[out[name]["work"]["causal_asof_hits_per_inference"] for name in SCENARIOS]
+    causal_reuse_ok=(
+        asof_hits[1] > asof_hits[0]
+        and asof_hits[3] > asof_hits[2]
+    )
+    pass_work=forecast_ok and history_reuse_ok and causal_reuse_ok
     a=out["A_ridge_only"]["total"]["p95_us"]; b=out["B_ridge_plus_tiny_mlp_hybrid"]["total"]["p95_us"]
     c=out["C_hybrid_plus_ridge_candidate"]["total"]["p95_us"]; d=out["D_hybrid_plus_hybrid_candidate"]["total"]["p95_us"]
     return {"contract":"hybrid_inference_shared_context_v2",
@@ -225,6 +245,8 @@ def run(iterations=80,entity_count=8):
                 "candidate_hybrid_minus_candidate_ridge":history_gets[3]-history_gets[2],
             },
             "expected_mlp_additional_history_map_gets":0.0,
+            "causal_asof_hits_per_inference":dict(zip(SCENARIOS,asof_hits)),
+            "hybrid_must_reuse_ridge_causal_asof":True,
             "no_model_deserialize_per_inference":True,"timing_thresholds_are_not_ci_contract":True},
         "pass":bool(pass_work)}
 
