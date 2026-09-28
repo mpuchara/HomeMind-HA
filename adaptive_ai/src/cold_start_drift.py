@@ -480,6 +480,9 @@ class AdaptationService:
                 "stage13_final_evaluation_required": True,
                 "stage13_confidence_contract_version": CONFIDENCE_CONTRACT_VERSION,
                 "optional_answers_do_not_bypass_promotion_gates": True,
+                "stage13_final_evaluation_required": True,
+                "stage13_confidence_contract_version": CONFIDENCE_CONTRACT_VERSION,
+                "optional_answers_do_not_bypass_promotion_gates": True,
             },
             "decay": decay_contract(),
         }
