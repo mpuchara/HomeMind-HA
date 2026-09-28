@@ -21,6 +21,7 @@ from telemetry import TELEMETRY, HEAVY_JOBS, RUNTIME_DEBUG
 from fast_runtime import fast_light_on_assist_action, is_fast_target, stabilize_fast_light_power_decision
 from training_budget import TRAINING_BUDGET
 from inference_hot_path_metrics import InferenceHotPathMetrics, observe_elapsed
+from shared_inference_context import shared_inference_temporal
 
 class HAEventStream(threading.Thread):
     """Near-real-time state_changed stream plus Entity Registry metadata.
@@ -1145,13 +1146,24 @@ class Engine(threading.Thread):
             )
             target_revision = snapshot_revisions.get(agent['target_entity'], 0)
         min_inference_gap = max(0.05, float(OPTIONS.get("realtime_inference_debounce_ms", 75)) / 1000.0)
-        if not changed_entities and now_ts() - rt["last_inference_ts"] < min_inference_gap:
+        inference_ts = now_ts()
+        if not changed_entities and inference_ts - rt["last_inference_ts"] < min_inference_gap:
             return
-        rt["last_inference_ts"] = now_ts()
+        rt["last_inference_ts"] = inference_ts
 
         policy = self.policy(agent)
+        shared_temporal = shared_inference_temporal(
+            self.temporal_history,
+            inference_ts,
+            home_provider=(
+                getattr(self.temporal_history, "home_context", None)
+                or getattr(policy, "context_engine", None)
+            ),
+        )
         stage_started_ns = time.perf_counter_ns()
-        features, labels, context_meta = policy.features(state_map, self.temporal_history, at_ts=now_ts())
+        features, labels, context_meta = policy.features(
+            state_map, shared_temporal, at_ts=inference_ts
+        )
         observe_elapsed(self, "ridge_feature_construction", stage_started_ns)
         context_meta.update(policy.selection_meta or {})
         automation_scan_marker = getattr(AUTOMATION_KNOWLEDGE, "last_scan", None)
@@ -1197,14 +1209,15 @@ class Engine(threading.Thread):
                     agent,
                     policy,
                     state_map,
-                    self.temporal_history,
-                    timestamp=now_ts(),
+                    shared_temporal,
+                    timestamp=inference_ts,
                     ridge_chosen=ridge_chosen,
                     ridge_confidence=ridge_confidence,
                     ridge_arms=arms,
                     ridge_horizon=ridge_horizon,
                     ridge_support=ridge_support,
                     ridge_novelty=ridge_novelty,
+                    home_provider=shared_temporal.home_context,
                 )
             except Exception as exc:
                 hybrid_result = {
@@ -1240,6 +1253,8 @@ class Engine(threading.Thread):
                 "applied": False,
                 "reason": "hybrid_service_unavailable",
             }
+
+        rt["shared_inference_context"] = shared_temporal.diagnostics()
 
         composer = self.decision_composer
         preference = None
