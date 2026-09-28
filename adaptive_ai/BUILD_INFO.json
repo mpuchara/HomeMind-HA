@@ -1,9 +1,16 @@
 {
-  "version": "0.14.101",
+  "version": "0.14.102",
   "release_date": "2026-09-28",
-  "base_version": "0.14.100",
-  "base_commit": "b60d4015132bc0a7911ccd80476ade584415c62a",
-  "release_status": "needs-retrain-candidate-checksum-recovery",
+  "base_version": "0.14.101",
+  "base_commit": "4036b8d2727112a977c9696f60827372ca760b8c",
+  "release_status": "candidate-shadow-deferred-qos-hotfix",
+  "candidate_shadow_qos_014102": {
+    "regression_source": "0.14.100 deferred Candidate Shadow queue composed under 60 s Raspberry Pi maintenance gate",
+    "deferred_shadow_drain": "runs on every Candidate worker maintenance hook before periodic housekeeping admission",
+    "periodic_housekeeping": "remains throttled to 60 s and may defer during fresh realtime activity",
+    "queue_contract": "bounded_latest_per_root_max_four_per_worker_pass",
+    "live_hot_path": "unchanged_non_blocking_candidate_enqueue"
+  },
   "pi4_profile_contract": "pi_training_profile_v2",
   "pi4_release_gate_contract": "pi4_release_gate_v1",
   "pi4_real_hardware_required": true,
