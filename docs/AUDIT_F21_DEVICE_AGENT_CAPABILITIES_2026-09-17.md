@@ -6,9 +6,9 @@ Date: 2026-09-17
 
 The shipped runtime remains:
 
-`run.sh -> trial_queue_main.py -> preference_queue_main.py -> fast_queue_main.py -> queue_main.py`
+`run.sh -> trial_queue_main.py -> preference_queue_main.py -> fast_queue_main.py -> queue_main.py -> main.py`
 
-`ActionIntent -> Executor` is still the only physical Home Assistant command path. Stage 15 adds a registry-backed device identity and resource arbiter inside Executor; `device_agents.py` has no HA import and cannot send a service.
+`ActionIntent -> Executor` is still the only physical Home Assistant command path. Stage 15 v2 adds a registry-backed device identity and resource arbiter inside Executor; `device_agents.py` has no HA import and cannot send a service.
 
 ## Why this is needed
 
@@ -86,7 +86,7 @@ Resource keys can include:
 
 Executor's existing `target_lock(entity)` API is preserved for callers, but it normalizes the entity to the logical device resource. Therefore training/promote/control paths that already use this lock serialize sibling properties/entities.
 
-Immediately before physical dispatch, Executor creates an additive durable **in-flight reservation** in `device_resource_state`. It stores owner agent/intent and `lease_until`; this is the crash/restart safety lease. A second owner cannot enter while that lease is active.
+Immediately before physical dispatch, Executor creates an additive durable **in-flight reservation** in `device_resource_state`. It stores owner agent/intent and `lease_until`; this is the crash/restart safety lease. Version 2 repeats manual-hold, Control-owner, lease and completed-action dwell checks atomically under the full canonical resource lock set. `legal_action_mask()` is therefore advisory/policy-facing, while `reserve_dispatch()` is the final TOCTOU guard.
 
 After a successful HA service call the in-flight lease is cleared immediately. The same row retains `last_dispatch_ts`, `last_dispatch_agent_id` and the last action. That separate completed-action record enforces **cross-agent minimum dwell**: a brightness agent cannot immediately fight a power agent on the same lamp. The original same-agent cooldown/pending rules in Executor remain authoritative for repeated commands by the same agent, avoiding duplicate cooldown layers.
 
@@ -110,7 +110,7 @@ Manual priority is shared across conflicting agents. An explicit manual hold rec
 
 Physical threshold control is still not enabled by Stage 15. The new contract only establishes ownership semantics for the later adapter required by Stage 10.
 
-`sensor-config:<logical_device_id>` has exactly one owner service: `perception_service`. Multiple consumers (for example presence belief and lighting) can register against the same lease, but they do not become independent owners of the radar threshold. The lease also has a configuration snapshot/TTL, matching the future restore requirement.
+`sensor-config:<logical_device_id>` has exactly one owner service: `perception_service`. Multiple consumers (for example presence belief and lighting) can register against the same durable lease, but they do not become independent owners of the radar threshold. The first active snapshot is immutable for that lease generation; expired leases discard stale consumers/snapshots, and releasing the final consumer makes the stored restore snapshot actionable. Stage-10 `HardwareThresholdAdapterContract` explicitly declares its local lease as a planning token only; authoritative ownership/TTL/snapshot comes from `DeviceAgentService.perception_resource_leases`.
 
 ## HVAC / covers
 
@@ -132,7 +132,7 @@ Stage 15 adds only:
 - `agents.device_property`;
 - `agents.device_contract_version`;
 - `device_explicit_mappings`;
-- `device_resource_state` (including `last_dispatch_agent_id` for completed cross-agent dwell);
+- `device_resource_state` (including `last_dispatch_agent_id` for completed cross-agent dwell and additive `control_owner_agent_id` / `control_acquired_ts` for durable shared Control ownership);
 - `perception_resource_leases`.
 
 No saved policy vector, label, generation, TrialRecord or rollback snapshot is reinterpreted.
@@ -167,3 +167,44 @@ The existing Executor/Experiments/provenance/packaged-startup suites also remain
 - The process-model backend for HVAC/covers is a contract only. No MPC/model-based RL controller is installed here.
 - Existing entity-level Home Assistant automation handoff journals remain unchanged for rollback compatibility. New Control acquisition is device-aware, while a future migration can consolidate those journal keys once enough production restart data exists.
 - Explicit mappings are operator configuration; Stage 15 does not infer physical identity from names, topology guesses or behavioral correlation.
+
+## v2 hardening on the current runtime stack
+
+The original Stage-15 implementation covered the requested identity/capability model but current-stack review exposed two concurrency gaps and one future-adapter integration gap:
+
+1. `legal_action_mask()` checked cross-agent dwell before dispatch, but the final `reserve_dispatch()` did not repeat that check atomically. Two different devices sharing a group/zone could therefore race between screening and reservation.
+2. `take_control()` ran before the HTTP handler persisted `mode=control`. Two simultaneous transitions on different devices in one shared group/zone could both observe the peer as Shadow.
+3. Stage 10 and Stage 15 both described threshold leases, but the future adapter contract did not state which lease is authoritative.
+
+Contract v2 fixes these without changing the physical boundary:
+
+- `reserve_dispatch()` rechecks manual hold, durable Control owner, active lease and cross-agent dwell while holding all shared resource locks;
+- `take_control()` creates a durable pre-commit Control claim before returning to the HTTP mode commit;
+- failed handoff releases only resources newly claimed by that transition; incumbent claims survive transient errors;
+- release clears ownership only after automation handoff restoration succeeds;
+- restart reconciliation clears stale claims for non-Control agents, preserves valid owners and refuses to choose between conflicting legacy Control agents;
+- Stage-10 threshold-adapter capability now requires the durable Stage-15 perception lease before any future external physical commit.
+
+## Control ownership lifecycle
+
+`device_resource_state.control_owner_agent_id` is intentionally distinct from an in-flight command lease:
+
+- Control ownership is long-lived and spans many actions;
+- command lease exists only while one service action is in flight;
+- completed-action dwell remains a third, separate timer;
+- manual hold is independent of all three and wins over reward/confidence.
+
+This separation prevents one timing mechanism from being overloaded with incompatible semantics.
+
+## Added deterministic coverage
+
+Version 2 adds tests for:
+
+- group/zone dwell being rechecked by the final reservation rather than only the advisory mask;
+- pre-commit Control ownership while the first agent is still persisted as Shadow;
+- restart reconciliation of valid/stale Control claims;
+- active perception snapshot immutability;
+- expired perception lease generation dropping stale consumers;
+- last perception consumer release exposing restore-required state;
+- Stage-10 threshold adapter declaring DeviceAgentService as the authoritative lease owner;
+- additive migration of existing Stage-15 resource rows.
