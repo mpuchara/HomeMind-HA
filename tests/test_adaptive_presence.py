@@ -314,6 +314,15 @@ class HardwareThresholdAdapterContractTests(unittest.TestCase):
         self.assertFalse(cap['enabled'])
         self.assertFalse(cap['physical_io'])
         self.assertTrue(cap['requires_snapshot'])
+        self.assertTrue(cap['requires_authoritative_perception_lease'])
+        self.assertEqual(
+            cap['resource_ownership'],
+            'DeviceAgentService.perception_resource_leases',
+        )
+        self.assertEqual(
+            cap['local_lease_role'],
+            'planning_token_only_not_resource_ownership',
+        )
         with self.assertRaises(RuntimeError):
             adapter.acquire_lease('number.radar_threshold', {'threshold': .5}, .5, 0)
 
