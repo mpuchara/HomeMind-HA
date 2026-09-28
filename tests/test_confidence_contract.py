@@ -10,23 +10,30 @@ from confidence_contract import (
     DEFAULT_FINAL_EPISODES,
     DEFAULT_MIN_PER_ACTION,
     DEFAULT_SELECTION_EPISODES,
+    DEFAULT_FINAL_MAX_REGRESSION,
     EvaluationEpochJournal,
     ProbabilityCalibrationJournal,
     action_quality_report,
     contract_descriptor,
+    paired_future_quality_report,
     probability_calibration,
 )
 
 
-def pair(i, outcome, correct=True, confidence=.9, scope='room-a', cluster=None):
+def pair(i, outcome, correct=True, confidence=.9, scope='room-a', cluster=None,
+         parent_correct=True, eligible=True, evidence_kind='manual_user_target_change'):
     return {
         'root_agent_id': scope,
         'scope_id': scope,
         'prediction_event_id': f'ep-{i}',
         'outcome_ts': float(i * 60),
         'outcome': float(outcome),
+        'parent_correct': 1 if parent_correct else 0,
         'child_correct': 1 if correct else 0,
+        'parent_confidence': .8,
         'child_confidence': float(confidence),
+        'evidence_kind': evidence_kind,
+        'calibration_eligible': 1 if eligible else 0,
         'dependency_cluster': cluster or f'cluster-{i}',
     }
 
@@ -124,12 +131,69 @@ class FixedFutureEvaluationTests(unittest.TestCase):
         future = selection + [pair(20+i, i % 2, True) for i in range(12)]
         completed = self.epochs.final_report(epoch, future, scope_id='room-a')
         self.assertTrue(completed['sufficient_evidence'])
-        self.assertEqual(completed['status'], 'complete')
+        self.assertEqual(completed['status'], 'complete_passed')
+        self.assertTrue(completed['promotion_quality_passed'])
         locked_end = completed['final_end_ts']
         later = future + [pair(100, 0, False), pair(101, 1, False)]
         still_locked = self.epochs.final_report(self.epochs.get('g0','g1','rev-a'), later, scope_id='room-a')
         self.assertEqual(still_locked['final_end_ts'], locked_end)
         self.assertEqual(still_locked['episodes'], completed['episodes'])
+
+    def test_external_automation_transitions_do_not_complete_final_calibration(self):
+        selection = [pair(i, i % 2, True) for i in range(12)]
+        epoch = self.epochs.ensure('g0', 'g1', 'rev-a', 'diagonal_linucb:v11', selection)
+        self.assertIsNotNone(epoch)
+        external = selection + [
+            pair(20+i, i % 2, True, eligible=False, evidence_kind='external_target_transition')
+            for i in range(24)
+        ]
+        report = self.epochs.final_report(epoch, external, scope_id='room-a')
+        self.assertFalse(report['sufficient_evidence'])
+        self.assertFalse(report['promotion_quality_passed'])
+        self.assertEqual(report['status'], 'collecting_fixed_future_test')
+        self.assertIsNone(report['final_end_ts'])
+
+    def test_failed_future_quality_locks_and_later_easy_rows_cannot_heal_it(self):
+        selection = [pair(i, i % 2, True) for i in range(12)]
+        epoch = self.epochs.ensure('g0', 'g1', 'rev-a', 'diagonal_linucb:v11', selection)
+        self.assertIsNotNone(epoch)
+
+        # Parent is right on every independent user label; child misses four of twelve,
+        # including both ON and OFF contexts. Evidence is sufficient, quality is not.
+        future_rows = []
+        for i in range(12):
+            child_ok = i not in {1, 4, 7, 10}
+            future_rows.append(pair(20+i, i % 2, child_ok, parent_correct=True))
+        failed = self.epochs.final_report(epoch, selection + future_rows, scope_id='room-a')
+        self.assertTrue(failed['sufficient_evidence'])
+        self.assertFalse(failed['promotion_quality_passed'])
+        self.assertEqual(failed['status'], 'complete_failed_quality')
+        self.assertFalse(failed['paired_delta']['non_regression_passed'])
+        locked_end = failed['final_end_ts']
+        self.assertIsNotNone(locked_end)
+
+        later = selection + future_rows + [
+            pair(100+i, i % 2, True, parent_correct=True) for i in range(20)
+        ]
+        still_failed = self.epochs.final_report(
+            self.epochs.get('g0', 'g1', 'rev-a'), later, scope_id='room-a'
+        )
+        self.assertEqual(still_failed['final_end_ts'], locked_end)
+        self.assertEqual(still_failed['episodes'], failed['episodes'])
+        self.assertFalse(still_failed['promotion_quality_passed'])
+        self.assertEqual(still_failed['status'], 'complete_failed_quality')
+
+    def test_paired_future_report_requires_separate_on_off_non_regression(self):
+        rows = [pair(i, i % 2, True, parent_correct=True) for i in range(12)]
+        report = paired_future_quality_report(
+            rows, scope_id='room-a', min_total=12, min_per_action=4,
+            max_regression=DEFAULT_FINAL_MAX_REGRESSION,
+        )
+        self.assertTrue(report['sufficient_evidence'])
+        self.assertTrue(report['promotion_quality_passed'])
+        self.assertTrue(report['per_action_delta']['OFF']['non_regression_passed'])
+        self.assertTrue(report['per_action_delta']['ON']['non_regression_passed'])
+        self.assertEqual(report['evidence_contract'], 'future_manual_user_preference_labels_only')
 
     def test_backend_or_model_revision_requires_new_calibration_epoch(self):
         selection = [pair(i, i % 2, True) for i in range(12)]
@@ -156,13 +220,18 @@ class ContractParityTests(unittest.TestCase):
         self.assertEqual(descriptor['selection_min_independent_episodes'], DEFAULT_SELECTION_EPISODES)
         self.assertEqual(descriptor['final_min_independent_episodes'], DEFAULT_FINAL_EPISODES)
         self.assertEqual(descriptor['final_min_per_action'], DEFAULT_MIN_PER_ACTION)
+        self.assertEqual(descriptor['final_max_allowed_regression'], DEFAULT_FINAL_MAX_REGRESSION)
+        self.assertIn('manual_user_target_change', descriptor['final_calibration_evidence_kinds'])
         self.assertIn('backend identity', descriptor['backend_recalibration'])
+        self.assertIn('screening_only', descriptor['automation_replay'])
 
         build = json.loads((ROOT / 'adaptive_ai' / 'BUILD_INFO.json').read_text(encoding='utf-8'))
         self.assertEqual(build['confidence_contract_version'], CONTRACT_VERSION)
         self.assertEqual(build['confidence_selection_min_independent_episodes'], DEFAULT_SELECTION_EPISODES)
         self.assertEqual(build['confidence_final_min_independent_episodes'], DEFAULT_FINAL_EPISODES)
         self.assertEqual(build['confidence_final_min_per_action'], DEFAULT_MIN_PER_ACTION)
+        self.assertEqual(build['confidence_final_max_allowed_regression'], DEFAULT_FINAL_MAX_REGRESSION)
+        self.assertEqual(build['confidence_final_evidence'], 'manual_user_target_change')
 
         ui = (ROOT / 'adaptive_ai' / 'src' / 'static' / 'confidence_contract_ui.js').read_text(encoding='utf-8')
         self.assertIn('Decision strength', ui)
@@ -170,6 +239,8 @@ class ContractParityTests(unittest.TestCase):
         self.assertIn('Final empirical quality', ui)
         self.assertIn('OFF future safety', ui)
         self.assertIn('ON future safety', ui)
+        self.assertIn('Paired quality delta', ui)
+        self.assertIn('automation replay is screening only', ui)
 
         entrypoint = (ROOT / 'adaptive_ai' / 'src' / 'trial_queue_main.py').read_text(encoding='utf-8')
         runtime = (ROOT / 'adaptive_ai' / 'src' / 'runtime_composition.py').read_text(encoding='utf-8')
