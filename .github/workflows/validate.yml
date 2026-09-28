@@ -160,6 +160,7 @@ jobs:
                       prefix+'src/hybrid_policy_runtime.py',
                       prefix+'src/inference_hot_path_metrics.py',
                       prefix+'src/hybrid_inference_benchmark.py',
+                      prefix+'src/shared_inference_context.py',
                       prefix+'src/candidate_shadow_deferred.py',
                       prefix+'src/candidate_neural_shadow.py',
                       prefix+'src/tiny_mlp_benchmark.py',
