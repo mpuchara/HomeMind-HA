@@ -32,6 +32,9 @@ class HybridHotPathBaselineTests(unittest.TestCase):
             self.assertEqual(row["work"]["model_deserialize_calls_per_inference"],0.0)
             self.assertIn("p95_us",row["total"])
         self.assertEqual(self.report["contract"],"hybrid_inference_shared_context_v2")
+        reuse=self.report["stable_assertions"]["mlp_additional_history_map_gets"]
+        self.assertAlmostEqual(reuse["live_hybrid_minus_ridge"],0.0)
+        self.assertAlmostEqual(reuse["candidate_hybrid_minus_candidate_ridge"],0.0)
         self.assertTrue(self.report["pass"])
     def test_mlp_and_candidate_stages_are_explicit(self):
         s=self.report["scenarios"]
