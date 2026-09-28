@@ -4,7 +4,7 @@
   "base_version": "0.14.103",
   "base_commit": "fac45cbfe086a26b8d7866e01690f45052e6d25a",
   "release_status": "candidate-shadow-latency-telemetry-hotfix",
-  "release_validation_tests_passed": 0,
+  "release_validation_tests_passed": 1436,
   "candidate_shadow_qos_014102": {
     "regression_source": "0.14.100 deferred Candidate Shadow queue composed under 60 s Raspberry Pi maintenance gate",
     "deferred_shadow_drain": "runs on every Candidate worker maintenance hook before periodic housekeeping admission",
@@ -68,7 +68,7 @@
   "migration": "no destructive migration; existing agents, models, feedback, raw archive, historical experiences, candidate lineage, rollback and generation state preserved",
   "physical_control": "unchanged; repaired agents return to Shadow and Control still requires qualified state plus all existing guards",
   "pi4": "0.14.38 targets the long-soak Raspberry Pi failure: drift analysis is coalesced on a throttled background observer, REST /states reconciliation is delta-only after bootstrap, websocket outage fallback reconciles every 10 s, and HA core-state health is tracked separately from unrelated REST errors.",
-  "ci_status": "0.14.104 validation pending.",
+  "ci_status": "0.14.104 PR validation: 1436 Python tests passed on 3.11/3.13; compileall, JS syntax, Docker image smoke, Candidate latency/heartbeat/QoS, Correct/training QoS/HA ingress/shared context, Tiny MLP/Hybrid/Candidate, Automatic Correct, Offline-RL, stateful replay, sparse long-memory, Pi gate, product-runtime benchmark and simulators are green.",
   "training_slice_budget": "adaptive-ai-index workers call a shared CooperativeTrainingBudget; expensive temporal tracker loops yield between entities/events and finalization is no longer outside the throttle",
   "finalization_lifeline": "HEAVY_JOBS remains owned through final gc.collect(), so /api/status and /api/agents stay on lightweight lifeline reads until the worker is actually finished",
   "finalization_progress": "post-replay UI now exposes bounded stages: replay complete, policy serialization, benchmark save, qualification, checkpoint complete",
