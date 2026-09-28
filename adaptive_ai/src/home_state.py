@@ -57,6 +57,7 @@ ROLE_PARAMS = {
 class RoomBeliefModel:
     VERSION = 2
     LEGACY_VERSION = 1
+    TIME_CONTRACT_VERSION = 2
     MAX_AREAS = 128
     MAX_CONTEXTS = 2048
     MAX_HYPOTHESES = 8
@@ -86,6 +87,7 @@ class RoomBeliefModel:
         self.last_decay_ts = 0.0
         self.revision = 0
         self.migrated_from = None
+        self.time_contract_loaded = self.TIME_CONTRACT_VERSION
         self.lock = threading.RLock()
         self._load_checkpoint(raw)
 
@@ -104,6 +106,7 @@ class RoomBeliefModel:
         if version not in (self.LEGACY_VERSION, self.VERSION):
             return
         self.migrated_from = self.LEGACY_VERSION if version == self.LEGACY_VERSION else None
+        self.time_contract_loaded = int(raw.get('time_contract_version') or 1)
         for row in raw.get('graph', [])[:self.MAX_CONTEXTS]:
             try:
                 key = tuple(str(x) for x in row['context'])
@@ -180,6 +183,21 @@ class RoomBeliefModel:
             value = fallback
         return float(value)
 
+    @classmethod
+    def _event_time(cls, source, fallback):
+        return cls._source_timestamp(source, 'event_ts', fallback)
+
+    @classmethod
+    def _received_time(cls, source, fallback):
+        value = source.get('received_ts')
+        if value is None:
+            value = source.get('event_ts')
+        if value is None:
+            value = source.get('ts')
+        if value is None:
+            value = fallback
+        return float(value)
+
     def source_area(self, entity_id):
         row = self.sources.get(entity_id)
         return row.get('area') if isinstance(row, dict) else None
@@ -189,11 +207,14 @@ class RoomBeliefModel:
         return row.get('role') if isinstance(row, dict) else None
 
     def _freshness(self, source, ts):
-        sample_ts = self._source_timestamp(source, 'ts', ts)
-        if not source.get('available') or sample_ts > float(ts):
+        event_ts = self._event_time(source, ts)
+        received_ts = self._received_time(source, event_ts)
+        if (not source.get('available')
+                or event_ts > float(ts)
+                or received_ts > float(ts)):
             return 0.0
         params = self._params(source.get('role'))
-        state_since = self._source_timestamp(source, 'state_since_ts', sample_ts)
+        state_since = self._source_timestamp(source, 'state_since_ts', event_ts)
         age = max(0.0, float(ts) - state_since)
         try:
             active = float(source.get('value')) >= .5
