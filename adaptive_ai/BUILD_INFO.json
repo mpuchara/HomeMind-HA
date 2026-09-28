@@ -12,7 +12,7 @@
   "profile": "rpi4-ram-first-complete-discovery-manual-agent-selection",
   "manual_agent_training": true,
   "max_concurrent_training_jobs": 1,
-  "production_entrypoint": "run.sh -> trial_queue_main.py -> preference_queue_main.py -> fast_queue_main.py -> queue_main.py",
+  "production_entrypoint": "run.sh -> trial_queue_main.py -> preference_queue_main.py -> fast_queue_main.py -> queue_main.py -> main.py",
   "product_benchmark_contract": 2,
   "product_benchmark_seeds": [
     11,
@@ -627,7 +627,12 @@
     "completed_rebuild_mode": "shadow"
   },
   "confidence_final_max_allowed_regression": 0.03,
-  "confidence_final_evidence": "manual_user_target_change",
-  "confidence_final_gate": "fixed future independent ON/OFF preference labels + paired child-vs-parent non-regression; window locks when evidence target is reached even if quality fails",
-  "confidence_automation_replay": "screening/diagnostic only; never final calibration evidence"
+  "confidence_final_evidence": "manual_user_target_change_or_episode_evaluator_independent",
+  "confidence_final_gate": "fixed future independent ON/OFF evidence + paired child-vs-parent non-regression; window locks when evidence completes even if quality fails",
+  "confidence_automation_replay": "screening/diagnostic only; never final calibration evidence",
+  "confidence_final_evidence_kinds": [
+    "episode_evaluator_independent",
+    "independent_preference_label",
+    "manual_user_target_change"
+  ]
 }
