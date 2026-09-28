@@ -741,9 +741,12 @@ class AdaptationService:
 
     def retain_regression_anchors(self, agent_id, episode_ids, reason="pre_drift_baseline"):
         now = time.time()
+        rows = [
+            (str(episode_id), self._regression_anchor_label(episode_id))
+            for episode_id in list(episode_ids or [])[:MAX_REGRESSION_ANCHORS]
+        ]
         with self.store.lock, self.store.conn() as c:
-            for episode_id in list(episode_ids or [])[:MAX_REGRESSION_ANCHORS]:
-                label = self._regression_anchor_label(episode_id)
+            for episode_id, label in rows:
                 c.execute(
                     """INSERT INTO adaptation_regression_anchors
                        (agent_id,episode_id,reason,retained_ts,training_weight,
