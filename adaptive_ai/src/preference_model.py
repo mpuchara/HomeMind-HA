@@ -18,6 +18,12 @@ import threading
 from settings import OPTIONS
 import teaching as teaching_module
 
+# Compatibility aliases for tests/extensions that patch the historical module symbols.
+# Runtime prediction deliberately resolves through teaching_module so the final installed
+# Teaching/observation contract remains authoritative.
+distance = teaching_module.distance
+signature = teaching_module.signature
+
 
 PREFERENCE_CONTRACT_VERSION = 1
 PREFERENCE_MODEL_VERSION = 1
