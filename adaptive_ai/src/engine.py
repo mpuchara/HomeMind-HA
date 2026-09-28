@@ -439,6 +439,7 @@ class Engine(threading.Thread):
         new_state = data.get("new_state")
         if not entity_id:
             return
+        received_ts = now_ts()
         with self.lock:
             old_state = self.state_map.get(entity_id)
             if old_state == new_state:
@@ -466,12 +467,19 @@ class Engine(threading.Thread):
                 float(OPTIONS.get("training_realtime_event_priority_seconds", 0.30)),
                 reason="ha_state_changed",
             )
-            self.context.observe(entity_id, new_state, now_ts())
+            event_ts = parse_ts(
+                (new_state or {}).get("last_updated") or
+                (new_state or {}).get("last_changed")
+            ) or received_ts
+            self.context.observe(
+                entity_id, new_state, received_ts,
+                event_ts=event_ts, received_ts=received_ts,
+            )
         HA.last_ok = now_ts(); HA.last_error = None
         if new_state is not None:
-            ts = parse_ts(new_state.get("last_updated") or new_state.get("last_changed")) or now_ts()
+            ts = parse_ts(new_state.get("last_updated") or new_state.get("last_changed")) or received_ts
             self.temporal_history.add(entity_id, ts, self._temporal_state(new_state))
-            self._queue_archive_state(new_state)
+            self._queue_archive_state(new_state, received_ts=received_ts)
         # A state transition can be the precursor to an action; wake inference now instead
         # of waiting for a whole-state REST poll.
         self.wake_event.set()
@@ -496,11 +504,11 @@ class Engine(threading.Thread):
             "last_changed": st.get("last_changed"), "last_updated": st.get("last_updated"),
         }
 
-    def _queue_archive_state(self, st, force=False):
+    def _queue_archive_state(self, st, force=False, received_ts=None):
         entity_id = st.get("entity_id")
         if not entity_id:
             return
-        now = now_ts()
+        now = float(received_ts if received_ts is not None else now_ts())
         compact_attrs = self._compact_attrs(st)
         fingerprint = json.dumps([st.get("state"), compact_attrs], sort_keys=True, separators=(",", ":"), default=str)
         with self.lock:
@@ -512,7 +520,9 @@ class Engine(threading.Thread):
                 return
             ts = parse_ts(st.get("last_updated") or st.get("last_changed")) or now
             user_id = (st.get("context") or {}).get("user_id")
-            self.pending_archive.append((entity_id, ts, st.get("state"), compact_attrs, user_id, "live"))
+            self.pending_archive.append(
+                (entity_id, ts, st.get("state"), compact_attrs, user_id, "live", now)
+            )
             self.archive_seen[entity_id] = fingerprint
             self.archive_last_ts[entity_id] = now
 
