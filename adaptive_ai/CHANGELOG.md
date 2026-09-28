@@ -9,7 +9,7 @@
 - Profile and optimize only measured ETAP-4 hotspots: Tiny MLP forward p95 is ~0.80× the exact reference loop and Ridge edge-scan p95 is ~0.37× the reference implementation on the GitHub synthetic profiler, with exact output parity. These are host timings, not Raspberry Pi 4 claims.
 - Keep the optional latency circuit breaker **disabled/not added**: after Candidate deferral and shared-context work, measured Hybrid component latency does not justify adding a new fallback/hysteresis state machine. Ridge fallback inside the existing Hybrid guard remains unchanged.
 - Integrate the current 0.14.99 mainline QoS/HTTP/Candidate-data fixes (#188–#190): registry refresh coalescing, deferred housekeeping/resync, server-owned HTTP route isolation and Candidate paired-data version contract v2.
-- Release validation covers Python 3.11/3.13, compileall, JS syntax, Docker image smoke, Correct/training QoS/HA ingress/shared context, Tiny MLP/Hybrid/Candidate, Automatic Correct, Offline-RL, stateful replay, sparse long-memory, Pi gate, product-runtime benchmark and simulators. Real Pi 4 latency evidence remains a post-install measurement.
+- Release validation covers **1381 tests** on Python 3.11/3.13, compileall, JS syntax, Docker image smoke, Correct/training QoS/HA ingress/shared context, Tiny MLP/Hybrid/Candidate, Automatic Correct, Offline-RL, stateful replay, sparse long-memory, Pi gate, product-runtime benchmark and simulators. Real Pi 4 latency evidence remains a post-install measurement.
 
 # 0.14.99 — 2026-09-27
 
