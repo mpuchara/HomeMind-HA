@@ -16,6 +16,9 @@ from semantic_reliability import SemanticReliabilityModel
 class ContextEngine:
     ROOM_MODEL_KEY = 'room_belief_model_v2'
     LEGACY_ROOM_MODEL_KEY = 'shared_home_model_v1'
+    ADAPTIVE_MODEL_KEY = 'adaptive_presence_model_v2'
+    LEGACY_ADAPTIVE_MODEL_KEY = 'adaptive_presence_model_v1'
+    ADAPTIVE_CHECKPOINT_RETENTION_SECONDS = 30 * 86400.0
     SEMANTIC_RELIABILITY_KEY = 'semantic_reliability_v1'
 
     def __init__(self, options, store=None):
@@ -29,6 +32,7 @@ class ContextEngine:
         self.registry_revision = 0
         self.last_save = 0
         self._last_saved_room_model_raw = None
+        self._last_saved_adaptive_model_raw = None
         self.bootstrap_cutoff = 0
         self.bootstrap_delta = None
         self.bootstrap_started = 0
@@ -44,7 +48,26 @@ class ContextEngine:
             except (ValueError, TypeError):
                 reliability_raw = None
         self.semantic_reliability = SemanticReliabilityModel(reliability_raw)
-        self.adaptive_presence = AdaptivePresenceModel()
+        adaptive_raw = None
+        if store:
+            for key in (self.ADAPTIVE_MODEL_KEY, self.LEGACY_ADAPTIVE_MODEL_KEY):
+                try:
+                    value = json.loads(store.meta_get(key, 'null'))
+                except (ValueError, TypeError):
+                    value = None
+                if isinstance(value, dict):
+                    adaptive_raw = value
+                    break
+            with store.lock, store.conn() as c:
+                c.execute(
+                    "CREATE TABLE IF NOT EXISTS adaptive_presence_checkpoints ("
+                    "ts REAL PRIMARY KEY, model_json TEXT NOT NULL)"
+                )
+        self.adaptive_presence = AdaptivePresenceModel(adaptive_raw)
+        if isinstance(adaptive_raw, dict):
+            self._last_saved_adaptive_model_raw = json.dumps(
+                adaptive_raw, separators=(',', ':'), sort_keys=True
+            )
         # Future physical threshold adapter contract only. It performs no I/O and remains
         # disabled unless a later, explicit product stage supplies a whitelist/driver.
         self.hardware_threshold_adapter = HardwareThresholdAdapterContract(enabled=False)
