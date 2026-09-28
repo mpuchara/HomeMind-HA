@@ -12,7 +12,7 @@ from agent_candidates import AgentCandidateManager, ensure_tables, install_store
 from agent_candidate_conservative_correct import install as install_conservative_correct
 from agent_candidate_lineage import install as install_lineage
 import agent_candidate_shadow_runtime as shadow_runtime_module
-from agent_candidate_shadow_runtime import install as install_shadow_runtime
+from agent_candidate_shadow_runtime import ensure_shadow_tables, install as install_shadow_runtime
 
 
 class FakeTeaching:
