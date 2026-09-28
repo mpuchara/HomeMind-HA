@@ -72,6 +72,8 @@ class PolicyBackendShadowService:
         self.alpha = float(OPTIONS.get("rl_alpha", 0.65))
         self.backends = {}
         self.last_predictions = {}
+        self._benchmark_gate_cache = {}
+        self._benchmark_gate_ttl = 30.0
         ensure_shadow_tables(store)
 
     @staticmethod
@@ -80,33 +82,44 @@ class PolicyBackendShadowService:
         domain = target.split(".", 1)[0]
         return domain in FAST_DOMAINS
 
-    def _benchmark_gate(self, agent_id):
+    def _benchmark_gate(self, agent_id, refresh=False):
+        aid = str(agent_id)
+        now = time.time()
+        cached = self._benchmark_gate_cache.get(aid)
+        if (not refresh and cached is not None
+                and now - float(cached[0]) < self._benchmark_gate_ttl):
+            return dict(cached[1])
         try:
             with self.store.conn() as c:
                 row = c.execute(
                     """SELECT benchmark_version,result_json FROM policy_backend_benchmarks
                        WHERE agent_id=? ORDER BY created_ts DESC LIMIT 1""",
-                    (str(agent_id),),
+                    (aid,),
                 ).fetchone()
         except Exception:
             row = None
         if not row:
-            return {"supported": False, "reason": "no_persisted_benchmark"}
-        result = _json(row["result_json"], {})
-        if int(row["benchmark_version"] or 0) < 2:
-            return {"supported": False, "reason": "benchmark_contract_too_old"}
-        if str(result.get("candidate_status") or "") != "shadow_candidate_supported":
-            return {"supported": False, "reason": "latest_benchmark_keeps_diagonal"}
-        indices = [int(x) for x in ((result.get("feature_selection") or {}).get("indices") or [])]
-        hp = result.get("hyperparameter_selection") or {}
-        if not indices:
-            return {"supported": False, "reason": "benchmark_projection_missing"}
-        return {
-            "supported": True, "reason": "supported_future_holdout",
-            "run_id": result.get("run_id"), "feature_indices": indices,
-            "ridge": float(hp.get("ridge", self.ridge)),
-            "alpha": float(hp.get("alpha", self.alpha)),
-        }
+            result = {"supported": False, "reason": "no_persisted_benchmark"}
+        else:
+            payload = _json(row["result_json"], {})
+            if int(row["benchmark_version"] or 0) < 2:
+                result = {"supported": False, "reason": "benchmark_contract_too_old"}
+            elif str(payload.get("candidate_status") or "") != "shadow_candidate_supported":
+                result = {"supported": False, "reason": "latest_benchmark_keeps_diagonal"}
+            else:
+                indices = [int(x) for x in ((payload.get("feature_selection") or {}).get("indices") or [])]
+                hp = payload.get("hyperparameter_selection") or {}
+                if not indices:
+                    result = {"supported": False, "reason": "benchmark_projection_missing"}
+                else:
+                    result = {
+                        "supported": True, "reason": "supported_future_holdout",
+                        "run_id": payload.get("run_id"), "feature_indices": indices,
+                        "ridge": float(hp.get("ridge", self.ridge)),
+                        "alpha": float(hp.get("alpha", self.alpha)),
+                    }
+        self._benchmark_gate_cache[aid] = (now, dict(result))
+        return result
 
     def _load_model(self, agent_id):
         with self.store.conn() as c:
