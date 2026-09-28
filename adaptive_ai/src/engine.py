@@ -458,6 +458,7 @@ class Engine(threading.Thread):
                 self.state_map[entity_id] = new_state
             self.last_state_count = len(self.state_map)
             self.last_ws_event = now_ts()
+            self.last_event_monotonic = time.monotonic()
             self.last_trigger_entity = entity_id
             self.dirty_entities.add(entity_id)
             self.last_event_received = time.perf_counter()
@@ -756,6 +757,96 @@ class Engine(threading.Thread):
             rt["next_periodic_inference_ts"] = now + 60.0
         due.discard("")
         return due
+
+    def _realtime_recent(self, seconds=0.75):
+        last = float(getattr(self, "last_event_monotonic", 0.0) or 0.0)
+        return bool(last and time.monotonic() - last < max(0.0, float(seconds)))
+
+    def _run_housekeeping(self):
+        """Persist low-priority runtime state away from the event->intent thread."""
+        started = time.perf_counter()
+        archive_rows = decision_rows = 0
+        context_saved = False
+        try:
+            archive_rows = int(self.flush_archive(force=False) or 0)
+            decision_rows = int(self.teaching.flush(force=False) or 0)
+            context_saved = bool(self.context.save())
+        except Exception as exc:
+            STORE.event(
+                None, "warning", "runtime_housekeeping_error",
+                f"{type(exc).__name__}: {exc}", None,
+            )
+        elapsed_ms = (time.perf_counter() - started) * 1000.0
+        with self.lock:
+            stats = self.housekeeping_stats
+            stats["runs"] += 1
+            stats["last_duration_ms"] = elapsed_ms
+            stats["max_duration_ms"] = max(float(stats.get("max_duration_ms") or 0.0), elapsed_ms)
+            stats["archive_rows"] += archive_rows
+            stats["decision_rows"] += decision_rows
+            stats["context_saves"] += int(context_saved)
+        TELEMETRY.observe("runtime_housekeeping", elapsed_ms)
+        return {
+            "archive_rows": archive_rows,
+            "decision_rows": decision_rows,
+            "context_saved": context_saved,
+        }
+
+    def _schedule_housekeeping(self, *, force=False):
+        now = time.monotonic()
+        future = self.housekeeping_future
+        if future is not None and not future.done():
+            with self.lock:
+                self.housekeeping_stats["busy_skips"] += 1
+            return False
+
+        since_submit = now - float(self.housekeeping_last_submit or 0.0)
+        if not force and self._realtime_recent(0.40) and since_submit < 2.0:
+            with self.lock:
+                self.housekeeping_stats["deferred_for_realtime"] += 1
+            return False
+        if not force and since_submit < 0.75:
+            return False
+
+        self.housekeeping_last_submit = now
+        self.housekeeping_future = self.housekeeping_worker.submit(self._run_housekeeping)
+        return True
+
+    def _maybe_schedule_state_resync(self):
+        """Schedule a safety /states snapshot only from a realtime-quiet window."""
+        now_epoch = now_ts()
+        now_mono = time.monotonic()
+        healthy = bool(self.ws_connected)
+        resync_seconds = float(
+            OPTIONS.get("realtime_resync_seconds", 900)
+            if healthy
+            else OPTIONS.get("realtime_fallback_poll_seconds", 10)
+        )
+        if now_epoch - float(self.last_full_poll or 0.0) < max(5.0, resync_seconds):
+            return False
+        if self.poll_future is not None and not self.poll_future.done():
+            return False
+        if now_mono < float(self.next_resync_retry_monotonic or 0.0):
+            return False
+
+        if healthy:
+            if self._realtime_recent(2.0):
+                with self.lock:
+                    self.state_resync_stats["deferred_for_realtime"] += 1
+                self.next_resync_retry_monotonic = now_mono + 3.0
+                return False
+            if HEAVY_JOBS.owner is not None:
+                with self.lock:
+                    self.state_resync_stats["deferred_for_heavy_job"] += 1
+                self.next_resync_retry_monotonic = now_mono + 5.0
+                return False
+
+        self.last_full_poll = now_epoch
+        self.next_resync_retry_monotonic = 0.0
+        with self.lock:
+            self.state_resync_stats["scheduled"] += 1
+        self.poll_future = self.poll_worker.submit(self.refresh_states)
+        return True
 
     def run(self):
         print(f"Adaptive AI {APP_VERSION} starting; HA={HA_BASE_URL}", flush=True)
