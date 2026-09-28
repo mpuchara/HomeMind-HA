@@ -1,14 +1,14 @@
 {
-  "version": "0.14.99",
-  "release_date": "2026-09-27",
-  "base_version": "0.14.98",
-  "base_commit": "b99865a7f86a00ca06f466e626ef215834b1c3fd",
-  "release_status": "agent-training-vnext",
+  "version": "0.14.100",
+  "release_date": "2026-09-28",
+  "base_version": "0.14.99",
+  "base_commit": "3d0fa3800405eef3c6362f51d332b2d79258cb42",
+  "release_status": "hybrid-inference-hot-path-optimized",
   "pi4_profile_contract": "pi_training_profile_v2",
   "pi4_release_gate_contract": "pi4_release_gate_v1",
   "pi4_real_hardware_required": true,
   "stage7_offline_rl_control_unlock": false,
-  "tests_passed": 1358,
+  "tests_passed": 1378,
   "profile": "rpi4-ram-first-complete-discovery-manual-agent-selection",
   "manual_agent_training": true,
   "max_concurrent_training_jobs": 1,
@@ -44,7 +44,7 @@
   "migration": "no destructive migration; existing agents, models, feedback, raw archive, historical experiences, candidate lineage, rollback and generation state preserved",
   "physical_control": "unchanged; repaired agents return to Shadow and Control still requires qualified state plus all existing guards",
   "pi4": "0.14.38 targets the long-soak Raspberry Pi failure: drift analysis is coalesced on a throttled background observer, REST /states reconciliation is delta-only after bootstrap, websocket outage fallback reconciles every 10 s, and HA core-state health is tracked separately from unrelated REST errors.",
-  "ci_status": "Stage-8 release candidate: full Python 3.11/3.13, JS/compile, Docker smoke, product benchmarks and stateful replay equivalence must be green before merge.",
+  "ci_status": "0.14.100 release candidate: full Python 3.11/3.13, JS/compile, Docker image, Hybrid/Candidate hot-path gates, Correct/QoS/HA ingress, Offline-RL, stateful replay, Pi gate, product benchmark and simulators must be green before merge.",
   "training_slice_budget": "adaptive-ai-index workers call a shared CooperativeTrainingBudget; expensive temporal tracker loops yield between entities/events and finalization is no longer outside the throttle",
   "finalization_lifeline": "HEAVY_JOBS remains owned through final gc.collect(), so /api/status and /api/agents stay on lightweight lifeline reads until the worker is actually finished",
   "finalization_progress": "post-replay UI now exposes bounded stages: replay complete, policy serialization, benchmark save, qualification, checkpoint complete",
@@ -597,5 +597,22 @@
   "training_validation": "existing prequential test-then-learn validation is preserved beside an immutable frozen Ridge holdout snapshot; insufficient class evidence is explicit and frozen gating remains configurable",
   "training_long_memory": "full-resolution recent memory remains 7 days; deterministic bounded train-only sparse memory may represent older history through 35 days, remains time-decayed and never enters fresh validation or inference",
   "agent_training_vnext_safety": "Correct chart-selection and learning gates preserved; hybrid Tiny MLP action selection remains guarded by Ridge confidence/support/novelty with Ridge fallback; Offline-RL remains Shadow-only; Executor remains the sole physical dispatch boundary",
-  "agent_training_vnext_performance": "vNext audit and sparse-memory work execute in training/background paths; no new SQLite read, MLP deserialization or full-history scan is added to inference; max_concurrent_training_jobs remains 1"
+  "agent_training_vnext_performance": "vNext audit and sparse-memory work execute in training/background paths; no new SQLite read, MLP deserialization or full-history scan is added to inference; max_concurrent_training_jobs remains 1",
+  "hybrid_inference_014100": {
+    "baseline_contract": "hybrid_inference_hot_path_baseline_v1",
+    "optimized_contract": "hybrid_inference_shared_context_v2",
+    "candidate_execution": "bounded deferred worker; latest-per-root coalescing; Live never waits for Candidate backend",
+    "shared_context": "one causal timestamp and Home Context forecast per Live or Candidate decision; Ridge-to-MLP as-of reuse",
+    "stable_forecast_calls_per_inference": {
+      "ridge_only": 1,
+      "live_hybrid": 1,
+      "live_hybrid_plus_ridge_candidate_worker": 2,
+      "live_hybrid_plus_hybrid_candidate_worker": 2
+    },
+    "stage4_profiler_contract": "hybrid_inference_hotspot_profile_etap4_v1",
+    "stage4_mlp_forward_p95_ratio_new_over_reference": 0.8016971215294455,
+    "stage4_ridge_edge_p95_ratio_new_over_reference": 0.3658909550675967,
+    "latency_circuit_breaker": "not added; measurement did not justify extra runtime state machine",
+    "timing_note": "GitHub-host synthetic timings are descriptive only; real Raspberry Pi 4 acceptance remains post-install"
+  }
 }

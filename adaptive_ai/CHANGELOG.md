@@ -1,3 +1,16 @@
+# 0.14.100 — 2026-09-28
+
+- Optimize the **Hybrid Ridge + Tiny MLP realtime hot path** without changing model selection, Correct semantics, Candidate promotion authority, ActionIntent freshness or Executor safety.
+- Add bounded RAM-only p50/p95/p99/max/EWMA instrumentation for Live Ridge feature construction/prediction, Tiny MLP observation/forward, Hybrid Ridge guard, composer and Candidate scheduling/worker execution. No per-event SQLite telemetry is introduced.
+- Move **Candidate Shadow inference off the synchronous Live path** onto the existing Candidate worker. The bounded latest-per-root queue coalesces bursts, deduplicates exact repeats, self-wakes while backlog remains and never executes the Candidate backend before Live returns.
+- Preserve exact Candidate causality across deferred execution: captured state snapshot, state/context revisions, Parent decision, generation revision, Home Context forecast and Root inference timestamp are retained; stale lineage is recorded as a gap rather than compared across generations.
+- Share one **per-decision inference context** between Ridge and Tiny MLP. Live Hybrid performs one Home Context forecast instead of two and reuses Ridge-owned temporal/as-of reads for overlapping MLP observation work. Candidate Ridge+MLP uses the same contract inside its deferred job.
+- Add semantic-parity tests proving Ridge vectors and Tiny MLP observations remain identical before/after shared-context optimization, including timestamp and future-knowledge guards.
+- Profile and optimize only measured ETAP-4 hotspots: Tiny MLP forward p95 is ~0.80× the exact reference loop and Ridge edge-scan p95 is ~0.37× the reference implementation on the GitHub synthetic profiler, with exact output parity. These are host timings, not Raspberry Pi 4 claims.
+- Keep the optional latency circuit breaker **disabled/not added**: after Candidate deferral and shared-context work, measured Hybrid component latency does not justify adding a new fallback/hysteresis state machine. Ridge fallback inside the existing Hybrid guard remains unchanged.
+- Integrate the current 0.14.99 mainline QoS/HTTP/Candidate-data fixes (#188–#190): registry refresh coalescing, deferred housekeeping/resync, server-owned HTTP route isolation and Candidate paired-data version contract v2.
+- Release validation covers Python 3.11/3.13, compileall, JS syntax, Docker image smoke, Correct/training QoS/HA ingress/shared context, Tiny MLP/Hybrid/Candidate, Automatic Correct, Offline-RL, stateful replay, sparse long-memory, Pi gate, product-runtime benchmark and simulators. Real Pi 4 latency evidence remains a post-install measurement.
+
 # 0.14.99 — 2026-09-27
 
 - Add a bounded **Training Balance Audit** that exposes dwell/action/source counts, effective update/reward/evidence mass, Ridge support statistics, qualification metrics and Tiny MLP class/tournament diagnostics without adding history scans to realtime inference.
