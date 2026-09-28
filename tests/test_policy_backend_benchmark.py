@@ -26,8 +26,9 @@ class FullRidgeBackendTests(unittest.TestCase):
             backend.update(1, 1, {0: 1, 1: 1, 2: 1}, 1.0)
         raw = backend.serialize()
         self.assertEqual(raw['backend'], 'full_ridge_linucb')
-        self.assertEqual(raw['version'], 1)
+        self.assertEqual(raw['version'], FullRidgeLinUCBBackend.VERSION)
         restored = FullRidgeLinUCBBackend.deserialize(raw)
+        self.assertEqual(restored.serialize()['feature_contract'], 'semantic_projection_v2')
         self.assertEqual(restored.serialize()['feature_indices'], [0, 1, 2])
         self.assertEqual(restored.predict({0: 1, 1: 1, 2: 1})[0]['index'], 1)
 
