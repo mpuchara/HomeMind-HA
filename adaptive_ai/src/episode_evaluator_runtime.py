@@ -341,7 +341,7 @@ def _candidate_pair_episode(manager, evaluator, root_id):
     end = float(pair["outcome_ts"])
     if end < start:
         return None
-    return evaluator.evaluate_episode(
+    evaluated = evaluator.evaluate_episode(
         episode_id=_stable("candidate-transition", pair["parent_generation_id"], pair["child_generation_id"], f"{end:.6f}"),
         agent_id=str(root_id), start_ts=start, end_ts=end,
         observations=[
@@ -363,6 +363,23 @@ def _candidate_pair_episode(manager, evaluator, root_id):
         context={"prediction_event_id": pair["prediction_event_id"], "evidence": "automation_replay_only"},
         end_reason="observed target transition; not a light-need label",
     )
+    # Current Candidate transition episodes deliberately carry no light_need label.
+    # If a future/parallel independent EpisodeEvaluator source supplies one for the
+    # same episode contract, attach it through the Stage-13 immutable calibration
+    # overlay instead of rewriting the raw target transition.
+    light_need = str((evaluated.get("labels") or {}).get("light_need") or "")
+    recorder = getattr(manager, "record_independent_candidate_label", None)
+    if callable(recorder) and light_need in {"true", "false"}:
+        recorder(
+            parent_generation_id=pair["parent_generation_id"],
+            child_generation_id=pair["child_generation_id"],
+            prediction_event_id=pair["prediction_event_id"],
+            desired_action=1.0 if light_need == "true" else 0.0,
+            source_kind="episode_evaluator_independent",
+            source_id=str(evaluated.get("episode_id") or ""),
+            dependency_cluster=f"episode:{evaluated.get('episode_id')}",
+        )
+    return evaluated
 
 
 def _candidate_edge(manager, root_id):
