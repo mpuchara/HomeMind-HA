@@ -188,13 +188,22 @@ class PolicyBackendShadowService:
             "action": int(action_idx), "other_actions_rewarded": False,
         })
 
-    def observe_trial_record(self, record):
+    def observe_trial_record(self, record, policy=None):
         if not self.enabled or not record or record.get("reward") is None:
             return False
         aid = str(record.get("owner_agent_id") or "")
         trial_id = str(record.get("trial_id") or "")
         backend = self.backends.get(aid)
-        if not aid or not trial_id or backend is None:
+        context = _json(record.get("context_json"), {})
+        if not aid or not trial_id:
+            return False
+        if backend is None and policy is not None:
+            agent = self.store.get_agent_config(aid)
+            if agent:
+                features = {int(k): float(v) for k, v in dict(context.get("policy_features") or {}).items()}
+                labels = dict(context.get("policy_feature_labels") or {})
+                backend = self._backend(agent, policy, features, labels)
+        if backend is None:
             return False
         with self.store.conn() as c:
             if c.execute(
@@ -203,7 +212,6 @@ class PolicyBackendShadowService:
                 (aid, FullRidgeLinUCBBackend.BACKEND, trial_id),
             ).fetchone():
                 return False
-        context = _json(record.get("context_json"), {})
         assigned = _json(record.get("assigned_action_json"), {})
         try:
             action_idx = int(assigned["index"])
