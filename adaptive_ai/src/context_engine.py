@@ -433,14 +433,36 @@ class ContextEngine:
             now = time.time()
             if not self.store or (not force and now - self.last_save < 60):
                 return False
-            raw = json.dumps(self.home.export(), separators=(',', ':'), sort_keys=True)
-            changed = raw != self._last_saved_room_model_raw
-            if changed:
-                self.store.meta_set(self.ROOM_MODEL_KEY, raw)
-                self._last_saved_room_model_raw = raw
+
+            room_raw = json.dumps(
+                self.home.export(), separators=(',', ':'), sort_keys=True
+            )
+            room_changed = room_raw != self._last_saved_room_model_raw
+            if room_changed:
+                self.store.meta_set(self.ROOM_MODEL_KEY, room_raw)
+                self._last_saved_room_model_raw = room_raw
                 self.room_checkpoint_source = self.ROOM_MODEL_KEY
+
+            adaptive_raw = json.dumps(
+                self.adaptive_presence.export(), separators=(',', ':'), sort_keys=True
+            )
+            adaptive_changed = adaptive_raw != self._last_saved_adaptive_model_raw
+            if adaptive_changed:
+                self.store.meta_set(self.ADAPTIVE_MODEL_KEY, adaptive_raw)
+                with self.store.lock, self.store.conn() as c:
+                    c.execute(
+                        "INSERT OR REPLACE INTO adaptive_presence_checkpoints(ts,model_json) "
+                        "VALUES(?,?)",
+                        (float(now), adaptive_raw),
+                    )
+                    c.execute(
+                        "DELETE FROM adaptive_presence_checkpoints WHERE ts<?",
+                        (float(now) - self.ADAPTIVE_CHECKPOINT_RETENTION_SECONDS,),
+                    )
+                self._last_saved_adaptive_model_raw = adaptive_raw
+
             self.last_save = now
-            return changed
+            return bool(room_changed or adaptive_changed)
 
     def diagnostics(self):
         with self.lock:
