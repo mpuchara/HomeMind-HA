@@ -24,7 +24,7 @@
   ],
   "product_benchmark_full_ridge": "Shadow-only challenger is unstable across seeds and is not deployed; production default remains unchanged",
   "anticipation_simulator": "component fixture simulator with intentionally permissive setup; mandatory regression smoke but never used as product benchmark evidence",
-  "confidence_contract_version": 1,
+  "confidence_contract_version": 2,
   "confidence_selection_min_independent_episodes": 12,
   "confidence_final_min_independent_episodes": 12,
   "confidence_final_min_per_action": 4,
