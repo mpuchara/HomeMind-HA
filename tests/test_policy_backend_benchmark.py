@@ -11,7 +11,7 @@ import storage
 from policy_backend import PolicyBackend
 from policy_full_ridge import FullRidgeLinUCBBackend
 from policy_backend_benchmark import (
-    _FullRidgeBenchmarkBackend, _learn_episode, _metrics, run_benchmark,
+    _FullRidgeBenchmarkBackend, _learn_episode, _metrics, persist_result, run_benchmark,
     semantic_feature_indices, split_future, trial_records_to_episodes,
 )
 from policy_backend_shadow import PolicyBackendShadowService
@@ -26,8 +26,9 @@ class FullRidgeBackendTests(unittest.TestCase):
             backend.update(1, 1, {0: 1, 1: 1, 2: 1}, 1.0)
         raw = backend.serialize()
         self.assertEqual(raw['backend'], 'full_ridge_linucb')
-        self.assertEqual(raw['version'], 1)
+        self.assertEqual(raw['version'], FullRidgeLinUCBBackend.VERSION)
         restored = FullRidgeLinUCBBackend.deserialize(raw)
+        self.assertEqual(restored.serialize()['feature_contract'], 'semantic_projection_v2')
         self.assertEqual(restored.serialize()['feature_indices'], [0, 1, 2])
         self.assertEqual(restored.predict({0: 1, 1: 1, 2: 1})[0]['index'], 1)
 
@@ -90,6 +91,25 @@ class BenchmarkContractTests(unittest.TestCase):
         selected_again = semantic_feature_indices(split_future(changed_future)[0], max_features=3)
         self.assertEqual(selected, selected_again)
 
+    def test_v12_entity_feature_group_is_selected_atomically(self):
+        suffixes = [
+            "value", "valid", "communication_age", "event_age", "quality",
+            "trend_1", "trend_2", "trend_3", "time_since_edge",
+            "category_bit_0", "category_bit_1", "category_bit_2",
+        ]
+        rows = []
+        for n in range(8):
+            features = {0: 1.0}
+            labels = {0: ["bias"]}
+            for offset, suffix in enumerate(suffixes, start=1):
+                features[offset] = (n + offset) / 20.0
+                labels[offset] = [f"sensor.kitchen_activity:{suffix}"]
+            rows.append({"features": features, "feature_labels": labels})
+        selected = semantic_feature_indices(rows, max_features=13)
+        self.assertEqual(selected, list(range(13)))
+        too_small = semantic_feature_indices(rows, max_features=8)
+        self.assertTrue(set(range(1, 13)).isdisjoint(too_small))
+
     def test_bandit_learning_updates_only_executed_action(self):
         backend = _FullRidgeBenchmarkBackend(actions=[0, 1], feature_indices=[0, 1])
         row = self.episode(1, kind='bandit', executed=1, reward=-1.0)
@@ -98,6 +118,21 @@ class BenchmarkContractTests(unittest.TestCase):
         self.assertEqual(head.counts[0], 0)
         self.assertGreater(head.counts[1], 0)
         self.assertLess(head.reward_sums[1], 0)
+
+    def test_benchmark_keeps_distinct_policy_horizons(self):
+        backend = _FullRidgeBenchmarkBackend(
+            actions=[0, 1], feature_indices=[0, 1], horizons=[1, 5]
+        )
+        one = self.episode(1, kind='bandit', executed=1, reward=1.0)
+        one['horizon'] = 1
+        five = self.episode(2, kind='bandit', executed=0, reward=-1.0)
+        five['horizon'] = 5
+        _learn_episode(backend, one)
+        _learn_episode(backend, five)
+        self.assertGreater(backend.backend.heads[1].counts[1], 0)
+        self.assertEqual(backend.backend.heads[1].counts[0], 0)
+        self.assertGreater(backend.backend.heads[5].counts[0], 0)
+        self.assertEqual(backend.backend.heads[5].counts[1], 0)
 
     def test_automation_replay_is_not_scored_as_demonstration_quality(self):
         backend = _FullRidgeBenchmarkBackend(actions=[0, 1], feature_indices=[0, 1, 2, 3])
@@ -125,9 +160,15 @@ class BenchmarkContractTests(unittest.TestCase):
         self.assertFalse(result['automatic_backend_switch'])
         self.assertFalse(result['nonlinear_backend_added'])
         self.assertIn(result['candidate_status'], ('keep_diagonal_default', 'shadow_candidate_supported'))
+        self.assertEqual(result['backend_effect_comparison'],
+                         'full_ridge_vs_diagonal_on_identical_semantic_projection')
+        self.assertEqual(result['matched_baseline']['feature_indices'],
+                         result['feature_selection']['indices'])
         self.assertIn('mean_inference_us', result['baseline']['future_test'])
         self.assertIn('reward_calibration_mae', result['candidate']['future_test'])
         self.assertGreater(result['candidate']['serialized_bytes'], 0)
+        self.assertGreater(result['candidate']['python_state_bytes'], 0)
+        self.assertTrue(result['small_correction_curve']['matched_baseline'])
         self.assertTrue(result['small_correction_curve']['candidate'])
 
 
@@ -139,6 +180,17 @@ class TrialAndShadowTests(unittest.TestCase):
 
     def tearDown(self):
         self.temp.cleanup()
+
+    def support_shadow(self, agent_id='a1', indices=(0, 1), ridge=1.0, alpha=.65):
+        result = {
+            'run_id': 'bench-' + str(agent_id),
+            'candidate_status': 'shadow_candidate_supported',
+            'feature_selection': {'indices': list(indices)},
+            'hyperparameter_selection': {'ridge': ridge, 'alpha': alpha},
+        }
+        persist_result(self.store, result, agent_id=agent_id)
+        return result
+
 
     def test_trial_records_preserve_action_set_propensities_and_only_executed_reward(self):
         now = time.time()
@@ -160,8 +212,23 @@ class TrialAndShadowTests(unittest.TestCase):
         self.assertEqual(rows[0]['reward'], .6)
         self.assertEqual(rows[0]['action_propensities'], {0: .25, 1: .75})
         self.assertNotIn('counterfactual_rewards', rows[0])
+        self.assertEqual(rows[0]['feature_labels'], {})
+
+    def test_enabled_shadow_waits_for_supported_benchmark(self):
+        service = PolicyBackendShadowService(self.store, enabled=True)
+        agent = {'id': 'a1', 'target_entity': 'light.kitchen'}
+        policy = SimpleNamespace(actions=[0.0, 1.0], horizons=[1])
+        result = service.observe_decision(
+            agent, policy, {0: 1, 1: .8},
+            {0: ['bias'], 1: ['sensor.kitchen:value']}, [0, 1],
+        )
+        self.assertEqual(result['evaluation'], 'shadow_waiting_for_supported_benchmark')
+        self.assertEqual(result['reason'], 'no_persisted_benchmark')
+        self.assertNotIn('a1', service.backends)
+        self.assertFalse(result['dispatch_capability'])
 
     def test_shadow_is_flagged_non_controlling_and_reward_updates_logged_action_only(self):
+        self.support_shadow()
         service = PolicyBackendShadowService(self.store, enabled=True)
         agent = {'id': 'a1', 'target_entity': 'light.kitchen'}
         policy = SimpleNamespace(actions=[0.0, 1.0], horizons=[1])
@@ -172,9 +239,43 @@ class TrialAndShadowTests(unittest.TestCase):
         head = service.backends['a1'].heads[1]
         self.assertGreater(head.counts[0], 0)
         self.assertEqual(head.counts[1], 0)
+        action0_before = head.counts[0]
+        service.observe_demonstration(agent, policy, {0: 1, 1: .8}, 1, timestamp=time.time())
+        self.assertEqual(head.counts[0], action0_before)
+        self.assertGreater(head.counts[1], 0)
         diag = service.diagnostics('a1')
         self.assertFalse(diag['dispatch_capability'])
         self.assertEqual(diag['mode'], 'shadow')
+
+    def test_trial_record_reward_is_exactly_once_in_shadow(self):
+        self.support_shadow()
+        service = PolicyBackendShadowService(self.store, enabled=True)
+        agent = {'id': 'a1', 'target_entity': 'light.kitchen'}
+        policy = SimpleNamespace(actions=[0.0, 1.0], horizons=[1])
+        service.observe_decision(
+            agent, policy, {0: 1.0, 1: .8},
+            {0: ['bias'], 1: ['sensor.kitchen:value']}, [0, 1],
+        )
+        record = {
+            'trial_id': 'trial-1', 'owner_agent_id': 'a1', 'reward': .6, 'propensity': .75,
+            'context_json': json.dumps({
+                'policy_features': {'0': 1.0, '1': .8},
+                'policy_feature_labels': {'0': ['bias'], '1': ['sensor.kitchen:value']},
+                'horizon': 1,
+            }),
+            'assigned_action_json': json.dumps({'index': 1, 'value': 1.0}),
+            'episode_result_json': json.dumps({'finished_at': time.time()}),
+        }
+        self.assertTrue(service.observe_trial_record(record, policy=policy))
+        first = service.backends['a1'].heads[1].counts[1]
+        self.assertFalse(service.observe_trial_record(record, policy=policy))
+        second = service.backends['a1'].heads[1].counts[1]
+        self.assertEqual(first, second)
+        with self.store.conn() as db:
+            sources = db.execute(
+                "SELECT COUNT(*) FROM policy_backend_shadow_sources WHERE source_id='trial-1'"
+            ).fetchone()[0]
+        self.assertEqual(sources, 1)
 
 
 if __name__ == '__main__':
