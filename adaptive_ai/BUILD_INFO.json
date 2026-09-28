@@ -597,5 +597,23 @@
   "training_validation": "existing prequential test-then-learn validation is preserved beside an immutable frozen Ridge holdout snapshot; insufficient class evidence is explicit and frozen gating remains configurable",
   "training_long_memory": "full-resolution recent memory remains 7 days; deterministic bounded train-only sparse memory may represent older history through 35 days, remains time-decayed and never enters fresh validation or inference",
   "agent_training_vnext_safety": "Correct chart-selection and learning gates preserved; hybrid Tiny MLP action selection remains guarded by Ridge confidence/support/novelty with Ridge fallback; Offline-RL remains Shadow-only; Executor remains the sole physical dispatch boundary",
-  "agent_training_vnext_performance": "vNext audit and sparse-memory work execute in training/background paths; no new SQLite read, MLP deserialization or full-history scan is added to inference; max_concurrent_training_jobs remains 1"
+  "agent_training_vnext_performance": "vNext audit and sparse-memory work execute in training/background paths; no new SQLite read, MLP deserialization or full-history scan is added to inference; max_concurrent_training_jobs remains 1",
+  "runtime_composition_contract_version": 2,
+  "explicit_http_route_contract_version": 2,
+  "runtime_entrypoint_chain": [
+    "run.sh",
+    "trial_queue_main.py",
+    "preference_queue_main.py",
+    "fast_queue_main.py",
+    "queue_main.py",
+    "main.py"
+  ],
+  "runtime_transport_binding": "concrete ThreadingHTTPServer owns explicit route registry via per-server Handler subclass; shared main.Handler is not mutated in shipped runtime",
+  "runtime_route_isolation": "two server/runtime instances may share one base Handler class without replacing each other's registry",
+  "runtime_overlay_characterization": "AST map includes install*, bind*, and prepare_* method/function mutations",
+  "runtime_explicit_routes": [
+    "feedback.*",
+    "promotion.*"
+  ],
+  "runtime_remaining_compatibility": "unmigrated queue/GET/static/process-agent overlays remain staged compatibility fallbacks"
 }
