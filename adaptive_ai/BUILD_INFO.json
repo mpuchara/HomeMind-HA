@@ -1,9 +1,9 @@
 {
-  "version": "0.14.100",
+  "version": "0.14.101",
   "release_date": "2026-09-28",
-  "base_version": "0.14.99",
-  "base_commit": "3d0fa3800405eef3c6362f51d332b2d79258cb42",
-  "release_status": "hybrid-inference-hot-path-optimized",
+  "base_version": "0.14.100",
+  "base_commit": "b60d4015132bc0a7911ccd80476ade584415c62a",
+  "release_status": "needs-retrain-candidate-checksum-recovery",
   "pi4_profile_contract": "pi_training_profile_v2",
   "pi4_release_gate_contract": "pi4_release_gate_v1",
   "pi4_real_hardware_required": true,
@@ -614,5 +614,16 @@
     "stage4_ridge_edge_p95_ratio_new_over_reference": 0.3658909550675967,
     "latency_circuit_breaker": "not added; measurement did not justify extra runtime state machine",
     "timing_note": "GitHub-host synthetic timings are descriptive only; real Raspberry Pi 4 acceptance remains post-install"
+  },
+  "candidate_checksum_014101": {
+    "contract": "schema_evolution_recomputes_backend_envelope",
+    "checksum_invalid_models": "fail_closed_and_rebuild_required",
+    "debug_fields": [
+      "model_checksum",
+      "computed_model_checksum",
+      "model_checksum_valid"
+    ],
+    "needs_retrain_shadow": "blocked_until_safe_rebuild",
+    "completed_rebuild_mode": "shadow"
   }
 }
