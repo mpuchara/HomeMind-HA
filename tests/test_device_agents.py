@@ -410,6 +410,61 @@ class DurableControlOwnershipTests(unittest.TestCase):
         self.assertIsNone(stale[0])
 
 
+class DeviceAgentMigrationAndParityTests(unittest.TestCase):
+    def test_v1_resource_table_migrates_control_ownership_columns_additively(self):
+        tmp = tempfile.TemporaryDirectory(prefix='device-agent-migration-')
+        try:
+            store = Store(Path(tmp.name) / 'legacy.db')
+            with store.lock, store.conn() as db:
+                db.execute(
+                    """CREATE TABLE device_resource_state (
+                       resource_key TEXT PRIMARY KEY,
+                       owner_agent_id TEXT,
+                       owner_intent_id TEXT,
+                       lease_until REAL NOT NULL DEFAULT 0,
+                       last_dispatch_ts REAL,
+                       last_dispatch_agent_id TEXT,
+                       last_action_json TEXT,
+                       manual_hold_until REAL NOT NULL DEFAULT 0,
+                       updated_ts REAL NOT NULL
+                    )"""
+                )
+                db.execute(
+                    """INSERT INTO device_resource_state
+                       (resource_key,lease_until,manual_hold_until,updated_ts)
+                       VALUES('device:legacy',0,0,1)"""
+                )
+            service = DeviceAgentService(_Engine({}, {}, {}), store)
+            with store.conn() as db:
+                cols = {row['name'] for row in db.execute(
+                    'PRAGMA table_info(device_resource_state)'
+                ).fetchall()}
+                row = dict(db.execute(
+                    "SELECT * FROM device_resource_state WHERE resource_key='device:legacy'"
+                ).fetchone())
+            self.assertIn('control_owner_agent_id', cols)
+            self.assertIn('control_acquired_ts', cols)
+            self.assertIsNone(row['control_owner_agent_id'])
+            self.assertIsNone(row['control_acquired_ts'])
+            self.assertEqual(service.contract()['version'], CONTRACT_VERSION)
+        finally:
+            tmp.cleanup()
+
+    def test_build_info_and_final_runtime_publish_same_device_contract_v2(self):
+        build = __import__('json').loads(
+            (ROOT / 'adaptive_ai' / 'BUILD_INFO.json').read_text(encoding='utf-8')
+        )
+        self.assertEqual(build['device_agent_contract_version'], CONTRACT_VERSION)
+        self.assertIn('pre-commit', build['device_control_ownership'])
+        self.assertIn('perception_resource_leases', build['perception_lease_authority'])
+        composition = (
+            ROOT / 'adaptive_ai' / 'src' / 'runtime_composition.py'
+        ).read_text(encoding='utf-8')
+        self.assertIn('"device_resources"', composition)
+        self.assertIn('durable_precommit_shared_resource_claim', composition)
+        self.assertIn('atomic_lease_manual_hold_and_cross_agent_dwell_recheck', composition)
+
+
 class CapabilityAndDynamicsTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory(prefix='device-capability-')
