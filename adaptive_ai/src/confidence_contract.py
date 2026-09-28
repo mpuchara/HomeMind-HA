@@ -20,7 +20,7 @@ from urllib.parse import urlsplit
 from fast_runtime import is_fast_target
 
 
-CONTRACT_VERSION = 1
+CONTRACT_VERSION = 2
 PROBABILITY_BINS = 10
 DEFAULT_SELECTION_EPISODES = 12
 DEFAULT_FINAL_EPISODES = 12
@@ -28,6 +28,8 @@ DEFAULT_MIN_PER_ACTION = 4
 DEFAULT_DEPENDENCY_WINDOW_SECONDS = 30.0
 DEFAULT_HALF_LIFE_EPISODES = 40.0
 DEFAULT_OVERCONFIDENCE_GAP = 0.15
+DEFAULT_FINAL_MAX_REGRESSION = 0.03
+FINAL_CALIBRATION_EVIDENCE_KINDS = {"manual_user_target_change", "independent_preference_label"}
 EVALUATION_REVISION_SEPARATOR = "::backend="
 
 METRIC_SEMANTICS = {
@@ -259,18 +261,30 @@ def probability_calibration(rows, *, scope_id=None, model_key=None,
     }
 
 
+def _eligible_calibration_row(row):
+    kind = str(row.get("evidence_kind") or "")
+    return bool(row.get("calibration_eligible")) and kind in FINAL_CALIBRATION_EVIDENCE_KINDS
+
+
 def action_quality_report(rows, *, scope_id=None, end_ts=None,
                           min_total=DEFAULT_FINAL_EPISODES,
                           min_per_action=DEFAULT_MIN_PER_ACTION,
-                          half_life=DEFAULT_HALF_LIFE_EPISODES):
-    """Independent future action quality. Confidence-like policy scores are diagnostics only."""
+                          half_life=DEFAULT_HALF_LIFE_EPISODES,
+                          correct_key="child_correct",
+                          confidence_key="child_confidence",
+                          require_calibration_eligible=False):
+    """Episode-level action quality; never interprets confidence as a probability."""
     selected = []
+    source_counts = defaultdict(int)
     for raw in rows or ():
         row = dict(raw or {})
         if scope_id is not None:
             candidate_scope = row.get("scope_id") or row.get("root_agent_id")
             if str(candidate_scope) != str(scope_id):
                 continue
+        if require_calibration_eligible and not _eligible_calibration_row(row):
+            continue
+        source_counts[str(row.get("evidence_kind") or "unclassified")] += 1
         selected.append(row)
     rows = independent_episode_rows(selected, end_ts=end_ts)
     weights = dependency_adjusted_weights(
@@ -285,12 +299,12 @@ def action_quality_report(rows, *, scope_id=None, end_ts=None,
     strengths_weight = 0.0
     for row, weight in zip(rows, weights):
         outcome = 1 if float(row.get("outcome") or 0.0) >= .5 else 0
-        correct = bool(row.get("child_correct"))
+        correct = bool(row.get(correct_key))
         name = "ON" if outcome else "OFF"
         by_action[name].append((row, correct, weight))
         all_weight += weight
         all_success += weight if correct else 0.0
-        strength = _finite(row.get("child_confidence"))
+        strength = _finite(row.get(confidence_key))
         if strength is not None:
             strengths_num += max(0.0, min(1.0, strength)) * weight
             strengths_weight += weight
@@ -327,6 +341,10 @@ def action_quality_report(rows, *, scope_id=None, end_ts=None,
     return {
         "metric": "future_episode_action_quality",
         "probability_claim": False,
+        "correctness_key": str(correct_key),
+        "confidence_key": str(confidence_key),
+        "calibration_eligible_only": bool(require_calibration_eligible),
+        "evidence_kinds": dict(source_counts),
         "episodes": len(rows),
         "effective_n": total_eff,
         "accuracy": overall["mean"],
@@ -340,6 +358,117 @@ def action_quality_report(rows, *, scope_id=None, end_ts=None,
         "decision_strength_overstated": overstated,
         "sufficient_evidence": ready,
         "recommendation": "evaluate" if ready else "abstain_insufficient_independent_evidence",
+    }
+
+
+def _paired_delta_interval(rows, weights, *, max_regression):
+    if not rows:
+        return {
+            "mean_delta": None, "lower": None, "upper": None, "effective_n": 0.0,
+            "non_regression_passed": False, "max_allowed_regression": float(max_regression),
+        }
+    deltas = [
+        (1.0 if bool(row.get("child_correct")) else 0.0)
+        - (1.0 if bool(row.get("parent_correct")) else 0.0)
+        for row in rows
+    ]
+    total = sum(weights)
+    n_eff = dependency_effective_sample_size(rows, weights)
+    if total <= 1e-12 or n_eff <= 1e-12:
+        return {
+            "mean_delta": None, "lower": None, "upper": None, "effective_n": n_eff,
+            "non_regression_passed": False, "max_allowed_regression": float(max_regression),
+        }
+    mean = sum(w * d for w, d in zip(weights, deltas)) / total
+    variance = sum(w * ((d - mean) ** 2) for w, d in zip(weights, deltas)) / total
+    se = math.sqrt(max(0.0, variance) / max(1.0, n_eff))
+    lower = max(-1.0, mean - 1.96 * se)
+    upper = min(1.0, mean + 1.96 * se)
+    return {
+        "mean_delta": mean,
+        "lower": lower,
+        "upper": upper,
+        "effective_n": n_eff,
+        "max_allowed_regression": float(max_regression),
+        "non_regression_passed": bool(lower >= -float(max_regression)),
+        "interval": "paired_weighted_normal_95pct",
+    }
+
+
+def paired_future_quality_report(rows, *, scope_id=None, end_ts=None,
+                                 min_total=DEFAULT_FINAL_EPISODES,
+                                 min_per_action=DEFAULT_MIN_PER_ACTION,
+                                 max_regression=DEFAULT_FINAL_MAX_REGRESSION):
+    """Fixed future comparison on the same independent labelled episodes for parent/child."""
+    selected = []
+    for raw in rows or ():
+        row = dict(raw or {})
+        candidate_scope = row.get("scope_id") or row.get("root_agent_id")
+        if scope_id is not None and str(candidate_scope) != str(scope_id):
+            continue
+        if not _eligible_calibration_row(row):
+            continue
+        selected.append(row)
+    selected = independent_episode_rows(selected, end_ts=end_ts)
+    weights = dependency_adjusted_weights(
+        selected,
+        recent_full_weight=max(1, int(min_total)),
+    )
+    child = action_quality_report(
+        selected, scope_id=None, end_ts=end_ts,
+        min_total=min_total, min_per_action=min_per_action,
+        correct_key="child_correct", confidence_key="child_confidence",
+        require_calibration_eligible=True,
+    )
+    parent = action_quality_report(
+        selected, scope_id=None, end_ts=end_ts,
+        min_total=min_total, min_per_action=min_per_action,
+        correct_key="parent_correct", confidence_key="parent_confidence",
+        require_calibration_eligible=True,
+    )
+    overall = _paired_delta_interval(selected, weights, max_regression=max_regression)
+    per_action = {}
+    for action_name, action_value in (("OFF", 0), ("ON", 1)):
+        subset, subset_weights = [], []
+        for row, weight in zip(selected, weights):
+            outcome = 1 if float(row.get("outcome") or 0.0) >= .5 else 0
+            if outcome == action_value:
+                subset.append(row)
+                subset_weights.append(weight)
+        interval = _paired_delta_interval(subset, subset_weights, max_regression=max_regression)
+        interval["sufficient_evidence"] = bool(
+            child["per_action"][action_name]["sufficient_evidence"]
+            and parent["per_action"][action_name]["sufficient_evidence"]
+        )
+        per_action[action_name] = interval
+
+    evidence_ready = bool(child["sufficient_evidence"] and parent["sufficient_evidence"])
+    non_regression = bool(
+        evidence_ready
+        and overall["non_regression_passed"]
+        and per_action["OFF"]["sufficient_evidence"]
+        and per_action["OFF"]["non_regression_passed"]
+        and per_action["ON"]["sufficient_evidence"]
+        and per_action["ON"]["non_regression_passed"]
+    )
+    return {
+        "metric": "fixed_future_paired_policy_quality",
+        "probability_claim": False,
+        "evidence_contract": "future_manual_user_preference_labels_only",
+        "episodes": len(selected),
+        "effective_n": child["effective_n"],
+        "sufficient_evidence": evidence_ready,
+        "child": child,
+        "parent": parent,
+        "paired_delta": overall,
+        "per_action_delta": per_action,
+        "promotion_quality_passed": non_regression,
+        "recommendation": (
+            "pass_paired_non_regression"
+            if non_regression else
+            "fail_paired_quality" if evidence_ready else
+            "abstain_insufficient_independent_evidence"
+        ),
     }
 
 
