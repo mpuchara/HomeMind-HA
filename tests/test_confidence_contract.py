@@ -283,6 +283,18 @@ class IndependentCandidateLabelTests(unittest.TestCase):
         self.assertEqual(row['evidence_kind'], 'episode_evaluator_independent')
         self.assertEqual(row['calibration_source_id'], 'episode-light-1')
 
+    def test_replaying_same_independent_label_is_idempotent(self):
+        kwargs = dict(
+            parent_generation_id='g0', child_generation_id='g1',
+            prediction_event_id='event-1', desired_action=1,
+            source_kind='episode_evaluator_independent', source_id='episode-light-1',
+        )
+        self.assertTrue(record_independent_candidate_label(self.store, **kwargs))
+        self.assertFalse(record_independent_candidate_label(self.store, **kwargs))
+        with self.store.conn() as db:
+            row = dict(db.execute('SELECT * FROM candidate_generation_pairs').fetchone())
+        self.assertEqual(row['calibration_source_id'], 'episode-light-1')
+
     def test_different_second_label_cannot_overwrite_first_independent_fact(self):
         self.assertTrue(record_independent_candidate_label(
             self.store,
@@ -316,7 +328,8 @@ class ContractParityTests(unittest.TestCase):
         self.assertEqual(build['confidence_final_min_independent_episodes'], DEFAULT_FINAL_EPISODES)
         self.assertEqual(build['confidence_final_min_per_action'], DEFAULT_MIN_PER_ACTION)
         self.assertEqual(build['confidence_final_max_allowed_regression'], DEFAULT_FINAL_MAX_REGRESSION)
-        self.assertEqual(build['confidence_final_evidence'], 'manual_user_target_change')
+        self.assertEqual(build['confidence_final_evidence'], 'manual_user_target_change_or_episode_evaluator_independent')
+        self.assertEqual(build['confidence_final_evidence_kinds'], descriptor['final_calibration_evidence_kinds'])
 
         ui = (ROOT / 'adaptive_ai' / 'src' / 'static' / 'confidence_contract_ui.js').read_text(encoding='utf-8')
         self.assertIn('Decision strength', ui)
