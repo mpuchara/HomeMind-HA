@@ -136,6 +136,7 @@ class TrialJournal:
         context = {
             "x": dict(trial.get("x") or {}),
             "policy_features": dict(meta.get("policy_features") or {}),
+            "policy_feature_labels": dict(meta.get("policy_feature_labels") or {}),
             "prediction_inputs": dict(trial.get("prediction_inputs") or {}),
             "background_dependencies": dict(trial.get("background_dependencies") or {}),
             "focus": trial.get("focus"),
@@ -472,6 +473,10 @@ def _decorate_trial(trial, ctx, experiments, session, *, information=False,
                        "information_exploration": bool(information)},
         "policy_features": {str(k): float(v) for k, v in ctx["features"].items()
                             if _finite(v) is not None},
+        "policy_feature_labels": {
+            str(k): [str(x) for x in (v if isinstance(v, (list, tuple)) else [v])]
+            for k, v in dict(ctx.get("labels") or {}).items() if v is not None
+        },
         "horizon": float(ctx["horizon"]),
         "model_versions": versions,
         "action_set": action_set,
