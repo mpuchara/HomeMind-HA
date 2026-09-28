@@ -17,6 +17,7 @@ import threading
 import time
 
 from inference_hot_path_metrics import increment_counter, observe_elapsed
+from shared_inference_context import shared_inference_temporal
 
 
 _MISSING = object()
@@ -133,11 +134,15 @@ class DeferredCandidateShadowQueue:
 
     def _job_temporal(self, job):
         base = getattr(self.engine, "temporal_history", None)
+        context_ts = float(job.get("context_ts") or time.time())
         if not job.get("home_forecast_captured"):
-            return base, None
+            shared = shared_inference_temporal(base, context_ts)
+            return shared, getattr(shared, "home_context", None)
         base_home = getattr(base, "home_context", None) if base is not None else None
         frozen = _FrozenHomeProvider(base_home, job.get("home_forecast") or {})
-        return _TemporalView(base, frozen), frozen
+        view = _TemporalView(base, frozen)
+        shared = shared_inference_temporal(view, context_ts, home_provider=frozen)
+        return shared, shared.home_context
 
     def current_temporal(self):
         return getattr(self.local, "temporal", None) or getattr(
