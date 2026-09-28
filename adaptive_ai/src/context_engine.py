@@ -49,7 +49,13 @@ class ContextEngine:
                 reliability_raw = None
         self.semantic_reliability = SemanticReliabilityModel(reliability_raw)
         adaptive_raw = None
-        if store:
+        durable_adaptive_store = bool(
+            store is not None
+            and callable(getattr(store, 'meta_get', None))
+            and hasattr(store, 'lock')
+            and callable(getattr(store, 'conn', None))
+        )
+        if durable_adaptive_store:
             for key in (self.ADAPTIVE_MODEL_KEY, self.LEGACY_ADAPTIVE_MODEL_KEY):
                 try:
                     value = json.loads(store.meta_get(key, 'null'))
