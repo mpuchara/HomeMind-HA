@@ -31,8 +31,10 @@
     startup(status);
     const control=lastAgents.filter(a=>a.mode==='control').length, shadow=lastAgents.filter(a=>a.mode==='shadow').length;
     const latency=status.telemetry?.metrics?.event_to_intent||{};
-    const p95=latency.recent_p95_ms;
-    $('#overview').innerHTML=`<div class="metric"><b>${lastAgents.length||status.agent_count||0}</b><span>agents</span></div><div class="metric"><b>${control}</b><span>Control · ${shadow} Shadow</span></div><div class="metric"><b>${status.state_count||0}</b><span>HA entities</span></div><div class="metric"><b>${p95==null?'—':ms(p95)}</b><span>event → intent p95</span></div>`;
+    const recentP95=latency.recent_p95_ms;
+    const p95=recentP95??latency.p95_ms;
+    const p95Label=recentP95==null&&latency.p95_ms!=null?'event → intent p95 · retained':'event → intent p95';
+    $('#overview').innerHTML=`<div class="metric"><b>${lastAgents.length||status.agent_count||0}</b><span>agents</span></div><div class="metric"><b>${control}</b><span>Control · ${shadow} Shadow</span></div><div class="metric"><b>${status.state_count||0}</b><span>HA entities</span></div><div class="metric"><b>${p95==null?'—':ms(p95)}</b><span>${p95Label}</span></div>`;
     const c=$('#connection'), s=status.startup||{}, rt=status.realtime||{};
     if (!s.ready) { c.textContent=s.error?'Startup error':`Starting · ${s.step||0}/${s.steps||7}`; c.className='pill'; return; }
     c.textContent=status.ha_connected?`HA connected${rt.connected?' · realtime':' · REST fallback'}`:`Connecting to HA${status.ha_error?' · '+status.ha_error:''}`;
