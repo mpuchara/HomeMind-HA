@@ -13,6 +13,7 @@ import json
 import threading
 import time
 
+from inference_hot_path_metrics import increment_counter, observe_elapsed
 from observation_space import (
     ObservationMask,
     global_observation_catalog,
@@ -522,6 +523,7 @@ class TinyMLPShadowService:
         if not self.enabled or str(agent.get("mode") or "") != "shadow":
             return None
         mask, backend, model_source = self._bundle(agent, policy, state_map)
+        observation_started_ns = time.perf_counter_ns()
         observation = observation_as_of(
             mask,
             state_map,
@@ -530,11 +532,13 @@ class TinyMLPShadowService:
             agent,
             home_provider=self.engine.context,
         )
+        observe_elapsed(self.engine, "shadow_mlp_observation_construction", observation_started_ns)
         started = time.perf_counter_ns()
         chosen, confidence, arms, horizon, support, novelty = backend.predict(
             observation
         )
         inference_us = (time.perf_counter_ns() - started) / 1000.0
+        observe_elapsed(self.engine, "shadow_mlp_forward", started)
         result = {
             "contract_version": self.CONTRACT_VERSION,
             "enabled": True,
@@ -625,7 +629,10 @@ class TinyMLPShadowService:
             self.cache.pop(aid, None)
             self.record_cache.pop(aid, None)
 
-    def predict_persisted(self, agent, policy, state_map, temporal, *, timestamp, require_selected=False):
+    def predict_persisted(
+        self, agent, policy, state_map, temporal, *, timestamp,
+        require_selected=False, metric_prefix="", home_provider=None,
+    ):
         aid = str(agent["id"])
         source_policy_revision = self._source_policy_revision(policy)
         record = self._load_record(aid)
@@ -648,6 +655,7 @@ class TinyMLPShadowService:
                 else None
             )
         if backend is None:
+            increment_counter(self.engine, "mlp_model_deserialize")
             backend = TinyMLPBackend.deserialize(
                 record["model"],
                 expected_schema_id=mask.schema_id,
@@ -666,11 +674,15 @@ class TinyMLPShadowService:
         if require_selected and not backend.trained:
             return None
 
+        observation_started_ns = time.perf_counter_ns()
         observation = observation_as_of(
             mask, state_map, temporal, float(timestamp), agent,
-            home_provider=self.engine.context,
+            home_provider=home_provider or self.engine.context,
         )
+        observe_elapsed(self.engine, str(metric_prefix or "") + "mlp_observation_construction", observation_started_ns)
+        forward_started_ns = time.perf_counter_ns()
         chosen, confidence, arms, horizon, support, novelty = backend.predict(observation)
+        observe_elapsed(self.engine, str(metric_prefix or "") + "mlp_forward", forward_started_ns)
         return {
             "backend": backend,
             "record": record,
@@ -720,6 +732,12 @@ def install(core):
     def process_agent_with_tiny_mlp_shadow(
         agent, state_map, changed_entities=None
     ):
+        wrapped_started_ns = time.perf_counter_ns()
+
+        def finish(value):
+            observe_elapsed(engine, "wrapped_process_agent_total", wrapped_started_ns)
+            return value
+
         aid = str(agent["id"])
         with engine.lock:
             before = float(
@@ -735,13 +753,13 @@ def install(core):
             not service.enabled
             or str(agent.get("mode") or "") != "shadow"
         ):
-            return result
+            return finish(result)
         with engine.lock:
             after = float(
                 (engine.runtime.get(aid) or {}).get("last_inference_ts") or 0.0
             )
         if after <= before:
-            return result
+            return finish(result)
 
         # Hybrid routing may already have run the selected Tiny MLP for this exact
         # inference. Reuse that result instead of paying for a second observation
@@ -783,9 +801,10 @@ def install(core):
             }
             with engine.lock:
                 engine.runtime.setdefault(aid, {})["tiny_mlp_shadow"] = row
-            return result
+            return finish(result)
 
         try:
+            increment_counter(engine, "shadow_mlp_fallback_observes")
             policy = engine.policy(agent)
             service.observe(
                 agent,
@@ -797,7 +816,7 @@ def install(core):
         except Exception as exc:
             # Shadow diagnostics fail open with respect to the authoritative Ridge path.
             service.record_error(aid, exc)
-        return result
+        return finish(result)
 
     engine.process_agent = process_agent_with_tiny_mlp_shadow
     engine._tiny_mlp_shadow_installed = True

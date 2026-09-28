@@ -212,6 +212,9 @@ def _sample_event_time(state, fallback=None):
 
 
 def _samples(temporal, entity_id):
+    shared = getattr(temporal, "samples_for", None)
+    if callable(shared):
+        return shared(entity_id)
     dq = getattr(temporal, "samples", {}).get(entity_id)
     return list(dq or ())
 
@@ -224,10 +227,20 @@ def _eligible_sample(state, event_ts, query_ts, knowledge_ts):
 
 
 def _sample_before(temporal, entity_id, query_ts, knowledge_ts):
+    cached = getattr(temporal, "causal_asof", None)
+    if callable(cached):
+        hit, result = cached(entity_id, query_ts, knowledge_ts)
+        if hit:
+            return result
+    result = (None, None)
     for ts, st in reversed(_samples(temporal, entity_id)):
         if _eligible_sample(st, float(ts), query_ts, knowledge_ts):
-            return float(ts), st
-    return None, None
+            result = (float(ts), st)
+            break
+    publish = getattr(temporal, "cache_causal_asof", None)
+    if callable(publish):
+        publish(entity_id, query_ts, knowledge_ts, result)
+    return result
 
 
 def _latest_communication(temporal, entity_id, at_ts, current=None):
@@ -244,8 +257,7 @@ def _latest_communication(temporal, entity_id, at_ts, current=None):
     return latest
 
 
-def _same_observation(left, right):
-    a, b = observation_value(left), observation_value(right)
+def _same_observation_values(a, b):
     if not a["valid"] or not b["valid"]:
         return None
     if a["kind"] != b["kind"]:
@@ -255,29 +267,41 @@ def _same_observation(left, right):
     return abs(float(a["value"]) - float(b["value"])) <= 1e-9
 
 
+def _same_observation(left, right):
+    return _same_observation_values(observation_value(left), observation_value(right))
+
+
 def _last_edge_time(temporal, entity_id, at_ts, current):
     """Last valid value edge; missing/unavailable samples never create an edge."""
-    ordered = [(float(ts), st) for ts, st in _samples(temporal, entity_id)
-               if float(ts) <= float(at_ts) + 1e-9]
-    if not ordered:
+    rows = _samples(temporal, entity_id)
+    if not rows:
         changed = _state_ts(current, "last_changed")
         return changed if changed is not None and changed <= at_ts else None
-    last_valid = None
+    cutoff = float(at_ts) + 1e-9
+    last_valid_ts = None
+    last_valid_obs = None
     first_valid_ts = None
     valid_count = 0
     edge = None
-    for ts, st in ordered:
+    for raw_ts, st in rows:
+        ts = float(raw_ts)
+        if ts > cutoff:
+            # Historical/replay adapters normally expose ordered samples, but the old
+            # implementation filtered the whole iterable. Keep that exact behavior rather
+            # than depending on ordering as an optimization precondition.
+            continue
         obs = observation_value(st)
         if not obs["valid"]:
             continue
         valid_count += 1
         if first_valid_ts is None:
             first_valid_ts = ts
-        if last_valid is not None:
-            same = _same_observation(last_valid[1], st)
+        if last_valid_obs is not None:
+            same = _same_observation_values(last_valid_obs, obs)
             if same is False:
                 edge = ts
-        last_valid = (ts, st)
+        last_valid_ts = ts
+        last_valid_obs = obs
     if edge is not None:
         return edge
     if valid_count >= 2:
@@ -285,7 +309,7 @@ def _last_edge_time(temporal, entity_id, at_ts, current):
     changed = _state_ts(current, "last_changed")
     if changed is not None and changed <= at_ts:
         return changed
-    return last_valid[0] if last_valid else None
+    return last_valid_ts
 
 
 def _source_quality(state, obs, fast_profile):

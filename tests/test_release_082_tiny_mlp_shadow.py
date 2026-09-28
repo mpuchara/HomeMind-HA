@@ -122,6 +122,34 @@ class TinyMLPBackendTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "feature order mismatch"):
             model.predict(observation(tuple(reversed(FEATURE_IDS))))
 
+    def test_optimized_forward_is_exactly_equal_to_reference_mac_order(self):
+        model = backend(seed=1777)
+        dense = model._dense_input(observation())
+
+        current = [
+            max(-6.0, min(6.0, (float(value) - float(mean)) / float(scale)))
+            for value, mean, scale in zip(dense, model.input_mean, model.input_scale)
+        ]
+        for layer_index, (fan_in, fan_out) in enumerate(
+            zip(model.architecture, model.architecture[1:])
+        ):
+            weights = model.weights[layer_index]
+            biases = model.biases[layer_index]
+            output = []
+            for row in range(int(fan_out)):
+                offset = row * int(fan_in)
+                value = float(biases[row])
+                for column in range(int(fan_in)):
+                    value += float(weights[offset + column]) * float(current[column])
+                output.append(value)
+            current = (
+                output
+                if layer_index == len(model.weights) - 1
+                else [value if value > 0.0 else 0.0 for value in output]
+            )
+
+        self.assertEqual(model._forward(dense), current)
+
 
 class TinyMLPShadowPersistenceTests(unittest.TestCase):
     def setUp(self):

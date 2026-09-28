@@ -12,7 +12,9 @@ is promoted in a later stage.
 from __future__ import annotations
 
 import json
+import time
 
+from inference_hot_path_metrics import increment_counter, observe_elapsed
 from policy_tiny_mlp import TinyMLPBackend
 
 
@@ -81,12 +83,26 @@ def install(manager):
                 raise RuntimeError("selected neural Candidate Ridge baseline is unavailable")
             policy = manager.engine.policy(agent)
 
+        temporal_provider = getattr(manager, "candidate_shadow_temporal", None)
+        temporal = (
+            temporal_provider()
+            if callable(temporal_provider) else manager.engine.temporal_history
+        )
+        home_provider_getter = getattr(manager, "candidate_shadow_home_provider", None)
+        home_provider = (
+            home_provider_getter() if callable(home_provider_getter) else None
+        )
+
         hybrid = getattr(manager.engine, "hybrid_policy", None)
         if hybrid is not None:
+            stage_started_ns = time.perf_counter_ns()
             features, _, _ = policy.features(
-                state_map, manager.engine.temporal_history, at_ts=float(event_ts)
+                state_map, temporal, at_ts=float(event_ts)
             )
+            observe_elapsed(manager.engine, "candidate_feature_construction", stage_started_ns)
+            stage_started_ns = time.perf_counter_ns()
             ridge = policy.predict(features)
+            observe_elapsed(manager.engine, "candidate_ridge_predict", stage_started_ns)
             (
                 ridge_chosen,
                 ridge_confidence,
@@ -95,20 +111,29 @@ def install(manager):
                 ridge_support,
                 ridge_novelty,
             ) = ridge
+            hybrid_started_ns = time.perf_counter_ns()
+            hybrid_kwargs = {
+                "timestamp": float(event_ts),
+                "ridge_chosen": ridge_chosen,
+                "ridge_confidence": ridge_confidence,
+                "ridge_arms": ridge_arms,
+                "ridge_horizon": ridge_horizon,
+                "ridge_support": ridge_support,
+                "ridge_novelty": ridge_novelty,
+                "metric_prefix": "candidate_",
+            }
+            if home_provider is not None:
+                hybrid_kwargs["home_provider"] = home_provider
             selected = hybrid.evaluate(
                 agent,
                 policy,
                 state_map,
-                manager.engine.temporal_history,
-                timestamp=float(event_ts),
-                ridge_chosen=ridge_chosen,
-                ridge_confidence=ridge_confidence,
-                ridge_arms=ridge_arms,
-                ridge_horizon=ridge_horizon,
-                ridge_support=ridge_support,
-                ridge_novelty=ridge_novelty,
+                temporal,
+                **hybrid_kwargs,
             )
+            observe_elapsed(manager.engine, "candidate_hybrid_policy_total", hybrid_started_ns)
             if not bool((selected or {}).get("applied")):
+                increment_counter(manager.engine, "candidate_hybrid_fallbacks")
                 # Returning None intentionally delegates to the established Candidate
                 # Ridge path, matching the post-promotion Live fallback semantics.
                 return None
@@ -137,13 +162,19 @@ def install(manager):
 
         # Compatibility for non-final entrypoints that have not installed the hybrid
         # service yet: retain the previous neural Shadow observation behavior.
+        predict_kwargs = {
+            "timestamp": float(event_ts),
+            "require_selected": True,
+            "metric_prefix": "candidate_",
+        }
+        if home_provider is not None:
+            predict_kwargs["home_provider"] = home_provider
         result = service.predict_persisted(
             agent,
             policy,
             state_map,
-            manager.engine.temporal_history,
-            timestamp=float(event_ts),
-            require_selected=True,
+            temporal,
+            **predict_kwargs,
         )
         if result is None:
             raise RuntimeError("selected neural Candidate model is unavailable")

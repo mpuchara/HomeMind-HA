@@ -355,15 +355,21 @@ class ContextTournament:
             raise
 
     def _shadow_writer(self):
-        while not self.engine.stop_event.is_set():
+        # Unit/component test doubles intentionally omit Engine lifecycle primitives.
+        # A writer without an owning stop_event would be an orphan daemon anyway, so
+        # return immediately. The shipped Engine always provides stop_event.
+        stop_event = getattr(self.engine, "stop_event", None)
+        if stop_event is None:
+            return
+        while not stop_event.is_set():
             self._shadow_flush_event.wait(5.0)
             self._shadow_flush_event.clear()
             # Shadow persistence yields briefly to fresh realtime inference.
             last_event = float(getattr(self.engine, "last_event_monotonic", 0.0) or 0.0)
             if last_event:
                 quiet_for = time.monotonic() - last_event
-                if quiet_for < 0.75 and not self.engine.stop_event.is_set():
-                    self.engine.stop_event.wait(max(0.0, 0.75 - quiet_for))
+                if quiet_for < 0.75 and not stop_event.is_set():
+                    stop_event.wait(max(0.0, 0.75 - quiet_for))
             try:
                 self._flush_shadow_models()
             except Exception as exc:

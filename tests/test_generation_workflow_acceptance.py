@@ -446,7 +446,14 @@ class GenerationWorkflowAcceptanceTests(unittest.TestCase):
 
     def _process(self):
         root = self.store.get_agent_config(self.root["id"])
-        return self.engine.process_agent(root, dict(self.states))
+        result = self.engine.process_agent(root, dict(self.states))
+        # Production Candidate Shadow is deferred to AgentCandidateManager's worker.
+        # This deterministic acceptance harness has start_worker=False, so explicitly
+        # advance that worker boundary after Live has already returned.
+        drain = getattr(self.manager, "drain_deferred_candidate_shadow", None)
+        if callable(drain):
+            drain(max_roots=8)
+        return result
 
     def _collect_alternating_pairs(self, cycles=20):
         # The prediction context represents the next external transition. G0 knows the

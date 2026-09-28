@@ -9,7 +9,9 @@ the unchanged Ridge decision.
 from __future__ import annotations
 
 import math
+import time
 
+from inference_hot_path_metrics import observe_elapsed
 from policy_tiny_mlp import TinyMLPBackend
 from settings import OPTIONS
 
@@ -56,6 +58,8 @@ class HybridPolicyService:
         ridge_horizon,
         ridge_support,
         ridge_novelty,
+        metric_prefix="",
+        home_provider=None,
     ):
         base = {
             "evaluated": True,
@@ -99,13 +103,20 @@ class HybridPolicyService:
             }
 
         try:
+            predict_kwargs = {
+                "timestamp": float(timestamp),
+                "require_selected": True,
+            }
+            if metric_prefix:
+                predict_kwargs["metric_prefix"] = metric_prefix
+            if home_provider is not None:
+                predict_kwargs["home_provider"] = home_provider
             result = self.neural.predict_persisted(
                 agent,
                 policy,
                 state_map,
                 temporal,
-                timestamp=float(timestamp),
-                require_selected=True,
+                **predict_kwargs,
             )
         except Exception as exc:
             return {
@@ -116,13 +127,20 @@ class HybridPolicyService:
         if not result:
             return {**base, "reason": "neural_prediction_unavailable"}
 
+        guard_started_ns = time.perf_counter_ns()
+        guard_stage = str(metric_prefix or "") + "hybrid_ridge_guard"
+
+        def guard_result(value):
+            observe_elapsed(self.engine, guard_stage, guard_started_ns)
+            return value
+
         mlp_chosen = dict(result.get("chosen") or {})
         try:
             mlp_index = int(mlp_chosen["index"])
         except (KeyError, TypeError, ValueError):
-            return {**base, "reason": "neural_action_index_invalid"}
+            return guard_result({**base, "reason": "neural_action_index_invalid"})
         if mlp_index < 0 or mlp_index >= len(policy.actions):
-            return {**base, "reason": "neural_action_outside_ridge_action_space"}
+            return guard_result({**base, "reason": "neural_action_outside_ridge_action_space"})
 
         selected_arm = next(
             (
@@ -133,11 +151,11 @@ class HybridPolicyService:
             None,
         )
         if selected_arm is None:
-            return {**base, "reason": "ridge_guard_arm_missing"}
+            return guard_result({**base, "reason": "ridge_guard_arm_missing"})
 
         head = policy.heads.get(int(ridge_horizon))
         if head is None:
-            return {**base, "reason": "ridge_guard_head_missing"}
+            return guard_result({**base, "reason": "ridge_guard_head_missing"})
 
         structural = float(head.structural_confidence(ridge_arms, mlp_index))
         calibration = dict(head.calibration(mlp_index) or {})
@@ -218,10 +236,10 @@ class HybridPolicyService:
         if mlp_strength + 1e-12 < min_mlp_strength:
             failures.append("mlp_decision_strength")
         if failures:
-            return {
+            return guard_result({
                 **common,
                 "reason": "ridge_guard_rejected:" + ",".join(failures),
-            }
+            })
 
         chosen = dict(ridge_chosen)
         chosen.update(selected_arm)
@@ -241,7 +259,7 @@ class HybridPolicyService:
                 "mlp_decision_strength": mlp_strength,
             }
         )
-        return {
+        return guard_result({
             **common,
             "applied": True,
             "reason": (
@@ -255,7 +273,7 @@ class HybridPolicyService:
             "novelty": novelty,
             "horizon": int(ridge_horizon),
             "decision_source": "hybrid_tiny_mlp_ridge_guard",
-        }
+        })
 
     def diagnostics(self):
         return {

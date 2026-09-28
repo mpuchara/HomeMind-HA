@@ -58,11 +58,32 @@ def install(manager):
                     context_ts = float(at_ts) if at_ts is not None else time.time()
                 except (TypeError, ValueError):
                     context_ts = time.time()
+                tls = getattr(engine, "_inference_tls", None)
+                meta = (
+                    dict(result[2] or {})
+                    if isinstance(result, tuple) and len(result) > 2 and isinstance(result[2], dict)
+                    else {}
+                )
+                schema = getattr(policy_obj, "schema", None)
+                selection = dict(getattr(policy_obj, "selection_meta", None) or {})
                 call["capture"] = {
-                    # Do not mutate this mapping. Engine created it as the policy snapshot.
+                    # Do not mutate this mapping. Engine.process_target created it as the
+                    # immutable pass snapshot. Retaining the mapping avoids an O(home)
+                    # copy on the Live critical path.
                     "state_map": state_map,
                     "context_ts": context_ts,
                     "inference_ts": inference_ts,
+                    "state_revision": getattr(tls, "state_revision", getattr(engine, "state_revision", None)) if tls is not None else getattr(engine, "state_revision", None),
+                    "entity_revisions": getattr(tls, "entity_revisions", None) if tls is not None else None,
+                    "context_revision": getattr(tls, "context_revision", None) if tls is not None else None,
+                    "home_forecast_captured": "home_forecast" in meta,
+                    "home_forecast": dict(meta.get("home_forecast") or {}),
+                    "parent_model_revision": getattr(policy_obj, "model_revision", None),
+                    "parent_schema_revision": (
+                        selection.get("schema_revision")
+                        if selection.get("schema_revision") is not None
+                        else getattr(schema, "version", None)
+                    ),
                 }
             return result
 
@@ -82,7 +103,7 @@ def install(manager):
         # still receives the scheduler's physical target event snapshot.
         return original_before(agent, state_map)
 
-    def after_live_process(agent, state_map):
+    def _capture_shadow_job(agent):
         aid = str(agent["id"])
         call = calls.pop(aid, None)
         if not call:
@@ -106,34 +127,79 @@ def install(manager):
             or abs(float(captured_inference) - final_inference) > 1e-6
         ):
             return None
+        try:
+            context_ts = float(capture["context_ts"])
+        except (KeyError, TypeError, ValueError):
+            return None
+        if not math.isfinite(context_ts):
+            return None
 
-        # This is the exact map supplied to the parent's policy feature builder, not a
-        # later reconstruction and not the outer scheduler snapshot.
-        bundle = original_after(agent, capture["state_map"])
+        try:
+            parent_prediction = float(runtime.get("last_prediction"))
+            parent_confidence = runtime.get("last_confidence")
+            parent_confidence = None if parent_confidence is None else float(parent_confidence)
+        except (TypeError, ValueError):
+            return None
+        if not math.isfinite(parent_prediction):
+            return None
+        if parent_confidence is not None and not math.isfinite(parent_confidence):
+            parent_confidence = None
+
+        return {
+            "root_agent_id": aid,
+            "agent": dict(agent),
+            # Exact Root policy snapshot; no later engine.state_map reconstruction.
+            "state_map": capture["state_map"],
+            "context_ts": context_ts,
+            "inference_ts": final_inference,
+            "state_revision": capture.get("state_revision"),
+            "entity_revisions": capture.get("entity_revisions"),
+            "context_revision": capture.get("context_revision"),
+            "generation_revision": int(
+                getattr(manager.store, "_provenance_generation_revision", 0) or 0
+            ),
+            "home_forecast_captured": bool(capture.get("home_forecast_captured")),
+            "home_forecast": dict(capture.get("home_forecast") or {}),
+            "parent_observation": {
+                "desired": parent_prediction,
+                "confidence": parent_confidence,
+                "model_revision": (
+                    str(capture.get("parent_model_revision"))
+                    if capture.get("parent_model_revision") is not None else None
+                ),
+                "schema_revision": (
+                    str(capture.get("parent_schema_revision"))
+                    if capture.get("parent_schema_revision") is not None else None
+                ),
+            },
+        }
+
+    def execute_candidate_shadow_job(job):
+        agent = dict(job.get("agent") or {})
+        if not agent:
+            return None
+        bundle = original_after(agent, job.get("state_map"))
         if not bundle:
             return bundle
 
-        # agent_candidate_shadow_runtime creates one shared event a few milliseconds after
-        # Root inference. Re-anchor that event to the timestamp that was actually passed to
-        # the Root policy. This makes parent/child decision-history timestamps refer to the
-        # same inference context rather than to a later bookkeeping instant.
+        # Shadow runtime creates the event on the deferred worker. Re-anchor it to the
+        # timestamp actually passed to Root policy.features so Parent/Child remain one
+        # causal event even though Candidate computation runs later.
         try:
-            context_ts = float(capture["context_ts"])
+            context_ts = float(job["context_ts"])
             old_ts = float(bundle["ts"])
         except (KeyError, TypeError, ValueError):
             return bundle
-        if not math.isfinite(context_ts):
-            return bundle
         bundle["ts"] = context_ts
+        align_runtime = getattr(manager, "align_candidate_shadow_event_timestamp", None)
+        if callable(align_runtime):
+            align_runtime(agent["id"], bundle["event_id"], old_ts, context_ts)
         for result in (bundle.get("results") or {}).values():
             try:
                 if abs(float(result.get("desired_since_ts")) - old_ts) <= 1e-6:
                     result["desired_since_ts"] = context_ts
             except (TypeError, ValueError):
                 pass
-        # Rows may not exist when the 30 s history heartbeat did not need a write. When
-        # they do exist, move only this exact shared event; no historical policy replay is
-        # involved and no other generation/event is touched.
         try:
             with manager.store.lock, manager.store.conn() as c:
                 c.execute(
@@ -148,6 +214,22 @@ def install(manager):
                 {"event_id": bundle.get("event_id"), "error": f"{type(exc).__name__}: {exc}"},
             )
         return bundle
+
+    def after_live_process(agent, state_map):
+        job = _capture_shadow_job(agent)
+        if not job:
+            return None
+        defer = getattr(manager, "defer_candidate_shadow", None)
+        if callable(defer):
+            return defer(job)
+        # Compatibility for unit/legacy compositions that intentionally do not install
+        # the deferred worker. Shipped runtime installs defer_candidate_shadow.
+        return execute_candidate_shadow_job(job)
+
+    manager.execute_candidate_shadow_job = execute_candidate_shadow_job
+    manager.candidate_shadow_exact_context_contract = (
+        "captured_state_map_timestamp_revisions_parent_decision_and_home_forecast"
+    )
 
     engine.policy = policy
     manager.before_live_process = before_live_process

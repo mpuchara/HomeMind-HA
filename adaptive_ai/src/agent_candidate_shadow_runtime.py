@@ -18,8 +18,10 @@ import uuid
 from urllib.parse import parse_qs, unquote, urlsplit
 
 from context import target_value
+from candidate_shadow_deferred import DeferredCandidateShadowQueue
 from fast_runtime import is_fast_target
 from settings import parse_ts
+from inference_hot_path_metrics import observe_elapsed
 
 
 DECISION_STALE_SECONDS = 95.0
@@ -148,6 +150,15 @@ def _model_revision(policy, generation):
     return str(value) if value is not None else generation.get("model_revision")
 
 
+def _candidate_temporal(manager):
+    provider = getattr(manager, "candidate_shadow_temporal", None)
+    if callable(provider):
+        temporal = provider()
+        if temporal is not None:
+            return temporal
+    return manager.engine.temporal_history
+
+
 def _predict_candidate(manager, generation, state_map, event_ts):
     agent_id = generation.get("agent_id")
     if not agent_id:
@@ -165,8 +176,13 @@ def _predict_candidate(manager, generation, state_map, event_ts):
             if not agent or manager.store.get_model(str(agent_id)) is None:
                 return None
             policy = manager.engine.policy(agent)
-        features, _, _ = policy.features(state_map, manager.engine.temporal_history, at_ts=event_ts)
+        stage_started_ns = time.perf_counter_ns()
+        temporal = _candidate_temporal(manager)
+        features, _, _ = policy.features(state_map, temporal, at_ts=event_ts)
+        observe_elapsed(manager.engine, "candidate_feature_construction", stage_started_ns)
+        stage_started_ns = time.perf_counter_ns()
         result = policy.predict(features)
+        observe_elapsed(manager.engine, "candidate_ridge_predict", stage_started_ns)
         chosen = result[0]
         confidence = result[1] if len(result) > 1 else None
         desired = float(chosen["value"])
@@ -190,7 +206,27 @@ def _predict_candidate(manager, generation, state_map, event_ts):
         return None
 
 
-def _root_observation(manager, root_agent, generation):
+def _root_observation(manager, root_agent, generation, captured=None):
+    if captured is not None:
+        try:
+            desired = float(captured.get("desired"))
+            confidence = captured.get("confidence")
+            confidence = None if confidence is None else float(confidence)
+        except (TypeError, ValueError):
+            return None
+        if not math.isfinite(desired) or (
+            confidence is not None and not math.isfinite(confidence)
+        ):
+            return None
+        return {
+            "generation_id": generation["generation_id"],
+            "agent_id": str(root_agent["id"]),
+            "desired": desired,
+            "confidence": confidence,
+            "model_revision": captured.get("model_revision"),
+            "schema_revision": captured.get("schema_revision"),
+        }
+
     rt = manager.engine.runtime.get(str(root_agent["id"])) or {}
     desired = rt.get("last_prediction")
     if desired is None:
@@ -455,6 +491,7 @@ def install(manager):
     original_get = handler.do_GET
 
     shadow_runtime = {}
+    deferred_shadow = DeferredCandidateShadowQueue(manager, limit=32)
     active_candidate_parents = set()
     candidate_dependency_roots = {}
     passive_pending = {}
@@ -623,7 +660,10 @@ def install(manager):
                       "event_ts": event_ts, "previous_current": previous_current})
         return result
 
-    def _bundle(root_agent, state_map, *, include_parent=True, event_id=None, event_ts=None):
+    def _bundle(
+        root_agent, state_map, *, include_parent=True, event_id=None, event_ts=None,
+        parent_observation=None,
+    ):
         root_gen, shadow_generations = _cached_generations(root_agent["id"])
         # No Candidate means no A/B observation work at all. Live runtime telemetry is
         # already stored by Engine; candidate_generation_decisions exist only to compare
@@ -642,7 +682,9 @@ def install(manager):
         root_rt = _root_runtime(root_agent["id"])
         results = {}
         if include_parent:
-            observed_root = _root_observation(manager, root_agent, root_gen)
+            observed_root = _root_observation(
+                manager, root_agent, root_gen, captured=parent_observation
+            )
             if observed_root is not None:
                 results[root_gen["generation_id"]] = _decorate_result(root_rt, observed_root, event_ts, current)
         for generation in shadow_generations:
@@ -741,10 +783,17 @@ def install(manager):
     def after_live_process(agent, state_map):
         # This extension is authoritative for Candidate Shadow runtime; the older Candidate
         # wrapper is intentionally not called, avoiding duplicate policy inference and
-        # duplicate A/B samples. _bundle() is the only generation lookup on this path.
+        # duplicate A/B samples. Deferred execution supplies the exact parent observation
+        # captured before a newer Live inference can overwrite Engine.runtime.
         root_rt = _root_runtime(agent["id"])
         previous_bundle = root_rt.get("bundle")
-        bundle = _bundle(agent, state_map)
+        current_job = getattr(manager, "candidate_shadow_current_job", None)
+        current_job = current_job() if callable(current_job) else None
+        bundle = _bundle(
+            agent, state_map,
+            event_ts=(current_job or {}).get("context_ts"),
+            parent_observation=(current_job or {}).get("parent_observation"),
+        )
         if not bundle:
             return None
         _increment_false_early(agent["id"], previous_bundle, bundle)
@@ -916,6 +965,36 @@ def install(manager):
             "child_generation_id": child["generation_id"], "pairs": pairs, "summary": summary,
             "contract": "same_prediction_event_same_future_outcome",
         }
+
+    def align_candidate_shadow_event_timestamp(root_id, event_id, old_ts, new_ts):
+        root_id = str(root_id)
+        event_id = str(event_id)
+        old_ts = float(old_ts)
+        new_ts = float(new_ts)
+        changed = 0
+        with manager.lock:
+            for row in latest_generation_runtime.values():
+                if (
+                    str(row.get("root_agent_id") or "") == root_id
+                    and str(row.get("event_id") or "") == event_id
+                    and abs(float(row.get("ts") or 0.0) - old_ts) <= 1e-6
+                ):
+                    row["ts"] = new_ts
+                    changed += 1
+            root_rt = shadow_runtime.get(root_id)
+            if root_rt is not None:
+                for state in (root_rt.get("generation_state") or {}).values():
+                    try:
+                        if abs(float(state.get("desired_since_ts")) - old_ts) <= 1e-6:
+                            state["desired_since_ts"] = new_ts
+                    except (TypeError, ValueError):
+                        pass
+                try:
+                    if abs(float(root_rt.get("last_persist") or 0.0) - old_ts) <= 1e-6:
+                        root_rt["last_persist"] = new_ts
+                except (TypeError, ValueError):
+                    pass
+        return changed
 
     def _latest_shadow(generation_id):
         """Return the last actually observed decision, even when it is no longer fresh.
@@ -1153,6 +1232,7 @@ def install(manager):
         return result
 
     def maintenance():
+        deferred_shadow.drain(max_roots=4)
         # Runtime evidence is never synthesized from history. Passive observations use
         # only the live websocket-backed state map and run on the Candidate worker, never
         # on the websocket callback or HTTP thread.
@@ -1208,9 +1288,17 @@ def install(manager):
 
     manager.before_live_process = before_live_process
     manager.after_live_process = after_live_process
+    manager.defer_candidate_shadow = deferred_shadow.enqueue
+    manager.drain_deferred_candidate_shadow = deferred_shadow.drain
+    manager.candidate_shadow_temporal = deferred_shadow.current_temporal
+    manager.candidate_shadow_home_provider = deferred_shadow.current_home_provider
+    manager.candidate_shadow_current_job = deferred_shadow.current_job
+    manager.candidate_shadow_async_diagnostics = deferred_shadow.diagnostics
+    manager.candidate_shadow_async = deferred_shadow
     manager.drain_candidate_shadow_events = drain_candidate_shadow_events
     manager.candidate_live_runtime_snapshots = candidate_live_runtime_snapshots
     manager.candidate_latest_runtime = lambda generation_id: _latest_shadow(generation_id)
+    manager.align_candidate_shadow_event_timestamp = align_candidate_shadow_event_timestamp
     manager.candidate_dependency_roots = candidate_dependency_roots
     manager.rebuild_candidate_dependency_index = _rebuild_candidate_dependency_index
     if callable(original_on_state_changed):
@@ -1225,7 +1313,7 @@ def install(manager):
     manager._maintenance = maintenance
     handler.do_GET = do_get
     manager._candidate_shadow_runtime_installed = True
-    manager.candidate_shadow_contract = "observed_generation_predictions_no_executor_plus_passive_event_fallback"
+    manager.candidate_shadow_contract = "observed_generation_predictions_deferred_off_live_path_no_executor_plus_passive_event_fallback"
     manager.candidate_event_contract = "state_changed_root_lineage_index_to_candidate_worker_with_parent_path_dedup"
     manager.candidate_hot_read_contract = "current_generation_snapshots_and_active_ab_edge_are_ram_first"
     manager.candidate_decision_history_contract = "observed_only_no_policy_replay_gaps_preserved"
