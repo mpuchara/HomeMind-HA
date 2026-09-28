@@ -19,7 +19,7 @@ import time
 from training_budget import TRAINING_BUDGET
 
 
-CONTRACT_VERSION = 7
+CONTRACT_VERSION = 8
 DEFAULT_ARCHIVE_BATCH_ROWS = 16
 DEFAULT_EXPERIENCE_BATCH_ROWS = 128
 DEFAULT_TRAINING_DUTY_CYCLE = 0.85
@@ -203,6 +203,16 @@ def install(core, manager):
     maintenance_state = {"next_at": 0.0}
 
     def bounded_maintenance():
+        # Candidate Shadow inference is event-driven runtime work, not periodic
+        # housekeeping. 0.14.100 moved Candidate inference to a deferred queue that is
+        # drained by AgentCandidateManager._maintenance(). The Pi low-power wrapper then
+        # rate-limited that whole function to 60 s, so wake_event could wake the worker
+        # without actually running the queued Candidate. Drain the bounded deferred queue
+        # before the maintenance gate; the original maintenance remains throttled below.
+        drain_deferred = getattr(manager, "drain_deferred_candidate_shadow", None)
+        if callable(drain_deferred):
+            drain_deferred(max_roots=4)
+
         now = time.monotonic()
         if now < maintenance_state["next_at"]:
             return None
