@@ -92,8 +92,13 @@ def semantic_feature_indices(training_episodes, max_features=24):
     """Select bounded semantic groups from training only, preserving v12 missingness."""
     stats, labels = {}, {}
     for episode in training_episodes:
-        labels.update(_feature_labels(episode))
-        for idx, value in _features(episode.get("features")).items():
+        episode_labels = _feature_labels(episode)
+        labels.update(episode_labels)
+        values = _features(episode.get("features"))
+        # HomeMind vectors are sparse: an omitted slot numerically means zero, not that
+        # the schema slot does not exist. Labels therefore define the semantic support.
+        for idx in sorted(set(values) | set(episode_labels)):
+            value = float(values.get(idx, 0.0))
             row = stats.setdefault(idx, [0, 0.0, 0.0])
             row[0] += 1
             row[1] += value
