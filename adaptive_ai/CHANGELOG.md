@@ -1,3 +1,11 @@
+# 0.14.101 — 2026-09-28
+
+- Fix a Candidate Correct schema-evolution integrity bug: semantic changes to schema, policy heads, revisions and selection metadata are now followed by rebuilding the common backend envelope so both feature-mask identity and `model_checksum` match the persisted model.
+- Treat checksum-invalid persisted models as incompatible before Candidate fine-tuning instead of accepting version/schema alone and failing later with `NEEDS_RETRAIN: policy model checksum mismatch`.
+- Extend Correct debug export with persisted checksum, recomputed checksum and `model_checksum_valid` for direct diagnosis without exporting policy weights.
+- Clarify `NEEDS_RETRAIN` in the agent card: an incompatible old policy remains intentionally blocked from inference; Train/Rebuild is required and the existing completed-training lifecycle returns the agent to Shadow automatically.
+- Preserve the safety boundary: this release does not run old-schema or checksum-invalid models in Shadow and does not change Correct labels, Candidate lineage authority, ActionIntent or Executor behaviour.
+
 # 0.14.100 — 2026-09-28
 
 - Optimize the **Hybrid Ridge + Tiny MLP realtime hot path** without changing model selection, Correct semantics, Candidate promotion authority, ActionIntent freshness or Executor safety.
