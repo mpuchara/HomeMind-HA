@@ -315,6 +315,8 @@ class Engine(threading.Thread):
             last_state_sync_ok = self.last_state_sync_ok
             last_state_sync_error = self.last_state_sync_error
             state_resync_stats = dict(self.state_resync_stats)
+            registry_refresh_stats = dict(self.registry_refresh_stats)
+            housekeeping_stats = dict(self.housekeeping_stats)
             inference_scheduler = dict(self.inference_scheduler)
         agents = STORE.list_agents()
         confidences = [runtime_conf.get(a["id"]) for a in agents]
@@ -347,6 +349,11 @@ class Engine(threading.Thread):
                 **state_resync_stats,
                 "last_ok": last_state_sync_ok,
                 "error": last_state_sync_error,
+            },
+            "runtime_qos": {
+                "registry_refresh": registry_refresh_stats,
+                "housekeeping": housekeeping_stats,
+                "healthy_resync_seconds": float(OPTIONS.get("realtime_resync_seconds", 900)),
             },
             "inference_scheduler": {
                 **inference_scheduler,
