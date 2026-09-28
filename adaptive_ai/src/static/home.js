@@ -42,11 +42,27 @@ function renderHome(status){
   const sourcesOpen=sourcePanel?.open||false, sourceScroll=sourcePanel?.querySelector('.home-source-table')?.scrollTop||0;
   const h=status.home_intelligence||{}, b=status.home_bootstrap||{}, t=status.telemetry||{};
   const inf=t.metrics?.inference||{}, latency=t.metrics?.event_to_intent||{};
+  const candidateInf=t.metrics?.candidate_inference||{}, candidateLatency=t.metrics?.candidate_event_to_decision||{};
   const drift=status.drift_observer||{}, scheduler=status.inference_scheduler||{}, resync=status.state_resync||{};
-  const inferenceRecentP95=inf.recent_p95_ms, eventRecentP95=latency.recent_p95_ms;
-  const inferenceP95=inferenceRecentP95??inf.p95_ms, eventP95=eventRecentP95??latency.p95_ms;
-  const inferenceP95Label=inferenceRecentP95==null&&inf.p95_ms!=null?'inference p95 · retained (no sample last 60 s)':'inference p95 · last 60 s';
-  const eventP95Label=eventRecentP95==null&&latency.p95_ms!=null?'event → intent p95 · retained (no sample last 60 s)':'event → intent p95 · last 60 s';
+  const pickMetric=(primary,fallback)=>{
+    if(primary.recent_p95_ms!=null)return {value:primary.recent_p95_ms,source:'live',recent:true};
+    if(fallback.recent_p95_ms!=null)return {value:fallback.recent_p95_ms,source:'candidate',recent:true};
+    if(primary.p95_ms!=null)return {value:primary.p95_ms,source:'live',recent:false};
+    if(fallback.p95_ms!=null)return {value:fallback.p95_ms,source:'candidate',recent:false};
+    return {value:null,source:null,recent:false};
+  };
+  const inferenceMetric=pickMetric(inf,candidateInf), eventMetric=pickMetric(latency,candidateLatency);
+  const inferenceP95=inferenceMetric.value, eventP95=eventMetric.value;
+  const inferenceP95Label=inferenceMetric.source==='candidate'
+    ?`Candidate inference p95 · ${inferenceMetric.recent?'last 60 s':'retained'}`
+    :inferenceMetric.source==='live'
+      ?`inference p95 · ${inferenceMetric.recent?'last 60 s':'retained'}`
+      :'inference p95 · waiting for first sample';
+  const eventP95Label=eventMetric.source==='candidate'
+    ?`event → Candidate decision p95 · ${eventMetric.recent?'last 60 s':'retained'}`
+    :eventMetric.source==='live'
+      ?`event → intent p95 · ${eventMetric.recent?'last 60 s':'retained'}`
+      :'event → decision p95 · waiting for relevant HA event';
   const running=['IMPORTING','TRAINING'].includes(b.state), names=h.area_names||{};
   const paths=(h.top_transitions||[]).slice(0,5);
   $('#homePanel').innerHTML='<div class="history-head"><div><b>Home Intelligence</b><span>Shared occupancy and trajectory model · live learning is automatic</span></div><strong>'+esc(b.state||'IDLE')+'</strong></div>'+
@@ -58,7 +74,7 @@ function renderHome(status){
       [eventP95==null?'—':num(eventP95,2)+' ms',eventP95Label]
     ].map(([v,label])=>'<div><b>'+v+'</b><span>'+label+'</span></div>').join('')+'</div>'+
     '<div class="home-transitions">'+(paths.length?paths.map(p=>'<span>'+p.path.map(id=>esc(names[id]||id)).join(' → ')+' <b>'+pct(p.probability)+'</b></span>').join(''):'No observed area-to-area transitions yet. Existing mapped presence/activity sensors learn the live map automatically as state changes arrive.')+'</div>'+
-    '<div class="history-meta"><span>Graph half-life '+num(h.half_life_days)+' days</span><span>Policy half-life '+num(status.options?.policy_half_life_days||30)+' days</span><span>Heavy job: '+esc(status.heavy_job||'idle')+'</span><span>Inference count '+num(inf.count)+'</span><span>Event/timer passes '+num(scheduler.event_passes||0)+' / '+num(scheduler.timer_passes||0)+'</span><span>Drift observer '+num(drift.runs||0)+' runs · '+num(drift.pending||0)+' pending · max '+num(drift.max_run_ms||0,1)+' ms</span><span>State resync '+num(resync.last_changed_entities||0)+' changed · '+num(resync.last_duration_ms||0,1)+' ms · max '+num(resync.max_duration_ms||0,1)+' ms</span></div>'+
+    '<div class="history-meta"><span>Graph half-life '+num(h.half_life_days)+' days</span><span>Policy half-life '+num(status.options?.policy_half_life_days||30)+' days</span><span>Heavy job: '+esc(status.heavy_job||'idle')+'</span><span>Inference count '+num(inf.count)+' live · '+num(candidateInf.count)+' Candidate</span><span>Event/timer passes '+num(scheduler.event_passes||0)+' / '+num(scheduler.timer_passes||0)+'</span><span>Drift observer '+num(drift.runs||0)+' runs · '+num(drift.pending||0)+' pending · max '+num(drift.max_run_ms||0,1)+' ms</span><span>State resync '+num(resync.last_changed_entities||0)+' changed · '+num(resync.last_duration_ms||0,1)+' ms · max '+num(resync.max_duration_ms||0,1)+' ms</span></div>'+
     (running?'<div class="bar history-bar"><i style="width:'+Math.round((b.progress||0)*100)+'%"></i></div><p>'+num(b.rows)+' rows · '+num(b.rows_per_second)+' rows/s · '+esc(duration(b.eta_seconds)||'ETA pending')+'</p>':'')+
     (b.error?'<p role="alert">'+esc(b.error)+'</p><p class="muted">Bootstrap failed; the current live model continues running.</p>':'')+
     homeSources(h,names)+
