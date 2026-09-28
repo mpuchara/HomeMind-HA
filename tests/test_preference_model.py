@@ -2,7 +2,7 @@ import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import Mock, patch
+from unittest.mock import Mock, patch, patch
 
 from manual_feedback_unified import UnifiedManualFeedbackJournal
 from preference_model import LightingPreferenceModel, PreferenceDecisionComposer
@@ -162,6 +162,18 @@ class LightingPreferenceModelTests(unittest.TestCase):
         self.assertEqual(regression, 0)
         self.assertEqual(adapted_pref["independent_evidence_count"], 1)
         self.assertFalse(untouched_pref["applied"])
+
+    def test_predict_uses_final_runtime_teaching_signature_contract(self):
+        row = self.record(1.0, rejected=0.0)
+        policy = SimpleNamespace(actions=[0.0, 1.0])
+        with patch("teaching.signature", return_value=dict(self.context)) as runtime_signature:
+            result = self.model.predict(
+                self.agent, policy, {"sensor.any": {}}, object(), self.now
+            )
+        runtime_signature.assert_called_once()
+        self.assertTrue(result["applied"])
+        self.assertEqual(result["action_value"], 1.0)
+        self.assertEqual(result["evidence_ids"], [row["feedback_id"]])
 
     def test_instruction_scope_one_time_expires_using_existing_intent_ttl(self):
         row = self.record(1.0, rejected=0.0, scope="one_time")
