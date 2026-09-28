@@ -66,9 +66,12 @@ class ContextPolicy:
     def features(self, state_map, history, at_ts=None):
         presence = (state_map or {}).get("binary_sensor.presence") or {}
         value = 1.0 if str(presence.get("state")) == "on" else 0.0
-        return {0: 1.0, 1: value}, {}, {"at_ts": at_ts}
+        # The timestamp gate makes this test fail if deferred Candidate evaluates at
+        # worker wall-clock time instead of the exact timestamp captured from Root Live.
+        causal_time = 1.0 if float(at_ts or 0.0) < 100.0 else 0.0
+        return {0: 1.0, 1: value, 2: causal_time}, {}, {"at_ts": at_ts}
     def predict(self, features):
-        value = float(features.get(1, 0.0))
+        value = float(features.get(1, 0.0)) * float(features.get(2, 0.0))
         return {"value": value}, .9, [], 1.0, 1.0, 0.0
     def serialize(self): return dict(self.model)
 
