@@ -26,6 +26,7 @@ from inference_hot_path_metrics import observe_elapsed
 
 DECISION_STALE_SECONDS = 95.0
 DECISION_HEARTBEAT_SECONDS = 30.0
+DECISION_HEARTBEAT_MAX_DEFER_SECONDS = 60.0
 SHADOW_STATES = {"comparing", "ready", "offline_blocked", "insufficient_evidence", "parent"}
 COMPARISON_STATES = {"comparing", "ready"}
 
@@ -1236,9 +1237,27 @@ def install(manager):
 
     def drain_candidate_shadow_events(*, force=False, max_roots=2):
         now = time.monotonic()
-        # Candidate heartbeat is maintenance/evidence work; recent realtime events win.
+        # Candidate heartbeat is low-priority evidence work, so a fresh realtime event may
+        # defer it briefly. It must not be starved indefinitely by a busy Home Assistant,
+        # though: once any active Candidate would exceed the bounded freshness budget,
+        # allow one worker-side heartbeat even while unrelated realtime traffic continues.
         last_event = float(getattr(manager.engine, "last_event_monotonic", 0.0) or 0.0)
-        if not force and last_event and now - last_event < 0.50:
+        freshness_due = False
+        for root_id in tuple(active_candidate_parents):
+            rt = _root_runtime(root_id)
+            last_activity = max(
+                float(rt.get("last_candidate_observed_monotonic") or 0.0),
+                float(rt.get("last_candidate_attempt_monotonic") or 0.0),
+            )
+            if last_activity <= 0.0 or now - last_activity >= DECISION_HEARTBEAT_MAX_DEFER_SECONDS:
+                freshness_due = True
+                break
+        if (
+            not force
+            and not freshness_due
+            and last_event
+            and now - last_event < 0.50
+        ):
             return 0
         # A 30 s heartbeat keeps persistent Candidate Shadow fresh even while Parent is
         # paused or no relevant HA entity changes. Normal Parent inference updates the
