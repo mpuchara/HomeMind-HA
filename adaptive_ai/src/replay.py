@@ -406,25 +406,33 @@ class SQLiteTemporalTracker:
             yield ids[offset:offset + cls.SQL_ENTITY_CHUNK]
 
     @staticmethod
-    def _row_order(row):
-        # entity_history ordering is (ts,id) with an integer primary key. Keep that exact
-        # tie-breaker in the base tracker; observation-contract v12 overrides this with
-        # its historical string-id merge ordering for archive + fast-journal rows.
+    def _availability_time(row):
+        value = row.get("_feature_received_time")
+        if value is None:
+            value = row.get("received_ts")
+        if value is None:
+            value = row.get("ts")
+        return float(value or 0.0)
+
+    @classmethod
+    def _row_order(cls, row):
+        # Feature vectors remain ordered on event time; receive time is a causal
+        # availability tie-breaker. Legacy rows with unknown receive time fall back to ts.
+        raw_id = row.get("id")
+        received = cls._availability_time(row)
+        try:
+            return (float(row.get("ts") or 0.0), received, 0, int(raw_id))
+        except (TypeError, ValueError):
+            return (float(row.get("ts") or 0.0), received, 1, str(raw_id or ""))
+
+    @classmethod
+    def _home_causal_order(cls, row):
         raw_id = row.get("id")
         try:
-            return (
-                float(row.get("ts") or 0.0),
-                float(row.get("_feature_received_time") or 0.0),
-                0,
-                int(raw_id),
-            )
+            suffix = (0, int(raw_id))
         except (TypeError, ValueError):
-            return (
-                float(row.get("ts") or 0.0),
-                float(row.get("_feature_received_time") or 0.0),
-                1,
-                str(raw_id or ""),
-            )
+            suffix = (1, str(raw_id or ""))
+        return (cls._availability_time(row), float(row.get("ts") or 0.0), *suffix)
 
     def _fetch_rows(self, sql, params):
         if self.query_cache is not None:
@@ -453,11 +461,12 @@ class SQLiteTemporalTracker:
             for eid in ids:
                 parts.append(
                     "SELECT * FROM ("
-                    "SELECT id,entity_id,ts,state,attributes_json,context_user_id,source "
+                    "SELECT id,entity_id,ts,received_ts,state,attributes_json,context_user_id,source "
                     "FROM entity_history WHERE entity_id=? AND ts<=? "
+                    "AND COALESCE(received_ts,ts)<=? "
                     "ORDER BY ts DESC,id DESC LIMIT ?)"
                 )
-                params.extend([eid, float(ts), count])
+                params.extend([eid, float(ts), float(ts), count])
             if not parts:
                 continue
             sql = " UNION ALL ".join(parts)
@@ -474,22 +483,25 @@ class SQLiteTemporalTracker:
             marks = ",".join("?" for _ in ids)
             if per_entity_limit is None:
                 sql = (
-                    "SELECT id,entity_id,ts,state,attributes_json,context_user_id,source "
+                    "SELECT id,entity_id,ts,received_ts,state,attributes_json,context_user_id,source "
                     f"FROM entity_history WHERE entity_id IN ({marks}) "
-                    "AND ts>? AND ts<=? ORDER BY ts,id"
+                    "AND ts<=? AND COALESCE(received_ts,ts)<=? "
+                    "AND (ts>? OR COALESCE(received_ts,ts)>?) ORDER BY ts,id"
                 )
-                params = [*ids, float(lo), float(hi)]
+                params = [*ids, float(hi), float(hi), float(lo), float(lo)]
             else:
                 limit = max(1, int(per_entity_limit))
                 parts, params = [], []
                 for eid in ids:
                     parts.append(
                         "SELECT * FROM ("
-                        "SELECT id,entity_id,ts,state,attributes_json,context_user_id,source "
-                        "FROM entity_history WHERE entity_id=? AND ts>? AND ts<=? "
+                        "SELECT id,entity_id,ts,received_ts,state,attributes_json,context_user_id,source "
+                        "FROM entity_history WHERE entity_id=? "
+                        "AND ts<=? AND COALESCE(received_ts,ts)<=? "
+                        "AND (ts>? OR COALESCE(received_ts,ts)>?) "
                         "ORDER BY ts DESC,id DESC LIMIT ?)"
                     )
-                    params.extend([eid, float(lo), float(hi), limit])
+                    params.extend([eid, float(hi), float(hi), float(lo), float(lo), limit])
                 sql = " UNION ALL ".join(parts)
             result.extend(self._fetch_rows(sql, params))
             TRAINING_BUDGET.checkpoint("temporal_forward_query")
