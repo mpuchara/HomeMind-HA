@@ -201,19 +201,28 @@ class TinyMLPBackend(PolicyBackend):
             max(-6.0, min(6.0, (float(value) - float(mean)) / float(scale)))
             for value, mean, scale in zip(dense, self.input_mean, self.input_scale)
         ]
+        last_layer = len(self.weights) - 1
         for layer_index, (fan_in, fan_out) in enumerate(
             zip(self.architecture, self.architecture[1:])
         ):
+            # array('f') indexing already returns Python floats and current is a float
+            # list. Re-wrapping every operand in float() added two Python calls per MAC.
+            # Keep the exact row/column accumulation order, but fuse ReLU into the row
+            # output so hidden layers do not need a second list traversal.
+            fan_in = int(fan_in)
+            fan_out = int(fan_out)
             weights = self.weights[layer_index]
             biases = self.biases[layer_index]
             output = []
-            for row in range(int(fan_out)):
-                offset = row * int(fan_in)
-                value = float(biases[row])
-                for column in range(int(fan_in)):
-                    value += float(weights[offset + column]) * float(current[column])
-                output.append(value)
-            current = output if layer_index == len(self.weights) - 1 else self._relu(output)
+            append = output.append
+            is_output = layer_index == last_layer
+            for row in range(fan_out):
+                offset = row * fan_in
+                value = biases[row]
+                for column in range(fan_in):
+                    value += weights[offset + column] * current[column]
+                append(value if is_output or value > 0.0 else 0.0)
+            current = output
         return current
 
     @staticmethod
