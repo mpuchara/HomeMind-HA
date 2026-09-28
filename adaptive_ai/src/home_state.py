@@ -235,8 +235,9 @@ class RoomBeliefModel:
             source = self.sources.get(eid)
             if not source:
                 continue
-            sample_ts = self._source_timestamp(source, 'ts', ts)
-            if sample_ts > float(ts):
+            event_ts = self._event_time(source, ts)
+            received_ts = self._received_time(source, event_ts)
+            if event_ts > float(ts) or received_ts > float(ts):
                 continue
             role = str(source.get('role') or 'auxiliary')
             params = self._params(role)
@@ -276,13 +277,15 @@ class RoomBeliefModel:
                 elif role in {'radar_activity', 'auxiliary'}:
                     contribution = q * float(params['active']) * evidence_comm * fresh
                     raw_activity.append(contribution)
-            state_since = self._source_timestamp(source, 'state_since_ts', sample_ts)
+            state_since = self._source_timestamp(source, 'state_since_ts', event_ts)
             rows.append({
                 'entity_id': eid,
                 'role': role,
                 'value_semantics': params['semantics'],
                 'available': available,
                 'communication_reliability': comm,
+                'communication_age_seconds': max(0.0, float(ts) - received_ts),
+                'event_age_seconds': max(0.0, float(ts) - event_ts),
                 'semantic_reliability': semantic_reliability,
                 'semantic_reliability_detail': copy.deepcopy(
                     source.get('semantic_reliability_detail')
