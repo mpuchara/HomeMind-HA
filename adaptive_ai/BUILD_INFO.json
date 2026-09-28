@@ -4,6 +4,7 @@
   "base_version": "0.14.101",
   "base_commit": "4036b8d2727112a977c9696f60827372ca760b8c",
   "release_status": "candidate-shadow-deferred-qos-hotfix",
+  "release_validation_tests_passed": 1433,
   "candidate_shadow_qos_014102": {
     "regression_source": "0.14.100 deferred Candidate Shadow queue composed under 60 s Raspberry Pi maintenance gate",
     "deferred_shadow_drain": "runs on every Candidate worker maintenance hook before periodic housekeeping admission",
@@ -15,7 +16,7 @@
   "pi4_release_gate_contract": "pi4_release_gate_v1",
   "pi4_real_hardware_required": true,
   "stage7_offline_rl_control_unlock": false,
-  "tests_passed": 1433,
+  "tests_passed": 1381,
   "profile": "rpi4-ram-first-complete-discovery-manual-agent-selection",
   "manual_agent_training": true,
   "max_concurrent_training_jobs": 1,
