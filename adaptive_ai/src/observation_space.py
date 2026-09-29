@@ -6,6 +6,7 @@ HomeMind entity/context selection. Historical reconstruction is causal by constr
 """
 from __future__ import annotations
 
+from array import array
 from dataclasses import dataclass
 from datetime import datetime
 import hashlib
@@ -342,9 +343,15 @@ def _entity_descriptor_snapshot(entity_id, state_map, temporal, at_ts, agent):
 
 
 def observation_as_of(
-    mask, state_map, temporal, at_ts, agent, *, home_provider=None, home_forecast=None
+    mask, state_map, temporal, at_ts, agent, *, home_provider=None,
+    home_forecast=None, compact=False
 ):
-    """Reconstruct one selected dense observation exactly as of a historical timestamp."""
+    """Reconstruct one selected dense observation exactly as of a historical timestamp.
+
+    compact=True is an internal historical-training path: it returns only the dense
+    values consumed immediately by TinyMLP preparation and skips debug/audit payload
+    allocation. Correct/Automatic Correct/live callers keep the full contract by default.
+    """
     if not isinstance(mask, ObservationMask):
         mask = ObservationMask.from_export(mask)
     if mask.schema_id != observation_schema_id():
@@ -385,9 +392,9 @@ def observation_as_of(
             forecast = provider.forecast(agent["target_entity"], at_ts) or {}
     home_values = {"home:" + name: float(forecast.get(name, 0.0) or 0.0) for name in FEATURE_NAMES}
     entity_cache = {}
-    entity_available = {}
-    values = []
-    missing_ids = []
+    entity_available = None if compact else {}
+    values = array("f") if compact else []
+    missing_ids = None if compact else []
     for row in mask.features:
         feature_id = row["id"]
         kind = row.get("kind")
@@ -395,7 +402,7 @@ def observation_as_of(
             value = float(global_values.get(feature_id, 0.0))
         elif kind == "home":
             value = float(home_values.get(feature_id, 0.0))
-            if not forecast:
+            if not forecast and not compact:
                 missing_ids.append(feature_id)
         else:
             entity_id = row["entity_id"]
@@ -404,11 +411,18 @@ def observation_as_of(
                     entity_id, causal_state_map, causal_temporal, at_ts, agent
                 )
                 entity_cache[entity_id] = snapshot
-                entity_available[entity_id] = available
+                if not compact:
+                    entity_available[entity_id] = available
             value = float(entity_cache[entity_id].get(row["descriptor"], 0.0))
-            if not entity_available[entity_id] and row["descriptor"] != "available":
+            if (
+                not compact
+                and not entity_available[entity_id]
+                and row["descriptor"] != "available"
+            ):
                 missing_ids.append(feature_id)
         values.append(value)
+    if compact:
+        return {"values": values}
     return {
         "schema_id": mask.schema_id,
         "mask_id": mask.mask_id,

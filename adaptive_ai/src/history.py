@@ -1980,7 +1980,6 @@ class HistoryManager(threading.Thread):
         )
 
         if neural_enabled:
-            from array import array
             from observation_space import observation_as_of
 
         def neural_observation(agent, tracker, sample_ts, home_forecast=None):
@@ -1996,6 +1995,7 @@ class HistoryManager(threading.Thread):
                 float(sample_ts),
                 agent,
                 home_forecast=home_forecast,
+                compact=True,
             )
             # Historical supervised queues only consume feature order + dense values.
             # Do not retain the live-debug sparse map, missing-id list and repeated
@@ -2004,7 +2004,7 @@ class HistoryManager(threading.Thread):
             # without changing the numeric inputs seen by TinyMLPBackend.
             return {
                 "feature_ids": mask.feature_ids,
-                "values": array("f", (float(x) for x in raw.get("values") or ())),
+                "values": raw.get("values"),
             }
 
         pending = {}

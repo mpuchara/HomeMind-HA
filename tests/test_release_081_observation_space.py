@@ -1,4 +1,5 @@
 """0.14.81 Stage-2 observation-space, mask and historical causality contracts."""
+from array import array
 import copy
 import json
 from pathlib import Path
@@ -302,6 +303,25 @@ class HistoricalObservationTests(unittest.TestCase):
         self.assertEqual(provider.calls, 1)
         self.assertEqual(reused["feature_ids"], baseline["feature_ids"])
         self.assertEqual(reused["values"], baseline["values"])
+
+    def test_compact_historical_observation_preserves_dense_values_only(self):
+        full_tracker = HistoricalTemporalTracker(self.rows, [self.motion])
+        compact_tracker = HistoricalTemporalTracker(self.rows, [self.motion])
+        full = observation_as_of(
+            self.mask, self.states, full_tracker, BASE + 25, self.agent
+        )
+        compact = observation_as_of(
+            self.mask, self.states, compact_tracker, BASE + 25, self.agent,
+            compact=True,
+        )
+        self.assertEqual(
+            list(compact["values"]),
+            list(array("f", (float(value) for value in full["values"]))),
+        )
+        self.assertEqual(set(compact), {"values"})
+        self.assertNotIn("sparse", compact)
+        self.assertNotIn("missing_feature_ids", compact)
+        self.assertNotIn("missing_feature_count", compact)
 
     def test_unavailable_source_is_zero_with_explicit_available_flag(self):
         tracker = HistoricalTemporalTracker(self.rows, [self.motion])
