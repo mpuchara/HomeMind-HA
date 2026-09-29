@@ -106,7 +106,9 @@ def cache_probe():
         context = ContextEngine(DEFAULT_OPTIONS)
         context.configure(states, entities=registry)
 
-        query_cache = ReplayQueryCache(max_rows=4096, max_entry_rows=1024)
+        query_cache = ReplayQueryCache(
+            max_rows=4096, max_entry_rows=1024, copy_rows=False
+        )
         home_cache = HistoricalContextCache(max_entries=16, max_units=4096)
         connection = sqlite3.connect(store.path, timeout=30)
         connection.row_factory = sqlite3.Row
@@ -181,6 +183,7 @@ def main():
         and cache["shared_connection_reported"]
         and cache["second_tracker_ram_query_hits"] > 0
         and cache["query_cache"]["hits"] > 0
+        and cache["query_cache"]["copy_rows"] is False
     )
     print(json.dumps(
         result,
