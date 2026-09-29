@@ -271,12 +271,28 @@ class HistoryManager(threading.Thread):
                     "started_at": session.training_job_started_at,
                     "training_process": dict(session.training_process_status or {}),
                 })
+            process_rows = [row["training_process"] for row in rows]
+            worker_cpu_total = sum(
+                float(process.get("cpu_total_percent_estimate") or 0.0)
+                for process in process_rows
+            )
+            worker_one_core_total = sum(
+                float(process.get("cpu_one_core_percent") or 0.0)
+                for process in process_rows
+            )
+            worker_rss_sum = sum(
+                float(process.get("rss_mb") or 0.0)
+                for process in process_rows
+            )
             d["parallel_training"] = {
                 "contract": "adaptive_dual_agent_training_v1",
                 "active_count": len(rows),
                 "effective_slots": self.effective_training_slots(),
                 "agents": rows,
                 "aggregate_progress": sum(row["progress"] for row in rows) / len(rows),
+                "worker_cpu_one_core_percent_sum": round(worker_one_core_total, 2),
+                "worker_cpu_total_percent_estimate": round(worker_cpu_total, 2),
+                "worker_rss_mb_sum": round(worker_rss_sum, 2),
                 "recorder_serialized": True,
             }
             d["training_processes"] = {
@@ -295,6 +311,9 @@ class HistoryManager(threading.Thread):
                 "effective_slots": self.effective_training_slots(),
                 "agents": [],
                 "aggregate_progress": None,
+                "worker_cpu_one_core_percent_sum": 0.0,
+                "worker_cpu_total_percent_estimate": 0.0,
+                "worker_rss_mb_sum": 0.0,
                 "recorder_serialized": True,
             }
             d["training_processes"] = {}
