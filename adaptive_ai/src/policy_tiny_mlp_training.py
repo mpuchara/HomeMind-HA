@@ -89,6 +89,19 @@ def _set_initial_normalization(backend, samples):
     backend.input_scale = array("f", scale)
 
 
+def _set_initial_normalization_numpy(np, backend, matrix):
+    if backend.trained or backend.training_samples > 0 or len(matrix) <= 0:
+        return
+    mean = np.mean(matrix, axis=0, dtype=np.float64)
+    centered = matrix - mean
+    variance = np.mean(centered * centered, axis=0, dtype=np.float64)
+    scale = np.maximum(1e-3, np.sqrt(np.maximum(0.0, variance)))
+    # TinyMLP persists normalization as float32 arrays. Compute in float64, then use
+    # the same storage boundary as the scalar implementation.
+    backend.input_mean = array("f", mean.astype(np.float32).tolist())
+    backend.input_scale = array("f", scale.astype(np.float32).tolist())
+
+
 def _class_weights(samples, action_count):
     counts = [0] * int(action_count)
     for row in samples:
@@ -152,6 +165,7 @@ def _train_supervised_numpy(
         targets[index] = int(row["action_idx"])
         source_weights[index] = max(0.0, _finite(row.get("weight"), 1.0))
 
+    _set_initial_normalization_numpy(np, backend, matrix)
     means = np.asarray(backend.input_mean, dtype=np.float64)
     scales = np.asarray(backend.input_scale, dtype=np.float64)
     matrix -= means
@@ -391,7 +405,9 @@ def train_supervised(
             "epochs": 0,
         }
 
-    _set_initial_normalization(backend, rows)
+    np = _numpy_module()
+    if np is None:
+        _set_initial_normalization(backend, rows)
     class_counts, class_weight = _class_weights(rows, len(backend.actions))
     max_epochs = max(1, min(64, int(max_epochs)))
     batch_size = max(1, min(128, int(batch_size)))
