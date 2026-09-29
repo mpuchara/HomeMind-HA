@@ -1980,7 +1980,6 @@ class HistoryManager(threading.Thread):
         )
 
         if neural_enabled:
-            from array import array
             from observation_space import observation_as_of
 
         def neural_observation(agent, tracker, sample_ts, home_forecast=None):
@@ -2005,7 +2004,7 @@ class HistoryManager(threading.Thread):
             # without changing the numeric inputs seen by TinyMLPBackend.
             return {
                 "feature_ids": mask.feature_ids,
-                "values": array("f", (float(x) for x in raw.get("values") or ())),
+                "values": raw.get("values"),
             }
 
         pending = {}
