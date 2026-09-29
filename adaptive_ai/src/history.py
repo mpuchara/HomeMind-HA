@@ -3,6 +3,7 @@ from urllib.error import URLError
 from collections import deque
 import gc
 import math
+import sqlite3
 import threading
 import time
 import traceback
@@ -151,6 +152,7 @@ class HistoryManager(threading.Thread):
         # cross agent/job boundaries.
         self._persistent_replay_query_cache = None
         self._persistent_home_context_cache = None
+        self._persistent_replay_sqlite_connection = None
         self.neural_training_artifacts = {}
         self.training_process_status = {
             "enabled": bool(OPTIONS.get("training_process_isolation", True)),
@@ -929,6 +931,17 @@ class HistoryManager(threading.Thread):
                 self.eta_source = str(eta_source)
             if phase_detail is not None:
                 self.phase_detail = str(phase_detail)
+
+    def close_persistent_training_resources(self):
+        connection = getattr(self, "_persistent_replay_sqlite_connection", None)
+        self._persistent_replay_sqlite_connection = None
+        if connection is not None:
+            try:
+                connection.close()
+            except Exception:
+                pass
+        self._persistent_replay_query_cache = None
+        self._persistent_home_context_cache = None
 
     def request_discovery_rescan(self, *, threshold_override=1, reason="manual"):
         """Run the bounded Recorder/discovery job outside the caller thread.
@@ -2072,17 +2085,35 @@ class HistoryManager(threading.Thread):
             )
             for policy in policies.values()
         }))
+        replay_connection = None
+        if persistent_cache:
+            replay_connection = self._persistent_replay_sqlite_connection
+            if replay_connection is None:
+                replay_connection = sqlite3.connect(STORE.path, timeout=30)
+                replay_connection.row_factory = sqlite3.Row
+                # The worker never mutates entity_history through this connection.
+                # WAL + query_only keeps the hot page cache private to replay reads.
+                replay_connection.execute("PRAGMA query_only=ON")
+                sqlite_cache_mb = max(2, min(128, int(OPTIONS.get(
+                    "training_worker_effective_sqlite_cache_mb",
+                    OPTIONS.get("training_sqlite_cache_mb", 32),
+                ) or 32)))
+                replay_connection.execute(f"PRAGMA cache_size=-{sqlite_cache_mb * 1024}")
+                self._persistent_replay_sqlite_connection = replay_connection
+
         timeline = SQLiteTemporalTracker(
             STORE, watched_entities, self.engine.context, start_ts, end_ts,
             query_cache=replay_query_cache,
             home_context_cache=replay_home_context_cache,
             context_cache_contract=context_cache_contract,
+            connection=replay_connection,
         )
         persistence_timeline = SQLiteTemporalTracker(
             STORE, watched_entities, self.engine.context, start_ts, end_ts,
             query_cache=replay_query_cache,
             home_context_cache=replay_home_context_cache,
             context_cache_contract=context_cache_contract,
+            connection=replay_connection,
         )
 
         if neural_enabled:
