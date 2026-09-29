@@ -334,8 +334,10 @@ class SQLiteTemporalTracker:
     HOME_FORWARD_REBUILD_GAP_SECONDS = 60.0
 
     def __init__(self, store, watched, context, start, end, query_cache=None,
-                 home_context_cache=None, context_cache_contract=None):
-        self.conn = sqlite3.connect(store.path, timeout=30)
+                 home_context_cache=None, context_cache_contract=None,
+                 connection=None):
+        self._owns_connection = connection is None
+        self.conn = connection or sqlite3.connect(store.path, timeout=30)
         self.conn.row_factory = sqlite3.Row
         context_options = dict(getattr(context, "options", {}) or {})
         # Keep the realtime/parent tracker at the historical 2 MB cache. Only an
@@ -382,6 +384,7 @@ class SQLiteTemporalTracker:
             "max_home_forward_gap_seconds": 0.0,
             "legacy_asof_queries_estimate": 0,
             "sqlite_cache_kib": int(self.sqlite_cache_kib),
+            "shared_sqlite_connection": not self._owns_connection,
         }
         try:
             row = self.conn.execute(
@@ -882,10 +885,11 @@ class SQLiteTemporalTracker:
         if self._closed:
             return
         self._closed = True
-        try:
-            self.conn.close()
-        except Exception:
-            pass
+        if self._owns_connection:
+            try:
+                self.conn.close()
+            except Exception:
+                pass
 
     def __del__(self):
         self.close()
