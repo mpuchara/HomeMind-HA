@@ -134,6 +134,20 @@ class SupervisedTrainingTests(unittest.TestCase):
                 vectorized.predict(observation(x))[0]["index"],
             )
 
+    def test_tiny_holdout_does_not_import_numpy_in_fresh_worker(self):
+        model = backend()
+        with patch.object(training_module, "_NUMPY_CHECKED", False), \
+             patch.object(training_module, "_NUMPY", None), \
+             patch.object(
+                 training_module,
+                 "_numpy_module",
+                 side_effect=AssertionError("tiny holdout should stay scalar"),
+             ):
+            predicted = training_module._numpy_prediction_indices(
+                model, classification_rows(8)
+            )
+        self.assertIsNone(predicted)
+
     def test_trained_model_roundtrip_keeps_normalization_and_prediction(self):
         model = backend()
         train_supervised(model, classification_rows(), max_epochs=10, learning_rate=.03)
