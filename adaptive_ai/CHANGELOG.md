@@ -1,3 +1,11 @@
+# 0.14.105 — 2026-09-29
+
+- Fix agent **Current** state becoming stuck after a Home Assistant websocket gap. A disconnect now arms an explicit full-state truth reconciliation that survives a fast websocket reconnect and bypasses the ordinary quiet-window/heavy-job deferral.
+- Bound starvation of the normal `/states` safety reconciliation: once a due snapshot has waited 30 seconds, it runs even in a continuously busy home instead of being deferred forever by unrelated realtime events.
+- Treat `last_full_poll` as the last **successful** reconciliation rather than the last scheduled attempt. A failed REST snapshot therefore remains due and retries after a short backoff instead of hiding stale state for the 15-minute healthy-websocket interval.
+- Preserve Raspberry Pi QoS: the normal healthy-websocket reconciliation cadence remains 15 minutes and still prefers quiet windows; only missed-event recovery and overdue safety work bypass the deferral gates.
+- No policy, reward, Candidate lineage, Correct-label, promotion or physical-control semantics are changed.
+
 # 0.14.104 — 2026-09-28
 
 - Restore meaningful latency indicators while Candidate Shadow is the active observer. Passive Candidate inference now publishes bounded in-memory `candidate_inference` telemetry instead of leaving the Home Intelligence inference card empty.
