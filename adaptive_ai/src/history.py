@@ -1983,7 +1983,7 @@ class HistoryManager(threading.Thread):
             from array import array
             from observation_space import observation_as_of
 
-        def neural_observation(agent, tracker, sample_ts):
+        def neural_observation(agent, tracker, sample_ts, home_forecast=None):
             if not neural_enabled:
                 return None
             mask = neural_masks.get(str(agent["id"]))
@@ -1995,6 +1995,7 @@ class HistoryManager(threading.Thread):
                 tracker,
                 float(sample_ts),
                 agent,
+                home_forecast=home_forecast,
             )
             # Historical supervised queues only consume feature order + dense values.
             # Do not retain the live-debug sparse map, missing-id list and repeated
@@ -2449,7 +2450,7 @@ class HistoryManager(threading.Thread):
                 )
                 context_ts = target_time
                 persistence_timeline.advance(context_ts)
-                features, _, _ = policy.features(
+                features, _, persistence_meta = policy.features(
                     persistence_timeline.state_map,
                     persistence_timeline.history,
                     at_ts=context_ts,
@@ -2481,7 +2482,10 @@ class HistoryManager(threading.Thread):
                     )
                     if neural_enabled and float(reward) > 0.0:
                         observation = neural_observation(
-                            agent, persistence_timeline, target_time
+                            agent,
+                            persistence_timeline,
+                            target_time,
+                            home_forecast=(persistence_meta or {}).get("home_forecast"),
                         )
                         if observation is not None:
                             neural_train_samples[str(agent["id"])].append({
@@ -2530,7 +2534,10 @@ class HistoryManager(threading.Thread):
                 snapshots[query_ts] = (dict(features), dict(meta or {}))
                 if neural_enabled:
                     neural_snapshots[query_ts] = neural_observation(
-                        agent, tracker, query_ts
+                        agent,
+                        tracker,
+                        query_ts,
+                        home_forecast=(meta or {}).get("home_forecast"),
                     )
 
             anchor_features = snapshots[float(anchor_ts)][0]
