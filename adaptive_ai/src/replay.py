@@ -18,9 +18,13 @@ class ReplayQueryCache:
     the same bounded seed/interval rows. Sharing those exact results in RAM removes repeat
     reads without materializing the whole archive or weakening durability.
     """
-    def __init__(self, max_rows=8192, max_entry_rows=1024):
+    def __init__(self, max_rows=8192, max_entry_rows=1024, copy_rows=True):
         self.max_rows = max(0, int(max_rows))
         self.max_entry_rows = max(1, int(max_entry_rows))
+        # Default keeps the historical defensive-copy contract. A private persistent
+        # training worker can opt into read-only row sharing to avoid tens of thousands
+        # of transient dict allocations across logical chunks.
+        self.copy_rows = bool(copy_rows)
         self.rows = 0
         self.data = OrderedDict()
         self.hits = 0
@@ -42,12 +46,18 @@ class ReplayQueryCache:
             return None
         self.data[key] = value
         self.hits += 1
-        return [dict(row) for row in value]
+        return (
+            [dict(row) for row in value]
+            if self.copy_rows else list(value)
+        )
 
     def put(self, sql, params, rows):
         if self.max_rows <= 0:
             return
-        rows = [dict(row) for row in (rows or ())]
+        rows = (
+            [dict(row) for row in (rows or ())]
+            if self.copy_rows else list(rows or ())
+        )
         if len(rows) > self.max_entry_rows or len(rows) > self.max_rows:
             return
         key = self._key(sql, params)
@@ -71,6 +81,7 @@ class ReplayQueryCache:
             "evictions": int(self.evictions),
             "max_rows": int(self.max_rows),
             "max_entry_rows": int(self.max_entry_rows),
+            "copy_rows": bool(self.copy_rows),
             "hit_rate": (float(self.hits) / requests) if requests else None,
         }
 
@@ -334,8 +345,10 @@ class SQLiteTemporalTracker:
     HOME_FORWARD_REBUILD_GAP_SECONDS = 60.0
 
     def __init__(self, store, watched, context, start, end, query_cache=None,
-                 home_context_cache=None, context_cache_contract=None):
-        self.conn = sqlite3.connect(store.path, timeout=30)
+                 home_context_cache=None, context_cache_contract=None,
+                 connection=None):
+        self._owns_connection = connection is None
+        self.conn = connection or sqlite3.connect(store.path, timeout=30)
         self.conn.row_factory = sqlite3.Row
         context_options = dict(getattr(context, "options", {}) or {})
         # Keep the realtime/parent tracker at the historical 2 MB cache. Only an
@@ -382,6 +395,7 @@ class SQLiteTemporalTracker:
             "max_home_forward_gap_seconds": 0.0,
             "legacy_asof_queries_estimate": 0,
             "sqlite_cache_kib": int(self.sqlite_cache_kib),
+            "shared_sqlite_connection": not self._owns_connection,
         }
         try:
             row = self.conn.execute(
@@ -882,10 +896,11 @@ class SQLiteTemporalTracker:
         if self._closed:
             return
         self._closed = True
-        try:
-            self.conn.close()
-        except Exception:
-            pass
+        if self._owns_connection:
+            try:
+                self.conn.close()
+            except Exception:
+                pass
 
     def __del__(self):
         self.close()

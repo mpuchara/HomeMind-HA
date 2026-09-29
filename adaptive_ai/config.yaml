@@ -103,7 +103,7 @@ options:
   training_replay_ram_cache_entry_rows: 2048
   training_home_context_cache_entries: 64
   training_home_context_cache_units: 32768
-  training_sqlite_cache_mb: 32
+  training_sqlite_cache_mb: 64
   observation_selected_features: 96
   observation_freshness_tau_seconds: 300
   tiny_mlp_shadow_enabled: true
@@ -182,6 +182,8 @@ options:
   offline_rl_context_distance_threshold: 1.5
   offline_rl_worker_timeout_seconds: 120.0
   training_process_isolation: true
+  training_persistent_worker_enabled: true
+  training_persistent_worker_cache_enabled: true
   training_worker_nice: 10
   training_worker_memory_limit_mb: 1024
   training_worker_memory_floor_mb: 256
@@ -378,6 +380,8 @@ schema:
   offline_rl_context_distance_threshold: "float(0.01,10.0)"
   offline_rl_worker_timeout_seconds: "float(5.0,600.0)"
   training_process_isolation: "bool"
+  training_persistent_worker_enabled: "bool"
+  training_persistent_worker_cache_enabled: "bool"
   training_worker_nice: "int(0,19)"
   training_worker_memory_limit_mb: "int(128,2048)"
   training_worker_memory_floor_mb: "int(128,1024)"

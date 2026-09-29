@@ -24,7 +24,7 @@ class Release096ResourceProfileTests(unittest.TestCase):
         self.assertEqual(DEFAULT_OPTIONS["training_worker_memory_limit_mb"], 1024)
         self.assertEqual(DEFAULT_OPTIONS["training_replay_ram_cache_rows"], 65536)
         self.assertEqual(DEFAULT_OPTIONS["training_home_context_cache_entries"], 64)
-        self.assertEqual(DEFAULT_OPTIONS["training_sqlite_cache_mb"], 32)
+        self.assertEqual(DEFAULT_OPTIONS["training_sqlite_cache_mb"], 64)
         self.assertEqual(DEFAULT_OPTIONS["training_worker_nice"], 10)
         self.assertEqual(DEFAULT_OPTIONS["max_concurrent_training_jobs"], 1)
 
@@ -41,7 +41,7 @@ class Release096ResourceProfileTests(unittest.TestCase):
         self.assertEqual(worker["training_worker_effective_replay_cache_entry_rows"], 2048)
         self.assertEqual(worker["training_worker_effective_home_context_cache_entries"], 64)
         self.assertEqual(worker["training_worker_effective_home_context_cache_units"], 32768)
-        self.assertEqual(worker["training_worker_effective_sqlite_cache_mb"], 32)
+        self.assertEqual(worker["training_worker_effective_sqlite_cache_mb"], 64)
 
     def test_medium_host_keeps_headroom_for_parent(self):
         profile = resolve_training_resource_profile(

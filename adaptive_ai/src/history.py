@@ -3,6 +3,7 @@ from urllib.error import URLError
 from collections import deque
 import gc
 import math
+import sqlite3
 import threading
 import time
 import traceback
@@ -72,6 +73,10 @@ class HistoryManager(threading.Thread):
     def __init__(self, engine, worker_mode=False):
         super().__init__(name="adaptive-ai-history")
         self.worker_mode = bool(worker_mode)
+        # Only fully initialized managers may switch the selected-agent pass to the
+        # persistent-worker transport. Test/legacy objects created via __new__ fall back
+        # to the established one-process-per-chunk path.
+        self._persistent_worker_capable = True
         self.engine = engine
         self.stop_event = threading.Event()
         self.lock = threading.RLock()
@@ -146,6 +151,12 @@ class HistoryManager(threading.Thread):
         self.training_schema_cache_misses = 0
         self.training_replay_cache_status = {}
         self.training_home_context_cache_status = {}
+        # Persistent isolated-worker caches live for the complete selected-agent pass.
+        # They are process-local, bounded by the existing adaptive RAM profile and never
+        # cross agent/job boundaries.
+        self._persistent_replay_query_cache = None
+        self._persistent_home_context_cache = None
+        self._persistent_replay_sqlite_connection = None
         self.neural_training_artifacts = {}
         self.training_process_status = {
             "enabled": bool(OPTIONS.get("training_process_isolation", True)),
@@ -665,64 +676,153 @@ class HistoryManager(threading.Thread):
             "continuation_seed_agents": 0,
         }
         self.training_stateful_replay_status = dict(replay_summary)
-        while cursor < target_end - 0.5 and not self.stop_event.is_set():
-            boundary_ts = float(cursor)
-            chunk_end = min(target_end, cursor + chunk_s)
-            chunk_start = max(start_ts, cursor - overlap_s) if cursor > start_ts else start_ts
+        chunks = []
+        planned_cursor = float(cursor)
+        while planned_cursor < target_end - 0.5:
+            boundary_ts = float(planned_cursor)
+            chunk_end = min(target_end, planned_cursor + chunk_s)
+            chunk_start = (
+                max(start_ts, planned_cursor - overlap_s)
+                if planned_cursor > start_ts else start_ts
+            )
             continuation_from_ts = (
                 boundary_ts
                 if stateful_continuation and boundary_ts > chunk_start + 0.5
                 else None
             )
             final = chunk_end >= target_end - 0.5
-            self._run_training_chunk(
-                chunk_start, chunk_end, qualify=final, agent_ids={agent_id}, include_candidates=True,
-                benchmark=True, accumulate_benchmark=True,
-                progress_lo=(cursor-start_ts)/max(1,target_end-start_ts),
-                progress_hi=(chunk_end-start_ts)/max(1,target_end-start_ts),
-                progress_label=f"Training {agent['name']}",
-                continuation_from_ts=continuation_from_ts,
-                include_long_memory=(boundary_ts <= start_ts + 0.5),
-                long_memory_recent_start_ts=start_ts,
-                long_memory_reference_end_ts=target_end,
-            )
-            replay_summary["chunks"] += 1
-            replay_summary["logical_hours"] += max(
-                0.0, float(chunk_end) - float(chunk_start)
-            ) / 3600.0
             scan_start = (
                 float(continuation_from_ts)
                 if continuation_from_ts is not None else float(chunk_start)
             )
+            progress = (chunk_end - start_ts) / max(1.0, target_end - start_ts)
+            chunks.append({
+                "start_ts": float(chunk_start),
+                "end_ts": float(chunk_end),
+                "sequence_start_ts": float(start_ts),
+                "sequence_target_end_ts": float(target_end),
+                "checkpoint_cursor_ts": float(chunk_end),
+                "checkpoint_meta": {
+                    "message": f"Historical indexing checkpoint {progress:.0%}",
+                    "cursor_ts": float(chunk_end),
+                    "end_ts": float(target_end),
+                    "final": bool(final),
+                    "stateful_continuation": continuation_from_ts is not None,
+                    "logical_chunk_start_ts": float(chunk_start),
+                    "scan_start_ts": float(scan_start),
+                    "overlap_hours_avoided": max(
+                        0.0, float(scan_start) - float(chunk_start)
+                    ) / 3600.0,
+                },
+                "train_kwargs": {
+                    "qualify": bool(final),
+                    "agent_ids": {agent_id},
+                    "include_candidates": True,
+                    "benchmark": True,
+                    "accumulate_benchmark": True,
+                    "progress_lo": (
+                        (planned_cursor - start_ts) / max(1, target_end - start_ts)
+                    ),
+                    "progress_hi": (
+                        (chunk_end - start_ts) / max(1, target_end - start_ts)
+                    ),
+                    "progress_label": f"Training {agent['name']}",
+                    "continuation_from_ts": continuation_from_ts,
+                    # Keep the established source/semantic contract explicit:
+                    # include_long_memory=(boundary_ts <= start_ts + 0.5)
+                    # long_memory_recent_start_ts=start_ts
+                    # long_memory_reference_end_ts=target_end
+                    "include_long_memory": bool(boundary_ts <= start_ts + 0.5),
+                    "long_memory_recent_start_ts": float(start_ts),
+                    "long_memory_reference_end_ts": float(target_end),
+                },
+            })
+            replay_summary["chunks"] += 1
+            replay_summary["logical_hours"] += max(
+                0.0, float(chunk_end) - float(chunk_start)
+            ) / 3600.0
             replay_summary["unique_hours_scanned"] += max(
-                0.0, float(chunk_end) - scan_start
+                0.0, float(chunk_end) - float(scan_start)
             ) / 3600.0
             replay_summary["overlap_hours_avoided"] += max(
-                0.0, scan_start - float(chunk_start)
+                0.0, float(scan_start) - float(chunk_start)
             ) / 3600.0
-            continuation_stats = dict(
-                (self.temporal_replay_stats or {}).get("continuation") or {}
+            planned_cursor = float(chunk_end)
+
+        persistent = bool(
+            getattr(self, "_persistent_worker_capable", False)
+            and not getattr(self, "worker_mode", False)
+            and OPTIONS.get("training_process_isolation", True)
+            and OPTIONS.get("training_persistent_worker_enabled", True)
+            and len(chunks) > 1
+        )
+        if persistent and not self.stop_event.is_set():
+            from training_process import run_isolated_training_sequence
+            run_isolated_training_sequence(self, chunks)
+            # The child persists each logical checkpoint before continuing. Aggregate
+            # continuation counters from the per-chunk reports returned by the worker.
+            reports = list(
+                (self.training_process_status or {}).get(
+                    "sequence_chunk_reports", ()
+                ) or ()
             )
-            replay_summary["continuation_seed_target_rows"] += int(
-                continuation_stats.get("seed_target_rows_scanned") or 0
+            replay_summary["continuation_seed_target_rows"] = sum(
+                int(((row.get("temporal_replay") or {}).get("continuation") or {}).get(
+                    "seed_target_rows_scanned"
+                ) or 0)
+                for row in reports
             )
-            replay_summary["continuation_seed_agents"] += int(
-                continuation_stats.get("seed_agents") or 0
+            replay_summary["continuation_seed_agents"] = sum(
+                int(((row.get("temporal_replay") or {}).get("continuation") or {}).get(
+                    "seed_agents"
+                ) or 0)
+                for row in reports
             )
+            replay_summary["persistent_worker"] = True
+            replay_summary["worker_processes"] = 1
+            cursor = float(target_end)
             self.training_stateful_replay_status = dict(replay_summary)
-            cursor = chunk_end
-            STORE.set_training_progress(agent_id, start_ts, cursor, target_end)
-            STORE.event(agent_id, "info", "agent_index_checkpoint",
-                        f"Historical indexing checkpoint {((cursor-start_ts)/max(1.0,target_end-start_ts)):.0%}",
-                        {"cursor_ts": cursor, "end_ts": target_end, "final": final,
-                         "stateful_continuation": continuation_from_ts is not None,
-                         "logical_chunk_start_ts": chunk_start,
-                         "scan_start_ts": scan_start,
-                         "overlap_hours_avoided": max(0.0, scan_start - float(chunk_start)) / 3600.0})
-            if not final:
-                pause_ms = max(0.0, float(OPTIONS.get("agent_training_pause_ms", 0) or 0))
-                if pause_ms:
-                    self.stop_event.wait(pause_ms / 1000.0)
+        else:
+            # Compatibility/fallback path retains the original one-process-per-chunk
+            # behavior and exact checkpoint semantics.
+            replay_summary["persistent_worker"] = False
+            replay_summary["worker_processes"] = 0
+            for chunk in chunks:
+                if self.stop_event.is_set():
+                    break
+                kwargs = dict(chunk["train_kwargs"])
+                self._run_training_chunk(
+                    float(chunk["start_ts"]), float(chunk["end_ts"]), **kwargs
+                )
+                continuation_stats = dict(
+                    (self.temporal_replay_stats or {}).get("continuation") or {}
+                )
+                replay_summary["continuation_seed_target_rows"] += int(
+                    continuation_stats.get("seed_target_rows_scanned") or 0
+                )
+                replay_summary["continuation_seed_agents"] += int(
+                    continuation_stats.get("seed_agents") or 0
+                )
+                replay_summary["worker_processes"] += int(
+                    bool(OPTIONS.get("training_process_isolation", True))
+                )
+                cursor = float(chunk["checkpoint_cursor_ts"])
+                STORE.set_training_progress(agent_id, start_ts, cursor, target_end)
+                meta = dict(chunk.get("checkpoint_meta") or {})
+                message = str(meta.pop(
+                    "message", "Historical indexing checkpoint"
+                ))
+                STORE.event(
+                    agent_id, "info", "agent_index_checkpoint", message, meta
+                )
+                self.training_stateful_replay_status = dict(replay_summary)
+                if cursor < target_end - 0.5:
+                    pause_ms = max(
+                        0.0,
+                        float(OPTIONS.get("agent_training_pause_ms", 0) or 0),
+                    )
+                    if pause_ms:
+                        self.stop_event.wait(pause_ms / 1000.0)
 
     def _run_training_chunk(self, start_ts, end_ts, **kwargs):
         """Run one CPU-heavy replay chunk, isolated from realtime when supported."""
@@ -840,6 +940,17 @@ class HistoryManager(threading.Thread):
                 self.eta_source = str(eta_source)
             if phase_detail is not None:
                 self.phase_detail = str(phase_detail)
+
+    def close_persistent_training_resources(self):
+        connection = getattr(self, "_persistent_replay_sqlite_connection", None)
+        self._persistent_replay_sqlite_connection = None
+        if connection is not None:
+            try:
+                connection.close()
+            except Exception:
+                pass
+        self._persistent_replay_query_cache = None
+        self._persistent_home_context_cache = None
 
     def request_discovery_rescan(self, *, threshold_override=1, reason="manual"):
         """Run the bounded Recorder/discovery job outside the caller thread.
@@ -1942,17 +2053,35 @@ class HistoryManager(threading.Thread):
                 min(home_cache_units, 2048),
             ) or 0)
 
-        replay_query_cache = ReplayQueryCache(
-            max_rows=replay_cache_rows,
-            max_entry_rows=replay_cache_entry_rows,
+        persistent_cache = bool(
+            self.worker_mode
+            and OPTIONS.get("training_persistent_worker_enabled", True)
+            and OPTIONS.get("training_persistent_worker_cache_enabled", True)
         )
+        replay_query_cache = (
+            self._persistent_replay_query_cache if persistent_cache else None
+        )
+        if replay_query_cache is None:
+            replay_query_cache = ReplayQueryCache(
+                max_rows=replay_cache_rows,
+                max_entry_rows=replay_cache_entry_rows,
+                copy_rows=not persistent_cache,
+            )
+            if persistent_cache:
+                self._persistent_replay_query_cache = replay_query_cache
         # RoomBelief/AdaptivePresence reconstruction is identical for trackers that ask
         # for the same causal home state. Share only immutable exact-as-of snapshots; the
         # onset and persistence cursors still own separate mutable tracker/model state.
-        replay_home_context_cache = HistoricalContextCache(
-            max_entries=home_cache_entries,
-            max_units=home_cache_units,
+        replay_home_context_cache = (
+            self._persistent_home_context_cache if persistent_cache else None
         )
+        if replay_home_context_cache is None:
+            replay_home_context_cache = HistoricalContextCache(
+                max_entries=home_cache_entries,
+                max_units=home_cache_units,
+            )
+            if persistent_cache:
+                self._persistent_home_context_cache = replay_home_context_cache
         context_cache_contract = "|".join(sorted({
             "policy:%s:schema:%s:dims:%s:feature:%s" % (
                 int(getattr(policy, "VERSION", 0) or 0),
@@ -1966,17 +2095,35 @@ class HistoryManager(threading.Thread):
             )
             for policy in policies.values()
         }))
+        replay_connection = None
+        if persistent_cache:
+            replay_connection = self._persistent_replay_sqlite_connection
+            if replay_connection is None:
+                replay_connection = sqlite3.connect(STORE.path, timeout=30)
+                replay_connection.row_factory = sqlite3.Row
+                # The worker never mutates entity_history through this connection.
+                # WAL + query_only keeps the hot page cache private to replay reads.
+                replay_connection.execute("PRAGMA query_only=ON")
+                sqlite_cache_mb = max(2, min(128, int(OPTIONS.get(
+                    "training_worker_effective_sqlite_cache_mb",
+                    OPTIONS.get("training_sqlite_cache_mb", 32),
+                ) or 32)))
+                replay_connection.execute(f"PRAGMA cache_size=-{sqlite_cache_mb * 1024}")
+                self._persistent_replay_sqlite_connection = replay_connection
+
         timeline = SQLiteTemporalTracker(
             STORE, watched_entities, self.engine.context, start_ts, end_ts,
             query_cache=replay_query_cache,
             home_context_cache=replay_home_context_cache,
             context_cache_contract=context_cache_contract,
+            connection=replay_connection,
         )
         persistence_timeline = SQLiteTemporalTracker(
             STORE, watched_entities, self.engine.context, start_ts, end_ts,
             query_cache=replay_query_cache,
             home_context_cache=replay_home_context_cache,
             context_cache_contract=context_cache_contract,
+            connection=replay_connection,
         )
 
         if neural_enabled:

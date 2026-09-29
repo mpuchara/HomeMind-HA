@@ -129,7 +129,7 @@ DEFAULT_OPTIONS = {
     # a smaller effective profile from MemTotal/MemAvailable before each heavy job.
     "training_home_context_cache_entries": 64,
     "training_home_context_cache_units": 32768,
-    "training_sqlite_cache_mb": 32,
+    "training_sqlite_cache_mb": 64,
     # Stage-2 semantic observation contract. Active Ridge inference still uses the
     # existing ExplicitFeatureSchema in 0.14.81; these bounds prepare future backends.
     "observation_selected_features": 96,
@@ -228,6 +228,10 @@ DEFAULT_OPTIONS = {
     # CPU-heavy historical replay runs in one child process. The parent remains the
     # authority for HA ingress/HTTP/queue/control and supervises RSS/CPU/I/O.
     "training_process_isolation": True,
+    # 0.14.108: keep one isolated process alive for all logical chunks of one agent.
+    # Checkpoints/validation boundaries remain unchanged; only process/cache lifetime grows.
+    "training_persistent_worker_enabled": True,
+    "training_persistent_worker_cache_enabled": True,
     "training_worker_nice": 10,
     "training_worker_memory_limit_mb": 1024,
     "training_worker_memory_floor_mb": 256,
