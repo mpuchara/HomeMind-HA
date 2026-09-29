@@ -724,6 +724,8 @@ class HistoryManager(threading.Thread):
                     ),
                     "progress_label": f"Training {agent['name']}",
                     "continuation_from_ts": continuation_from_ts,
+                    # Keep the established source/semantic contract explicit:
+                    # include_long_memory=(boundary_ts <= start_ts + 0.5)
                     "include_long_memory": bool(boundary_ts <= start_ts + 0.5),
                     "long_memory_recent_start_ts": float(start_ts),
                     "long_memory_reference_end_ts": float(target_end),
@@ -742,7 +744,7 @@ class HistoryManager(threading.Thread):
             planned_cursor = float(chunk_end)
 
         persistent = bool(
-            not self.worker_mode
+            not getattr(self, "worker_mode", False)
             and OPTIONS.get("training_process_isolation", True)
             and OPTIONS.get("training_persistent_worker_enabled", True)
             and len(chunks) > 1
