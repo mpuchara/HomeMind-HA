@@ -1,3 +1,17 @@
+# 0.14.107 — 2026-09-29
+
+- Optimize the neural training paths that became the dominant cost after adding Tiny MLP. Offline supervised Tiny MLP now materializes its bounded training matrix once in RAM and runs forward/backprop with NumPy instead of Python multiply/accumulate loops; the existing scalar implementation remains the fallback.
+- Compute first-model input normalization directly from the prepared RAM matrix instead of materializing the same observations a second time in Python. A fresh isolated worker also avoids importing NumPy solely to score a tiny holdout; if SGD already loaded NumPy, the same worker reuses it.
+- Package NumPy 2.3.3 and cap BLAS/OMP/MKL/NumExpr to one thread. This uses RAM and vectorized native math for the bounded offline workload without creating a CPU thread pool that could starve realtime Home Assistant work.
+- Reuse the exact Home Context forecast already computed by Ridge when constructing the matching historical neural observation. Historical supervised replay now uses a compact path that stores only the float32 dense values required by Tiny MLP, skipping sparse/debug/missing-list allocation and the previous second float32 copy. Manual Correct, Automatic Correct and live Shadow keep the complete observation/audit contract.
+- Batch Tiny MLP holdout evaluation and Manual Correct parent/child/nearby-context checks. The Correct chart/selected timestamps, replay mixture, parent immutability and all regression/distance gates are unchanged.
+- Vectorize conservative Offline-RL end-to-end: reward-weighted policy-gradient + parent-KL backprop, hard parent-relative-L2 projection, logged-action reward proxy, parent/candidate drift metrics and bounded nearest-context checks. Manual Correct anchors, action-support requirements and Shadow-only authority remain unchanged.
+- Same-host production-image supervised benchmark (96→32→16→2, 384 train, 160 holdout, 8 epochs): **4.585 s scalar → 0.141 s vectorized (~32.5×)** with 94.27% holdout score on both paths and identical holdout decisions.
+- Same-host Stage-7 benchmark (192 train, 64 holdout, 2 Manual Correct anchors, 4 epochs): **2.769 s scalar → 0.105 s vectorized end-to-end (~26.4×)**; trainer-only speedup is ~90×. Both safety gates pass with the same parent-relative L2, reward-gain proxy and holdout decisions. These are synthetic GitHub-host timings, not Raspberry Pi 4 or real-world reward-performance claims.
+- Stage-5 synthetic Manual Correct now completes the 4-correction/192-replay/64-holdout case in ~0.043 s, with 4/4 corrected points fitted, 98.44% parent/child holdout agreement and an unchanged parent.
+- Keep the existing adaptive RAM-first worker profile and **do not** raise the 1024 MB ceiling blindly: effective memory remains bounded by host total/available RAM and the Home Assistant reserve. The 6-hour logical chunks, stateful continuation and validation boundaries are also unchanged so this release does not trade training semantics or crash/restart granularity for benchmark speed.
+- No model-format migration, reward semantics, Correct-label semantics, Candidate lineage, promotion authority, ActionIntent or Executor/physical-control behavior changes.
+
 # 0.14.106 — 2026-09-29
 
 - Allow **Discard** to stop an actively training Candidate instead of waiting for the full training job to finish.
