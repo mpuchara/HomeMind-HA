@@ -186,6 +186,7 @@ options:
   training_persistent_worker_cache_enabled: true
   training_worker_nice: 10
   training_worker_memory_limit_mb: 1024
+  training_parallel_agent_workers: 2
   training_parallel_min_available_mb: 2048
   training_parallel_worker_memory_limit_mb: 768
   training_worker_memory_floor_mb: 256
@@ -203,7 +204,7 @@ options:
   training_realtime_cooldown_seconds: 0.20
   training_recorder_refresh_overlap_minutes: 30
   manual_agent_training: true
-  max_concurrent_training_jobs: 2
+  max_concurrent_training_jobs: 1
   manual_discovery_hours: 24
   manual_context_max_snapshots: 256
   manual_context_min_samples: 4
@@ -386,6 +387,7 @@ schema:
   training_persistent_worker_cache_enabled: "bool"
   training_worker_nice: "int(0,19)"
   training_worker_memory_limit_mb: "int(128,2048)"
+  training_parallel_agent_workers: "int(1,2)"
   training_parallel_min_available_mb: "int(1024,8192)"
   training_parallel_worker_memory_limit_mb: "int(448,1024)"
   training_worker_memory_floor_mb: "int(128,1024)"
@@ -403,7 +405,7 @@ schema:
   training_realtime_cooldown_seconds: "float(0.05,1.00)"
   training_recorder_refresh_overlap_minutes: "int(1,360)"
   manual_agent_training: "bool"
-  max_concurrent_training_jobs: "int(1,2)"
+  max_concurrent_training_jobs: "int(1,1)"
   manual_discovery_hours: "int(6,72)"
   manual_context_max_snapshots: "int(16,2048)"
   manual_context_min_samples: "int(3,50)"
