@@ -21,7 +21,7 @@ class EffectiveParallelSlotsTests(unittest.TestCase):
         options = {
             **history_module.OPTIONS,
             "max_concurrent_training_jobs": 2,
-            "training_parallel_min_available_mb": 1800,
+            "training_parallel_min_available_mb": 2048,
         }
         with (
             patch.object(history_module, "OPTIONS", options),
@@ -36,7 +36,7 @@ class EffectiveParallelSlotsTests(unittest.TestCase):
         options = {
             **history_module.OPTIONS,
             "max_concurrent_training_jobs": 2,
-            "training_parallel_min_available_mb": 1800,
+            "training_parallel_min_available_mb": 2048,
         }
         with (
             patch.object(history_module, "OPTIONS", options),
@@ -57,7 +57,7 @@ class EffectiveParallelSlotsTests(unittest.TestCase):
 
     def test_release_defaults_target_two_slots_but_preserve_single_agent_order(self):
         self.assertEqual(DEFAULT_OPTIONS["max_concurrent_training_jobs"], 2)
-        self.assertEqual(DEFAULT_OPTIONS["training_parallel_min_available_mb"], 1800)
+        self.assertEqual(DEFAULT_OPTIONS["training_parallel_min_available_mb"], 2048)
         self.assertEqual(
             DEFAULT_OPTIONS["training_parallel_worker_memory_limit_mb"], 768
         )
