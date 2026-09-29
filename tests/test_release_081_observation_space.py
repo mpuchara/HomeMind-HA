@@ -303,6 +303,21 @@ class HistoricalObservationTests(unittest.TestCase):
         self.assertEqual(reused["feature_ids"], baseline["feature_ids"])
         self.assertEqual(reused["values"], baseline["values"])
 
+    def test_compact_historical_observation_preserves_dense_values_only(self):
+        full_tracker = HistoricalTemporalTracker(self.rows, [self.motion])
+        compact_tracker = HistoricalTemporalTracker(self.rows, [self.motion])
+        full = observation_as_of(
+            self.mask, self.states, full_tracker, BASE + 25, self.agent
+        )
+        compact = observation_as_of(
+            self.mask, self.states, compact_tracker, BASE + 25, self.agent,
+            compact=True,
+        )
+        self.assertEqual(compact, {"values": full["values"]})
+        self.assertNotIn("sparse", compact)
+        self.assertNotIn("missing_feature_ids", compact)
+        self.assertNotIn("missing_feature_count", compact)
+
     def test_unavailable_source_is_zero_with_explicit_available_flag(self):
         tracker = HistoricalTemporalTracker(self.rows, [self.motion])
         result = observation_as_of(
