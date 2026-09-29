@@ -626,9 +626,18 @@ def exact_paired_mlp_win_p_value(mlp_only_correct, ridge_only_correct):
 
 
 def _numpy_prediction_indices(backend, rows):
-    """Return dense batch predictions or None when NumPy is unavailable."""
+    """Return dense batch predictions or None when NumPy is unavailable.
+
+    A fresh isolated history worker should not import NumPy only to score a tiny
+    holdout. Scalar TinyMLP inference is cheaper for a handful of rows. Once NumPy is
+    already resident because SGD ran in this worker, even small batches reuse it.
+    """
+    if not rows:
+        return None
+    if len(rows) < 24 and not (_NUMPY_CHECKED and _NUMPY is not None):
+        return None
     np = _numpy_module()
-    if np is None or not rows:
+    if np is None:
         return None
     matrix = np.empty((len(rows), int(backend.input_size)), dtype=np.float64)
     for index, row in enumerate(rows):
