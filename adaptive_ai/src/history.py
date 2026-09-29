@@ -70,9 +70,10 @@ class HistoryManager(threading.Thread):
     and turns logged trajectories into offline contextual-RL experiences."""
     daemon = True
 
-    def __init__(self, engine, worker_mode=False):
+    def __init__(self, engine, worker_mode=False, session_mode=False):
         super().__init__(name="adaptive-ai-history")
         self.worker_mode = bool(worker_mode)
+        self.session_mode = bool(session_mode)
         # Only fully initialized managers may switch the selected-agent pass to the
         # persistent-worker transport. Test/legacy objects created via __new__ fall back
         # to the established one-process-per-chunk path.
@@ -102,7 +103,7 @@ class HistoryManager(threading.Thread):
         # entity_history table during every child bootstrap can fault a large SQLite
         # working set into that process before its first status heartbeat. On real Pi
         # archives this can trip the worker RSS guard at 0% with phase=unknown.
-        if self.worker_mode:
+        if self.worker_mode or self.session_mode:
             self.archive_cache = {
                 "n": 0, "min_ts": None, "max_ts": None,
                 "entities": 0, "days": 0.0, "by_source": {},
@@ -130,6 +131,13 @@ class HistoryManager(threading.Thread):
         self.esphome_candidate_count = 0
         self.esphome_sensor_sibling_overrides = 0
         self.agent_jobs = set()
+        # Main HistoryManager owns lightweight per-agent training sessions. Each session
+        # has independent progress/cancel/process state while sharing the same Engine and
+        # durable Store. This allows two replay workers to occupy two CPU cores without
+        # making one agent's causal replay itself concurrent.
+        self.training_sessions = {}
+        self.training_recorder_lock = threading.RLock()
+        self.training_parallel_slot_count = 1
         self.training_rows_per_second = 0.0
         self.history_rows_per_second = 0.0
         self.temporal_replay_stats = {}
@@ -183,7 +191,7 @@ class HistoryManager(threading.Thread):
         # collecting target history. Expose whether the activity classifier has run so
         # the UI can distinguish "pending" from a real zero-device result.
         self.discovery_classified = False
-        if (not self.worker_mode) and bool(OPTIONS.get("manual_agent_training", True)):
+        if (not self.worker_mode) and (not self.session_mode) and bool(OPTIONS.get("manual_agent_training", True)):
             paused = STORE.pause_stale_training_agents()
             if paused:
                 STORE.event(None, "info", "manual_training_migration", f"Paused {paused} unfinished automatic training job(s); resume manually when ready", None)
@@ -250,6 +258,43 @@ class HistoryManager(threading.Thread):
                 "discovery_reason_counts": dict(getattr(self, "discovery_reason_counts", {}) or {}),
                 "discovery_inactive_examples": list(getattr(self, "discovery_inactive_examples", []) or []),
             }
+        with self.agent_jobs_lock:
+            sessions = list(self.training_sessions.items())
+        if sessions:
+            rows = []
+            for aid, session in sessions:
+                rows.append({
+                    "agent_id": aid,
+                    "name": session.training_job_name or aid,
+                    "progress": float(session.progress or 0.0),
+                    "message": session.message,
+                    "started_at": session.training_job_started_at,
+                    "training_process": dict(session.training_process_status or {}),
+                })
+            d["parallel_training"] = {
+                "contract": "adaptive_dual_agent_training_v1",
+                "active_count": len(rows),
+                "effective_slots": self.effective_training_slots(),
+                "agents": rows,
+                "aggregate_progress": sum(row["progress"] for row in rows) / len(rows),
+                "recorder_serialized": True,
+            }
+            d["training_processes"] = {
+                row["agent_id"]: row["training_process"] for row in rows
+            }
+            d["training_overall_progress"] = d["parallel_training"]["aggregate_progress"]
+            d["training_job_agent_id"] = rows[0]["agent_id"] if len(rows) == 1 else None
+            d["training_job_name"] = rows[0]["name"] if len(rows) == 1 else f"{len(rows)} agents"
+        else:
+            d["parallel_training"] = {
+                "contract": "adaptive_dual_agent_training_v1",
+                "active_count": 0,
+                "effective_slots": self.effective_training_slots(),
+                "agents": [],
+                "aggregate_progress": None,
+                "recorder_serialized": True,
+            }
+            d["training_processes"] = {}
         return d
 
     def qualified_context_entities(self):
@@ -333,135 +378,211 @@ class HistoryManager(threading.Thread):
         self.training_schema_cache_hits += 1
         return item.get("model")
 
+    def effective_training_slots(self):
+        """Return safe concurrent agent replay slots for the current host headroom."""
+        configured = max(
+            1, min(2, int(OPTIONS.get("max_concurrent_training_jobs", 1) or 1))
+        )
+        if configured <= 1:
+            return 1
+        try:
+            import os
+            cpu_count = max(1, int(os.cpu_count() or 1))
+        except Exception:
+            cpu_count = 1
+        if cpu_count < 4:
+            return 1
+        try:
+            from training_process import _host_memory_mb
+            memory = _host_memory_mb()
+            available = memory.get("available_mb")
+        except Exception:
+            available = None
+        minimum = max(
+            1024.0,
+            float(OPTIONS.get("training_parallel_min_available_mb", 1800) or 1800),
+        )
+        if isinstance(available, (int, float)) and float(available) < minimum:
+            return 1
+        # Unknown-memory hosts remain conservative. Raspberry Pi/Linux exposes
+        # MemAvailable, so the normal product path can safely select two slots.
+        if available is None:
+            return 1
+        return configured
+
+    def training_session_for(self, agent_id):
+        with self.agent_jobs_lock:
+            return self.training_sessions.get(str(agent_id))
+
+    def cancel_agent_training(self, agent_id):
+        session = self.training_session_for(agent_id)
+        if session is None:
+            return False
+        event = getattr(session, "job_cancel_event", None)
+        if event is None:
+            event = threading.Event()
+            session.job_cancel_event = event
+        event.set()
+        return True
+
+    def _new_training_session(self, agent_id, slots):
+        session = HistoryManager(self.engine, worker_mode=False, session_mode=True)
+        session.stop_event = self.stop_event
+        session.training_parallel_slot_count = int(max(1, slots))
+        session.training_recorder_lock = self.training_recorder_lock
+        # Recorder coverage is immutable enough under the shared Recorder lock and can
+        # therefore be reused by sibling sessions without repeating already imported
+        # target/context slices.
+        session.training_recorder_coverage = self.training_recorder_coverage
+        session.agent_jobs.add(str(agent_id))
+        cached = self.training_schema_cache.get(str(agent_id))
+        if cached:
+            session.training_schema_cache[str(agent_id)] = dict(cached)
+        return session
+
     def _start_agent_job(self, agent_id, rebuild=False, rebuild_reason=None):
+        agent_id = str(agent_id)
         agent = STORE.get_agent_config(agent_id)
         if not agent:
             return False
+        slots = self.effective_training_slots()
         with self.agent_jobs_lock:
             if agent_id in self.agent_jobs:
                 return False
-            max_jobs = 1
-            if len(self.agent_jobs) >= max_jobs:
+            if len(self.agent_jobs) >= slots:
                 return False
-            if not HEAVY_JOBS.acquire("agent:" + agent_id):
+            if not self.agent_jobs:
+                if not HEAVY_JOBS.acquire("agent_pool"):
+                    return False
+            elif HEAVY_JOBS.owner != "agent_pool":
                 return False
             self.agent_jobs.add(agent_id)
 
+        session = None
         try:
             with self.engine.executor.target_lock(agent["target_entity"]):
                 if rebuild:
                     # Capture schema/input selection before deleting learned weights.
-                    # Rebuild still starts with empty RL heads; only the expensive,
-                    # repeatedly reusable feature-selection result survives in RAM.
                     self._remember_training_schema(agent)
                     STORE.clear_learning(agent_id)
                     self.engine.models.pop(agent_id, None)
                     self.engine.runtime.pop(agent_id, None)
                 else:
-                    # Resume preserves policy, experiences, benchmark counts and cursor.
                     STORE.set_training_state(
                         agent_id, "training", score=agent.get("benchmark_score"),
-                        samples=agent.get("benchmark_samples") or 0, source=agent.get("benchmark_source"),
+                        samples=agent.get("benchmark_samples") or 0,
+                        source=agent.get("benchmark_source"),
                         detail=agent.get("benchmark_detail") or {},
                     )
+            session = self._new_training_session(agent_id, slots)
+            with self.agent_jobs_lock:
+                self.training_sessions[agent_id] = session
             started_at = now_ts()
-            start_progress = 0.0 if rebuild else clamp(float(agent.get("training_progress") or 0.0), 0.0, 1.0)
+            start_progress = (
+                0.0 if rebuild else clamp(
+                    float(agent.get("training_progress") or 0.0), 0.0, 1.0
+                )
+            )
+            session.phase = "training"
+            session.phase_started_at = started_at
+            session.cycle_started_at = started_at
+            session.progress = start_progress
+            session._progress_samples = [(started_at, start_progress)]
+            session.eta_source = "measuring end-to-end training rate"
+            session.phase_detail = "Preparing Recorder history for the selected agent"
+            session.message = f"Training {agent['name']}: preparing history"
+            session.training_job_agent_id = agent_id
+            session.training_job_name = agent.get("name") or agent_id
+            session.training_job_started_at = started_at
+            session.training_job_start_progress = start_progress
+            session.training_rebuild_reason = rebuild_reason if rebuild else None
             with self.lock:
                 self.phase = "training"
-                self.phase_started_at = started_at
-                self.cycle_started_at = started_at
-                self.progress = start_progress
-                self._progress_samples = [(started_at, start_progress)]
-                self.progress_rate_per_min = None
-                self.eta_seconds = None
-                self.stage_eta_seconds = None
-                self.work_done = 0
-                self.work_total = 0
-                self.work_unit = None
-                self.eta_source = "measuring end-to-end training rate"
-                self.phase_detail = "Preparing Recorder history for the selected agent"
-                self.message = f"Training {agent['name']}: preparing history"
-                self.training_rows_per_second = 0.0
-                self.training_job_agent_id = agent_id
-                self.training_job_name = agent.get("name") or agent_id
-                self.training_job_started_at = started_at
-                self.training_job_start_progress = start_progress
-                self.training_overall_eta_seconds = None
-                self.training_rebuild_reason = rebuild_reason if rebuild else None
-                self.training_stateful_replay_status = {}
+                self.message = (
+                    f"Training {len(self.agent_jobs)} agent(s) in parallel"
+                    if len(self.agent_jobs) > 1 else session.message
+                )
         except Exception:
             with self.agent_jobs_lock:
                 self.agent_jobs.discard(agent_id)
-            HEAVY_JOBS.release('agent:' + agent_id)
+                self.training_sessions.pop(agent_id, None)
+                empty = not self.agent_jobs
+            if empty:
+                HEAVY_JOBS.release("agent_pool")
             raise
 
         def worker():
             TRAINING_BUDGET.begin()
             failure_text = None
             try:
-                self._run_agent_indexing(
+                session._run_agent_indexing(
                     agent_id, rebuild=rebuild, rebuild_reason=rebuild_reason
                 )
             except Exception as exc:
                 failure_text = f"{type(exc).__name__}: {exc}"
-                STORE.event(agent_id, "error", "agent_index_failed", str(exc), {"trace": traceback.format_exc(limit=6)})
-                # A stale isolated job can mean the user/configuration changed while
-                # training was running. Preserve that newer needs_retrain/lifecycle
-                # instead of overwriting it with a generic PAUSED failure state.
+                STORE.event(
+                    agent_id, "error", "agent_index_failed", str(exc),
+                    {"trace": traceback.format_exc(limit=6)},
+                )
                 if not bool(getattr(exc, "preserve_training_state", False)):
                     STORE.set_training_state(
                         agent_id, "paused", detail={"reason": str(exc)}
                     )
             finally:
-                # Keep the heavy slot owned until final GC is complete. Otherwise the UI
-                # lifeline can switch back to rich aggregate reads while this worker still
-                # monopolizes the interpreter during collection.
                 try:
                     TRAINING_BUDGET.checkpoint("pre_training_gc", force=True)
                     gc.collect()
                     TRAINING_BUDGET.checkpoint("post_training_gc", force=True)
                 finally:
                     TRAINING_BUDGET.end()
-                    with self.agent_jobs_lock:
-                        self.agent_jobs.discard(agent_id)
-                    HEAVY_JOBS.release("agent:" + agent_id)
+                    session.agent_jobs.discard(agent_id)
                     final_agent = STORE.get_agent_config(agent_id)
-                    final_progress = clamp(float((final_agent or {}).get("training_progress") or self.progress or 0.0), 0.0, 1.0)
+                    final_progress = clamp(
+                        float((final_agent or {}).get("training_progress") or session.progress or 0.0),
+                        0.0, 1.0,
+                    )
                     final_state = str((final_agent or {}).get("training_state") or "paused")
                     completed = (
                         final_progress >= 0.999
                         and final_state in ("qualified", "paused")
                         and failure_text is None
                     )
+                    with self.agent_jobs_lock:
+                        self.agent_jobs.discard(agent_id)
+                        self.training_sessions.pop(agent_id, None)
+                        remaining = len(self.agent_jobs)
+                    if remaining == 0:
+                        HEAVY_JOBS.release("agent_pool")
                     with self.lock:
-                        self.progress = final_progress
-                        self.phase = "ready"
-                        self.phase_started_at = now_ts()
-                        if completed:
-                            self.message = f"Training finished: {self.training_job_name or agent_id}"
-                            self.phase_detail = f"Agent training finished in state {final_state}"
-                            self.eta_source = "complete"
+                        if remaining:
+                            self.phase = "training"
+                            self.message = f"Training {remaining} agent(s)"
                         else:
-                            self.message = f"Training stopped before completion: {self.training_job_name or agent_id}"
+                            self.progress = final_progress
+                            self.phase = "ready"
+                            self.phase_started_at = now_ts()
+                            self.message = (
+                                f"Training finished: {agent.get('name') or agent_id}"
+                                if completed else
+                                f"Training stopped before completion: {agent.get('name') or agent_id}"
+                            )
                             self.phase_detail = (
+                                f"Agent training finished in state {final_state}"
+                                if completed else
                                 f"Agent training stopped at {final_progress:.0%} in state {final_state}"
                                 + (f": {failure_text}" if failure_text else "")
                             )
-                            self.eta_source = "incomplete"
-                        self.stage_eta_seconds = None
-                        self.eta_seconds = None
-                        self.training_overall_eta_seconds = None
-                        self.training_rebuild_reason = None
-                        self.work_done = 0
-                        self.work_total = 0
-                        self.work_unit = None
-                        self.training_rows_per_second = 0.0
-                        self.training_job_agent_id = None
-                        self.training_job_name = None
-                        self.training_job_started_at = None
-                        self.training_job_start_progress = final_progress
+                            self.eta_source = "complete" if completed else "incomplete"
+                            self.training_job_agent_id = None
+                            self.training_job_name = None
+                            self.training_job_started_at = None
+                            self.training_overall_eta_seconds = None
 
-        threading.Thread(target=worker, name=f"adaptive-ai-index-{agent_id}", daemon=True).start()
+        threading.Thread(
+            target=worker,
+            name=f"adaptive-ai-index-{agent_id}",
+            daemon=True,
+        ).start()
         return True
 
     def _eligible_rebuild_context(self):
@@ -570,7 +691,19 @@ class HistoryManager(threading.Thread):
 
         Resume is cheap: target + already selected feature entities from the saved cursor.
         Rebuild is intentionally broader so a newly added sensor can enter feature selection.
+        Concurrent CPU replay is allowed, but Recorder backfill remains serialized so two
+        training slots never hammer Home Assistant history endpoints at the same time.
         """
+        recorder_lock = getattr(self, "training_recorder_lock", None)
+        if recorder_lock is not None and not getattr(self, "_training_recorder_lock_held", False):
+            with recorder_lock:
+                self._training_recorder_lock_held = True
+                try:
+                    return self._refresh_agent_history(
+                        agent, start_ts, end_ts, rebuild=rebuild
+                    )
+                finally:
+                    self._training_recorder_lock_held = False
         if end_ts <= start_ts:
             return
         target = agent["target_entity"]
@@ -861,6 +994,10 @@ class HistoryManager(threading.Thread):
             self.discovery_classified = False
 
     def refresh_archive_cache(self):
+        # Per-agent training sessions never expose global archive totals. Avoid making
+        # each concurrent session run the expensive whole-table archive_stats() query.
+        if getattr(self, "session_mode", False):
+            return
         # Called by the history thread only, never synchronously from the UI.
         try:
             stats = STORE.archive_stats()
