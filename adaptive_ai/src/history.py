@@ -282,6 +282,9 @@ class HistoryManager(threading.Thread):
             d["training_processes"] = {
                 row["agent_id"]: row["training_process"] for row in rows
             }
+            # Backwards-compatible single-process surface follows the oldest active
+            # session while new UI/debug surfaces can inspect all workers.
+            d["training_process"] = dict(rows[0]["training_process"] or {})
             d["training_overall_progress"] = d["parallel_training"]["aggregate_progress"]
             d["training_job_agent_id"] = rows[0]["agent_id"] if len(rows) == 1 else None
             d["training_job_name"] = rows[0]["name"] if len(rows) == 1 else f"{len(rows)} agents"
