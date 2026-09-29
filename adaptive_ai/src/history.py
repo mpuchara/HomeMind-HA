@@ -1996,6 +1996,7 @@ class HistoryManager(threading.Thread):
                 float(sample_ts),
                 agent,
                 home_forecast=home_forecast,
+                compact=True,
             )
             # Historical supervised queues only consume feature order + dense values.
             # Do not retain the live-debug sparse map, missing-id list and repeated
