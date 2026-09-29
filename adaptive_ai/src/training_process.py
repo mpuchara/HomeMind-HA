@@ -64,6 +64,8 @@ NON_SEMANTIC_TRAINING_OPTION_KEYS = frozenset({
     "training_home_context_cache_units",
     "training_max_continuous_work_ms",
     "training_process_isolation",
+    "training_persistent_worker_enabled",
+    "training_persistent_worker_cache_enabled",
     "training_replay_ram_cache_entry_rows",
     "training_replay_ram_cache_rows",
     "training_sqlite_cache_mb",
@@ -614,6 +616,52 @@ def _build_job(history, start_ts, end_ts, kwargs):
     return job
 
 
+def _build_sequence_job(history, chunks):
+    """Build one isolated descriptor containing the existing logical 6 h chunks."""
+    chunks = list(chunks or ())
+    if not chunks:
+        raise ValueError("persistent training sequence requires at least one chunk")
+    first = dict(chunks[0])
+    first_kwargs = dict(first.get("train_kwargs") or {})
+    job = _build_job(
+        history,
+        float(first["start_ts"]),
+        float(first["end_ts"]),
+        first_kwargs,
+    )
+    root = Path(job["job_path"]).parent
+    normalized = []
+    for index, raw in enumerate(chunks):
+        row = dict(raw or {})
+        kwargs = dict(row.get("train_kwargs") or {})
+        if sorted(set(kwargs.get("agent_ids") or ())) != [str(job["agent_id"])]:
+            raise ValueError("persistent sequence chunks must target the same agent")
+        normalized.append({
+            "index": int(index),
+            "start_ts": float(row["start_ts"]),
+            "end_ts": float(row["end_ts"]),
+            "train_kwargs": {
+                key: value for key, value in kwargs.items()
+                if key != "agent_ids"
+            },
+            "checkpoint_cursor_ts": float(
+                row.get("checkpoint_cursor_ts", row["end_ts"])
+            ),
+            "checkpoint_meta": dict(row.get("checkpoint_meta") or {}),
+        })
+    job["sequence_chunks"] = normalized
+    job["sequence_start_ts"] = float(
+        chunks[0].get("sequence_start_ts", normalized[0]["start_ts"])
+    )
+    job["sequence_target_end_ts"] = float(
+        chunks[-1].get("sequence_target_end_ts", normalized[-1]["end_ts"])
+    )
+    job["rollback_path"] = str(root / f"{job['job_id']}.rollback.json")
+    job["sequence_contract"] = "persistent_agent_training_worker_v1"
+    job["checksum"] = descriptor_checksum(job)
+    return job
+
+
 def _apply_status(history, payload):
     if not isinstance(payload, dict):
         return
@@ -674,11 +722,31 @@ def _restore_rejected_chunk(
     store.touch_agent_index()
 
 
+def run_isolated_training_sequence(history, chunks):
+    """Run all logical chunks for one agent in one supervised child process."""
+    chunks = list(chunks or ())
+    if not chunks:
+        return 0
+    first = dict(chunks[0])
+    kwargs = dict(first.get("train_kwargs") or {})
+    kwargs["_persistent_sequence_chunks"] = chunks
+    return run_isolated_training_chunk(
+        history,
+        float(first["start_ts"]),
+        float(chunks[-1]["end_ts"]),
+        **kwargs,
+    )
+
+
 def run_isolated_training_chunk(history, start_ts, end_ts, **kwargs):
     """Supervise one clean worker process while realtime remains in the parent."""
     from storage import STORE
 
-    job = _build_job(history, start_ts, end_ts, kwargs)
+    sequence_chunks = kwargs.pop("_persistent_sequence_chunks", None)
+    if sequence_chunks:
+        job = _build_sequence_job(history, sequence_chunks)
+    else:
+        job = _build_job(history, start_ts, end_ts, kwargs)
     job_path = Path(job.pop("job_path"))
     resource_profile = resolve_training_resource_profile(OPTIONS)
     job["resource_profile"] = resource_profile
@@ -740,7 +808,11 @@ def run_isolated_training_chunk(history, start_ts, end_ts, **kwargs):
     history.training_process_status = {
         "enabled": True,
         "state": "running",
-        "contract": "isolated_training_process_v1",
+        "contract": (
+            "persistent_agent_training_worker_v1"
+            if sequence_chunks else "isolated_training_process_v1"
+        ),
+        "sequence_chunks": len(sequence_chunks or ()),
         "job_id": job["job_id"],
         "pid": process.pid,
         "agent_id": agent_id,
@@ -950,6 +1022,16 @@ def run_isolated_training_chunk(history, start_ts, end_ts, **kwargs):
         history.training_home_context_cache_status = dict(
             result.get("training_home_context_cache") or {}
         )
+        if result.get("sequence_contract"):
+            history.training_process_status["sequence_contract"] = result.get(
+                "sequence_contract"
+            )
+            history.training_process_status["sequence_chunks_completed"] = int(
+                result.get("sequence_chunks_completed") or 0
+            )
+            history.training_process_status["sequence_chunk_reports"] = list(
+                result.get("sequence_chunk_reports") or ()
+            )
         schema_item = result.get("schema_cache_item")
         if isinstance(schema_item, dict) and schema_item:
             history.training_schema_cache[agent_id] = schema_item
@@ -1001,15 +1083,29 @@ def run_isolated_training_chunk(history, start_ts, end_ts, **kwargs):
         }
         return int(result.get("return_value") or 0)
     except Exception as exc:
+        rollback_agent = agent_before
+        rollback_model = model_before
+        rollback_neural = neural_before
+        semantic_stale = bool(
+            isinstance(exc, StaleTrainingJob) and not exc.preserve_lifecycle
+        )
+        if sequence_chunks and not semantic_stale:
+            rollback = _read_json(job.get("rollback_path"), {}) or {}
+            if isinstance(rollback.get("agent_before"), dict):
+                rollback_agent = rollback.get("agent_before")
+            if "model_before" in rollback:
+                rollback_model = rollback.get("model_before")
+            if "neural_before" in rollback:
+                rollback_neural = rollback.get("neural_before")
         _restore_rejected_chunk(
-            STORE, agent_id, agent_before, model_before,
+            STORE, agent_id, rollback_agent, rollback_model,
             preserve_lifecycle=bool(
                 isinstance(exc, StaleTrainingJob) and exc.preserve_lifecycle
             ),
         )
         try:
             from tiny_mlp_shadow import restore_training_record
-            restore_training_record(STORE, agent_id, neural_before)
+            restore_training_record(STORE, agent_id, rollback_neural)
             service = getattr(history.engine, "tiny_mlp_shadow", None)
             if service is not None and callable(getattr(service, "invalidate", None)):
                 service.invalidate(agent_id)
@@ -1251,15 +1347,111 @@ def worker_main(job_path):
             stage="before_train_from_archive",
             progress=kwargs.get("progress_lo"),
         )
-        value = history.train_from_archive(
-            float(job["start_ts"]),
-            float(job["end_ts"]),
-            agent_ids={aid},
-            **kwargs,
-        )
+        chunks = list(job.get("sequence_chunks") or ())
+        if not chunks:
+            chunks = [{
+                "index": 0,
+                "start_ts": float(job["start_ts"]),
+                "end_ts": float(job["end_ts"]),
+                "train_kwargs": kwargs,
+                "checkpoint_cursor_ts": float(job["end_ts"]),
+                "checkpoint_meta": {},
+            }]
+        sequence_mode = bool(job.get("sequence_chunks"))
+        total_value = 0
+        chunk_reports = []
+        from tiny_mlp_shadow import load_training_record, publish_training_artifact
+
+        def write_rollback_snapshot(next_chunk_index):
+            path = job.get("rollback_path")
+            if not path:
+                return
+            _atomic_json(path, {
+                "chunk_index": int(next_chunk_index),
+                "agent_before": STORE.get_agent_config(aid),
+                "model_before": STORE.get_model(aid),
+                "neural_before": load_training_record(STORE, aid),
+                "captured_at": now_ts(),
+            })
+
+        if sequence_mode:
+            write_rollback_snapshot(0)
+        for chunk_position, chunk in enumerate(chunks):
+            chunk_kwargs = dict(chunk.get("train_kwargs") or {})
+            history.set_status(
+                progress=chunk_kwargs.get("progress_lo"),
+                message=(
+                    f"Persistent training worker: chunk {chunk_position + 1}/"
+                    f"{len(chunks)}"
+                ),
+                phase_detail=(
+                    "Persistent worker keeps Python, NumPy and bounded replay caches "
+                    "resident while preserving logical chunk boundaries"
+                ),
+            )
+            chunk_started = time.monotonic()
+            value = history.train_from_archive(
+                float(chunk["start_ts"]),
+                float(chunk["end_ts"]),
+                agent_ids={aid},
+                **chunk_kwargs,
+            )
+            total_value += int(value or 0)
+
+            # The old process-per-chunk path publishes the supervised neural artifact
+            # before the next child starts. Do the same here so the next logical chunk
+            # sees exactly the same persisted TinyMLP parent.
+            for neural_agent_id, artifact in dict(
+                history.neural_training_artifacts or {}
+            ).items():
+                publish_training_artifact(STORE, artifact)
+
+            checkpoint_cursor = float(
+                chunk.get("checkpoint_cursor_ts", chunk["end_ts"])
+            )
+            if sequence_mode:
+                STORE.set_training_progress(
+                    aid,
+                    float(job.get("sequence_start_ts", chunks[0]["start_ts"])),
+                    checkpoint_cursor,
+                    float(job.get("sequence_target_end_ts", chunks[-1]["end_ts"])),
+                )
+                checkpoint_meta = dict(chunk.get("checkpoint_meta") or {})
+                STORE.event(
+                    aid,
+                    "info",
+                    "agent_index_checkpoint",
+                    str(checkpoint_meta.pop(
+                        "message",
+                        f"Historical indexing checkpoint {chunk_position + 1}/{len(chunks)}",
+                    )),
+                    checkpoint_meta,
+                )
+                # Immediately advance the rollback point. A kill/cancel between chunks
+                # therefore preserves every completed checkpoint.
+                write_rollback_snapshot(chunk_position + 1)
+
+            chunk_reports.append({
+                "index": int(chunk_position),
+                "elapsed_seconds": round(time.monotonic() - chunk_started, 4),
+                "return_value": int(value or 0),
+                "temporal_replay": dict(history.temporal_replay_stats or {}),
+                "training_replay_cache": dict(
+                    history.training_replay_cache_status or {}
+                ),
+                "training_home_context_cache": dict(
+                    history.training_home_context_cache_status or {}
+                ),
+            })
+
         result.update({
             "ok": True,
-            "return_value": int(value or 0),
+            "return_value": int(total_value),
+            "sequence_contract": (
+                "persistent_agent_training_worker_v1" if sequence_mode else None
+            ),
+            "sequence_chunks_completed": len(chunk_reports),
+            "sequence_chunk_reports": chunk_reports,
             "context_relevance": dict(engine.context_relevance.get(aid) or {}),
             "temporal_replay": dict(history.temporal_replay_stats or {}),
             "training_long_memory": dict(
