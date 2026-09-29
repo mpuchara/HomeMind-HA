@@ -6,6 +6,7 @@ HomeMind entity/context selection. Historical reconstruction is causal by constr
 """
 from __future__ import annotations
 
+from array import array
 from dataclasses import dataclass
 from datetime import datetime
 import hashlib
@@ -392,7 +393,7 @@ def observation_as_of(
     home_values = {"home:" + name: float(forecast.get(name, 0.0) or 0.0) for name in FEATURE_NAMES}
     entity_cache = {}
     entity_available = None if compact else {}
-    values = []
+    values = array("f") if compact else []
     missing_ids = None if compact else []
     for row in mask.features:
         feature_id = row["id"]
