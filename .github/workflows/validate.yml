@@ -76,7 +76,7 @@ jobs:
         run: python tools/benchmark_automatic_correct.py --rows 512 --summaries 2000 --compact
       - name: 0.14.86 conservative Offline-RL Candidate benchmark
         if: matrix.python == '3.11'
-        run: python tools/benchmark_offline_rl.py --features 96 --parent-samples 384 --reward-contexts 128 --epochs 4 --compact
+        run: python tools/benchmark_offline_rl.py --features 96 --parent-samples 384 --reward-contexts 128 --epochs 4 --compare-scalar --compact
       - name: 0.14.87 stateful replay continuation benchmark
         if: matrix.python == '3.11'
         run: python tools/benchmark_stateful_replay.py --hours 18 --sensors 32 --interval 60 --compact
