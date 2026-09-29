@@ -32,7 +32,7 @@
   "pi4_release_gate_contract": "pi4_release_gate_v1",
   "pi4_real_hardware_required": true,
   "stage7_offline_rl_control_unlock": false,
-  "tests_passed": 1448,
+  "tests_passed": 1381,
   "profile": "rpi4-ram-first-complete-discovery-manual-agent-selection",
   "manual_agent_training": true,
   "max_concurrent_training_jobs": 1,
