@@ -7,6 +7,7 @@ import tempfile
 import unittest
 
 import candidate_neural_correct as neural_correct
+import policy_tiny_mlp_correct as correct_module
 import agent_candidate_lineage as lineage
 from agent_candidates import ensure_tables as ensure_candidate_tables
 from context import archived_state, context_scalar
@@ -131,6 +132,49 @@ class TinyMLPCorrectMathTests(unittest.TestCase):
         self.assertEqual(report["mode"], "incremental_supervised_finetune")
         self.assertFalse(report["online_reward_updates"])
         self.assertFalse(report["physical_authority"])
+
+    def test_batched_correct_evaluation_matches_scalar_contract(self):
+        try:
+            import numpy  # noqa: F401
+        except ImportError:
+            self.skipTest("NumPy not installed in this source-only environment")
+
+        parent = trained_backend()
+        holdout = rows(80, offset=5000)
+        corrections = [
+            {
+                "observation": observation(-.25),
+                "action_idx": 0,
+                "weight": 1.0,
+                "label_id": 1,
+                "timestamp": 10.0,
+            },
+            {
+                "observation": observation(.25),
+                "action_idx": 1,
+                "weight": 1.0,
+                "label_id": 2,
+                "timestamp": 11.0,
+            },
+        ]
+        nearby = [observation(x) for x in (-.8, -.2, .2, .8)]
+
+        with patch.object(correct_module, "_numpy_prediction_indices", return_value=None):
+            scalar_fit = correct_module.correction_fit(parent, AGENT, corrections)
+            scalar_pair = correct_module.pair_regression_metrics(
+                parent, parent, AGENT, holdout
+            )
+            scalar_nearby = correct_module.nearby_agreement(parent, parent, nearby)
+
+        vector_fit = correct_module.correction_fit(parent, AGENT, corrections)
+        vector_pair = correct_module.pair_regression_metrics(
+            parent, parent, AGENT, holdout
+        )
+        vector_nearby = correct_module.nearby_agreement(parent, parent, nearby)
+
+        self.assertEqual(vector_fit, scalar_fit)
+        self.assertEqual(vector_pair, scalar_pair)
+        self.assertEqual(vector_nearby, scalar_nearby)
 
     def test_parent_distance_gate_blocks_overlarge_incremental_move(self):
         parent = trained_backend()

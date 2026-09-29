@@ -15,7 +15,11 @@ from __future__ import annotations
 import math
 
 from policy_tiny_mlp import TinyMLPBackend
-from policy_tiny_mlp_training import evaluate_supervised, train_supervised
+from policy_tiny_mlp_training import (
+    _numpy_prediction_indices,
+    evaluate_supervised,
+    train_supervised,
+)
 
 
 def clone_backend(parent):
@@ -41,6 +45,16 @@ def _prediction_index(model, observation):
     return int(model.predict(observation)[0]["index"])
 
 
+def _prediction_indices(model, rows):
+    rows = list(rows or ())
+    if not rows:
+        return []
+    dense = _numpy_prediction_indices(model, rows)
+    if dense is not None:
+        return [int(value) for value in dense]
+    return [_prediction_index(model, row["observation"]) for row in rows]
+
+
 def _is_correct(agent, actions, predicted_idx, actual_idx):
     if len(actions) <= 2 or str(agent.get("target_property") or "") == "power":
         return int(predicted_idx) == int(actual_idx)
@@ -57,9 +71,9 @@ def correction_fit(model, agent, rows):
         return {"samples": 0, "correct": 0, "score": None, "details": []}
     details = []
     correct = 0
-    for row in rows:
+    predictions = _prediction_indices(model, rows)
+    for row, predicted in zip(rows, predictions):
         actual = int(row["action_idx"])
-        predicted = _prediction_index(model, row["observation"])
         ok = _is_correct(agent, model.actions, predicted, actual)
         correct += int(ok)
         details.append({
@@ -114,10 +128,10 @@ def pair_regression_metrics(parent, child, agent, rows):
     agreement = 0
     regressions = 0
     improvements = 0
-    for row in rows:
+    parent_predictions = _prediction_indices(parent, rows)
+    child_predictions = _prediction_indices(child, rows)
+    for row, p, c in zip(rows, parent_predictions, child_predictions):
         actual = int(row["action_idx"])
-        p = _prediction_index(parent, row["observation"])
-        c = _prediction_index(child, row["observation"])
         agreement += int(p == c)
         p_ok = _is_correct(agent, parent.actions, p, actual)
         c_ok = _is_correct(agent, child.actions, c, actual)
@@ -147,12 +161,13 @@ def nearby_agreement(parent, child, observations):
     observations = list(observations or ())
     if not observations:
         return {"samples": 0, "agreement": None}
-    same = 0
-    for observation in observations:
-        same += int(
-            _prediction_index(parent, observation)
-            == _prediction_index(child, observation)
-        )
+    rows = [{"observation": observation} for observation in observations]
+    parent_predictions = _prediction_indices(parent, rows)
+    child_predictions = _prediction_indices(child, rows)
+    same = sum(
+        int(parent_idx == child_idx)
+        for parent_idx, child_idx in zip(parent_predictions, child_predictions)
+    )
     return {
         "samples": len(observations),
         "agreement": float(same) / len(observations),
