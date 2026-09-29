@@ -99,9 +99,82 @@ class PeriodicQosTests(unittest.TestCase):
             self.assertTrue(Engine._maybe_schedule_state_resync(engine))
             self.assertEqual(engine.state_resync_stats["scheduled"], 1)
             self.assertEqual(len(engine.poll_worker.calls), 1)
+            self.assertEqual(engine.last_full_poll, 0.0)
         finally:
             with HEAVY_JOBS.lock:
                 HEAVY_JOBS.owner = old_owner
+
+    def test_websocket_gap_resync_bypasses_busy_realtime_and_heavy_job(self):
+        engine = Engine.__new__(Engine)
+        engine.lock = threading.RLock()
+        engine.ws_connected = True
+        engine.last_full_poll = time.time()
+        engine.poll_future = None
+        engine.next_resync_retry_monotonic = 0.0
+        engine.last_event_monotonic = time.monotonic()
+        engine.state_resync_urgent = True
+        engine.state_resync_due_since_monotonic = time.monotonic()
+        engine.state_resync_max_defer_seconds = 30.0
+        engine.poll_worker = FakePollWorker()
+        engine.state_resync_stats = {
+            "runs": 0, "failures": 0, "last_changed_entities": 0,
+            "last_duration_ms": 0.0, "max_duration_ms": 0.0,
+            "deferred_for_realtime": 0, "deferred_for_heavy_job": 0,
+            "scheduled": 0, "urgent_requested": 1, "urgent_scheduled": 0,
+            "forced_after_starvation": 0,
+        }
+        with HEAVY_JOBS.lock:
+            old_owner = HEAVY_JOBS.owner
+            HEAVY_JOBS.owner = "training:test"
+        try:
+            previous_success = engine.last_full_poll
+            self.assertTrue(Engine._maybe_schedule_state_resync(engine))
+            self.assertEqual(engine.state_resync_stats["urgent_scheduled"], 1)
+            self.assertEqual(engine.state_resync_stats["deferred_for_realtime"], 0)
+            self.assertEqual(engine.state_resync_stats["deferred_for_heavy_job"], 0)
+            self.assertEqual(len(engine.poll_worker.calls), 1)
+            # Scheduling is not success: a failed REST call must remain immediately due
+            # after the short retry backoff instead of hiding stale Current for 15 min.
+            self.assertEqual(engine.last_full_poll, previous_success)
+        finally:
+            with HEAVY_JOBS.lock:
+                HEAVY_JOBS.owner = old_owner
+
+    def test_due_safety_resync_has_bounded_starvation_in_busy_home(self):
+        engine = Engine.__new__(Engine)
+        engine.lock = threading.RLock()
+        engine.ws_connected = True
+        engine.last_full_poll = 0.0
+        engine.poll_future = None
+        engine.next_resync_retry_monotonic = 0.0
+        engine.last_event_monotonic = time.monotonic()
+        engine.state_resync_urgent = False
+        engine.state_resync_due_since_monotonic = time.monotonic() - 31.0
+        engine.state_resync_max_defer_seconds = 30.0
+        engine.poll_worker = FakePollWorker()
+        engine.state_resync_stats = {
+            "runs": 0, "failures": 0, "last_changed_entities": 0,
+            "last_duration_ms": 0.0, "max_duration_ms": 0.0,
+            "deferred_for_realtime": 0, "deferred_for_heavy_job": 0,
+            "scheduled": 0, "urgent_requested": 0, "urgent_scheduled": 0,
+            "forced_after_starvation": 0,
+        }
+        with HEAVY_JOBS.lock:
+            old_owner = HEAVY_JOBS.owner
+            HEAVY_JOBS.owner = "training:test"
+        try:
+            self.assertTrue(Engine._maybe_schedule_state_resync(engine))
+            self.assertEqual(engine.state_resync_stats["forced_after_starvation"], 1)
+            self.assertEqual(len(engine.poll_worker.calls), 1)
+        finally:
+            with HEAVY_JOBS.lock:
+                HEAVY_JOBS.owner = old_owner
+
+    def test_websocket_disconnect_arms_truth_reconciliation_latch(self):
+        source = (support.ROOT / "adaptive_ai/src/engine.py").read_text(encoding="utf-8")
+        stream = source.split("class HAEventStream", 1)[1].split("class Engine", 1)[0]
+        self.assertIn("self.engine.state_resync_urgent = True", stream)
+        self.assertIn('stats["urgent_requested"]', stream)
 
     def test_shipped_healthy_resync_default_is_fifteen_minutes(self):
         self.assertEqual(int(OPTIONS["realtime_resync_seconds"]), 900)
