@@ -16,7 +16,9 @@ from candidate_offline_rl import (
 )
 from observation_space import ObservationMask, observation_schema_id
 from policy_tiny_mlp import TinyMLPBackend
+import policy_tiny_mlp_offline_rl as offline_module
 from policy_tiny_mlp_offline_rl import (
+    offline_policy_metrics,
     offline_rl_gate,
     train_conservative_offline_rl,
 )
@@ -154,6 +156,69 @@ class OfflineRLMathTests(unittest.TestCase):
             child.predict(observation(-.8))[0]["index"], 0
         )
 
+    def test_vectorized_and_scalar_trainers_preserve_offline_rl_decisions(self):
+        try:
+            import numpy  # noqa: F401
+        except ImportError:
+            self.skipTest("NumPy not installed in this source-only environment")
+
+        parent = trained_parent()
+        before = parent.serialize()
+        rows = reward_rows(64)
+        manual = [
+            {
+                "label_id": 1,
+                "observation": observation(-.75),
+                "action_idx": 0,
+                "weight": 1.0,
+            },
+            {
+                "label_id": 2,
+                "observation": observation(.75),
+                "action_idx": 1,
+                "weight": 1.0,
+            },
+        ]
+        kwargs = dict(
+            manual_samples=manual,
+            max_epochs=4,
+            batch_size=16,
+            learning_rate=.0015,
+            kl_beta=2.0,
+            parent_l2=.002,
+            manual_weight=4.0,
+            gradient_clip=.5,
+            max_parent_relative_l2=.08,
+            min_action_support=4,
+            early_stop_patience=2,
+            early_stop_min_delta=.0001,
+        )
+        with patch.object(offline_module, "_numpy_module", return_value=None):
+            scalar, scalar_report = offline_module.train_conservative_offline_rl(
+                parent, rows, **kwargs
+            )
+        vectorized, vector_report = offline_module.train_conservative_offline_rl(
+            parent, rows, **kwargs
+        )
+
+        self.assertEqual(parent.serialize(), before)
+        self.assertEqual(
+            scalar_report["execution_backend"], "python_scalar_fallback"
+        )
+        self.assertEqual(
+            vector_report["execution_backend"], "numpy_vectorized"
+        )
+        self.assertLessEqual(
+            float(vector_report["parent_distance"]["relative_l2"]), .080001
+        )
+        self.assertEqual(vector_report["manual_fit_candidate"]["score"], 1.0)
+        self.assertEqual(scalar_report["manual_fit_candidate"]["score"], 1.0)
+        probe = [observation(x) for x in (-.9, -.5, -.1, .1, .5, .9)]
+        self.assertEqual(
+            [scalar.predict(row)[0]["index"] for row in probe],
+            [vectorized.predict(row)[0]["index"] for row in probe],
+        )
+
     def test_gate_blocks_unsupported_action_extrapolation(self):
         parent = trained_parent()
         rows = [
@@ -194,6 +259,72 @@ class OfflineRLMathTests(unittest.TestCase):
         self.assertFalse(gate["passed"])
         self.assertIn(
             "insufficient_action_support", gate["reasons"]
+        )
+
+    def test_vectorized_safety_metrics_match_scalar_contract(self):
+        try:
+            import numpy  # noqa: F401
+        except ImportError:
+            self.skipTest("NumPy not installed in this source-only environment")
+
+        parent = trained_parent()
+        rows = reward_rows(64)
+        child, _report = train_conservative_offline_rl(
+            parent,
+            rows[:48],
+            max_epochs=3,
+            max_parent_relative_l2=.08,
+        )
+        kwargs = dict(
+            train_reference=rows[:48],
+            supported_actions=(0, 1),
+            reward_clip=1.0,
+            ratio_clip=2.0,
+            context_threshold=1.5,
+        )
+        with patch.object(offline_module, "_numpy_module", return_value=None):
+            scalar = offline_policy_metrics(parent, child, rows[48:], **kwargs)
+        vectorized = offline_policy_metrics(parent, child, rows[48:], **kwargs)
+
+        self.assertEqual(scalar["samples"], vectorized["samples"])
+        self.assertEqual(
+            scalar["unsupported_new_argmax_count"],
+            vectorized["unsupported_new_argmax_count"],
+        )
+        self.assertEqual(
+            scalar["logged_probability_regression_count"],
+            vectorized["logged_probability_regression_count"],
+        )
+        for key in (
+            "average_trusted_reward",
+            "parent_reward_proxy",
+            "candidate_reward_proxy",
+            "reward_improvement_estimate",
+            "effective_sample_size_proxy",
+            "parent_action_agreement",
+            "action_drift_mean_tv",
+            "action_drift_max_tv",
+            "unsupported_probability_lift_max",
+            "logged_probability_regression_fraction",
+        ):
+            left = scalar.get(key)
+            right = vectorized.get(key)
+            if left is None or right is None:
+                self.assertEqual(left, right, key)
+            else:
+                self.assertAlmostEqual(float(left), float(right), places=11, msg=key)
+        self.assertEqual(
+            scalar["unseen_context"]["samples"],
+            vectorized["unseen_context"]["samples"],
+        )
+        self.assertEqual(
+            scalar["unseen_context"]["unseen"],
+            vectorized["unseen_context"]["unseen"],
+        )
+        self.assertAlmostEqual(
+            float(scalar["unseen_context"]["rate"]),
+            float(vectorized["unseen_context"]["rate"]),
+            places=12,
         )
 
     def test_gate_records_required_offline_comparison_metrics(self):

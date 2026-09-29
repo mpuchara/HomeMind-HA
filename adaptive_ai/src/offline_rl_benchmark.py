@@ -11,6 +11,7 @@ import sys
 import time
 
 from policy_tiny_mlp import TinyMLPBackend
+import policy_tiny_mlp_offline_rl as offline_module
 from policy_tiny_mlp_offline_rl import (
     offline_rl_gate,
     train_conservative_offline_rl,
@@ -85,6 +86,7 @@ def benchmark(
     parent_samples=384,
     reward_contexts=128,
     epochs=4,
+    compare_scalar=False,
 ):
     feature_ids = tuple(f"feature:{idx}" for idx in range(int(features)))
     parent = TinyMLPBackend(
@@ -173,6 +175,82 @@ def benchmark(
     wall = time.perf_counter() - started
     rss_after = rss_bytes()
 
+    scalar_reference = None
+    if compare_scalar:
+        original_numpy_module = offline_module._numpy_module
+        try:
+            offline_module._numpy_module = lambda: None
+            scalar_started = time.perf_counter()
+            scalar_child, scalar_trainer = offline_module.train_conservative_offline_rl(
+                parent,
+                train_rows,
+                manual_samples=manual,
+                max_samples=384,
+                max_epochs=epochs,
+                batch_size=16,
+                learning_rate=.0015,
+                reward_clip=1.0,
+                advantage_clip=1.5,
+                kl_beta=2.0,
+                parent_l2=.002,
+                manual_weight=4.0,
+                gradient_clip=.5,
+                max_parent_relative_l2=.08,
+                min_action_support=4,
+                early_stop_patience=2,
+                early_stop_min_delta=.0001,
+            )
+            scalar_gate = offline_module.offline_rl_gate(
+                parent,
+                scalar_child,
+                train_rows=train_rows,
+                holdout_rows=holdout_rows,
+                manual_samples=manual,
+                min_total_samples=24,
+                min_holdout_samples=8,
+                min_supported_actions=2,
+                min_action_support=4,
+                min_effective_sample_size=4.0,
+                min_reward_gain=0.0,
+                min_parent_agreement=.80,
+                max_mean_tv=.10,
+                max_max_tv=.25,
+                max_parent_relative_l2=.08,
+                max_unsupported_probability_lift=.02,
+                max_regression_fraction=.10,
+                max_unseen_context_rate=.75,
+                reward_clip=1.0,
+                context_threshold=1.5,
+            )
+            scalar_wall = time.perf_counter() - scalar_started
+        finally:
+            offline_module._numpy_module = original_numpy_module
+        scalar_reference = {
+            "execution_backend": scalar_trainer.get("execution_backend"),
+            "trainer_elapsed_seconds": scalar_trainer.get("elapsed_seconds"),
+            "wall_seconds": scalar_wall,
+            "gate_passed": bool(scalar_gate.get("passed")),
+            "manual_fit_score": (
+                scalar_gate.get("manual_fit_candidate") or {}
+            ).get("score"),
+            "parent_distance_relative_l2": (
+                scalar_gate.get("parent_distance") or {}
+            ).get("relative_l2"),
+            "holdout_reward_gain": (
+                scalar_gate.get("holdout") or {}
+            ).get("reward_improvement_estimate"),
+            "decision_parity": all(
+                scalar_child.predict(row["observation"])[0]["index"]
+                == child.predict(row["observation"])[0]["index"]
+                for row in holdout_rows
+            ),
+            "trainer_speedup": (
+                float(scalar_trainer.get("elapsed_seconds") or 0.0)
+                / max(1e-12, float(trainer.get("elapsed_seconds") or 0.0))
+            ),
+            "end_to_end_speedup": scalar_wall / max(1e-12, wall),
+        }
+
     latency = []
     for row in holdout_rows:
         t0 = time.perf_counter_ns()
@@ -184,6 +262,7 @@ def benchmark(
     manual_fit = gate.get("manual_fit_candidate") or {}
     passed = bool(
         trainer.get("trained")
+        and trainer.get("execution_backend") == "numpy_vectorized"
         and gate.get("passed")
         and parent_unchanged
         and float((gate.get("parent_distance") or {}).get("relative_l2") or 0.0) <= .080001
@@ -191,6 +270,14 @@ def benchmark(
         and int(holdout.get("unsupported_new_argmax_count") or 0) == 0
         and float(manual_fit.get("score") or 0.0) >= 1.0
         and wall < 30.0
+        and (
+            not compare_scalar
+            or (
+                scalar_reference is not None
+                and scalar_reference.get("execution_backend") == "python_scalar_fallback"
+                and scalar_reference.get("gate_passed")
+            )
+        )
     )
     return {
         "contract": "tiny_mlp_stage7_offline_rl_benchmark_v1",
@@ -202,6 +289,7 @@ def benchmark(
         "holdout_samples": len(holdout_rows),
         "manual_samples": len(manual),
         "wall_seconds": wall,
+        "scalar_reference": scalar_reference,
         "rss_before_bytes": rss_before,
         "rss_after_bytes": rss_after,
         "rss_delta_bytes": (
@@ -237,6 +325,7 @@ def main(argv=None):
     parser.add_argument("--parent-samples", type=int, default=384)
     parser.add_argument("--reward-contexts", type=int, default=128)
     parser.add_argument("--epochs", type=int, default=4)
+    parser.add_argument("--compare-scalar", action="store_true")
     parser.add_argument("--compact", action="store_true")
     args = parser.parse_args(argv)
     result = benchmark(
@@ -244,6 +333,7 @@ def main(argv=None):
         parent_samples=args.parent_samples,
         reward_contexts=args.reward_contexts,
         epochs=args.epochs,
+        compare_scalar=args.compare_scalar,
     )
     print(json.dumps(
         result,

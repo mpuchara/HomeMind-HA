@@ -29,6 +29,7 @@ import time
 import uuid
 
 from policy_tiny_mlp_correct import clone_backend, parameter_distance
+from policy_tiny_mlp_training import _numpy_module, _numpy_softmax, _observation_values
 
 
 def _finite(value, default=0.0):
@@ -169,6 +170,52 @@ def _manual_metrics(model, rows):
 
 
 def _nearest_context_rate(parent, reference_rows, eval_rows, threshold):
+    np = _numpy_module()
+    if np is not None:
+        refs = []
+        for row in _bounded(reference_rows, 128):
+            try:
+                refs.append(parent.normalized_input(row["observation"]))
+            except Exception:
+                continue
+        vectors = []
+        for row in eval_rows:
+            try:
+                vectors.append(parent.normalized_input(row["observation"]))
+            except Exception:
+                continue
+        if not refs:
+            return {
+                "samples": 0,
+                "unseen": 0,
+                "rate": None,
+                "threshold": float(threshold),
+            }
+        if not vectors:
+            return {
+                "samples": 0,
+                "unseen": 0,
+                "rate": None,
+                "threshold": float(threshold),
+            }
+        refs_matrix = np.asarray(refs, dtype=np.float64)
+        eval_matrix = np.asarray(vectors, dtype=np.float64)
+        unseen = 0
+        # Keep peak scratch RAM bounded while turning the O(N*128*D) Python loop into
+        # dense C/BLAS-friendly array math. 64*128*96 float64 ~= 6 MiB.
+        for start in range(0, len(eval_matrix), 64):
+            block = eval_matrix[start:start + 64]
+            delta = block[:, None, :] - refs_matrix[None, :, :]
+            distances = np.sqrt(np.mean(delta * delta, axis=2))
+            unseen += int(np.sum(np.min(distances, axis=1) > float(threshold)))
+        samples = int(len(eval_matrix))
+        return {
+            "samples": samples,
+            "unseen": int(unseen),
+            "rate": (float(unseen) / samples if samples else None),
+            "threshold": float(threshold),
+        }
+
     refs = []
     for row in _bounded(reference_rows, 128):
         try:
@@ -255,6 +302,18 @@ def offline_policy_metrics(
     context_threshold=1.5,
 ):
     rows = list(rows or ())
+    vectorized = _offline_policy_metrics_numpy(
+        parent,
+        child,
+        rows,
+        train_reference=train_reference,
+        supported_actions=supported_actions,
+        reward_clip=reward_clip,
+        ratio_clip=ratio_clip,
+        context_threshold=context_threshold,
+    )
+    if vectorized is not None:
+        return vectorized
     supported = {int(idx) for idx in supported_actions}
     unsupported = set(range(len(parent.actions))) - supported
     weighted_reward = weighted_child_reward = 0.0
@@ -383,6 +442,552 @@ def _training_score(parent, child, rows, supported_actions, reward_clip):
     return float(reward) - 0.25 * float(drift or 0.0), metrics
 
 
+def _numpy_normalized_matrix(np, backend, rows):
+    matrix = np.empty((len(rows), int(backend.input_size)), dtype=np.float64)
+    for index, row in enumerate(rows):
+        matrix[index, :] = _observation_values(backend, row)
+    matrix -= np.asarray(backend.input_mean, dtype=np.float64)
+    matrix /= np.asarray(backend.input_scale, dtype=np.float64)
+    np.clip(matrix, -6.0, 6.0, out=matrix)
+    return matrix
+
+
+def _numpy_parameters(np, backend):
+    architecture = tuple(int(x) for x in backend.architecture)
+    weights = [
+        np.asarray(layer, dtype=np.float64).reshape(
+            architecture[index + 1], architecture[index]
+        ).copy()
+        for index, layer in enumerate(backend.weights)
+    ]
+    biases = [np.asarray(layer, dtype=np.float64).copy() for layer in backend.biases]
+    return architecture, weights, biases
+
+
+def _numpy_forward(np, architecture, weights, biases, matrix):
+    activations = [matrix]
+    current = matrix
+    for layer_index, (weight, bias) in enumerate(zip(weights, biases)):
+        current = current @ weight.T + bias
+        if layer_index < len(weights) - 1:
+            current = np.maximum(current, 0.0)
+        activations.append(current)
+    return activations, _numpy_softmax(np, activations[-1])
+
+
+def _numpy_project_to_parent(
+    np, weights, biases, parent_weights, parent_biases, maximum_relative_l2
+):
+    parent_sq = 0.0
+    diff_sq = 0.0
+    for weight, parent_weight in zip(weights, parent_weights):
+        diff = weight - parent_weight
+        parent_sq += float(np.sum(parent_weight * parent_weight))
+        diff_sq += float(np.sum(diff * diff))
+    for bias, parent_bias in zip(biases, parent_biases):
+        diff = bias - parent_bias
+        parent_sq += float(np.sum(parent_bias * parent_bias))
+        diff_sq += float(np.sum(diff * diff))
+    relative = math.sqrt(diff_sq / max(1e-12, parent_sq))
+    maximum = max(0.0, float(maximum_relative_l2))
+    if relative <= maximum or relative <= 1e-12:
+        return False
+    scale = maximum / relative
+    for index in range(len(weights)):
+        weights[index] = parent_weights[index] + (
+            weights[index] - parent_weights[index]
+        ) * scale
+        biases[index] = parent_biases[index] + (
+            biases[index] - parent_biases[index]
+        ) * scale
+        # Scalar array('f') projection quantizes each assigned parameter to float32.
+        weights[index] = weights[index].astype(np.float32).astype(np.float64)
+        biases[index] = biases[index].astype(np.float32).astype(np.float64)
+    return True
+
+
+def _offline_policy_metrics_numpy(
+    parent,
+    child,
+    rows,
+    *,
+    train_reference=(),
+    supported_actions=(),
+    reward_clip=1.0,
+    ratio_clip=2.0,
+    context_threshold=1.5,
+):
+    np = _numpy_module()
+    if np is None:
+        return None
+    valid_rows = []
+    targets = []
+    weights = []
+    rewards = []
+    for row in rows:
+        try:
+            idx = int(row.get("action_idx", -1))
+        except (TypeError, ValueError):
+            continue
+        weight = max(0.0, _finite(row.get("weight"), 1.0))
+        if not 0 <= idx < len(parent.actions) or weight <= 0.0:
+            continue
+        # Preserve the scalar contract: malformed observations still surface as an
+        # error instead of being silently discarded from safety metrics.
+        _observation_values(parent, row)
+        valid_rows.append(row)
+        targets.append(idx)
+        weights.append(weight)
+        rewards.append(
+            max(-float(reward_clip), min(float(reward_clip), _finite(row.get("reward"))))
+        )
+    samples = len(valid_rows)
+    supported = {int(idx) for idx in supported_actions}
+    unsupported = sorted(set(range(len(parent.actions))) - supported)
+    if samples <= 0:
+        return {
+            "contract": "offline_logged_action_reward_proxy_v1",
+            "behavior_propensity_known": False,
+            "samples": 0,
+            "average_trusted_reward": None,
+            "parent_reward_proxy": None,
+            "candidate_reward_proxy": None,
+            "reward_improvement_estimate": None,
+            "effective_sample_size_proxy": 0.0,
+            "parent_action_agreement": None,
+            "action_drift_mean_tv": None,
+            "action_drift_max_tv": 0.0,
+            "unsupported_probability_lift_max": 0.0,
+            "unsupported_new_argmax_count": 0,
+            "logged_probability_regression_count": 0,
+            "logged_probability_regression_fraction": None,
+            "unseen_context": _nearest_context_rate(
+                parent, train_reference, rows, context_threshold
+            ),
+            "q_proxy_calibration": _action_reward_proxy(
+                train_reference, rows, len(parent.actions)
+            ),
+        }
+
+    matrix = _numpy_normalized_matrix(np, parent, valid_rows)
+    architecture, parent_weights, parent_biases = _numpy_parameters(np, parent)
+    child_architecture, child_weights, child_biases = _numpy_parameters(np, child)
+    if child_architecture != architecture:
+        raise ValueError("Offline-RL parent/child architecture mismatch")
+    _parent_acts, parent_probs = _numpy_forward(
+        np, architecture, parent_weights, parent_biases, matrix
+    )
+    _child_acts, child_probs = _numpy_forward(
+        np, architecture, child_weights, child_biases, matrix
+    )
+    target_array = np.asarray(targets, dtype=np.int64)
+    weight_array = np.asarray(weights, dtype=np.float64)
+    reward_array = np.asarray(rewards, dtype=np.float64)
+    row_indices = np.arange(samples)
+
+    parent_action = np.argmax(parent_probs, axis=1)
+    child_action = np.argmax(child_probs, axis=1)
+    agreements = int(np.sum(parent_action == child_action))
+    tv = 0.5 * np.sum(np.abs(parent_probs - child_probs), axis=1)
+
+    unsupported_lift = 0.0
+    unsupported_argmax = 0
+    if unsupported:
+        unsupported_idx = np.asarray(unsupported, dtype=np.int64)
+        unsupported_lift = max(
+            0.0,
+            float(np.max(
+                child_probs[:, unsupported_idx] - parent_probs[:, unsupported_idx]
+            )),
+        )
+        unsupported_mask = np.isin(child_action, unsupported_idx)
+        unsupported_argmax = int(np.sum(
+            unsupported_mask & (child_action != parent_action)
+        ))
+
+    total_weight = float(np.sum(weight_array))
+    parent_reward = (
+        float(np.sum(weight_array * reward_array)) / total_weight
+        if total_weight > 0.0 else None
+    )
+    parent_logged = np.maximum(
+        1e-6, parent_probs[row_indices, target_array]
+    )
+    ratio_limit = max(1.0, float(ratio_clip))
+    ratio = np.clip(
+        child_probs[row_indices, target_array] / parent_logged,
+        1.0 / ratio_limit,
+        ratio_limit,
+    )
+    child_weight_array = weight_array * ratio
+    child_weight = float(np.sum(child_weight_array))
+    child_reward = (
+        float(np.sum(child_weight_array * reward_array)) / child_weight
+        if child_weight > 0.0 else None
+    )
+    improvement = (
+        child_reward - parent_reward
+        if child_reward is not None and parent_reward is not None else None
+    )
+    ratio_sq = float(np.sum(child_weight_array * child_weight_array))
+    ess = (
+        (child_weight * child_weight) / ratio_sq
+        if child_weight > 0.0 and ratio_sq > 0.0 else 0.0
+    )
+
+    baseline, _spread = _weighted_stats(rows, reward_clip)
+    probability_delta = (
+        child_probs[row_indices, target_array]
+        - parent_probs[row_indices, target_array]
+    )
+    regressions = (
+        ((reward_array > baseline + 1e-9) & (probability_delta < -0.02))
+        | ((reward_array < baseline - 1e-9) & (probability_delta > 0.02))
+    )
+    regression_count = int(np.sum(regressions))
+
+    return {
+        "contract": "offline_logged_action_reward_proxy_v1",
+        "behavior_propensity_known": False,
+        "samples": int(samples),
+        "average_trusted_reward": parent_reward,
+        "parent_reward_proxy": parent_reward,
+        "candidate_reward_proxy": child_reward,
+        "reward_improvement_estimate": improvement,
+        "effective_sample_size_proxy": float(ess),
+        "parent_action_agreement": float(agreements) / samples,
+        "action_drift_mean_tv": float(np.mean(tv)),
+        "action_drift_max_tv": float(np.max(tv)),
+        "unsupported_probability_lift_max": float(unsupported_lift),
+        "unsupported_new_argmax_count": int(unsupported_argmax),
+        "logged_probability_regression_count": int(regression_count),
+        "logged_probability_regression_fraction": float(regression_count) / samples,
+        "unseen_context": _nearest_context_rate(
+            parent, train_reference, rows, context_threshold
+        ),
+        "q_proxy_calibration": _action_reward_proxy(
+            train_reference, rows, len(parent.actions)
+        ),
+    }
+
+
+def _numpy_offline_training_score(
+    np, child_probs, parent_probs, targets, rewards, sample_weights
+):
+    rows = int(len(targets))
+    if rows <= 0:
+        return -math.inf
+    parent_logged = np.maximum(
+        1e-6, parent_probs[np.arange(rows), targets]
+    )
+    ratio = np.clip(
+        child_probs[np.arange(rows), targets] / parent_logged,
+        0.5,
+        2.0,
+    )
+    weighted = sample_weights * ratio
+    denominator = float(np.sum(weighted))
+    if denominator <= 0.0:
+        return -math.inf
+    reward = float(np.sum(weighted * rewards)) / denominator
+    drift = float(np.mean(0.5 * np.sum(np.abs(child_probs - parent_probs), axis=1)))
+    return reward - 0.25 * drift
+
+
+def _train_conservative_offline_rl_numpy(
+    parent,
+    child,
+    prepared,
+    manual,
+    *,
+    support_counts,
+    supported,
+    reward_mean,
+    reward_std,
+    reward_clip,
+    advantage_clip,
+    min_action_support,
+    max_epochs,
+    batch_size,
+    lr,
+    kl_beta,
+    parent_l2,
+    manual_weight,
+    clip,
+    max_parent_relative_l2,
+    patience,
+    min_delta,
+    checkpoint,
+):
+    np = _numpy_module()
+    if np is None:
+        return None
+
+    started = time.perf_counter()
+    architecture, parent_weights, parent_biases = _numpy_parameters(np, parent)
+    _child_architecture, weights, biases = _numpy_parameters(np, child)
+    train_matrix = _numpy_normalized_matrix(np, parent, prepared)
+    train_targets = np.asarray(
+        [int(row["action_idx"]) for row in prepared], dtype=np.int64
+    )
+    train_rewards = np.asarray(
+        [float(row["reward"]) for row in prepared], dtype=np.float64
+    )
+    train_weights = np.asarray(
+        [max(0.0, _finite(row.get("weight"), 1.0)) for row in prepared],
+        dtype=np.float64,
+    )
+    train_advantages = np.asarray(
+        [float(row.get("advantage") or 0.0) for row in prepared],
+        dtype=np.float64,
+    )
+    _parent_activations, parent_probs = _numpy_forward(
+        np, architecture, parent_weights, parent_biases, train_matrix
+    )
+
+    if manual:
+        manual_matrix = _numpy_normalized_matrix(np, parent, manual)
+        manual_targets = np.asarray(
+            [int(row["action_idx"]) for row in manual], dtype=np.int64
+        )
+        manual_scales = np.asarray(
+            [
+                manual_weight * max(0.0, _finite(row.get("weight"), 1.0))
+                for row in manual
+            ],
+            dtype=np.float64,
+        )
+    else:
+        manual_matrix = np.empty((0, int(parent.input_size)), dtype=np.float64)
+        manual_targets = np.empty(0, dtype=np.int64)
+        manual_scales = np.empty(0, dtype=np.float64)
+
+    rng = random.Random(
+        int(parent.init_seed)
+        ^ int(parent.training_samples)
+        ^ len(prepared)
+        ^ 0x7A17
+    )
+    order = list(range(len(prepared)))
+    best_score = -math.inf
+    best_epoch = 0
+    best_weights = None
+    best_biases = None
+    stale = 0
+    updates = 0
+    clip_events = 0
+    projection_events = 0
+    epoch_scores = []
+    effective_kl_weight = max(0.25, kl_beta)
+
+    for epoch in range(1, max_epochs + 1):
+        rng.shuffle(order)
+        for batch_start in range(0, len(order), batch_size):
+            indices = order[batch_start:batch_start + batch_size]
+            batch_count = len(indices)
+            if batch_count <= 0:
+                continue
+            batch_matrix = train_matrix[indices]
+            if len(manual_matrix):
+                combined = np.concatenate((batch_matrix, manual_matrix), axis=0)
+            else:
+                combined = batch_matrix
+            activations, probabilities = _numpy_forward(
+                np, architecture, weights, biases, combined
+            )
+
+            batch_targets = train_targets[indices]
+            batch_weights = train_weights[indices]
+            batch_advantages = train_advantages[indices]
+            batch_parent_probs = parent_probs[indices]
+            delta = np.zeros_like(probabilities)
+            reward_delta = probabilities[:batch_count].copy()
+            reward_delta[
+                np.arange(batch_count), batch_targets
+            ] -= 1.0
+            reward_delta *= batch_advantages[:, None]
+            reward_delta += kl_beta * (
+                probabilities[:batch_count] - batch_parent_probs
+            )
+            reward_delta *= batch_weights[:, None]
+            delta[:batch_count] = reward_delta
+
+            effective_weight = float(
+                np.sum(
+                    batch_weights
+                    * (np.abs(batch_advantages) + effective_kl_weight)
+                )
+            )
+            if len(manual_matrix):
+                manual_delta = probabilities[batch_count:].copy()
+                manual_delta[
+                    np.arange(len(manual_targets)), manual_targets
+                ] -= 1.0
+                manual_delta *= manual_scales[:, None]
+                delta[batch_count:] = manual_delta
+                effective_weight += float(np.sum(manual_scales))
+            if effective_weight <= 0.0:
+                continue
+
+            grad_w = [None] * len(weights)
+            grad_b = [None] * len(biases)
+            current_delta = delta
+            for layer_index in range(len(weights) - 1, -1, -1):
+                previous = activations[layer_index]
+                grad_w[layer_index] = (
+                    current_delta.T @ previous
+                ) / effective_weight
+                grad_b[layer_index] = np.sum(
+                    current_delta, axis=0
+                ) / effective_weight
+                grad_w[layer_index] += parent_l2 * (
+                    weights[layer_index] - parent_weights[layer_index]
+                )
+                grad_b[layer_index] += parent_l2 * (
+                    biases[layer_index] - parent_biases[layer_index]
+                )
+                if layer_index > 0:
+                    current_delta = current_delta @ weights[layer_index]
+                    current_delta *= (previous > 0.0)
+
+            norm_sq = 0.0
+            for grad in grad_w:
+                norm_sq += float(np.sum(grad * grad))
+            for grad in grad_b:
+                norm_sq += float(np.sum(grad * grad))
+            norm = math.sqrt(norm_sq)
+            clip_scale = min(1.0, clip / max(1e-12, norm))
+            clip_events += int(clip_scale < 0.999999)
+
+            for layer_index in range(len(weights)):
+                weights[layer_index] -= lr * grad_w[layer_index] * clip_scale
+                biases[layer_index] -= lr * grad_b[layer_index] * clip_scale
+                # Match array('f') assignment semantics after every optimizer update.
+                weights[layer_index] = weights[layer_index].astype(
+                    np.float32
+                ).astype(np.float64)
+                biases[layer_index] = biases[layer_index].astype(
+                    np.float32
+                ).astype(np.float64)
+
+            projection_events += int(_numpy_project_to_parent(
+                np,
+                weights,
+                biases,
+                parent_weights,
+                parent_biases,
+                max_parent_relative_l2,
+            ))
+            updates += 1
+            if callable(checkpoint):
+                checkpoint("tiny_mlp_offline_rl_batch")
+
+        _activations, child_probs = _numpy_forward(
+            np, architecture, weights, biases, train_matrix
+        )
+        score = _numpy_offline_training_score(
+            np,
+            child_probs,
+            parent_probs,
+            train_targets,
+            train_rewards,
+            train_weights,
+        )
+        epoch_scores.append(float(score))
+        if score - best_score > min_delta:
+            best_score = float(score)
+            best_epoch = epoch
+            best_weights = [weight.copy() for weight in weights]
+            best_biases = [bias.copy() for bias in biases]
+            stale = 0
+        else:
+            stale += 1
+        if callable(checkpoint):
+            checkpoint("tiny_mlp_offline_rl_epoch", force=True)
+        if stale >= patience:
+            break
+
+    if best_weights is not None:
+        weights = best_weights
+        biases = best_biases
+    child.weights = [
+        array("f", weight.reshape(-1).astype(np.float32).tolist())
+        for weight in weights
+    ]
+    child.biases = [
+        array("f", bias.astype(np.float32).tolist())
+        for bias in biases
+    ]
+    child.trained = True
+    child.training_samples = int(parent.training_samples) + len(prepared)
+    child.model_revision = str(uuid.uuid4())
+    elapsed = max(0.0, time.perf_counter() - started)
+    distance = parameter_distance(parent, child)
+    parent_manual = _manual_metrics(parent, manual)
+    child_manual = _manual_metrics(child, manual)
+    matrix_bytes = int(
+        train_matrix.nbytes
+        + train_targets.nbytes
+        + train_rewards.nbytes
+        + train_weights.nbytes
+        + train_advantages.nbytes
+        + parent_probs.nbytes
+        + manual_matrix.nbytes
+        + manual_targets.nbytes
+        + manual_scales.nbytes
+        + sum(weight.nbytes for weight in weights)
+        + sum(bias.nbytes for bias in biases)
+    )
+    meta = {
+        "contract": "tiny_mlp_conservative_offline_policy_improvement_v1",
+        "trained": True,
+        "algorithm": "reward_weighted_policy_gradient_with_parent_kl",
+        "execution_backend": "numpy_vectorized",
+        "behavior_propensity_known": False,
+        "samples": len(prepared),
+        "manual_samples": len(manual),
+        "reward_clip": float(reward_clip),
+        "reward_mean": float(reward_mean),
+        "reward_std": float(reward_std),
+        "advantage_clip": float(advantage_clip),
+        "action_support_counts": {
+            str(idx): int(value)
+            for idx, value in enumerate(support_counts)
+        },
+        "supported_actions": sorted(int(idx) for idx in supported),
+        "min_action_support": int(min_action_support),
+        "epochs": len(epoch_scores),
+        "best_epoch": int(best_epoch),
+        "best_score": (
+            None if not math.isfinite(best_score) else float(best_score)
+        ),
+        "epoch_scores": epoch_scores,
+        "batch_updates": int(updates),
+        "learning_rate": float(lr),
+        "kl_beta": float(kl_beta),
+        "parent_l2": float(parent_l2),
+        "manual_weight": float(manual_weight),
+        "gradient_clip": float(clip),
+        "gradient_clip_events": int(clip_events),
+        "parent_projection_events": int(projection_events),
+        "max_parent_relative_l2": float(max_parent_relative_l2),
+        "parent_distance": distance,
+        "manual_fit_parent": parent_manual,
+        "manual_fit_candidate": child_manual,
+        "prepared_matrix_bytes": matrix_bytes,
+        "prepared_matrix_dtype": "float64",
+        "elapsed_seconds": round(elapsed, 4),
+        "online_exploration": False,
+        "online_reward_updates": False,
+        "physical_authority": False,
+    }
+    child.training_meta = {
+        **dict(child.training_meta or {}),
+        "offline_rl": meta,
+    }
+    return child, meta
+
+
 def train_conservative_offline_rl(
     parent,
     samples,
@@ -464,6 +1069,33 @@ def train_conservative_offline_rl(
     clip = max(1e-4, min(10.0, float(gradient_clip)))
     patience = max(1, min(10, int(early_stop_patience)))
     min_delta = max(0.0, float(early_stop_min_delta))
+
+    vectorized = _train_conservative_offline_rl_numpy(
+        parent,
+        child,
+        prepared,
+        manual,
+        support_counts=support_counts,
+        supported=supported,
+        reward_mean=reward_mean,
+        reward_std=reward_std,
+        reward_clip=reward_clip,
+        advantage_clip=advantage_clip,
+        min_action_support=min_action_support,
+        max_epochs=max_epochs,
+        batch_size=batch_size,
+        lr=lr,
+        kl_beta=kl_beta,
+        parent_l2=parent_l2,
+        manual_weight=manual_weight,
+        clip=clip,
+        max_parent_relative_l2=max_parent_relative_l2,
+        patience=patience,
+        min_delta=min_delta,
+        checkpoint=checkpoint,
+    )
+    if vectorized is not None:
+        return vectorized
 
     rng = random.Random(
         int(parent.init_seed)
@@ -644,6 +1276,7 @@ def train_conservative_offline_rl(
         "contract": "tiny_mlp_conservative_offline_policy_improvement_v1",
         "trained": True,
         "algorithm": "reward_weighted_policy_gradient_with_parent_kl",
+        "execution_backend": "python_scalar_fallback",
         "behavior_propensity_known": False,
         "samples": len(prepared),
         "manual_samples": len(manual),
