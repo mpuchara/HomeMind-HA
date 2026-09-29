@@ -18,6 +18,7 @@ from observation_space import ObservationMask, observation_schema_id
 from policy_tiny_mlp import TinyMLPBackend
 import policy_tiny_mlp_offline_rl as offline_module
 from policy_tiny_mlp_offline_rl import (
+    offline_policy_metrics,
     offline_rl_gate,
     train_conservative_offline_rl,
 )
@@ -258,6 +259,72 @@ class OfflineRLMathTests(unittest.TestCase):
         self.assertFalse(gate["passed"])
         self.assertIn(
             "insufficient_action_support", gate["reasons"]
+        )
+
+    def test_vectorized_safety_metrics_match_scalar_contract(self):
+        try:
+            import numpy  # noqa: F401
+        except ImportError:
+            self.skipTest("NumPy not installed in this source-only environment")
+
+        parent = trained_parent()
+        rows = reward_rows(64)
+        child, _report = train_conservative_offline_rl(
+            parent,
+            rows[:48],
+            max_epochs=3,
+            max_parent_relative_l2=.08,
+        )
+        kwargs = dict(
+            train_reference=rows[:48],
+            supported_actions=(0, 1),
+            reward_clip=1.0,
+            ratio_clip=2.0,
+            context_threshold=1.5,
+        )
+        with patch.object(offline_module, "_numpy_module", return_value=None):
+            scalar = offline_policy_metrics(parent, child, rows[48:], **kwargs)
+        vectorized = offline_policy_metrics(parent, child, rows[48:], **kwargs)
+
+        self.assertEqual(scalar["samples"], vectorized["samples"])
+        self.assertEqual(
+            scalar["unsupported_new_argmax_count"],
+            vectorized["unsupported_new_argmax_count"],
+        )
+        self.assertEqual(
+            scalar["logged_probability_regression_count"],
+            vectorized["logged_probability_regression_count"],
+        )
+        for key in (
+            "average_trusted_reward",
+            "parent_reward_proxy",
+            "candidate_reward_proxy",
+            "reward_improvement_estimate",
+            "effective_sample_size_proxy",
+            "parent_action_agreement",
+            "action_drift_mean_tv",
+            "action_drift_max_tv",
+            "unsupported_probability_lift_max",
+            "logged_probability_regression_fraction",
+        ):
+            left = scalar.get(key)
+            right = vectorized.get(key)
+            if left is None or right is None:
+                self.assertEqual(left, right, key)
+            else:
+                self.assertAlmostEqual(float(left), float(right), places=11, msg=key)
+        self.assertEqual(
+            scalar["unseen_context"]["samples"],
+            vectorized["unseen_context"]["samples"],
+        )
+        self.assertEqual(
+            scalar["unseen_context"]["unseen"],
+            vectorized["unseen_context"]["unseen"],
+        )
+        self.assertAlmostEqual(
+            float(scalar["unseen_context"]["rate"]),
+            float(vectorized["unseen_context"]["rate"]),
+            places=12,
         )
 
     def test_gate_records_required_offline_comparison_metrics(self):
