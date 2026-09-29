@@ -399,7 +399,7 @@ def resolve_training_resource_profile(options=None, memory=None):
         tier = "large"
         target = {
             "replay_rows": 65536, "replay_entry_rows": 2048,
-            "home_entries": 64, "home_units": 32768, "sqlite_mb": 32,
+            "home_entries": 64, "home_units": 32768, "sqlite_mb": 64,
         }
     elif effective >= 640:
         tier = "medium_plus"
@@ -442,7 +442,7 @@ def resolve_training_resource_profile(options=None, memory=None):
             "training_home_context_cache_units", 32768, target["home_units"]
         ),
         "training_worker_effective_sqlite_cache_mb": bounded_int(
-            "training_sqlite_cache_mb", 32, target["sqlite_mb"], minimum=2
+            "training_sqlite_cache_mb", 64, target["sqlite_mb"], minimum=2
         ),
     }
     return {
