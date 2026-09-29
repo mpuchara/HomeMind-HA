@@ -5,10 +5,12 @@ import json
 import tempfile
 import threading
 import unittest
+from unittest.mock import patch
 
 from candidate_neural_shadow import install as install_candidate_neural_shadow
 from observation_space import ObservationMask, observation_schema_id
 from policy_tiny_mlp import TinyMLPBackend
+import policy_tiny_mlp_training as training_module
 from policy_tiny_mlp_training import (
     build_training_artifact,
     evaluate_supervised,
@@ -86,6 +88,45 @@ class SupervisedTrainingTests(unittest.TestCase):
         self.assertEqual(chosen["confidence_kind"], "softmax_uncalibrated")
         with self.assertRaisesRegex(RuntimeError, "training is disabled"):
             model.update(1, 1, observation(.8), 1.0)
+
+    def test_numpy_vectorized_trainer_matches_scalar_decision_contract(self):
+        try:
+            import numpy  # noqa: F401
+        except ImportError:
+            self.skipTest("NumPy not installed in this source-only environment")
+
+        rows = classification_rows(96)
+        scalar = backend()
+        vectorized = backend()
+        kwargs = dict(
+            max_epochs=6,
+            batch_size=16,
+            learning_rate=.03,
+            gradient_clip=1.0,
+            early_stop_patience=3,
+        )
+        with patch.object(training_module, "_numpy_module", return_value=None):
+            scalar_report = training_module.train_supervised(scalar, rows, **kwargs)
+        vector_report = training_module.train_supervised(vectorized, rows, **kwargs)
+
+        self.assertEqual(scalar_report["execution_backend"], "python_scalar_fallback")
+        self.assertEqual(vector_report["execution_backend"], "numpy_vectorized")
+        self.assertGreater(vector_report["prepared_matrix_bytes"], 0)
+        agent = {
+            "target_property": "power",
+            "deadband": .5,
+            "min_value": 0,
+            "max_value": 1,
+        }
+        scalar_score = evaluate_supervised(scalar, agent, rows)["score"]
+        vector_score = evaluate_supervised(vectorized, agent, rows)["score"]
+        self.assertGreater(scalar_score, .90)
+        self.assertGreater(vector_score, .90)
+        for x in (-.9, -.5, -.1, .1, .5, .9):
+            self.assertEqual(
+                scalar.predict(observation(x))[0]["index"],
+                vectorized.predict(observation(x))[0]["index"],
+            )
 
     def test_trained_model_roundtrip_keeps_normalization_and_prediction(self):
         model = backend()
