@@ -1377,6 +1377,8 @@ def worker_main(job_path):
         if sequence_mode:
             write_rollback_snapshot(0)
         for chunk_position, chunk in enumerate(chunks):
+            if history.stop_event.is_set():
+                raise InterruptedError("Persistent training worker cancelled")
             chunk_kwargs = dict(chunk.get("train_kwargs") or {})
             history.set_status(
                 progress=chunk_kwargs.get("progress_lo"),
@@ -1443,6 +1445,15 @@ def worker_main(job_path):
                     history.training_home_context_cache_status or {}
                 ),
             })
+            if history.stop_event.is_set():
+                raise InterruptedError("Persistent training worker cancelled")
+            if chunk_position + 1 < len(chunks):
+                pause_ms = max(
+                    0.0,
+                    float(OPTIONS.get("agent_training_pause_ms", 0) or 0),
+                )
+                if pause_ms and history.stop_event.wait(pause_ms / 1000.0):
+                    raise InterruptedError("Persistent training worker cancelled")
 
         result.update({
             "ok": True,
