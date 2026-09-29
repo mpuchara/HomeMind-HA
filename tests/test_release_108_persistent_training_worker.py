@@ -10,7 +10,7 @@ from unittest.mock import patch
 import history as history_module
 import training_process
 from context_engine import ContextEngine
-from replay import SQLiteTemporalTracker
+from replay import ReplayQueryCache, SQLiteTemporalTracker
 from settings import DEFAULT_OPTIONS
 from storage import Store
 from support import state
@@ -213,6 +213,27 @@ class PersistentSchedulingTests(unittest.TestCase):
         self.assertEqual(
             manager.training_stateful_replay_status["continuation_seed_agents"], 2
         )
+
+
+class PersistentReplayCacheTests(unittest.TestCase):
+    def test_zero_copy_mode_reuses_cached_row_objects_but_not_result_list(self):
+        cache = ReplayQueryCache(max_rows=16, max_entry_rows=8, copy_rows=False)
+        source = [{"id": 1, "state": "on"}, {"id": 2, "state": "off"}]
+        cache.put("SELECT ?", (1,), source)
+        first = cache.get("SELECT ?", (1,))
+        second = cache.get("SELECT ?", (1,))
+        self.assertIsNot(first, second)
+        self.assertIs(first[0], source[0])
+        self.assertIs(second[1], source[1])
+        self.assertFalse(cache.status()["copy_rows"])
+
+    def test_default_cache_keeps_defensive_copy_contract(self):
+        cache = ReplayQueryCache(max_rows=16, max_entry_rows=8)
+        source = [{"id": 1, "state": "on"}]
+        cache.put("SELECT ?", (1,), source)
+        cached = cache.get("SELECT ?", (1,))
+        self.assertIsNot(cached[0], source[0])
+        self.assertTrue(cache.status()["copy_rows"])
 
 
 class SharedReplayConnectionTests(unittest.TestCase):
