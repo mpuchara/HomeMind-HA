@@ -122,11 +122,31 @@ class SupervisedTrainingTests(unittest.TestCase):
         vector_score = evaluate_supervised(vectorized, agent, rows)["score"]
         self.assertGreater(scalar_score, .90)
         self.assertGreater(vector_score, .90)
+        self.assertEqual(len(scalar.input_mean), len(vectorized.input_mean))
+        self.assertEqual(len(scalar.input_scale), len(vectorized.input_scale))
+        for left, right in zip(scalar.input_mean, vectorized.input_mean):
+            self.assertAlmostEqual(float(left), float(right), places=6)
+        for left, right in zip(scalar.input_scale, vectorized.input_scale):
+            self.assertAlmostEqual(float(left), float(right), places=6)
         for x in (-.9, -.5, -.1, .1, .5, .9):
             self.assertEqual(
                 scalar.predict(observation(x))[0]["index"],
                 vectorized.predict(observation(x))[0]["index"],
             )
+
+    def test_tiny_holdout_does_not_import_numpy_in_fresh_worker(self):
+        model = backend()
+        with patch.object(training_module, "_NUMPY_CHECKED", False), \
+             patch.object(training_module, "_NUMPY", None), \
+             patch.object(
+                 training_module,
+                 "_numpy_module",
+                 side_effect=AssertionError("tiny holdout should stay scalar"),
+             ):
+            predicted = training_module._numpy_prediction_indices(
+                model, classification_rows(8)
+            )
+        self.assertIsNone(predicted)
 
     def test_trained_model_roundtrip_keeps_normalization_and_prediction(self):
         model = backend()
