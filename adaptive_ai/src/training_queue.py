@@ -1,9 +1,10 @@
 """Priority admission queue for expensive per-agent historical training jobs.
 
-The HistoryManager intentionally permits only one heavy replay at a time so Home
-Assistant keeps CPU/RAM priority. This queue turns that resource limit into normal
-product behaviour: Train/Resume/Rebuild requests are accepted, deduplicated and run
-in order as soon as the shared heavy-job gate becomes available.
+HistoryManager admits up to two independent agent replays on >=4-core hosts with at
+least the configured RAM headroom. One agent remains strictly sequential, shared-target
+lineages are serialized, and low-memory/low-core hosts fall back to one slot. The queue
+turns that adaptive resource limit into normal product behaviour: Train/Resume/Rebuild
+requests are accepted, deduplicated and run as soon as the shared agent-pool gate allows.
 
 Explicit user training has priority over the periodic low-memory discovery refresh.
 Discovery is safe to defer because per-agent Rebuild performs its own authoritative
