@@ -18,9 +18,13 @@ class ReplayQueryCache:
     the same bounded seed/interval rows. Sharing those exact results in RAM removes repeat
     reads without materializing the whole archive or weakening durability.
     """
-    def __init__(self, max_rows=8192, max_entry_rows=1024):
+    def __init__(self, max_rows=8192, max_entry_rows=1024, copy_rows=True):
         self.max_rows = max(0, int(max_rows))
         self.max_entry_rows = max(1, int(max_entry_rows))
+        # Default keeps the historical defensive-copy contract. A private persistent
+        # training worker can opt into read-only row sharing to avoid tens of thousands
+        # of transient dict allocations across logical chunks.
+        self.copy_rows = bool(copy_rows)
         self.rows = 0
         self.data = OrderedDict()
         self.hits = 0
@@ -42,12 +46,18 @@ class ReplayQueryCache:
             return None
         self.data[key] = value
         self.hits += 1
-        return [dict(row) for row in value]
+        return (
+            [dict(row) for row in value]
+            if self.copy_rows else list(value)
+        )
 
     def put(self, sql, params, rows):
         if self.max_rows <= 0:
             return
-        rows = [dict(row) for row in (rows or ())]
+        rows = (
+            [dict(row) for row in (rows or ())]
+            if self.copy_rows else list(rows or ())
+        )
         if len(rows) > self.max_entry_rows or len(rows) > self.max_rows:
             return
         key = self._key(sql, params)
@@ -71,6 +81,7 @@ class ReplayQueryCache:
             "evictions": int(self.evictions),
             "max_rows": int(self.max_rows),
             "max_entry_rows": int(self.max_entry_rows),
+            "copy_rows": bool(self.copy_rows),
             "hit_rate": (float(self.hits) / requests) if requests else None,
         }
 
