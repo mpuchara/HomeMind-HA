@@ -38,6 +38,9 @@ def cold_start_probe(processes):
     baseline = 0.0
     for index in range(processes):
         with tempfile.TemporaryDirectory(prefix=f"hm-cold-{index}-") as data:
+            # Production training children attach to the parent's already-migrated DB;
+            # worker bootstrap intentionally never performs schema migrations.
+            Store(Path(data) / "adaptive_ai.db")
             env = dict(os.environ)
             env["ADAPTIVE_AI_DATA"] = data
             env["ADAPTIVE_AI_TRAINING_WORKER"] = "1"
@@ -56,6 +59,7 @@ def cold_start_probe(processes):
                 raise RuntimeError(completed.stdout + completed.stderr)
 
     with tempfile.TemporaryDirectory(prefix="hm-persistent-cold-") as data:
+        Store(Path(data) / "adaptive_ai.db")
         env = dict(os.environ)
         env["ADAPTIVE_AI_DATA"] = data
         env["ADAPTIVE_AI_TRAINING_WORKER"] = "1"
