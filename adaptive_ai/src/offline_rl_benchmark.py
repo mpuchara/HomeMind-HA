@@ -262,6 +262,7 @@ def benchmark(
     manual_fit = gate.get("manual_fit_candidate") or {}
     passed = bool(
         trainer.get("trained")
+        and trainer.get("execution_backend") == "numpy_vectorized"
         and gate.get("passed")
         and parent_unchanged
         and float((gate.get("parent_distance") or {}).get("relative_l2") or 0.0) <= .080001
@@ -269,6 +270,14 @@ def benchmark(
         and int(holdout.get("unsupported_new_argmax_count") or 0) == 0
         and float(manual_fit.get("score") or 0.0) >= 1.0
         and wall < 30.0
+        and (
+            not compare_scalar
+            or (
+                scalar_reference is not None
+                and scalar_reference.get("execution_backend") == "python_scalar_fallback"
+                and scalar_reference.get("gate_passed")
+            )
+        )
     )
     return {
         "contract": "tiny_mlp_stage7_offline_rl_benchmark_v1",
