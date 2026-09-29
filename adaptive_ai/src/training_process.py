@@ -1484,6 +1484,10 @@ def worker_main(job_path):
         _atomic_json(job["result_path"], result)
         return 2
     finally:
+        try:
+            history.close_persistent_training_resources()
+        except Exception:
+            pass
         budget.end()
 
 
