@@ -562,10 +562,10 @@ def _offline_policy_metrics_numpy(
             "logged_probability_regression_count": 0,
             "logged_probability_regression_fraction": None,
             "unseen_context": _nearest_context_rate(
-                parent, train_reference, valid_rows, context_threshold
+                parent, train_reference, rows, context_threshold
             ),
             "q_proxy_calibration": _action_reward_proxy(
-                train_reference, valid_rows, len(parent.actions)
+                train_reference, rows, len(parent.actions)
             ),
         }
 
@@ -635,7 +635,7 @@ def _offline_policy_metrics_numpy(
         if child_weight > 0.0 and ratio_sq > 0.0 else 0.0
     )
 
-    baseline, _spread = _weighted_stats(valid_rows, reward_clip)
+    baseline, _spread = _weighted_stats(rows, reward_clip)
     probability_delta = (
         child_probs[row_indices, target_array]
         - parent_probs[row_indices, target_array]
@@ -663,10 +663,10 @@ def _offline_policy_metrics_numpy(
         "logged_probability_regression_count": int(regression_count),
         "logged_probability_regression_fraction": float(regression_count) / samples,
         "unseen_context": _nearest_context_rate(
-            parent, train_reference, valid_rows, context_threshold
+            parent, train_reference, rows, context_threshold
         ),
         "q_proxy_calibration": _action_reward_proxy(
-            train_reference, valid_rows, len(parent.actions)
+            train_reference, rows, len(parent.actions)
         ),
     }
 
