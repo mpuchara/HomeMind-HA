@@ -102,7 +102,7 @@ assert slept == []
         pre_gc = source.index('TRAINING_BUDGET.checkpoint("pre_training_gc", force=True)')
         collect = source.index("gc.collect()", pre_gc)
         post_gc = source.index('TRAINING_BUDGET.checkpoint("post_training_gc", force=True)', collect)
-        release = source.index('HEAVY_JOBS.release("agent:" + agent_id)', post_gc)
+        release = source.index('HEAVY_JOBS.release("agent_pool")', post_gc)
         self.assertLess(pre_gc, collect)
         self.assertLess(collect, post_gc)
         self.assertLess(post_gc, release)
