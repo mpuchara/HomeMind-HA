@@ -66,6 +66,10 @@ NON_SEMANTIC_TRAINING_OPTION_KEYS = frozenset({
     "training_process_isolation",
     "training_persistent_worker_enabled",
     "training_persistent_worker_cache_enabled",
+    "max_concurrent_training_jobs",
+    "training_parallel_agent_workers",
+    "training_parallel_worker_memory_limit_mb",
+    "training_parallel_min_available_mb",
     "training_replay_ram_cache_entry_rows",
     "training_replay_ram_cache_rows",
     "training_sqlite_cache_mb",
@@ -748,7 +752,22 @@ def run_isolated_training_chunk(history, start_ts, end_ts, **kwargs):
     else:
         job = _build_job(history, start_ts, end_ts, kwargs)
     job_path = Path(job.pop("job_path"))
-    resource_profile = resolve_training_resource_profile(OPTIONS)
+    parallel_slots = max(
+        1, int(getattr(history, "training_parallel_slot_count", 1) or 1)
+    )
+    profile_options = dict(OPTIONS)
+    if parallel_slots > 1:
+        parallel_cap = max(
+            448,
+            int(OPTIONS.get("training_parallel_worker_memory_limit_mb", 768) or 768),
+        )
+        profile_options["training_worker_memory_limit_mb"] = min(
+            int(profile_options.get("training_worker_memory_limit_mb", 1024) or 1024),
+            parallel_cap,
+        )
+    resource_profile = resolve_training_resource_profile(profile_options)
+    resource_profile["parallel_slots"] = int(parallel_slots)
+    resource_profile["parallel_memory_cap_applied"] = bool(parallel_slots > 1)
     job["resource_profile"] = resource_profile
     # _build_job checksums the semantic descriptor before transport metadata is added.
     # Recompute after adding the non-semantic resource profile so the worker also verifies
@@ -803,6 +822,8 @@ def run_isolated_training_chunk(history, start_ts, end_ts, **kwargs):
     peak_rss = 0.0
     last_status_mtime = None
     latest_metrics = {}
+    last_cpu_seconds = None
+    last_cpu_wall = None
     cancelled = False
     memory_exceeded = False
     history.training_process_status = {
@@ -819,6 +840,7 @@ def run_isolated_training_chunk(history, start_ts, end_ts, **kwargs):
         "started_at": now_ts(),
         "worker_nice": int(OPTIONS.get("training_worker_nice", 10) or 10),
         "memory_limit_mb": memory_limit,
+        "parallel_slots": int(parallel_slots),
         "resource_profile": dict(resource_profile),
         "checkpointed_wal_reads": True,
         "context_snapshot": dict(job.get("context_snapshot") or {}),
@@ -837,6 +859,21 @@ def run_isolated_training_chunk(history, start_ts, end_ts, **kwargs):
                 last_status_mtime = mtime
 
             latest_metrics = _proc_metrics(process.pid)
+            sample_wall = time.monotonic()
+            sample_cpu = latest_metrics.get("cpu_seconds")
+            if sample_cpu is not None and last_cpu_seconds is not None and last_cpu_wall is not None:
+                wall_delta = max(1e-6, sample_wall - last_cpu_wall)
+                cpu_delta = max(0.0, float(sample_cpu) - float(last_cpu_seconds))
+                one_core = 100.0 * cpu_delta / wall_delta
+                cpu_count = max(1, int(os.cpu_count() or 1))
+                latest_metrics["cpu_one_core_percent"] = round(one_core, 2)
+                latest_metrics["cpu_total_percent_estimate"] = round(
+                    one_core / cpu_count, 2
+                )
+                latest_metrics["logical_cpu_count"] = cpu_count
+            if sample_cpu is not None:
+                last_cpu_seconds = float(sample_cpu)
+                last_cpu_wall = sample_wall
             rss = latest_metrics.get("rss_mb")
             if rss is not None:
                 peak_rss = max(peak_rss, float(rss))

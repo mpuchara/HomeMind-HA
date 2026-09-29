@@ -186,6 +186,9 @@ options:
   training_persistent_worker_cache_enabled: true
   training_worker_nice: 10
   training_worker_memory_limit_mb: 1024
+  training_parallel_agent_workers: 2
+  training_parallel_min_available_mb: 2048
+  training_parallel_worker_memory_limit_mb: 768
   training_worker_memory_floor_mb: 256
   training_worker_memory_total_fraction: 0.30
   training_worker_memory_available_fraction: 0.50
@@ -384,6 +387,9 @@ schema:
   training_persistent_worker_cache_enabled: "bool"
   training_worker_nice: "int(0,19)"
   training_worker_memory_limit_mb: "int(128,2048)"
+  training_parallel_agent_workers: "int(1,2)"
+  training_parallel_min_available_mb: "int(1024,8192)"
+  training_parallel_worker_memory_limit_mb: "int(448,1024)"
   training_worker_memory_floor_mb: "int(128,1024)"
   training_worker_memory_total_fraction: "float(0.10,0.50)"
   training_worker_memory_available_fraction: "float(0.20,0.80)"

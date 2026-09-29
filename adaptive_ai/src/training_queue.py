@@ -1,9 +1,10 @@
 """Priority admission queue for expensive per-agent historical training jobs.
 
-The HistoryManager intentionally permits only one heavy replay at a time so Home
-Assistant keeps CPU/RAM priority. This queue turns that resource limit into normal
-product behaviour: Train/Resume/Rebuild requests are accepted, deduplicated and run
-in order as soon as the shared heavy-job gate becomes available.
+HistoryManager admits up to two independent agent replays on >=4-core hosts with at
+least the configured RAM headroom. One agent remains strictly sequential, shared-target
+lineages are serialized, and low-memory/low-core hosts fall back to one slot. The queue
+turns that adaptive resource limit into normal product behaviour: Train/Resume/Rebuild
+requests are accepted, deduplicated and run as soon as the shared agent-pool gate allows.
 
 Explicit user training has priority over the periodic low-memory discovery refresh.
 Discovery is safe to defer because per-agent Rebuild performs its own authoritative
@@ -102,6 +103,7 @@ class TrainingQueue(threading.Thread):
         self.jobs = deque()
         self.pending = {}
         self.active = None
+        self.parallel_active = {}
         # Active jobs normally finish. Candidate Discard is the one lifecycle action
         # that must be able to stop its own isolated training worker.
         self.cancel_requested = set()
@@ -118,6 +120,31 @@ class TrainingQueue(threading.Thread):
             return set(jobs)
         with lock:
             return set(jobs)
+
+    def _active_jobs_locked(self):
+        jobs = []
+        if self.active:
+            jobs.append(self.active)
+        jobs.extend(self.parallel_active.values())
+        return jobs
+
+    def _active_job_locked(self, agent_id):
+        agent_id = str(agent_id)
+        if self.active and str(self.active.get("agent_id")) == agent_id:
+            return self.active
+        return self.parallel_active.get(agent_id)
+
+    def _active_count_locked(self):
+        return len(self._active_jobs_locked())
+
+    def _effective_slots(self):
+        resolver = getattr(self.history, "effective_training_slots", None)
+        if callable(resolver):
+            try:
+                return max(1, min(2, int(resolver() or 1)))
+            except Exception:
+                pass
+        return 1
 
     def _agent_label(self, agent_id):
         agent = self.store.get_agent(agent_id)
@@ -191,7 +218,7 @@ class TrainingQueue(threading.Thread):
     def _release_training_priority_if_idle(self):
         reschedule = False
         with self.cv:
-            if self.jobs or self.active:
+            if self.jobs or self._active_count_locked():
                 return False
             self._training_priority.clear()
             if self._discovery_preempted:
@@ -313,7 +340,7 @@ class TrainingQueue(threading.Thread):
         requested_rebuild_reason = _queue_rebuild_reason(rebuild, reason, rebuild_reason)
 
         with self.cv:
-            if self.active and self.active["agent_id"] == agent_id:
+            if self._active_job_locked(agent_id):
                 self._request_training_priority()
                 return self.status_for(agent_id)
             if agent_id in self._history_active_ids():
@@ -448,18 +475,20 @@ class TrainingQueue(threading.Thread):
         agent_id = str(agent_id)
         active_ids = {str(x) for x in self._history_active_ids()}
         with self.cv:
-            queue_active = bool(
-                self.active and str(self.active.get("agent_id")) == agent_id
-            )
+            queue_active = self._active_job_locked(agent_id) is not None
             history_active = agent_id in active_ids
             if not queue_active and not history_active:
                 return False
             self.cancel_requested.add(agent_id)
-            event = getattr(self.history, "job_cancel_event", None)
-            if event is None:
-                event = threading.Event()
-                self.history.job_cancel_event = event
-            event.set()
+            cancel = getattr(self.history, "cancel_agent_training", None)
+            if callable(cancel):
+                cancel(agent_id)
+            else:
+                event = getattr(self.history, "job_cancel_event", None)
+                if event is None:
+                    event = threading.Event()
+                    self.history.job_cancel_event = event
+                event.set()
             self._bump_revision_locked()
             self.store.event(
                 agent_id, "info", "training_queue_active_cancel_requested",
@@ -470,30 +499,35 @@ class TrainingQueue(threading.Thread):
         return True
 
     def status_for(self, agent_id):
+        agent_id = str(agent_id)
         with self.cv:
-            if self.active and self.active["agent_id"] == agent_id:
+            active_job = self._active_job_locked(agent_id)
+            if active_job:
                 return {
                     "state": "active", "position": 0, "ahead": 0,
-                    "rebuild": bool(self.active.get("rebuild")),
-                    "reason": self.active.get("reason"),
-                    "rebuild_reason": self.active.get("rebuild_reason"),
-                    "priority": self.active.get("priority"),
-                    "priority_class": self.active.get("priority_class"),
-                    "queued_at": self.active.get("queued_at"),
-                    "started_at": self.active.get("started_at"),
-                    "cancel_requested": str(agent_id) in self.cancel_requested,
+                    "rebuild": bool(active_job.get("rebuild")),
+                    "reason": active_job.get("reason"),
+                    "rebuild_reason": active_job.get("rebuild_reason"),
+                    "priority": active_job.get("priority"),
+                    "priority_class": active_job.get("priority_class"),
+                    "queued_at": active_job.get("queued_at"),
+                    "started_at": active_job.get("started_at"),
+                    "cancel_requested": agent_id in self.cancel_requested,
                     "agent_id": agent_id,
                 }
-            active_ids = self._history_active_ids()
+            active_ids = {str(x) for x in self._history_active_ids()}
             if agent_id in active_ids:
-                return {"state": "active", "position": 0, "ahead": 0,
-                        "rebuild": False, "agent_id": agent_id}
+                return {
+                    "state": "active", "position": 0, "ahead": 0,
+                    "rebuild": False, "agent_id": agent_id,
+                }
+            active_count = self._active_count_locked()
             for index, job in enumerate(self.jobs):
-                if job["agent_id"] == agent_id:
+                if str(job["agent_id"]) == agent_id:
                     return {
                         "state": "queued",
                         "position": index + 1,
-                        "ahead": index + (1 if self.active or active_ids else 0),
+                        "ahead": index + active_count,
                         "rebuild": bool(job.get("rebuild")),
                         "reason": job.get("reason"),
                         "rebuild_reason": job.get("rebuild_reason"),
@@ -507,20 +541,28 @@ class TrainingQueue(threading.Thread):
 
     def snapshot(self):
         with self.cv:
-            active = None
-            if self.active:
-                active = {**self.active, "name": self._agent_label(self.active["agent_id"])}
+            active_jobs = [
+                {**job, "name": self._agent_label(job["agent_id"])}
+                for job in self._active_jobs_locked()
+            ]
+            active = active_jobs[0] if active_jobs else None
             queued = []
+            active_count = len(active_jobs)
             for index, job in enumerate(self.jobs):
                 queued.append({
                     **job,
                     "name": self._agent_label(job["agent_id"]),
                     "position": index + 1,
-                    "ahead": index + (1 if self.active else 0),
+                    "ahead": index + active_count,
                     "blocked_by": HEAVY_JOBS.owner,
                 })
             return {
-                "active": active, "queued": queued, "queued_count": len(queued),
+                "active": active,
+                "active_jobs": active_jobs,
+                "active_count": active_count,
+                "effective_slots": self._effective_slots(),
+                "queued": queued,
+                "queued_count": len(queued),
                 "revision": int(self.revision),
                 "heavy_job": HEAVY_JOBS.owner,
                 "explicit_training_priority": self._training_priority.is_set(),
@@ -540,24 +582,48 @@ class TrainingQueue(threading.Thread):
 
     def _try_start_head(self):
         with self.cv:
-            if self.active or not self.jobs:
+            if not self.jobs:
+                return False
+            active_jobs = self._active_jobs_locked()
+            slots = self._effective_slots()
+            if len(active_jobs) >= slots:
                 return False
             job = self.jobs[0]
+            # Teach/Correct retraining stays exclusive. Likewise, no ordinary second
+            # worker starts while a Teach job owns the training slot.
+            if job.get("reason") == "teach_rl" and active_jobs:
+                return False
+            if any(active.get("reason") == "teach_rl" for active in active_jobs):
+                return False
 
         agent = self.store.get_agent(job["agent_id"])
         if not agent:
-            self._drop_head("training_queue_dropped", "Queued training dropped because the agent no longer exists")
+            self._drop_head(
+                "training_queue_dropped",
+                "Queued training dropped because the agent no longer exists",
+            )
             return True
 
-        # Teach RL has a queue-owned preflight before the destructive Rebuild. Do not
-        # query Recorder while another agent/bootstrap owns the shared heavy slot. Once
-        # selection succeeds, its state becomes `selected`, so a rare acquire race does
-        # not repeat the Recorder scan on the next queue poll.
+        if active_jobs:
+            target = str(agent.get("target_entity") or "")
+            for active_job in active_jobs:
+                active_agent = self.store.get_agent(active_job["agent_id"])
+                if (
+                    active_agent
+                    and target
+                    and str(active_agent.get("target_entity") or "") == target
+                ):
+                    # A Live agent and its Candidate may share one physical target.
+                    # Never train such lineage-adjacent policies concurrently.
+                    return False
+
         service = self._teach_service(job)
-        if self._history_active_ids() or HEAVY_JOBS.owner is not None:
+        owner = HEAVY_JOBS.owner
+        if owner not in (None, "agent_pool"):
             return False
-        cancel_event = threading.Event()
-        self.history.job_cancel_event = cancel_event
+        # Teach context selection is allowed only before any agent worker is running.
+        if service is not None and self._history_active_ids():
+            return False
         try:
             if job.get("reason") == "teach_rl" and service is None:
                 raise RuntimeError("Teach RL service unavailable")
@@ -572,15 +638,18 @@ class TrainingQueue(threading.Thread):
                 else self.history.request_agent_resume(job["agent_id"])
             )
         except Exception as exc:
-            if getattr(self.history, "job_cancel_event", None) is cancel_event:
-                self.history.job_cancel_event = None
             if service is not None:
                 try:
                     self._abort_teach(service, job["agent_id"], exc, state="failed")
                 except Exception as cleanup_exc:
-                    self.store.event(job["agent_id"], "warning", "teach_rl_prepare_cleanup_failed",
-                                     str(cleanup_exc), {"error": f"{type(cleanup_exc).__name__}: {cleanup_exc}"})
-            dropped = self._drop_head("training_queue_failed", str(exc), {"error": str(exc)})
+                    self.store.event(
+                        job["agent_id"], "warning", "teach_rl_prepare_cleanup_failed",
+                        str(cleanup_exc),
+                        {"error": f"{type(cleanup_exc).__name__}: {cleanup_exc}"},
+                    )
+            dropped = self._drop_head(
+                "training_queue_failed", str(exc), {"error": str(exc)}
+            )
             if dropped:
                 current = self.store.get_agent(dropped["agent_id"])
                 if current:
@@ -594,77 +663,104 @@ class TrainingQueue(threading.Thread):
             return True
 
         if not started:
-            # Another job won the small race after the preflight. Keep this request at
-            # the head; Teach context is already selected and will not be rescanned.
-            if getattr(self.history, "job_cancel_event", None) is cancel_event:
-                self.history.job_cancel_event = None
             return False
 
         with self.cv:
             job = self.jobs.popleft()
             self.pending.pop(job["agent_id"], None)
             job = {**job, "started_at": time.time()}
-            self.active = job
+            if self.active is None:
+                self.active = job
+            else:
+                self.parallel_active[str(job["agent_id"])] = job
             self._bump_revision_locked()
             if service is not None:
                 service.mark_training(job["agent_id"])
-            self.store.event(job["agent_id"], "info", "training_queue_started",
-                             "Queued training started automatically",
-                             {"wait_seconds": max(0.0, job["started_at"] - job["queued_at"]),
-                              "rebuild": bool(job.get("rebuild")), "reason": job.get("reason"),
-                              "rebuild_reason": job.get("rebuild_reason")})
+            self.store.event(
+                job["agent_id"], "info", "training_queue_started",
+                "Queued training started automatically",
+                {
+                    "wait_seconds": max(0.0, job["started_at"] - job["queued_at"]),
+                    "rebuild": bool(job.get("rebuild")),
+                    "reason": job.get("reason"),
+                    "rebuild_reason": job.get("rebuild_reason"),
+                    "parallel_active_count": self._active_count_locked(),
+                    "effective_slots": slots,
+                },
+            )
             self.cv.notify_all()
         return True
 
     def _finish_active_if_done(self):
+        active_ids = {str(x) for x in self._history_active_ids()}
         with self.cv:
-            job = self.active
+            jobs = list(self._active_jobs_locked())
+        job = next(
+            (item for item in jobs if str(item["agent_id"]) not in active_ids),
+            None,
+        )
         if not job:
             return False
-        if job["agent_id"] in self._history_active_ids():
-            return False
-
+        agent_id = str(job["agent_id"])
         with self.cv:
-            cancelled = str(job["agent_id"]) in self.cancel_requested
+            cancelled = agent_id in self.cancel_requested
 
-        # A Teach RL job is two-stage after preflight: normal deterministic historical
-        # rebuild first, then supervised fine-tuning on the active Teach labels. A
-        # cancelled Candidate must never run that finalizer after its worker was stopped.
         service = self._teach_service(job)
         if service is not None:
             try:
                 if cancelled:
                     self._abort_teach(
-                        service, job["agent_id"],
+                        service, agent_id,
                         "Active training cancelled by lifecycle owner",
                         state="cancelled",
                     )
                 else:
-                    service.finalize_retrain(job["agent_id"])
+                    service.finalize_retrain(agent_id)
             except Exception as exc:
-                code = "teach_rl_cancel_cleanup_failed" if cancelled else "teach_rl_finalize_failed"
+                code = (
+                    "teach_rl_cancel_cleanup_failed"
+                    if cancelled else "teach_rl_finalize_failed"
+                )
                 self.store.event(
-                    job["agent_id"], "warning" if cancelled else "error", code,
+                    agent_id, "warning" if cancelled else "error", code,
                     str(exc), {"error": f"{type(exc).__name__}: {exc}"},
                 )
 
-        # Slot completion only needs lifecycle fields; avoid aggregate history scans
-        # immediately after the heavy worker releases CPU. Test/legacy stores without the
-        # config-only helper keep the old compatible fallback.
         config_getter = getattr(self.store, "get_agent_config", None)
-        agent = (config_getter(job["agent_id"]) if callable(config_getter)
-                 else self.store.get_agent(job["agent_id"]))
+        agent = (
+            config_getter(agent_id)
+            if callable(config_getter) else self.store.get_agent(agent_id)
+        )
         with self.cv:
-            if self.active and self.active["agent_id"] == job["agent_id"]:
+            if self.active and str(self.active.get("agent_id")) == agent_id:
+                # Promote the oldest parallel slot to the legacy primary field so old UI
+                # surfaces continue to show one active job while the new API exposes all.
                 self.active = None
-                self.cancel_requested.discard(str(job["agent_id"]))
-                self._bump_revision_locked()
-                self.cv.notify_all()
-        # Do not leak a signalled cancellation event into the next queued job.
-        self.history.job_cancel_event = None
+                if self.parallel_active:
+                    _, promoted = min(
+                        self.parallel_active.items(),
+                        key=lambda item: float(item[1].get("started_at") or 0.0),
+                    )
+                    self.parallel_active.pop(str(promoted["agent_id"]), None)
+                    self.active = promoted
+            else:
+                self.parallel_active.pop(agent_id, None)
+            self.cancel_requested.discard(agent_id)
+            self._bump_revision_locked()
+            self.cv.notify_all()
+
+        # Legacy queue adapters expose one global cancel event. Product dual-agent
+        # sessions own their cancellation events independently, so clearing this
+        # compatibility surface cannot cancel a sibling worker.
+        if hasattr(self.history, "job_cancel_event"):
+            self.history.job_cancel_event = None
+
         state = str((agent or {}).get("training_state") or "")
         progress_raw = (agent or {}).get("training_progress")
-        progress = None if progress_raw is None else max(0.0, min(1.0, float(progress_raw)))
+        progress = (
+            None if progress_raw is None
+            else max(0.0, min(1.0, float(progress_raw)))
+        )
         interrupted = (
             state in ("paused", "needs_retrain", "waiting")
             and progress is not None and progress < 0.999
@@ -679,35 +775,40 @@ class TrainingQueue(threading.Thread):
         }
         if cancelled:
             self.store.event(
-                job["agent_id"], "info", "training_queue_active_cancelled",
+                agent_id, "info", "training_queue_active_cancelled",
                 "Active training cancelled; slot released for the next queued job",
                 detail,
             )
         elif interrupted:
             self.store.event(
-                job["agent_id"], "warning", "training_queue_interrupted",
+                agent_id, "warning", "training_queue_interrupted",
                 f"Training stopped at {progress:.0%}; slot released for the next queued job",
                 detail,
             )
         else:
             self.store.event(
-                job["agent_id"], "info", "training_queue_finished",
-                "Training slot released; next queued job may start",
-                detail,
+                agent_id, "info", "training_queue_finished",
+                "Training slot released; next queued job may start", detail,
             )
         self._release_training_priority_if_idle()
         return True
 
     def run(self):
         while not self.stop_event.is_set():
-            self._finish_active_if_done()
-            progressed = self._try_start_head()
+            finished = False
+            while self._finish_active_if_done():
+                finished = True
+            progressed = False
+            while self._try_start_head():
+                progressed = True
+                if self._active_count_locked() >= self._effective_slots():
+                    break
             with self.cv:
                 if self.stop_event.is_set():
                     break
-                if not self.jobs and not self.active:
+                if not self.jobs and not self._active_count_locked():
                     self.cv.wait(timeout=1.0)
-                elif not progressed:
+                elif not progressed and not finished:
                     self.cv.wait(timeout=self.poll_seconds)
 
     def stop(self):
