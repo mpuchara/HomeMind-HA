@@ -228,6 +228,10 @@ DEFAULT_OPTIONS = {
     # CPU-heavy historical replay runs in one child process. The parent remains the
     # authority for HA ingress/HTTP/queue/control and supervises RSS/CPU/I/O.
     "training_process_isolation": True,
+    # 0.14.108: keep one isolated process alive for all logical chunks of one agent.
+    # Checkpoints/validation boundaries remain unchanged; only process/cache lifetime grows.
+    "training_persistent_worker_enabled": True,
+    "training_persistent_worker_cache_enabled": True,
     "training_worker_nice": 10,
     "training_worker_memory_limit_mb": 1024,
     "training_worker_memory_floor_mb": 256,
