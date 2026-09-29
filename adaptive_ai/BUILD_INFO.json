@@ -1,10 +1,10 @@
 {
-  "version": "0.14.108",
+  "version": "0.14.109",
   "release_date": "2026-09-29",
-  "base_version": "0.14.107",
-  "base_commit": "3601eca3c9ee4aa625fc4cdd9e1b808fd37a604a",
-  "release_status": "persistent-agent-training-worker",
-  "release_validation_tests_passed": 1455,
+  "base_version": "0.14.108",
+  "base_commit": "381b357ed40e48898bf8378b85e90616e81ce4ac",
+  "release_status": "adaptive-dual-agent-training",
+  "release_validation_tests_passed": 1463,
   "candidate_shadow_qos_014102": {
     "regression_source": "0.14.100 deferred Candidate Shadow queue composed under 60 s Raspberry Pi maintenance gate",
     "deferred_shadow_drain": "runs on every Candidate worker maintenance hook before periodic housekeeping admission",
@@ -819,5 +819,48 @@
       "semantic_state_parity": true
     },
     "safety": "single heavy job; one-thread neural BLAS; adaptive RSS guard retained; no learning/reward/Correct/Candidate/promotion/ActionIntent/Executor authority changes"
+  },
+  "release_014109": {
+    "scope": "adaptive_multicore_training_throughput",
+    "scheduler_contract": "adaptive_dual_agent_training_v1",
+    "parallel_agent_workers_default": 2,
+    "admission": {
+      "minimum_logical_cpus": 4,
+      "minimum_mem_available_mb": 2048,
+      "low_resource_fallback_workers": 1,
+      "shared_target_parallelism": false,
+      "recorder_parallelism": false,
+      "teach_rl_parallelism": false
+    },
+    "memory": {
+      "single_worker_ceiling_mb": 1024,
+      "parallel_worker_ceiling_mb": 768,
+      "admission_headroom_at_worker_caps_mb": 512
+    },
+    "semantics": "one agent remains strictly sequential through existing 6-hour persistent-worker chunks and validation/rollback boundaries",
+    "upgrade_contract": "new training_parallel_agent_workers option defaults to 2 while legacy max_concurrent_training_jobs remains forced to 1",
+    "diagnostics": [
+      "parallel_training.active_count",
+      "parallel_training.effective_slots",
+      "parallel_training.worker_cpu_one_core_percent_sum",
+      "parallel_training.worker_cpu_total_percent_estimate",
+      "parallel_training.worker_rss_mb_sum",
+      "training_processes"
+    ],
+    "benchmark": {
+      "environment": "GitHub-hosted 4-core synthetic independent Python replay capacity; not Raspberry Pi Train/Rebuild timing",
+      "duty_target": 0.85,
+      "sequential_wall_seconds": 0.8917659969999931,
+      "parallel_wall_seconds": 0.44640627499995844,
+      "throughput_speedup": 1.9976556041916664,
+      "aggregate_one_core_percent": 156.81882675149788,
+      "estimated_host_cpu_percent": 39.20470668787447,
+      "observed_worker_duty": [
+        0.8487889602348172,
+        0.8485684054329513
+      ]
+    },
+    "single_agent_note": "single Train/Rebuild remains primarily one-core; this release accelerates queued independent agents",
+    "safety": "Recorder serialized; same target serialized; per-agent cancel/process state; worker nice=10; single-thread neural BLAS; no learning or physical-control authority changes"
   }
 }

@@ -1,3 +1,18 @@
+# 0.14.109 — 2026-09-29
+
+- Add an **adaptive dual-agent training scheduler** so independent historical Train/Rebuild jobs can use a second CPU core instead of leaving a 4-core Raspberry Pi near one-core utilization.
+- Keep every individual agent strictly sequential: its existing 6-hour logical chunks, persistent-worker state, validation boundaries, rewards and rollback order are unchanged. Parallelism is only between different agents.
+- Enable up to **2 agent workers** only when the host exposes at least 4 logical CPUs and at least **2048 MB MemAvailable**; otherwise automatically fall back to one worker.
+- Use a new upgrade-safe `training_parallel_agent_workers=2` option instead of repurposing the legacy `max_concurrent_training_jobs=1` value, so existing installations carrying the old persisted default still receive the new scheduler.
+- Cap each worker at **768 MB** while two slots are available. The normal one-worker adaptive ceiling remains up to 1024 MB. The 2 GB admission threshold leaves roughly 512 MB of explicit headroom even if both workers reach their caps.
+- Keep Recorder/history backfill serialized through one shared lock. Two workers may replay local SQLite history concurrently, but they do not make simultaneous Home Assistant Recorder requests.
+- Serialize agents sharing the same `target_entity` so Live/Candidate or otherwise lineage-adjacent policies for one physical target cannot train concurrently. Teach RL remains exclusive.
+- Give every active agent its own lightweight training session, cancel event, subprocess PID/status, progress/ETA and schema cache. Cancelling one agent cannot cancel or overwrite telemetry for its sibling worker.
+- Extend runtime diagnostics with `parallel_training.active_count`, `effective_slots`, per-agent process state, aggregate one-core CPU, estimated whole-host worker CPU and aggregate worker RSS.
+- Same-host 4-core synthetic capacity probe at the existing 0.85 duty target: two CPU-heavy workers complete in **0.446 s vs 0.892 s sequentially (1.998× throughput)**. Aggregate worker CPU was **156.8% of one core**, equivalent to **39.2% of the 4-core host** in that short probe. This is a scheduler-capacity measurement, not Raspberry Pi Train/Rebuild timing.
+- A single Train/Rebuild still remains primarily one-core because its causal replay and policy updates are chronological. This release targets queues/batches of independent agents; single-agent parallel preprocessing remains a separate optimization candidate if on-device profiling justifies it.
+- No reward, Correct-label, Candidate promotion, policy semantics, ActionIntent, Executor or physical-control authority change.
+
 # 0.14.108 — 2026-09-29
 
 - Keep one isolated **persistent training worker per selected agent** instead of restarting Python for every 6-hour logical chunk. With the default 7-day recent window, the transport changes from up to 28 worker starts to 1 while retaining the existing logical chunk boundaries.
