@@ -1,3 +1,12 @@
+# 0.14.106 — 2026-09-29
+
+- Allow **Discard** to stop an actively training Candidate instead of waiting for the full training job to finish.
+- TrainingQueue now exposes an explicit active-cancel path backed by the existing per-job `HistoryManager.job_cancel_event`. With process-isolated training, the worker is terminated through the existing bounded supervisor/grace-period path; the Candidate is deleted only after the worker has actually exited.
+- A cancelled Teach-RL Candidate never runs the normal finalize step after cancellation. The temporary Teach preparation is closed as `cancelled`, the heavy slot is released, and the next queued job can start normally.
+- Cancellation state is per-job and cleared before the next training request, so a discarded Candidate cannot accidentally cancel later training.
+- Candidate UI shows `Cancelling…` while the isolated worker is shutting down, then removes the Candidate card when cleanup completes.
+- No Live policy, reward, promotion, Correct semantics or physical-control authority are changed.
+
 # 0.14.105 — 2026-09-29
 
 - Fix agent **Current** state becoming stuck after a Home Assistant websocket gap. A disconnect now arms an explicit full-state truth reconciliation that survives a fast websocket reconnect and bypasses the ordinary quiet-window/heavy-job deferral.
