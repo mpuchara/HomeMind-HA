@@ -87,6 +87,7 @@ class FakeHistory:
         self.started = []
         self.fetch_calls = 0
         self.status_updates = []
+        self.job_cancel_event = None
 
     def _fetch_history_resilient(self, *args, **kwargs):
         self.fetch_calls += 1
@@ -234,6 +235,23 @@ class TrainingQueueTests(unittest.TestCase):
         self.assertTrue(self.queue.cancel('a'))
         self.assertIsNone(self.queue.status_for('a'))
         self.assertEqual(self.queue.snapshot()['queued_count'], 0)
+
+    def test_active_teach_rl_can_be_cancelled_without_finalizing(self):
+        self.queue.enqueue('a', rebuild=True, reason='teach_rl')
+        self.assertTrue(self.wait_for(lambda: self.history.started == [('a', True)]))
+        self.assertEqual(self.queue.status_for('a')['state'], 'active')
+        self.assertTrue(self.queue.cancel_active('a', reason='candidate_discard'))
+        self.assertTrue(self.history.job_cancel_event.is_set())
+        self.assertTrue(self.queue.status_for('a')['cancel_requested'])
+
+        # The real isolated worker exits when job_cancel_event is observed. FakeHistory
+        # models that boundary explicitly so the queue can finish its cancellation path.
+        self.history.complete('a', state='paused', progress=.25)
+        self.assertTrue(self.wait_for(lambda: self.queue.status_for('a') is None))
+        self.assertTrue(any(x[:2] == ('a', 'cancelled') for x in self.engine.rl_teaching.aborted))
+        self.assertNotIn(('finalize', 'a'), self.trace)
+        self.assertIsNone(self.history.job_cancel_event)
+        self.assertTrue(any(e[2] == 'training_queue_active_cancelled' for e in self.store.events))
 
     def test_teach_rl_prepares_context_before_rebuild_and_finalizes_after(self):
         self.queue.enqueue('a', rebuild=True, reason='teach_rl')

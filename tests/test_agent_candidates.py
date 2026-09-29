@@ -147,6 +147,33 @@ class CandidateTests(unittest.TestCase):
         status = self.manager.status(self.parent["id"])
         self.assertEqual(status["feedback_revision"], 1)
 
+    def test_discard_during_active_training_requests_worker_cancellation(self):
+        status = self.manager.enqueue(self.parent["id"], "teach")
+        candidate_id = status["candidate_id"]
+
+        class ActiveQueue:
+            def __init__(self):
+                self.cancelled = []
+            def status_for(self, agent_id):
+                return {"state": "active", "agent_id": agent_id}
+            def cancel_active(self, agent_id, reason=""):
+                self.cancelled.append((agent_id, reason))
+                return True
+            def cancel(self, agent_id):
+                return False
+
+        queue = ActiveQueue()
+        self.core.TRAINING_QUEUE = queue
+        result = self.manager.discard(self.parent["id"])
+
+        self.assertFalse(result["discarded"])
+        self.assertEqual(result["state"], "discarding")
+        self.assertTrue(result["training_cancel_requested"])
+        self.assertEqual(queue.cancelled, [(candidate_id, "candidate_discard")])
+        row = self.manager._candidate_row(self.parent["id"])
+        self.assertEqual(row["state"], "discarding")
+        self.assertEqual(int(row["discard_requested"]), 1)
+
     def test_candidate_inference_never_dispatches_service(self):
         status = self.manager.enqueue(self.parent["id"], "teach")
         candidate_id = status["candidate_id"]

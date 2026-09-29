@@ -731,11 +731,25 @@ class AgentCandidateManager(threading.Thread):
         queue = self._queue()
         active = queue.status_for(row["candidate_id"]) if queue is not None else None
         if active and active.get("state") == "active":
+            cancel_requested = False
+            cancel_active = getattr(queue, "cancel_active", None)
+            if callable(cancel_active):
+                cancel_requested = bool(
+                    cancel_active(row["candidate_id"], reason="candidate_discard")
+                )
             now = time.time()
             with self.store.lock, self.store.conn() as c:
                 c.execute("UPDATE agent_candidates SET state='discarding',discard_requested=1,dirty=0,updated_ts=? WHERE parent_agent_id=?",
                           (now, str(parent_id)))
-            return {"ok": True, "discarded": False, "state": "discarding"}
+            # Wake the Candidate lifecycle worker now. It will wait only until the
+            # isolated training process has actually exited, then delete the surrogate.
+            self.wake_event.set()
+            return {
+                "ok": True,
+                "discarded": False,
+                "state": "discarding",
+                "training_cancel_requested": cancel_requested,
+            }
         self._delete_candidate(row)
         self.store.event(parent_id, "info", "agent_candidate_discarded", "Candidate discarded; Live agent was unchanged", None)
         return {"ok": True, "discarded": True}

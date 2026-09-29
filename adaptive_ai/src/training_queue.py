@@ -102,6 +102,9 @@ class TrainingQueue(threading.Thread):
         self.jobs = deque()
         self.pending = {}
         self.active = None
+        # Active jobs normally finish. Candidate Discard is the one lifecycle action
+        # that must be able to stop its own isolated training worker.
+        self.cancel_requested = set()
         self._queue_sequence = 0
         self.revision = 0
         self._training_priority = threading.Event()
@@ -410,7 +413,7 @@ class TrainingQueue(threading.Thread):
             return self.status_for(agent_id)
 
     def cancel(self, agent_id):
-        """Remove a not-yet-started job. Active HistoryManager work is not killed."""
+        """Remove a not-yet-started job. Active work needs explicit cancel_active()."""
         with self.cv:
             job = self.pending.pop(agent_id, None)
             if not job:
@@ -430,6 +433,42 @@ class TrainingQueue(threading.Thread):
         self._release_training_priority_if_idle()
         return True
 
+    def cancel_active(self, agent_id, reason="active_training_cancelled"):
+        """Cooperatively stop the currently active agent-training job.
+
+        Historical training is process-isolated by default. HistoryManager supervises
+        that subprocess and already honours job_cancel_event by terminating the worker
+        with the configured grace period. The queue owns that per-job event so a
+        cancellation cannot leak into the next training request.
+
+        This method never deletes the agent. Lifecycle owners such as Candidate Discard
+        wait until status_for() and HistoryManager.agent_jobs clear, then remove the
+        surrogate after the worker has actually exited.
+        """
+        agent_id = str(agent_id)
+        active_ids = {str(x) for x in self._history_active_ids()}
+        with self.cv:
+            queue_active = bool(
+                self.active and str(self.active.get("agent_id")) == agent_id
+            )
+            history_active = agent_id in active_ids
+            if not queue_active and not history_active:
+                return False
+            self.cancel_requested.add(agent_id)
+            event = getattr(self.history, "job_cancel_event", None)
+            if event is None:
+                event = threading.Event()
+                self.history.job_cancel_event = event
+            event.set()
+            self._bump_revision_locked()
+            self.store.event(
+                agent_id, "info", "training_queue_active_cancel_requested",
+                "Active training cancellation requested",
+                {"reason": str(reason)},
+            )
+            self.cv.notify_all()
+        return True
+
     def status_for(self, agent_id):
         with self.cv:
             if self.active and self.active["agent_id"] == agent_id:
@@ -442,6 +481,7 @@ class TrainingQueue(threading.Thread):
                     "priority_class": self.active.get("priority_class"),
                     "queued_at": self.active.get("queued_at"),
                     "started_at": self.active.get("started_at"),
+                    "cancel_requested": str(agent_id) in self.cancel_requested,
                     "agent_id": agent_id,
                 }
             active_ids = self._history_active_ids()
@@ -516,6 +556,8 @@ class TrainingQueue(threading.Thread):
         service = self._teach_service(job)
         if self._history_active_ids() or HEAVY_JOBS.owner is not None:
             return False
+        cancel_event = threading.Event()
+        self.history.job_cancel_event = cancel_event
         try:
             if job.get("reason") == "teach_rl" and service is None:
                 raise RuntimeError("Teach RL service unavailable")
@@ -530,6 +572,8 @@ class TrainingQueue(threading.Thread):
                 else self.history.request_agent_resume(job["agent_id"])
             )
         except Exception as exc:
+            if getattr(self.history, "job_cancel_event", None) is cancel_event:
+                self.history.job_cancel_event = None
             if service is not None:
                 try:
                     self._abort_teach(service, job["agent_id"], exc, state="failed")
@@ -552,6 +596,8 @@ class TrainingQueue(threading.Thread):
         if not started:
             # Another job won the small race after the preflight. Keep this request at
             # the head; Teach context is already selected and will not be rescanned.
+            if getattr(self.history, "job_cancel_event", None) is cancel_event:
+                self.history.job_cancel_event = None
             return False
 
         with self.cv:
@@ -578,15 +624,29 @@ class TrainingQueue(threading.Thread):
         if job["agent_id"] in self._history_active_ids():
             return False
 
+        with self.cv:
+            cancelled = str(job["agent_id"]) in self.cancel_requested
+
         # A Teach RL job is two-stage after preflight: normal deterministic historical
-        # rebuild first, then supervised fine-tuning on the active Teach labels.
+        # rebuild first, then supervised fine-tuning on the active Teach labels. A
+        # cancelled Candidate must never run that finalizer after its worker was stopped.
         service = self._teach_service(job)
         if service is not None:
             try:
-                service.finalize_retrain(job["agent_id"])
+                if cancelled:
+                    self._abort_teach(
+                        service, job["agent_id"],
+                        "Active training cancelled by lifecycle owner",
+                        state="cancelled",
+                    )
+                else:
+                    service.finalize_retrain(job["agent_id"])
             except Exception as exc:
-                self.store.event(job["agent_id"], "error", "teach_rl_finalize_failed",
-                                 str(exc), {"error": f"{type(exc).__name__}: {exc}"})
+                code = "teach_rl_cancel_cleanup_failed" if cancelled else "teach_rl_finalize_failed"
+                self.store.event(
+                    job["agent_id"], "warning" if cancelled else "error", code,
+                    str(exc), {"error": f"{type(exc).__name__}: {exc}"},
+                )
 
         # Slot completion only needs lifecycle fields; avoid aggregate history scans
         # immediately after the heavy worker releases CPU. Test/legacy stores without the
@@ -597,8 +657,11 @@ class TrainingQueue(threading.Thread):
         with self.cv:
             if self.active and self.active["agent_id"] == job["agent_id"]:
                 self.active = None
+                self.cancel_requested.discard(str(job["agent_id"]))
                 self._bump_revision_locked()
                 self.cv.notify_all()
+        # Do not leak a signalled cancellation event into the next queued job.
+        self.history.job_cancel_event = None
         state = str((agent or {}).get("training_state") or "")
         progress_raw = (agent or {}).get("training_progress")
         progress = None if progress_raw is None else max(0.0, min(1.0, float(progress_raw)))
@@ -612,8 +675,15 @@ class TrainingQueue(threading.Thread):
             "reason": job.get("reason"),
             "rebuild_reason": job.get("rebuild_reason"),
             "failure_reason": ((agent or {}).get("benchmark_detail") or {}).get("reason"),
+            "cancel_requested": bool(cancelled),
         }
-        if interrupted:
+        if cancelled:
+            self.store.event(
+                job["agent_id"], "info", "training_queue_active_cancelled",
+                "Active training cancelled; slot released for the next queued job",
+                detail,
+            )
+        elif interrupted:
             self.store.event(
                 job["agent_id"], "warning", "training_queue_interrupted",
                 f"Training stopped at {progress:.0%}; slot released for the next queued job",

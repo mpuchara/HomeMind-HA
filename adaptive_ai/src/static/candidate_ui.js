@@ -43,6 +43,7 @@
     if(c.stale)return 'New Correct / Change decision feedback arrived after this build snapshot — the same child will absorb the newer revision.';
     if(c.state==='queued')return 'Candidate is queued from its exact direct-parent snapshot.';
     if(c.state==='building')return 'Child training is running while the parent generation remains immutable.';
+    if(c.state==='discarding')return 'Training cancellation requested. Candidate will be removed as soon as the isolated worker exits.';
     if(c.state==='exploring')return 'Explore is collecting evidence while the direct parent remains immutable.';
     if(c.state==='offline_blocked')return 'Offline regression gate blocks automatic promotion, but passive Shadow A/B evidence keeps accumulating. Explicit Promote may accept the current evidence after confirmation.';
     if(c.state==='insufficient_evidence')return 'Offline history is insufficient for automatic promotion. Explicit Promote may accept the current evidence after confirmation.';
@@ -150,7 +151,7 @@
       <div class="actions candidate-workflow-actions"><button class="ghost" data-wf="auto">Autonomous</button><button class="primary" data-wf="correct">Correct</button><button class="ghost" data-wf="offline-rl" title="Trusted Automatic Correct → conservative Offline RL child">Offline RL</button><button class="ghost" data-wf="explore">Explore</button><button class="ghost" data-wf="change">Change decision</button><button class="ghost" data-wf="settings">Settings</button><button class="ghost" data-wf="debug">Export debug</button></div>
       <div class="candidate-actions candidate-lifecycle-actions">
         <select data-promote-mode aria-label="Promotion target mode"><option value="shadow" ${targetMode==='shadow'?'selected':''}>Promote as Shadow</option><option value="control" ${targetMode==='control'?'selected':''}>Promote as Control</option></select>
-        <button class="primary" data-promote ${c.promotable?'':'disabled'}>Promote</button><button class="ghost" data-discard>Discard</button>
+        <button class="primary" data-promote ${c.promotable?'':'disabled'}>Promote</button><button class="ghost" data-discard ${c.state==='discarding'?'disabled':''}>${c.state==='discarding'?'Cancelling…':'Discard'}</button>
       </div>
     </article>`;
   }
