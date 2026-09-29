@@ -265,6 +265,44 @@ class HistoricalObservationTests(unittest.TestCase):
         self.assertEqual(early_b["values"], early_a["values"])
         self.assertEqual(early_b["mask_id"], early_a["mask_id"])
 
+    def test_precomputed_home_forecast_reuses_exact_values_without_second_provider_call(self):
+        forecast = {
+            str(feature_id).split(":", 1)[1]: 0.25 + index * 0.01
+            for index, feature_id in enumerate(HOME_FEATURES)
+        }
+
+        class Provider:
+            def __init__(self):
+                self.calls = 0
+
+            def forecast(self, target_entity, at_ts):
+                self.calls += 1
+                return dict(forecast)
+
+        provider = Provider()
+        tracker = HistoricalTemporalTracker(self.rows, [self.motion])
+        baseline = observation_as_of(
+            self.mask,
+            self.states,
+            tracker,
+            BASE + 25,
+            self.agent,
+            home_provider=provider,
+        )
+        self.assertEqual(provider.calls, 1)
+        reused = observation_as_of(
+            self.mask,
+            self.states,
+            tracker,
+            BASE + 25,
+            self.agent,
+            home_provider=provider,
+            home_forecast=forecast,
+        )
+        self.assertEqual(provider.calls, 1)
+        self.assertEqual(reused["feature_ids"], baseline["feature_ids"])
+        self.assertEqual(reused["values"], baseline["values"])
+
     def test_unavailable_source_is_zero_with_explicit_available_flag(self):
         tracker = HistoricalTemporalTracker(self.rows, [self.motion])
         result = observation_as_of(

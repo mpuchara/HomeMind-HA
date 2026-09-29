@@ -341,7 +341,9 @@ def _entity_descriptor_snapshot(entity_id, state_map, temporal, at_ts, agent):
     }, available
 
 
-def observation_as_of(mask, state_map, temporal, at_ts, agent, *, home_provider=None):
+def observation_as_of(
+    mask, state_map, temporal, at_ts, agent, *, home_provider=None, home_forecast=None
+):
     """Reconstruct one selected dense observation exactly as of a historical timestamp."""
     if not isinstance(mask, ObservationMask):
         mask = ObservationMask.from_export(mask)
@@ -372,9 +374,15 @@ def observation_as_of(mask, state_map, temporal, at_ts, agent, *, home_provider=
         or getattr(causal_temporal, "home_context", None)
         or getattr(temporal, "home_context", None)
     )
-    forecast = {}
-    if provider is not None and callable(getattr(provider, "forecast", None)):
-        forecast = provider.forecast(agent["target_entity"], at_ts) or {}
+    if home_forecast is not None:
+        # Historical Ridge features may have already computed the exact same causal
+        # forecast for this timestamp. Reuse that immutable value instead of executing
+        # RoomBelief/AdaptivePresence twice for one supervised sample.
+        forecast = dict(home_forecast or {})
+    else:
+        forecast = {}
+        if provider is not None and callable(getattr(provider, "forecast", None)):
+            forecast = provider.forecast(agent["target_entity"], at_ts) or {}
     home_values = {"home:" + name: float(forecast.get(name, 0.0) or 0.0) for name in FEATURE_NAMES}
     entity_cache = {}
     entity_available = {}

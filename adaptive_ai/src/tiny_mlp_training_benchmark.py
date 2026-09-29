@@ -15,6 +15,7 @@ import sys
 import time
 
 from policy_tiny_mlp import TinyMLPBackend
+import policy_tiny_mlp_training as training_module
 from policy_tiny_mlp_training import evaluate_supervised, train_supervised
 
 
@@ -60,7 +61,7 @@ def dataset(feature_ids, count, *, offset=0):
     return rows
 
 
-def benchmark(samples=384, holdout=160, epochs=8, features=96):
+def benchmark(samples=384, holdout=160, epochs=8, features=96, compare_scalar=False):
     feature_ids = tuple(f"feature:{idx}" for idx in range(int(features)))
     model = TinyMLPBackend(
         actions=(0.0, 1.0),
@@ -115,6 +116,50 @@ def benchmark(samples=384, holdout=160, epochs=8, features=96):
         and model.parameter_count <= 50000
         and len(encoded) <= 524288
     )
+    scalar_reference = None
+    if compare_scalar:
+        scalar = TinyMLPBackend(
+            actions=(0.0, 1.0),
+            horizons=(1,),
+            feature_ids=feature_ids,
+            schema_id="stage4-training-benchmark-schema",
+            mask_id="stage4-training-benchmark-mask",
+            hidden=(32, 16),
+            init_seed=1483,
+        )
+        original_numpy_module = training_module._numpy_module
+        try:
+            training_module._numpy_module = lambda: None
+            scalar_started = time.perf_counter()
+            scalar_trainer = training_module.train_supervised(
+                scalar,
+                train_rows,
+                max_samples=samples,
+                max_epochs=epochs,
+                batch_size=16,
+                learning_rate=.03,
+                l2=1e-4,
+                gradient_clip=1.0,
+                early_stop_patience=3,
+                early_stop_min_delta=1e-3,
+            )
+            scalar_wall = time.perf_counter() - scalar_started
+        finally:
+            training_module._numpy_module = original_numpy_module
+        scalar_metrics = evaluate_supervised(scalar, agent, holdout_rows)
+        scalar_reference = {
+            "execution_backend": scalar_trainer.get("execution_backend"),
+            "training_wall_seconds": scalar_wall,
+            "holdout_score": scalar_metrics.get("score"),
+            "decision_parity": all(
+                scalar.predict(row["observation"])[0]["index"]
+                == model.predict(row["observation"])[0]["index"]
+                for row in holdout_rows
+            ),
+            "vectorized_speedup": (
+                scalar_wall / max(1e-12, wall_seconds)
+            ),
+        }
     return {
         "contract": "tiny_mlp_stage4_training_benchmark_v1",
         "pass": passed,
@@ -126,6 +171,7 @@ def benchmark(samples=384, holdout=160, epochs=8, features=96):
         "trainer": trainer,
         "holdout": metrics,
         "training_wall_seconds": wall_seconds,
+        "scalar_reference": scalar_reference,
         "serialized_bytes": len(encoded),
         "rss_before_bytes": before_rss,
         "rss_after_bytes": after_rss,
@@ -155,9 +201,16 @@ def main(argv=None):
     parser.add_argument("--holdout", type=int, default=160)
     parser.add_argument("--epochs", type=int, default=8)
     parser.add_argument("--features", type=int, default=96)
+    parser.add_argument("--compare-scalar", action="store_true")
     parser.add_argument("--compact", action="store_true")
     args = parser.parse_args(argv)
-    result = benchmark(args.samples, args.holdout, args.epochs, args.features)
+    result = benchmark(
+        args.samples,
+        args.holdout,
+        args.epochs,
+        args.features,
+        compare_scalar=args.compare_scalar,
+    )
     print(json.dumps(
         result,
         separators=(",", ":") if args.compact else None,
