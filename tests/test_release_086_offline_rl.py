@@ -16,6 +16,7 @@ from candidate_offline_rl import (
 )
 from observation_space import ObservationMask, observation_schema_id
 from policy_tiny_mlp import TinyMLPBackend
+import policy_tiny_mlp_offline_rl as offline_module
 from policy_tiny_mlp_offline_rl import (
     offline_rl_gate,
     train_conservative_offline_rl,
@@ -152,6 +153,69 @@ class OfflineRLMathTests(unittest.TestCase):
         )
         self.assertEqual(
             child.predict(observation(-.8))[0]["index"], 0
+        )
+
+    def test_vectorized_and_scalar_trainers_preserve_offline_rl_decisions(self):
+        try:
+            import numpy  # noqa: F401
+        except ImportError:
+            self.skipTest("NumPy not installed in this source-only environment")
+
+        parent = trained_parent()
+        before = parent.serialize()
+        rows = reward_rows(64)
+        manual = [
+            {
+                "label_id": 1,
+                "observation": observation(-.75),
+                "action_idx": 0,
+                "weight": 1.0,
+            },
+            {
+                "label_id": 2,
+                "observation": observation(.75),
+                "action_idx": 1,
+                "weight": 1.0,
+            },
+        ]
+        kwargs = dict(
+            manual_samples=manual,
+            max_epochs=4,
+            batch_size=16,
+            learning_rate=.0015,
+            kl_beta=2.0,
+            parent_l2=.002,
+            manual_weight=4.0,
+            gradient_clip=.5,
+            max_parent_relative_l2=.08,
+            min_action_support=4,
+            early_stop_patience=2,
+            early_stop_min_delta=.0001,
+        )
+        with patch.object(offline_module, "_numpy_module", return_value=None):
+            scalar, scalar_report = offline_module.train_conservative_offline_rl(
+                parent, rows, **kwargs
+            )
+        vectorized, vector_report = offline_module.train_conservative_offline_rl(
+            parent, rows, **kwargs
+        )
+
+        self.assertEqual(parent.serialize(), before)
+        self.assertEqual(
+            scalar_report["execution_backend"], "python_scalar_fallback"
+        )
+        self.assertEqual(
+            vector_report["execution_backend"], "numpy_vectorized"
+        )
+        self.assertLessEqual(
+            float(vector_report["parent_distance"]["relative_l2"]), .080001
+        )
+        self.assertEqual(vector_report["manual_fit_candidate"]["score"], 1.0)
+        self.assertEqual(scalar_report["manual_fit_candidate"]["score"], 1.0)
+        probe = [observation(x) for x in (-.9, -.5, -.1, .1, .5, .9)]
+        self.assertEqual(
+            [scalar.predict(row)[0]["index"] for row in probe],
+            [vectorized.predict(row)[0]["index"] for row in probe],
         )
 
     def test_gate_blocks_unsupported_action_extrapolation(self):
