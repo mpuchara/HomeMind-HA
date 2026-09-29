@@ -735,6 +735,12 @@ class TrainingQueue(threading.Thread):
             self._bump_revision_locked()
             self.cv.notify_all()
 
+        # Legacy queue adapters expose one global cancel event. Product dual-agent
+        # sessions own their cancellation events independently, so clearing this
+        # compatibility surface cannot cancel a sibling worker.
+        if hasattr(self.history, "job_cancel_event"):
+            self.history.job_cancel_event = None
+
         state = str((agent or {}).get("training_state") or "")
         progress_raw = (agent or {}).get("training_progress")
         progress = (
