@@ -129,7 +129,7 @@ DEFAULT_OPTIONS = {
     # a smaller effective profile from MemTotal/MemAvailable before each heavy job.
     "training_home_context_cache_entries": 64,
     "training_home_context_cache_units": 32768,
-    "training_sqlite_cache_mb": 32,
+    "training_sqlite_cache_mb": 64,
     # Stage-2 semantic observation contract. Active Ridge inference still uses the
     # existing ExplicitFeatureSchema in 0.14.81; these bounds prepare future backends.
     "observation_selected_features": 96,
