@@ -26,7 +26,7 @@ class Release096ResourceProfileTests(unittest.TestCase):
         self.assertEqual(DEFAULT_OPTIONS["training_home_context_cache_entries"], 64)
         self.assertEqual(DEFAULT_OPTIONS["training_sqlite_cache_mb"], 64)
         self.assertEqual(DEFAULT_OPTIONS["training_worker_nice"], 10)
-        self.assertEqual(DEFAULT_OPTIONS["max_concurrent_training_jobs"], 2)
+        self.assertEqual(DEFAULT_OPTIONS["max_concurrent_training_jobs"], 1)
 
     def test_large_pi_profile_uses_full_bounded_cache_budget(self):
         profile = resolve_training_resource_profile(
