@@ -2065,6 +2065,7 @@ class HistoryManager(threading.Thread):
             replay_query_cache = ReplayQueryCache(
                 max_rows=replay_cache_rows,
                 max_entry_rows=replay_cache_entry_rows,
+                copy_rows=not persistent_cache,
             )
             if persistent_cache:
                 self._persistent_replay_query_cache = replay_query_cache
