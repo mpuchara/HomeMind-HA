@@ -8,7 +8,7 @@ LABEL io.hass.version="${BUILD_VERSION}" io.hass.type="app" io.hass.arch="${BUIL
 WORKDIR /app
 COPY src/ /app/
 RUN python -m compileall -q /app \
-    && pip install --no-cache-dir websockets==15.0.1 \
+    && pip install --no-cache-dir websockets==15.0.1 numpy==2.3.3 \
     && chmod +x /app/run.sh
 EXPOSE 8099
 CMD ["/app/run.sh"]
