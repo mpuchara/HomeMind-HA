@@ -1,4 +1,5 @@
 """0.14.81 Stage-2 observation-space, mask and historical causality contracts."""
+from array import array
 import copy
 import json
 from pathlib import Path
@@ -313,7 +314,11 @@ class HistoricalObservationTests(unittest.TestCase):
             self.mask, self.states, compact_tracker, BASE + 25, self.agent,
             compact=True,
         )
-        self.assertEqual(compact, {"values": full["values"]})
+        self.assertEqual(
+            list(compact["values"]),
+            list(array("f", (float(value) for value in full["values"]))),
+        )
+        self.assertEqual(set(compact), {"values"})
         self.assertNotIn("sparse", compact)
         self.assertNotIn("missing_feature_ids", compact)
         self.assertNotIn("missing_feature_count", compact)
