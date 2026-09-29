@@ -609,7 +609,37 @@ def exact_paired_mlp_win_p_value(mlp_only_correct, ridge_only_correct):
     return min(1.0, max(0.0, float(numerator / denominator)))
 
 
+def _numpy_prediction_indices(backend, rows):
+    """Return dense batch predictions or None when NumPy is unavailable."""
+    np = _numpy_module()
+    if np is None or not rows:
+        return None
+    matrix = np.empty((len(rows), int(backend.input_size)), dtype=np.float64)
+    for index, row in enumerate(rows):
+        matrix[index, :] = _observation_values(backend, row)
+    matrix -= np.asarray(backend.input_mean, dtype=np.float64)
+    matrix /= np.asarray(backend.input_scale, dtype=np.float64)
+    np.clip(matrix, -6.0, 6.0, out=matrix)
+    current = matrix
+    architecture = tuple(int(x) for x in backend.architecture)
+    for layer_index, (raw_weight, raw_bias) in enumerate(
+        zip(backend.weights, backend.biases)
+    ):
+        weight = np.asarray(raw_weight, dtype=np.float64).reshape(
+            architecture[layer_index + 1], architecture[layer_index]
+        )
+        bias = np.asarray(raw_bias, dtype=np.float64)
+        current = current @ weight.T + bias
+        if layer_index < len(backend.weights) - 1:
+            current = np.maximum(current, 0.0)
+    # Softmax is monotonic per row, so argmax(logits) is exactly the same action
+    # selection as argmax(softmax(logits)) while avoiding another allocation.
+    return np.argmax(current, axis=1).astype(np.int64).tolist()
+
+
 def evaluate_supervised(backend, agent, samples):
+    rows = list(samples or ())
+    predicted_indices = _numpy_prediction_indices(backend, rows)
     stats = {"samples": 0, "correct": 0, "per_action": {}}
     paired = {
         "contract": "paired_holdout_correctness_v1",
@@ -623,12 +653,15 @@ def evaluate_supervised(backend, agent, samples):
         float(agent.get("deadband") or 0.0),
         (float(agent.get("max_value") or 0.0) - float(agent.get("min_value") or 0.0)) * 0.03,
     )
-    for row in samples or ():
+    for row_index, row in enumerate(rows):
         target = int(row.get("action_idx", -1))
         if not (0 <= target < len(backend.actions)):
             continue
-        chosen = backend.predict(row["observation"])[0]
-        predicted = int(chosen["index"])
+        if predicted_indices is None:
+            chosen = backend.predict(row["observation"])[0]
+            predicted = int(chosen["index"])
+        else:
+            predicted = int(predicted_indices[row_index])
         if len(backend.actions) <= 2 or str(agent.get("target_property")) == "power":
             correct = predicted == target
         else:
