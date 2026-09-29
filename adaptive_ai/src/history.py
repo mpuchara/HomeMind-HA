@@ -422,7 +422,7 @@ class HistoryManager(threading.Thread):
             available = None
         minimum = max(
             1024.0,
-            float(OPTIONS.get("training_parallel_min_available_mb", 1800) or 1800),
+            float(OPTIONS.get("training_parallel_min_available_mb", 2048) or 1800),
         )
         if isinstance(available, (int, float)) and float(available) < minimum:
             return 1
