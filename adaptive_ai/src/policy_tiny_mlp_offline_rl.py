@@ -170,6 +170,52 @@ def _manual_metrics(model, rows):
 
 
 def _nearest_context_rate(parent, reference_rows, eval_rows, threshold):
+    np = _numpy_module()
+    if np is not None:
+        refs = []
+        for row in _bounded(reference_rows, 128):
+            try:
+                refs.append(parent.normalized_input(row["observation"]))
+            except Exception:
+                continue
+        vectors = []
+        for row in eval_rows:
+            try:
+                vectors.append(parent.normalized_input(row["observation"]))
+            except Exception:
+                continue
+        if not refs:
+            return {
+                "samples": 0,
+                "unseen": 0,
+                "rate": None,
+                "threshold": float(threshold),
+            }
+        if not vectors:
+            return {
+                "samples": 0,
+                "unseen": 0,
+                "rate": None,
+                "threshold": float(threshold),
+            }
+        refs_matrix = np.asarray(refs, dtype=np.float64)
+        eval_matrix = np.asarray(vectors, dtype=np.float64)
+        unseen = 0
+        # Keep peak scratch RAM bounded while turning the O(N*128*D) Python loop into
+        # dense C/BLAS-friendly array math. 64*128*96 float64 ~= 6 MiB.
+        for start in range(0, len(eval_matrix), 64):
+            block = eval_matrix[start:start + 64]
+            delta = block[:, None, :] - refs_matrix[None, :, :]
+            distances = np.sqrt(np.mean(delta * delta, axis=2))
+            unseen += int(np.sum(np.min(distances, axis=1) > float(threshold)))
+        samples = int(len(eval_matrix))
+        return {
+            "samples": samples,
+            "unseen": int(unseen),
+            "rate": (float(unseen) / samples if samples else None),
+            "threshold": float(threshold),
+        }
+
     refs = []
     for row in _bounded(reference_rows, 128):
         try:
@@ -256,6 +302,18 @@ def offline_policy_metrics(
     context_threshold=1.5,
 ):
     rows = list(rows or ())
+    vectorized = _offline_policy_metrics_numpy(
+        parent,
+        child,
+        rows,
+        train_reference=train_reference,
+        supported_actions=supported_actions,
+        reward_clip=reward_clip,
+        ratio_clip=ratio_clip,
+        context_threshold=context_threshold,
+    )
+    if vectorized is not None:
+        return vectorized
     supported = {int(idx) for idx in supported_actions}
     unsupported = set(range(len(parent.actions))) - supported
     weighted_reward = weighted_child_reward = 0.0
@@ -446,6 +504,171 @@ def _numpy_project_to_parent(
         weights[index] = weights[index].astype(np.float32).astype(np.float64)
         biases[index] = biases[index].astype(np.float32).astype(np.float64)
     return True
+
+
+def _offline_policy_metrics_numpy(
+    parent,
+    child,
+    rows,
+    *,
+    train_reference=(),
+    supported_actions=(),
+    reward_clip=1.0,
+    ratio_clip=2.0,
+    context_threshold=1.5,
+):
+    np = _numpy_module()
+    if np is None:
+        return None
+    valid_rows = []
+    targets = []
+    weights = []
+    rewards = []
+    for row in rows:
+        try:
+            idx = int(row.get("action_idx", -1))
+        except (TypeError, ValueError):
+            continue
+        weight = max(0.0, _finite(row.get("weight"), 1.0))
+        if not 0 <= idx < len(parent.actions) or weight <= 0.0:
+            continue
+        # Preserve the scalar contract: malformed observations still surface as an
+        # error instead of being silently discarded from safety metrics.
+        _observation_values(parent, row)
+        valid_rows.append(row)
+        targets.append(idx)
+        weights.append(weight)
+        rewards.append(
+            max(-float(reward_clip), min(float(reward_clip), _finite(row.get("reward"))))
+        )
+    samples = len(valid_rows)
+    supported = {int(idx) for idx in supported_actions}
+    unsupported = sorted(set(range(len(parent.actions))) - supported)
+    if samples <= 0:
+        return {
+            "contract": "offline_logged_action_reward_proxy_v1",
+            "behavior_propensity_known": False,
+            "samples": 0,
+            "average_trusted_reward": None,
+            "parent_reward_proxy": None,
+            "candidate_reward_proxy": None,
+            "reward_improvement_estimate": None,
+            "effective_sample_size_proxy": 0.0,
+            "parent_action_agreement": None,
+            "action_drift_mean_tv": None,
+            "action_drift_max_tv": 0.0,
+            "unsupported_probability_lift_max": 0.0,
+            "unsupported_new_argmax_count": 0,
+            "logged_probability_regression_count": 0,
+            "logged_probability_regression_fraction": None,
+            "unseen_context": _nearest_context_rate(
+                parent, train_reference, valid_rows, context_threshold
+            ),
+            "q_proxy_calibration": _action_reward_proxy(
+                train_reference, valid_rows, len(parent.actions)
+            ),
+        }
+
+    matrix = _numpy_normalized_matrix(np, parent, valid_rows)
+    architecture, parent_weights, parent_biases = _numpy_parameters(np, parent)
+    child_architecture, child_weights, child_biases = _numpy_parameters(np, child)
+    if child_architecture != architecture:
+        raise ValueError("Offline-RL parent/child architecture mismatch")
+    _parent_acts, parent_probs = _numpy_forward(
+        np, architecture, parent_weights, parent_biases, matrix
+    )
+    _child_acts, child_probs = _numpy_forward(
+        np, architecture, child_weights, child_biases, matrix
+    )
+    target_array = np.asarray(targets, dtype=np.int64)
+    weight_array = np.asarray(weights, dtype=np.float64)
+    reward_array = np.asarray(rewards, dtype=np.float64)
+    row_indices = np.arange(samples)
+
+    parent_action = np.argmax(parent_probs, axis=1)
+    child_action = np.argmax(child_probs, axis=1)
+    agreements = int(np.sum(parent_action == child_action))
+    tv = 0.5 * np.sum(np.abs(parent_probs - child_probs), axis=1)
+
+    unsupported_lift = 0.0
+    unsupported_argmax = 0
+    if unsupported:
+        unsupported_idx = np.asarray(unsupported, dtype=np.int64)
+        unsupported_lift = max(
+            0.0,
+            float(np.max(
+                child_probs[:, unsupported_idx] - parent_probs[:, unsupported_idx]
+            )),
+        )
+        unsupported_mask = np.isin(child_action, unsupported_idx)
+        unsupported_argmax = int(np.sum(
+            unsupported_mask & (child_action != parent_action)
+        ))
+
+    total_weight = float(np.sum(weight_array))
+    parent_reward = (
+        float(np.sum(weight_array * reward_array)) / total_weight
+        if total_weight > 0.0 else None
+    )
+    parent_logged = np.maximum(
+        1e-6, parent_probs[row_indices, target_array]
+    )
+    ratio_limit = max(1.0, float(ratio_clip))
+    ratio = np.clip(
+        child_probs[row_indices, target_array] / parent_logged,
+        1.0 / ratio_limit,
+        ratio_limit,
+    )
+    child_weight_array = weight_array * ratio
+    child_weight = float(np.sum(child_weight_array))
+    child_reward = (
+        float(np.sum(child_weight_array * reward_array)) / child_weight
+        if child_weight > 0.0 else None
+    )
+    improvement = (
+        child_reward - parent_reward
+        if child_reward is not None and parent_reward is not None else None
+    )
+    ratio_sq = float(np.sum(child_weight_array * child_weight_array))
+    ess = (
+        (child_weight * child_weight) / ratio_sq
+        if child_weight > 0.0 and ratio_sq > 0.0 else 0.0
+    )
+
+    baseline, _spread = _weighted_stats(valid_rows, reward_clip)
+    probability_delta = (
+        child_probs[row_indices, target_array]
+        - parent_probs[row_indices, target_array]
+    )
+    regressions = (
+        ((reward_array > baseline + 1e-9) & (probability_delta < -0.02))
+        | ((reward_array < baseline - 1e-9) & (probability_delta > 0.02))
+    )
+    regression_count = int(np.sum(regressions))
+
+    return {
+        "contract": "offline_logged_action_reward_proxy_v1",
+        "behavior_propensity_known": False,
+        "samples": int(samples),
+        "average_trusted_reward": parent_reward,
+        "parent_reward_proxy": parent_reward,
+        "candidate_reward_proxy": child_reward,
+        "reward_improvement_estimate": improvement,
+        "effective_sample_size_proxy": float(ess),
+        "parent_action_agreement": float(agreements) / samples,
+        "action_drift_mean_tv": float(np.mean(tv)),
+        "action_drift_max_tv": float(np.max(tv)),
+        "unsupported_probability_lift_max": float(unsupported_lift),
+        "unsupported_new_argmax_count": int(unsupported_argmax),
+        "logged_probability_regression_count": int(regression_count),
+        "logged_probability_regression_fraction": float(regression_count) / samples,
+        "unseen_context": _nearest_context_rate(
+            parent, train_reference, valid_rows, context_threshold
+        ),
+        "q_proxy_calibration": _action_reward_proxy(
+            train_reference, valid_rows, len(parent.actions)
+        ),
+    }
 
 
 def _numpy_offline_training_score(
