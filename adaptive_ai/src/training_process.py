@@ -710,6 +710,13 @@ def run_isolated_training_chunk(history, start_ts, end_ts, **kwargs):
     env["ADAPTIVE_AI_DATA"] = str(DATA_DIR)
     env["ADAPTIVE_AI_TRAINING_WORKER"] = "1"
     env["PYTHONUNBUFFERED"] = "1"
+    # Tiny MLP training is vectorized in the child process. These matrices are small;
+    # one BLAS thread is faster/more predictable than a thread pool and preserves CPU
+    # headroom for the realtime HA parent on Raspberry Pi.
+    env["OPENBLAS_NUM_THREADS"] = "1"
+    env["OMP_NUM_THREADS"] = "1"
+    env["MKL_NUM_THREADS"] = "1"
+    env["NUMEXPR_NUM_THREADS"] = "1"
 
     log_handle = open(job["log_path"], "ab", buffering=0)
     process = subprocess.Popen(
