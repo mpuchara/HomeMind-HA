@@ -21,6 +21,27 @@ import uuid
 from policy_tiny_mlp import TinyMLPBackend
 
 
+_NUMPY = None
+_NUMPY_CHECKED = False
+
+
+def _numpy_module():
+    """Load NumPy lazily so realtime startup never pays the import/RSS cost.
+
+    Production images include NumPy for historical/Correct training. Source-only test
+    environments may omit it; in that case the exact scalar trainer remains available.
+    """
+    global _NUMPY, _NUMPY_CHECKED
+    if not _NUMPY_CHECKED:
+        try:
+            import numpy as np
+        except ImportError:
+            np = None
+        _NUMPY = np
+        _NUMPY_CHECKED = True
+    return _NUMPY
+
+
 def _finite(value, default=0.0):
     try:
         value = float(value)
@@ -82,6 +103,226 @@ def _class_weights(samples, action_count):
             if count > 0:
                 weights[idx] = min(4.0, max(0.25, total / float(present * count)))
     return counts, weights
+
+
+def _numpy_softmax(np, logits):
+    peak = np.max(logits, axis=1, keepdims=True)
+    exp = np.exp(np.clip(logits - peak, -60.0, 60.0))
+    total = np.sum(exp, axis=1, keepdims=True)
+    total = np.where((total > 0.0) & np.isfinite(total), total, 1.0)
+    return exp / total
+
+
+def _train_supervised_numpy(
+    backend,
+    rows,
+    *,
+    class_counts,
+    class_weight,
+    max_samples,
+    max_epochs,
+    batch_size,
+    learning_rate,
+    l2,
+    gradient_clip,
+    early_stop_patience,
+    early_stop_min_delta,
+    checkpoint,
+    started,
+):
+    """Vectorized equivalent of the scalar mini-batch trainer.
+
+    The complete bounded observation matrix is normalized once and retained in RAM for
+    all epochs. Dense forward/backward math then runs in NumPy instead of Python MAC
+    loops. Parameters are rounded back to float32 after every optimizer batch, matching
+    the persistent TinyMLP tensor contract. The isolated worker owns this memory and
+    releases it when the historical chunk exits.
+    """
+    np = _numpy_module()
+    if np is None:
+        return None
+
+    row_count = len(rows)
+    input_size = int(backend.input_size)
+    matrix = np.empty((row_count, input_size), dtype=np.float64)
+    targets = np.empty(row_count, dtype=np.int64)
+    source_weights = np.empty(row_count, dtype=np.float64)
+    for index, row in enumerate(rows):
+        matrix[index, :] = _observation_values(backend, row)
+        targets[index] = int(row["action_idx"])
+        source_weights[index] = max(0.0, _finite(row.get("weight"), 1.0))
+
+    means = np.asarray(backend.input_mean, dtype=np.float64)
+    scales = np.asarray(backend.input_scale, dtype=np.float64)
+    matrix -= means
+    matrix /= scales
+    np.clip(matrix, -6.0, 6.0, out=matrix)
+    class_weight_vector = np.asarray(class_weight, dtype=np.float64)
+    effective_weights = source_weights * class_weight_vector[targets]
+
+    architecture = tuple(int(x) for x in backend.architecture)
+    weights = [
+        np.asarray(layer, dtype=np.float64).reshape(
+            architecture[index + 1], architecture[index]
+        ).copy()
+        for index, layer in enumerate(backend.weights)
+    ]
+    biases = [
+        np.asarray(layer, dtype=np.float64).copy()
+        for layer in backend.biases
+    ]
+
+    rng = random.Random(
+        int(backend.init_seed) ^ int(backend.training_samples) ^ row_count
+    )
+    order = list(range(row_count))
+    best_loss = math.inf
+    best_weights = None
+    best_biases = None
+    best_epoch = 0
+    stale_epochs = 0
+    clip_events = 0
+    batch_updates = 0
+    epoch_losses = []
+
+    for epoch in range(1, max_epochs + 1):
+        rng.shuffle(order)
+        for batch_start in range(0, row_count, batch_size):
+            indices = order[batch_start:batch_start + batch_size]
+            xb = matrix[indices]
+            yb = targets[indices]
+            wb = effective_weights[indices]
+            batch_weight = float(np.sum(wb))
+            if batch_weight <= 0.0:
+                continue
+
+            activations = [xb]
+            current = xb
+            for layer_index, (weight, bias) in enumerate(zip(weights, biases)):
+                current = current @ weight.T + bias
+                if layer_index < len(weights) - 1:
+                    current = np.maximum(current, 0.0)
+                activations.append(current)
+
+            probabilities = _numpy_softmax(np, activations[-1])
+            delta = probabilities.copy()
+            delta[np.arange(len(indices)), yb] -= 1.0
+            delta *= wb[:, None]
+
+            grad_w = [None] * len(weights)
+            grad_b = [None] * len(biases)
+            for layer_index in range(len(weights) - 1, -1, -1):
+                previous = activations[layer_index]
+                grad_w[layer_index] = (delta.T @ previous) / batch_weight
+                grad_w[layer_index] += l2 * weights[layer_index]
+                grad_b[layer_index] = np.sum(delta, axis=0) / batch_weight
+                if layer_index > 0:
+                    delta = delta @ weights[layer_index]
+                    delta *= (previous > 0.0)
+
+            norm_sq = 0.0
+            for grad in grad_w:
+                norm_sq += float(np.sum(grad * grad))
+            for grad in grad_b:
+                norm_sq += float(np.sum(grad * grad))
+            grad_norm = math.sqrt(norm_sq)
+            clip_scale = min(1.0, gradient_clip / max(1e-12, grad_norm))
+            if clip_scale < 0.999999:
+                clip_events += 1
+
+            for layer_index in range(len(weights)):
+                weights[layer_index] -= (
+                    learning_rate * grad_w[layer_index] * clip_scale
+                )
+                biases[layer_index] -= (
+                    learning_rate * grad_b[layer_index] * clip_scale
+                )
+                # TinyMLP parameters are float32 at every scalar update. Keep the same
+                # quantization boundary instead of accumulating hidden float64 state.
+                weights[layer_index] = weights[layer_index].astype(
+                    np.float32
+                ).astype(np.float64)
+                biases[layer_index] = biases[layer_index].astype(
+                    np.float32
+                ).astype(np.float64)
+
+            batch_updates += 1
+            if callable(checkpoint):
+                checkpoint("tiny_mlp_supervised_batch")
+
+        current = matrix
+        for layer_index, (weight, bias) in enumerate(zip(weights, biases)):
+            current = current @ weight.T + bias
+            if layer_index < len(weights) - 1:
+                current = np.maximum(current, 0.0)
+        probabilities = _numpy_softmax(np, current)
+        selected = probabilities[np.arange(row_count), targets]
+        weighted_loss = -np.log(np.maximum(1e-9, selected)) * effective_weights
+        epoch_loss = float(np.sum(weighted_loss)) / max(
+            1e-9, float(np.sum(effective_weights))
+        )
+        epoch_losses.append(float(epoch_loss))
+        if best_loss - epoch_loss > early_stop_min_delta:
+            best_loss = float(epoch_loss)
+            best_epoch = epoch
+            best_weights = [weight.copy() for weight in weights]
+            best_biases = [bias.copy() for bias in biases]
+            stale_epochs = 0
+        else:
+            stale_epochs += 1
+        if callable(checkpoint):
+            checkpoint("tiny_mlp_supervised_epoch", force=True)
+        if stale_epochs >= early_stop_patience:
+            break
+
+    if best_weights is not None:
+        weights = best_weights
+        biases = best_biases
+    backend.weights = [
+        array("f", weight.reshape(-1).astype(np.float32).tolist())
+        for weight in weights
+    ]
+    backend.biases = [
+        array("f", bias.astype(np.float32).tolist())
+        for bias in biases
+    ]
+    backend.trained = True
+    backend.training_samples = int(backend.training_samples) + row_count
+    backend.model_revision = str(uuid.uuid4())
+    elapsed = max(0.0, time.perf_counter() - started)
+    matrix_bytes = int(
+        matrix.nbytes + targets.nbytes + source_weights.nbytes
+        + effective_weights.nbytes
+        + sum(weight.nbytes for weight in weights)
+        + sum(bias.nbytes for bias in biases)
+    )
+    meta = {
+        "trainer": "offline_supervised_cross_entropy_v2",
+        "execution_backend": "numpy_vectorized",
+        "samples": row_count,
+        "training_samples_total": int(backend.training_samples),
+        "class_counts": {str(i): int(v) for i, v in enumerate(class_counts)},
+        "class_weight": {str(i): float(v) for i, v in enumerate(class_weight)},
+        "epochs": len(epoch_losses),
+        "best_epoch": int(best_epoch),
+        "best_loss": None if not math.isfinite(best_loss) else float(best_loss),
+        "last_loss": float(epoch_losses[-1]) if epoch_losses else None,
+        "learning_rate": learning_rate,
+        "batch_size": batch_size,
+        "l2": l2,
+        "gradient_clip": gradient_clip,
+        "gradient_clip_events": int(clip_events),
+        "batch_updates": int(batch_updates),
+        "early_stop_patience": early_stop_patience,
+        "early_stop_min_delta": early_stop_min_delta,
+        "max_samples": int(max_samples),
+        "prepared_matrix_bytes": matrix_bytes,
+        "prepared_matrix_dtype": "float64",
+        "elapsed_seconds": round(elapsed, 4),
+        "online_reward_updates": False,
+    }
+    backend.training_meta = {**dict(backend.training_meta or {}), "supervised": meta}
+    return {"trained": True, **meta}
 
 
 def _forward_activations(backend, normalized):
@@ -161,6 +402,25 @@ def train_supervised(
     min_delta = max(0.0, float(early_stop_min_delta))
 
     started = time.perf_counter()
+    vectorized = _train_supervised_numpy(
+        backend,
+        rows,
+        class_counts=class_counts,
+        class_weight=class_weight,
+        max_samples=max_samples,
+        max_epochs=max_epochs,
+        batch_size=batch_size,
+        learning_rate=lr,
+        l2=l2,
+        gradient_clip=clip,
+        early_stop_patience=patience,
+        early_stop_min_delta=min_delta,
+        checkpoint=checkpoint,
+        started=started,
+    )
+    if vectorized is not None:
+        return vectorized
+
     rng = random.Random(int(backend.init_seed) ^ int(backend.training_samples) ^ len(rows))
     order = list(range(len(rows)))
     best_loss = math.inf
@@ -274,7 +534,8 @@ def train_supervised(
     backend.model_revision = str(uuid.uuid4())
     elapsed = max(0.0, time.perf_counter() - started)
     meta = {
-        "trainer": "offline_supervised_cross_entropy_v1",
+        "trainer": "offline_supervised_cross_entropy_v2",
+        "execution_backend": "python_scalar_fallback",
         "samples": len(rows),
         "training_samples_total": int(backend.training_samples),
         "class_counts": {str(i): int(v) for i, v in enumerate(class_counts)},
