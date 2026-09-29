@@ -1,4 +1,6 @@
 """0.14.108 persistent selected-agent training worker contracts."""
+import json
+import os
 import sqlite3
 import tempfile
 import threading
@@ -9,6 +11,7 @@ from unittest.mock import patch
 
 import history as history_module
 import training_process
+import tiny_mlp_shadow
 from context_engine import ContextEngine
 from replay import ReplayQueryCache, SQLiteTemporalTracker
 from settings import DEFAULT_OPTIONS
@@ -234,6 +237,172 @@ class PersistentReplayCacheTests(unittest.TestCase):
         cached = cache.get("SELECT ?", (1,))
         self.assertIsNot(cached[0], source[0])
         self.assertTrue(cache.status()["copy_rows"])
+
+
+class SequenceRollbackTests(unittest.TestCase):
+    def test_worker_advances_rollback_snapshot_after_each_completed_chunk(self):
+        with tempfile.TemporaryDirectory(prefix="hm-sequence-rollback-") as root:
+            root = Path(root)
+            agent = {
+                "id": "rollback-agent",
+                "enabled": True,
+                "input_entities": ["binary_sensor.motion"],
+                "target_entity": "switch.target",
+                "target_property": "power",
+                "min_value": 0.0,
+                "max_value": 1.0,
+                "confidence_threshold": .78,
+                "deadband": .5,
+                "action_interval": 30.0,
+                "exploration_step": 1.0,
+                "exploration_interval": 21600.0,
+                "micro_exploration": False,
+                "ack_timeout": 8.0,
+                "settling_seconds": 2.0,
+                "manual_hold_seconds": 30.0,
+            }
+
+            class FakeStore:
+                def __init__(self):
+                    self.model = {"version": 1, "marker": "initial"}
+                    self.training_publish_guard = None
+                    self.checkpointed_archive_reads = False
+
+                def get_agent_config(self, agent_id):
+                    return dict(agent)
+
+                def get_model(self, agent_id):
+                    return dict(self.model)
+
+                def set_training_progress(self, *args, **kwargs):
+                    return None
+
+                def event(self, *args, **kwargs):
+                    return None
+
+            store = FakeStore()
+
+            class FakeEngine:
+                def __init__(self, job, worker_store):
+                    self.context_relevance = {agent["id"]: {}}
+                    self.history_manager = None
+
+            class FakeHistory:
+                calls = 0
+
+                def __init__(self, engine, worker_mode=False):
+                    self.engine = engine
+                    self.worker_mode = worker_mode
+                    self.stop_event = threading.Event()
+                    self.agent_jobs = set()
+                    self.training_schema_cache = {}
+                    self.neural_training_artifacts = {}
+                    self.temporal_replay_stats = {}
+                    self.training_long_memory_status = {}
+                    self.training_replay_cache_status = {}
+                    self.training_home_context_cache_status = {}
+                    self.progress = 0.0
+                    self.phase = "training"
+                    self.message = ""
+
+                def set_status(self, *args, **kwargs):
+                    if kwargs.get("progress") is not None:
+                        self.progress = float(kwargs["progress"])
+                    return None
+
+                def status(self):
+                    return {
+                        "phase": self.phase,
+                        "progress": self.progress,
+                        "message": self.message,
+                    }
+
+                def train_from_archive(self, start_ts, end_ts, agent_ids=None, **kwargs):
+                    type(self).calls += 1
+                    if type(self).calls == 1:
+                        store.model = {"version": 1, "marker": "chunk-1"}
+                        return 1
+                    raise RuntimeError("synthetic second chunk failure")
+
+                def close_persistent_training_resources(self):
+                    return None
+
+            class FakeBudget:
+                def begin(self, **kwargs):
+                    return None
+
+                def end(self):
+                    return None
+
+            status_path = root / "job.status.json"
+            result_path = root / "job.result.json"
+            rollback_path = root / "job.rollback.json"
+            job = {
+                "format": training_process.JOB_FORMAT,
+                "version": training_process.JOB_VERSION,
+                "job_id": "rollback-job",
+                "app_version": training_process.APP_VERSION,
+                "training_revision": training_process.TRAINING_REVISION,
+                "parent_pid": 0,
+                "agent_id": agent["id"],
+                "agent_fingerprint": training_process.agent_config_fingerprint(agent),
+                "state_map": {},
+                "entity_registry": {},
+                "context_relevance": {},
+                "automation_hints": [],
+                "schema_cache_item": {},
+                "options": dict(DEFAULT_OPTIONS),
+                "resource_profile": {"worker_options": {}},
+                "status_path": str(status_path),
+                "result_path": str(result_path),
+                "rollback_path": str(rollback_path),
+                "sequence_start_ts": 0.0,
+                "sequence_target_end_ts": 12.0,
+                "sequence_chunks": [
+                    {
+                        "index": 0,
+                        "start_ts": 0.0,
+                        "end_ts": 6.0,
+                        "checkpoint_cursor_ts": 6.0,
+                        "checkpoint_meta": {},
+                        "train_kwargs": {"progress_lo": 0.0, "progress_hi": .5},
+                    },
+                    {
+                        "index": 1,
+                        "start_ts": 3.0,
+                        "end_ts": 12.0,
+                        "checkpoint_cursor_ts": 12.0,
+                        "checkpoint_meta": {},
+                        "train_kwargs": {
+                            "progress_lo": .5,
+                            "progress_hi": 1.0,
+                            "continuation_from_ts": 6.0,
+                        },
+                    },
+                ],
+            }
+            job["checksum"] = training_process.descriptor_checksum(job)
+            job_path = root / "job.json"
+            job_path.write_text(json.dumps(job), encoding="utf-8")
+
+            FakeHistory.calls = 0
+            with (
+                patch.object(history_module, "HistoryManager", FakeHistory),
+                patch.object(training_process, "TrainingWorkerEngine", FakeEngine),
+                patch.object(training_process, "_worker_configure_budget", return_value=FakeBudget()),
+                patch("storage.STORE", store),
+                patch.object(tiny_mlp_shadow, "load_training_record", return_value=None),
+                patch.object(tiny_mlp_shadow, "publish_training_artifact", side_effect=lambda _store, artifact: artifact),
+            ):
+                code = training_process.worker_main(job_path)
+
+            self.assertEqual(code, 2)
+            rollback = json.loads(rollback_path.read_text(encoding="utf-8"))
+            self.assertEqual(rollback["chunk_index"], 1)
+            self.assertEqual(rollback["model_before"]["marker"], "chunk-1")
+            result = json.loads(result_path.read_text(encoding="utf-8"))
+            self.assertFalse(result["ok"])
+            self.assertIn("synthetic second chunk failure", result["error"])
 
 
 class SharedReplayConnectionTests(unittest.TestCase):
