@@ -603,6 +603,19 @@ class TrainingQueue(threading.Thread):
             )
             return True
 
+        if active_jobs:
+            target = str(agent.get("target_entity") or "")
+            for active_job in active_jobs:
+                active_agent = self.store.get_agent(active_job["agent_id"])
+                if (
+                    active_agent
+                    and target
+                    and str(active_agent.get("target_entity") or "") == target
+                ):
+                    # A Live agent and its Candidate may share one physical target.
+                    # Never train such lineage-adjacent policies concurrently.
+                    return False
+
         service = self._teach_service(job)
         owner = HEAVY_JOBS.owner
         if owner not in (None, "agent_pool"):
