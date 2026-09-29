@@ -67,6 +67,7 @@ NON_SEMANTIC_TRAINING_OPTION_KEYS = frozenset({
     "training_persistent_worker_enabled",
     "training_persistent_worker_cache_enabled",
     "max_concurrent_training_jobs",
+    "training_parallel_agent_workers",
     "training_parallel_worker_memory_limit_mb",
     "training_parallel_min_available_mb",
     "training_replay_ram_cache_entry_rows",
