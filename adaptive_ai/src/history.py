@@ -539,6 +539,13 @@ class HistoryManager(threading.Thread):
                 finally:
                     TRAINING_BUDGET.end()
                     session.agent_jobs.discard(agent_id)
+                    # Bring reusable per-agent schema metadata back to the scheduler.
+                    # The Store/model is already durable; this only avoids a later
+                    # whole-home feature-selection rescan after the lightweight session
+                    # object is released.
+                    schema_item = session.training_schema_cache.get(agent_id)
+                    if schema_item:
+                        self.training_schema_cache[agent_id] = dict(schema_item)
                     final_agent = STORE.get_agent_config(agent_id)
                     final_progress = clamp(
                         float((final_agent or {}).get("training_progress") or session.progress or 0.0),
