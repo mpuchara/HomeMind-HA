@@ -123,13 +123,15 @@ jobs:
       - name: Verify packaged vectorized Tiny MLP trainer
         shell: bash
         run: |
-          docker run --rm --entrypoint python homemind:${{ steps.version.outputs.version }} /app/tiny_mlp_training_benchmark.py --samples 384 --holdout 160 --epochs 8 --features 96 --compact > tiny-mlp-image.json
+          docker run --rm --entrypoint python homemind:${{ steps.version.outputs.version }} /app/tiny_mlp_training_benchmark.py --samples 384 --holdout 160 --epochs 8 --features 96 --compare-scalar --compact > tiny-mlp-image.json
           cat tiny-mlp-image.json
           python - <<'PY'
           import json
           row = json.load(open("tiny-mlp-image.json", encoding="utf-8"))
           assert row["pass"], row
           assert row["trainer"]["execution_backend"] == "numpy_vectorized", row["trainer"]
+          assert row["scalar_reference"]["execution_backend"] == "python_scalar_fallback", row["scalar_reference"]
+          assert row["scalar_reference"]["decision_parity"], row["scalar_reference"]
           PY
   package:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
