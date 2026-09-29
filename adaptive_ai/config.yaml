@@ -103,7 +103,7 @@ options:
   training_replay_ram_cache_entry_rows: 2048
   training_home_context_cache_entries: 64
   training_home_context_cache_units: 32768
-  training_sqlite_cache_mb: 32
+  training_sqlite_cache_mb: 64
   observation_selected_features: 96
   observation_freshness_tau_seconds: 300
   tiny_mlp_shadow_enabled: true
