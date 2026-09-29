@@ -234,6 +234,10 @@ DEFAULT_OPTIONS = {
     "training_persistent_worker_cache_enabled": True,
     "training_worker_nice": 10,
     "training_worker_memory_limit_mb": 1024,
+    # 0.14.109: two agent replay workers may run on >=4-core hosts with enough RAM.
+    # Each worker gets a lower cap so realtime HA keeps explicit headroom.
+    "training_parallel_min_available_mb": 1800,
+    "training_parallel_worker_memory_limit_mb": 768,
     "training_worker_memory_floor_mb": 256,
     "training_worker_memory_total_fraction": 0.30,
     "training_worker_memory_available_fraction": 0.50,
@@ -249,7 +253,7 @@ DEFAULT_OPTIONS = {
     "training_realtime_cooldown_seconds": 0.20,
     "training_recorder_refresh_overlap_minutes": 30,
     "manual_agent_training": True,
-    "max_concurrent_training_jobs": 1,
+    "max_concurrent_training_jobs": 2,
     "manual_discovery_hours": 24,
     "teach_rl_feature_min_labels": 12,
     "teach_rl_feature_min_per_binary_class": 5,
