@@ -186,7 +186,7 @@ options:
   training_persistent_worker_cache_enabled: true
   training_worker_nice: 10
   training_worker_memory_limit_mb: 1024
-  training_parallel_min_available_mb: 1800
+  training_parallel_min_available_mb: 2048
   training_parallel_worker_memory_limit_mb: 768
   training_worker_memory_floor_mb: 256
   training_worker_memory_total_fraction: 0.30
