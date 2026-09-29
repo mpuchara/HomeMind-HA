@@ -1,3 +1,16 @@
+# 0.14.108 — 2026-09-29
+
+- Keep one isolated **persistent training worker per selected agent** instead of restarting Python for every 6-hour logical chunk. With the default 7-day recent window, the transport changes from up to 28 worker starts to 1 while retaining the existing logical chunk boundaries.
+- Preserve training semantics exactly: 6-hour start/end boundaries, overlap/stateful continuation, validation split, final qualification, long-memory-only-first-chunk behavior, configured inter-chunk pause and single-heavy-job admission remain unchanged.
+- Preserve resumability with a **per-chunk rollback point**. After each successful chunk the worker persists the current agent/Ridge/TinyMLP checkpoint; Cancel, OOM or a later-chunk failure restores only the unfinished chunk. Semantic topology/options staleness still rejects the complete sequence.
+- Keep bounded `ReplayQueryCache` and `HistoricalContextCache` alive across logical chunks. Onset and persistence trackers additionally share one read-only SQLite connection so its page cache stays warm for the complete agent pass.
+- Use a private **zero-copy replay-cache mode** inside the persistent worker: cache hits reuse read-only row dicts instead of allocating a new dict per cached row. The historical defensive-copy cache contract remains the default everywhere else.
+- Raise only the **large** adaptive worker SQLite page cache from 32 MB to 64 MB. The worker RSS ceiling remains 1024 MB and is still capped by MemTotal, MemAvailable and the explicit Home Assistant/parent reserve; lower-memory tiers keep their smaller cache budgets.
+- Same-host synthetic persistent-worker benchmark for 6 logical chunks: separate process cold starts **0.706 s → 0.116 s** with one persistent process (**~6.06× less startup wall time**, 6 process starts → 1). This isolates startup/import overhead and is not a whole-training speedup claim.
+- In the cross-tracker replay probe the first tracker performed 3 SQLite queries and the second tracker performed **0 SQLite queries**, receiving all 3 reads from RAM with identical reconstructed state.
+- Dedicated regressions cover sequence boundaries, continuation cursors, non-semantic option fingerprinting, shared SQLite connection ownership, zero-copy/default cache behavior, Cancel/pause semantics and rollback after a synthetic failure in a later chunk.
+- No reward, Correct-label, Candidate lineage, policy-selection, promotion, ActionIntent, Executor or physical-control authority semantics change.
+
 # 0.14.107 — 2026-09-29
 
 - Optimize the neural training paths that became the dominant cost after adding Tiny MLP. Offline supervised Tiny MLP now materializes its bounded training matrix once in RAM and runs forward/backprop with NumPy instead of Python multiply/accumulate loops; the existing scalar implementation remains the fallback.

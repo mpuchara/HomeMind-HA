@@ -1,10 +1,10 @@
 {
-  "version": "0.14.107",
+  "version": "0.14.108",
   "release_date": "2026-09-29",
-  "base_version": "0.14.106",
-  "base_commit": "9bc563a036b385a0233910a59594263f63e22a34",
-  "release_status": "ram-first-neural-training-optimization",
-  "release_validation_tests_passed": 1448,
+  "base_version": "0.14.107",
+  "base_commit": "3601eca3c9ee4aa625fc4cdd9e1b808fd37a604a",
+  "release_status": "persistent-agent-training-worker",
+  "release_validation_tests_passed": 1455,
   "candidate_shadow_qos_014102": {
     "regression_source": "0.14.100 deferred Candidate Shadow queue composed under 60 s Raspberry Pi maintenance gate",
     "deferred_shadow_drain": "runs on every Candidate worker maintenance hook before periodic housekeeping admission",
@@ -790,5 +790,34 @@
     "chunk_semantics": "6-hour logical chunks, overlap/stateful continuation and per-chunk validation boundaries remain unchanged",
     "worker_memory_profile": "existing adaptive RAM-first profile remains: configured ceiling 1024 MB, additionally capped by MemTotal/MemAvailable and parent/HA reserve; no blind memory-limit increase",
     "safety": "no reward trust, Correct labels, feature selection, Candidate lineage, promotion authority, ActionIntent or Executor semantics changed"
+  },
+  "release_014108": {
+    "scope": "historical_training_transport_and_ram_cache_performance",
+    "persistent_worker_contract": "persistent_agent_training_worker_v1",
+    "default_recent_history_days": 7,
+    "logical_chunk_hours": 6,
+    "default_process_starts_before": 28,
+    "default_process_starts_after": 1,
+    "chunk_semantics": "unchanged start/end, overlap, stateful continuation, validation, final qualification and first-chunk long-memory semantics",
+    "rollback": "per-logical-chunk agent/Ridge/TinyMLP snapshot; completed chunks survive Cancel/OOM/later-chunk failure; semantic stale result restores full sequence",
+    "ram_reuse": "ReplayQueryCache + HistoricalContextCache + one read-only SQLite connection/page cache remain resident for the selected-agent pass",
+    "zero_copy_replay_cache": "private persistent-worker mode only; default cache retains defensive row copies",
+    "large_worker_sqlite_cache_mb": 64,
+    "worker_memory_ceiling_mb": 1024,
+    "benchmark": {
+      "environment": "GitHub-hosted synthetic; not Raspberry Pi 4",
+      "logical_chunks": 6,
+      "separate_worker_cold_start_seconds": 0.7055398510000259,
+      "persistent_worker_cold_start_seconds": 0.11643757399997412,
+      "cold_start_speedup": 6.059382953136612,
+      "process_starts_before": 6,
+      "process_starts_after": 1,
+      "first_tracker_sql_queries": 3,
+      "second_tracker_sql_queries": 0,
+      "second_tracker_ram_query_hits": 3,
+      "replay_cache_hit_rate": 0.5,
+      "semantic_state_parity": true
+    },
+    "safety": "single heavy job; one-thread neural BLAS; adaptive RSS guard retained; no learning/reward/Correct/Candidate/promotion/ActionIntent/Executor authority changes"
   }
 }
