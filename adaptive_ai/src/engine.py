@@ -155,6 +155,16 @@ class HAEventStream(threading.Thread):
                 # urgent. Healthy websocket operation uses the much slower safety resync.
                 with self.engine.lock:
                     self.engine.last_full_poll = 0.0
+                    # A websocket gap can lose the one target transition that defines
+                    # the UI/Correct "Current" truth. Keep an explicit recovery latch
+                    # until a successful REST /states reconciliation completes. This
+                    # must survive a fast websocket reconnect and unrelated realtime
+                    # traffic that would otherwise keep deferring the safety poll.
+                    self.engine.state_resync_urgent = True
+                    self.engine.state_resync_due_since_monotonic = time.monotonic()
+                    self.engine.next_resync_retry_monotonic = 0.0
+                    stats = self.engine.state_resync_stats
+                    stats["urgent_requested"] = int(stats.get("urgent_requested") or 0) + 1
                 self.engine.wake_event.set()
                 if not self.stop_event.is_set():
                     time.sleep(backoff)
@@ -271,6 +281,12 @@ class Engine(threading.Thread):
         self.poll_future = None
         self.last_full_poll = 0.0
         self.next_resync_retry_monotonic = 0.0
+        # Correctness recovery is separate from the ordinary 15-minute safety cadence.
+        # Once set (currently by a websocket gap), the latch is cleared only by a
+        # successful full-state reconciliation.
+        self.state_resync_urgent = False
+        self.state_resync_due_since_monotonic = 0.0
+        self.state_resync_max_defer_seconds = 30.0
         # REST /states health is tracked separately from generic HAClient requests.
         # A failed history/automation/config request must never make the UI claim that
         # Home Assistant itself is disconnected.
@@ -285,6 +301,9 @@ class Engine(threading.Thread):
             "deferred_for_realtime": 0,
             "deferred_for_heavy_job": 0,
             "scheduled": 0,
+            "urgent_requested": 0,
+            "urgent_scheduled": 0,
+            "forced_after_starvation": 0,
         }
         self.last_ws_event = None
         self.last_event_monotonic = 0.0
@@ -632,6 +651,12 @@ class Engine(threading.Thread):
             self.last_full_poll = sync_now
             self.last_state_sync_ok = sync_now
             self.last_state_sync_error = None
+            # Only a completed snapshot may acknowledge a missed-event recovery.
+            # Scheduling (or a failed REST request) must never make stale Current look
+            # healthy for another 15 minutes.
+            self.state_resync_urgent = False
+            self.state_resync_due_since_monotonic = 0.0
+            self.next_resync_retry_monotonic = 0.0
             self.error = None
 
         # Initial bootstrap needs every current entity once. Later safety/fallback polls
@@ -833,23 +858,54 @@ class Engine(threading.Thread):
         return True
 
     def _maybe_schedule_state_resync(self):
-        """Schedule a safety /states snapshot only from a realtime-quiet window."""
+        """Schedule /states reconciliation without allowing Current truth to starve.
+
+        Normal healthy-websocket reconciliation still prefers a realtime-quiet window.
+        A websocket gap is different: one missed target transition can leave state_map,
+        /api/live and Correct stuck on an old Current value. That recovery is urgent and
+        bypasses the quiet/heavy gates. Ordinary due work also gets a bounded starvation
+        limit so a permanently busy home cannot suppress the safety snapshot forever.
+        """
         now_epoch = now_ts()
         now_mono = time.monotonic()
-        healthy = bool(self.ws_connected)
+        with self.lock:
+            healthy = bool(self.ws_connected)
+            urgent = bool(getattr(self, "state_resync_urgent", False))
+            due_since = float(
+                getattr(self, "state_resync_due_since_monotonic", 0.0) or 0.0
+            )
+            last_full_poll = float(self.last_full_poll or 0.0)
         resync_seconds = float(
             OPTIONS.get("realtime_resync_seconds", 900)
             if healthy
             else OPTIONS.get("realtime_fallback_poll_seconds", 10)
         )
-        if now_epoch - float(self.last_full_poll or 0.0) < max(5.0, resync_seconds):
+        periodic_due = (
+            now_epoch - last_full_poll >= max(5.0, resync_seconds)
+        )
+        if not urgent and not periodic_due:
             return False
         if self.poll_future is not None and not self.poll_future.done():
             return False
         if now_mono < float(self.next_resync_retry_monotonic or 0.0):
             return False
 
-        if healthy:
+        if due_since <= 0.0:
+            due_since = now_mono
+            with self.lock:
+                if not float(
+                    getattr(self, "state_resync_due_since_monotonic", 0.0) or 0.0
+                ):
+                    self.state_resync_due_since_monotonic = due_since
+                else:
+                    due_since = float(self.state_resync_due_since_monotonic)
+
+        max_defer = max(
+            1.0, float(getattr(self, "state_resync_max_defer_seconds", 30.0) or 30.0)
+        )
+        starved = now_mono - due_since >= max_defer
+
+        if healthy and not urgent and not starved:
             if self._realtime_recent(2.0):
                 with self.lock:
                     self.state_resync_stats["deferred_for_realtime"] += 1
@@ -861,10 +917,15 @@ class Engine(threading.Thread):
                 self.next_resync_retry_monotonic = now_mono + 5.0
                 return False
 
-        self.last_full_poll = now_epoch
-        self.next_resync_retry_monotonic = 0.0
+        # Do not advance last_full_poll here. It is the timestamp of the last successful
+        # reconciliation, not the last attempt. A failed request must remain due.
+        self.next_resync_retry_monotonic = now_mono + 2.0
         with self.lock:
             self.state_resync_stats["scheduled"] += 1
+            if urgent:
+                self.state_resync_stats["urgent_scheduled"] += 1
+            if starved and not urgent:
+                self.state_resync_stats["forced_after_starvation"] += 1
         self.poll_future = self.poll_worker.submit(self.refresh_states)
         return True
 
