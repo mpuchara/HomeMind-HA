@@ -403,7 +403,7 @@ class HistoryManager(threading.Thread):
     def effective_training_slots(self):
         """Return safe concurrent agent replay slots for the current host headroom."""
         configured = max(
-            1, min(2, int(OPTIONS.get("max_concurrent_training_jobs", 1) or 1))
+            1, min(2, int(OPTIONS.get("training_parallel_agent_workers", 2) or 2))
         )
         if configured <= 1:
             return 1
