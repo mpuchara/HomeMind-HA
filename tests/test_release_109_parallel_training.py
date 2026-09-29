@@ -165,6 +165,26 @@ class DualQueueAdmissionTests(unittest.TestCase):
             self.assertEqual(snapshot["active_count"], 1)
             self.assertEqual(snapshot["active"]["agent_id"], "b")
 
+    def test_agents_sharing_target_are_not_parallelized(self):
+        gate = self.FakeGate()
+        history = self.FakeHistory(gate)
+        store = self.FakeStore()
+        store.agents["b"]["target_entity"] = store.agents["a"].get(
+            "target_entity", "light.kitchen"
+        )
+        store.agents["a"]["target_entity"] = store.agents["b"]["target_entity"]
+        engine = SimpleNamespace(
+            executor=SimpleNamespace(release_control=lambda *args, **kwargs: None)
+        )
+        queue = queue_module.TrainingQueue(history, store, engine)
+        with patch.object(queue_module, "HEAVY_JOBS", gate):
+            queue.enqueue("a", rebuild=True, reason="training")
+            queue.enqueue("b", rebuild=True, reason="training")
+            self.assertTrue(queue._try_start_head())
+            self.assertFalse(queue._try_start_head())
+            self.assertEqual(queue.snapshot()["active_count"], 1)
+            self.assertEqual(queue.snapshot()["queued_count"], 1)
+
     def test_teach_job_does_not_enter_second_parallel_slot(self):
         gate = self.FakeGate()
         history = self.FakeHistory(gate)
