@@ -9,7 +9,7 @@
     "evidence": "0.14.115 debug export showed ws_connected=true with zero state events/event passes and no Correct trace while two training jobs both started",
     "realtime_health": "WebSocket realtime is healthy only after Home Assistant confirms state_changed subscription id=2; failure/timeout triggers reconnect plus urgent REST resync",
     "realtime_diagnostics": "tracks subscription confirmation, total WS messages, state_changed events and last WS message",
-    "correct_runtime": "generation-aware observed-history Correct reader is installed in final shipped runtime immediately after agent_workflow_actions",
+    "correct_runtime": "generation-aware observed-history Correct reader is installed in final shipped runtime after the durable workflow request queue and before later HTTP adapters",
     "event_to_intent": "continues to use per-event timestamps introduced in 0.14.115; no synthetic latency is fabricated when no HA event exists",
     "runtime_debug_contract_version": 3
   },
