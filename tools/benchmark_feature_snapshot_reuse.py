@@ -21,6 +21,13 @@ ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "adaptive_ai" / "src"
 sys.path.insert(0, str(SRC))
 
+# storage.py creates its module-global Store at import time. Keep benchmark imports
+# runner-safe; the real A/B workers below still receive their own isolated data roots.
+os.environ.setdefault(
+    "ADAPTIVE_AI_DATA",
+    str(Path(tempfile.gettempdir()) / "homemind-feature-cache-import"),
+)
+
 from settings import APP_VERSION, DEFAULT_OPTIONS, TRAINING_REVISION
 from storage import Store
 from training_process import (
