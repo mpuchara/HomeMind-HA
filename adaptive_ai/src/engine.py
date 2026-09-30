@@ -254,6 +254,10 @@ class Engine(threading.Thread):
         self.entity_revisions = {}
         self.dirty_entities = set()
         self.last_trigger_entity = None
+        # Diagnostic timestamp carried with each concrete HA entity transition. Unlike
+        # last_event_received this cannot be overwritten by an unrelated later event
+        # before a coalesced inference pass reaches its worker.
+        self.entity_event_received_perf = {}
         # Policy inference is predominantly Python CPU work. More worker threads increase
         # GIL contention and can starve Ingress on Raspberry Pi. Two workers retain limited
         # overlap for SQLite/I/O while bounding CPU contention; single-core hosts stay at 1.
@@ -483,7 +487,9 @@ class Engine(threading.Thread):
             self.last_event_monotonic = time.monotonic()
             self.last_trigger_entity = entity_id
             self.dirty_entities.add(entity_id)
-            self.last_event_received = time.perf_counter()
+            received_perf = time.perf_counter()
+            self.last_event_received = received_perf
+            self.entity_event_received_perf[entity_id] = received_perf
             # Historical replay shares this process. Give fresh HA state changes a short
             # strict-priority window so Shadow/Control inference is never queued behind
             # cooperative offline work for seconds.
@@ -1170,6 +1176,11 @@ class Engine(threading.Thread):
             pass_revision = self.state_revision
             revision_snapshot = dict(self.entity_revisions)
             context_revision = self.context.home.revision
+            event_received_perf = {
+                eid: self.entity_event_received_perf.get(eid)
+                for eid in changed
+                if self.entity_event_received_perf.get(eid) is not None
+            }
         snapshot = (pass_states, pass_revision, revision_snapshot, context_revision)
 
         for target, target_agents in groups.items():
@@ -1185,14 +1196,29 @@ class Engine(threading.Thread):
                     active.add_done_callback(retry_completed)
                 continue
             self.in_flight[target] = self.control_workers.submit(
-                self.process_target, target_agents, changed, snapshot
+                self.process_target, target_agents, changed, snapshot, event_received_perf
             )
         for target in list(self.in_flight):
             if target not in groups and self.in_flight[target].done():
                 del self.in_flight[target]
 
-    def process_target(self, agents, changed_entities=None, snapshot=None):
-        target_trace = (RUNTIME_DEBUG.begin("inference_target", target_entity=str((agents[0] if agents else {}).get("target_entity") or "unknown"), agent_count=len(agents or ()), changed_count=len(changed_entities or ())) if RUNTIME_DEBUG.enabled else None)
+    def process_target(self, agents, changed_entities=None, snapshot=None, event_received_perf=None):
+        received_values = [
+            float(value) for value in (event_received_perf or {}).values()
+            if value is not None
+        ]
+        oldest_event_age_ms = (
+            max(0.0, (time.perf_counter() - min(received_values)) * 1000.0)
+            if received_values else None
+        )
+        target_trace = (RUNTIME_DEBUG.begin(
+            "inference_target",
+            target_entity=str((agents[0] if agents else {}).get("target_entity") or "unknown"),
+            agent_count=len(agents or ()),
+            changed_count=len(changed_entities or ()),
+            event_timestamp_count=len(received_values),
+            oldest_event_age_ms=None if oldest_event_age_ms is None else round(oldest_event_age_ms, 3),
+        ) if RUNTIME_DEBUG.enabled else None)
         if snapshot is None:
             with self.lock:
                 states = dict(self.state_map)
@@ -1205,6 +1231,7 @@ class Engine(threading.Thread):
         self._inference_tls.entity_revisions = revisions
         self._inference_tls.context_revision = context_revision
         self._inference_tls.state_revision = revision
+        self._inference_tls.event_received_perf = dict(event_received_perf or {})
         try:
             for agent in agents:
                 if self.stop_event.is_set():
@@ -1219,7 +1246,7 @@ class Engine(threading.Thread):
                     RUNTIME_DEBUG.end(agent_trace, status="error", error=f"{type(exc).__name__}: {exc}")
                     STORE.event(agent["id"], "error", "agent_error", str(exc), {"trace": traceback.format_exc(limit=4)})
         finally:
-            for name in ("entity_revisions", "context_revision", "state_revision"):
+            for name in ("entity_revisions", "context_revision", "state_revision", "event_received_perf"):
                 try:
                     delattr(self._inference_tls, name)
                 except AttributeError:
