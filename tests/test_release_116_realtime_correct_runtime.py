@@ -141,10 +141,12 @@ class CorrectRuntimeComposition116Tests(unittest.TestCase):
             source,
         )
         workflow = source.index("manager = install_agent_workflow_actions(manager)")
-        generation = source.index("manager = install_correct_generation_history(manager)")
         request_queue = source.index("manager = install_workflow_request_queue(manager)")
-        self.assertLess(workflow, generation)
-        self.assertLess(generation, request_queue)
+        generation = source.index("manager = install_correct_generation_history(manager)")
+        explore = source.index("manager = install_agent_explore(manager)")
+        self.assertLess(workflow, request_queue)
+        self.assertLess(request_queue, generation)
+        self.assertLess(generation, explore)
 
     def test_generation_correct_installer_exposes_runtime_binding_flag(self):
         source = (SRC / "agent_correct_generation_history.py").read_text(encoding="utf-8")
