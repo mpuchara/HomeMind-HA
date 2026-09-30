@@ -1,10 +1,10 @@
 {
-  "version": "0.14.110",
+  "version": "0.14.111",
   "release_date": "2026-09-30",
-  "base_version": "0.14.109",
-  "base_commit": "f50129b682709fbfddc7bf04e95bad0a2a2d7776",
-  "release_status": "target-only-single-agent-replay",
-  "release_validation_tests_passed": 1467,
+  "base_version": "0.14.110",
+  "base_commit": "553b5af096f10ca1b3accb63561ddb6c542a9a68",
+  "release_status": "bounded-ram-replay-index",
+  "release_validation_tests_passed": 1476,
   "candidate_shadow_qos_014102": {
     "regression_source": "0.14.100 deferred Candidate Shadow queue composed under 60 s Raspberry Pi maintenance gate",
     "deferred_shadow_drain": "runs on every Candidate worker maintenance hook before periodic housekeeping admission",
@@ -893,5 +893,56 @@
       "target_row_parity": true
     },
     "safety": "only duplicate outer-loop context row iteration removed; causal tracker context/reward/validation/Correct/Candidate/promotion/Executor authority unchanged"
+  },
+  "release_014111": {
+    "scope": "single_agent_ram_first_indexed_replay",
+    "replay_index_contract": "ram_replay_index_v1",
+    "materialized_sources": "selected agent target + policy schema entities + required Home Context sources only",
+    "storage": "compact columnar arrays with per-entity string dictionary encoding; row dicts reconstructed only at compatibility boundary",
+    "causal_semantics": "event_time and received_time visibility preserved exactly; late observations do not leak into earlier timestamps",
+    "reuse": "shared by onset/persistence trackers and reused across persistent logical chunks when requested coverage is contained",
+    "adaptive_default_budget_mb": {
+      "large": 192,
+      "medium_plus": 128,
+      "medium": 64,
+      "small": 24
+    },
+    "fallback": "per-entity/per-range SQLite fallback; mixed transport preserves exact order/results",
+    "diagnostics": [
+      "training_phase_timings.ram_index_construction_seconds",
+      "training_phase_timings.ram_replay_estimated_bytes",
+      "training_phase_timings.ram_replay_actual_bytes",
+      "training_phase_timings.ram_replay_entities",
+      "training_phase_timings.ram_replay_rows",
+      "training_phase_timings.ram_replay_fallback",
+      "training_phase_timings.ram_replay_fallback_entities",
+      "training_phase_timings.ram_replay_lookup_seconds",
+      "training_phase_timings.ram_replay_lookups",
+      "training_phase_timings.sqlite_fallback_seconds",
+      "training_phase_timings.sqlite_fallback_lookups"
+    ],
+    "benchmark": {
+      "environment": "GitHub-hosted synthetic SQLite temporal transport; not Raspberry Pi full training",
+      "entities": 12,
+      "rows_per_entity": 1800,
+      "queries": 500,
+      "rows_written": 21600,
+      "sqlite_seconds": 1.4085648589999948,
+      "ram_warm_replay_seconds": 0.2941005240000152,
+      "ram_index_build_seconds": 0.04174441499998238,
+      "ram_build_plus_replay_seconds": 0.33584493899999757,
+      "warm_component_wall_speedup": 4.789399351766956,
+      "build_plus_replay_component_wall_speedup": 4.194092854857655,
+      "sqlite_tracker_queries": 1000,
+      "ram_index_build_queries": 36,
+      "ram_replay_queries": 0,
+      "build_plus_replay_query_reduction_ratio": 0.964,
+      "parity": true,
+      "fallback_entities": 0,
+      "actual_columnar_payload_bytes": 1297284,
+      "estimated_retained_bytes": 1341828
+    },
+    "validation": "1476 Python tests passed on both 3.11 and 3.13 feature-head CI; release metadata bump requires final release CI",
+    "safety": "reward/sample count/validation/Correct/Candidate/update order/ActionIntent/Executor/physical authority unchanged"
   }
 }
