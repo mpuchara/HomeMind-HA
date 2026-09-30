@@ -2436,7 +2436,10 @@ class HistoryManager(threading.Thread):
             "ram_replay_rows": int(
                 self.training_ram_replay_index_status.get("rows") or 0
             ),
-            "ram_replay_fallback": int(
+            "ram_replay_fallback": bool(
+                self.training_ram_replay_index_status.get("fallback_entities")
+            ),
+            "ram_replay_fallback_entities": int(
                 self.training_ram_replay_index_status.get("fallback_entities") or 0
             ),
             "ram_replay_index_reused": bool(ram_index_reused),
@@ -2585,6 +2588,22 @@ class HistoryManager(threading.Thread):
             totals["query_reduction_ratio"] = (
                 max(0.0, 1.0 - totals["sql_queries"] / legacy) if legacy else None
             )
+            self.training_phase_timings.update({
+                "ram_replay_lookup_seconds": round(
+                    float(onset.get("ram_index_lookup_seconds") or 0.0)
+                    + float(persistence.get("ram_index_lookup_seconds") or 0.0),
+                    6,
+                ),
+                "sqlite_fallback_seconds": round(
+                    float(onset.get("sqlite_fallback_seconds") or 0.0)
+                    + float(persistence.get("sqlite_fallback_seconds") or 0.0),
+                    6,
+                ),
+                "ram_replay_lookups": int(totals.get("ram_index_lookups") or 0),
+                "sqlite_fallback_lookups": int(
+                    totals.get("sqlite_fallback_lookups") or 0
+                ),
+            })
             self.temporal_replay_stats = {
                 # Preserve the established incremental replay contract: 0.14.79 changes
                 # only how duplicate rendered home contexts are reused across cursors.
