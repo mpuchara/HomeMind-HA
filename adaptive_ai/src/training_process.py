@@ -73,6 +73,7 @@ NON_SEMANTIC_TRAINING_OPTION_KEYS = frozenset({
     "training_replay_ram_cache_entry_rows",
     "training_replay_ram_cache_rows",
     "training_ram_replay_index_mb",
+    "training_transition_edge_max_rows_per_entity",
     "training_sqlite_cache_mb",
     "training_throttle_max_sleep_seconds",
     "training_worker_memory_available_fraction",
