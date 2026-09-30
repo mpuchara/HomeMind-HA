@@ -331,14 +331,46 @@ class Handler(BaseHTTPRequestHandler):
                 return
             if path == '/api/live':
                 # No model serialization, history counts, recommendations or status.
+                # Keep lightweight timing metadata in the response so stale Current can be
+                # distinguished from browser/Ingress delay without changing live semantics.
+                live_started = time.perf_counter()
+                config_started = time.perf_counter()
                 agents = STORE.list_agent_configs()
+                config_lookup_ms = max(0.0, time.perf_counter() - config_started) * 1000.0
                 with ENGINE.lock:
                     from context import target_value
+                    snapshot_revision = int(getattr(ENGINE, "state_revision", 0) or 0)
+                    last_event_monotonic = float(getattr(ENGINE, "last_event_monotonic", 0.0) or 0.0)
                     values = [{"id": a['id'], "current_value": target_value(ENGINE.state_map.get(a['target_entity']), a['target_property']),
                         "last_prediction": (ENGINE.runtime.get(a['id']) or {}).get('last_prediction'),
                         "teaching_id": (ENGINE.runtime.get(a['id']) or {}).get('teaching_id')}
                         for a in agents]
-                payload = {"ts": time.time(), "agents": values}
+                completed = time.perf_counter()
+                snapshot_age_ms = (
+                    max(0.0, completed - last_event_monotonic) * 1000.0
+                    if last_event_monotonic else None
+                )
+                payload = {
+                    "ts": time.time(),
+                    "agents": values,
+                    "snapshot_revision": snapshot_revision,
+                    "snapshot_age_ms": snapshot_age_ms,
+                    "config_lookup_ms": config_lookup_ms,
+                    "build_ms": max(0.0, completed - live_started) * 1000.0,
+                }
+                try:
+                    from telemetry import RUNTIME_DEBUG
+                    if RUNTIME_DEBUG.enabled:
+                        RUNTIME_DEBUG.instant(
+                            "api_live",
+                            agent_count=len(agents),
+                            snapshot_revision=snapshot_revision,
+                            snapshot_age_ms=None if snapshot_age_ms is None else round(snapshot_age_ms, 3),
+                            config_lookup_ms=round(config_lookup_ms, 3),
+                            build_ms=round(payload["build_ms"], 3),
+                        )
+                except Exception:
+                    pass
                 if parse_qs(query).get('bootstrap') == ['1']:
                     payload['configs'] = agents
                 return self.send_json(200, payload)
