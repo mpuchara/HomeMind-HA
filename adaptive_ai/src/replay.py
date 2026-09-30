@@ -668,6 +668,10 @@ class HistoricalFeatureSnapshot:
             units,
         )
 
+    @property
+    def has_neural(self):
+        return self.neural_feature_ids is not None
+
     def restore(self):
         neural = None
         if self.neural_feature_ids is not None:
@@ -751,6 +755,10 @@ class HistoricalFeatureSnapshotCache:
             if neural:
                 self.neural_builds += 1
             self.build_seconds += max(0.0, float(seconds))
+
+    def record_neural_build(self):
+        with self.lock:
+            self.neural_builds += 1
 
     def status(self):
         with self.lock:
