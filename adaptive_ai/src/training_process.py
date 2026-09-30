@@ -60,6 +60,8 @@ NON_SEMANTIC_TRAINING_OPTION_KEYS = frozenset({
     "training_archive_batch_rows",
     "training_cpu_duty_cycle",
     "training_experience_batch_rows",
+    "training_feature_snapshot_cache_entries",
+    "training_feature_snapshot_cache_units",
     "training_home_context_cache_entries",
     "training_home_context_cache_units",
     "training_max_continuous_work_ms",
@@ -406,6 +408,7 @@ def resolve_training_resource_profile(options=None, memory=None):
         target = {
             "replay_rows": 65536, "replay_entry_rows": 2048,
             "ram_index_mb": 192,
+            "feature_entries": 512, "feature_units": 65536,
             "home_entries": 64, "home_units": 32768, "sqlite_mb": 64,
         }
     elif effective >= 640:
@@ -413,6 +416,7 @@ def resolve_training_resource_profile(options=None, memory=None):
         target = {
             "replay_rows": 32768, "replay_entry_rows": 1536,
             "ram_index_mb": 128,
+            "feature_entries": 256, "feature_units": 32768,
             "home_entries": 32, "home_units": 16384, "sqlite_mb": 24,
         }
     elif effective >= 448:
@@ -420,6 +424,7 @@ def resolve_training_resource_profile(options=None, memory=None):
         target = {
             "replay_rows": 16384, "replay_entry_rows": 1024,
             "ram_index_mb": 64,
+            "feature_entries": 128, "feature_units": 16384,
             "home_entries": 16, "home_units": 8192, "sqlite_mb": 16,
         }
     else:
@@ -427,6 +432,7 @@ def resolve_training_resource_profile(options=None, memory=None):
         target = {
             "replay_rows": 8192, "replay_entry_rows": 512,
             "ram_index_mb": 24,
+            "feature_entries": 64, "feature_units": 8192,
             "home_entries": 8, "home_units": 4096, "sqlite_mb": 8,
         }
 
@@ -447,6 +453,12 @@ def resolve_training_resource_profile(options=None, memory=None):
         ),
         "training_worker_effective_ram_replay_index_mb": bounded_int(
             "training_ram_replay_index_mb", 192, target["ram_index_mb"]
+        ),
+        "training_worker_effective_feature_snapshot_cache_entries": bounded_int(
+            "training_feature_snapshot_cache_entries", 512, target["feature_entries"]
+        ),
+        "training_worker_effective_feature_snapshot_cache_units": bounded_int(
+            "training_feature_snapshot_cache_units", 65536, target["feature_units"]
         ),
         "training_worker_effective_home_context_cache_entries": bounded_int(
             "training_home_context_cache_entries", 64, target["home_entries"]
