@@ -1,10 +1,17 @@
 {
-  "version": "0.14.116",
+  "version": "0.14.117",
   "release_date": "2026-09-30",
-  "base_version": "0.14.115",
-  "base_commit": "857d532f6eff6d93fc35eb15b8243b258644f3b2",
-  "release_status": "realtime-subscription-and-correct-runtime-fix",
-  "release_validation_tests_passed": 1501,
+  "base_version": "0.14.116",
+  "base_commit": "95d3a60e8cef335894fee8fdde5e150d6d1805e8",
+  "release_status": "ha-websocket-id-order-hotfix",
+  "release_validation_tests_passed": 1503,
+  "ha_websocket_id_order_014117": {
+    "evidence": "0.14.116 runtime debug showed state_changed subscription failed with Home Assistant id_reuse while websocket command ids had been sent out of order",
+    "root_cause": "initial registry list commands 10/11/12 were emitted before subscriptions 2/5/6/7 on the same Home Assistant websocket",
+    "fix": "send state and registry-event subscriptions first (2/5/6/7), then registry list requests from 10 upward, preserving strict monotonic command ids",
+    "expected_runtime_effect": "state_changed subscription can confirm; realtime Current and per-event event-to-intent measurement can operate again instead of REST fallback-only event passes",
+    "semantics": "no policy, reward, Candidate, Correct, ActionIntent or Executor behavior changed"
+  },
   "realtime_correct_runtime_014116": {
     "evidence": "0.14.115 debug export showed ws_connected=true with zero state events/event passes and no Correct trace while two training jobs both started",
     "realtime_health": "WebSocket realtime is healthy only after Home Assistant confirms state_changed subscription id=2; failure/timeout triggers reconnect plus urgent REST resync",
