@@ -1,3 +1,13 @@
+# 0.14.114 — 2026-09-30
+
+- Fix delayed **Current / Desired** tiles under Raspberry Pi, Home Assistant Ingress or training pressure. The shared UI polling broker intentionally removed caller-specific `AbortSignal` objects so one consumer could not cancel a request used by another, but this also discarded the Live card's 2.5 s deadline and let `/api/live` fall back to the generic **12 s** GET timeout.
+- Keep GET coalescing, but give the shared upstream requests for `/api/live` and `/api/candidate-live` their own **2.5 s** route-level deadline. If a caller asks for an even shorter timeout, the broker preserves the shorter value.
+- Normal Live-card polling remains at **1 s**; this release does not restore the old 250 ms polling pressure. The change bounds abnormal in-flight stalls rather than increasing steady-state request frequency.
+- This prevents an old ON/OFF snapshot from sitting in a shared request for many seconds and then being painted after the physical device has already moved to a newer state.
+- Add a regression contract that verifies shared realtime reads keep the short deadline while caller signals remain isolated.
+- Feature-head validation before the release metadata bump: **1489 tests green on Python 3.11 and 3.13**, image smoke green.
+- No HA websocket ingestion, REST state reconciliation, inference, reward, Correct, Candidate lineage, ActionIntent, Executor or physical-control semantics change.
+
 # 0.14.113 — 2026-09-30
 
 - Add a bounded **historical feature snapshot cache** for single-agent Train/Rebuild. Repeated requests for the same causally identical timestamp now restore one immutable Ridge feature vector, compact Home Context metadata and optional TinyMLP observation instead of rebuilding them independently in onset/persistence/neural paths.
