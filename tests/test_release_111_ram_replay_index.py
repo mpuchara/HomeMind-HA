@@ -5,9 +5,11 @@ import unittest
 from pathlib import Path
 from types import SimpleNamespace
 
+from context_engine import ContextEngine
 from replay import RAMReplayIndex, SQLiteTemporalTracker
 from settings import DEFAULT_OPTIONS
 from storage import Store
+from support import state
 from training_process import resolve_training_resource_profile
 
 
@@ -112,6 +114,124 @@ class RAMReplayIndexParityTests(unittest.TestCase):
         finally:
             base.close()
             ram.close()
+
+
+    def test_partial_budget_mixes_ram_and_sqlite_without_order_change(self):
+        # Leave just over the admission guard: sensor.a fits first, then the remaining
+        # budget is too small for sensor.b and the same lookup mixes both transports.
+        index = self.build_index(max_bytes=256 * 1024 + 512)
+        status = index.status()
+        self.assertEqual(status["indexed_entities"], 1)
+        self.assertEqual(status["fallback_entities"], 1)
+
+        base = SQLiteTemporalTracker(
+            self.store, ["sensor.a", "sensor.b"], context_stub(), 4.0, 50.0
+        )
+        ram = SQLiteTemporalTracker(
+            self.store, ["sensor.a", "sensor.b"], context_stub(), 4.0, 50.0,
+            ram_replay_index=index,
+        )
+        try:
+            self.assertEqual(
+                base._base_bulk_before(["sensor.a", "sensor.b"], 36.0, 64),
+                ram._base_bulk_before(["sensor.a", "sensor.b"], 36.0, 64),
+            )
+            self.assertEqual(
+                base._base_interval_rows(
+                    ["sensor.a", "sensor.b"], 11.0, 36.0, per_entity_limit=64
+                ),
+                ram._base_interval_rows(
+                    ["sensor.a", "sensor.b"], 11.0, 36.0, per_entity_limit=64
+                ),
+            )
+            self.assertGreater(ram.stats()["ram_index_rows"], 0)
+            self.assertGreater(ram.stats()["sqlite_fallback_lookups"], 0)
+        finally:
+            base.close()
+            ram.close()
+
+    def test_advance_rewind_and_home_forecast_match_sqlite_tracker(self):
+        motion = "binary_sensor.motion"
+        radar = "binary_sensor.presence"
+        target = "light.target"
+        base_ts = 1000.0
+        states = {
+            motion: state(motion, "off", device_class="motion"),
+            radar: state(radar, "off", device_class="occupancy"),
+            target: state(target, "off"),
+        }
+        registry = {
+            motion: {"area_id": "kitchen"},
+            radar: {"area_id": "kitchen"},
+            target: {"area_id": "kitchen"},
+        }
+        ctx_sql = ContextEngine(DEFAULT_OPTIONS)
+        ctx_sql.configure(states, entities=registry)
+        ctx_ram = ContextEngine(DEFAULT_OPTIONS)
+        ctx_ram.configure(states, entities=registry)
+        self.store.archive_batch([
+            (motion, base_ts + 0, "off", {"device_class": "motion"}, None, "test", base_ts + 0),
+            (radar, base_ts + 0, "off", {"device_class": "occupancy"}, None, "test", base_ts + 0),
+            (motion, base_ts + 10, "on", {"device_class": "motion"}, None, "test", base_ts + 10),
+            # Late presence evidence must not leak into the t=20 view.
+            (radar, base_ts + 12, "on", {"device_class": "occupancy"}, None, "test", base_ts + 28),
+            (motion, base_ts + 24, "off", {"device_class": "motion"}, None, "test", base_ts + 24),
+            (radar, base_ts + 42, "off", {"device_class": "occupancy"}, None, "test", base_ts + 42),
+        ])
+        connection = sqlite3.connect(self.store.path, timeout=30)
+        connection.row_factory = sqlite3.Row
+        try:
+            index = RAMReplayIndex.build(
+                connection, [motion, radar], base_ts - 1, base_ts + 60,
+                max_bytes=8 * 1024 * 1024,
+            )
+        finally:
+            connection.close()
+
+        sql_tracker = SQLiteTemporalTracker(
+            self.store, [motion, radar], ctx_sql, base_ts - 1, base_ts + 60
+        )
+        ram_tracker = SQLiteTemporalTracker(
+            self.store, [motion, radar], ctx_ram, base_ts - 1, base_ts + 60,
+            ram_replay_index=index,
+        )
+        try:
+            for query_ts in (
+                base_ts + 20,
+                base_ts + 35,
+                base_ts + 50,
+                base_ts + 18,  # explicit rewind
+                base_ts + 50,
+            ):
+                sql_tracker.advance(query_ts)
+                ram_tracker.advance(query_ts)
+                self.assertEqual(sql_tracker.state_map, ram_tracker.state_map)
+                self.assertEqual(
+                    {
+                        eid: list(samples)
+                        for eid, samples in sql_tracker.history.samples.items()
+                    },
+                    {
+                        eid: list(samples)
+                        for eid, samples in ram_tracker.history.samples.items()
+                    },
+                )
+                expected = sql_tracker.history.home_context.forecast(target, query_ts)
+                actual = ram_tracker.history.home_context.forecast(target, query_ts)
+                for key in (
+                    "occupancy_now", "occupancy_in_1s", "occupancy_in_3s",
+                    "occupancy_in_5s", "arrival_probability",
+                    "departure_probability", "trajectory_confidence",
+                ):
+                    self.assertAlmostEqual(
+                        float(expected.get(key) or 0.0),
+                        float(actual.get(key) or 0.0),
+                        places=9,
+                        msg=f"{query_ts}:{key}",
+                    )
+        finally:
+            sql_tracker.close()
+            ram_tracker.close()
 
     def test_out_of_coverage_query_falls_back_without_changing_result(self):
         index = self.build_index()
