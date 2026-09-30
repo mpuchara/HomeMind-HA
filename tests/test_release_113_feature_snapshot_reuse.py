@@ -13,7 +13,10 @@ from replay import (
 )
 from settings import DEFAULT_OPTIONS
 from storage import Store
-from training_process import resolve_training_resource_profile
+from training_process import (
+    resolve_training_resource_profile,
+    training_options_fingerprint,
+)
 
 
 class FeatureSnapshotCacheTests(unittest.TestCase):
@@ -177,6 +180,16 @@ class FeatureSnapshotResourceProfileTests(unittest.TestCase):
         self.assertEqual(
             worker["training_worker_effective_feature_snapshot_cache_units"],
             8192,
+        )
+
+    def test_feature_cache_bounds_are_nonsemantic(self):
+        base = dict(DEFAULT_OPTIONS)
+        changed = dict(base)
+        changed["training_feature_snapshot_cache_entries"] = 7
+        changed["training_feature_snapshot_cache_units"] = 777
+        self.assertEqual(
+            training_options_fingerprint(base),
+            training_options_fingerprint(changed),
         )
 
     def test_addon_config_exposes_feature_cache_bounds(self):
