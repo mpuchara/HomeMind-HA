@@ -1,3 +1,18 @@
+# 0.14.113 — 2026-09-30
+
+- Add a bounded **historical feature snapshot cache** for single-agent Train/Rebuild. Repeated requests for the same causally identical timestamp now restore one immutable Ridge feature vector, compact Home Context metadata and optional TinyMLP observation instead of rebuilding them independently in onset/persistence/neural paths.
+- The cache key is deliberately stricter than a timestamp: it includes the policy/schema/feature-contract namespace, optional TinyMLP schema/mask/feature order, target identity, exact visible per-entity row fingerprints and the existing causal Home Context revision with event/receive watermarks, topology/reliability revisions and checkpoint identity.
+- Preserve late-packet and rewind semantics. A row that occurred earlier but was received later changes the feature revision only once it was causally available; rewinding reconstructs the earlier revision and cannot reuse future evidence.
+- Share snapshots between the onset and persistence cursors only when their exact causal source revision matches. Cache entries are chunk-local and immutable; every consumer receives private feature/meta/float32 containers so policy updates cannot mutate retained snapshots.
+- Route anchor, upstream-anchor, early-horizon, persistence, validation and historical TinyMLP sample construction through the same snapshot helper. Feature schema, Home Context values, reward labels, sample mass, validation boundaries and policy update order are unchanged.
+- Add adaptive cache caps tied to the existing worker memory profile: **512/65536 units large, 256/32768 medium+, 128/16384 medium, 64/8192 small**. Cache sizing is explicitly non-semantic and can be reduced or disabled without changing the training fingerprint.
+- Add diagnostics for unique feature timestamps, cache hits/misses, duplicate hits, snapshot builds, TinyMLP builds, build time, retained entries/units and evictions. Worker diagnostics propagate back to the parent runtime.
+- Add regressions for immutable restore, bounded LRU behavior, late `received_ts`, exact cross-tracker revision parity, rewind, adaptive resource tiers and non-semantic cache sizing.
+- Full isolated-worker replay A/B on byte-identical synthetic history: **301 → 255 feature builds (−15.28%)**, exactly **46 duplicate reconstructions removed**; historical experiences, Ridge model and learned TinyMLP semantics are identical. The synthetic x86 worker wall time was **1.149 s → 1.157 s (~0.993×)**, i.e. effectively neutral/noisy at this scale, so this release claims the measured reconstruction reduction rather than a whole-training speedup.
+- TinyMLP parity deliberately ignores only its intentionally random post-fit `model_revision`/derived checksum, wall-clock `elapsed_seconds`, and the `serialized_bytes` metadata derived from those nondeterministic fields; learned weights, biases, normalization, masks, sample counts, tournament metrics and backend selection remain part of the equality gate.
+- Final feature-head validation: **1488 tests green on Python 3.11 and 3.13**, image smoke green, full benchmark suite green.
+- No reward, sample count, validation split, Correct, Candidate lineage, policy update order, 6-hour chunk/checkpoint behavior, ActionIntent, Executor or physical-control semantics change.
+
 # 0.14.112 — 2026-09-30
 
 - Add a bounded **causal transition-edge index** for the fast-agent anchor/dwell path. Repeated `directional_transition_before()` and `first_directional_transition_after()` calls now advance a compact per-entity cursor and binary-search precomputed ON/OFF edges instead of rebuilding/scanning the same top-512 history for every replay sample.

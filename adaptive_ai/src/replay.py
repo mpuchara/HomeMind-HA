@@ -600,6 +600,235 @@ class HistoricalContextCache:
             }
 
 
+
+class ExactFeatureRowsRevision:
+    """Exact immutable rowset identity with a precomputed in-process hash.
+
+    Cache lifetime is one worker chunk. Python's hash is only an acceleration hint:
+    equality always compares the complete immutable row identity tuple, so collisions
+    cannot produce a false cache hit.
+    """
+
+    __slots__ = ("rows", "_hash")
+
+    def __init__(self, rows):
+        self.rows = tuple(rows or ())
+        self._hash = hash(self.rows)
+
+    def __hash__(self):
+        return self._hash
+
+    def __eq__(self, other):
+        return (
+            isinstance(other, ExactFeatureRowsRevision)
+            and self.rows == other.rows
+        )
+
+
+class HistoricalFeatureSnapshot:
+    """Immutable exact-as-of training feature bundle.
+
+    Ridge features/meta and the optional compact Tiny MLP observation are captured once.
+    Every cache hit returns fresh mutable containers, so policy/update callers cannot
+    mutate the retained cache entry.
+    """
+
+    def __init__(self, feature_items, meta, neural_feature_ids, neural_values, units):
+        self.feature_items = tuple(feature_items)
+        meta = dict(meta or {})
+        self.home_forecast_items = tuple(
+            sorted(dict(meta.get("home_forecast") or {}).items())
+        )
+        self.home_known = bool(meta.get("home_known"))
+        self.reconstruction_complete = bool(
+            meta.get("reconstruction_complete", True)
+        )
+        self.neural_feature_ids = (
+            None if neural_feature_ids is None else tuple(neural_feature_ids)
+        )
+        self.neural_values = (
+            None if neural_values is None else bytes(neural_values)
+        )
+        self.units = max(1, int(units))
+
+    @classmethod
+    def capture(cls, features, meta, neural_observation=None):
+        feature_items = tuple(
+            sorted(
+                (int(key), float(value))
+                for key, value in dict(features or {}).items()
+            )
+        )
+        neural_feature_ids = None
+        neural_bytes = None
+        neural_units = 0
+        if neural_observation is not None:
+            neural_feature_ids = tuple(
+                neural_observation.get("feature_ids") or ()
+            )
+            raw_values = neural_observation.get("values")
+            if raw_values is not None:
+                if isinstance(raw_values, array):
+                    values = array("f", raw_values)
+                else:
+                    values = array("f", (float(v) for v in raw_values))
+                neural_bytes = values.tobytes()
+                neural_units = len(values) + len(neural_feature_ids)
+        compact_meta = dict(meta or {})
+        home_forecast = dict(compact_meta.get("home_forecast") or {})
+        units = (
+            len(feature_items) * 2
+            + len(home_forecast) * 2
+            + 8
+            + neural_units
+        )
+        return cls(
+            feature_items,
+            meta,
+            neural_feature_ids,
+            neural_bytes,
+            units,
+        )
+
+    @property
+    def has_neural(self):
+        return self.neural_feature_ids is not None
+
+    def restore(self):
+        neural = None
+        if self.neural_feature_ids is not None:
+            values = array("f")
+            if self.neural_values:
+                values.frombytes(self.neural_values)
+            neural = {
+                "feature_ids": self.neural_feature_ids,
+                "values": values,
+            }
+        return (
+            dict(self.feature_items),
+            {
+                "home_forecast": dict(self.home_forecast_items),
+                "home_known": bool(self.home_known),
+                "reconstruction_complete": bool(
+                    self.reconstruction_complete
+                ),
+            },
+            neural,
+        )
+
+
+class HistoricalFeatureSnapshotCache:
+    """Bounded per-training LRU for exact causal feature snapshots."""
+
+    CONTRACT = "historical_feature_snapshot_cache_v1"
+
+    def __init__(self, max_entries=256, max_units=32768):
+        self.max_entries = max(0, int(max_entries))
+        self.max_units = max(0, int(max_units))
+        self.units = 0
+        self.data = OrderedDict()
+        self.hits = 0
+        self.misses = 0
+        self.puts = 0
+        self.evictions = 0
+        self.builds = 0
+        self.neural_builds = 0
+        self.build_seconds = 0.0
+        self._timestamps = set()
+        self._timestamp_cap = max(64, self.max_entries * 4)
+        self._timestamp_overflow = 0
+        self.lock = threading.RLock()
+
+    def get(self, key):
+        if self.max_entries <= 0 or self.max_units <= 0:
+            with self.lock:
+                self.misses += 1
+            return None
+        with self.lock:
+            value = self.data.pop(key, None)
+            if value is None:
+                self.misses += 1
+                return None
+            self.data[key] = value
+            self.hits += 1
+            return value
+
+    def put(self, key, snapshot, timestamp=None):
+        if (
+            self.max_entries <= 0
+            or self.max_units <= 0
+            or snapshot is None
+            or int(snapshot.units) > self.max_units
+        ):
+            return False
+        with self.lock:
+            previous = self.data.pop(key, None)
+            if previous is not None:
+                self.units -= int(previous.units)
+            self.data[key] = snapshot
+            self.units += int(snapshot.units)
+            self.puts += 1
+            if timestamp is not None:
+                timestamp_key = round(float(timestamp), 9)
+                if (
+                    timestamp_key in self._timestamps
+                    or len(self._timestamps) < self._timestamp_cap
+                ):
+                    self._timestamps.add(timestamp_key)
+                else:
+                    self._timestamp_overflow += 1
+            while (
+                len(self.data) > self.max_entries
+                or self.units > self.max_units
+            ) and self.data:
+                _, evicted = self.data.popitem(last=False)
+                self.units -= int(evicted.units)
+                self.evictions += 1
+        return True
+
+    def record_build(self, seconds, neural=False):
+        with self.lock:
+            self.builds += 1
+            if neural:
+                self.neural_builds += 1
+            self.build_seconds += max(0.0, float(seconds))
+
+    def record_neural_build(self):
+        with self.lock:
+            self.neural_builds += 1
+
+    def status(self):
+        with self.lock:
+            requests = self.hits + self.misses
+            return {
+                "contract": self.CONTRACT,
+                "entries": len(self.data),
+                "units": int(self.units),
+                "max_entries": int(self.max_entries),
+                "max_units": int(self.max_units),
+                "hits": int(self.hits),
+                "misses": int(self.misses),
+                "duplicate_hits": int(self.hits),
+                "puts": int(self.puts),
+                "evictions": int(self.evictions),
+                "builds": int(self.builds),
+                "neural_builds": int(self.neural_builds),
+                "unique_feature_timestamps": len(self._timestamps),
+                "unique_feature_timestamps_saturated": bool(
+                    self._timestamp_overflow
+                ),
+                "unique_feature_timestamp_overflow": int(
+                    self._timestamp_overflow
+                ),
+                "unique_feature_timestamp_cap": int(self._timestamp_cap),
+                "build_seconds": round(float(self.build_seconds), 6),
+                "hit_rate": (
+                    float(self.hits) / requests if requests else None
+                ),
+                "snapshot_contract": "immutable_restore_v1",
+            }
+
+
 class BoundedUsage:
     """Discovery needs a count and last transition, not the entire target history."""
     def __init__(self):
@@ -770,9 +999,11 @@ class SQLiteTemporalTracker:
         self.history = TemporalHistory(maxlen=self.HISTORY_SAMPLES)
         self.current_ts = None
         self._watched_rows = {}
+        self._watched_entity_fingerprints = {}
         self._home_seed_rows = {}
         self._home_window_rows = []
         self._home_cache_ts = None
+        self._last_home_context_cache_key = None
         self._closed = False
         self._metrics = {
             "advances": 0,
@@ -1028,10 +1259,21 @@ class SQLiteTemporalTracker:
         rows = self._bulk_before([eid], float(ts), int(count))
         return self._compact_rows(rows, count)
 
+    @classmethod
+    def _feature_rows_fingerprint(cls, rows):
+        return ExactFeatureRowsRevision(
+            cls._home_row_fingerprint(row)
+            for row in (rows or ())
+        )
+
     def _set_entity_rows(self, eid, rows):
         compact = self._compact_rows(rows, self.HISTORY_SAMPLES)
         if compact:
             self._watched_rows[eid] = compact
+            # Compute the cryptographic row fingerprint lazily only if feature snapshot
+            # reuse actually asks for a revision. Cache-disabled replay therefore keeps
+            # the 0.14.112 tracker cost.
+            self._watched_entity_fingerprints[eid] = None
             dq = deque(maxlen=self.HISTORY_SAMPLES)
             for row in compact:
                 sample = (float(row["ts"]), archived_state(row))
@@ -1043,6 +1285,7 @@ class SQLiteTemporalTracker:
             self.state_map[eid] = dq[-1][1]
         else:
             self._watched_rows.pop(eid, None)
+            self._watched_entity_fingerprints.pop(eid, None)
             self.history.samples.pop(eid, None)
             self.state_map.pop(eid, None)
 
@@ -1136,6 +1379,7 @@ class SQLiteTemporalTracker:
         view = self.home_view
         self._metrics["home_rebuilds"] += 1
         cache_key = self._historical_context_cache_key(ts)
+        self._last_home_context_cache_key = cache_key
         if cache_key is not None:
             snapshot = self.home_context_cache.get(cache_key)
             if snapshot is not None:
@@ -1304,6 +1548,34 @@ class SQLiteTemporalTracker:
             self._rebuild_home_cache(ts)
         self.current_ts = ts
         TRAINING_BUDGET.checkpoint("temporal_advance_done")
+
+
+    def feature_snapshot_revision(self, entity_ids, ts):
+        """Exact causal revision token for cross-tracker feature-cache reuse."""
+        ts = min(float(ts), self.end)
+        if self.current_ts is None or abs(float(self.current_ts) - ts) > 1e-9:
+            self.advance(ts)
+        ids = sorted(set(str(eid) for eid in (entity_ids or ()) if eid))
+        entity_revisions = []
+        for eid in ids:
+            fingerprint = self._watched_entity_fingerprints.get(eid)
+            if (
+                fingerprint is None
+                and eid in self._watched_rows
+            ):
+                fingerprint = self._feature_rows_fingerprint(
+                    self._watched_rows.get(eid) or ()
+                )
+                self._watched_entity_fingerprints[eid] = fingerprint
+            entity_revisions.append((eid, fingerprint))
+        return (
+            "historical_feature_source_v1",
+            self.context_cache_contract,
+            type(self).__name__,
+            round(ts, 9),
+            self._last_home_context_cache_key,
+            tuple(entity_revisions),
+        )
 
     def _edges(self, eid, lo, hi):
         previous = self._before(eid, lo, 1)

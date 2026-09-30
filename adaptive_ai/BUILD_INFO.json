@@ -1,10 +1,10 @@
 {
-  "version": "0.14.112",
+  "version": "0.14.113",
   "release_date": "2026-09-30",
-  "base_version": "0.14.111",
-  "base_commit": "b194262b7d601c454a8c2b48357a867ed03ab975",
-  "release_status": "preindexed-causal-transition-edges",
-  "release_validation_tests_passed": 1480,
+  "base_version": "0.14.112",
+  "base_commit": "181956521cd895471b23cb999347b1d5ddf707ea",
+  "release_status": "exact-historical-feature-snapshot-reuse",
+  "release_validation_tests_passed": 1487,
   "candidate_shadow_qos_014102": {
     "regression_source": "0.14.100 deferred Candidate Shadow queue composed under 60 s Raspberry Pi maintenance gate",
     "deferred_shadow_drain": "runs on every Candidate worker maintenance hook before periodic housekeeping admission",
@@ -990,5 +990,76 @@
     },
     "validation": "1480 Python tests passed on both 3.11 and 3.13 feature-head CI; final release metadata bump requires final release CI",
     "safety": "reward/sample count/validation/Correct/Candidate/update order/ActionIntent/Executor/physical authority unchanged"
+  },
+  "release_014113": {
+    "scope": "single_agent_exact_historical_feature_snapshot_reuse",
+    "cache_contract": "historical_feature_snapshot_cache_v1",
+    "key_contract": "timestamp + policy/schema/mask namespace + exact entity-row fingerprints + exact causal Home Context revision",
+    "coverage": [
+      "anchor",
+      "upstream_anchor",
+      "early_horizon",
+      "persistence",
+      "validation",
+      "historical_tiny_mlp"
+    ],
+    "immutability": "cache retains immutable snapshots; every hit restores private feature/meta/float32 containers",
+    "causal_semantics": "event_time + received_time, late-packet visibility and rewind preserved; future source revisions cannot satisfy earlier keys",
+    "cache_lifetime": "chunk-local; shared by onset/persistence trackers only on exact causal revision match",
+    "adaptive_cache_profile": {
+      "large": {
+        "entries": 512,
+        "units": 65536
+      },
+      "medium_plus": {
+        "entries": 256,
+        "units": 32768
+      },
+      "medium": {
+        "entries": 128,
+        "units": 16384
+      },
+      "small": {
+        "entries": 64,
+        "units": 8192
+      }
+    },
+    "diagnostics": [
+      "training_phase_timings.feature_snapshot_unique_timestamps",
+      "training_phase_timings.feature_snapshot_cache_hits",
+      "training_phase_timings.feature_snapshot_cache_misses",
+      "training_phase_timings.feature_snapshot_duplicate_hits",
+      "training_phase_timings.feature_snapshot_builds",
+      "training_phase_timings.feature_snapshot_build_seconds",
+      "training_feature_snapshot_cache.entries",
+      "training_feature_snapshot_cache.units",
+      "training_feature_snapshot_cache.evictions"
+    ],
+    "benchmark": {
+      "environment": "synthetic isolated-worker historical replay on GitHub-hosted x86; not Raspberry Pi timing",
+      "historical_experiences": 28,
+      "baseline_feature_builds": 301,
+      "cached_feature_builds": 255,
+      "feature_build_reduction_ratio": 0.15282392026578073,
+      "duplicate_hits": 46,
+      "unique_feature_timestamps": 255,
+      "baseline_wall_seconds": 1.1488153889999921,
+      "cached_wall_seconds": 1.1571312229999933,
+      "wall_speedup": 0.992813404534672,
+      "parity": {
+        "historical_experiences": true,
+        "ridge_model": true,
+        "tiny_mlp_learned_semantics": true,
+        "return_value": true
+      },
+      "tiny_mlp_parity_exclusions": [
+        "random post-fit model_revision UUID",
+        "model checksum derived from that UUID",
+        "wall-clock elapsed_seconds",
+        "serialized_bytes metadata derived from nondeterministic identity/timing fields"
+      ]
+    },
+    "validation": "1488 tests passed on Python 3.11 and 3.13 final feature-head CI; image smoke and full benchmark suite green",
+    "safety": "feature schema/reward/sample count/validation/Correct/Candidate/update order/chunk checkpoints/ActionIntent/Executor/physical authority unchanged"
   }
 }

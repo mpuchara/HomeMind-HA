@@ -14,7 +14,8 @@ from context import (archived_state, balanced_presence_driver_score, controllabl
 from telemetry import HEAVY_JOBS, rss_mb
 from replay import (
     SQLiteTemporalTracker, DeferredUpdates, BoundedUsage, ReplayQueryCache,
-    HistoricalContextCache, RAMReplayIndex,
+    HistoricalContextCache, HistoricalFeatureSnapshot,
+    HistoricalFeatureSnapshotCache, RAMReplayIndex,
 )
 from training_budget import TRAINING_BUDGET
 from policy import MultiHorizonPolicy
@@ -163,6 +164,7 @@ class HistoryManager(threading.Thread):
         self.training_home_context_cache_status = {}
         self.training_ram_replay_index_status = {}
         self.training_transition_edge_index_status = {}
+        self.training_feature_snapshot_cache_status = {}
         # Persistent isolated-worker caches live for the complete selected-agent pass.
         # They are process-local, bounded by the existing adaptive RAM profile and never
         # cross agent/job boundaries.
@@ -245,6 +247,9 @@ class HistoryManager(threading.Thread):
                 ),
                 "training_transition_edge_index": dict(
                     getattr(self, "training_transition_edge_index_status", {}) or {}
+                ),
+                "training_feature_snapshot_cache": dict(
+                    getattr(self, "training_feature_snapshot_cache_status", {}) or {}
                 ),
                 "tiny_mlp_training": {
                     "enabled": bool(OPTIONS.get("tiny_mlp_supervised_training_enabled", True)),
@@ -2270,6 +2275,12 @@ class HistoryManager(threading.Thread):
         home_cache_units = int(
             OPTIONS.get("training_home_context_cache_units", 8192) or 0
         )
+        feature_cache_entries = int(
+            OPTIONS.get("training_feature_snapshot_cache_entries", 512) or 0
+        )
+        feature_cache_units = int(
+            OPTIONS.get("training_feature_snapshot_cache_units", 65536) or 0
+        )
         if self.worker_mode:
             # 0.14.96 receives a bounded RAM-first resource profile from the parent
             # supervisor. Cache capacity is a performance hint only: causal replay,
@@ -2290,6 +2301,14 @@ class HistoryManager(threading.Thread):
             home_cache_units = int(OPTIONS.get(
                 "training_worker_effective_home_context_cache_units",
                 min(home_cache_units, 2048),
+            ) or 0)
+            feature_cache_entries = int(OPTIONS.get(
+                "training_worker_effective_feature_snapshot_cache_entries",
+                min(feature_cache_entries, 64),
+            ) or 0)
+            feature_cache_units = int(OPTIONS.get(
+                "training_worker_effective_feature_snapshot_cache_units",
+                min(feature_cache_units, 8192),
             ) or 0)
 
         persistent_cache = bool(
@@ -2334,6 +2353,14 @@ class HistoryManager(threading.Thread):
             )
             for policy in policies.values()
         }))
+        # Feature snapshots are intentionally chunk-local. They are shared between the
+        # onset and persistence cursors only when the exact causal source revision,
+        # schema/mask namespace and model-context revision all match.
+        feature_snapshot_cache = HistoricalFeatureSnapshotCache(
+            max_entries=feature_cache_entries,
+            max_units=feature_cache_units,
+        )
+
         replay_connection = None
         if persistent_cache:
             replay_connection = self._persistent_replay_sqlite_connection
@@ -2584,6 +2611,156 @@ class HistoryManager(threading.Thread):
                 "values": raw.get("values"),
             }
 
+
+        feature_snapshot_namespaces = {}
+        feature_snapshot_entities = {}
+        for _agent in agents:
+            _aid = str(_agent["id"])
+            _policy = policies[_aid]
+            _mask = neural_masks.get(_aid)
+            _schema_entities = tuple(
+                str(eid) for eid in (getattr(_policy.schema, "entities", ()) or ())
+            )
+            _mask_entities = tuple(
+                str(eid) for eid in (
+                    getattr(_mask, "selected_entities", ()) or ()
+                )
+            )
+            feature_snapshot_entities[_aid] = tuple(dict.fromkeys(
+                [*_schema_entities, *_mask_entities]
+            ))
+            feature_snapshot_namespaces[_aid] = (
+                "historical_training_feature_snapshot_v1",
+                int(getattr(_policy, "VERSION", 0) or 0),
+                int(getattr(_policy.schema, "VERSION", 0) or 0),
+                int(getattr(_policy, "dims", 0) or 0),
+                int(getattr(
+                    _policy.schema, "feature_contract_version", 0
+                ) or 0),
+                _schema_entities,
+                str(_agent.get("target_entity") or ""),
+                str(_agent.get("target_property") or ""),
+                (
+                    str(getattr(_mask, "schema_id", "") or ""),
+                    str(getattr(_mask, "mask_id", "") or ""),
+                    tuple(getattr(_mask, "feature_ids", ()) or ()),
+                ) if _mask is not None else None,
+                context_cache_contract,
+            )
+
+        feature_snapshot_cache_enabled = bool(
+            feature_cache_entries > 0 and feature_cache_units > 0
+        )
+
+        def historical_feature_snapshot(
+            agent, policy, tracker, sample_ts, *, include_neural=False
+        ):
+            aid = str(agent["id"])
+            sample_ts = float(sample_ts)
+            tracker.advance(sample_ts)
+            if not feature_snapshot_cache_enabled:
+                build_started = time.perf_counter()
+                features, _, meta = policy.features(
+                    tracker.state_map,
+                    tracker.history,
+                    at_ts=sample_ts,
+                )
+                compact_meta = {
+                    "home_forecast": dict(
+                        (meta or {}).get("home_forecast") or {}
+                    ),
+                    "home_known": bool((meta or {}).get("home_known")),
+                    "reconstruction_complete": bool(
+                        (meta or {}).get("reconstruction_complete", True)
+                    ),
+                }
+                neural = None
+                if include_neural:
+                    neural = neural_observation(
+                        agent,
+                        tracker,
+                        sample_ts,
+                        home_forecast=compact_meta["home_forecast"],
+                    )
+                feature_snapshot_cache.record_build(
+                    time.perf_counter() - build_started,
+                    neural=bool(neural is not None),
+                )
+                return dict(features), compact_meta, neural
+
+            source_revision = tracker.feature_snapshot_revision(
+                feature_snapshot_entities.get(aid, ()),
+                sample_ts,
+            )
+            cache_key = (
+                feature_snapshot_namespaces[aid],
+                source_revision,
+            )
+            cached = feature_snapshot_cache.get(cache_key)
+            if cached is not None:
+                features, compact_meta, neural = cached.restore()
+                if include_neural and neural is None:
+                    neural = neural_observation(
+                        agent,
+                        tracker,
+                        sample_ts,
+                        home_forecast=compact_meta["home_forecast"],
+                    )
+                    upgraded = HistoricalFeatureSnapshot.capture(
+                        features,
+                        compact_meta,
+                        neural,
+                    )
+                    feature_snapshot_cache.record_neural_build()
+                    feature_snapshot_cache.put(
+                        cache_key,
+                        upgraded,
+                        timestamp=sample_ts,
+                    )
+                    return upgraded.restore()
+                return features, compact_meta, neural
+
+            build_started = time.perf_counter()
+            features, _, meta = policy.features(
+                tracker.state_map,
+                tracker.history,
+                at_ts=sample_ts,
+            )
+            # Current training consumers require only the causal Home Context payload
+            # from feature meta. Do not retain the large per-entity debug/audit structure
+            # in every cache entry.
+            compact_meta = {
+                "home_forecast": dict((meta or {}).get("home_forecast") or {}),
+                "home_known": bool((meta or {}).get("home_known")),
+                "reconstruction_complete": bool(
+                    (meta or {}).get("reconstruction_complete", True)
+                ),
+            }
+            neural = None
+            if include_neural:
+                neural = neural_observation(
+                    agent,
+                    tracker,
+                    sample_ts,
+                    home_forecast=compact_meta["home_forecast"],
+                )
+            snapshot = HistoricalFeatureSnapshot.capture(
+                features,
+                compact_meta,
+                neural,
+            )
+            feature_snapshot_cache.record_build(
+                time.perf_counter() - build_started,
+                neural=bool(neural is not None),
+            )
+            feature_snapshot_cache.put(
+                cache_key,
+                snapshot,
+                timestamp=sample_ts,
+            )
+            # Return private mutable copies on misses too, matching cache-hit behavior.
+            return snapshot.restore()
+
         pending = {}
         last_value = {}
         new_count = 0
@@ -2720,6 +2897,30 @@ class HistoryManager(threading.Thread):
                     totals.get("transition_edge_scan_rows_avoided_estimate") or 0
                 ),
             })
+            feature_cache_status = feature_snapshot_cache.status()
+            self.training_feature_snapshot_cache_status = dict(
+                feature_cache_status
+            )
+            self.training_phase_timings.update({
+                "feature_snapshot_unique_timestamps": int(
+                    feature_cache_status.get("unique_feature_timestamps") or 0
+                ),
+                "feature_snapshot_cache_hits": int(
+                    feature_cache_status.get("hits") or 0
+                ),
+                "feature_snapshot_cache_misses": int(
+                    feature_cache_status.get("misses") or 0
+                ),
+                "feature_snapshot_duplicate_hits": int(
+                    feature_cache_status.get("duplicate_hits") or 0
+                ),
+                "feature_snapshot_builds": int(
+                    feature_cache_status.get("builds") or 0
+                ),
+                "feature_snapshot_build_seconds": float(
+                    feature_cache_status.get("build_seconds") or 0.0
+                ),
+            })
             self.temporal_replay_stats = {
                 # Preserve the established incremental replay contract: 0.14.79 changes
                 # only how duplicate rendered home contexts are reused across cursors.
@@ -2729,6 +2930,7 @@ class HistoryManager(threading.Thread):
                 "persistence": persistence,
                 "totals": totals,
                 "home_context_cache": replay_home_context_cache.status(),
+                "feature_snapshot_cache": feature_cache_status,
                 "ram_replay_index": (
                     ram_replay_index.status()
                     if ram_replay_index is not None
@@ -3085,11 +3287,19 @@ class HistoryManager(threading.Thread):
                     persistence_count_by_horizon.get(h, 0)
                 )
                 context_ts = target_time
-                persistence_timeline.advance(context_ts)
-                features, _, persistence_meta = policy.features(
-                    persistence_timeline.state_map,
-                    persistence_timeline.history,
-                    at_ts=context_ts,
+                include_neural_snapshot = bool(
+                    neural_enabled
+                    and float(reward) > 0.0
+                    and target_time < validation_start
+                )
+                features, persistence_meta, persistence_neural = (
+                    historical_feature_snapshot(
+                        agent,
+                        policy,
+                        persistence_timeline,
+                        context_ts,
+                        include_neural=include_neural_snapshot,
+                    )
                 )
                 if target_time < validation_start <= effective_end:
                     if audit is not None:
@@ -3117,15 +3327,9 @@ class HistoryManager(threading.Thread):
                         evidence_weight=persistence_evidence_weight,
                     )
                     if neural_enabled and float(reward) > 0.0:
-                        observation = neural_observation(
-                            agent,
-                            persistence_timeline,
-                            target_time,
-                            home_forecast=(persistence_meta or {}).get("home_forecast"),
-                        )
-                        if observation is not None:
+                        if persistence_neural is not None:
                             neural_train_samples[str(agent["id"])].append({
-                                "observation": observation,
+                                "observation": persistence_neural,
                                 "action_idx": int(old["action_idx"]),
                                 "weight": sample_mass * persistence_evidence_weight,
                                 "reward": float(reward),
@@ -3163,18 +3367,16 @@ class HistoryManager(threading.Thread):
             snapshots = {}
             neural_snapshots = {}
             for query_ts in sorted(query_times):
-                tracker.advance(query_ts)
-                features, _, meta = policy.features(
-                    tracker.state_map, tracker.history, at_ts=query_ts
+                features, meta, neural_snapshot = historical_feature_snapshot(
+                    agent,
+                    policy,
+                    tracker,
+                    query_ts,
+                    include_neural=bool(neural_enabled),
                 )
                 snapshots[query_ts] = (dict(features), dict(meta or {}))
                 if neural_enabled:
-                    neural_snapshots[query_ts] = neural_observation(
-                        agent,
-                        tracker,
-                        query_ts,
-                        home_forecast=(meta or {}).get("home_forecast"),
-                    )
+                    neural_snapshots[query_ts] = neural_snapshot
 
             anchor_features = snapshots[float(anchor_ts)][0]
             features_by_horizon = {
@@ -3974,6 +4176,9 @@ class HistoryManager(threading.Thread):
         self.training_transition_edge_index_status = (
             transition_edge_index.status() if transition_edge_index is not None
             else dict(self.training_transition_edge_index_status or {})
+        )
+        self.training_feature_snapshot_cache_status = (
+            feature_snapshot_cache.status()
         )
         timeline.close()
         persistence_timeline.close()
