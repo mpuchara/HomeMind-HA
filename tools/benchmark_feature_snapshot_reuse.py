@@ -289,17 +289,40 @@ def semantic_ridge_model(store, aid):
     }
 
 
+def _strip_neural_nondeterminism(value):
+    """Remove transport/profiling identity fields, never learned semantics.
+
+    TinyMLP supervised training intentionally assigns a fresh UUID model_revision on each
+    successful offline fit. model_checksum therefore changes with that UUID, and
+    elapsed_seconds is wall-clock telemetry. Neither affects inference, learned tensors,
+    normalization, sample counts, tournament scoring or backend selection.
+    """
+    if isinstance(value, dict):
+        return {
+            key: _strip_neural_nondeterminism(item)
+            for key, item in value.items()
+            if key not in {
+                "model_revision",
+                "model_checksum",
+                "elapsed_seconds",
+            }
+        }
+    if isinstance(value, list):
+        return [_strip_neural_nondeterminism(item) for item in value]
+    return value
+
+
 def semantic_neural_model(store, aid):
     record = load_training_record(store, aid)
     if not record:
         return None
-    return {
+    return _strip_neural_nondeterminism({
         "model": record.get("model"),
         "mask": record.get("mask"),
         "training": record.get("training"),
         "tournament": record.get("tournament"),
         "selected_backend": record.get("selected_backend"),
-    }
+    })
 
 
 def main():
