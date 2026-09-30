@@ -115,8 +115,12 @@ class HAEventStream(threading.Thread):
                             if now_mono - float(registry_last_request.get(name) or 0.0) >= registry_min_interval:
                                 send_registry(name)
 
-                    for name in ("entity", "device", "area"):
-                        send_registry(name, force=True)
+                    # Home Assistant requires command identifiers on one websocket
+                    # connection to increase monotonically. 0.14.116 accidentally sent
+                    # registry list requests 10/11/12 before subscriptions 2/5/6/7,
+                    # which HA rejected with id_reuse. Establish all subscriptions first,
+                    # then start registry reads at id 10 so every subsequent command keeps
+                    # increasing on the same socket.
                     ws.send(json.dumps({"id": 2, "type": "subscribe_events", "event_type": "state_changed"}))
                     state_subscription_sent_mono = time.monotonic()
                     for ident, event_type in (
@@ -125,6 +129,8 @@ class HAEventStream(threading.Thread):
                         (7, "area_registry_updated"),
                     ):
                         ws.send(json.dumps({"id": ident, "type": "subscribe_events", "event_type": event_type}))
+                    for name in ("entity", "device", "area"):
+                        send_registry(name, force=True)
 
                     backoff = 2.0
                     while not self.stop_event.is_set():
