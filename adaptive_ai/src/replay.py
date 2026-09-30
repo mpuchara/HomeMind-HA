@@ -611,7 +611,14 @@ class HistoricalFeatureSnapshot:
 
     def __init__(self, feature_items, meta, neural_feature_ids, neural_values, units):
         self.feature_items = tuple(feature_items)
-        self.meta = copy.deepcopy(dict(meta or {}))
+        meta = dict(meta or {})
+        self.home_forecast_items = tuple(
+            sorted(dict(meta.get("home_forecast") or {}).items())
+        )
+        self.home_known = bool(meta.get("home_known"))
+        self.reconstruction_complete = bool(
+            meta.get("reconstruction_complete", True)
+        )
         self.neural_feature_ids = (
             None if neural_feature_ids is None else tuple(neural_feature_ids)
         )
@@ -619,18 +626,6 @@ class HistoricalFeatureSnapshot:
             None if neural_values is None else bytes(neural_values)
         )
         self.units = max(1, int(units))
-
-    @staticmethod
-    def _units(value):
-        if isinstance(value, dict):
-            return 1 + sum(
-                HistoricalFeatureSnapshot._units(k)
-                + HistoricalFeatureSnapshot._units(v)
-                for k, v in value.items()
-            )
-        if isinstance(value, (list, tuple, set)):
-            return 1 + sum(HistoricalFeatureSnapshot._units(v) for v in value)
-        return 1
 
     @classmethod
     def capture(cls, features, meta, neural_observation=None):
@@ -655,9 +650,12 @@ class HistoricalFeatureSnapshot:
                     values = array("f", (float(v) for v in raw_values))
                 neural_bytes = values.tobytes()
                 neural_units = len(values) + len(neural_feature_ids)
+        compact_meta = dict(meta or {})
+        home_forecast = dict(compact_meta.get("home_forecast") or {})
         units = (
             len(feature_items) * 2
-            + cls._units(dict(meta or {}))
+            + len(home_forecast) * 2
+            + 8
             + neural_units
         )
         return cls(
@@ -684,7 +682,13 @@ class HistoricalFeatureSnapshot:
             }
         return (
             dict(self.feature_items),
-            copy.deepcopy(self.meta),
+            {
+                "home_forecast": dict(self.home_forecast_items),
+                "home_known": bool(self.home_known),
+                "reconstruction_complete": bool(
+                    self.reconstruction_complete
+                ),
+            },
             neural,
         )
 
@@ -1242,9 +1246,10 @@ class SQLiteTemporalTracker:
         compact = self._compact_rows(rows, self.HISTORY_SAMPLES)
         if compact:
             self._watched_rows[eid] = compact
-            self._watched_entity_fingerprints[eid] = (
-                self._feature_rows_fingerprint(compact)
-            )
+            # Compute the cryptographic row fingerprint lazily only if feature snapshot
+            # reuse actually asks for a revision. Cache-disabled replay therefore keeps
+            # the 0.14.112 tracker cost.
+            self._watched_entity_fingerprints[eid] = None
             dq = deque(maxlen=self.HISTORY_SAMPLES)
             for row in compact:
                 sample = (float(row["ts"]), archived_state(row))
@@ -1527,16 +1532,25 @@ class SQLiteTemporalTracker:
         if self.current_ts is None or abs(float(self.current_ts) - ts) > 1e-9:
             self.advance(ts)
         ids = sorted(set(str(eid) for eid in (entity_ids or ()) if eid))
+        entity_revisions = []
+        for eid in ids:
+            fingerprint = self._watched_entity_fingerprints.get(eid)
+            if (
+                fingerprint is None
+                and eid in self._watched_rows
+            ):
+                fingerprint = self._feature_rows_fingerprint(
+                    self._watched_rows.get(eid) or ()
+                )
+                self._watched_entity_fingerprints[eid] = fingerprint
+            entity_revisions.append((eid, fingerprint))
         return (
             "historical_feature_source_v1",
             self.context_cache_contract,
             type(self).__name__,
             round(ts, 9),
             self._last_home_context_cache_key,
-            tuple(
-                (eid, self._watched_entity_fingerprints.get(eid))
-                for eid in ids
-            ),
+            tuple(entity_revisions),
         )
 
     def _edges(self, eid, lo, hi):
