@@ -111,7 +111,10 @@ def main():
             journal.record_batch(feature_rows[offset:offset + 2000])
 
         cover_start = 0.0
-        cover_end = float(rows_per_entity * 2 + 20)
+        # The lookup workload reaches ~3700 s with the default deterministic modulo.
+        # Keep the declared index coverage wider than every synthetic query; out-of-range
+        # fallback has its own regression and would contaminate this component benchmark.
+        cover_end = max(float(rows_per_entity * 2 + 20), 3800.0)
         connection = sqlite3.connect(store.path, timeout=30)
         connection.row_factory = sqlite3.Row
         try:
