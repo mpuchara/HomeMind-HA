@@ -59,6 +59,13 @@ class TargetOnlyReplayStreamTests(unittest.TestCase):
             source,
         )
 
+    def test_recorder_refresh_is_timed_separately_from_worker_replay(self):
+        source = (ROOT / "adaptive_ai/src/history.py").read_text(encoding="utf-8")
+        self.assertIn('"recorder_refresh_seconds"', source)
+        self.assertIn('"training_job_timings": dict(', source)
+        self.assertIn('"recorder_coverage_hits"', source)
+        self.assertIn('"recorder_coverage_misses"', source)
+
     def test_phase_timing_is_returned_by_persistent_worker(self):
         source = (ROOT / "adaptive_ai/src/training_process.py").read_text(
             encoding="utf-8"
