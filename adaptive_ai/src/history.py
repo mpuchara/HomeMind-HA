@@ -162,12 +162,14 @@ class HistoryManager(threading.Thread):
         self.training_replay_cache_status = {}
         self.training_home_context_cache_status = {}
         self.training_ram_replay_index_status = {}
+        self.training_transition_edge_index_status = {}
         # Persistent isolated-worker caches live for the complete selected-agent pass.
         # They are process-local, bounded by the existing adaptive RAM profile and never
         # cross agent/job boundaries.
         self._persistent_replay_query_cache = None
         self._persistent_home_context_cache = None
         self._persistent_ram_replay_index = None
+        self._persistent_transition_edge_index = None
         self._persistent_replay_sqlite_connection = None
         self.neural_training_artifacts = {}
         self.training_process_status = {
@@ -240,6 +242,9 @@ class HistoryManager(threading.Thread):
                 ),
                 "training_ram_replay_index": dict(
                     getattr(self, "training_ram_replay_index_status", {}) or {}
+                ),
+                "training_transition_edge_index": dict(
+                    getattr(self, "training_transition_edge_index_status", {}) or {}
                 ),
                 "tiny_mlp_training": {
                     "enabled": bool(OPTIONS.get("tiny_mlp_supervised_training_enabled", True)),
@@ -1146,6 +1151,7 @@ class HistoryManager(threading.Thread):
         self._persistent_replay_query_cache = None
         self._persistent_home_context_cache = None
         self._persistent_ram_replay_index = None
+        self._persistent_transition_edge_index = None
 
     def request_discovery_rescan(self, *, threshold_override=1, reason="manual"):
         """Run the bounded Recorder/discovery job outside the caller thread.
@@ -2218,6 +2224,21 @@ class HistoryManager(threading.Thread):
         # the exact same feature timestamp/reward semantics as before.
         horizons = sorted({h for p in policies.values() for h in p.horizons})
         watched_entities = {eid for p in policies.values() for eid in p.schema.entities}
+        # Fast-light anchor/dwell semantics repeatedly ask for directional edges from a
+        # tiny subset of the selected schema. Preindex exactly those sources in Stage 2.
+        edge_entities = set()
+        for policy in policies.values():
+            meta = dict(getattr(policy, "selection_meta", {}) or {})
+            primary = (
+                meta.get("primary_occupancy_sensor")
+                or meta.get("primary_local_sensor")
+                or next(iter(meta.get("primary_local_sensors") or ()), None)
+            )
+            if primary:
+                edge_entities.add(str(primary))
+            edge_entities.update(
+                str(eid) for eid in (meta.get("upstream_sensors") or ()) if eid
+            )
         # The chronological driver loop consumes only target transitions. Historical
         # context is reconstructed independently by SQLiteTemporalTracker at the exact
         # causal timestamps requested by policy.features()/observation_as_of(). Feeding
@@ -2345,6 +2366,7 @@ class HistoryManager(threading.Thread):
         home_replay_entities = list(self.engine.context.relevant_entities())
         ordered_ram_entities = list(dict.fromkeys([
             *sorted(target_map.keys()),
+            *sorted(edge_entities),
             *sorted(watched_entities),
             *home_replay_entities,
         ]))
@@ -2445,6 +2467,76 @@ class HistoryManager(threading.Thread):
             "ram_replay_index_reused": bool(ram_index_reused),
         })
 
+
+        transition_edge_index = (
+            self._persistent_transition_edge_index if persistent_cache else None
+        )
+        edge_index_reused = bool(
+            transition_edge_index is not None
+            and transition_edge_index.covers(ram_cover_start, ram_cover_end)
+            and set(edge_entities).issubset(
+                set(getattr(transition_edge_index, "requested_entities", ()) or ())
+            )
+        )
+        if not edge_index_reused:
+            transition_edge_index = None
+
+        edge_index_started = time.perf_counter()
+        edge_builder = getattr(SQLiteTemporalTracker, "build_transition_edge_index", None)
+        if (
+            transition_edge_index is None
+            and edge_entities
+            and callable(edge_builder)
+        ):
+            transition_edge_index = edge_builder(
+                STORE,
+                edge_entities,
+                ram_cover_start,
+                ram_cover_end,
+                ram_replay_index=ram_replay_index,
+                connection=replay_connection,
+            )
+            if persistent_cache:
+                self._persistent_transition_edge_index = transition_edge_index
+        edge_index_construction_seconds = (
+            0.0 if edge_index_reused
+            else time.perf_counter() - edge_index_started
+        )
+        self.training_transition_edge_index_status = (
+            transition_edge_index.status()
+            if transition_edge_index is not None
+            else {
+                "contract": "observation_transition_edge_index_v1",
+                "requested_entities": len(edge_entities),
+                "indexed_entities": 0,
+                "fallback_entities": len(edge_entities),
+                "source_rows": 0,
+                "estimated_bytes": 0,
+                "disabled": not bool(edge_entities),
+            }
+        )
+        self.training_transition_edge_index_status["reused"] = bool(
+            edge_index_reused
+        )
+        self.training_phase_timings.update({
+            "transition_edge_index_construction_seconds": round(
+                float(edge_index_construction_seconds), 4
+            ),
+            "transition_edge_entities": int(
+                self.training_transition_edge_index_status.get("indexed_entities") or 0
+            ),
+            "transition_edge_source_rows": int(
+                self.training_transition_edge_index_status.get("source_rows") or 0
+            ),
+            "transition_edge_estimated_bytes": int(
+                self.training_transition_edge_index_status.get("estimated_bytes") or 0
+            ),
+            "transition_edge_fallback_entities": int(
+                self.training_transition_edge_index_status.get("fallback_entities") or 0
+            ),
+            "transition_edge_index_reused": bool(edge_index_reused),
+        })
+
         timeline = SQLiteTemporalTracker(
             STORE, watched_entities, self.engine.context, start_ts, end_ts,
             query_cache=replay_query_cache,
@@ -2452,6 +2544,7 @@ class HistoryManager(threading.Thread):
             context_cache_contract=context_cache_contract,
             connection=replay_connection,
             ram_replay_index=ram_replay_index,
+            transition_edge_index=transition_edge_index,
         )
         persistence_timeline = SQLiteTemporalTracker(
             STORE, watched_entities, self.engine.context, start_ts, end_ts,
@@ -2460,6 +2553,7 @@ class HistoryManager(threading.Thread):
             context_cache_contract=context_cache_contract,
             connection=replay_connection,
             ram_replay_index=ram_replay_index,
+            transition_edge_index=transition_edge_index,
         )
 
         if neural_enabled:
@@ -2579,6 +2673,10 @@ class HistoryManager(threading.Thread):
                 "home_render_executes", "home_context_cache_hits",
                 "home_context_cache_misses", "legacy_asof_queries_estimate",
                 "ram_index_lookups", "ram_index_rows", "sqlite_fallback_lookups",
+                "transition_edge_index_lookups", "transition_edge_index_hits",
+                "transition_edge_index_fallbacks", "transition_edge_cursor_rewinds",
+                "transition_edge_rows_applied",
+                "transition_edge_scan_rows_avoided_estimate",
             )
             totals = {
                 key: int(onset.get(key) or 0) + int(persistence.get(key) or 0)
@@ -2603,6 +2701,24 @@ class HistoryManager(threading.Thread):
                 "sqlite_fallback_lookups": int(
                     totals.get("sqlite_fallback_lookups") or 0
                 ),
+                "transition_edge_index_lookups": int(
+                    totals.get("transition_edge_index_lookups") or 0
+                ),
+                "transition_edge_index_hits": int(
+                    totals.get("transition_edge_index_hits") or 0
+                ),
+                "transition_edge_index_fallbacks": int(
+                    totals.get("transition_edge_index_fallbacks") or 0
+                ),
+                "transition_edge_cursor_rewinds": int(
+                    totals.get("transition_edge_cursor_rewinds") or 0
+                ),
+                "transition_edge_rows_applied": int(
+                    totals.get("transition_edge_rows_applied") or 0
+                ),
+                "transition_edge_scan_rows_avoided_estimate": int(
+                    totals.get("transition_edge_scan_rows_avoided_estimate") or 0
+                ),
             })
             self.temporal_replay_stats = {
                 # Preserve the established incremental replay contract: 0.14.79 changes
@@ -2617,6 +2733,11 @@ class HistoryManager(threading.Thread):
                     ram_replay_index.status()
                     if ram_replay_index is not None
                     else dict(self.training_ram_replay_index_status or {})
+                ),
+                "transition_edge_index": (
+                    transition_edge_index.status()
+                    if transition_edge_index is not None
+                    else dict(self.training_transition_edge_index_status or {})
                 ),
                 "ram_index_lookup_seconds": round(
                     float(onset.get("ram_index_lookup_seconds") or 0.0)
@@ -3227,6 +3348,7 @@ class HistoryManager(threading.Thread):
                                 home_context_cache=replay_home_context_cache,
                                 context_cache_contract=context_cache_contract,
                                 ram_replay_index=ram_replay_index,
+                                transition_edge_index=transition_edge_index,
                             )
                             before_advances = int(
                                 long_tracker.stats().get("advances") or 0
@@ -3848,6 +3970,10 @@ class HistoryManager(threading.Thread):
         self.training_ram_replay_index_status = (
             ram_replay_index.status() if ram_replay_index is not None
             else dict(self.training_ram_replay_index_status or {})
+        )
+        self.training_transition_edge_index_status = (
+            transition_edge_index.status() if transition_edge_index is not None
+            else dict(self.training_transition_edge_index_status or {})
         )
         timeline.close()
         persistence_timeline.close()
