@@ -14,7 +14,7 @@ from context import (archived_state, balanced_presence_driver_score, controllabl
 from telemetry import HEAVY_JOBS, rss_mb
 from replay import (
     SQLiteTemporalTracker, DeferredUpdates, BoundedUsage, ReplayQueryCache,
-    HistoricalContextCache,
+    HistoricalContextCache, RAMReplayIndex,
 )
 from training_budget import TRAINING_BUDGET
 from policy import MultiHorizonPolicy
@@ -161,11 +161,13 @@ class HistoryManager(threading.Thread):
         self.training_schema_cache_misses = 0
         self.training_replay_cache_status = {}
         self.training_home_context_cache_status = {}
+        self.training_ram_replay_index_status = {}
         # Persistent isolated-worker caches live for the complete selected-agent pass.
         # They are process-local, bounded by the existing adaptive RAM profile and never
         # cross agent/job boundaries.
         self._persistent_replay_query_cache = None
         self._persistent_home_context_cache = None
+        self._persistent_ram_replay_index = None
         self._persistent_replay_sqlite_connection = None
         self.neural_training_artifacts = {}
         self.training_process_status = {
@@ -235,6 +237,9 @@ class HistoryManager(threading.Thread):
                 "training_replay_cache": dict(getattr(self, "training_replay_cache_status", {}) or {}),
                 "training_home_context_cache": dict(
                     getattr(self, "training_home_context_cache_status", {}) or {}
+                ),
+                "training_ram_replay_index": dict(
+                    getattr(self, "training_ram_replay_index_status", {}) or {}
                 ),
                 "tiny_mlp_training": {
                     "enabled": bool(OPTIONS.get("tiny_mlp_supervised_training_enabled", True)),
@@ -1140,6 +1145,7 @@ class HistoryManager(threading.Thread):
                 pass
         self._persistent_replay_query_cache = None
         self._persistent_home_context_cache = None
+        self._persistent_ram_replay_index = None
 
     def request_discovery_rescan(self, *, threshold_override=1, reason="manual"):
         """Run the bounded Recorder/discovery job outside the caller thread.
@@ -2323,12 +2329,129 @@ class HistoryManager(threading.Thread):
                 replay_connection.execute(f"PRAGMA cache_size=-{sqlite_cache_mb * 1024}")
                 self._persistent_replay_sqlite_connection = replay_connection
 
+        # 0.14.111 materializes only this selected agent's causal replay sources.  Target
+        # rows drive the outer loop; policy schema entities and admitted Home Context
+        # sources are the only entity_history streams repeatedly reconstructed by the
+        # temporal trackers.  Priority ordering keeps target/schema entities in RAM first
+        # when a chatty home exceeds the adaptive budget.
+        ram_budget_mb = int(
+            OPTIONS.get("training_ram_replay_index_mb", 192) or 0
+        )
+        if self.worker_mode:
+            ram_budget_mb = int(OPTIONS.get(
+                "training_worker_effective_ram_replay_index_mb",
+                min(ram_budget_mb, 32),
+            ) or 0)
+        home_replay_entities = list(self.engine.context.relevant_entities())
+        ordered_ram_entities = list(dict.fromkeys([
+            *sorted(target_map.keys()),
+            *sorted(watched_entities),
+            *home_replay_entities,
+        ]))
+        ram_guard_seconds = max(
+            30.0,
+            max([float(value) for value in horizons] or [0.0]),
+            float(OPTIONS.get("temporal_long_seconds", 300) or 300),
+            float(OPTIONS.get("fast_precursor_off_seconds", 120) or 120),
+        )
+        ram_logical_start = min(
+            float(logical_start_ts),
+            float(long_memory_recent_start_ts)
+            if long_memory_recent_start_ts is not None
+            else float(logical_start_ts),
+        )
+        ram_cover_start = max(0.0, ram_logical_start - ram_guard_seconds)
+        ram_cover_end = max(
+            float(end_ts),
+            float(long_memory_reference_end_ts)
+            if long_memory_reference_end_ts is not None
+            else float(end_ts),
+        )
+        ram_replay_index = (
+            self._persistent_ram_replay_index if persistent_cache else None
+        )
+        ram_index_reused = bool(
+            ram_replay_index is not None
+            and ram_replay_index.covers(ram_cover_start, ram_cover_end)
+            and set(ordered_ram_entities).issubset(
+                set(ram_replay_index.requested_entities)
+            )
+        )
+        if not ram_index_reused:
+            ram_replay_index = None
+        ram_index_started = time.perf_counter()
+        if ram_replay_index is None and ram_budget_mb > 0 and ordered_ram_entities:
+            index_connection = replay_connection
+            owns_index_connection = False
+            if index_connection is None:
+                index_connection = sqlite3.connect(STORE.path, timeout=30)
+                index_connection.row_factory = sqlite3.Row
+                index_connection.execute("PRAGMA query_only=ON")
+                owns_index_connection = True
+            try:
+                ram_replay_index = RAMReplayIndex.build(
+                    index_connection,
+                    ordered_ram_entities,
+                    ram_cover_start,
+                    ram_cover_end,
+                    max_bytes=ram_budget_mb * 1024 * 1024,
+                )
+            finally:
+                if owns_index_connection:
+                    index_connection.close()
+            if persistent_cache:
+                self._persistent_ram_replay_index = ram_replay_index
+        ram_index_construction_seconds = (
+            0.0 if ram_index_reused
+            else time.perf_counter() - ram_index_started
+        )
+        self.training_ram_replay_index_status = (
+            ram_replay_index.status() if ram_replay_index is not None else {
+                "contract": RAMReplayIndex.CONTRACT,
+                "requested_entities": len(ordered_ram_entities),
+                "indexed_entities": 0,
+                "fallback_entities": len(ordered_ram_entities),
+                "rows": 0,
+                "max_bytes": max(0, ram_budget_mb) * 1024 * 1024,
+                "estimated_bytes": 0,
+                "actual_bytes": 0,
+                "budget_exhausted": False,
+                "disabled": True,
+            }
+        )
+        self.training_ram_replay_index_status["reused"] = bool(ram_index_reused)
+        self.training_phase_timings.update({
+            "ram_index_construction_seconds": round(
+                float(ram_index_construction_seconds), 4
+            ),
+            "ram_replay_estimated_bytes": int(
+                self.training_ram_replay_index_status.get("estimated_bytes") or 0
+            ),
+            "ram_replay_actual_bytes": int(
+                self.training_ram_replay_index_status.get("actual_bytes") or 0
+            ),
+            "ram_replay_entities": int(
+                self.training_ram_replay_index_status.get("indexed_entities") or 0
+            ),
+            "ram_replay_rows": int(
+                self.training_ram_replay_index_status.get("rows") or 0
+            ),
+            "ram_replay_fallback": bool(
+                self.training_ram_replay_index_status.get("fallback_entities")
+            ),
+            "ram_replay_fallback_entities": int(
+                self.training_ram_replay_index_status.get("fallback_entities") or 0
+            ),
+            "ram_replay_index_reused": bool(ram_index_reused),
+        })
+
         timeline = SQLiteTemporalTracker(
             STORE, watched_entities, self.engine.context, start_ts, end_ts,
             query_cache=replay_query_cache,
             home_context_cache=replay_home_context_cache,
             context_cache_contract=context_cache_contract,
             connection=replay_connection,
+            ram_replay_index=ram_replay_index,
         )
         persistence_timeline = SQLiteTemporalTracker(
             STORE, watched_entities, self.engine.context, start_ts, end_ts,
@@ -2336,6 +2459,7 @@ class HistoryManager(threading.Thread):
             home_context_cache=replay_home_context_cache,
             context_cache_contract=context_cache_contract,
             connection=replay_connection,
+            ram_replay_index=ram_replay_index,
         )
 
         if neural_enabled:
@@ -2454,6 +2578,7 @@ class HistoryManager(threading.Thread):
                 "rewinds", "sql_queries", "rows_loaded", "home_rebuilds",
                 "home_render_executes", "home_context_cache_hits",
                 "home_context_cache_misses", "legacy_asof_queries_estimate",
+                "ram_index_lookups", "ram_index_rows", "sqlite_fallback_lookups",
             )
             totals = {
                 key: int(onset.get(key) or 0) + int(persistence.get(key) or 0)
@@ -2463,6 +2588,22 @@ class HistoryManager(threading.Thread):
             totals["query_reduction_ratio"] = (
                 max(0.0, 1.0 - totals["sql_queries"] / legacy) if legacy else None
             )
+            self.training_phase_timings.update({
+                "ram_replay_lookup_seconds": round(
+                    float(onset.get("ram_index_lookup_seconds") or 0.0)
+                    + float(persistence.get("ram_index_lookup_seconds") or 0.0),
+                    6,
+                ),
+                "sqlite_fallback_seconds": round(
+                    float(onset.get("sqlite_fallback_seconds") or 0.0)
+                    + float(persistence.get("sqlite_fallback_seconds") or 0.0),
+                    6,
+                ),
+                "ram_replay_lookups": int(totals.get("ram_index_lookups") or 0),
+                "sqlite_fallback_lookups": int(
+                    totals.get("sqlite_fallback_lookups") or 0
+                ),
+            })
             self.temporal_replay_stats = {
                 # Preserve the established incremental replay contract: 0.14.79 changes
                 # only how duplicate rendered home contexts are reused across cursors.
@@ -2472,6 +2613,21 @@ class HistoryManager(threading.Thread):
                 "persistence": persistence,
                 "totals": totals,
                 "home_context_cache": replay_home_context_cache.status(),
+                "ram_replay_index": (
+                    ram_replay_index.status()
+                    if ram_replay_index is not None
+                    else dict(self.training_ram_replay_index_status or {})
+                ),
+                "ram_index_lookup_seconds": round(
+                    float(onset.get("ram_index_lookup_seconds") or 0.0)
+                    + float(persistence.get("ram_index_lookup_seconds") or 0.0),
+                    6,
+                ),
+                "sqlite_fallback_seconds": round(
+                    float(onset.get("sqlite_fallback_seconds") or 0.0)
+                    + float(persistence.get("sqlite_fallback_seconds") or 0.0),
+                    6,
+                ),
                 "continuation": {
                     "contract": "stateful_chunk_continuation_v1",
                     "enabled": bool(scan_start_ts > logical_start_ts + 0.5),
@@ -3070,6 +3226,7 @@ class HistoryManager(threading.Thread):
                                 query_cache=replay_query_cache,
                                 home_context_cache=replay_home_context_cache,
                                 context_cache_contract=context_cache_contract,
+                                ram_replay_index=ram_replay_index,
                             )
                             before_advances = int(
                                 long_tracker.stats().get("advances") or 0
@@ -3688,6 +3845,10 @@ class HistoryManager(threading.Thread):
         _publish_temporal_replay_stats()
         self.training_replay_cache_status = replay_query_cache.status()
         self.training_home_context_cache_status = replay_home_context_cache.status()
+        self.training_ram_replay_index_status = (
+            ram_replay_index.status() if ram_replay_index is not None
+            else dict(self.training_ram_replay_index_status or {})
+        )
         timeline.close()
         persistence_timeline.close()
         TRAINING_BUDGET.checkpoint("finalization_complete", force=True)

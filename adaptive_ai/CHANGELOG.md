@@ -1,3 +1,16 @@
+# 0.14.111 — 2026-09-30
+
+- Add a bounded **RAM Replay Index** for single-agent historical Train/Rebuild. The index materializes only the selected agent's target, policy-schema context entities and required Home Context sources instead of the full Home Assistant archive.
+- Store history in compact columnar arrays with per-entity string dictionary encoding. Full row dictionaries are reconstructed only at the existing tracker API boundary; the index remains a transport optimization rather than a new learning representation.
+- Preserve causal replay exactly: both event time and received time gate visibility, late observations cannot leak into earlier timestamps, chronological row ordering is unchanged, and rewind/as-of queries retain the established semantics.
+- Share one index between onset and persistence trackers and reuse it across the persistent selected-agent worker when coverage is sufficient. Individual 6-hour logical chunks remain sequential and keep their existing checkpoints, rollback, validation and update order.
+- Add adaptive RAM budgets tied to the existing worker resource profile: **192 MB large / 128 MB medium+ / 64 MB medium / 24 MB small** by default. The configured 192 MB cap can be lowered or disabled; worker RSS supervision remains the hard outer guard.
+- If an entity or requested range does not fit/lie inside RAM coverage, replay falls back to the original SQLite path for that entity/range. Mixed RAM+SQLite queries are regression-tested for identical ordering and results.
+- Add diagnostics for index build time, indexed/fallback entity counts, rows, conservative retained-memory estimate, columnar payload bytes, RAM lookup time/count and SQLite fallback time/count. These propagate from the isolated worker to runtime status.
+- Add replay parity regressions covering late received data, partial fallback, out-of-coverage fallback, forward advance, explicit rewind and Home Context forecast parity. Full Python 3.11/3.13 suite: **1476 tests green** on the release-candidate feature head.
+- GitHub-host synthetic component benchmark (12 entities × 1800 rows, 500 replay timestamps): pure SQLite **1.409 s**, RAM warm replay **0.294 s (~4.79×)**, RAM index build + replay **0.336 s (~4.19×)**. SQLite transport work drops from **1000 tracker queries to 36 total build+replay queries (−96.4%)**, with exact benchmark parity and no fallback. This is a component benchmark, **not** Raspberry Pi end-to-end Train/Rebuild timing.
+- No reward, sample count, validation fraction, Correct, Candidate lineage, policy update order, TinyMLP authority, ActionIntent, Executor or physical-control semantics change.
+
 # 0.14.110 — 2026-09-30
 
 - Remove a major source of wasted work from **single-agent Train/Rebuild**: the outer chronological replay driver now streams only target rows instead of target + every selected context sensor row.

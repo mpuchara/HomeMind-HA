@@ -72,6 +72,7 @@ NON_SEMANTIC_TRAINING_OPTION_KEYS = frozenset({
     "training_parallel_min_available_mb",
     "training_replay_ram_cache_entry_rows",
     "training_replay_ram_cache_rows",
+    "training_ram_replay_index_mb",
     "training_sqlite_cache_mb",
     "training_throttle_max_sleep_seconds",
     "training_worker_memory_available_fraction",
@@ -403,24 +404,28 @@ def resolve_training_resource_profile(options=None, memory=None):
         tier = "large"
         target = {
             "replay_rows": 65536, "replay_entry_rows": 2048,
+            "ram_index_mb": 192,
             "home_entries": 64, "home_units": 32768, "sqlite_mb": 64,
         }
     elif effective >= 640:
         tier = "medium_plus"
         target = {
             "replay_rows": 32768, "replay_entry_rows": 1536,
+            "ram_index_mb": 128,
             "home_entries": 32, "home_units": 16384, "sqlite_mb": 24,
         }
     elif effective >= 448:
         tier = "medium"
         target = {
             "replay_rows": 16384, "replay_entry_rows": 1024,
+            "ram_index_mb": 64,
             "home_entries": 16, "home_units": 8192, "sqlite_mb": 16,
         }
     else:
         tier = "small"
         target = {
             "replay_rows": 8192, "replay_entry_rows": 512,
+            "ram_index_mb": 24,
             "home_entries": 8, "home_units": 4096, "sqlite_mb": 8,
         }
 
@@ -438,6 +443,9 @@ def resolve_training_resource_profile(options=None, memory=None):
         "training_worker_effective_replay_cache_entry_rows": bounded_int(
             "training_replay_ram_cache_entry_rows", 2048, target["replay_entry_rows"],
             minimum=64,
+        ),
+        "training_worker_effective_ram_replay_index_mb": bounded_int(
+            "training_ram_replay_index_mb", 192, target["ram_index_mb"]
         ),
         "training_worker_effective_home_context_cache_entries": bounded_int(
             "training_home_context_cache_entries", 64, target["home_entries"]
@@ -1059,6 +1067,9 @@ def run_isolated_training_chunk(history, start_ts, end_ts, **kwargs):
         history.training_home_context_cache_status = dict(
             result.get("training_home_context_cache") or {}
         )
+        history.training_ram_replay_index_status = dict(
+            result.get("training_ram_replay_index") or {}
+        )
         history.training_phase_timings = dict(
             result.get("training_phase_timings") or {}
         )
@@ -1484,6 +1495,9 @@ def worker_main(job_path):
                 "training_home_context_cache": dict(
                     history.training_home_context_cache_status or {}
                 ),
+                "training_ram_replay_index": dict(
+                    getattr(history, "training_ram_replay_index_status", {}) or {}
+                ),
                 "training_phase_timings": dict(
                     getattr(history, "training_phase_timings", {}) or {}
                 ),
@@ -1514,6 +1528,9 @@ def worker_main(job_path):
             "training_replay_cache": dict(history.training_replay_cache_status or {}),
             "training_home_context_cache": dict(
                 history.training_home_context_cache_status or {}
+            ),
+            "training_ram_replay_index": dict(
+                getattr(history, "training_ram_replay_index_status", {}) or {}
             ),
             "training_phase_timings": dict(
                 getattr(history, "training_phase_timings", {}) or {}
