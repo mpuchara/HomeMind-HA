@@ -305,6 +305,7 @@ def _strip_neural_nondeterminism(value):
                 "model_revision",
                 "model_checksum",
                 "elapsed_seconds",
+                "serialized_bytes",
             }
         }
     if isinstance(value, list):
