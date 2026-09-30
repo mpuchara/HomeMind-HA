@@ -58,8 +58,14 @@ class HAEventStream(threading.Thread):
                             raise RuntimeError(auth.get("message") or "WebSocket auth failed")
                     elif hello.get("type") != "auth_ok":
                         raise RuntimeError(f"Unexpected WebSocket greeting: {hello.get('type')}")
-                    self.engine.ws_connected = True
-                    self.engine.ws_error = None
+                    # Authentication is not enough to call realtime healthy. 0.14.115
+                    # captured a session that reported ws_connected=true for minutes while
+                    # no state_changed event ever reached Engine. Keep the connection
+                    # unhealthy until Home Assistant explicitly confirms subscription #2.
+                    with self.engine.lock:
+                        self.engine.ws_connected = False
+                        self.engine.ws_subscription_confirmed = False
+                        self.engine.ws_error = None
                     HA.last_ok = now_ts(); HA.last_error = None
                     # Registry payloads can be large. Keep at most one request per
                     # registry in flight and coalesce bursts into one bounded follow-up.
@@ -112,6 +118,7 @@ class HAEventStream(threading.Thread):
                     for name in ("entity", "device", "area"):
                         send_registry(name, force=True)
                     ws.send(json.dumps({"id": 2, "type": "subscribe_events", "event_type": "state_changed"}))
+                    state_subscription_sent_mono = time.monotonic()
                     for ident, event_type in (
                         (5, "entity_registry_updated"),
                         (6, "device_registry_updated"),
@@ -124,9 +131,36 @@ class HAEventStream(threading.Thread):
                         try:
                             raw = ws.recv(timeout=5)
                         except TimeoutError:
+                            if (
+                                not bool(getattr(self.engine, "ws_subscription_confirmed", False))
+                                and time.monotonic() - state_subscription_sent_mono > 10.0
+                            ):
+                                raise RuntimeError("state_changed subscription confirmation timeout")
                             flush_registry_due()
                             continue
                         msg = json.loads(raw)
+                        with self.engine.lock:
+                            self.engine.ws_messages_total += 1
+                            self.engine.ws_last_message = now_ts()
+                        if msg.get("type") == "result" and msg.get("id") == 2:
+                            if not msg.get("success"):
+                                detail = msg.get("error") or msg.get("message") or msg.get("result")
+                                raise RuntimeError(
+                                    "state_changed subscription failed"
+                                    + (f": {detail}" if detail else "")
+                                )
+                            with self.engine.lock:
+                                self.engine.ws_subscription_confirmed = True
+                                self.engine.ws_connected = True
+                                self.engine.ws_error = None
+                            HA.last_ok = now_ts(); HA.last_error = None
+                            if RUNTIME_DEBUG.enabled:
+                                RUNTIME_DEBUG.instant(
+                                    "ha_state_subscription",
+                                    confirmed=True,
+                                    messages_total=int(self.engine.ws_messages_total),
+                                )
+                            continue
                         if msg.get("type") == "result" and msg.get("id") in registry_requests:
                             name, callback = registry_requests.pop(msg["id"])
                             registry_inflight.pop(name, None)
@@ -146,11 +180,20 @@ class HAEventStream(threading.Thread):
                             continue
                         event = msg.get("event") or {}
                         data = event.get("data") or {}
+                        with self.engine.lock:
+                            self.engine.ws_state_events_total += 1
+                            # Receiving a real event is definitive evidence even if a
+                            # nonstandard proxy reordered the subscription result.
+                            self.engine.ws_subscription_confirmed = True
+                            self.engine.ws_connected = True
+                            self.engine.ws_error = None
                         self.engine.on_state_changed(data)
                         flush_registry_due()
             except Exception as exc:
-                self.engine.ws_connected = False
-                self.engine.ws_error = f"{type(exc).__name__}: {exc}"
+                with self.engine.lock:
+                    self.engine.ws_connected = False
+                    self.engine.ws_subscription_confirmed = False
+                    self.engine.ws_error = f"{type(exc).__name__}: {exc}"
                 # Realtime loss is the one case where a full REST snapshot should become
                 # urgent. Healthy websocket operation uses the much slower safety resync.
                 with self.engine.lock:
@@ -169,7 +212,9 @@ class HAEventStream(threading.Thread):
                 if not self.stop_event.is_set():
                     time.sleep(backoff)
                     backoff = min(30.0, backoff * 1.7)
-        self.engine.ws_connected = False
+        with self.engine.lock:
+            self.engine.ws_connected = False
+            self.engine.ws_subscription_confirmed = False
 
 
 class Engine(threading.Thread):
@@ -312,6 +357,10 @@ class Engine(threading.Thread):
         self.last_ws_event = None
         self.last_event_monotonic = 0.0
         self.ws_connected = False
+        self.ws_subscription_confirmed = False
+        self.ws_messages_total = 0
+        self.ws_state_events_total = 0
+        self.ws_last_message = None
         self.ws_error = None
         self.temporal_history = TemporalHistory(maxlen=24)
         self.lock = threading.RLock()
@@ -336,6 +385,10 @@ class Engine(threading.Thread):
             last_poll = self.last_poll
             state_count = self.last_state_count
             ws_connected = self.ws_connected
+            ws_subscription_confirmed = self.ws_subscription_confirmed
+            ws_messages_total = self.ws_messages_total
+            ws_state_events_total = self.ws_state_events_total
+            ws_last_message = self.ws_last_message
             ws_error = self.ws_error
             registry_count = len(self.entity_registry)
             last_ws_event = self.last_ws_event
@@ -371,7 +424,16 @@ class Engine(threading.Thread):
             "average_confidence": sum(confidences) / len(confidences) if confidences else 0.0,
             "feedback_count": sum(int(a.get("feedback_count") or 0) for a in agents),
             "historical_experience_count": sum(int(a.get("historical_count") or 0) for a in agents),
-            "realtime": {"connected": ws_connected, "error": ws_error, "registry_entries": registry_count, "last_event": last_ws_event},
+            "realtime": {
+                "connected": ws_connected,
+                "subscription_confirmed": ws_subscription_confirmed,
+                "messages_total": ws_messages_total,
+                "state_events_total": ws_state_events_total,
+                "last_message": ws_last_message,
+                "error": ws_error,
+                "registry_entries": registry_count,
+                "last_event": last_ws_event,
+            },
             "state_resync": {
                 **state_resync_stats,
                 "last_ok": last_state_sync_ok,
