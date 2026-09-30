@@ -16,6 +16,15 @@
     if(base.endsWith('api/events'))return 3000;
     return 0;
   };
+  const sharedTimeoutFor=path=>{
+    const base=path.split('?')[0].replace(/^\.?\//,'');
+    // Current/Desired are realtime truth. A shared request that sits behind Ingress,
+    // CPU or I/O pressure must expire quickly instead of delivering an old snapshot
+    // many seconds later. The caller AbortSignal is intentionally stripped below, so
+    // the broker must carry the short timeout on the shared upstream request itself.
+    if(base.endsWith('api/live')||base.endsWith('api/candidate-live'))return 2500;
+    return null;
+  };
   const keyFor=input=>{
     const raw=typeof input==='string'?input:(input?.url||'');
     try{
@@ -38,9 +47,16 @@
     if(cached&&now-cached.at<ttl)return Promise.resolve(responseFrom(cached.value));
     if(inflight.has(key))return inflight.get(key).then(responseFrom);
     // A caller-specific AbortSignal must not cancel a read shared by other UI layers.
-    // The upstream home.js read guard still provides the bounded 12 s safety timeout.
+    // Preserve that rule, but keep realtime decision snapshots on their own short
+    // route-level deadline instead of falling back to home.js's generic 12 s timeout.
     const sharedInit={...init};
     delete sharedInit.signal;
+    const sharedTimeout=sharedTimeoutFor(key);
+    if(sharedTimeout!=null){
+      const requested=Number(sharedInit.adaptiveAiTimeoutMs);
+      sharedInit.adaptiveAiTimeoutMs=Number.isFinite(requested)&&requested>0
+        ?Math.min(requested,sharedTimeout):sharedTimeout;
+    }
     const request=upstreamFetch(input,sharedInit).then(snapshot).then(value=>{
       if(value.ok)cache.set(key,{at:performance.now(),value});
       return value;
