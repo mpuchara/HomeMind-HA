@@ -109,9 +109,27 @@ class TrainingQueue(threading.Thread):
         self.cancel_requested = set()
         self._queue_sequence = 0
         self.revision = 0
+        # Bounded in-RAM lifecycle trace for diagnosing queue hand-off without adding
+        # SQLite writes to the training path. Exported by RuntimeDebugLogService via
+        # snapshot(); it is deliberately diagnostic-only and never drives admission.
+        self.recent_transitions = deque(maxlen=50)
         self._training_priority = threading.Event()
         self._discovery_preempted = False
         self._install_discovery_priority_bridge()
+
+    def _record_transition_locked(self, state, job=None, **detail):
+        job = job or {}
+        self.recent_transitions.append({
+            "ts": time.time(),
+            "state": str(state),
+            "agent_id": str(job.get("agent_id") or detail.pop("agent_id", "")),
+            "reason": job.get("reason"),
+            "rebuild": bool(job.get("rebuild")),
+            "rebuild_reason": job.get("rebuild_reason"),
+            "priority": job.get("priority"),
+            "priority_class": job.get("priority_class"),
+            **detail,
+        })
 
     def _history_active_ids(self):
         lock = getattr(self.history, "agent_jobs_lock", None)
@@ -418,6 +436,7 @@ class TrainingQueue(threading.Thread):
             self.pending[agent_id] = job
             self._resort_jobs_locked()
             self._bump_revision_locked()
+            self._record_transition_locked("queued", job)
             position = next(
                 (index + 1 for index, queued in enumerate(self.jobs)
                  if queued["agent_id"] == agent_id),
@@ -447,6 +466,7 @@ class TrainingQueue(threading.Thread):
                 return False
             self.jobs = deque(x for x in self.jobs if x["agent_id"] != agent_id)
             self._bump_revision_locked()
+            self._record_transition_locked("cancelled_queued", job)
             self.store.event(agent_id, "info", "training_queue_cancelled",
                              "Queued training request cancelled", None)
             self.cv.notify_all()
@@ -566,6 +586,7 @@ class TrainingQueue(threading.Thread):
                 "revision": int(self.revision),
                 "heavy_job": HEAVY_JOBS.owner,
                 "explicit_training_priority": self._training_priority.is_set(),
+                "recent_transitions": list(self.recent_transitions),
             }
 
     def _drop_head(self, event_code, message, detail=None):
@@ -575,6 +596,13 @@ class TrainingQueue(threading.Thread):
             job = self.jobs.popleft()
             self.pending.pop(job["agent_id"], None)
             self._bump_revision_locked()
+            self._record_transition_locked(
+                "dropped",
+                job,
+                event_code=str(event_code),
+                message=str(message),
+                detail=detail,
+            )
             self.store.event(job["agent_id"], "warning", event_code, message, detail)
             self.cv.notify_all()
         self._release_training_priority_if_idle()
@@ -676,6 +704,12 @@ class TrainingQueue(threading.Thread):
             self._bump_revision_locked()
             if service is not None:
                 service.mark_training(job["agent_id"])
+            self._record_transition_locked(
+                "started",
+                job,
+                active_count=self._active_count_locked(),
+                effective_slots=slots,
+            )
             self.store.event(
                 job["agent_id"], "info", "training_queue_started",
                 "Queued training started automatically",
@@ -747,6 +781,13 @@ class TrainingQueue(threading.Thread):
                 self.parallel_active.pop(agent_id, None)
             self.cancel_requested.discard(agent_id)
             self._bump_revision_locked()
+            self._record_transition_locked(
+                "worker_released",
+                job,
+                training_state=str((agent or {}).get("training_state") or ""),
+                training_progress=(agent or {}).get("training_progress"),
+                cancelled=bool(cancelled),
+            )
             self.cv.notify_all()
 
         # Legacy queue adapters expose one global cancel event. Product dual-agent
