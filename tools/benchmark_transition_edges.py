@@ -80,7 +80,10 @@ def main():
         from storage import Store
 
         store = Store(Path(tmp) / "adaptive_ai.db")
-        journal = FeatureJournal(store)
+        # Keep synthetic event times deterministic while preventing FeatureJournal's
+        # real-time 24h retention pruning from deleting the fixture during insertion.
+        fixture_now = float(rows_per_entity * 2 + 1000)
+        journal = FeatureJournal(store, clock=lambda: fixture_now)
 
         base_rows = []
         feature_rows = []
