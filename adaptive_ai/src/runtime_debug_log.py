@@ -9,7 +9,7 @@ from settings import APP_VERSION
 from telemetry import HEAVY_JOBS, RUNTIME_DEBUG, TELEMETRY
 
 
-CONTRACT_VERSION = 1
+CONTRACT_VERSION = 2
 
 
 def _now_iso():
@@ -63,6 +63,7 @@ class RuntimeDebugLogService:
         result.update({
             "contract_version": CONTRACT_VERSION,
             "heavy_job": HEAVY_JOBS.owner,
+            "training_queue": self._queue_status(),
             "candidate_worker": self._candidate_worker_status(),
         })
         return result
@@ -91,6 +92,10 @@ class RuntimeDebugLogService:
                         "ws_connected": bool(getattr(engine, "ws_connected", False)),
                         "ws_error": getattr(engine, "ws_error", None),
                         "last_event": getattr(engine, "last_ws_event", None),
+                        "state_revision": int(getattr(engine, "state_revision", 0) or 0),
+                        "event_timestamp_entries": len(
+                            getattr(engine, "entity_event_received_perf", {}) or {}
+                        ),
                     }
             else:
                 scheduler = dict(getattr(engine, "inference_scheduler", {}) or {})
@@ -115,6 +120,17 @@ class RuntimeDebugLogService:
                 "event_to_intent_recent_p95_window_seconds": 60,
                 "trace_storage": "bounded_ram_only",
                 "normal_runtime_overhead_when_disabled": "boolean instrumentation checks only",
+                "inference_stage_trace": [
+                    "pre_inference",
+                    "policy_context",
+                    "feature_construction",
+                    "policy_predict",
+                    "post_predict",
+                    "executor_submit",
+                ],
+                "correct_history_stage_trace": True,
+                "training_queue_recent_transition_limit": 50,
+                "api_live_snapshot_timing": True,
             },
         }
 

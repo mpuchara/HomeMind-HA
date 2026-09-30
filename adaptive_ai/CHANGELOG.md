@@ -1,3 +1,15 @@
+# 0.14.115 — 2026-09-30
+
+- Add **diagnostic-only full-path instrumentation** for the current Raspberry Pi regressions before changing runtime behaviour.
+- Carry a per-entity HA receive timestamp into each coalesced inference pass so debug traces no longer depend on the global `last_event_received` value being untouched by unrelated events.
+- Split each Live agent execution into bounded trace stages: **pre-inference**, policy/context resolution, feature construction, policy prediction, post-predict composition and Executor submission. Existing inference/model/control semantics are unchanged.
+- Trace **Correct history** end-to-end and time generation resolution, labels, Live/child/parent observed history and physical Current reads separately. The existing observed-history/no-policy-replay contract is unchanged.
+- Add lightweight `/api/live` diagnostics: state snapshot revision, age since the latest HA state event, agent-config lookup time and total snapshot build time. Returned Current/Desired values are unchanged.
+- Keep the latest **50 TrainingQueue lifecycle transitions** in RAM and include them in runtime-debug export so a queued job can be followed through queued → started → worker released / dropped / cancelled without adding SQLite writes.
+- Runtime-debug export contract advances to v2 and exposes the new queue/event timestamp diagnostics.
+- Regression contract adds 6 tests for the 0.14.115 instrumentation surfaces; expected full suite: **1495 tests** on Python 3.11 and 3.13 plus image smoke.
+- No HA action selection, reward, learning, Candidate lineage, Correct semantics, queue admission priority, ActionIntent or Executor safety behaviour is intentionally changed.
+
 # 0.14.114 — 2026-09-30
 
 - Fix delayed **Current / Desired** tiles under Raspberry Pi, Home Assistant Ingress or training pressure. The shared UI polling broker intentionally removed caller-specific `AbortSignal` objects so one consumer could not cancel a request used by another, but this also discarded the Live card's 2.5 s deadline and let `/api/live` fall back to the generic **12 s** GET timeout.

@@ -254,6 +254,10 @@ class Engine(threading.Thread):
         self.entity_revisions = {}
         self.dirty_entities = set()
         self.last_trigger_entity = None
+        # Diagnostic timestamp carried with each concrete HA entity transition. Unlike
+        # last_event_received this cannot be overwritten by an unrelated later event
+        # before a coalesced inference pass reaches its worker.
+        self.entity_event_received_perf = {}
         # Policy inference is predominantly Python CPU work. More worker threads increase
         # GIL contention and can starve Ingress on Raspberry Pi. Two workers retain limited
         # overlap for SQLite/I/O while bounding CPU contention; single-core hosts stay at 1.
@@ -483,7 +487,9 @@ class Engine(threading.Thread):
             self.last_event_monotonic = time.monotonic()
             self.last_trigger_entity = entity_id
             self.dirty_entities.add(entity_id)
-            self.last_event_received = time.perf_counter()
+            received_perf = time.perf_counter()
+            self.last_event_received = received_perf
+            self.entity_event_received_perf[entity_id] = received_perf
             # Historical replay shares this process. Give fresh HA state changes a short
             # strict-priority window so Shadow/Control inference is never queued behind
             # cooperative offline work for seconds.
@@ -1170,6 +1176,11 @@ class Engine(threading.Thread):
             pass_revision = self.state_revision
             revision_snapshot = dict(self.entity_revisions)
             context_revision = self.context.home.revision
+            event_received_perf = {
+                eid: self.entity_event_received_perf.get(eid)
+                for eid in changed
+                if self.entity_event_received_perf.get(eid) is not None
+            }
         snapshot = (pass_states, pass_revision, revision_snapshot, context_revision)
 
         for target, target_agents in groups.items():
@@ -1185,14 +1196,29 @@ class Engine(threading.Thread):
                     active.add_done_callback(retry_completed)
                 continue
             self.in_flight[target] = self.control_workers.submit(
-                self.process_target, target_agents, changed, snapshot
+                self.process_target, target_agents, changed, snapshot, event_received_perf
             )
         for target in list(self.in_flight):
             if target not in groups and self.in_flight[target].done():
                 del self.in_flight[target]
 
-    def process_target(self, agents, changed_entities=None, snapshot=None):
-        target_trace = (RUNTIME_DEBUG.begin("inference_target", target_entity=str((agents[0] if agents else {}).get("target_entity") or "unknown"), agent_count=len(agents or ()), changed_count=len(changed_entities or ())) if RUNTIME_DEBUG.enabled else None)
+    def process_target(self, agents, changed_entities=None, snapshot=None, event_received_perf=None):
+        received_values = [
+            float(value) for value in (event_received_perf or {}).values()
+            if value is not None
+        ]
+        oldest_event_age_ms = (
+            max(0.0, (time.perf_counter() - min(received_values)) * 1000.0)
+            if received_values else None
+        )
+        target_trace = (RUNTIME_DEBUG.begin(
+            "inference_target",
+            target_entity=str((agents[0] if agents else {}).get("target_entity") or "unknown"),
+            agent_count=len(agents or ()),
+            changed_count=len(changed_entities or ()),
+            event_timestamp_count=len(received_values),
+            oldest_event_age_ms=None if oldest_event_age_ms is None else round(oldest_event_age_ms, 3),
+        ) if RUNTIME_DEBUG.enabled else None)
         if snapshot is None:
             with self.lock:
                 states = dict(self.state_map)
@@ -1205,6 +1231,7 @@ class Engine(threading.Thread):
         self._inference_tls.entity_revisions = revisions
         self._inference_tls.context_revision = context_revision
         self._inference_tls.state_revision = revision
+        self._inference_tls.event_received_perf = dict(event_received_perf or {})
         try:
             for agent in agents:
                 if self.stop_event.is_set():
@@ -1219,7 +1246,7 @@ class Engine(threading.Thread):
                     RUNTIME_DEBUG.end(agent_trace, status="error", error=f"{type(exc).__name__}: {exc}")
                     STORE.event(agent["id"], "error", "agent_error", str(exc), {"trace": traceback.format_exc(limit=4)})
         finally:
-            for name in ("entity_revisions", "context_revision", "state_revision"):
+            for name in ("entity_revisions", "context_revision", "state_revision", "event_received_perf"):
                 try:
                     delattr(self._inference_tls, name)
                 except AttributeError:
@@ -1308,6 +1335,20 @@ class Engine(threading.Thread):
 
     def process_agent(self, agent, state_map, changed_entities=None):
         aid = agent["id"]
+        pre_inference_started = time.perf_counter()
+
+        def trace_stage(stage, started, **fields):
+            if not RUNTIME_DEBUG.enabled:
+                return
+            RUNTIME_DEBUG.instant(
+                "inference_stage",
+                agent_id=str(aid),
+                target_entity=str(agent.get("target_entity") or ""),
+                stage=str(stage),
+                duration_ms=round(max(0.0, time.perf_counter() - float(started)) * 1000.0, 3),
+                **fields,
+            )
+
         defaults = {
             "previous_target": None, "last_ai_ts": 0.0, "last_ai_value": None,
             "last_inference_ts": 0.0, "manual_override_until": 0.0,
@@ -1352,10 +1393,12 @@ class Engine(threading.Thread):
             rt["previous_target"] = None
             rt["decision_state"] = "blocked"
             rt["decision_reason"] = "Target state/value unavailable"
+            trace_stage("pre_inference", pre_inference_started, outcome="target_unavailable")
             return
         if agent["target_property"] == "position" and target_state.get("state") in ("opening", "closing"):
             rt["decision_state"] = "waiting"
             rt["decision_reason"] = "Cover is moving; wait for its final position"
+            trace_stage("pre_inference", pre_inference_started, outcome="cover_moving")
             return
 
         # Resolve acknowledgement separately from delayed preference feedback.
@@ -1431,7 +1474,9 @@ class Engine(threading.Thread):
         if agent["mode"] not in ("shadow", "control"):
             rt["decision_state"] = "paused"
             rt["decision_reason"] = "Agent is paused"
+            trace_stage("pre_inference", pre_inference_started, outcome="paused")
             return
+        trace_stage("pre_inference", pre_inference_started, outcome="continue")
         inference_started = time.perf_counter()
         inference_started_ns = time.perf_counter_ns()
         snapshot_revisions = getattr(self._inference_tls, "entity_revisions", None)
@@ -1450,9 +1495,11 @@ class Engine(threading.Thread):
         min_inference_gap = max(0.05, float(OPTIONS.get("realtime_inference_debounce_ms", 75)) / 1000.0)
         inference_ts = now_ts()
         if not changed_entities and inference_ts - rt["last_inference_ts"] < min_inference_gap:
+            trace_stage("inference_debounce_skip", inference_started, outcome="skip")
             return
         rt["last_inference_ts"] = inference_ts
 
+        policy_context_started = time.perf_counter()
         policy = self.policy(agent)
         shared_temporal = shared_inference_temporal(
             self.temporal_history,
@@ -1462,11 +1509,14 @@ class Engine(threading.Thread):
                 or getattr(policy, "context_engine", None)
             ),
         )
+        trace_stage("policy_context", policy_context_started)
+        feature_started = time.perf_counter()
         stage_started_ns = time.perf_counter_ns()
         features, labels, context_meta = policy.features(
             state_map, shared_temporal, at_ts=inference_ts
         )
         observe_elapsed(self, "ridge_feature_construction", stage_started_ns)
+        trace_stage("feature_construction", feature_started, feature_count=len(features))
         context_meta.update(policy.selection_meta or {})
         automation_scan_marker = getattr(AUTOMATION_KNOWLEDGE, "last_scan", None)
         if rt.get("_automation_scan_marker") != automation_scan_marker:
@@ -1488,9 +1538,12 @@ class Engine(threading.Thread):
         context_meta["upstream_sensors"] = list((policy.selection_meta or {}).get("upstream_sensors") or [])
         rt["context_meta"] = context_meta
         teaching_revision = self.teaching.revision(aid)
+        predict_started = time.perf_counter()
         stage_started_ns = time.perf_counter_ns()
         chosen, confidence, arms, horizon, support, novelty = policy.predict(features)
         observe_elapsed(self, "ridge_predict", stage_started_ns)
+        trace_stage("policy_predict", predict_started, arm_count=len(arms))
+        post_predict_started = time.perf_counter()
 
         shadow = getattr(self, "policy_backend_shadow", None)
         if shadow is not None and bool(getattr(shadow, "enabled", False)):
@@ -1715,12 +1768,39 @@ class Engine(threading.Thread):
             ))
         rt['last_intent'] = intent.export()
         rt['behavior_summary'] = self.behavior_summary(agent, rt)
+        trace_stage("post_predict", post_predict_started, decision_source=str(decision_source))
         observe_elapsed(self, "live_inference_total", inference_started_ns)
         TELEMETRY.observe('inference', (time.perf_counter()-inference_started)*1000)
-        received = getattr(self, 'last_event_received', None)
+
+        received_map = getattr(self._inference_tls, 'event_received_perf', {}) or {}
+        received_values = [
+            float(received_map[eid])
+            for eid in set(changed_entities or ())
+            if received_map.get(eid) is not None
+        ]
+        # Direct/legacy process_agent callers do not have a pass-local timestamp map.
+        # Keep the old fallback only for those calls; normal event-driven inference uses
+        # the timestamps captured for this exact coalesced pass.
+        received = min(received_values) if received_values else (
+            getattr(self, 'last_event_received', None) if changed_entities else None
+        )
         if changed_entities and received:
-            TELEMETRY.observe('event_to_intent', (time.perf_counter()-received)*1000)
+            event_to_intent_ms = (time.perf_counter()-received)*1000
+            TELEMETRY.observe('event_to_intent', event_to_intent_ms)
+            if RUNTIME_DEBUG.enabled:
+                RUNTIME_DEBUG.instant(
+                    "event_to_intent_pass",
+                    agent_id=str(aid),
+                    target_entity=str(agent.get("target_entity") or ""),
+                    changed_count=len(changed_entities or ()),
+                    timestamp_count=len(received_values),
+                    sample_ms=round(max(0.0, event_to_intent_ms), 3),
+                )
         self._schedule_next_inference(agent, rt)
+        # Executor submission is the boundary after the decision is ready. Keep the
+        # original direct return contract; the stage marker locates this boundary while
+        # Executor/HA work remains independently observable.
+        trace_stage("executor_submit", time.perf_counter(), boundary="decision_ready")
         return self.executor.submit(intent, features, chosen['index'])
 
     def _intent_dependencies(

@@ -13,6 +13,7 @@ from agent_workflow_actions import _resolve_generation
 from context import archived_state, target_value
 from teach_observed_history import DESIRED_STALE_SECONDS, _desired_at, _recorded_rows, _timestamps
 from training_budget import TRAINING_BUDGET
+from telemetry import RUNTIME_DEBUG, TELEMETRY
 from teaching_rl import fingerprint as rl_fingerprint
 
 
@@ -222,70 +223,139 @@ def _base_payload(generation, agent, start, end):
 
 def build_correct_history(manager, ref, start, end, legacy_history):
     TRAINING_BUDGET.request_interactive_window(1.0, reason="correct_history")
-    generation, agent = _resolve_generation(manager, ref)
-    start, end = float(start), float(end)
-    if end <= start or end - start > 31 * 86400:
-        raise ValueError("Choose a history range from 1 second to 31 days")
-    payload = _base_payload(generation, agent, start, end)
-    labels = _active_labels(manager, agent)
+    total_started = time.perf_counter()
+    token = RUNTIME_DEBUG.begin(
+        "correct_history",
+        ref=str(ref),
+        requested_range_seconds=max(0.0, float(end) - float(start)),
+    ) if RUNTIME_DEBUG.enabled else None
+    outcome = "ok"
+    error_text = None
 
-    if generation.get("generation_type") == "live":
-        observed = _live_observed_history(manager, generation, agent, start, end)
-        points = list(observed.get("points") or [])
+    def stage(name, started, **fields):
+        if RUNTIME_DEBUG.enabled:
+            RUNTIME_DEBUG.instant(
+                "correct_history_stage",
+                ref=str(ref),
+                stage=str(name),
+                duration_ms=round(max(0.0, time.perf_counter() - float(started)) * 1000.0, 3),
+                **fields,
+            )
+
+    try:
+        stage_started = time.perf_counter()
+        generation, agent = _resolve_generation(manager, ref)
+        stage(
+            "resolve_generation",
+            stage_started,
+            generation_type=str(generation.get("generation_type") or ""),
+            generation_number=int(generation.get("generation_number") or 0),
+        )
+        start, end = float(start), float(end)
+        if end <= start or end - start > 31 * 86400:
+            raise ValueError("Choose a history range from 1 second to 31 days")
+        payload = _base_payload(generation, agent, start, end)
+
+        stage_started = time.perf_counter()
+        labels = _active_labels(manager, agent)
+        stage("labels", stage_started, label_count=len(labels))
+
+        if generation.get("generation_type") == "live":
+            stage_started = time.perf_counter()
+            observed = _live_observed_history(manager, generation, agent, start, end)
+            points = list(observed.get("points") or [])
+            stage(
+                "live_observed_history",
+                stage_started,
+                point_count=len(points),
+                gap_count=len(observed.get("gaps") or []),
+            )
+            payload.update({
+                "chart_mode": "live",
+                "parent_generation_id": None,
+                "series_order": ["current", "live_desired", "correct"],
+                "series": {
+                    "current": {"label": "Current", "points": _values(points, "current")},
+                    "live_desired": {"label": "Live Desired", "points": _values(points, "desired")},
+                },
+                "labels": labels,
+                "points": points,
+                "gaps": list(observed.get("gaps") or []),
+                "stale_after_seconds": observed.get("stale_after_seconds"),
+                "desired_source": observed.get("desired_source"),
+                "desired_semantics": observed.get("desired_semantics"),
+            })
+            return payload
+
+        stage_started = time.perf_counter()
+        parent_id = generation.get("parent_generation_id")
+        parent = lineage_row(manager.store, generation_id=parent_id) if parent_id else None
+        stage("resolve_parent", stage_started, found=bool(parent))
+        if not parent:
+            raise ValueError("Candidate direct parent generation not found")
+
+        stage_started = time.perf_counter()
+        child_history = manager.generation_history(generation["generation_id"], start, end)
+        child_points = list(child_history.get("points") or [])
+        stage(
+            "child_generation_history",
+            stage_started,
+            point_count=len(child_points),
+            gap_count=len(child_history.get("gaps") or []),
+        )
+
+        stage_started = time.perf_counter()
+        parent_history = manager.generation_history(parent["generation_id"], start, end)
+        parent_points = list(parent_history.get("points") or [])
+        stage(
+            "parent_generation_history",
+            stage_started,
+            point_count=len(parent_points),
+            gap_count=len(parent_history.get("gaps") or []),
+        )
+
+        # Current is physical target history, not Candidate observation history. Candidate
+        # inference may legitimately have gaps; the real device state must remain visible
+        # across those gaps so Correct can still anchor the user's correction in time.
+        stage_started = time.perf_counter()
+        current_points = _current_rows(manager, agent, start, end)
+        stage("current_history", stage_started, point_count=len(current_points))
+
         payload.update({
-            "chart_mode": "live",
-            "parent_generation_id": None,
-            "series_order": ["current", "live_desired", "correct"],
+            "chart_mode": "candidate_vs_parent",
+            "parent_generation_id": parent["generation_id"],
+            "parent_generation_number": int(parent["generation_number"]),
+            "parent_generation_type": parent["generation_type"],
+            "series_order": ["current", "parent_desired", "candidate_desired", "correct"],
             "series": {
-                "current": {"label": "Current", "points": _values(points, "current")},
-                "live_desired": {"label": "Live Desired", "points": _values(points, "desired")},
+                "current": {"label": "Current", "points": _values(current_points, "current")},
+                "parent_desired": {"label": _generation_label(parent), "points": _values(parent_points, "desired")},
+                "candidate_desired": {"label": _generation_label(generation), "points": _values(child_points, "desired")},
             },
             "labels": labels,
-            "points": points,
-            "gaps": list(observed.get("gaps") or []),
-            "stale_after_seconds": observed.get("stale_after_seconds"),
-            "desired_source": observed.get("desired_source"),
-            "desired_semantics": observed.get("desired_semantics"),
+            # Keep the selected generation's observed rows available for backwards-compatible
+            # consumers. No values below are synthesized from a policy replay.
+            "points": child_points,
+            "gaps": list(child_history.get("gaps") or []),
+            "parent_gaps": list(parent_history.get("gaps") or []),
+            "desired_source": "observed_candidate_generation_shadow_runtime",
+            "parent_desired_source": parent_history.get("desired_source") or "observed_generation_runtime",
+            "desired_semantics": "Candidate Desired actually observed from the selected generation",
+            "parent_desired_semantics": "Parent Desired actually observed from the direct parent generation",
         })
         return payload
-
-    parent_id = generation.get("parent_generation_id")
-    parent = lineage_row(manager.store, generation_id=parent_id) if parent_id else None
-    if not parent:
-        raise ValueError("Candidate direct parent generation not found")
-
-    child_history = manager.generation_history(generation["generation_id"], start, end)
-    parent_history = manager.generation_history(parent["generation_id"], start, end)
-    child_points = list(child_history.get("points") or [])
-    parent_points = list(parent_history.get("points") or [])
-    # Current is physical target history, not Candidate observation history. Candidate
-    # inference may legitimately have gaps; the real device state must remain visible
-    # across those gaps so Correct can still anchor the user's correction in time.
-    current_points = _current_rows(manager, agent, start, end)
-    payload.update({
-        "chart_mode": "candidate_vs_parent",
-        "parent_generation_id": parent["generation_id"],
-        "parent_generation_number": int(parent["generation_number"]),
-        "parent_generation_type": parent["generation_type"],
-        "series_order": ["current", "parent_desired", "candidate_desired", "correct"],
-        "series": {
-            "current": {"label": "Current", "points": _values(current_points, "current")},
-            "parent_desired": {"label": _generation_label(parent), "points": _values(parent_points, "desired")},
-            "candidate_desired": {"label": _generation_label(generation), "points": _values(child_points, "desired")},
-        },
-        "labels": labels,
-        # Keep the selected generation's observed rows available for backwards-compatible
-        # consumers. No values below are synthesized from a policy replay.
-        "points": child_points,
-        "gaps": list(child_history.get("gaps") or []),
-        "parent_gaps": list(parent_history.get("gaps") or []),
-        "desired_source": "observed_candidate_generation_shadow_runtime",
-        "parent_desired_source": parent_history.get("desired_source") or "observed_generation_runtime",
-        "desired_semantics": "Candidate Desired actually observed from the selected generation",
-        "parent_desired_semantics": "Parent Desired actually observed from the direct parent generation",
-    })
-    return payload
-
+    except Exception as exc:
+        outcome = "error"
+        error_text = f"{type(exc).__name__}: {exc}"
+        raise
+    finally:
+        total_ms = max(0.0, time.perf_counter() - total_started) * 1000.0
+        TELEMETRY.observe("correct_history", total_ms)
+        if token:
+            fields = {"total_ms": round(total_ms, 3)}
+            if error_text:
+                fields["error"] = error_text[:500]
+            RUNTIME_DEBUG.end(token, status=outcome, **fields)
 
 def build_correct_point(manager, ref, timestamp, legacy_point):
     TRAINING_BUDGET.request_interactive_window(1.0, reason="correct_point")
