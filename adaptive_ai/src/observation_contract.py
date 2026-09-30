@@ -1212,13 +1212,17 @@ class ObservationTransitionEdgeIndex:
         return list(unique.values())
 
     @classmethod
-    def _base_rows(cls, connection, entity_id, start, end, ram_replay_index):
+    def _base_rows(
+        cls, connection, entity_id, start, end, ram_replay_index, maximum
+    ):
         if (
             ram_replay_index is not None
             and ram_replay_index.covers(start, end)
             and callable(getattr(ram_replay_index, "entity_rows", None))
         ):
-            rows = ram_replay_index.entity_rows(entity_id)
+            rows = ram_replay_index.entity_rows(
+                entity_id, max_rows=max(1, int(maximum))
+            )
             if rows is not None:
                 return list(rows), 0
 
@@ -1238,25 +1242,35 @@ class ObservationTransitionEdgeIndex:
         event_sql = (
             "SELECT id,entity_id,ts,received_ts,state,attributes_json,context_user_id,source "
             "FROM entity_history WHERE entity_id=? AND ts>? AND ts<=? "
-            "AND COALESCE(received_ts,ts)<=? ORDER BY ts,id"
+            "AND COALESCE(received_ts,ts)<=? ORDER BY ts,id LIMIT ?"
         )
         result.extend(dict(row) for row in connection.execute(
-            event_sql, (entity_id, float(start), float(end), float(end))
+            event_sql,
+            (
+                entity_id, float(start), float(end), float(end),
+                max(1, int(maximum)) + 1,
+            ),
         ).fetchall())
         queries += 1
+        if len(result) > max(1, int(maximum)):
+            return result, queries
         late_sql = (
             "SELECT id,entity_id,ts,received_ts,state,attributes_json,context_user_id,source "
             "FROM entity_history WHERE entity_id=? AND received_ts>? AND received_ts<=? "
-            "AND ts<=? ORDER BY ts,id"
+            "AND ts<=? ORDER BY ts,id LIMIT ?"
         )
         result.extend(dict(row) for row in connection.execute(
-            late_sql, (entity_id, float(start), float(end), float(start))
+            late_sql,
+            (
+                entity_id, float(start), float(end), float(start),
+                max(1, int(maximum)) + 1,
+            ),
         ).fetchall())
         queries += 1
         return cls._dedupe_rows(result), queries
 
     @classmethod
-    def _feature_rows(cls, connection, entity_id, start, end):
+    def _feature_rows(cls, connection, entity_id, start, end, maximum):
         result = []
         queries = 0
         try:
@@ -1279,23 +1293,33 @@ class ObservationTransitionEdgeIndex:
                 "last_changed,last_updated,source,quality "
                 "FROM feature_observation_events "
                 "WHERE entity_id=? AND event_time>? AND event_time<=? "
-                "AND received_time<=? ORDER BY event_time,received_time,event_key"
+                "AND received_time<=? ORDER BY event_time,received_time,event_key LIMIT ?"
             )
             raw = connection.execute(
-                event_sql, (entity_id, float(start), float(end), float(end))
+                event_sql,
+                (
+                    entity_id, float(start), float(end), float(end),
+                    max(1, int(maximum)) + 1,
+                ),
             ).fetchall()
             result.extend(FeatureJournal.normalized_row(dict(row)) for row in raw)
             queries += 1
+            if len(result) > max(1, int(maximum)):
+                return result, queries
 
             late_sql = (
                 "SELECT event_key,entity_id,event_time,received_time,state,attributes_json,"
                 "last_changed,last_updated,source,quality "
                 "FROM feature_observation_events "
                 "WHERE entity_id=? AND received_time>? AND received_time<=? "
-                "AND event_time<=? ORDER BY event_time,received_time,event_key"
+                "AND event_time<=? ORDER BY event_time,received_time,event_key LIMIT ?"
             )
             raw = connection.execute(
-                late_sql, (entity_id, float(start), float(end), float(start))
+                late_sql,
+                (
+                    entity_id, float(start), float(end), float(start),
+                    max(1, int(maximum)) + 1,
+                ),
             ).fetchall()
             result.extend(FeatureJournal.normalized_row(dict(row)) for row in raw)
             queries += 1
@@ -1329,10 +1353,15 @@ class ObservationTransitionEdgeIndex:
             for entity_id in index.requested_entities:
                 base_rows, base_queries = cls._base_rows(
                     conn, entity_id, index.cover_start, index.cover_end,
-                    ram_replay_index,
+                    ram_replay_index, maximum,
                 )
+                if len(base_rows) > maximum:
+                    index.sql_queries += int(base_queries)
+                    index.rows_loaded += len(base_rows)
+                    index.fallback_entities.append(entity_id)
+                    continue
                 feature_rows, feature_queries = cls._feature_rows(
-                    conn, entity_id, index.cover_start, index.cover_end
+                    conn, entity_id, index.cover_start, index.cover_end, maximum
                 )
                 index.sql_queries += int(base_queries + feature_queries)
                 index.rows_loaded += len(base_rows) + len(feature_rows)
