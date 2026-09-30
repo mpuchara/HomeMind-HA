@@ -443,14 +443,17 @@ class RAMReplayIndex:
         self.fallback_lookups += len(fallback)
         return rows, fallback
 
-    def entity_rows(self, entity_id):
+    def entity_rows(self, entity_id, max_rows=None):
         """Return this index's immutable causal source slice for one RAM-backed entity.
 
         The row list is reconstructed only for one-time secondary index construction.
-        Ordinary replay continues to use the compact columnar timeline directly.
+        Ordinary replay continues to use the compact columnar timeline directly. A
+        secondary-index admission cap is checked before any row dicts are materialized.
         """
         timeline = self.timelines.get(str(entity_id))
         if timeline is None:
+            return None
+        if max_rows is not None and len(timeline) > max(0, int(max_rows)):
             return None
         return [timeline.row(i) for i in range(len(timeline))]
 
