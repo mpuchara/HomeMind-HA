@@ -1,9 +1,13 @@
 """Bounded-memory historical views. Large timelines and held-out vectors stay on disk."""
+import bisect
 import copy
 import hashlib
 import json
+import math
 import sqlite3
 import threading
+import time
+from array import array
 from collections import defaultdict, deque, OrderedDict
 from adaptive_presence import AdaptivePresenceModel
 from context import archived_state, TemporalHistory, state_scalar
@@ -83,6 +87,378 @@ class ReplayQueryCache:
             "max_entry_rows": int(self.max_entry_rows),
             "copy_rows": bool(self.copy_rows),
             "hit_rate": (float(self.hits) / requests) if requests else None,
+        }
+
+
+
+class _RAMEntityTimeline:
+    """Compact columnar entity_history slice used by RAMReplayIndex.
+
+    Rows are kept as primitive arrays plus a tiny per-entity string dictionary.  Dict rows
+    are reconstructed only for the existing replay API boundary, so SQLite transport and
+    repeated row deserialization disappear without changing downstream semantics.
+    """
+
+    def __init__(self, entity_id):
+        self.entity_id = str(entity_id)
+        self.ids = array("q")
+        self.ts = array("d")
+        self.received_raw = array("d")
+        self.available = array("d")
+        self.state_codes = array("I")
+        self.attributes_codes = array("I")
+        self.user_codes = array("I")
+        self.source_codes = array("I")
+        self._strings = [None, ""]
+        self._string_codes = {None: 0, "": 1}
+        self._string_bytes = 0
+        self.received_order = array("I")
+        self.received_sorted = array("d")
+
+    def _code(self, value):
+        key = None if value is None else str(value)
+        existing = self._string_codes.get(key)
+        if existing is not None:
+            return existing
+        code = len(self._strings)
+        self._strings.append(key)
+        self._string_codes[key] = code
+        self._string_bytes += len(key.encode("utf-8", errors="replace"))
+        return code
+
+    def append(self, row):
+        row_id = int(row["id"])
+        event_ts = float(row["ts"])
+        raw_received = row["received_ts"]
+        received = float(raw_received) if raw_received is not None else math.nan
+        availability = event_ts if raw_received is None else float(raw_received)
+        self.ids.append(row_id)
+        self.ts.append(event_ts)
+        self.received_raw.append(received)
+        self.available.append(availability)
+        self.state_codes.append(self._code(row["state"]))
+        self.attributes_codes.append(self._code(row["attributes_json"]))
+        self.user_codes.append(self._code(row["context_user_id"]))
+        self.source_codes.append(self._code(row["source"]))
+
+    def __len__(self):
+        return len(self.ids)
+
+    @staticmethod
+    def _reordered(values, order):
+        return array(values.typecode, (values[i] for i in order))
+
+    def finalize(self):
+        count = len(self.ids)
+        if count > 1:
+            order = sorted(range(count), key=lambda i: (self.ts[i], self.ids[i]))
+            self.ids = self._reordered(self.ids, order)
+            self.ts = self._reordered(self.ts, order)
+            self.received_raw = self._reordered(self.received_raw, order)
+            self.available = self._reordered(self.available, order)
+            self.state_codes = self._reordered(self.state_codes, order)
+            self.attributes_codes = self._reordered(self.attributes_codes, order)
+            self.user_codes = self._reordered(self.user_codes, order)
+            self.source_codes = self._reordered(self.source_codes, order)
+        receive_order = sorted(
+            range(count),
+            key=lambda i: (self.available[i], self.ts[i], self.ids[i]),
+        )
+        self.received_order = array("I", receive_order)
+        self.received_sorted = array(
+            "d", (self.available[i] for i in receive_order)
+        )
+
+    def _decode(self, code):
+        return self._strings[int(code)]
+
+    def row(self, position):
+        raw_received = float(self.received_raw[position])
+        return {
+            "id": int(self.ids[position]),
+            "entity_id": self.entity_id,
+            "ts": float(self.ts[position]),
+            "received_ts": None if math.isnan(raw_received) else raw_received,
+            "state": self._decode(self.state_codes[position]),
+            "attributes_json": self._decode(self.attributes_codes[position]),
+            "context_user_id": self._decode(self.user_codes[position]),
+            "source": self._decode(self.source_codes[position]),
+        }
+
+    def bulk_before(self, ts, count):
+        ts = float(ts)
+        wanted = max(1, int(count))
+        position = bisect.bisect_right(self.ts, ts)
+        chosen = []
+        while position > 0 and len(chosen) < wanted:
+            position -= 1
+            if float(self.available[position]) <= ts:
+                chosen.append(position)
+        chosen.reverse()
+        return [self.row(i) for i in chosen]
+
+    def interval_rows(self, lo, hi, per_entity_limit=None):
+        lo, hi = float(lo), float(hi)
+        if hi <= lo:
+            return []
+
+        positions = set()
+
+        # Rows whose event itself entered the causal interval.
+        left = bisect.bisect_right(self.ts, lo)
+        right = bisect.bisect_right(self.ts, hi)
+        for position in range(left, right):
+            if float(self.available[position]) <= hi:
+                positions.add(position)
+
+        # Late rows whose event is older than the previous cursor but whose local
+        # receive/availability time entered (lo, hi].
+        receive_left = bisect.bisect_right(self.received_sorted, lo)
+        receive_right = bisect.bisect_right(self.received_sorted, hi)
+        for receive_position in range(receive_left, receive_right):
+            position = int(self.received_order[receive_position])
+            if float(self.ts[position]) <= lo:
+                positions.add(position)
+
+        ordered = sorted(
+            positions,
+            key=lambda i: (self.ts[i], self.ids[i]),
+        )
+        if per_entity_limit is not None:
+            ordered = ordered[-max(1, int(per_entity_limit)):]
+        return [self.row(i) for i in ordered]
+
+    def memory_bytes(self):
+        arrays = (
+            self.ids, self.ts, self.received_raw, self.available,
+            self.state_codes, self.attributes_codes, self.user_codes,
+            self.source_codes, self.received_order, self.received_sorted,
+        )
+        primitive_bytes = sum(len(values) * values.itemsize for values in arrays)
+        # Include the encoded payload and a conservative allowance for dictionary/list
+        # references. This is intentionally an estimate used for admission control, not
+        # a claim about exact CPython allocator RSS.
+        dictionary_bytes = self._string_bytes + len(self._strings) * 40
+        return int(primitive_bytes + dictionary_bytes + 256)
+
+
+class RAMReplayIndex:
+    """Bounded entity_history materialization for one selected-agent replay pass.
+
+    Coverage is exact for [cover_start, cover_end].  We load:
+      * the latest seed rows that were causally visible at cover_start,
+      * all later event-time rows visible by cover_end,
+      * old-event rows that become visible later through received_ts.
+
+    That is sufficient to answer the existing as-of and incremental interval contracts
+    without future leakage. Entities that do not fit the adaptive budget remain SQLite
+    backed; callers may mix RAM and SQLite results in the same query.
+    """
+
+    CONTRACT = "ram_replay_index_v1"
+    DEFAULT_SEED_ROWS = 512
+    FETCH_ROWS = 512
+
+    def __init__(self, cover_start, cover_end, max_bytes, seed_rows=None):
+        self.cover_start = float(cover_start)
+        self.cover_end = float(cover_end)
+        self.max_bytes = max(0, int(max_bytes))
+        self.seed_rows = max(
+            SQLiteTemporalTracker.HISTORY_SAMPLES if "SQLiteTemporalTracker" in globals() else 64,
+            int(seed_rows or self.DEFAULT_SEED_ROWS),
+        )
+        self.timelines = {}
+        self.requested_entities = []
+        self.fallback_entities = []
+        self.rows = 0
+        self.estimated_bytes = 0
+        self.actual_bytes = 0
+        self.build_seconds = 0.0
+        self.sql_queries = 0
+        self.rows_loaded = 0
+        self.lookup_calls = 0
+        self.lookup_rows = 0
+        self.fallback_lookups = 0
+        self.budget_exhausted = False
+
+    @staticmethod
+    def _dedupe_entities(entity_ids):
+        out, seen = [], set()
+        for eid in entity_ids or ():
+            eid = str(eid)
+            if not eid or eid in seen:
+                continue
+            seen.add(eid)
+            out.append(eid)
+        return out
+
+    def _load_query(self, connection, timeline, sql, params, remaining_bytes):
+        cursor = connection.execute(sql, params)
+        self.sql_queries += 1
+        while True:
+            batch = cursor.fetchmany(self.FETCH_ROWS)
+            if not batch:
+                break
+            for row in batch:
+                timeline.append(row)
+                self.rows_loaded += 1
+            # Finalization creates reordered primitive arrays temporarily. Reserve about
+            # 2x the retained payload so building one pathological entity cannot push the
+            # worker through its RAM ceiling before we can fall back to SQLite.
+            if timeline.memory_bytes() * 2 > max(1, int(remaining_bytes)):
+                return False
+            TRAINING_BUDGET.checkpoint("ram_replay_index_rows")
+        return True
+
+    def _load_entity(self, connection, eid, remaining_bytes):
+        timeline = _RAMEntityTimeline(eid)
+
+        seed_sql = (
+            "SELECT * FROM ("
+            "SELECT id,entity_id,ts,received_ts,state,attributes_json,context_user_id,source "
+            "FROM entity_history WHERE entity_id=? AND ts<=? "
+            "AND COALESCE(received_ts,ts)<=? "
+            "ORDER BY ts DESC,id DESC LIMIT ?"
+            ") ORDER BY ts,id"
+        )
+        if not self._load_query(
+            connection, timeline, seed_sql,
+            (eid, self.cover_start, self.cover_start, self.seed_rows),
+            remaining_bytes,
+        ):
+            return None
+
+        event_sql = (
+            "SELECT id,entity_id,ts,received_ts,state,attributes_json,context_user_id,source "
+            "FROM entity_history WHERE entity_id=? AND ts>? AND ts<=? "
+            "AND COALESCE(received_ts,ts)<=? ORDER BY ts,id"
+        )
+        if not self._load_query(
+            connection, timeline, event_sql,
+            (eid, self.cover_start, self.cover_end, self.cover_end),
+            remaining_bytes,
+        ):
+            return None
+
+        # Disjoint late-receipt branch: ts<=cover_start excludes every row from the
+        # event-time branch and received_ts>cover_start excludes every causal seed.
+        late_sql = (
+            "SELECT id,entity_id,ts,received_ts,state,attributes_json,context_user_id,source "
+            "FROM entity_history WHERE entity_id=? AND received_ts>? AND received_ts<=? "
+            "AND ts<=? ORDER BY ts,id"
+        )
+        if not self._load_query(
+            connection, timeline, late_sql,
+            (eid, self.cover_start, self.cover_end, self.cover_start),
+            remaining_bytes,
+        ):
+            return None
+
+        timeline.finalize()
+        return timeline
+
+    @classmethod
+    def build(cls, connection, entity_ids, cover_start, cover_end, max_bytes,
+              seed_rows=None):
+        index = cls(cover_start, cover_end, max_bytes, seed_rows=seed_rows)
+        index.requested_entities = cls._dedupe_entities(entity_ids)
+        started = time.perf_counter()
+
+        if index.max_bytes <= 0 or index.cover_end <= index.cover_start:
+            index.fallback_entities = list(index.requested_entities)
+            index.build_seconds = round(time.perf_counter() - started, 6)
+            return index
+
+        for eid in index.requested_entities:
+            remaining = index.max_bytes - index.actual_bytes
+            if remaining < 256 * 1024:
+                index.budget_exhausted = True
+                index.fallback_entities.append(eid)
+                continue
+            timeline = index._load_entity(connection, eid, remaining)
+            if timeline is None:
+                index.budget_exhausted = True
+                index.fallback_entities.append(eid)
+                continue
+            entity_bytes = timeline.memory_bytes()
+            if index.actual_bytes + entity_bytes > index.max_bytes:
+                index.budget_exhausted = True
+                index.fallback_entities.append(eid)
+                continue
+            index.timelines[eid] = timeline
+            index.rows += len(timeline)
+            index.actual_bytes += entity_bytes
+            index.estimated_bytes = index.actual_bytes
+            TRAINING_BUDGET.checkpoint("ram_replay_index_entity")
+
+        indexed = set(index.timelines)
+        for eid in index.requested_entities:
+            if eid not in indexed and eid not in index.fallback_entities:
+                index.fallback_entities.append(eid)
+        index.build_seconds = round(time.perf_counter() - started, 6)
+        return index
+
+    def covers(self, lo, hi=None):
+        lo = float(lo)
+        hi = lo if hi is None else float(hi)
+        return lo >= self.cover_start - 1e-9 and hi <= self.cover_end + 1e-9
+
+    def bulk_before(self, entity_ids, ts, count):
+        ids = self._dedupe_entities(entity_ids)
+        self.lookup_calls += 1
+        if not self.covers(ts) or int(count) > self.seed_rows:
+            self.fallback_lookups += len(ids)
+            return [], ids
+
+        rows, fallback = [], []
+        for eid in ids:
+            timeline = self.timelines.get(eid)
+            if timeline is None:
+                fallback.append(eid)
+                continue
+            rows.extend(timeline.bulk_before(ts, count))
+        self.lookup_rows += len(rows)
+        self.fallback_lookups += len(fallback)
+        return rows, fallback
+
+    def interval_rows(self, entity_ids, lo, hi, per_entity_limit=None):
+        ids = self._dedupe_entities(entity_ids)
+        self.lookup_calls += 1
+        if not self.covers(lo, hi):
+            self.fallback_lookups += len(ids)
+            return [], ids
+
+        rows, fallback = [], []
+        for eid in ids:
+            timeline = self.timelines.get(eid)
+            if timeline is None:
+                fallback.append(eid)
+                continue
+            rows.extend(timeline.interval_rows(lo, hi, per_entity_limit))
+        self.lookup_rows += len(rows)
+        self.fallback_lookups += len(fallback)
+        return rows, fallback
+
+    def status(self):
+        return {
+            "contract": self.CONTRACT,
+            "cover_start": self.cover_start,
+            "cover_end": self.cover_end,
+            "requested_entities": len(self.requested_entities),
+            "indexed_entities": len(self.timelines),
+            "fallback_entities": len(self.fallback_entities),
+            "rows": int(self.rows),
+            "seed_rows": int(self.seed_rows),
+            "max_bytes": int(self.max_bytes),
+            "estimated_bytes": int(self.estimated_bytes),
+            "actual_bytes": int(self.actual_bytes),
+            "budget_exhausted": bool(self.budget_exhausted),
+            "build_seconds": float(self.build_seconds),
+            "sql_queries": int(self.sql_queries),
+            "rows_loaded": int(self.rows_loaded),
+            "lookup_calls": int(self.lookup_calls),
+            "lookup_rows": int(self.lookup_rows),
+            "fallback_lookups": int(self.fallback_lookups),
         }
 
 
@@ -346,7 +722,7 @@ class SQLiteTemporalTracker:
 
     def __init__(self, store, watched, context, start, end, query_cache=None,
                  home_context_cache=None, context_cache_contract=None,
-                 connection=None):
+                 connection=None, ram_replay_index=None):
         self._owns_connection = connection is None
         self.conn = connection or sqlite3.connect(store.path, timeout=30)
         self.conn.row_factory = sqlite3.Row
@@ -363,6 +739,7 @@ class SQLiteTemporalTracker:
         self.context = context
         self.query_cache = query_cache
         self.home_context_cache = home_context_cache
+        self.ram_replay_index = ram_replay_index
         self.context_cache_contract = str(
             context_cache_contract or "historical_home_context_v1"
         )
@@ -396,6 +773,11 @@ class SQLiteTemporalTracker:
             "legacy_asof_queries_estimate": 0,
             "sqlite_cache_kib": int(self.sqlite_cache_kib),
             "shared_sqlite_connection": not self._owns_connection,
+            "ram_index_lookups": 0,
+            "ram_index_rows": 0,
+            "ram_index_lookup_seconds": 0.0,
+            "sqlite_fallback_lookups": 0,
+            "sqlite_fallback_seconds": 0.0,
         }
         try:
             row = self.conn.execute(
@@ -472,7 +854,7 @@ class SQLiteTemporalTracker:
             self.query_cache.put(sql, params, rows)
         return rows
 
-    def _base_bulk_before(self, entity_ids, ts, count):
+    def _sqlite_base_bulk_before(self, entity_ids, ts, count):
         """Last count rows per entity using indexed LIMIT subqueries in one round-trip.
 
         A window-function scan still walks every historical row for the selected
@@ -500,7 +882,7 @@ class SQLiteTemporalTracker:
         result.sort(key=self._row_order)
         return result
 
-    def _base_interval_rows(self, entity_ids, lo, hi, per_entity_limit=None):
+    def _sqlite_base_interval_rows(self, entity_ids, lo, hi, per_entity_limit=None):
         if float(hi) <= float(lo):
             return []
         result = []
@@ -532,6 +914,56 @@ class SQLiteTemporalTracker:
             TRAINING_BUDGET.checkpoint("temporal_forward_query")
         result.sort(key=self._row_order)
         return result
+
+
+    def _base_bulk_before(self, entity_ids, ts, count):
+        if self.ram_replay_index is None:
+            return self._sqlite_base_bulk_before(entity_ids, ts, count)
+
+        started = time.perf_counter()
+        rows, fallback = self.ram_replay_index.bulk_before(
+            entity_ids, float(ts), int(count)
+        )
+        self._metrics["ram_index_lookups"] += 1
+        self._metrics["ram_index_rows"] += len(rows)
+        self._metrics["ram_index_lookup_seconds"] += time.perf_counter() - started
+
+        if fallback:
+            fallback_started = time.perf_counter()
+            rows.extend(self._sqlite_base_bulk_before(fallback, ts, count))
+            self._metrics["sqlite_fallback_lookups"] += 1
+            self._metrics["sqlite_fallback_seconds"] += (
+                time.perf_counter() - fallback_started
+            )
+        rows.sort(key=self._row_order)
+        return rows
+
+    def _base_interval_rows(self, entity_ids, lo, hi, per_entity_limit=None):
+        if self.ram_replay_index is None:
+            return self._sqlite_base_interval_rows(
+                entity_ids, lo, hi, per_entity_limit=per_entity_limit
+            )
+
+        started = time.perf_counter()
+        rows, fallback = self.ram_replay_index.interval_rows(
+            entity_ids, float(lo), float(hi),
+            per_entity_limit=per_entity_limit,
+        )
+        self._metrics["ram_index_lookups"] += 1
+        self._metrics["ram_index_rows"] += len(rows)
+        self._metrics["ram_index_lookup_seconds"] += time.perf_counter() - started
+
+        if fallback:
+            fallback_started = time.perf_counter()
+            rows.extend(self._sqlite_base_interval_rows(
+                fallback, lo, hi, per_entity_limit=per_entity_limit
+            ))
+            self._metrics["sqlite_fallback_lookups"] += 1
+            self._metrics["sqlite_fallback_seconds"] += (
+                time.perf_counter() - fallback_started
+            )
+        rows.sort(key=self._row_order)
+        return rows
 
     def _compact_rows(self, rows, count):
         """Base archive has unique IDs; subclasses may merge additional observation rows."""
@@ -886,6 +1318,11 @@ class SQLiteTemporalTracker:
             "history_samples_per_entity": self.HISTORY_SAMPLES,
             "home_context_cache_enabled": self.home_context_cache is not None,
             "context_cache_contract": self.context_cache_contract,
+            "ram_replay_index_enabled": self.ram_replay_index is not None,
+            "ram_replay_index_contract": (
+                getattr(self.ram_replay_index, "CONTRACT", None)
+                if self.ram_replay_index is not None else None
+            ),
             "query_reduction_ratio": (
                 max(0.0, 1.0 - (actual / legacy)) if legacy > 0 else None
             ),
