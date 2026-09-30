@@ -4,7 +4,7 @@
 - Realtime is now marked healthy only after subscription **id=2** succeeds (or a real state event is received). A failed or unconfirmed subscription triggers reconnect and the existing urgent REST state-resync path instead of allowing the 15-minute healthy-WebSocket resync interval to preserve stale Current values.
 - Track WebSocket subscription confirmation, total messages, state events and last-message time in status/debug export. Runtime-debug contract advances to **v3**.
 - Bind the already-tested **generation-aware Correct history** implementation into the final shipped runtime. The optimized observed-history/no-policy-replay reader had existed as library code but was not installed by `runtime_composition.py`, so production still used the older workflow reader and 0.14.115 could not trace Correct requests.
-- Install generation-aware Correct immediately after `agent_workflow_actions` and before later workflow/HTTP adapters, preserving the existing Correct UI and child-Candidate semantics.
+- Install generation-aware Correct after the established durable workflow-request queue and before later workflow/HTTP adapters, preserving request-queue ordering, the existing Correct UI and child-Candidate semantics.
 - Keep the 0.14.115 per-event receive timestamp contract for event→intent latency; when no real HA event arrives the UI remains in waiting state rather than fabricating a measurement.
 - Add 6 regressions covering confirmed/failed state subscriptions, urgent resync on subscription failure, final Correct installer order, debug-export health fields and realtime status counters. Expected full suite: **1501 tests** on Python 3.11 and 3.13 plus image smoke.
 
