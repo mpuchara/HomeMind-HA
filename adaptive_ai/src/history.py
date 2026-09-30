@@ -2660,12 +2660,31 @@ class HistoryManager(threading.Thread):
             )
             cache_key = (
                 feature_snapshot_namespaces[aid],
-                bool(include_neural),
                 source_revision,
             )
             cached = feature_snapshot_cache.get(cache_key)
             if cached is not None:
-                return cached.restore()
+                features, compact_meta, neural = cached.restore()
+                if include_neural and neural is None:
+                    neural = neural_observation(
+                        agent,
+                        tracker,
+                        sample_ts,
+                        home_forecast=compact_meta["home_forecast"],
+                    )
+                    upgraded = HistoricalFeatureSnapshot.capture(
+                        features,
+                        compact_meta,
+                        neural,
+                    )
+                    feature_snapshot_cache.record_neural_build()
+                    feature_snapshot_cache.put(
+                        cache_key,
+                        upgraded,
+                        timestamp=sample_ts,
+                    )
+                    return upgraded.restore()
+                return features, compact_meta, neural
 
             build_started = time.perf_counter()
             features, _, meta = policy.features(
