@@ -1,10 +1,10 @@
 {
-  "version": "0.14.113",
+  "version": "0.14.114",
   "release_date": "2026-09-30",
-  "base_version": "0.14.112",
-  "base_commit": "181956521cd895471b23cb999347b1d5ddf707ea",
-  "release_status": "exact-historical-feature-snapshot-reuse",
-  "release_validation_tests_passed": 1487,
+  "base_version": "0.14.113",
+  "base_commit": "47e6e902d06ea914fc6a34ba091e82059a3e0392",
+  "release_status": "live-current-freshness-hotfix",
+  "release_validation_tests_passed": 1489,
   "candidate_shadow_qos_014102": {
     "regression_source": "0.14.100 deferred Candidate Shadow queue composed under 60 s Raspberry Pi maintenance gate",
     "deferred_shadow_drain": "runs on every Candidate worker maintenance hook before periodic housekeeping admission",
@@ -1061,5 +1061,21 @@
     },
     "validation": "1488 tests passed on Python 3.11 and 3.13 final feature-head CI; image smoke and full benchmark suite green",
     "safety": "feature schema/reward/sample count/validation/Correct/Candidate/update order/chunk checkpoints/ActionIntent/Executor/physical authority unchanged"
+  },
+  "release_014114": {
+    "scope": "realtime_live_current_desired_transport_freshness",
+    "regression_source": "shared UI polling broker removed the caller AbortSignal from /api/live and /api/candidate-live, unintentionally falling back to the generic 12 s GET timeout",
+    "symptom": "an old Current snapshot could arrive many seconds late under Ingress/CPU/I/O pressure and be painted after the physical device had already changed again",
+    "affected_routes": [
+      "/api/live",
+      "/api/candidate-live"
+    ],
+    "shared_realtime_timeout_ms": 2500,
+    "coalescing_contract": "preserved; one caller still cannot cancel a request shared by other UI layers",
+    "caller_timeout_contract": "a shorter adaptiveAiTimeoutMs is preserved with min(caller, route deadline)",
+    "normal_live_poll_seconds": 1,
+    "control_semantics": "unchanged",
+    "validation": "1489 unit tests green on Python 3.11 and 3.13 feature-head CI before the release metadata bump; final release CI required",
+    "safety": "HA websocket ingestion/state reconciliation, policy, reward, Correct, Candidate lineage, Executor and physical authority unchanged"
   }
 }
