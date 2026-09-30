@@ -1335,6 +1335,20 @@ class Engine(threading.Thread):
 
     def process_agent(self, agent, state_map, changed_entities=None):
         aid = agent["id"]
+        pre_inference_started = time.perf_counter()
+
+        def trace_stage(stage, started, **fields):
+            if not RUNTIME_DEBUG.enabled:
+                return
+            RUNTIME_DEBUG.instant(
+                "inference_stage",
+                agent_id=str(aid),
+                target_entity=str(agent.get("target_entity") or ""),
+                stage=str(stage),
+                duration_ms=round(max(0.0, time.perf_counter() - float(started)) * 1000.0, 3),
+                **fields,
+            )
+
         defaults = {
             "previous_target": None, "last_ai_ts": 0.0, "last_ai_value": None,
             "last_inference_ts": 0.0, "manual_override_until": 0.0,
@@ -1379,10 +1393,12 @@ class Engine(threading.Thread):
             rt["previous_target"] = None
             rt["decision_state"] = "blocked"
             rt["decision_reason"] = "Target state/value unavailable"
+            trace_stage("pre_inference", pre_inference_started, outcome="target_unavailable")
             return
         if agent["target_property"] == "position" and target_state.get("state") in ("opening", "closing"):
             rt["decision_state"] = "waiting"
             rt["decision_reason"] = "Cover is moving; wait for its final position"
+            trace_stage("pre_inference", pre_inference_started, outcome="cover_moving")
             return
 
         # Resolve acknowledgement separately from delayed preference feedback.
@@ -1458,7 +1474,9 @@ class Engine(threading.Thread):
         if agent["mode"] not in ("shadow", "control"):
             rt["decision_state"] = "paused"
             rt["decision_reason"] = "Agent is paused"
+            trace_stage("pre_inference", pre_inference_started, outcome="paused")
             return
+        trace_stage("pre_inference", pre_inference_started, outcome="continue")
         inference_started = time.perf_counter()
         inference_started_ns = time.perf_counter_ns()
         snapshot_revisions = getattr(self._inference_tls, "entity_revisions", None)
@@ -1477,9 +1495,11 @@ class Engine(threading.Thread):
         min_inference_gap = max(0.05, float(OPTIONS.get("realtime_inference_debounce_ms", 75)) / 1000.0)
         inference_ts = now_ts()
         if not changed_entities and inference_ts - rt["last_inference_ts"] < min_inference_gap:
+            trace_stage("inference_debounce_skip", inference_started, outcome="skip")
             return
         rt["last_inference_ts"] = inference_ts
 
+        policy_context_started = time.perf_counter()
         policy = self.policy(agent)
         shared_temporal = shared_inference_temporal(
             self.temporal_history,
@@ -1489,11 +1509,14 @@ class Engine(threading.Thread):
                 or getattr(policy, "context_engine", None)
             ),
         )
+        trace_stage("policy_context", policy_context_started)
+        feature_started = time.perf_counter()
         stage_started_ns = time.perf_counter_ns()
         features, labels, context_meta = policy.features(
             state_map, shared_temporal, at_ts=inference_ts
         )
         observe_elapsed(self, "ridge_feature_construction", stage_started_ns)
+        trace_stage("feature_construction", feature_started, feature_count=len(features))
         context_meta.update(policy.selection_meta or {})
         automation_scan_marker = getattr(AUTOMATION_KNOWLEDGE, "last_scan", None)
         if rt.get("_automation_scan_marker") != automation_scan_marker:
@@ -1515,9 +1538,12 @@ class Engine(threading.Thread):
         context_meta["upstream_sensors"] = list((policy.selection_meta or {}).get("upstream_sensors") or [])
         rt["context_meta"] = context_meta
         teaching_revision = self.teaching.revision(aid)
+        predict_started = time.perf_counter()
         stage_started_ns = time.perf_counter_ns()
         chosen, confidence, arms, horizon, support, novelty = policy.predict(features)
         observe_elapsed(self, "ridge_predict", stage_started_ns)
+        trace_stage("policy_predict", predict_started, arm_count=len(arms))
+        post_predict_started = time.perf_counter()
 
         shadow = getattr(self, "policy_backend_shadow", None)
         if shadow is not None and bool(getattr(shadow, "enabled", False)):
@@ -1742,13 +1768,39 @@ class Engine(threading.Thread):
             ))
         rt['last_intent'] = intent.export()
         rt['behavior_summary'] = self.behavior_summary(agent, rt)
+        trace_stage("post_predict", post_predict_started, decision_source=str(decision_source))
         observe_elapsed(self, "live_inference_total", inference_started_ns)
         TELEMETRY.observe('inference', (time.perf_counter()-inference_started)*1000)
-        received = getattr(self, 'last_event_received', None)
+
+        received_map = getattr(self._inference_tls, 'event_received_perf', {}) or {}
+        received_values = [
+            float(received_map[eid])
+            for eid in set(changed_entities or ())
+            if received_map.get(eid) is not None
+        ]
+        # Direct/legacy process_agent callers do not have a pass-local timestamp map.
+        # Keep the old fallback only for those calls; normal event-driven inference uses
+        # the timestamps captured for this exact coalesced pass.
+        received = min(received_values) if received_values else (
+            getattr(self, 'last_event_received', None) if changed_entities else None
+        )
         if changed_entities and received:
-            TELEMETRY.observe('event_to_intent', (time.perf_counter()-received)*1000)
+            event_to_intent_ms = (time.perf_counter()-received)*1000
+            TELEMETRY.observe('event_to_intent', event_to_intent_ms)
+            if RUNTIME_DEBUG.enabled:
+                RUNTIME_DEBUG.instant(
+                    "event_to_intent_pass",
+                    agent_id=str(aid),
+                    target_entity=str(agent.get("target_entity") or ""),
+                    changed_count=len(changed_entities or ()),
+                    timestamp_count=len(received_values),
+                    sample_ms=round(max(0.0, event_to_intent_ms), 3),
+                )
         self._schedule_next_inference(agent, rt)
-        return self.executor.submit(intent, features, chosen['index'])
+        submit_started = time.perf_counter()
+        future = self.executor.submit(intent, features, chosen['index'])
+        trace_stage("executor_submit", submit_started)
+        return future
 
     def _intent_dependencies(
         self, policy, trial, snapshot_revisions=None, extra_entities=None
