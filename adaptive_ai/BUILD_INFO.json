@@ -1043,9 +1043,9 @@
       "feature_build_reduction_ratio": 0.15282392026578073,
       "duplicate_hits": 46,
       "unique_feature_timestamps": 255,
-      "baseline_wall_seconds": 1.1214945350000107,
-      "cached_wall_seconds": 1.1056009540000105,
-      "wall_speedup": 1.0143755131021712,
+      "baseline_wall_seconds": 1.1488153889999921,
+      "cached_wall_seconds": 1.1571312229999933,
+      "wall_speedup": 0.992813404534672,
       "parity": {
         "historical_experiences": true,
         "ridge_model": true,
@@ -1055,10 +1055,11 @@
       "tiny_mlp_parity_exclusions": [
         "random post-fit model_revision UUID",
         "model checksum derived from that UUID",
-        "wall-clock elapsed_seconds"
+        "wall-clock elapsed_seconds",
+        "serialized_bytes metadata derived from nondeterministic identity/timing fields"
       ]
     },
-    "validation": "1486 tests passed on both Python 3.11/3.13 feature-head CI before the final non-semantic fingerprint regression; final release CI must validate the complete 1487-test head",
+    "validation": "1488 tests passed on Python 3.11 and 3.13 final feature-head CI; image smoke and full benchmark suite green",
     "safety": "feature schema/reward/sample count/validation/Correct/Candidate/update order/chunk checkpoints/ActionIntent/Executor/physical authority unchanged"
   }
 }
