@@ -601,6 +601,30 @@ class HistoricalContextCache:
 
 
 
+class ExactFeatureRowsRevision:
+    """Exact immutable rowset identity with a precomputed in-process hash.
+
+    Cache lifetime is one worker chunk. Python's hash is only an acceleration hint:
+    equality always compares the complete immutable row identity tuple, so collisions
+    cannot produce a false cache hit.
+    """
+
+    __slots__ = ("rows", "_hash")
+
+    def __init__(self, rows):
+        self.rows = tuple(rows or ())
+        self._hash = hash(self.rows)
+
+    def __hash__(self):
+        return self._hash
+
+    def __eq__(self, other):
+        return (
+            isinstance(other, ExactFeatureRowsRevision)
+            and self.rows == other.rows
+        )
+
+
 class HistoricalFeatureSnapshot:
     """Immutable exact-as-of training feature bundle.
 
@@ -1237,10 +1261,10 @@ class SQLiteTemporalTracker:
 
     @classmethod
     def _feature_rows_fingerprint(cls, rows):
-        digest = hashlib.blake2b(digest_size=16)
-        for row in rows or ():
-            digest.update(repr(cls._home_row_fingerprint(row)).encode("utf-8"))
-        return digest.hexdigest()
+        return ExactFeatureRowsRevision(
+            cls._home_row_fingerprint(row)
+            for row in (rows or ())
+        )
 
     def _set_entity_rows(self, eid, rows):
         compact = self._compact_rows(rows, self.HISTORY_SAMPLES)
