@@ -127,6 +127,8 @@ DEFAULT_OPTIONS = {
     "training_replay_ram_cache_entry_rows": 2048,
     "training_ram_replay_index_mb": 192,
     "training_transition_edge_max_rows_per_entity": 65536,
+    "training_feature_snapshot_cache_entries": 512,
+    "training_feature_snapshot_cache_units": 65536,
     # RAM-first historical replay. These are upper bounds; the isolated worker derives
     # a smaller effective profile from MemTotal/MemAvailable before each heavy job.
     "training_home_context_cache_entries": 64,
