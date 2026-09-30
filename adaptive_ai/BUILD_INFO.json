@@ -1,10 +1,26 @@
 {
-  "version": "0.14.114",
+  "version": "0.14.115",
   "release_date": "2026-09-30",
-  "base_version": "0.14.113",
-  "base_commit": "47e6e902d06ea914fc6a34ba091e82059a3e0392",
-  "release_status": "live-current-freshness-hotfix",
-  "release_validation_tests_passed": 1489,
+  "base_version": "0.14.114",
+  "base_commit": "29419dcebc94d10c6e89a66026c14d334b95a2af",
+  "release_status": "runtime-instrumentation-diagnostics",
+  "release_validation_tests_passed": 1495,
+  "runtime_instrumentation_014115": {
+    "scope": "diagnostics only; no policy/reward/control/Candidate semantics changed",
+    "inference_stages": [
+      "pre_inference",
+      "policy_context",
+      "feature_construction",
+      "policy_predict",
+      "post_predict",
+      "executor_submit"
+    ],
+    "event_timestamp_contract": "event receive perf timestamps are captured per changed entity and carried with the coalesced inference pass; global last_event_received remains legacy fallback only",
+    "correct_history_trace": "resolve generation, labels, live/child/parent generation history and physical Current reads are timed independently",
+    "live_snapshot_trace": "/api/live exposes state revision, age since latest state event, config lookup time and total snapshot build time",
+    "training_queue_trace": "bounded 50-entry in-RAM lifecycle ring records queued, started, dropped/cancelled and worker release transitions",
+    "runtime_debug_contract_version": 2
+  },
   "candidate_shadow_qos_014102": {
     "regression_source": "0.14.100 deferred Candidate Shadow queue composed under 60 s Raspberry Pi maintenance gate",
     "deferred_shadow_drain": "runs on every Candidate worker maintenance hook before periodic housekeeping admission",
