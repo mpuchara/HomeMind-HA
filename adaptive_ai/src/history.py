@@ -168,7 +168,6 @@ class HistoryManager(threading.Thread):
         self._persistent_replay_query_cache = None
         self._persistent_home_context_cache = None
         self._persistent_ram_replay_index = None
-        self._persistent_ram_replay_index = None
         self._persistent_replay_sqlite_connection = None
         self.neural_training_artifacts = {}
         self.training_process_status = {
@@ -238,6 +237,9 @@ class HistoryManager(threading.Thread):
                 "training_replay_cache": dict(getattr(self, "training_replay_cache_status", {}) or {}),
                 "training_home_context_cache": dict(
                     getattr(self, "training_home_context_cache_status", {}) or {}
+                ),
+                "training_ram_replay_index": dict(
+                    getattr(self, "training_ram_replay_index_status", {}) or {}
                 ),
                 "tiny_mlp_training": {
                     "enabled": bool(OPTIONS.get("tiny_mlp_supervised_training_enabled", True)),
@@ -1143,6 +1145,7 @@ class HistoryManager(threading.Thread):
                 pass
         self._persistent_replay_query_cache = None
         self._persistent_home_context_cache = None
+        self._persistent_ram_replay_index = None
 
     def request_discovery_rescan(self, *, threshold_override=1, reason="manual"):
         """Run the bounded Recorder/discovery job outside the caller thread.
