@@ -47,6 +47,21 @@ class FeatureSnapshotCacheTests(unittest.TestCase):
         self.assertEqual(list(neural["values"]), [1.0, 2.0, 3.0])
         self.assertEqual(neural["feature_ids"], ("a", "b", "c"))
 
+    def test_unique_timestamp_diagnostic_is_bounded(self):
+        cache = HistoricalFeatureSnapshotCache(max_entries=1, max_units=1000)
+        snap = HistoricalFeatureSnapshot.capture(
+            {0: 1.0}, {"home_forecast": {}}, None
+        )
+        for idx in range(200):
+            cache.put(("k", idx), snap, timestamp=float(idx))
+        status = cache.status()
+        self.assertLessEqual(
+            status["unique_feature_timestamps"],
+            status["unique_feature_timestamp_cap"],
+        )
+        self.assertTrue(status["unique_feature_timestamps_saturated"])
+        self.assertGreater(status["unique_feature_timestamp_overflow"], 0)
+
     def test_lru_is_bounded_and_reports_duplicate_hits(self):
         cache = HistoricalFeatureSnapshotCache(max_entries=2, max_units=1000)
         snap = HistoricalFeatureSnapshot.capture(
