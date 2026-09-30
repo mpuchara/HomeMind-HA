@@ -3265,9 +3265,9 @@ class HistoryManager(threading.Thread):
                 frac = replay_done / replay_total
                 p = screening_end + (replay_end - screening_end) * frac
                 _publish_temporal_replay_stats()
-                self.set_status(progress=p, message=f"{progress_label}: replay {replay_done:,}/{replay_total:,} archived state changes",
+                self.set_status(progress=p, message=f"{progress_label}: replay {replay_done:,}/{replay_total:,} target history rows",
                                 stage_eta_seconds=remaining, work_done=replay_done, work_total=replay_total,
-                                work_unit="history rows", eta_source="measured replay throughput",
+                                work_unit="target history rows", eta_source="measured replay throughput",
                                 phase_detail=f"Chronological reward replay for {len(agents)} agent(s) · {rate:,.0f} rows/s")
                 replay_last_report = now_report
             if (
