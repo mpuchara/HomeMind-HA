@@ -228,18 +228,21 @@ class _RAMEntityTimeline:
             ordered = ordered[-max(1, int(per_entity_limit)):]
         return [self.row(i) for i in ordered]
 
-    def memory_bytes(self):
+    def payload_bytes(self):
         arrays = (
             self.ids, self.ts, self.received_raw, self.available,
             self.state_codes, self.attributes_codes, self.user_codes,
             self.source_codes, self.received_order, self.received_sorted,
         )
         primitive_bytes = sum(len(values) * values.itemsize for values in arrays)
-        # Include the encoded payload and a conservative allowance for dictionary/list
-        # references. This is intentionally an estimate used for admission control, not
-        # a claim about exact CPython allocator RSS.
-        dictionary_bytes = self._string_bytes + len(self._strings) * 40
-        return int(primitive_bytes + dictionary_bytes + 256)
+        # Exact logical payload retained by the column buffers + UTF-8 string content.
+        # This intentionally excludes CPython allocator/container overhead.
+        return int(primitive_bytes + self._string_bytes)
+
+    def memory_bytes(self):
+        # Conservative admission estimate: payload plus list/dict/hash-table/reference
+        # overhead. It is not process RSS; supervisor RSS remains the hard outer guard.
+        return int(self.payload_bytes() + len(self._strings) * 128 + 512)
 
 
 class RAMReplayIndex:
@@ -256,6 +259,7 @@ class RAMReplayIndex:
     """
 
     CONTRACT = "ram_replay_index_v1"
+    MIN_SEED_ROWS = 64
     DEFAULT_SEED_ROWS = 512
     FETCH_ROWS = 512
 
@@ -264,7 +268,7 @@ class RAMReplayIndex:
         self.cover_end = float(cover_end)
         self.max_bytes = max(0, int(max_bytes))
         self.seed_rows = max(
-            SQLiteTemporalTracker.HISTORY_SAMPLES if "SQLiteTemporalTracker" in globals() else 64,
+            self.MIN_SEED_ROWS,
             int(seed_rows or self.DEFAULT_SEED_ROWS),
         )
         self.timelines = {}
@@ -370,7 +374,7 @@ class RAMReplayIndex:
             return index
 
         for eid in index.requested_entities:
-            remaining = index.max_bytes - index.actual_bytes
+            remaining = index.max_bytes - index.estimated_bytes
             if remaining < 256 * 1024:
                 index.budget_exhausted = True
                 index.fallback_entities.append(eid)
@@ -380,15 +384,15 @@ class RAMReplayIndex:
                 index.budget_exhausted = True
                 index.fallback_entities.append(eid)
                 continue
-            entity_bytes = timeline.memory_bytes()
-            if index.actual_bytes + entity_bytes > index.max_bytes:
+            estimated_entity_bytes = timeline.memory_bytes()
+            if index.estimated_bytes + estimated_entity_bytes > index.max_bytes:
                 index.budget_exhausted = True
                 index.fallback_entities.append(eid)
                 continue
             index.timelines[eid] = timeline
             index.rows += len(timeline)
-            index.actual_bytes += entity_bytes
-            index.estimated_bytes = index.actual_bytes
+            index.actual_bytes += timeline.payload_bytes()
+            index.estimated_bytes += estimated_entity_bytes
             TRAINING_BUDGET.checkpoint("ram_replay_index_entity")
 
         indexed = set(index.timelines)
