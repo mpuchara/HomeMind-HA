@@ -2648,12 +2648,46 @@ class HistoryManager(threading.Thread):
                 context_cache_contract,
             )
 
+        feature_snapshot_cache_enabled = bool(
+            feature_cache_entries > 0 and feature_cache_units > 0
+        )
+
         def historical_feature_snapshot(
             agent, policy, tracker, sample_ts, *, include_neural=False
         ):
             aid = str(agent["id"])
             sample_ts = float(sample_ts)
             tracker.advance(sample_ts)
+            if not feature_snapshot_cache_enabled:
+                build_started = time.perf_counter()
+                features, _, meta = policy.features(
+                    tracker.state_map,
+                    tracker.history,
+                    at_ts=sample_ts,
+                )
+                compact_meta = {
+                    "home_forecast": dict(
+                        (meta or {}).get("home_forecast") or {}
+                    ),
+                    "home_known": bool((meta or {}).get("home_known")),
+                    "reconstruction_complete": bool(
+                        (meta or {}).get("reconstruction_complete", True)
+                    ),
+                }
+                neural = None
+                if include_neural:
+                    neural = neural_observation(
+                        agent,
+                        tracker,
+                        sample_ts,
+                        home_forecast=compact_meta["home_forecast"],
+                    )
+                feature_snapshot_cache.record_build(
+                    time.perf_counter() - build_started,
+                    neural=bool(neural is not None),
+                )
+                return dict(features), compact_meta, neural
+
             source_revision = tracker.feature_snapshot_revision(
                 feature_snapshot_entities.get(aid, ()),
                 sample_ts,
