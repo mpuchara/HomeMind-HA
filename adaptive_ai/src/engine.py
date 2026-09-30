@@ -1797,10 +1797,11 @@ class Engine(threading.Thread):
                     sample_ms=round(max(0.0, event_to_intent_ms), 3),
                 )
         self._schedule_next_inference(agent, rt)
-        submit_started = time.perf_counter()
-        future = self.executor.submit(intent, features, chosen['index'])
-        trace_stage("executor_submit", submit_started)
-        return future
+        # Executor submission is the boundary after the decision is ready. Keep the
+        # original direct return contract; the stage marker locates this boundary while
+        # Executor/HA work remains independently observable.
+        trace_stage("executor_submit", time.perf_counter(), boundary="decision_ready")
+        return self.executor.submit(intent, features, chosen['index'])
 
     def _intent_dependencies(
         self, policy, trial, snapshot_revisions=None, extra_entities=None
