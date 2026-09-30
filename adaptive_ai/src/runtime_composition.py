@@ -226,11 +226,13 @@ class RuntimeCompositionRoot:
         # shipped root rather than depending on a legacy overlay side effect. Both
         # installers are idempotent, so upgrades never stack duplicate HTTP handlers.
         manager = install_agent_workflow_actions(manager)
+        manager = install_workflow_request_queue(manager)
         # The optimized generation-aware Correct reader used to exist only as tested
         # library code and was never bound into the shipped final composition. Install
-        # it immediately after the workflow routes it wraps, before later HTTP adapters.
+        # it after the durable workflow queue so the established request-queue ordering
+        # remains intact, while its GET wrapper still becomes the authoritative Correct
+        # history/point read path before later HTTP adapters.
         manager = install_correct_generation_history(manager)
-        manager = install_workflow_request_queue(manager)
         manager = install_agent_explore(manager)
 
         # RPi resource control changes scheduling only, never learning semantics.
