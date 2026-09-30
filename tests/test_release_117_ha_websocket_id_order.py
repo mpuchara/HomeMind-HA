@@ -31,6 +31,8 @@ class FakeEngine:
         self.last_full_poll = 0.0
         self.wake_event = threading.Event()
         self.stream = None
+        self.connected_when_event = None
+        self.confirmed_when_event = None
 
     def update_entity_registry(self, _payload):
         return None
@@ -42,6 +44,8 @@ class FakeEngine:
         return None
 
     def on_state_changed(self, _data):
+        self.connected_when_event = self.ws_connected
+        self.confirmed_when_event = self.ws_subscription_confirmed
         if self.stream is not None:
             self.stream.stop_event.set()
 
@@ -95,8 +99,8 @@ class HaWebsocketIdOrder117Tests(unittest.TestCase):
         self.assertEqual(command_ids, [2, 5, 6, 7, 10, 11, 12])
         self.assertEqual(command_ids, sorted(command_ids))
         self.assertEqual(len(command_ids), len(set(command_ids)))
-        self.assertTrue(fake.ws_subscription_confirmed)
-        self.assertTrue(fake.ws_connected)
+        self.assertTrue(fake.confirmed_when_event)
+        self.assertTrue(fake.connected_when_event)
         self.assertIsNone(fake.ws_error)
 
     def test_registry_reads_start_only_after_event_subscriptions(self):
