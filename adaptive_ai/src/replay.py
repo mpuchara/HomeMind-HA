@@ -707,6 +707,8 @@ class HistoricalFeatureSnapshotCache:
         self.neural_builds = 0
         self.build_seconds = 0.0
         self._timestamps = set()
+        self._timestamp_cap = max(64, self.max_entries * 4)
+        self._timestamp_overflow = 0
         self.lock = threading.RLock()
 
     def get(self, key):
@@ -739,7 +741,14 @@ class HistoricalFeatureSnapshotCache:
             self.units += int(snapshot.units)
             self.puts += 1
             if timestamp is not None:
-                self._timestamps.add(round(float(timestamp), 9))
+                timestamp_key = round(float(timestamp), 9)
+                if (
+                    timestamp_key in self._timestamps
+                    or len(self._timestamps) < self._timestamp_cap
+                ):
+                    self._timestamps.add(timestamp_key)
+                else:
+                    self._timestamp_overflow += 1
             while (
                 len(self.data) > self.max_entries
                 or self.units > self.max_units
@@ -777,6 +786,13 @@ class HistoricalFeatureSnapshotCache:
                 "builds": int(self.builds),
                 "neural_builds": int(self.neural_builds),
                 "unique_feature_timestamps": len(self._timestamps),
+                "unique_feature_timestamps_saturated": bool(
+                    self._timestamp_overflow
+                ),
+                "unique_feature_timestamp_overflow": int(
+                    self._timestamp_overflow
+                ),
+                "unique_feature_timestamp_cap": int(self._timestamp_cap),
                 "build_seconds": round(float(self.build_seconds), 6),
                 "hit_rate": (
                     float(self.hits) / requests if requests else None
