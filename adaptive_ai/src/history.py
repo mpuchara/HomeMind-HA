@@ -248,6 +248,9 @@ class HistoryManager(threading.Thread):
                 "training_transition_edge_index": dict(
                     getattr(self, "training_transition_edge_index_status", {}) or {}
                 ),
+                "training_feature_snapshot_cache": dict(
+                    getattr(self, "training_feature_snapshot_cache_status", {}) or {}
+                ),
                 "tiny_mlp_training": {
                     "enabled": bool(OPTIONS.get("tiny_mlp_supervised_training_enabled", True)),
                     "artifact_agents": sorted((getattr(self, "neural_training_artifacts", {}) or {}).keys()),
