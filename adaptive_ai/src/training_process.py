@@ -1059,6 +1059,9 @@ def run_isolated_training_chunk(history, start_ts, end_ts, **kwargs):
         history.training_home_context_cache_status = dict(
             result.get("training_home_context_cache") or {}
         )
+        history.training_phase_timings = dict(
+            result.get("training_phase_timings") or {}
+        )
         if result.get("sequence_contract"):
             history.training_process_status["sequence_contract"] = result.get(
                 "sequence_contract"
@@ -1481,6 +1484,9 @@ def worker_main(job_path):
                 "training_home_context_cache": dict(
                     history.training_home_context_cache_status or {}
                 ),
+                "training_phase_timings": dict(
+                    getattr(history, "training_phase_timings", {}) or {}
+                ),
             })
             if history.stop_event.is_set():
                 raise InterruptedError("Persistent training worker cancelled")
@@ -1508,6 +1514,9 @@ def worker_main(job_path):
             "training_replay_cache": dict(history.training_replay_cache_status or {}),
             "training_home_context_cache": dict(
                 history.training_home_context_cache_status or {}
+            ),
+            "training_phase_timings": dict(
+                getattr(history, "training_phase_timings", {}) or {}
             ),
             "schema_cache_item": dict(
                 history.training_schema_cache.get(aid) or {}
