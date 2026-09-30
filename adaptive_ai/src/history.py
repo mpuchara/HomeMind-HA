@@ -142,6 +142,7 @@ class HistoryManager(threading.Thread):
         self.history_rows_per_second = 0.0
         self.temporal_replay_stats = {}
         self.training_phase_timings = {}
+        self.training_job_timings = {}
         # Explicit per-agent training has a global pass progress/ETA contract separate
         # from the current Recorder/replay stage counters. The stage work may reset for
         # every 6 h chunk; these fields never do until the whole selected agent finishes.
@@ -254,6 +255,9 @@ class HistoryManager(threading.Thread):
                 "temporal_replay": dict(self.temporal_replay_stats),
                 "training_phase_timings": dict(
                     getattr(self, "training_phase_timings", {}) or {}
+                ),
+                "training_job_timings": dict(
+                    getattr(self, "training_job_timings", {}) or {}
                 ),
                 "discovery_job_active": bool(self.discovery_job_active),
                 "discovery_job_started_at": self.discovery_job_started_at,
@@ -801,7 +805,22 @@ class HistoryManager(threading.Thread):
         # the broader eligible sensor pool so newly added sensors can be discovered.
         target_end = max(now_ts(), archive_end, float(agent.get("training_window_end_ts") or archive_end))
         refresh_start = start_ts if rebuild else max(start_ts, cursor - max(60.0, float(OPTIONS.get("agent_training_overlap_hours", 12)) * 3600.0))
+        recorder_wall_started = time.perf_counter()
+        self.training_job_timings = {
+            "contract": "single_agent_training_job_timing_v1",
+            "rebuild": bool(rebuild),
+            "history_window_hours": round(max(0.0, target_end - refresh_start) / 3600.0, 3),
+        }
         self._refresh_agent_history(agent, refresh_start, target_end, rebuild=rebuild)
+        self.training_job_timings["recorder_refresh_seconds"] = round(
+            time.perf_counter() - recorder_wall_started, 4
+        )
+        self.training_job_timings["recorder_coverage_hits"] = int(
+            getattr(self, "training_recorder_coverage_hits", 0) or 0
+        )
+        self.training_job_timings["recorder_coverage_misses"] = int(
+            getattr(self, "training_recorder_coverage_misses", 0) or 0
+        )
         # Recorder refresh may extend the archive, but the requested pass still ends at
         # the captured current time for deterministic progress.
         STORE.set_training_progress(agent_id, start_ts, cursor, target_end)
