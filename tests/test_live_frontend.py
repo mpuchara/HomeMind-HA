@@ -41,3 +41,11 @@ setImmediate(()=>{
         self.assertIn("tileText(card,'confidence',liveConfidence(a));", text)
         self.assertIn('setTimeout(liveLoop,1000)', text)
         self.assertIn("document.addEventListener('visibilitychange'", text)
+
+    def test_shared_polling_broker_keeps_realtime_reads_short_bounded(self):
+        text = (ROOT / 'adaptive_ai/src/static/polling_guard.js').read_text(encoding='utf-8')
+        self.assertIn("if(base.endsWith('api/live')||base.endsWith('api/candidate-live'))return 2500;", text)
+        self.assertIn('const sharedTimeout=sharedTimeoutFor(key);', text)
+        self.assertIn('sharedInit.adaptiveAiTimeoutMs=Number.isFinite(requested)&&requested>0', text)
+        self.assertIn('?Math.min(requested,sharedTimeout):sharedTimeout;', text)
+        self.assertIn('delete sharedInit.signal;', text)
