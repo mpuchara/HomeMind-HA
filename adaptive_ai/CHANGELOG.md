@@ -1,3 +1,15 @@
+# 0.14.110 — 2026-09-30
+
+- Remove a major source of wasted work from **single-agent Train/Rebuild**: the outer chronological replay driver now streams only target rows instead of target + every selected context sensor row.
+- Historical context semantics are unchanged. `SQLiteTemporalTracker` still reconstructs the complete selected feature schema causally at every onset/persistence timestamp; only the duplicate outer-loop deserialization of context rows is removed.
+- Preserve target transition identity exactly. Dedicated regression compares the target rows from the old broad stream after filtering with the new target-only stream and requires identical row IDs, timestamps and states.
+- Add per-chunk diagnostics: `screening_seconds`, `replay_seconds`, `finalization_seconds`, `total_seconds`, target rows planned/processed, target entity count and context entity count.
+- Add end-to-end job diagnostics separating `recorder_refresh_seconds` from worker replay plus Recorder coverage hit/miss counters. This makes multi-hour Pi runs attributable instead of opaque.
+- Update replay progress wording to report **target history rows** instead of all archived state changes.
+- GitHub-host synthetic Store.archive_iter benchmark with 12 chatty context sensors: **48,080 → 80 rows deserialized (99.83% reduction)** with exact target-row parity; outer-stream wall time **0.741 s → 0.00093 s (~796×)**. This benchmark isolates the removed outer-stream overhead and is not a whole-training or Raspberry Pi speedup claim.
+- Python 3.11/3.13 test suite: **1467 tests green**; Docker image and deterministic product runtime validation pass.
+- No reward, feature timestamp, validation, Correct, Candidate lineage, TinyMLP, promotion, ActionIntent, Executor or physical-control authority semantics change.
+
 # 0.14.109 — 2026-09-29
 
 - Add an **adaptive dual-agent training scheduler** so independent historical Train/Rebuild jobs can use a second CPU core instead of leaving a 4-core Raspberry Pi near one-core utilization.

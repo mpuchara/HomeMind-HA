@@ -1,10 +1,10 @@
 {
-  "version": "0.14.109",
-  "release_date": "2026-09-29",
-  "base_version": "0.14.108",
-  "base_commit": "381b357ed40e48898bf8378b85e90616e81ce4ac",
-  "release_status": "adaptive-dual-agent-training",
-  "release_validation_tests_passed": 1463,
+  "version": "0.14.110",
+  "release_date": "2026-09-30",
+  "base_version": "0.14.109",
+  "base_commit": "f50129b682709fbfddc7bf04e95bad0a2a2d7776",
+  "release_status": "target-only-single-agent-replay",
+  "release_validation_tests_passed": 1467,
   "candidate_shadow_qos_014102": {
     "regression_source": "0.14.100 deferred Candidate Shadow queue composed under 60 s Raspberry Pi maintenance gate",
     "deferred_shadow_drain": "runs on every Candidate worker maintenance hook before periodic housekeeping admission",
@@ -862,5 +862,36 @@
     },
     "single_agent_note": "single Train/Rebuild remains primarily one-core; this release accelerates queued independent agents",
     "safety": "Recorder serialized; same target serialized; per-agent cancel/process state; worker nice=10; single-thread neural BLAS; no learning or physical-control authority changes"
+  },
+  "release_014110": {
+    "scope": "single_agent_historical_replay_performance",
+    "replay_stream_contract": "target_only_driver_v1",
+    "context_reconstruction": "SQLiteTemporalTracker retains complete selected policy schema and exact causal timestamps",
+    "phase_timing_contract": "single_agent_training_phase_timing_v1",
+    "job_timing_contract": "single_agent_training_job_timing_v1",
+    "diagnostics": [
+      "training_phase_timings.screening_seconds",
+      "training_phase_timings.replay_seconds",
+      "training_phase_timings.finalization_seconds",
+      "training_phase_timings.total_seconds",
+      "training_phase_timings.replay_driver_rows_planned",
+      "training_phase_timings.replay_driver_rows_processed",
+      "training_job_timings.recorder_refresh_seconds",
+      "training_job_timings.recorder_coverage_hits",
+      "training_job_timings.recorder_coverage_misses"
+    ],
+    "benchmark": {
+      "environment": "GitHub-hosted synthetic SQLite Store.archive_iter; not Raspberry Pi full training",
+      "context_entities": 12,
+      "rows_written": 48080,
+      "broad_rows_deserialized": 48080,
+      "target_only_rows_deserialized": 80,
+      "row_reduction_ratio": 0.9983361064891847,
+      "broad_wall_seconds": 0.7410382730000151,
+      "target_only_wall_seconds": 0.0009305799999879127,
+      "outer_stream_wall_speedup": 796.3187184440246,
+      "target_row_parity": true
+    },
+    "safety": "only duplicate outer-loop context row iteration removed; causal tracker context/reward/validation/Correct/Candidate/promotion/Executor authority unchanged"
   }
 }
