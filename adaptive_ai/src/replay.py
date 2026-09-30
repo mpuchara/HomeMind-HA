@@ -443,6 +443,20 @@ class RAMReplayIndex:
         self.fallback_lookups += len(fallback)
         return rows, fallback
 
+    def entity_rows(self, entity_id, max_rows=None):
+        """Return this index's immutable causal source slice for one RAM-backed entity.
+
+        The row list is reconstructed only for one-time secondary index construction.
+        Ordinary replay continues to use the compact columnar timeline directly. A
+        secondary-index admission cap is checked before any row dicts are materialized.
+        """
+        timeline = self.timelines.get(str(entity_id))
+        if timeline is None:
+            return None
+        if max_rows is not None and len(timeline) > max(0, int(max_rows)):
+            return None
+        return [timeline.row(i) for i in range(len(timeline))]
+
     def status(self):
         return {
             "contract": self.CONTRACT,
@@ -726,7 +740,8 @@ class SQLiteTemporalTracker:
 
     def __init__(self, store, watched, context, start, end, query_cache=None,
                  home_context_cache=None, context_cache_contract=None,
-                 connection=None, ram_replay_index=None):
+                 connection=None, ram_replay_index=None,
+                 transition_edge_index=None):
         self._owns_connection = connection is None
         self.conn = connection or sqlite3.connect(store.path, timeout=30)
         self.conn.row_factory = sqlite3.Row
@@ -744,6 +759,7 @@ class SQLiteTemporalTracker:
         self.query_cache = query_cache
         self.home_context_cache = home_context_cache
         self.ram_replay_index = ram_replay_index
+        self.transition_edge_index = transition_edge_index
         self.context_cache_contract = str(
             context_cache_contract or "historical_home_context_v1"
         )
@@ -782,6 +798,12 @@ class SQLiteTemporalTracker:
             "ram_index_lookup_seconds": 0.0,
             "sqlite_fallback_lookups": 0,
             "sqlite_fallback_seconds": 0.0,
+            "transition_edge_index_lookups": 0,
+            "transition_edge_index_hits": 0,
+            "transition_edge_index_fallbacks": 0,
+            "transition_edge_cursor_rewinds": 0,
+            "transition_edge_rows_applied": 0,
+            "transition_edge_scan_rows_avoided_estimate": 0,
         }
         try:
             row = self.conn.execute(
@@ -1326,6 +1348,11 @@ class SQLiteTemporalTracker:
             "ram_replay_index_contract": (
                 getattr(self.ram_replay_index, "CONTRACT", None)
                 if self.ram_replay_index is not None else None
+            ),
+            "transition_edge_index_enabled": self.transition_edge_index is not None,
+            "transition_edge_index_contract": (
+                getattr(self.transition_edge_index, "CONTRACT", None)
+                if self.transition_edge_index is not None else None
             ),
             "query_reduction_ratio": (
                 max(0.0, 1.0 - (actual / legacy)) if legacy > 0 else None

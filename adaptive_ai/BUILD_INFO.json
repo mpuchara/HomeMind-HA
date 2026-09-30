@@ -1,10 +1,10 @@
 {
-  "version": "0.14.111",
+  "version": "0.14.112",
   "release_date": "2026-09-30",
-  "base_version": "0.14.110",
-  "base_commit": "553b5af096f10ca1b3accb63561ddb6c542a9a68",
-  "release_status": "bounded-ram-replay-index",
-  "release_validation_tests_passed": 1476,
+  "base_version": "0.14.111",
+  "base_commit": "b194262b7d601c454a8c2b48357a867ed03ab975",
+  "release_status": "preindexed-causal-transition-edges",
+  "release_validation_tests_passed": 1480,
   "candidate_shadow_qos_014102": {
     "regression_source": "0.14.100 deferred Candidate Shadow queue composed under 60 s Raspberry Pi maintenance gate",
     "deferred_shadow_drain": "runs on every Candidate worker maintenance hook before periodic housekeeping admission",
@@ -943,6 +943,52 @@
       "estimated_retained_bytes": 1341828
     },
     "validation": "1476 Python tests passed on both 3.11 and 3.13 feature-head CI; release metadata bump requires final release CI",
+    "safety": "reward/sample count/validation/Correct/Candidate/update order/ActionIntent/Executor/physical authority unchanged"
+  },
+  "release_014112": {
+    "scope": "single_agent_fast_transition_edge_lookup",
+    "edge_index_contract": "observation_transition_edge_index_v1",
+    "indexed_sources": "primary occupancy/local sensor plus declared upstream sensors only",
+    "causal_semantics": "event time + receive time visibility, late-packet gating, rewind and interval boundaries preserved",
+    "merge_semantics": "exact Observation v12 top-512 merged entity_history + feature_observation_events behavior",
+    "persistent_reuse": "immutable source index reused across onset/persistence trackers and persistent logical chunks when coverage is sufficient",
+    "max_rows_per_entity_default": 65536,
+    "fallback": "oversized or out-of-coverage sources use exact legacy SQLite path; no partial edge semantics",
+    "diagnostics": [
+      "training_phase_timings.transition_edge_index_construction_seconds",
+      "training_phase_timings.transition_edge_entities",
+      "training_phase_timings.transition_edge_source_rows",
+      "training_phase_timings.transition_edge_estimated_bytes",
+      "training_phase_timings.transition_edge_fallback_entities",
+      "temporal_replay.transition_edge_index",
+      "temporal_replay.totals.transition_edge_index_lookups",
+      "temporal_replay.totals.transition_edge_index_hits",
+      "temporal_replay.totals.transition_edge_index_fallbacks",
+      "temporal_replay.totals.transition_edge_cursor_rewinds",
+      "temporal_replay.totals.transition_edge_rows_applied",
+      "temporal_replay.totals.transition_edge_scan_rows_avoided_estimate"
+    ],
+    "benchmark": {
+      "environment": "GitHub-hosted synthetic archive + feature journal; not Raspberry Pi full training",
+      "entities": 4,
+      "rows_per_entity": 1600,
+      "query_pairs": 800,
+      "legacy_lookup_seconds": 11.360225837000002,
+      "indexed_warm_lookup_seconds": 0.22392737799999907,
+      "edge_index_build_seconds": 0.14476984899999934,
+      "build_plus_lookup_seconds": 0.3686972269999984,
+      "warm_lookup_speedup": 50.73174141752354,
+      "build_plus_lookup_speedup": 30.811801676501492,
+      "legacy_lookup_sql_queries": 1600,
+      "edge_index_build_sql_queries": 12,
+      "indexed_lookup_sql_queries": 0,
+      "sql_query_reduction_ratio": 0.9925,
+      "parity": true,
+      "fallback_entities": 0,
+      "source_rows": 7200,
+      "estimated_bytes": 1152000
+    },
+    "validation": "1480 Python tests passed on both 3.11 and 3.13 feature-head CI; final release metadata bump requires final release CI",
     "safety": "reward/sample count/validation/Correct/Candidate/update order/ActionIntent/Executor/physical authority unchanged"
   }
 }

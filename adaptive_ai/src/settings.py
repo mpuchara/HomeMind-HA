@@ -15,7 +15,7 @@ try:
 except Exception:
     ws_connect = None
 
-APP_VERSION = "0.14.111"
+APP_VERSION = "0.14.112"
 HISTORY_BOOTSTRAP_REVISION = "target-attrs-v2"
 TRAINING_REVISION = "shared-home-intents-v19"
 DATA_DIR = Path(os.environ.get("ADAPTIVE_AI_DATA", "/data"))
@@ -126,6 +126,7 @@ DEFAULT_OPTIONS = {
     "training_replay_ram_cache_rows": 65536,
     "training_replay_ram_cache_entry_rows": 2048,
     "training_ram_replay_index_mb": 192,
+    "training_transition_edge_max_rows_per_entity": 65536,
     # RAM-first historical replay. These are upper bounds; the isolated worker derives
     # a smaller effective profile from MemTotal/MemAvailable before each heavy job.
     "training_home_context_cache_entries": 64,

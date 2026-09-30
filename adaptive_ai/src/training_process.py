@@ -73,6 +73,7 @@ NON_SEMANTIC_TRAINING_OPTION_KEYS = frozenset({
     "training_replay_ram_cache_entry_rows",
     "training_replay_ram_cache_rows",
     "training_ram_replay_index_mb",
+    "training_transition_edge_max_rows_per_entity",
     "training_sqlite_cache_mb",
     "training_throttle_max_sleep_seconds",
     "training_worker_memory_available_fraction",
@@ -1070,6 +1071,9 @@ def run_isolated_training_chunk(history, start_ts, end_ts, **kwargs):
         history.training_ram_replay_index_status = dict(
             result.get("training_ram_replay_index") or {}
         )
+        history.training_transition_edge_index_status = dict(
+            result.get("training_transition_edge_index") or {}
+        )
         history.training_phase_timings = dict(
             result.get("training_phase_timings") or {}
         )
@@ -1498,6 +1502,9 @@ def worker_main(job_path):
                 "training_ram_replay_index": dict(
                     getattr(history, "training_ram_replay_index_status", {}) or {}
                 ),
+                "training_transition_edge_index": dict(
+                    getattr(history, "training_transition_edge_index_status", {}) or {}
+                ),
                 "training_phase_timings": dict(
                     getattr(history, "training_phase_timings", {}) or {}
                 ),
@@ -1531,6 +1538,9 @@ def worker_main(job_path):
             ),
             "training_ram_replay_index": dict(
                 getattr(history, "training_ram_replay_index_status", {}) or {}
+            ),
+            "training_transition_edge_index": dict(
+                getattr(history, "training_transition_edge_index_status", {}) or {}
             ),
             "training_phase_timings": dict(
                 getattr(history, "training_phase_timings", {}) or {}

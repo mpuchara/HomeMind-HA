@@ -7,11 +7,13 @@ untouched.
 """
 from __future__ import annotations
 
+from bisect import bisect_right
 from collections import deque
 from contextlib import suppress
 import hashlib
 import json
 import math
+import sqlite3
 import time
 import threading
 
@@ -1006,6 +1008,412 @@ class FeatureJournal:
                 "global_event_limit": self.global_event_limit}
 
 
+
+class _TransitionEdgeCursor:
+    """Causal visibility cursor with binary-searched transition edges."""
+
+    def __init__(self, records, row_cap=512):
+        self.records = list(records or ())
+        self.row_cap = max(2, int(row_cap))
+        self.position = 0
+        self.cutoff = None
+        self.selected = {}
+        self.active_rows = []
+        self.times = []
+        self.positive_edges = []
+        self.positive_times = []
+        self.negative_edges = []
+        self.negative_times = []
+        self.rows_applied = 0
+        self.rewinds = 0
+        self.recomputes = 0
+
+    @staticmethod
+    def _merge_key(record):
+        return (round(float(record[1]), 9), str(record[4]))
+
+    @staticmethod
+    def _priority(record):
+        return (float(record[2]), str(record[3]))
+
+    @staticmethod
+    def _row_order(record):
+        return (float(record[1]), float(record[2]), str(record[3]))
+
+    def _reset(self):
+        self.position = 0
+        self.selected = {}
+        self.active_rows = []
+        self.times = []
+        self.positive_edges = []
+        self.positive_times = []
+        self.negative_edges = []
+        self.negative_times = []
+        self.cutoff = None
+
+    def advance(self, cutoff):
+        cutoff = float(cutoff)
+        if self.cutoff is not None and cutoff < float(self.cutoff) - 1e-9:
+            self.rewinds += 1
+            self._reset()
+
+        changed = False
+        while self.position < len(self.records):
+            record = self.records[self.position]
+            if float(record[0]) > cutoff + 1e-9:
+                break
+            key = self._merge_key(record)
+            previous = self.selected.get(key)
+            if previous is None or self._priority(record) > self._priority(previous):
+                self.selected[key] = record
+                changed = True
+            self.position += 1
+            self.rows_applied += 1
+
+        if changed or self.cutoff is None:
+            self._recompute()
+        self.cutoff = cutoff
+
+    def _recompute(self):
+        rows = sorted(self.selected.values(), key=self._row_order)
+        self.active_rows = rows[-self.row_cap:]
+        self.times = [float(record[1]) for record in self.active_rows]
+        positive = []
+        negative = []
+        previous = None
+        for row_index, record in enumerate(self.active_rows):
+            current_valid = bool(record[5])
+            current_kind = str(record[6])
+            current_value = float(record[7])
+            if previous is not None:
+                previous_valid = bool(previous[5])
+                previous_kind = str(previous[6])
+                previous_value = float(previous[7])
+                if (
+                    current_valid and previous_valid
+                    and current_kind != "category"
+                    and previous_kind != "category"
+                ):
+                    if current_value > .25 and previous_value <= .25:
+                        positive.append((float(record[1]), row_index))
+                    elif current_value < -.25 and previous_value >= -.25:
+                        negative.append((float(record[1]), row_index))
+            if current_valid:
+                previous = record
+
+        self.positive_edges = positive
+        self.positive_times = [item[0] for item in positive]
+        self.negative_edges = negative
+        self.negative_times = [item[0] for item in negative]
+        self.recomputes += 1
+
+    def _suppressed_first_valid_row(self, lo):
+        """Preserve the historical invalid-row boundary rule exactly."""
+        if not self.active_rows:
+            return None
+        boundary = bisect_right(self.times, float(lo)) - 1
+        if boundary < 0 or bool(self.active_rows[boundary][5]):
+            return None
+        start = bisect_right(self.times, float(lo))
+        for row_index in range(start, len(self.active_rows)):
+            if bool(self.active_rows[row_index][5]):
+                return row_index
+        return None
+
+    def latest(self, lo, hi, positive):
+        self.advance(hi)
+        edges = self.positive_edges if positive else self.negative_edges
+        times = self.positive_times if positive else self.negative_times
+        if not edges:
+            return None
+        suppressed = self._suppressed_first_valid_row(lo)
+        index = bisect_right(times, float(hi)) - 1
+        while index >= 0 and float(edges[index][0]) > float(lo):
+            if suppressed is None or int(edges[index][1]) != int(suppressed):
+                return float(edges[index][0])
+            index -= 1
+        return None
+
+    def first(self, lo, hi, positive):
+        self.advance(hi)
+        edges = self.positive_edges if positive else self.negative_edges
+        times = self.positive_times if positive else self.negative_times
+        if not edges:
+            return None
+        suppressed = self._suppressed_first_valid_row(lo)
+        index = bisect_right(times, float(lo))
+        while index < len(edges) and float(edges[index][0]) <= float(hi) + 1e-9:
+            if suppressed is None or int(edges[index][1]) != int(suppressed):
+                return float(edges[index][0])
+            index += 1
+        return None
+
+
+class ObservationTransitionEdgeIndex:
+    """Immutable preindexed source rows for fast-anchor/dwell transition queries."""
+
+    CONTRACT = "observation_transition_edge_index_v1"
+    ROW_CAP = 512
+    DEFAULT_MAX_ROWS_PER_ENTITY = 65536
+
+    def __init__(self, cover_start, cover_end, requested_entities):
+        self.cover_start = float(cover_start)
+        self.cover_end = float(cover_end)
+        self.requested_entities = tuple(sorted(set(str(x) for x in requested_entities or () if x)))
+        self.records = {}
+        self.fallback_entities = []
+        self.sql_queries = 0
+        self.rows_loaded = 0
+        self.source_rows = 0
+        self.estimated_bytes = 0
+        self.build_seconds = 0.0
+
+    @staticmethod
+    def _row_visible_at(row):
+        event_ts = float(row.get("ts") or 0.0)
+        received = row.get("_feature_received_time")
+        if received is None:
+            received = row.get("received_ts")
+        if received is None:
+            received = event_ts
+        return max(event_ts, float(received))
+
+    @staticmethod
+    def _record(row):
+        event_ts = float(row.get("ts") or 0.0)
+        feature_received = row.get("_feature_received_time")
+        received_rank = float(feature_received or 0.0)
+        observation = observation_value(context_module.archived_state(row))
+        return (
+            ObservationTransitionEdgeIndex._row_visible_at(row),
+            event_ts,
+            received_rank,
+            str(row.get("id") or ""),
+            str(row.get("state")),
+            bool(observation.get("valid")),
+            str(observation.get("kind") or "missing"),
+            float(observation.get("value") or 0.0),
+        )
+
+    @staticmethod
+    def _record_sort(record):
+        return (
+            float(record[0]),
+            float(record[1]),
+            float(record[2]),
+            str(record[3]),
+        )
+
+    @staticmethod
+    def _dedupe_rows(rows):
+        unique = {}
+        for row in rows or ():
+            unique[str(row.get("id"))] = row
+        return list(unique.values())
+
+    @classmethod
+    def _base_rows(
+        cls, connection, entity_id, start, end, ram_replay_index, maximum
+    ):
+        if (
+            ram_replay_index is not None
+            and ram_replay_index.covers(start, end)
+            and callable(getattr(ram_replay_index, "entity_rows", None))
+        ):
+            rows = ram_replay_index.entity_rows(
+                entity_id, max_rows=max(1, int(maximum))
+            )
+            if rows is not None:
+                return list(rows), 0
+
+        result = []
+        queries = 0
+        seed_sql = (
+            "SELECT * FROM ("
+            "SELECT id,entity_id,ts,received_ts,state,attributes_json,context_user_id,source "
+            "FROM entity_history WHERE entity_id=? AND ts<=? "
+            "AND COALESCE(received_ts,ts)<=? "
+            "ORDER BY ts DESC,id DESC LIMIT ?)"
+        )
+        result.extend(dict(row) for row in connection.execute(
+            seed_sql, (entity_id, float(start), float(start), cls.ROW_CAP)
+        ).fetchall())
+        queries += 1
+        event_sql = (
+            "SELECT id,entity_id,ts,received_ts,state,attributes_json,context_user_id,source "
+            "FROM entity_history WHERE entity_id=? AND ts>? AND ts<=? "
+            "AND COALESCE(received_ts,ts)<=? ORDER BY ts,id LIMIT ?"
+        )
+        result.extend(dict(row) for row in connection.execute(
+            event_sql,
+            (
+                entity_id, float(start), float(end), float(end),
+                max(1, int(maximum)) + 1,
+            ),
+        ).fetchall())
+        queries += 1
+        if len(result) > max(1, int(maximum)):
+            return result, queries
+        late_sql = (
+            "SELECT id,entity_id,ts,received_ts,state,attributes_json,context_user_id,source "
+            "FROM entity_history WHERE entity_id=? AND received_ts>? AND received_ts<=? "
+            "AND ts<=? ORDER BY ts,id LIMIT ?"
+        )
+        result.extend(dict(row) for row in connection.execute(
+            late_sql,
+            (
+                entity_id, float(start), float(end), float(start),
+                max(1, int(maximum)) + 1,
+            ),
+        ).fetchall())
+        queries += 1
+        return cls._dedupe_rows(result), queries
+
+    @classmethod
+    def _feature_rows(cls, connection, entity_id, start, end, maximum):
+        result = []
+        queries = 0
+        try:
+            seed_sql = (
+                "SELECT * FROM ("
+                "SELECT event_key,entity_id,event_time,received_time,state,attributes_json,"
+                "last_changed,last_updated,source,quality "
+                "FROM feature_observation_events "
+                "WHERE entity_id=? AND event_time<=? AND received_time<=? "
+                "ORDER BY event_time DESC,received_time DESC,event_key DESC LIMIT ?)"
+            )
+            raw = connection.execute(
+                seed_sql, (entity_id, float(start), float(start), cls.ROW_CAP)
+            ).fetchall()
+            result.extend(FeatureJournal.normalized_row(dict(row)) for row in raw)
+            queries += 1
+
+            event_sql = (
+                "SELECT event_key,entity_id,event_time,received_time,state,attributes_json,"
+                "last_changed,last_updated,source,quality "
+                "FROM feature_observation_events "
+                "WHERE entity_id=? AND event_time>? AND event_time<=? "
+                "AND received_time<=? ORDER BY event_time,received_time,event_key LIMIT ?"
+            )
+            raw = connection.execute(
+                event_sql,
+                (
+                    entity_id, float(start), float(end), float(end),
+                    max(1, int(maximum)) + 1,
+                ),
+            ).fetchall()
+            result.extend(FeatureJournal.normalized_row(dict(row)) for row in raw)
+            queries += 1
+            if len(result) > max(1, int(maximum)):
+                return result, queries
+
+            late_sql = (
+                "SELECT event_key,entity_id,event_time,received_time,state,attributes_json,"
+                "last_changed,last_updated,source,quality "
+                "FROM feature_observation_events "
+                "WHERE entity_id=? AND received_time>? AND received_time<=? "
+                "AND event_time<=? ORDER BY event_time,received_time,event_key LIMIT ?"
+            )
+            raw = connection.execute(
+                late_sql,
+                (
+                    entity_id, float(start), float(end), float(start),
+                    max(1, int(maximum)) + 1,
+                ),
+            ).fetchall()
+            result.extend(FeatureJournal.normalized_row(dict(row)) for row in raw)
+            queries += 1
+        except sqlite3.OperationalError:
+            return [], queries
+        return cls._dedupe_rows(result), queries
+
+    @classmethod
+    def build(cls, store, entity_ids, cover_start, cover_end, *,
+              ram_replay_index=None, connection=None, max_rows_per_entity=None):
+        index = cls(cover_start, cover_end, entity_ids)
+        started = time.perf_counter()
+        maximum = max(
+            cls.ROW_CAP,
+            int(
+                max_rows_per_entity
+                or OPTIONS.get(
+                    "training_transition_edge_max_rows_per_entity",
+                    cls.DEFAULT_MAX_ROWS_PER_ENTITY,
+                )
+                or cls.DEFAULT_MAX_ROWS_PER_ENTITY
+            ),
+        )
+        owns_connection = connection is None
+        conn = connection
+        if conn is None:
+            conn = sqlite3.connect(store.path, timeout=30)
+            conn.row_factory = sqlite3.Row
+            conn.execute("PRAGMA query_only=ON")
+        try:
+            for entity_id in index.requested_entities:
+                base_rows, base_queries = cls._base_rows(
+                    conn, entity_id, index.cover_start, index.cover_end,
+                    ram_replay_index, maximum,
+                )
+                if len(base_rows) > maximum:
+                    index.sql_queries += int(base_queries)
+                    index.rows_loaded += len(base_rows)
+                    index.fallback_entities.append(entity_id)
+                    continue
+                feature_rows, feature_queries = cls._feature_rows(
+                    conn, entity_id, index.cover_start, index.cover_end, maximum
+                )
+                index.sql_queries += int(base_queries + feature_queries)
+                index.rows_loaded += len(base_rows) + len(feature_rows)
+                source = cls._dedupe_rows([*base_rows, *feature_rows])
+                records = [cls._record(row) for row in source]
+                records = [
+                    record for record in records
+                    if float(record[0]) <= index.cover_end + 1e-9
+                    and float(record[1]) <= index.cover_end + 1e-9
+                ]
+                if len(records) > maximum:
+                    index.fallback_entities.append(entity_id)
+                    continue
+                records.sort(key=cls._record_sort)
+                index.records[entity_id] = tuple(records)
+                index.source_rows += len(records)
+                index.estimated_bytes += int(len(records) * 160)
+                TRAINING_BUDGET.checkpoint("transition_edge_index_entity")
+        finally:
+            if owns_connection:
+                conn.close()
+        index.build_seconds = round(time.perf_counter() - started, 6)
+        return index
+
+    def covers(self, lo, hi):
+        return (
+            float(lo) >= self.cover_start - 1e-9
+            and float(hi) <= self.cover_end + 1e-9
+        )
+
+    def new_cursor(self, entity_id):
+        records = self.records.get(str(entity_id))
+        if records is None:
+            return None
+        return _TransitionEdgeCursor(records, row_cap=self.ROW_CAP)
+
+    def status(self):
+        return {
+            "contract": self.CONTRACT,
+            "cover_start": self.cover_start,
+            "cover_end": self.cover_end,
+            "requested_entities": len(self.requested_entities),
+            "indexed_entities": len(self.records),
+            "fallback_entities": len(self.fallback_entities),
+            "source_rows": int(self.source_rows),
+            "rows_loaded": int(self.rows_loaded),
+            "sql_queries": int(self.sql_queries),
+            "estimated_bytes": int(self.estimated_bytes),
+            "build_seconds": float(self.build_seconds),
+        }
+
+
 class ObservationSQLiteTemporalTracker(replay_module.SQLiteTemporalTracker):
     """Incremental replay view merging long-term archive with the bounded fast journal.
 
@@ -1177,6 +1585,80 @@ class ObservationSQLiteTemporalTracker(replay_module.SQLiteTemporalTracker):
             out.extend(self._compact_rows(rows, max(1, len(rows))))
         out.sort(key=self._row_order)
         return out
+
+    @classmethod
+    def build_transition_edge_index(
+        cls, store, entity_ids, cover_start, cover_end, *,
+        ram_replay_index=None, connection=None, max_rows_per_entity=None,
+    ):
+        return ObservationTransitionEdgeIndex.build(
+            store, entity_ids, cover_start, cover_end,
+            ram_replay_index=ram_replay_index,
+            connection=connection,
+            max_rows_per_entity=max_rows_per_entity,
+        )
+
+    def _transition_edge_cursor(self, eid, lo, hi):
+        self._metrics["transition_edge_index_lookups"] += 1
+        edge_index = getattr(self, "transition_edge_index", None)
+        if edge_index is None or not edge_index.covers(lo, hi):
+            self._metrics["transition_edge_index_fallbacks"] += 1
+            return None
+        cursors = getattr(self, "_transition_edge_cursors", None)
+        if cursors is None:
+            cursors = {}
+            self._transition_edge_cursors = cursors
+        cursor = cursors.get(str(eid))
+        if cursor is None:
+            cursor = edge_index.new_cursor(eid)
+            if cursor is None:
+                self._metrics["transition_edge_index_fallbacks"] += 1
+                return None
+            cursors[str(eid)] = cursor
+        self._metrics["transition_edge_index_hits"] += 1
+        return cursor
+
+    def _indexed_transition(self, eid, lo, hi, positive, *, first):
+        cursor = self._transition_edge_cursor(eid, lo, hi)
+        if cursor is None:
+            return None, False
+        before_rows = int(cursor.rows_applied)
+        before_rewinds = int(cursor.rewinds)
+        value = (
+            cursor.first(lo, hi, positive)
+            if first else cursor.latest(lo, hi, positive)
+        )
+        self._metrics["transition_edge_rows_applied"] += (
+            int(cursor.rows_applied) - before_rows
+        )
+        self._metrics["transition_edge_cursor_rewinds"] += (
+            int(cursor.rewinds) - before_rewinds
+        )
+        self._metrics["transition_edge_scan_rows_avoided_estimate"] += len(
+            cursor.active_rows
+        )
+        return value, True
+
+    def directional_transition_before(self, eid, at_ts, positive, window):
+        lo = float(at_ts) - float(window)
+        value, indexed = self._indexed_transition(
+            eid, lo, float(at_ts), bool(positive), first=False
+        )
+        if indexed:
+            return value
+        return super().directional_transition_before(
+            eid, at_ts, positive, window
+        )
+
+    def first_directional_transition_after(self, eid, start, end, positive):
+        value, indexed = self._indexed_transition(
+            eid, float(start), float(end), bool(positive), first=True
+        )
+        if indexed:
+            return value
+        return super().first_directional_transition_after(
+            eid, start, end, positive
+        )
 
     def _edges(self, eid, lo, hi):
         # Keep the established v12 edge semantics while routing the as-of reconstruction
