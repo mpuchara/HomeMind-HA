@@ -102,6 +102,7 @@ def main():
 
         cover_start = 0.0
         cover_end = float(rows_per_entity + 20)
+        build_started = time.perf_counter()
         connection = sqlite3.connect(store.path, timeout=30)
         connection.row_factory = sqlite3.Row
         try:
@@ -114,6 +115,7 @@ def main():
             )
         finally:
             connection.close()
+        build_seconds = time.perf_counter() - build_started
 
         baseline = SQLiteTemporalTracker(
             store, entities, context_stub(), cover_start, cover_end
@@ -138,11 +140,14 @@ def main():
             and sqlite_run["parity_samples"] == ram_run["parity_samples"]
         )
         sqlite_queries = int(sqlite_run["stats"].get("sql_queries") or 0)
-        ram_queries = int(ram_run["stats"].get("sql_queries") or 0)
-        reduction = (
-            1.0 - ram_queries / max(1, sqlite_queries)
-        )
-        speedup = sqlite_run["seconds"] / max(ram_run["seconds"], 1e-9)
+        ram_replay_queries = int(ram_run["stats"].get("sql_queries") or 0)
+        ram_build_queries = int(index.status().get("sql_queries") or 0)
+        ram_total_queries = ram_replay_queries + ram_build_queries
+        warm_reduction = 1.0 - ram_replay_queries / max(1, sqlite_queries)
+        total_reduction = 1.0 - ram_total_queries / max(1, sqlite_queries)
+        warm_speedup = sqlite_run["seconds"] / max(ram_run["seconds"], 1e-9)
+        ram_total_seconds = build_seconds + ram_run["seconds"]
+        total_speedup = sqlite_run["seconds"] / max(ram_total_seconds, 1e-9)
 
         result = {
             "contract": "ram_replay_index_component_benchmark_v1",
@@ -153,16 +158,22 @@ def main():
             "rows_written": len(rows),
             "parity": parity,
             "sqlite_seconds": sqlite_run["seconds"],
-            "ram_seconds": ram_run["seconds"],
-            "component_wall_speedup": speedup,
+            "ram_index_build_seconds": build_seconds,
+            "ram_warm_replay_seconds": ram_run["seconds"],
+            "ram_build_plus_replay_seconds": ram_total_seconds,
+            "warm_component_wall_speedup": warm_speedup,
+            "build_plus_replay_component_wall_speedup": total_speedup,
             "sqlite_tracker_queries": sqlite_queries,
-            "ram_tracker_queries": ram_queries,
-            "query_reduction_ratio": reduction,
+            "ram_index_build_queries": ram_build_queries,
+            "ram_replay_queries": ram_replay_queries,
+            "ram_build_plus_replay_queries": ram_total_queries,
+            "warm_query_reduction_ratio": warm_reduction,
+            "build_plus_replay_query_reduction_ratio": total_reduction,
             "ram_index": index.status(),
             "pass": bool(
                 parity
                 and index.status()["fallback_entities"] == 0
-                and reduction >= 0.90
+                and total_reduction >= 0.80
             ),
         }
         print(json.dumps(
