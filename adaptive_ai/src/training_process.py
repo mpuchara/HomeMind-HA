@@ -1086,6 +1086,9 @@ def run_isolated_training_chunk(history, start_ts, end_ts, **kwargs):
         history.training_transition_edge_index_status = dict(
             result.get("training_transition_edge_index") or {}
         )
+        history.training_feature_snapshot_cache_status = dict(
+            result.get("training_feature_snapshot_cache") or {}
+        )
         history.training_phase_timings = dict(
             result.get("training_phase_timings") or {}
         )
@@ -1517,6 +1520,9 @@ def worker_main(job_path):
                 "training_transition_edge_index": dict(
                     getattr(history, "training_transition_edge_index_status", {}) or {}
                 ),
+                "training_feature_snapshot_cache": dict(
+                    getattr(history, "training_feature_snapshot_cache_status", {}) or {}
+                ),
                 "training_phase_timings": dict(
                     getattr(history, "training_phase_timings", {}) or {}
                 ),
@@ -1553,6 +1559,9 @@ def worker_main(job_path):
             ),
             "training_transition_edge_index": dict(
                 getattr(history, "training_transition_edge_index_status", {}) or {}
+            ),
+            "training_feature_snapshot_cache": dict(
+                getattr(history, "training_feature_snapshot_cache_status", {}) or {}
             ),
             "training_phase_timings": dict(
                 getattr(history, "training_phase_timings", {}) or {}
