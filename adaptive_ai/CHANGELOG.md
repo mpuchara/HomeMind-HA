@@ -1,3 +1,16 @@
+# 0.14.112 — 2026-09-30
+
+- Add a bounded **causal transition-edge index** for the fast-agent anchor/dwell path. Repeated `directional_transition_before()` and `first_directional_transition_after()` calls now advance a compact per-entity cursor and binary-search precomputed ON/OFF edges instead of rebuilding/scanning the same top-512 history for every replay sample.
+- Index only the small fast-edge source subset already selected by the policy: primary occupancy/local sensor plus declared upstream sensors. The complete policy schema and Home Context replay remain owned by the existing 0.14.111 RAM Replay Index.
+- Preserve the established Observation v12 causal contract: an observation becomes visible only when both event time and receive time allow it; late feature-journal packets cannot affect earlier replay timestamps; rewind resets the edge cursor and deterministically rebuilds its causal view.
+- Preserve the exact top-512 merged archive + `feature_observation_events` semantics, including same-event/state preference, category handling, invalid/unknown boundary behavior and directional interval boundaries.
+- Reuse the immutable edge source index across onset/persistence trackers and persistent 6-hour logical chunks when coverage is sufficient. Long-memory uses the index only inside declared coverage and otherwise falls back to the historical SQLite path.
+- Bound the secondary index with `training_transition_edge_max_rows_per_entity=65536` (configurable 512–262144). Oversized/chatty sources are not partially indexed: they use exact legacy SQLite lookup instead.
+- Add diagnostics for edge-index construction time, indexed/fallback entities, source rows, retained-memory estimate, lookup/hit/fallback counts, cursor rewinds, rows applied and estimated scan rows avoided. Worker diagnostics propagate back to the parent runtime.
+- Add parity regressions for late receive-time visibility, forward queries, explicit rewind, invalid boundary rows, source-cap fallback and archive+feature-journal merge semantics. Release-candidate Python 3.11/3.13 suite: **1480 tests green**.
+- GitHub-host synthetic transition-edge benchmark (4 entities × 1600 source rows, 800 query pairs): legacy repeated lookup **11.360 s**, indexed warm lookup **0.224 s (~50.7×)**, edge build + all lookups **0.369 s (~30.8×)**. SQLite work drops from **1600 lookup queries to 12 total build+lookup queries (−99.25%)**, with exact parity and zero fallback. This is a component benchmark, **not** Raspberry Pi end-to-end Train/Rebuild timing.
+- No reward, sample count, validation split, Correct, Candidate lineage, policy update order, TinyMLP authority, ActionIntent, Executor or physical-control semantics change.
+
 # 0.14.111 — 2026-09-30
 
 - Add a bounded **RAM Replay Index** for single-agent historical Train/Rebuild. The index materializes only the selected agent's target, policy-schema context entities and required Home Context sources instead of the full Home Assistant archive.
