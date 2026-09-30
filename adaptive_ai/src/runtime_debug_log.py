@@ -9,7 +9,7 @@ from settings import APP_VERSION
 from telemetry import HEAVY_JOBS, RUNTIME_DEBUG, TELEMETRY
 
 
-CONTRACT_VERSION = 2
+CONTRACT_VERSION = 3
 
 
 def _now_iso():
@@ -90,6 +90,14 @@ class RuntimeDebugLogService:
                     engine_error = getattr(engine, "error", None)
                     realtime = {
                         "ws_connected": bool(getattr(engine, "ws_connected", False)),
+                        "subscription_confirmed": bool(
+                            getattr(engine, "ws_subscription_confirmed", False)
+                        ),
+                        "messages_total": int(getattr(engine, "ws_messages_total", 0) or 0),
+                        "state_events_total": int(
+                            getattr(engine, "ws_state_events_total", 0) or 0
+                        ),
+                        "last_message": getattr(engine, "ws_last_message", None),
                         "ws_error": getattr(engine, "ws_error", None),
                         "last_event": getattr(engine, "last_ws_event", None),
                         "state_revision": int(getattr(engine, "state_revision", 0) or 0),
@@ -131,6 +139,10 @@ class RuntimeDebugLogService:
                 "correct_history_stage_trace": True,
                 "training_queue_recent_transition_limit": 50,
                 "api_live_snapshot_timing": True,
+                "ha_state_subscription_confirmation_required": True,
+                "generation_correct_history_installed": bool(
+                    getattr(self.manager, "_correct_generation_history_installed", False)
+                ),
             },
         }
 

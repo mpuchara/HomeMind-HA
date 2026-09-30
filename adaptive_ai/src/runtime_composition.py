@@ -178,6 +178,7 @@ class RuntimeCompositionRoot:
         # Imports remain off the pre-HTTP path; final composition happens in the
         # background runtime-init thread after Ingress is already listening.
         from agent_workflow_actions import install as install_agent_workflow_actions
+        from agent_correct_generation_history import install as install_correct_generation_history
         from agent_explore import install as install_agent_explore
         from cold_start_drift import install as install_cold_start_drift
         from confidence_contract import install as install_confidence_contract
@@ -226,6 +227,12 @@ class RuntimeCompositionRoot:
         # installers are idempotent, so upgrades never stack duplicate HTTP handlers.
         manager = install_agent_workflow_actions(manager)
         manager = install_workflow_request_queue(manager)
+        # The optimized generation-aware Correct reader used to exist only as tested
+        # library code and was never bound into the shipped final composition. Install
+        # it after the durable workflow queue so the established request-queue ordering
+        # remains intact, while its GET wrapper still becomes the authoritative Correct
+        # history/point read path before later HTTP adapters.
+        manager = install_correct_generation_history(manager)
         manager = install_agent_explore(manager)
 
         # RPi resource control changes scheduling only, never learning semantics.

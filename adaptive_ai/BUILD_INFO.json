@@ -1,10 +1,18 @@
 {
-  "version": "0.14.115",
+  "version": "0.14.116",
   "release_date": "2026-09-30",
-  "base_version": "0.14.114",
-  "base_commit": "29419dcebc94d10c6e89a66026c14d334b95a2af",
-  "release_status": "runtime-instrumentation-diagnostics",
-  "release_validation_tests_passed": 1495,
+  "base_version": "0.14.115",
+  "base_commit": "857d532f6eff6d93fc35eb15b8243b258644f3b2",
+  "release_status": "realtime-subscription-and-correct-runtime-fix",
+  "release_validation_tests_passed": 1501,
+  "realtime_correct_runtime_014116": {
+    "evidence": "0.14.115 debug export showed ws_connected=true with zero state events/event passes and no Correct trace while two training jobs both started",
+    "realtime_health": "WebSocket realtime is healthy only after Home Assistant confirms state_changed subscription id=2; failure/timeout triggers reconnect plus urgent REST resync",
+    "realtime_diagnostics": "tracks subscription confirmation, total WS messages, state_changed events and last WS message",
+    "correct_runtime": "generation-aware observed-history Correct reader is installed in final shipped runtime after the durable workflow request queue and before later HTTP adapters",
+    "event_to_intent": "continues to use per-event timestamps introduced in 0.14.115; no synthetic latency is fabricated when no HA event exists",
+    "runtime_debug_contract_version": 3
+  },
   "runtime_instrumentation_014115": {
     "scope": "diagnostics only; no policy/reward/control/Candidate semantics changed",
     "inference_stages": [

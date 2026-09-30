@@ -60,15 +60,19 @@ class RuntimeInstrumentation115Tests(unittest.TestCase):
         self.assertIn('"worker_released"', source)
         self.assertIn('"recent_transitions": list(self.recent_transitions)', source)
 
-    def test_release_version_is_014115(self):
+    def test_release_version_remains_consistent_after_014115(self):
+        import json
+        version = json.loads(
+            (ROOT / "adaptive_ai" / "BUILD_INFO.json").read_text(encoding="utf-8")
+        )["version"]
         settings = (SRC / "settings.py").read_text(encoding="utf-8")
         config = (ROOT / "adaptive_ai" / "config.yaml").read_text(encoding="utf-8")
         dockerfile = (ROOT / "adaptive_ai" / "Dockerfile").read_text(encoding="utf-8")
         index = (SRC / "static" / "index.html").read_text(encoding="utf-8")
-        self.assertIn('APP_VERSION = "0.14.115"', settings)
-        self.assertIn('version: "0.14.115"', config)
-        self.assertIn("ARG BUILD_VERSION=0.14.115", dockerfile)
-        self.assertIn("?v=0.14.115", index)
+        self.assertIn(f'APP_VERSION = "{version}"', settings)
+        self.assertIn(f'version: "{version}"', config)
+        self.assertIn(f"ARG BUILD_VERSION={version}", dockerfile)
+        self.assertIn(f"?v={version}", index)
 
 
 if __name__ == "__main__":
