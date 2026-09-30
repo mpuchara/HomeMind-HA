@@ -254,6 +254,13 @@ class RAMReplayIndexParityTests(unittest.TestCase):
 
 
 class RAMReplayResourceProfileTests(unittest.TestCase):
+    def test_addon_config_exposes_index_budget(self):
+        config = (Path(__file__).resolve().parents[1] / "adaptive_ai" / "config.yaml").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("training_ram_replay_index_mb: 192", config)
+        self.assertIn('training_ram_replay_index_mb: "int(0,384)"', config)
+
     def test_large_worker_gets_bounded_index_budget(self):
         profile = resolve_training_resource_profile(
             DEFAULT_OPTIONS,
