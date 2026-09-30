@@ -19,7 +19,7 @@ jobs:
       - name: Install vector-training dependency
         run: python -m pip install --disable-pip-version-check numpy==2.3.3
       - run: python -m unittest discover -s tests -v
-      - run: python -m compileall -q adaptive_ai/src tools/benchmark_product_runtime.py tools/run_product_runtime_benchmark.py tools/benchmark_correct_history.py tools/benchmark_training_qos.py tools/benchmark_ha_ingress.py tools/benchmark_shared_context.py tools/benchmark_observation_space.py tools/benchmark_tiny_mlp.py tools/benchmark_tiny_mlp_training.py tools/benchmark_tiny_mlp_correct.py tools/benchmark_hybrid_inference.py tools/benchmark_inference_hotspots.py tools/benchmark_candidate_deferred.py tools/benchmark_automatic_correct.py tools/benchmark_offline_rl.py tools/benchmark_stateful_replay.py tools/benchmark_persistent_worker.py tools/benchmark_parallel_training.py tools/benchmark_long_memory.py tools/profile_pi_training.py tools/evaluate_pi4_release.py tools/smoke_entrypoint.py
+      - run: python -m compileall -q adaptive_ai/src tools/benchmark_product_runtime.py tools/run_product_runtime_benchmark.py tools/benchmark_correct_history.py tools/benchmark_training_qos.py tools/benchmark_ha_ingress.py tools/benchmark_shared_context.py tools/benchmark_observation_space.py tools/benchmark_tiny_mlp.py tools/benchmark_tiny_mlp_training.py tools/benchmark_tiny_mlp_correct.py tools/benchmark_hybrid_inference.py tools/benchmark_inference_hotspots.py tools/benchmark_candidate_deferred.py tools/benchmark_automatic_correct.py tools/benchmark_offline_rl.py tools/benchmark_stateful_replay.py tools/benchmark_persistent_worker.py tools/benchmark_parallel_training.py tools/benchmark_target_only_replay.py tools/benchmark_long_memory.py tools/profile_pi_training.py tools/evaluate_pi4_release.py tools/smoke_entrypoint.py
       - run: node --check adaptive_ai/src/static/app.js && node --check adaptive_ai/src/static/debug_export_ui.js && node --check adaptive_ai/src/static/home.js && node --check adaptive_ai/src/static/polling_guard.js && node --check adaptive_ai/src/static/settings.js && node --check adaptive_ai/src/static/p0.js && node --check adaptive_ai/src/static/automation_baseline_ui.js && node --check adaptive_ai/src/static/queue.js && node --check adaptive_ai/src/static/experiments.js && node --check adaptive_ai/src/static/manual_feedback.js && node --check adaptive_ai/src/static/teach_observed_ui.js && node --check adaptive_ai/src/static/candidate_ui.js && node --check adaptive_ai/src/static/candidate_preference_ui.js && node --check adaptive_ai/src/static/agent_workflow_ui.js && node --check adaptive_ai/src/static/explore_ui.js && node --check adaptive_ai/src/static/promotion_lifecycle_ui.js && node --check adaptive_ai/src/static/confidence_contract_ui.js && node --check adaptive_ai/src/static/simple_agent_names.js && node --check adaptive_ai/src/static/runtime_activity_ui.js && node --check adaptive_ai/src/static/runtime_debug_ui.js
       - name: Stage 17 synthetic history-cost benchmark smoke
         if: matrix.python == '3.11'
@@ -86,6 +86,9 @@ jobs:
       - name: 0.14.109 dual-agent CPU capacity benchmark
         if: matrix.python == '3.11'
         run: python tools/benchmark_parallel_training.py --cpu-seconds 0.35 --duty 0.85 --compact
+      - name: 0.14.110 target-only replay stream benchmark
+        if: matrix.python == '3.11'
+        run: python tools/benchmark_target_only_replay.py --context-entities 12 --context-rows 4000 --target-rows 80 --compact
       - name: Agent Training vNext sparse long-memory boundedness benchmark
         if: matrix.python == '3.11'
         run: python tools/benchmark_long_memory.py --days 28 --transitions-per-day 192 --max-samples 96 --compact

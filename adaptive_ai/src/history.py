@@ -141,6 +141,8 @@ class HistoryManager(threading.Thread):
         self.training_rows_per_second = 0.0
         self.history_rows_per_second = 0.0
         self.temporal_replay_stats = {}
+        self.training_phase_timings = {}
+        self.training_job_timings = {}
         # Explicit per-agent training has a global pass progress/ETA contract separate
         # from the current Recorder/replay stage counters. The stage work may reset for
         # every 6 h chunk; these fields never do until the whole selected agent finishes.
@@ -251,6 +253,12 @@ class HistoryManager(threading.Thread):
                 "training_rebuild_reason": self.training_rebuild_reason,
                 "stateful_replay": dict(self.training_stateful_replay_status or {}),
                 "temporal_replay": dict(self.temporal_replay_stats),
+                "training_phase_timings": dict(
+                    getattr(self, "training_phase_timings", {}) or {}
+                ),
+                "training_job_timings": dict(
+                    getattr(self, "training_job_timings", {}) or {}
+                ),
                 "discovery_job_active": bool(self.discovery_job_active),
                 "discovery_job_started_at": self.discovery_job_started_at,
                 "discovery_classified": bool(self.discovery_classified),
@@ -797,7 +805,22 @@ class HistoryManager(threading.Thread):
         # the broader eligible sensor pool so newly added sensors can be discovered.
         target_end = max(now_ts(), archive_end, float(agent.get("training_window_end_ts") or archive_end))
         refresh_start = start_ts if rebuild else max(start_ts, cursor - max(60.0, float(OPTIONS.get("agent_training_overlap_hours", 12)) * 3600.0))
+        recorder_wall_started = time.perf_counter()
+        self.training_job_timings = {
+            "contract": "single_agent_training_job_timing_v1",
+            "rebuild": bool(rebuild),
+            "history_window_hours": round(max(0.0, target_end - refresh_start) / 3600.0, 3),
+        }
         self._refresh_agent_history(agent, refresh_start, target_end, rebuild=rebuild)
+        self.training_job_timings["recorder_refresh_seconds"] = round(
+            time.perf_counter() - recorder_wall_started, 4
+        )
+        self.training_job_timings["recorder_coverage_hits"] = int(
+            getattr(self, "training_recorder_coverage_hits", 0) or 0
+        )
+        self.training_job_timings["recorder_coverage_misses"] = int(
+            getattr(self, "training_recorder_coverage_misses", 0) or 0
+        )
         # Recorder refresh may extend the archive, but the requested pass still ends at
         # the captured current time for deterministic progress.
         STORE.set_training_progress(agent_id, start_ts, cursor, target_end)
@@ -1736,8 +1759,14 @@ class HistoryManager(threading.Thread):
             raise
 
     def _train_from_archive(self, start_ts, end_ts, *, qualify=False, agent_ids=None, include_candidates=False, benchmark=None, accumulate_benchmark=False, progress_lo=None, progress_hi=None, progress_label=None, continuation_from_ts=None, include_long_memory=False, long_memory_recent_start_ts=None, long_memory_reference_end_ts=None):
+        chunk_wall_started = time.perf_counter()
         benchmark = bool(qualify) if benchmark is None else bool(benchmark)
         self.temporal_replay_stats = {}
+        self.training_phase_timings = {
+            "contract": "single_agent_training_phase_timing_v1",
+            "start_ts": float(start_ts),
+            "end_ts": float(end_ts),
+        }
         agents = [a for a in STORE.list_agent_configs() if a["enabled"]]
         if agent_ids is not None:
             wanted = set(agent_ids)
@@ -1856,6 +1885,7 @@ class HistoryManager(threading.Thread):
         # window query could spend a long time building temp B-trees before yielding its
         # first row, leaving the UI at 0% and holding the only HEAVY_JOBS slot. Streaming
         # by the existing ts index starts yielding immediately and stays cooperative.
+        screening_wall_started = time.perf_counter()
         screening_rows = (
             STORE.archive_iter(
                 start_ts=start_ts, end_ts=selection_end,
@@ -1945,6 +1975,10 @@ class HistoryManager(threading.Thread):
 
         if screening_required:
             TRAINING_BUDGET.checkpoint("context_screen_complete", force=True)
+        self.training_phase_timings["screening_seconds"] = round(
+            time.perf_counter() - screening_wall_started, 4
+        )
+        self.training_phase_timings["screening_rows"] = int(screening_rows_done)
 
         occupancy_edge_index = {
             eid: transition_edges(fast_edge_rows.get(eid) or [], occupancy_state_bool)
@@ -2178,7 +2212,19 @@ class HistoryManager(threading.Thread):
         # the exact same feature timestamp/reward semantics as before.
         horizons = sorted({h for p in policies.values() for h in p.horizons})
         watched_entities = {eid for p in policies.values() for eid in p.schema.entities}
-        replay_entities = set(watched_entities) | set(target_map.keys())
+        # The chronological driver loop consumes only target transitions. Historical
+        # context is reconstructed independently by SQLiteTemporalTracker at the exact
+        # causal timestamps requested by policy.features()/observation_as_of(). Feeding
+        # watched sensor rows through this outer loop therefore only deserialized rows
+        # that immediately hit `if not agents_for_target: continue`. On chatty radar,
+        # illuminance and air-quality inputs that can dominate a seven-day Pi replay.
+        replay_entities = set(target_map.keys())
+        self.training_phase_timings.update({
+            "replay_stream_contract": "target_only_driver_v1",
+            "target_entities": len(replay_entities),
+            "context_entities_reconstructed_by_trackers": len(watched_entities),
+            "legacy_outer_stream_entity_count": len(set(watched_entities) | set(target_map.keys())),
+        })
         rows = STORE.archive_iter(scan_start_ts, end_ts, replay_entities, chunk_size=256)
         # Separate onset/anticipation and dwell-persistence cursors. 0.14.24 used one
         # mutable as-of tracker for both roles, so persistence sampling near the end of a
@@ -3188,9 +3234,12 @@ class HistoryManager(threading.Thread):
                 last_value[seed_aid] = float(seed_value)
                 continuation_seed_agents += 1
 
+        replay_wall_started = time.perf_counter()
         replay_started = now_ts()
         replay_last_report = replay_started
-        replay_total = max(1, STORE.archive_count(scan_start_ts, end_ts, replay_entities))
+        replay_total_raw = STORE.archive_count(scan_start_ts, end_ts, replay_entities)
+        replay_total = max(1, replay_total_raw)
+        self.training_phase_timings["replay_driver_rows_planned"] = int(replay_total_raw)
         replay_done = 0
         if progress_enabled:
             screening_end = float(progress_lo) + (float(progress_hi) - float(progress_lo)) * 0.20
@@ -3216,9 +3265,9 @@ class HistoryManager(threading.Thread):
                 frac = replay_done / replay_total
                 p = screening_end + (replay_end - screening_end) * frac
                 _publish_temporal_replay_stats()
-                self.set_status(progress=p, message=f"{progress_label}: replay {replay_done:,}/{replay_total:,} archived state changes",
+                self.set_status(progress=p, message=f"{progress_label}: replay {replay_done:,}/{replay_total:,} target history rows",
                                 stage_eta_seconds=remaining, work_done=replay_done, work_total=replay_total,
-                                work_unit="history rows", eta_source="measured replay throughput",
+                                work_unit="target history rows", eta_source="measured replay throughput",
                                 phase_detail=f"Chronological reward replay for {len(agents)} agent(s) · {rate:,.0f} rows/s")
                 replay_last_report = now_report
             if (
@@ -3248,6 +3297,13 @@ class HistoryManager(threading.Thread):
                     agent, policy, row, value
                 )
                 last_value[aid] = float(value)
+
+        self.training_phase_timings["replay_seconds"] = round(
+            time.perf_counter() - replay_wall_started, 4
+        )
+        self.training_phase_timings["replay_driver_rows_processed"] = int(replay_done)
+        self.training_phase_timings["rewarded_dwells"] = int(new_count)
+        finalization_wall_started = time.perf_counter()
 
         for agent in agents:
             aid = agent["id"]
@@ -3640,4 +3696,10 @@ class HistoryManager(threading.Thread):
                             stage_eta_seconds=0, work_done=replay_total, work_total=replay_total,
                             work_unit="finalization", eta_source="complete",
                             phase_detail="Replay, model save, benchmark and qualification complete")
+        self.training_phase_timings["finalization_seconds"] = round(
+            time.perf_counter() - finalization_wall_started, 4
+        )
+        self.training_phase_timings["total_seconds"] = round(
+            time.perf_counter() - chunk_wall_started, 4
+        )
         return new_count
