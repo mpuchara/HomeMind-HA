@@ -1,3 +1,13 @@
+# 0.14.117 — 2026-09-30
+
+- Fix the **Home Assistant WebSocket command-id ordering regression** exposed by the 0.14.116 runtime debug log.
+- 0.14.116 correctly began requiring confirmation of the `state_changed` subscription, but the connection sent initial registry list commands with ids **10/11/12** before subscriptions with ids **2/5/6/7**. Home Assistant requires identifiers on one WebSocket connection to increase, so it rejected the state subscription with `id_reuse: Identifier values have to increase`.
+- Establish `state_changed` and registry-update subscriptions first (**2 → 5 → 6 → 7**), then issue registry list reads from **10** upward. All later registry refreshes continue from the same increasing id sequence.
+- This restores the intended 0.14.116 contract: realtime is considered healthy only after a genuine `state_changed` subscription confirmation, while failures still fall back to urgent REST resync.
+- Add regressions that execute the HA event stream and assert the exact initial command-id sequence is strictly increasing and unique, and that registry reads are issued only after subscriptions.
+- Expected full suite: **1503 tests** on Python 3.11 and 3.13 plus image smoke and existing benchmark gates.
+- No learning, reward, Candidate lifecycle, Correct semantics, queue admission, ActionIntent, Executor or physical-control semantics change.
+
 # 0.14.116 — 2026-09-30
 
 - Fix a realtime health false-positive found by the 0.14.115 diagnostic run: the runtime could report **WebSocket connected** immediately after authentication even though the required Home Assistant `state_changed` subscription had never been confirmed.
