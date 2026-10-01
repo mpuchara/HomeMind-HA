@@ -1,9 +1,9 @@
 {
-  "version": "0.14.121",
+  "version": "0.14.122",
   "release_date": "2026-10-01",
-  "base_version": "0.14.120",
-  "base_commit": "b7262abf0bba495196cca383324c8c42eceaa9a3",
-  "release_status": "persistent-replay-session-transport-acceleration",
+  "base_version": "0.14.121",
+  "base_commit": "44b2543116b76ab5b53bfc796f0f50004809c4de",
+  "release_status": "persistent-continuation-row-cache",
   "release_validation_tests_passed": 1523,
   "event_decision_hotpath_014118": {
     "evidence": "0.14.117 debug: realtime subscription healthy, inference compute recent p95 ~76.8 ms, but event-to-intent recent p95 ~1.52e6 ms and completed Shadow inference spans still 5-11 s",
@@ -1154,7 +1154,7 @@
     "semantics": "no reward/sample selection/feature contract/validation boundary/policy update order/Correct/Candidate/ActionIntent/Executor/physical control change",
     "validation": "1517 tests expected on Python 3.11 and 3.13; final CI confirmation required before merge"
   },
-  "release_validation_pending": false,
+  "release_validation_pending": true,
   "release_014121": {
     "scope": "persistent_selected_agent_transport_acceleration",
     "durable_experience_ids": "loaded once per selected-agent worker sequence; accepted ids join the session set only after successful batch persistence",
@@ -1174,5 +1174,24 @@
     "semantics": "no reward, feature, validation, policy-update order, Correct, Candidate, ActionIntent, Executor or physical-control semantics changed",
     "continuation_seed_provenance": "refresh exact seed history ids before replay so cached overlap cannot stale own-command attribution",
     "validation": "1523 tests green on Python 3.11 and 3.13; image build/smoke green on pull request CI"
+  },
+  "release_014122": {
+    "scope": "persistent_selected_agent_continuation_acceleration",
+    "continuation_cache": "reuse the previous chunk's exact target-only overlap rows to reconstruct the next open-dwell seed without re-reading them from SQLite",
+    "reuse_guard": "exact agent/target/property/deadband scope plus full requested overlap coverage; otherwise authoritative SQLite fallback",
+    "semantic_parity": "the same stateful continuation reducer runs over cached rows, boundary rows remain excluded and _pending_from_row reconstructs features under the current chunk",
+    "provenance_safety": "selected seed history ids still receive an exact provenance refresh before replay",
+    "diagnostics": [
+      "continuation_seed_load_seconds",
+      "continuation_seed_cache_hits",
+      "continuation_seed_db_loads",
+      "continuation_seed_rows",
+      "continuation_seed_db_rows_avoided",
+      "continuation_cached_rows"
+    ],
+    "memory": "bounded to target rows inside the configured next-overlap window and released with persistent worker resources",
+    "fallback": "restart, scope changes, uncovered or non-monotonic windows keep the existing SQLite stateful_continuation_seed_rows path",
+    "semantics": "no reward, feature, validation, policy-update order, Correct, Candidate, ActionIntent, Executor or physical-control semantics changed",
+    "validation": "1531 tests expected on Python 3.11 and 3.13; CI confirmation pending"
   }
 }
