@@ -171,6 +171,7 @@ class Release121SourceContractTests(unittest.TestCase):
             "_persistent_replay_provenance_state",
             "experience_dedup_load_seconds",
             "provenance_load_seconds",
+            "provenance_seed_refresh_seconds",
             "tracker_init_seconds",
             "tiny_mlp_finalization_seconds",
             "heldout_fold_seconds",
