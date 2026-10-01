@@ -1930,7 +1930,7 @@ class HistoryManager(threading.Thread):
             if screening_required else ()
         )
         screening_checkpoint_rows = max(
-            8, min(128, int(OPTIONS.get("training_archive_batch_rows", 16)))
+            8, min(128, int(OPTIONS.get("training_archive_batch_rows", 64)))
         )
         screening_status_rows = max(128, screening_checkpoint_rows * 8)
         screening_rows_done = 0
@@ -2853,7 +2853,7 @@ class HistoryManager(threading.Thread):
         )
         experience_batch = []
         experience_batch_rows = max(
-            8, min(512, int(OPTIONS.get("training_experience_batch_rows", 64)))
+            8, min(512, int(OPTIONS.get("training_experience_batch_rows", 256)))
         )
 
         def flush_experience_batch(force=False):
