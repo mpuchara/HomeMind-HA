@@ -1,7 +1,7 @@
 # 0.14.122 — 2026-10-01
 
-- Reuse the previous persistent worker chunk's exact bounded target-row overlap when reconstructing the open dwell at the next 6-hour checkpoint. This removes repeated SQLite row transport and Python reduction over the same overlap without changing reward, feature, validation or policy-update semantics.
-- Keep the continuation cache target-only, process-local and bounded to the configured overlap window. Cache reuse requires the exact agent/target/property/deadband scope and full requested time coverage; restart, scope changes or non-monotonic ranges fall back to the established SQLite scan.
+- While the persistent worker is already replaying a chunk, pre-reduce target rows from the *next* overlap window into the exact legacy open-dwell seed. The following 6-hour checkpoint can reuse that tiny seed directly instead of re-reading and re-reducing the same SQLite rows.
+- Keep the continuation cache process-local and constant-size: only the pre-reduced seed row/value per agent plus its exact overlap window and source-row count are retained. Cache reuse requires the exact agent/target/property/deadband scope and exact requested window; restart, scope changes or non-monotonic ranges fall back to the established SQLite scan.
 - Preserve the existing continuation semantics by running the same reducer over cached rows: rows at the boundary remain invisible, duplicate target values obey the same deadband rule, and the seed is rebuilt under the current chunk's policy/schema before learning resumes.
 - Continue refreshing provenance for the exact selected seed history id, preserving the 0.14.121 own-command exclusion contract.
 - Add Diagnostics counters for continuation cache hits, SQLite fallback loads, rows reduced and target rows whose SQLite re-read was avoided.
