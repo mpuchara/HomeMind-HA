@@ -10,8 +10,9 @@ This extension keeps Control strict:
 - waiting/training/needs_retrain policies remain inactive;
 - paused policies never become Control-qualified by this module.
 
-The Executor remains untouched. Shadow decisions still flow through the normal
-Policy -> ActionIntent -> Executor path, where mode='shadow' prevents HA service calls.
+Shadow decisions still flow through the normal Policy -> ActionIntent -> Executor
+path. The Executor applies the same paused-with-existing-model observation contract, while
+mode='shadow' remains physically incapable of sending Home Assistant service calls.
 """
 
 def paused_shadow_eligible(agent, store, engine=None):

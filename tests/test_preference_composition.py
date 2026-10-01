@@ -17,7 +17,7 @@ class PreferenceCompositionContractTests(unittest.TestCase):
         source = (ROOT / "adaptive_ai/src/engine.py").read_text(encoding="utf-8")
         compose = source.index("composed = composer.compose(")
         intent = source.index("intent = ActionIntent.create(", compose)
-        dispatch = source.index("return self.executor.submit(intent", intent)
+        dispatch = source.index("self.executor.submit(", intent)
         self.assertLess(compose, intent)
         self.assertLess(intent, dispatch)
         self.assertIn("decision_source=decision_source", source[intent:dispatch])

@@ -129,14 +129,20 @@ class Executor:
         TELEMETRY.intent(status, reason)
         return result
 
-    def submit(self, intent, features=None, action_index=None):
-        # Shadow is observation-only. Use the scheduler's in-memory qualified-agent
-        # snapshot and keep the complete durable validation path exclusively for Control.
-        # A stale snapshot can at worst emit one extra SHADOW result; it can never cause a
-        # physical HA call. Control always enters _submit() and rereads durable config.
-        cached = None
-        with self.engine.lock:
-            cached = dict(getattr(self.engine, "agent_configs", {}).get(intent.agent_id) or {})
+    def submit(self, intent, features=None, action_index=None, agent_snapshot=None):
+        # Shadow is observation-only. The realtime scheduler already owns the exact
+        # immutable agent snapshot that produced this ActionIntent, so pass it through
+        # instead of reacquiring engine.lock after the decision is ready. A stale Shadow
+        # snapshot can at worst publish one observation-only SHADOW result; it can never
+        # send a Home Assistant service call. Direct/legacy callers without a snapshot
+        # retain the old cache lookup/fallback behaviour. Control always enters _submit()
+        # and rereads durable config under the resource lock.
+        cached = dict(agent_snapshot or {})
+        if not cached:
+            with self.engine.lock:
+                cached = dict(
+                    getattr(self.engine, "agent_configs", {}).get(intent.agent_id) or {}
+                )
         if cached.get("mode") == "shadow":
             return self._submit_shadow(intent, cached)
 
@@ -153,7 +159,7 @@ class Executor:
             return self._result(intent, rt, "EXPIRED", "expired: intent TTL exceeded")
         if (
             not agent.get("enabled")
-            or agent.get("training_state") != "qualified"
+            or agent.get("training_state") not in ("qualified", "paused")
             or agent.get("mode") != "shadow"
         ):
             return self._result(intent, rt, "REJECTED", "paused: stale Shadow routing snapshot", "paused")
@@ -170,17 +176,28 @@ class Executor:
             or intent.policy_head not in model.heads
         ):
             return self._result(intent, rt, "REJECTED", "model: stale policy version or revision")
-        with engine.lock:
-            state = engine.state_map.get(intent.target_entity)
-            if engine.entity_revisions.get(intent.target_entity, 0) != intent.target_revision:
-                return self._result(intent, rt, "REJECTED", "state: target changed since prediction", "waiting")
-            if any(
-                engine.entity_revisions.get(eid, 0) != rev
-                for eid, rev in intent.context_dependencies
-            ):
-                return self._result(intent, rt, "REJECTED", "context: selected input changed since prediction", "waiting")
-            if engine.context.home.revision != intent.context_revision:
-                return self._result(intent, rt, "REJECTED", "context: home state changed since prediction", "waiting")
+        # Shadow cannot dispatch, so it does not need to queue behind the engine-wide
+        # writer lock just to publish an observation. Use an optimistic revision read:
+        # any concurrent HA update changes state_revision/entity/context revision and
+        # causes this observation to be rejected as stale. Control keeps the durable,
+        # locked validation path below in _submit().
+        before_revision = int(getattr(engine, "state_revision", 0) or 0)
+        state = engine.state_map.get(intent.target_entity)
+        target_revision = engine.entity_revisions.get(intent.target_entity, 0)
+        dependencies_fresh = all(
+            engine.entity_revisions.get(eid, 0) == rev
+            for eid, rev in intent.context_dependencies
+        )
+        context_revision = engine.context.home.revision
+        after_revision = int(getattr(engine, "state_revision", 0) or 0)
+        if before_revision != after_revision:
+            return self._result(intent, rt, "REJECTED", "context: state changed during Shadow validation", "waiting")
+        if target_revision != intent.target_revision:
+            return self._result(intent, rt, "REJECTED", "state: target changed since prediction", "waiting")
+        if not dependencies_fresh:
+            return self._result(intent, rt, "REJECTED", "context: selected input changed since prediction", "waiting")
+        if context_revision != intent.context_revision:
+            return self._result(intent, rt, "REJECTED", "context: home state changed since prediction", "waiting")
         current = target_value(state, intent.target_property)
         if current is None or not math.isfinite(current):
             return self._result(intent, rt, "REJECTED", "unavailable: target state/value unavailable")

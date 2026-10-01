@@ -11,7 +11,9 @@ class RuntimeInstrumentation115Tests(unittest.TestCase):
         self.assertIn("self.entity_event_received_perf = {}", source)
         self.assertIn("self.entity_event_received_perf[entity_id] = received_perf", source)
         self.assertIn("event_received_perf = {", source)
-        self.assertIn("self.process_target, target_agents, changed, snapshot, event_received_perf", source)
+        self.assertIn("self.process_target,", source)
+        self.assertIn("target_event_received", source)
+        self.assertIn("target_changed", source)
         self.assertIn("self._inference_tls.event_received_perf", source)
         self.assertIn('"event_to_intent_pass"', source)
 

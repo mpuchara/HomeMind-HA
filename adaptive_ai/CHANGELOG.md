@@ -1,3 +1,16 @@
+# 0.14.118 — 2026-10-01
+
+- Use the first healthy realtime trace from **0.14.117** to repair the measured event→decision hot path instead of optimizing policy math blindly.
+- The trace shows Home Assistant realtime is now healthy, while model inference itself is normally tens to hundreds of milliseconds. The multi-second wall time occurs **after decision-ready**, inside Shadow Executor validation.
+- Preserve the concrete HA dependency entities that changed while a target worker is already busy. The previous retry collapsed them to the target entity, allowing a minutes-old target timestamp to poison event-latency samples.
+- Mark periodic/timer target ids as scheduling hints rather than HA events, so they never contribute synthetic or stale receive timestamps.
+- Define **event_to_decision** as Home Assistant WebSocket receipt → ActionIntent decision-ready. Keep event_to_intent as a compatibility alias for one release and add **decision_to_executor** for the separate validation/dispatch boundary.
+- Pass the exact in-memory routing snapshot that produced a Shadow intent directly into Executor. Observation-only Shadow validation uses optimistic revision checks rather than waiting on the engine-wide writer lock. Control keeps durable config reads, resource locking, qualification, review and physical dispatch guards unchanged.
+- Align paused-but-trained Shadow validation with the existing runtime lifecycle contract: a persisted/current paused policy may observe in Shadow but can never use the Control path.
+- UI reaction latency is now **recent-only**: p95 plus last-60-second sample count. When there are no recent relevant HA events it shows `waiting · 0 samples` instead of a retained stale p95.
+- Runtime-debug contract advances to **v4** and exposes the decision/executor boundary plus trigger-preserving retry semantics.
+- Add 7 regressions for in-flight trigger preservation, timer/non-event semantics, paused Shadow observation, nonblocking Shadow validation, metric boundaries, UI recent-only latency and debug-contract metadata. Expected full suite: **1510 tests** on Python 3.11 and 3.13 plus image smoke and benchmark gates.
+
 # 0.14.117 — 2026-09-30
 
 - Fix the **Home Assistant WebSocket command-id ordering regression** exposed by the 0.14.116 runtime debug log.

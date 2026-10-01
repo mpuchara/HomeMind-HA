@@ -1,10 +1,20 @@
 {
-  "version": "0.14.117",
-  "release_date": "2026-09-30",
-  "base_version": "0.14.116",
-  "base_commit": "95d3a60e8cef335894fee8fdde5e150d6d1805e8",
-  "release_status": "ha-websocket-id-order-hotfix",
-  "release_validation_tests_passed": 1503,
+  "version": "0.14.118",
+  "release_date": "2026-10-01",
+  "base_version": "0.14.117",
+  "base_commit": "08796e8f2b7114a6c294ac2c66d601f8d12982d4",
+  "release_status": "event-decision-hotpath-fix",
+  "release_validation_tests_passed": 1510,
+  "event_decision_hotpath_014118": {
+    "evidence": "0.14.117 debug: realtime subscription healthy, inference compute recent p95 ~76.8 ms, but event-to-intent recent p95 ~1.52e6 ms and completed Shadow inference spans still 5-11 s",
+    "metric_root_cause": "busy-target resubmit replaced real changed dependency entities with the target entity, so latency could reuse an arbitrarily old target receive timestamp; timer target hints could do the same",
+    "executor_root_cause": "decision-ready trace completed before Executor.submit, while Shadow submit reacquired the engine writer lock; the observed multi-second wall gap was therefore post-decision validation contention, not model inference",
+    "fix": "preserve concrete trigger entities across coalesced in-flight retries; exclude timer hints from event latency; pass the exact routing snapshot into Shadow Executor validation; use optimistic revision freshness for observation-only Shadow",
+    "metrics": "event_to_decision = HA websocket receipt to ActionIntent decision-ready; decision_to_executor = validation/dispatch after decision-ready; legacy event_to_intent retained as compatibility alias",
+    "ui": "reaction p95 is recent-only with last-60-second sample count; no retained stale event latency is displayed",
+    "control_safety": "Control still uses durable config, resource locks, qualification, review and existing dispatch guards unchanged",
+    "runtime_debug_contract_version": 4
+  },
   "ha_websocket_id_order_014117": {
     "evidence": "0.14.116 runtime debug showed state_changed subscription failed with Home Assistant id_reuse while websocket command ids had been sent out of order",
     "root_cause": "initial registry list commands 10/11/12 were emitted before subscriptions 2/5/6/7 on the same Home Assistant websocket",

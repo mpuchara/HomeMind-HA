@@ -41,7 +41,7 @@ function renderHome(status){
   const sourcePanel=$('#homePanel').querySelector('.home-source-details');
   const sourcesOpen=sourcePanel?.open||false, sourceScroll=sourcePanel?.querySelector('.home-source-table')?.scrollTop||0;
   const h=status.home_intelligence||{}, b=status.home_bootstrap||{}, t=status.telemetry||{};
-  const inf=t.metrics?.inference||{}, latency=t.metrics?.event_to_intent||{};
+  const inf=t.metrics?.inference||{}, latency=t.metrics?.event_to_decision||t.metrics?.event_to_intent||{};
   const candidateInf=t.metrics?.candidate_inference||{}, candidateLatency=t.metrics?.candidate_event_to_decision||{};
   const drift=status.drift_observer||{}, scheduler=status.inference_scheduler||{}, resync=status.state_resync||{};
   const pickMetric=(primary,fallback)=>{
@@ -51,18 +51,23 @@ function renderHome(status){
     if(fallback.p95_ms!=null)return {value:fallback.p95_ms,source:'candidate',recent:false};
     return {value:null,source:null,recent:false};
   };
-  const inferenceMetric=pickMetric(inf,candidateInf), eventMetric=pickMetric(latency,candidateLatency);
+  const pickRecentEventMetric=(primary,fallback)=>{
+    if(Number(primary.recent_count||0)>0&&primary.recent_p95_ms!=null)return {value:primary.recent_p95_ms,source:'live',count:Number(primary.recent_count||0)};
+    if(Number(fallback.recent_count||0)>0&&fallback.recent_p95_ms!=null)return {value:fallback.recent_p95_ms,source:'candidate',count:Number(fallback.recent_count||0)};
+    return {value:null,source:null,count:0};
+  };
+  const inferenceMetric=pickMetric(inf,candidateInf), eventMetric=pickRecentEventMetric(latency,candidateLatency);
   const inferenceP95=inferenceMetric.value, eventP95=eventMetric.value;
   const inferenceP95Label=inferenceMetric.source==='candidate'
-    ?`Candidate inference p95 · ${inferenceMetric.recent?'last 60 s':'retained'}`
+    ?'Candidate inference p95 · '+(inferenceMetric.recent?'last 60 s':'retained')
     :inferenceMetric.source==='live'
-      ?`inference p95 · ${inferenceMetric.recent?'last 60 s':'retained'}`
+      ?'inference p95 · '+(inferenceMetric.recent?'last 60 s':'retained')
       :'inference p95 · waiting for first sample';
   const eventP95Label=eventMetric.source==='candidate'
-    ?`event → Candidate decision p95 · ${eventMetric.recent?'last 60 s':'retained'}`
+    ?'event → Candidate decision p95 · '+eventMetric.count+' samples · last 60 s'
     :eventMetric.source==='live'
-      ?`event → intent p95 · ${eventMetric.recent?'last 60 s':'retained'}`
-      :'event → decision p95 · waiting for relevant HA event';
+      ?'event → decision p95 · '+eventMetric.count+' samples · last 60 s'
+      :'event → decision p95 · waiting for relevant HA event · 0 samples';
   const running=['IMPORTING','TRAINING'].includes(b.state), names=h.area_names||{};
   const paths=(h.top_transitions||[]).slice(0,5);
   $('#homePanel').innerHTML='<div class="history-head"><div><b>Home Intelligence</b><span>Shared occupancy and trajectory model · live learning is automatic</span></div><strong>'+esc(b.state||'IDLE')+'</strong></div>'+

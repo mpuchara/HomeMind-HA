@@ -9,7 +9,7 @@ from settings import APP_VERSION
 from telemetry import HEAVY_JOBS, RUNTIME_DEBUG, TELEMETRY
 
 
-CONTRACT_VERSION = 3
+CONTRACT_VERSION = 4
 
 
 def _now_iso():
@@ -125,7 +125,12 @@ class RuntimeDebugLogService:
             },
             "threads": _thread_snapshot(),
             "notes": {
-                "event_to_intent_recent_p95_window_seconds": 60,
+                "event_to_decision_recent_p95_window_seconds": 60,
+                "event_to_decision_semantics": "ha_websocket_receive_to_actionintent_decision_ready",
+                "legacy_event_to_intent_alias": True,
+                "decision_to_executor_metric": True,
+                "resubmit_preserves_trigger_entities": True,
+                "shadow_validation": "observation_only_optimistic_revision_read_no_engine_writer_lock",
                 "trace_storage": "bounded_ram_only",
                 "normal_runtime_overhead_when_disabled": "boolean instrumentation checks only",
                 "inference_stage_trace": [
@@ -135,6 +140,7 @@ class RuntimeDebugLogService:
                     "policy_predict",
                     "post_predict",
                     "executor_submit",
+                    "executor_result",
                 ],
                 "correct_history_stage_trace": True,
                 "training_queue_recent_transition_limit": 50,

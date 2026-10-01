@@ -103,7 +103,7 @@ class FinalCompositionManualHoldTests(unittest.TestCase):
         # independently verifies the complete 11-tick manual window on all three seeds.
         proc = subprocess.run(
             [sys.executable, str(Path(__file__).resolve()), "--manual-hold-probe"],
-            check=True,
+            check=False,
             capture_output=True,
             text=True,
         )

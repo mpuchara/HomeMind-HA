@@ -333,6 +333,12 @@ class Engine(threading.Thread):
         }
         self.in_flight = {}
         self.resubmit_targets = set()
+        # While a target worker is busy, preserve the *real* dependency entities that
+        # changed. 0.14.117 resubmitted only the target entity as a synthetic marker,
+        # which discarded the event batch identity and made event->decision latency use
+        # an arbitrarily old target timestamp. The bounded per-target set is RAM-only and
+        # is drained when the current worker completes.
+        self.pending_target_changes = {}
         self.poll_future = None
         self.last_full_poll = 0.0
         self.next_resync_retry_monotonic = 0.0
@@ -1060,10 +1066,10 @@ class Engine(threading.Thread):
                             with self.lock:
                                 self.inference_scheduler["timer_passes"] += 1
                                 self.inference_scheduler["last_timer_targets"] = len(due_targets)
-                            # Reuse the normal dependency-aware event scheduler by marking
-                            # only due target entities. No HA state is fabricated or fed to
-                            # RoomBelief; these IDs are scheduling hints only.
-                            self.process(state_map, due_targets)
+                            # Timer target IDs are scheduling hints, not HA events. Keep
+                            # them out of event->decision telemetry so an old target event
+                            # timestamp can never masquerade as current reaction latency.
+                            self.process(state_map, due_targets, event_driven=False)
                         else:
                             with self.lock:
                                 self.inference_scheduler["idle_skips"] += 1
@@ -1224,9 +1230,9 @@ class Engine(threading.Thread):
         deps.discard("")
         return deps
 
-    def process(self, state_map, changed_entities=None):
+    def process(self, state_map, changed_entities=None, *, event_driven=True):
         changed = set(changed_entities or ())
-        if changed:
+        if changed and event_driven:
             TRAINING_BUDGET.request_interactive_window(
                 float(OPTIONS.get("training_realtime_inference_priority_seconds", 0.40)),
                 reason="realtime_inference",
@@ -1238,33 +1244,70 @@ class Engine(threading.Thread):
             groups.setdefault(agent["target_entity"], []).append(agent)
 
         # One atomically consistent state+revision snapshot per coalesced pass. Every
-        # worker shares it; Executor rejects an intent if any dependency changes later.
+        # worker shares it; Executor rejects a Control intent if any dependency changes
+        # later. Event timestamps are included only for genuine HA-event passes.
         with self.lock:
             pass_states = dict(self.state_map) if self.state_map else dict(state_map or {})
             pass_revision = self.state_revision
             revision_snapshot = dict(self.entity_revisions)
             context_revision = self.context.home.revision
-            event_received_perf = {
+            dependency_snapshot = {
+                str(eid): set(agent_ids)
+                for eid, agent_ids in self.dependency_agents.items()
+            }
+            event_received_all = ({
                 eid: self.entity_event_received_perf.get(eid)
                 for eid in changed
                 if self.entity_event_received_perf.get(eid) is not None
-            }
+            } if event_driven else {})
         snapshot = (pass_states, pass_revision, revision_snapshot, context_revision)
 
         for target, target_agents in groups.items():
+            # Keep only the concrete entities that can affect this target. A burst may
+            # contain unrelated HA changes; those must not inflate this target's latency.
+            target_agent_ids = {str(agent.get("id") or "") for agent in target_agents}
+            target_changed = {
+                str(eid) for eid in changed
+                if target_agent_ids.intersection(dependency_snapshot.get(str(eid), ()))
+            }
+            # Synthetic timer scheduling uses the target id solely to select the group.
+            # Preserve that hint for process_agent semantics but carry no event timestamp.
+            if not target_changed and changed and not event_driven:
+                target_changed = set(changed)
+            target_event_received = {
+                eid: event_received_all[eid]
+                for eid in target_changed
+                if eid in event_received_all
+            }
+
             active = self.in_flight.get(target)
             if active is not None and not active.done():
-                if changed and target not in self.resubmit_targets:
-                    self.resubmit_targets.add(target)
-                    def retry_completed(_future, entity=target):
-                        with self.lock:
-                            self.resubmit_targets.discard(entity)
-                            self.dirty_entities.add(entity)
-                        self.wake_event.set()
-                    active.add_done_callback(retry_completed)
+                if event_driven and target_changed:
+                    install_callback = False
+                    with self.lock:
+                        pending = self.pending_target_changes.setdefault(target, set())
+                        pending.update(target_changed)
+                        if target not in self.resubmit_targets:
+                            self.resubmit_targets.add(target)
+                            install_callback = True
+                    if install_callback:
+                        def retry_completed(_future, entity=target):
+                            with self.lock:
+                                pending_changes = set(
+                                    self.pending_target_changes.pop(entity, set())
+                                )
+                                self.resubmit_targets.discard(entity)
+                                self.dirty_entities.update(pending_changes)
+                            if pending_changes:
+                                self.wake_event.set()
+                        active.add_done_callback(retry_completed)
                 continue
             self.in_flight[target] = self.control_workers.submit(
-                self.process_target, target_agents, changed, snapshot, event_received_perf
+                self.process_target,
+                target_agents,
+                target_changed,
+                snapshot,
+                target_event_received,
             )
         for target in list(self.in_flight):
             if target not in groups and self.in_flight[target].done():
@@ -1840,21 +1883,26 @@ class Engine(threading.Thread):
         observe_elapsed(self, "live_inference_total", inference_started_ns)
         TELEMETRY.observe('inference', (time.perf_counter()-inference_started)*1000)
 
+        pass_has_event_timestamps = hasattr(self._inference_tls, 'event_received_perf')
         received_map = getattr(self._inference_tls, 'event_received_perf', {}) or {}
         received_values = [
             float(received_map[eid])
             for eid in set(changed_entities or ())
             if received_map.get(eid) is not None
         ]
-        # Direct/legacy process_agent callers do not have a pass-local timestamp map.
-        # Keep the old fallback only for those calls; normal event-driven inference uses
-        # the timestamps captured for this exact coalesced pass.
+        # Normal scheduler passes always bind event_received_perf, including an empty
+        # mapping for timer hints. The legacy global timestamp fallback is therefore
+        # restricted to direct process_agent() callers that have no pass binding at all.
         received = min(received_values) if received_values else (
-            getattr(self, 'last_event_received', None) if changed_entities else None
+            getattr(self, 'last_event_received', None)
+            if changed_entities and not pass_has_event_timestamps else None
         )
-        if changed_entities and received:
-            event_to_intent_ms = (time.perf_counter()-received)*1000
-            TELEMETRY.observe('event_to_intent', event_to_intent_ms)
+        if changed_entities and received is not None:
+            event_to_decision_ms = max(0.0, (time.perf_counter()-received)*1000)
+            # New semantic name: HA websocket receipt -> ActionIntent decision ready.
+            # Keep the legacy key for one compatibility window; both carry the same sample.
+            TELEMETRY.observe('event_to_decision', event_to_decision_ms)
+            TELEMETRY.observe('event_to_intent', event_to_decision_ms)
             if RUNTIME_DEBUG.enabled:
                 RUNTIME_DEBUG.instant(
                     "event_to_intent_pass",
@@ -1862,14 +1910,29 @@ class Engine(threading.Thread):
                     target_entity=str(agent.get("target_entity") or ""),
                     changed_count=len(changed_entities or ()),
                     timestamp_count=len(received_values),
-                    sample_ms=round(max(0.0, event_to_intent_ms), 3),
+                    metric_semantics="ha_ws_receive_to_decision_ready",
+                    sample_ms=round(event_to_decision_ms, 3),
                 )
         self._schedule_next_inference(agent, rt)
-        # Executor submission is the boundary after the decision is ready. Keep the
-        # original direct return contract; the stage marker locates this boundary while
-        # Executor/HA work remains independently observable.
+
+        # The decision is complete before Executor validation/dispatch. Measure that
+        # boundary separately: Shadow should be a RAM-only validation, while Control may
+        # legitimately include durable guards and an HA service call.
         trace_stage("executor_submit", time.perf_counter(), boundary="decision_ready")
-        return self.executor.submit(intent, features, chosen['index'])
+        executor_started = time.perf_counter()
+        result = self.executor.submit(
+            intent, features, chosen['index'], agent_snapshot=agent
+        )
+        decision_to_executor_ms = max(
+            0.0, (time.perf_counter() - executor_started) * 1000.0
+        )
+        TELEMETRY.observe('decision_to_executor', decision_to_executor_ms)
+        trace_stage(
+            "executor_result",
+            executor_started,
+            status=str((result or {}).get("status") or "unknown"),
+        )
+        return result
 
     def _intent_dependencies(
         self, policy, trial, snapshot_revisions=None, extra_entities=None
