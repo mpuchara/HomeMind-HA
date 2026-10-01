@@ -1,11 +1,11 @@
-# 0.14.118 — 2026-10-01
-## 0.14.119
+# 0.14.119 — 2026-10-01
 
 - Fixed a restart regression in process-isolated agent training: the child trainer now installs the same Observation Contract v12 / Policy v11 used by the realtime parent before it constructs HistoryManager or any policy.
 - Previously, a clean isolated worker could persist the repository defaults (Policy v10 / Schema v11). The just-trained agent could appear usable in the running process, but the next app restart correctly classified that durable model as incompatible and changed the agent to `needs_retrain` / Paused.
 - Added an actual subprocess regression assertion that a worker-published model is Policy v11 / Schema v12 and remains Qualified + Shadow after a fresh Store plus observation-contract migration.
 - Existing genuinely incompatible v10/schema11 models are not silently reinterpreted as v12. An agent already affected by the old worker must be trained once on 0.14.119; subsequent restarts preserve its Shadow lifecycle.
 
+# 0.14.118 — 2026-10-01
 
 - Use the first healthy realtime trace from **0.14.117** to repair the measured event→decision hot path instead of optimizing policy math blindly.
 - The trace shows Home Assistant realtime is now healthy, while model inference itself is normally tens to hundreds of milliseconds. The multi-second wall time occurs **after decision-ready**, inside Shadow Executor validation.
