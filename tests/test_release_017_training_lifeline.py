@@ -57,7 +57,7 @@ assert _budget_pause(2.0, 0.25, 2.0) == 2.0
     def test_low_power_training_defaults_are_pi_safe_and_migrate_only_old_default(self):
         source = (ROOT / "adaptive_ai/src/rpi_low_power_runtime.py").read_text(encoding="utf-8")
         budget_source = (ROOT / "adaptive_ai/src/training_budget.py").read_text(encoding="utf-8")
-        self.assertIn("DEFAULT_ARCHIVE_BATCH_ROWS = 16", source)
+        self.assertIn("DEFAULT_ARCHIVE_BATCH_ROWS = 64", source)
         self.assertIn("DEFAULT_TRAINING_DUTY_CYCLE = 0.85", source)
         self.assertIn("DEFAULT_MAX_THROTTLE_SLEEP_SECONDS = 0.50", source)
         self.assertIn('current_duty in (0.20, 0.25, 0.55, 0.65)', source)
@@ -90,7 +90,7 @@ assert _budget_pause(2.0, 0.25, 2.0) == 2.0
         settings = (ROOT / "adaptive_ai/src/settings.py").read_text(encoding="utf-8")
         self.assertRegex(config, r'version: "0\.14\.\d+"')
         self.assertIn("training_cpu_duty_cycle: 0.85", config)
-        self.assertIn("training_archive_batch_rows: 16", config)
+        self.assertIn("training_archive_batch_rows: 64", config)
         self.assertIn("training_throttle_max_sleep_seconds: 0.50", config)
         self.assertIn("training_max_continuous_work_ms: 35", config)
         self.assertIn('training_cpu_duty_cycle: "float(0.15,0.90)"', config)
