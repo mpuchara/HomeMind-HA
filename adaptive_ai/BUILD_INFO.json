@@ -1,10 +1,20 @@
 {
-  "version": "0.14.122",
+  "version": "0.14.123",
   "release_date": "2026-10-01",
-  "base_version": "0.14.121",
-  "base_commit": "44b2543116b76ab5b53bfc796f0f50004809c4de",
-  "release_status": "persistent-continuation-row-cache",
-  "release_validation_tests_passed": 1531,
+  "base_version": "0.14.122",
+  "base_commit": "758f0da7267cfb27c2fc5a6af53535fbcd30b5b3",
+  "release_status": "continuation-history-revision-guard",
+  "release_validation_tests_passed": 1537,
+  "release_014123": {
+    "scope": "persistent_continuation_history_mutation_guard",
+    "root_cause": "0.14.122 continuation cache keyed scope and overlap timestamps but not the entity_history revision that produced the seed",
+    "fix": "durable per-mutation revision plus exact target-overlap fingerprint COUNT/MAX(mutation_revision); mismatch falls back to authoritative SQLite seed scan",
+    "race_guard": "fingerprint is captured from the exact streamed rows that produced the cached seed, closing late-row TOCTOU between replay and cache publication",
+    "legacy_writer_guard": "defensive INSERT/UPDATE triggers assign revisions to raw SQL writers that bypass Store archive helpers",
+    "performance_scope": "new target events outside the cached overlap do not invalidate the continuation seed",
+    "semantics": "no reward, feature, policy-update, Correct, Candidate, ActionIntent, Executor or physical-control semantics changed",
+    "validation": "1537 tests green on Python 3.11 and 3.13; image build/smoke and full benchmark gate green before release bump"
+  },
   "event_decision_hotpath_014118": {
     "evidence": "0.14.117 debug: realtime subscription healthy, inference compute recent p95 ~76.8 ms, but event-to-intent recent p95 ~1.52e6 ms and completed Shadow inference spans still 5-11 s",
     "metric_root_cause": "busy-target resubmit replaced real changed dependency entities with the target entity, so latency could reuse an arbitrarily old target receive timestamp; timer target hints could do the same",

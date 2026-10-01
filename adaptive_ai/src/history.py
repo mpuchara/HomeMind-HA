@@ -1285,6 +1285,18 @@ class HistoryManager(threading.Thread):
             or abs(boundary_ts - float(state.get("end_ts", boundary_ts))) > 1e-9
         ):
             return None
+        # 0.14.123: an exact scope/window match is insufficient when checkpointed
+        # archive reads allow the parent process to commit late Recorder rows between
+        # logical chunks. Compare the fingerprint of the rows that actually built the
+        # cached seed with the current target-window fingerprint. Newer rows outside the
+        # overlap do not invalidate the cache.
+        cached_fingerprint = state.get("history_fingerprint")
+        if cached_fingerprint is not None:
+            current_fingerprint = STORE.archive_window_fingerprint(
+                target_map.keys(), start_ts, boundary_ts
+            )
+            if tuple(cached_fingerprint) != tuple(current_fingerprint):
+                return None
         seeds = {
             str(aid): (dict(item[0]), float(item[1]))
             for aid, item in dict(state.get("seeds") or {}).items()
@@ -1292,9 +1304,10 @@ class HistoryManager(threading.Thread):
         return seeds, int(state.get("rows") or 0)
 
     def _remember_persistent_continuation_seed(
-        self, agents, seeds, row_count, start_ts, end_ts
+        self, agents, seeds, row_count, start_ts, end_ts,
+        history_fingerprint=None,
     ):
-        self._persistent_continuation_seed_state = {
+        state = {
             "scope": self._continuation_scope(agents),
             "start_ts": float(start_ts),
             "end_ts": float(end_ts),
@@ -1304,6 +1317,11 @@ class HistoryManager(threading.Thread):
                 for aid, item in dict(seeds or {}).items()
             },
         }
+        if history_fingerprint is not None:
+            state["history_fingerprint"] = tuple(
+                int(value) for value in history_fingerprint
+            )
+        self._persistent_continuation_seed_state = state
 
     def _persistent_experience_ids_for(self, agent_id, loader):
         """Reuse durable historical-experience ids across one worker sequence.
@@ -4166,6 +4184,7 @@ class HistoryManager(threading.Thread):
         continuation_capture_values = {}
         continuation_capture_seeds = {}
         continuation_capture_rows = 0
+        continuation_capture_revision = 0
 
         replay_wall_started = time.perf_counter()
         replay_started = now_ts()
@@ -4181,9 +4200,18 @@ class HistoryManager(threading.Thread):
             if (
                 persistent_cache
                 and continuation_overlap_s > 0.0
+                and row["entity_id"] in target_map
                 and continuation_capture_start <= float(row["ts"]) < float(end_ts)
             ):
+                # Fingerprint exactly the target rows consumed by this seed reducer.
+                # Computing it from the streamed rows, rather than re-querying SQLite at
+                # chunk end, closes the race where a late row lands after the cursor has
+                # passed but before the cache is remembered.
                 continuation_capture_rows += 1
+                continuation_capture_revision = max(
+                    continuation_capture_revision,
+                    int(row.get("mutation_revision") or 0),
+                )
                 _apply_stateful_continuation_seed_row(
                     row,
                     target_map,
@@ -4250,6 +4278,10 @@ class HistoryManager(threading.Thread):
                 continuation_capture_rows,
                 continuation_capture_start,
                 float(end_ts),
+                history_fingerprint=(
+                    continuation_capture_rows,
+                    continuation_capture_revision,
+                ),
             )
         self.training_phase_timings["replay_seconds"] = round(
             time.perf_counter() - replay_wall_started, 4
