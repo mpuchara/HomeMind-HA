@@ -1186,7 +1186,7 @@
       "continuation_seed_cache_hits",
       "continuation_seed_db_loads",
       "continuation_seed_rows",
-      "continuation_seed_db_rows_avoided",
+      "continuation_seed_avoided_db_rows",
       "continuation_cached_rows"
     ],
     "memory": "constant-size seed row/value per agent plus exact overlap window and source-row count; released with persistent worker resources",
