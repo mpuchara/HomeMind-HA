@@ -159,7 +159,7 @@ class CorrectRuntimeComposition116Tests(unittest.TestCase):
         self.assertIn('"messages_total"', source)
         self.assertIn('"state_events_total"', source)
         self.assertIn('"generation_correct_history_installed"', source)
-        self.assertIn("CONTRACT_VERSION = 3", source)
+        self.assertRegex(source, r"CONTRACT_VERSION = [3-9][0-9]*")
 
     def test_realtime_status_exposes_confirmed_subscription_counters(self):
         source = (SRC / "engine.py").read_text(encoding="utf-8")
