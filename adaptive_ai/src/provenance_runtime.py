@@ -459,10 +459,14 @@ def install(core):
             "action_probability": None,
         }
 
-    def submit(intent, features=None, action_index=None):
+    def submit(intent, features=None, action_index=None, agent_snapshot=None):
         features = features or {}
-        with engine.lock:
-            hot_agent = dict(getattr(engine, "agent_configs", {}).get(intent.agent_id) or {})
+        hot_agent = dict(agent_snapshot or {})
+        if not hot_agent:
+            with engine.lock:
+                hot_agent = dict(
+                    getattr(engine, "agent_configs", {}).get(intent.agent_id) or {}
+                )
         defer_shadow = hot_agent.get("mode") == "shadow"
         payload = decision_payload(intent, features)
 
@@ -476,7 +480,9 @@ def install(core):
         old_command = getattr(_TLS, "command_id", None)
         _TLS.decision_id, _TLS.command_id = intent.intent_id, None
         try:
-            result = original_submit(intent, features, action_index)
+            result = original_submit(
+                intent, features, action_index, agent_snapshot=agent_snapshot
+            )
         finally:
             leftover = getattr(_TLS, "command_id", None)
             if leftover:
