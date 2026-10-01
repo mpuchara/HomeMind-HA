@@ -1,10 +1,10 @@
 {
-  "version": "0.14.121",
+  "version": "0.14.122",
   "release_date": "2026-10-01",
-  "base_version": "0.14.120",
-  "base_commit": "b7262abf0bba495196cca383324c8c42eceaa9a3",
-  "release_status": "persistent-replay-session-transport-acceleration",
-  "release_validation_tests_passed": 1523,
+  "base_version": "0.14.121",
+  "base_commit": "44b2543116b76ab5b53bfc796f0f50004809c4de",
+  "release_status": "persistent-continuation-row-cache",
+  "release_validation_tests_passed": 1531,
   "event_decision_hotpath_014118": {
     "evidence": "0.14.117 debug: realtime subscription healthy, inference compute recent p95 ~76.8 ms, but event-to-intent recent p95 ~1.52e6 ms and completed Shadow inference spans still 5-11 s",
     "metric_root_cause": "busy-target resubmit replaced real changed dependency entities with the target entity, so latency could reuse an arbitrarily old target receive timestamp; timer target hints could do the same",
@@ -1174,5 +1174,24 @@
     "semantics": "no reward, feature, validation, policy-update order, Correct, Candidate, ActionIntent, Executor or physical-control semantics changed",
     "continuation_seed_provenance": "refresh exact seed history ids before replay so cached overlap cannot stale own-command attribution",
     "validation": "1523 tests green on Python 3.11 and 3.13; image build/smoke green on pull request CI"
+  },
+  "release_014122": {
+    "scope": "persistent_selected_agent_continuation_acceleration",
+    "continuation_cache": "pre-reduce target rows from the next overlap window during the current replay and retain only the exact legacy open-dwell seed for the following checkpoint",
+    "reuse_guard": "exact agent/target/property/deadband scope plus exact requested overlap window; otherwise authoritative SQLite fallback",
+    "semantic_parity": "the same reducer is applied online while rows are already streaming, boundary rows remain excluded and _pending_from_row reconstructs features under the current chunk",
+    "provenance_safety": "selected seed history ids still receive an exact provenance refresh before replay",
+    "diagnostics": [
+      "continuation_seed_load_seconds",
+      "continuation_seed_cache_hits",
+      "continuation_seed_db_loads",
+      "continuation_seed_rows",
+      "continuation_seed_avoided_db_rows",
+      "continuation_cached_rows"
+    ],
+    "memory": "constant-size seed row/value per agent plus exact overlap window and source-row count; released with persistent worker resources",
+    "fallback": "restart, scope changes, uncovered or non-monotonic windows keep the existing SQLite stateful_continuation_seed_rows path",
+    "semantics": "no reward, feature, validation, policy-update order, Correct, Candidate, ActionIntent, Executor or physical-control semantics changed",
+    "validation": "1531 tests green on Python 3.11 and 3.13; image build/smoke green; stateful continuation parity benchmark, persistent-worker gates and Stage 18 product runtime green"
   }
 }
