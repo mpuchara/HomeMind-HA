@@ -1171,6 +1171,7 @@
       "qualification_seconds"
     ],
     "checkpoint_contract": "6 h logical checkpoint and rollback boundaries unchanged",
-    "semantics": "no reward, feature, validation, policy-update order, Correct, Candidate, ActionIntent, Executor or physical-control semantics changed"
+    "semantics": "no reward, feature, validation, policy-update order, Correct, Candidate, ActionIntent, Executor or physical-control semantics changed",
+    "continuation_seed_provenance": "refresh exact seed history ids before replay so cached overlap cannot stale own-command attribution"
   }
 }
