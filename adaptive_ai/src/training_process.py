@@ -747,6 +747,83 @@ def _restore_rejected_chunk(
     store.touch_agent_index()
 
 
+def aggregate_training_sequence_profile(chunk_reports):
+    """Aggregate one selected-agent persistent-worker pass for diagnostics.
+
+    Timers in training_phase_timings are deliberately reported as observed metrics,
+    not an additive flame graph: feature-build/SQLite timers are nested inside replay.
+    Per-chunk timings remain authoritative and this summary makes the complete job
+    visible without retaining unbounded trace entries.
+    """
+    reports = list(chunk_reports or ())
+    seconds = {}
+    counters = {}
+    for report in reports:
+        timings = dict((report or {}).get("training_phase_timings") or {})
+        for key, value in timings.items():
+            if isinstance(value, bool) or not isinstance(value, (int, float)):
+                continue
+            if str(key).endswith("_seconds"):
+                seconds[key] = float(seconds.get(key, 0.0)) + float(value)
+            elif str(key).endswith((
+                "_rows", "_lookups", "_hits", "_misses", "_builds",
+                "_timestamps", "_dwells",
+            )):
+                counters[key] = float(counters.get(key, 0.0)) + float(value)
+
+    elapsed = sum(float((row or {}).get("elapsed_seconds") or 0.0) for row in reports)
+    slowest = sorted(
+        (
+            {
+                "index": int((row or {}).get("index") or 0),
+                "elapsed_seconds": float((row or {}).get("elapsed_seconds") or 0.0),
+                "replay_seconds": float(
+                    ((row or {}).get("training_phase_timings") or {}).get(
+                        "replay_seconds"
+                    ) or 0.0
+                ),
+                "finalization_seconds": float(
+                    ((row or {}).get("training_phase_timings") or {}).get(
+                        "finalization_seconds"
+                    ) or 0.0
+                ),
+            }
+            for row in reports
+        ),
+        key=lambda row: row["elapsed_seconds"],
+        reverse=True,
+    )[:5]
+    final_cache = dict(
+        (reports[-1].get("training_feature_snapshot_cache") or {})
+        if reports else {}
+    )
+    return {
+        "contract": "persistent_training_session_profile_v1",
+        "chunks": len(reports),
+        "chunk_elapsed_seconds": round(elapsed, 4),
+        "phase_seconds": {
+            key: round(value, 6) for key, value in sorted(seconds.items())
+        },
+        "counters": {
+            key: int(value) if float(value).is_integer() else float(value)
+            for key, value in sorted(counters.items())
+        },
+        "slowest_chunks": slowest,
+        "feature_snapshot_session": {
+            "persistent": bool(final_cache.get("session_persistent")),
+            "entries": int(final_cache.get("entries") or 0),
+            "units": int(final_cache.get("units") or 0),
+            "hits": int(final_cache.get("hits") or 0),
+            "misses": int(final_cache.get("misses") or 0),
+            "builds": int(final_cache.get("builds") or 0),
+            "evictions": int(final_cache.get("evictions") or 0),
+            "build_seconds": float(final_cache.get("build_seconds") or 0.0),
+            "hit_rate": final_cache.get("hit_rate"),
+        },
+        "note": "phase timers can be nested; do not sum them as exclusive CPU time",
+    }
+
+
 def run_isolated_training_sequence(history, chunks):
     """Run all logical chunks for one agent in one supervised child process."""
     chunks = list(chunks or ())
@@ -1102,6 +1179,17 @@ def run_isolated_training_chunk(history, start_ts, end_ts, **kwargs):
             history.training_process_status["sequence_chunk_reports"] = list(
                 result.get("sequence_chunk_reports") or ()
             )
+            session_profile = dict(
+                result.get("training_session_profile") or {}
+            )
+            history.training_process_status["session_profile"] = session_profile
+            if session_profile:
+                history.training_job_timings["training_session_profile"] = (
+                    session_profile
+                )
+                history.training_job_timings["worker_elapsed_seconds"] = float(
+                    result.get("elapsed_seconds") or 0.0
+                )
         schema_item = result.get("schema_cache_item")
         if isinstance(schema_item, dict) and schema_item:
             history.training_schema_cache[agent_id] = schema_item
@@ -1547,6 +1635,9 @@ def worker_main(job_path):
                 if pause_ms and history.stop_event.wait(pause_ms / 1000.0):
                     raise InterruptedError("Persistent training worker cancelled")
 
+        training_session_profile = aggregate_training_sequence_profile(
+            chunk_reports
+        )
         result.update({
             "ok": True,
             "return_value": int(total_value),
@@ -1555,6 +1646,7 @@ def worker_main(job_path):
             ),
             "sequence_chunks_completed": len(chunk_reports),
             "sequence_chunk_reports": chunk_reports,
+            "training_session_profile": training_session_profile,
             "context_relevance": dict(engine.context_relevance.get(aid) or {}),
             "temporal_replay": dict(history.temporal_replay_stats or {}),
             "training_long_memory": dict(
