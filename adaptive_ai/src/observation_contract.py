@@ -1848,7 +1848,20 @@ def install(core):
     engine, store = core.ENGINE, core.STORE
     if engine is None or store is None or getattr(engine, "_observation_contract_installed", False):
         return engine
-    install_training_contract()
+    # Keep the shipped parent-runtime composition explicit and unchanged. The isolated
+    # training process calls install_training_contract() separately because it starts in
+    # a fresh interpreter and cannot inherit these bindings.
+    policy_module.ExplicitFeatureSchema = FeatureSchemaV12
+    context_module.ExplicitFeatureSchema = FeatureSchemaV12
+    policy_module.build_explicit_features = build_observation_features
+    teaching_module.build_explicit_features = build_observation_features
+    policy_module.FEATURE_NAMES = HOME_FEATURE_NAMES
+    policy_module.MultiHorizonPolicy.VERSION = POLICY_VERSION
+    policy_module.MultiHorizonPolicy.features = policy_features
+    teaching_module.signature = teaching_signature
+    replay_module.SQLiteTemporalTracker = ObservationSQLiteTemporalTracker
+    history_module.SQLiteTemporalTracker = ObservationSQLiteTemporalTracker
+    _patch_teaching_point_context()
 
     journal = FeatureJournal(store)
     engine.feature_journal = journal
