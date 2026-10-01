@@ -30,22 +30,18 @@ from long_memory import (
     selected_history_provenance,
 )
 
-def stateful_continuation_seed_rows(store, agents, target_map, start_ts, boundary_ts):
-    """Return the exact open-target transition state the legacy overlap would leave.
-
-    Only target rows are scanned. Context/temporal features are reconstructed later by
-    SQLiteTemporalTracker as-of the selected transition, so no unrelated overlap history
-    is reprocessed and rows at/after the boundary cannot leak into the seed.
-    """
+def stateful_continuation_seed_rows_from_rows(
+    rows, agents, target_map, start_ts, boundary_ts
+):
+    """Reduce target rows to the exact open-dwell seed for one chunk boundary."""
     if float(boundary_ts) <= float(start_ts):
         return {}, 0
     values = {}
     seeds = {}
     scanned = 0
-    for row in store.archive_iter(
-        float(start_ts), float(boundary_ts), target_map.keys(), chunk_size=256
-    ):
-        if float(row["ts"]) >= float(boundary_ts):
+    for row in rows:
+        row_ts = float(row["ts"])
+        if row_ts < float(start_ts) or row_ts >= float(boundary_ts):
             continue
         scanned += 1
         state = archived_state(row)
@@ -64,6 +60,21 @@ def stateful_continuation_seed_rows(store, agents, target_map, start_ts, boundar
             values[aid] = float(value)
             seeds[aid] = (dict(row), float(value))
     return seeds, scanned
+
+
+def stateful_continuation_seed_rows(store, agents, target_map, start_ts, boundary_ts):
+    """Return the exact open-target transition state the legacy overlap would leave.
+
+    Only target rows are scanned. Context/temporal features are reconstructed later by
+    SQLiteTemporalTracker as-of the selected transition, so no unrelated overlap history
+    is reprocessed and rows at/after the boundary cannot leak into the seed.
+    """
+    rows = store.archive_iter(
+        float(start_ts), float(boundary_ts), target_map.keys(), chunk_size=256
+    )
+    return stateful_continuation_seed_rows_from_rows(
+        rows, agents, target_map, start_ts, boundary_ts
+    )
 
 
 class HistoryManager(threading.Thread):
@@ -186,6 +197,10 @@ class HistoryManager(threading.Thread):
         # the same monotonic training sequence.
         self._persistent_experience_ids = {}
         self._persistent_replay_provenance_state = None
+        # 0.14.122: the previous logical chunk already streamed every target row in
+        # the next overlap window. Keep exactly that bounded tail so the following
+        # checkpoint can reconstruct its open dwell without re-reading the same rows.
+        self._persistent_continuation_rows_state = None
         self._persistent_replay_sqlite_connection = None
         self.neural_training_artifacts = {}
         self.training_process_status = {
@@ -1232,6 +1247,54 @@ class HistoryManager(threading.Thread):
         self._persistent_feature_snapshot_cache = None
         self._persistent_experience_ids = {}
         self._persistent_replay_provenance_state = None
+        self._persistent_continuation_rows_state = None
+
+    @staticmethod
+    def _continuation_scope(agents):
+        return tuple(sorted(
+            (
+                str(agent["id"]),
+                str(agent["target_entity"]),
+                str(agent["target_property"]),
+                float(agent["deadband"]),
+            )
+            for agent in (agents or ())
+        ))
+
+    def _persistent_continuation_seed_rows_for(
+        self, agents, target_map, start_ts, boundary_ts
+    ):
+        """Return a RAM continuation seed only for an exactly covered monotonic window."""
+        state = getattr(self, "_persistent_continuation_rows_state", None)
+        if not isinstance(state, dict):
+            return None
+        scope = self._continuation_scope(agents)
+        if tuple(state.get("scope") or ()) != scope:
+            return None
+        start_ts = float(start_ts)
+        boundary_ts = float(boundary_ts)
+        if (
+            start_ts < float(state.get("start_ts", start_ts)) - 1e-9
+            or boundary_ts > float(state.get("end_ts", boundary_ts)) + 1e-9
+        ):
+            return None
+        return stateful_continuation_seed_rows_from_rows(
+            state.get("rows") or (),
+            agents,
+            target_map,
+            start_ts,
+            boundary_ts,
+        )
+
+    def _remember_persistent_continuation_rows(
+        self, agents, rows, start_ts, end_ts
+    ):
+        self._persistent_continuation_rows_state = {
+            "scope": self._continuation_scope(agents),
+            "start_ts": float(start_ts),
+            "end_ts": float(end_ts),
+            "rows": [dict(row) for row in (rows or ())],
+        }
 
     def _persistent_experience_ids_for(self, agent_id, loader):
         """Reuse durable historical-experience ids across one worker sequence.
@@ -4001,16 +4064,37 @@ class HistoryManager(threading.Thread):
                         audit.record_long_memory_selection(selection)
 
         if scan_start_ts > logical_start_ts + 0.5:
-            # The previous implementation replayed every context entity in the overlap
-            # solely so the final open target dwell survived the chunk boundary. Rebuild
-            # that minimal state from target rows only; temporal trackers reconstruct the
-            # selected features causally as-of the last effective transition.
-            seed_rows, continuation_seed_target_rows = (
-                stateful_continuation_seed_rows(
-                    STORE, agents, target_map,
-                    logical_start_ts, scan_start_ts,
+            # The previous logical chunk already streamed the exact target rows covering
+            # this overlap. Reuse that bounded RAM tail when its scope/window matches
+            # exactly; otherwise retain the existing SQLite scan as the authoritative
+            # fallback (restart, changed agent topology or non-monotonic invocation).
+            continuation_seed_started = time.perf_counter()
+            cached_seed = (
+                self._persistent_continuation_seed_rows_for(
+                    agents, target_map, logical_start_ts, scan_start_ts
                 )
+                if persistent_cache else None
             )
+            continuation_seed_cache_hit = cached_seed is not None
+            if cached_seed is not None:
+                seed_rows, continuation_seed_target_rows = cached_seed
+            else:
+                seed_rows, continuation_seed_target_rows = (
+                    stateful_continuation_seed_rows(
+                        STORE, agents, target_map,
+                        logical_start_ts, scan_start_ts,
+                    )
+                )
+            self.training_phase_timings.update({
+                "continuation_seed_load_seconds": round(
+                    time.perf_counter() - continuation_seed_started, 6
+                ),
+                "continuation_seed_cache_hits": int(continuation_seed_cache_hit),
+                "continuation_seed_db_scans": int(not continuation_seed_cache_hit),
+                "continuation_seed_rows_scanned": int(
+                    continuation_seed_target_rows
+                ),
+            })
 
             # The monotonic provenance cache loads only the new replay tail. The sole
             # older target fact that can still affect this chunk is the reconstructed
@@ -4054,6 +4138,22 @@ class HistoryManager(threading.Thread):
                 last_value[seed_aid] = float(seed_value)
                 continuation_seed_agents += 1
 
+        continuation_overlap_s = max(
+            0.0,
+            min(
+                max(
+                    6.0,
+                    float(OPTIONS.get("agent_training_chunk_hours", 48) or 48),
+                ) * 3600.0 * 0.5,
+                float(OPTIONS.get("agent_training_overlap_hours", 12) or 12)
+                * 3600.0,
+            ),
+        )
+        continuation_capture_start = max(
+            float(scan_start_ts), float(end_ts) - continuation_overlap_s
+        )
+        continuation_capture_rows = []
+
         replay_wall_started = time.perf_counter()
         replay_started = now_ts()
         replay_last_report = replay_started
@@ -4065,6 +4165,12 @@ class HistoryManager(threading.Thread):
             screening_end = float(progress_lo) + (float(progress_hi) - float(progress_lo)) * 0.20
             replay_end = float(progress_lo) + (float(progress_hi) - float(progress_lo)) * 0.90
         for row in rows:
+            if (
+                persistent_cache
+                and continuation_overlap_s > 0.0
+                and float(row["ts"]) >= continuation_capture_start
+            ):
+                continuation_capture_rows.append(dict(row))
             if replay_done % 256 == 0:
                 memory = rss_mb()
                 if self.stop_event.is_set():
@@ -4118,11 +4224,21 @@ class HistoryManager(threading.Thread):
                 )
                 last_value[aid] = float(value)
 
+        if persistent_cache:
+            self._remember_persistent_continuation_rows(
+                agents,
+                continuation_capture_rows,
+                continuation_capture_start,
+                float(end_ts),
+            )
         self.training_phase_timings["replay_seconds"] = round(
             time.perf_counter() - replay_wall_started, 4
         )
         self.training_phase_timings["replay_driver_rows_processed"] = int(replay_done)
         self.training_phase_timings["rewarded_dwells"] = int(new_count)
+        self.training_phase_timings["continuation_rows_cached"] = int(
+            len(continuation_capture_rows) if persistent_cache else 0
+        )
         finalization_wall_started = time.perf_counter()
 
         for agent in agents:
