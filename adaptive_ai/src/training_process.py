@@ -1334,12 +1334,21 @@ def worker_main(job_path):
         "Importing training modules",
         stage="before_training_imports",
     )
-    from history import HistoryManager
     from storage import STORE
     from training_budget import TRAINING_BUDGET
+    from observation_contract import install_training_contract
+    # The realtime parent installs Observation Contract v12 through runtime composition,
+    # but this worker is a fresh process. Align policy/schema/replay globals before
+    # HistoryManager constructs any policy or tracker so the durable model it publishes
+    # is restart-compatible with the parent.
+    worker_contract = install_training_contract()
+    from history import HistoryManager
     _worker_boot_status(
         job,
-        "Training modules loaded; attaching compact worker context",
+        (
+            "Training modules loaded; observation contract "
+            f"policy v{worker_contract['policy_version']}/schema v{worker_contract['schema_version']}"
+        ),
         stage="training_imports_complete",
     )
 
