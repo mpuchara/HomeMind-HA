@@ -153,9 +153,10 @@ class Release122SourceContractTests(unittest.TestCase):
             "_remember_persistent_continuation_rows",
             "stateful_continuation_seed_rows(",
             "continuation_seed_cache_hits",
-            "continuation_seed_db_scans",
-            "continuation_seed_rows_scanned",
-            "continuation_rows_cached",
+            "continuation_seed_db_loads",
+            "continuation_seed_rows",
+            "continuation_seed_db_rows_avoided",
+            "continuation_cached_rows",
         ):
             self.assertIn(marker, source)
 
