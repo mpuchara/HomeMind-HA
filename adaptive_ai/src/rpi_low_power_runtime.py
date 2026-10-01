@@ -19,9 +19,9 @@ import time
 from training_budget import TRAINING_BUDGET
 
 
-CONTRACT_VERSION = 9
-DEFAULT_ARCHIVE_BATCH_ROWS = 16
-DEFAULT_EXPERIENCE_BATCH_ROWS = 128
+CONTRACT_VERSION = 10
+DEFAULT_ARCHIVE_BATCH_ROWS = 64
+DEFAULT_EXPERIENCE_BATCH_ROWS = 256
 DEFAULT_TRAINING_DUTY_CYCLE = 0.85
 DEFAULT_MAX_THROTTLE_SLEEP_SECONDS = 0.50
 DEFAULT_MAX_CONTINUOUS_WORK_MS = 35
@@ -63,10 +63,25 @@ def install(core, manager):
     if current_duty in (0.20, 0.25, 0.55, 0.65):
         core.OPTIONS["training_cpu_duty_cycle"] = DEFAULT_TRAINING_DUTY_CYCLE
     core.OPTIONS.setdefault("training_cpu_duty_cycle", DEFAULT_TRAINING_DUTY_CYCLE)
+    # 0.14.120: reduce scheduler/transaction overhead without relaxing the 35 ms
+    # cooperative work-slice guard. Migrate only previously shipped batch defaults.
+    current_archive_batch = int(
+        core.OPTIONS.get("training_archive_batch_rows", DEFAULT_ARCHIVE_BATCH_ROWS)
+        or DEFAULT_ARCHIVE_BATCH_ROWS
+    )
+    if current_archive_batch == 16:
+        core.OPTIONS["training_archive_batch_rows"] = DEFAULT_ARCHIVE_BATCH_ROWS
     core.OPTIONS.setdefault("training_archive_batch_rows", DEFAULT_ARCHIVE_BATCH_ROWS)
-    if int(core.OPTIONS.get("training_experience_batch_rows", DEFAULT_EXPERIENCE_BATCH_ROWS) or DEFAULT_EXPERIENCE_BATCH_ROWS) == 64:
+    current_experience_batch = int(
+        core.OPTIONS.get(
+            "training_experience_batch_rows", DEFAULT_EXPERIENCE_BATCH_ROWS
+        ) or DEFAULT_EXPERIENCE_BATCH_ROWS
+    )
+    if current_experience_batch in (64, 128):
         core.OPTIONS["training_experience_batch_rows"] = DEFAULT_EXPERIENCE_BATCH_ROWS
-    core.OPTIONS.setdefault("training_experience_batch_rows", DEFAULT_EXPERIENCE_BATCH_ROWS)
+    core.OPTIONS.setdefault(
+        "training_experience_batch_rows", DEFAULT_EXPERIENCE_BATCH_ROWS
+    )
 
     # 0.14.96 RAM-first migration. Only values that were shipped defaults are raised;
     # explicit lower user limits remain authoritative.

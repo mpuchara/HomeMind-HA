@@ -15,7 +15,7 @@ try:
 except Exception:
     ws_connect = None
 
-APP_VERSION = "0.14.119"
+APP_VERSION = "0.14.120"
 HISTORY_BOOTSTRAP_REVISION = "target-attrs-v2"
 TRAINING_REVISION = "shared-home-intents-v19"
 DATA_DIR = Path(os.environ.get("ADAPTIVE_AI_DATA", "/data"))
@@ -121,8 +121,8 @@ DEFAULT_OPTIONS = {
     "background_cpu_duty_cycle": 0.20,
     "process_nice": 10,
     "training_cpu_duty_cycle": 0.85,
-    "training_archive_batch_rows": 16,
-    "training_experience_batch_rows": 128,
+    "training_archive_batch_rows": 64,
+    "training_experience_batch_rows": 256,
     "training_replay_ram_cache_rows": 65536,
     "training_replay_ram_cache_entry_rows": 2048,
     "training_ram_replay_index_mb": 192,
@@ -447,8 +447,8 @@ def load_options():
                 options["training_max_continuous_work_ms"] = 35
             if data.get("training_throttle_max_sleep_seconds") == 2.0:
                 options["training_throttle_max_sleep_seconds"] = 0.50
-            if data.get("training_experience_batch_rows") == 64:
-                options["training_experience_batch_rows"] = 128
+            if data.get("training_experience_batch_rows") in (64, 128):
+                options["training_experience_batch_rows"] = 256
             if data.get("training_replay_ram_cache_rows") in (8192, 16384):
                 options["training_replay_ram_cache_rows"] = 65536
             if data.get("training_replay_ram_cache_entry_rows") == 1024:

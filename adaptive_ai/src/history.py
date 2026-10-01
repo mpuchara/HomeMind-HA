@@ -144,6 +144,9 @@ class HistoryManager(threading.Thread):
         self.temporal_replay_stats = {}
         self.training_phase_timings = {}
         self.training_job_timings = {}
+        # Keep the last bounded per-agent profiles after lightweight session objects are
+        # released so Diagnostics can explain a completed multi-hour Train/Rebuild.
+        self.recent_training_profiles = {}
         # Explicit per-agent training has a global pass progress/ETA contract separate
         # from the current Recorder/replay stage counters. The stage work may reset for
         # every 6 h chunk; these fields never do until the whole selected agent finishes.
@@ -172,6 +175,11 @@ class HistoryManager(threading.Thread):
         self._persistent_home_context_cache = None
         self._persistent_ram_replay_index = None
         self._persistent_transition_edge_index = None
+        # 0.14.120: exact immutable feature snapshots may live for the whole
+        # persistent selected-agent sequence. Keys already include schema/mask,
+        # exact causal entity revisions and Home Context revision, so extending
+        # lifetime across logical 6 h checkpoints cannot turn stale data into a hit.
+        self._persistent_feature_snapshot_cache = None
         self._persistent_replay_sqlite_connection = None
         self.neural_training_artifacts = {}
         self.training_process_status = {
@@ -274,6 +282,9 @@ class HistoryManager(threading.Thread):
                 "training_job_timings": dict(
                     getattr(self, "training_job_timings", {}) or {}
                 ),
+                "recent_training_profiles": dict(
+                    getattr(self, "recent_training_profiles", {}) or {}
+                ),
                 "discovery_job_active": bool(self.discovery_job_active),
                 "discovery_job_started_at": self.discovery_job_started_at,
                 "discovery_classified": bool(self.discovery_classified),
@@ -293,6 +304,15 @@ class HistoryManager(threading.Thread):
                     "message": session.message,
                     "started_at": session.training_job_started_at,
                     "training_process": dict(session.training_process_status or {}),
+                    "training_phase_timings": dict(
+                        session.training_phase_timings or {}
+                    ),
+                    "training_job_timings": dict(
+                        session.training_job_timings or {}
+                    ),
+                    "training_feature_snapshot_cache": dict(
+                        session.training_feature_snapshot_cache_status or {}
+                    ),
                 })
             process_rows = [row["training_process"] for row in rows]
             worker_cpu_total = sum(
@@ -599,6 +619,52 @@ class HistoryManager(threading.Thread):
                         and final_state in ("qualified", "paused")
                         and failure_text is None
                     )
+                    finished_profile = {
+                        "agent_id": agent_id,
+                        "name": agent.get("name") or agent_id,
+                        "finished_at": now_ts(),
+                        "completed": bool(completed),
+                        "state": final_state,
+                        "progress": float(final_progress),
+                        "training_job_timings": dict(
+                            session.training_job_timings or {}
+                        ),
+                        "training_phase_timings": dict(
+                            session.training_phase_timings or {}
+                        ),
+                        "training_process": dict(
+                            session.training_process_status or {}
+                        ),
+                        "training_feature_snapshot_cache": dict(
+                            session.training_feature_snapshot_cache_status or {}
+                        ),
+                        "temporal_replay": dict(
+                            session.temporal_replay_stats or {}
+                        ),
+                    }
+                    with self.lock:
+                        self.recent_training_profiles.pop(agent_id, None)
+                        self.recent_training_profiles[agent_id] = finished_profile
+                        while len(self.recent_training_profiles) > 8:
+                            oldest = next(iter(self.recent_training_profiles))
+                            self.recent_training_profiles.pop(oldest, None)
+                        # Backwards-compatible single-result surfaces follow the most
+                        # recently completed training session.
+                        self.training_job_timings = dict(
+                            session.training_job_timings or {}
+                        )
+                        self.training_phase_timings = dict(
+                            session.training_phase_timings or {}
+                        )
+                        self.training_feature_snapshot_cache_status = dict(
+                            session.training_feature_snapshot_cache_status or {}
+                        )
+                        self.temporal_replay_stats = dict(
+                            session.temporal_replay_stats or {}
+                        )
+                        self.training_process_status = dict(
+                            session.training_process_status or {}
+                        )
                     with self.agent_jobs_lock:
                         self.agent_jobs.discard(agent_id)
                         self.training_sessions.pop(agent_id, None)
@@ -1157,6 +1223,7 @@ class HistoryManager(threading.Thread):
         self._persistent_home_context_cache = None
         self._persistent_ram_replay_index = None
         self._persistent_transition_edge_index = None
+        self._persistent_feature_snapshot_cache = None
 
     def request_discovery_rescan(self, *, threshold_override=1, reason="manual"):
         """Run the bounded Recorder/discovery job outside the caller thread.
@@ -1824,10 +1891,23 @@ class HistoryManager(threading.Thread):
             screen_target_map.setdefault(a["target_entity"], []).append(a)
         screening_required = bool(screen_agents)
 
-        archive_row_count = STORE.archive_count(start_ts=start_ts, end_ts=end_ts)
-        if archive_row_count <= 0:
-            return 0
-        screening_row_count = archive_row_count
+        # A full-archive COUNT is required only while feature screening is unresolved.
+        # Once a persisted/explicit schema exists, replay below counts only target rows.
+        # Avoid repeating a range COUNT over every unrelated HA sensor on each 6 h
+        # logical checkpoint of a seven-day selected-agent pass.
+        if screening_required:
+            archive_row_count = STORE.archive_count(
+                start_ts=start_ts, end_ts=end_ts
+            )
+            if archive_row_count <= 0:
+                return 0
+            screening_row_count = archive_row_count
+        else:
+            archive_row_count = 0
+            screening_row_count = 0
+        self.training_phase_timings["full_archive_count_skipped"] = bool(
+            not screening_required
+        )
         progress_enabled = progress_lo is not None and progress_hi is not None and float(progress_hi) > float(progress_lo)
         progress_label = progress_label or "Historical policy rebuild"
         if progress_enabled:
@@ -1911,7 +1991,7 @@ class HistoryManager(threading.Thread):
             if screening_required else ()
         )
         screening_checkpoint_rows = max(
-            8, min(128, int(OPTIONS.get("training_archive_batch_rows", 16)))
+            8, min(128, int(OPTIONS.get("training_archive_batch_rows", 64)))
         )
         screening_status_rows = max(128, screening_checkpoint_rows * 8)
         screening_rows_done = 0
@@ -2353,13 +2433,33 @@ class HistoryManager(threading.Thread):
             )
             for policy in policies.values()
         }))
-        # Feature snapshots are intentionally chunk-local. They are shared between the
-        # onset and persistence cursors only when the exact causal source revision,
-        # schema/mask namespace and model-context revision all match.
-        feature_snapshot_cache = HistoricalFeatureSnapshotCache(
-            max_entries=feature_cache_entries,
-            max_units=feature_cache_units,
+        # Exact feature snapshots are immutable and keyed by policy/schema/mask plus
+        # the exact causal source revision and Home Context revision. In a persistent
+        # worker those contracts remain authoritative across logical chunk boundaries,
+        # so retain the bounded LRU for the whole selected-agent sequence instead of
+        # throwing it away every 6 h. A capacity change starts a fresh cache.
+        feature_snapshot_cache_reused = False
+        feature_snapshot_cache = (
+            getattr(self, "_persistent_feature_snapshot_cache", None)
+            if persistent_cache else None
         )
+        if feature_snapshot_cache is not None and (
+            int(getattr(feature_snapshot_cache, "max_entries", -1))
+                != int(feature_cache_entries)
+            or int(getattr(feature_snapshot_cache, "max_units", -1))
+                != int(feature_cache_units)
+        ):
+            feature_snapshot_cache = None
+        if feature_snapshot_cache is None:
+            feature_snapshot_cache = HistoricalFeatureSnapshotCache(
+                max_entries=feature_cache_entries,
+                max_units=feature_cache_units,
+            )
+            if persistent_cache:
+                self._persistent_feature_snapshot_cache = feature_snapshot_cache
+        else:
+            feature_snapshot_cache_reused = True
+        feature_snapshot_cache_baseline = feature_snapshot_cache.status()
 
         replay_connection = None
         if persistent_cache:
@@ -2652,6 +2752,38 @@ class HistoryManager(threading.Thread):
             feature_cache_entries > 0 and feature_cache_units > 0
         )
 
+        def feature_snapshot_cache_diagnostics():
+            status = dict(feature_snapshot_cache.status())
+            baseline = dict(feature_snapshot_cache_baseline or {})
+            counter_keys = (
+                "hits", "misses", "duplicate_hits", "puts", "evictions",
+                "builds", "neural_builds", "unique_feature_timestamps",
+                "unique_feature_timestamp_overflow",
+            )
+            chunk = {
+                key: max(
+                    0,
+                    int(status.get(key) or 0) - int(baseline.get(key) or 0),
+                )
+                for key in counter_keys
+            }
+            chunk["build_seconds"] = round(
+                max(
+                    0.0,
+                    float(status.get("build_seconds") or 0.0)
+                    - float(baseline.get("build_seconds") or 0.0),
+                ),
+                6,
+            )
+            requests = int(chunk["hits"]) + int(chunk["misses"])
+            chunk["hit_rate"] = (
+                float(chunk["hits"]) / requests if requests else None
+            )
+            status["session_persistent"] = bool(persistent_cache)
+            status["session_reused"] = bool(feature_snapshot_cache_reused)
+            status["chunk"] = chunk
+            return status
+
         def historical_feature_snapshot(
             agent, policy, tracker, sample_ts, *, include_neural=False
         ):
@@ -2782,7 +2914,7 @@ class HistoryManager(threading.Thread):
         )
         experience_batch = []
         experience_batch_rows = max(
-            8, min(512, int(OPTIONS.get("training_experience_batch_rows", 64)))
+            8, min(512, int(OPTIONS.get("training_experience_batch_rows", 256)))
         )
 
         def flush_experience_batch(force=False):
@@ -2897,28 +3029,40 @@ class HistoryManager(threading.Thread):
                     totals.get("transition_edge_scan_rows_avoided_estimate") or 0
                 ),
             })
-            feature_cache_status = feature_snapshot_cache.status()
+            feature_cache_status = feature_snapshot_cache_diagnostics()
             self.training_feature_snapshot_cache_status = dict(
                 feature_cache_status
             )
+            feature_cache_chunk = dict(feature_cache_status.get("chunk") or {})
             self.training_phase_timings.update({
+                # Preserve the old per-chunk meaning of these counters even though the
+                # physical cache now survives across a persistent worker sequence.
                 "feature_snapshot_unique_timestamps": int(
-                    feature_cache_status.get("unique_feature_timestamps") or 0
+                    feature_cache_chunk.get("unique_feature_timestamps") or 0
                 ),
                 "feature_snapshot_cache_hits": int(
-                    feature_cache_status.get("hits") or 0
+                    feature_cache_chunk.get("hits") or 0
                 ),
                 "feature_snapshot_cache_misses": int(
-                    feature_cache_status.get("misses") or 0
+                    feature_cache_chunk.get("misses") or 0
                 ),
                 "feature_snapshot_duplicate_hits": int(
-                    feature_cache_status.get("duplicate_hits") or 0
+                    feature_cache_chunk.get("duplicate_hits") or 0
                 ),
                 "feature_snapshot_builds": int(
-                    feature_cache_status.get("builds") or 0
+                    feature_cache_chunk.get("builds") or 0
                 ),
                 "feature_snapshot_build_seconds": float(
-                    feature_cache_status.get("build_seconds") or 0.0
+                    feature_cache_chunk.get("build_seconds") or 0.0
+                ),
+                "feature_snapshot_session_reused": bool(
+                    feature_snapshot_cache_reused
+                ),
+                "feature_snapshot_session_hits_total": int(
+                    feature_cache_status.get("hits") or 0
+                ),
+                "feature_snapshot_session_builds_total": int(
+                    feature_cache_status.get("builds") or 0
                 ),
             })
             self.temporal_replay_stats = {
@@ -4178,7 +4322,7 @@ class HistoryManager(threading.Thread):
             else dict(self.training_transition_edge_index_status or {})
         )
         self.training_feature_snapshot_cache_status = (
-            feature_snapshot_cache.status()
+            feature_snapshot_cache_diagnostics()
         )
         timeline.close()
         persistence_timeline.close()

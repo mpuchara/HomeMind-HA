@@ -1,10 +1,10 @@
 {
-  "version": "0.14.119",
+  "version": "0.14.120",
   "release_date": "2026-10-01",
-  "base_version": "0.14.118",
-  "base_commit": "0eca6cd0803a30af3b638b05738180d0d41c9778",
-  "release_status": "training-worker-contract-restart-fix",
-  "release_validation_tests_passed": 1510,
+  "base_version": "0.14.119",
+  "base_commit": "e47155713d5758608b45a786506003dc76355bf3",
+  "release_status": "persistent-training-session-cache-profiling",
+  "release_validation_tests_passed": 1517,
   "event_decision_hotpath_014118": {
     "evidence": "0.14.117 debug: realtime subscription healthy, inference compute recent p95 ~76.8 ms, but event-to-intent recent p95 ~1.52e6 ms and completed Shadow inference spans still 5-11 s",
     "metric_root_cause": "busy-target resubmit replaced real changed dependency entities with the target entity, so latency could reuse an arbitrarily old target receive timestamp; timer target hints could do the same",
@@ -1126,5 +1126,32 @@
     "regression_test": "actual subprocess worker must persist Policy v11 / Schema v12; after marking the result completed, a fresh Store plus observation migration must preserve qualified + shadow",
     "existing_affected_models": "legacy worker output is not silently reinterpreted because schema11 and schema12 feature semantics differ; one retrain on 0.14.119 is required for agents already quarantined",
     "control_safety": "no Control qualification, ActionIntent freshness, Executor dispatch, reward or Candidate promotion guard is weakened"
+  },
+  "release_014120": {
+    "scope": "selected_agent_persistent_training_session_acceleration",
+    "feature_snapshot_cache": "bounded exact-causal cache persists across logical 6 h checkpoints inside one isolated selected-agent worker",
+    "cache_safety": "existing strict policy/schema/mask + entity revision + Home Context revision key remains authoritative; immutable restores only",
+    "redundant_work_removed": "full archive COUNT skipped after schema becomes authoritative; target-only replay count remains",
+    "batching": {
+      "archive_forced_checkpoint_rows": 64,
+      "historical_experience_transaction_rows": 256,
+      "previous_archive_rows": 16,
+      "previous_experience_rows": 128
+    },
+    "qos_unchanged": {
+      "training_wall_duty_cycle_target": 0.85,
+      "max_continuous_work_ms": 35,
+      "realtime_preemption": "unchanged bounded burst/cooldown contract"
+    },
+    "diagnostics": [
+      "training_process.session_profile",
+      "training_job_timings.training_session_profile",
+      "recent_training_profiles",
+      "training_feature_snapshot_cache.chunk",
+      "training_phase_timings.feature_snapshot_session_hits_total",
+      "training_phase_timings.feature_snapshot_session_builds_total"
+    ],
+    "semantics": "no reward/sample selection/feature contract/validation boundary/policy update order/Correct/Candidate/ActionIntent/Executor/physical control change",
+    "validation": "1517 tests expected on Python 3.11 and 3.13; final CI confirmation required before merge"
   }
 }

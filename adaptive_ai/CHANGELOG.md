@@ -1,3 +1,14 @@
+# 0.14.120 — 2026-10-01
+
+- Speed up selected-agent Train/Rebuild without changing reward, feature semantics, validation boundaries or policy update order.
+- Keep the bounded **exact historical feature snapshot cache** alive for the complete persistent worker sequence instead of discarding it at every 6-hour logical checkpoint. Cross-chunk hits are allowed only when the existing strict key matches policy/schema/mask, exact causal entity revisions and Home Context revision.
+- Preserve the old per-chunk feature-cache diagnostics by reporting counter deltas while also exposing session totals, reuse state and final cache hit/build/eviction statistics.
+- Skip the redundant full-archive range `COUNT` on chunks whose feature schema is already authoritative; chronological replay continues to count and stream only the selected agent's target rows.
+- Raise shipped non-semantic batching defaults from **16 → 64 archive rows** per forced scheduler checkpoint and **128 → 256 historical experiences** per persistence transaction. The 85% cooperative duty target, 35 ms continuous-work slice, realtime preemption, WAL durability and rollback contract remain unchanged.
+- Add a bounded **persistent training session profile** aggregating all logical chunk timings/counters and the five slowest chunks. Completed per-agent profiles remain available in Diagnostics after the lightweight training session object is released.
+- Add 0.14.120 regressions for session profiling, persistent cache cleanup, non-semantic batch tuning and shipped configuration alignment.
+- Expected full suite after adding these regressions: **1517 tests** on Python 3.11 and 3.13; final release status is confirmed by CI before merge.
+
 # 0.14.119 — 2026-10-01
 
 - Fixed a restart regression in process-isolated agent training: the child trainer now installs the same Observation Contract v12 / Policy v11 used by the realtime parent before it constructs HistoryManager or any policy.
