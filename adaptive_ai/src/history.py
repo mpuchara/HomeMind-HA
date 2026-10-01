@@ -4012,6 +4012,36 @@ class HistoryManager(threading.Thread):
                 )
             )
 
+            # The monotonic provenance cache loads only the new replay tail. The sole
+            # older target fact that can still affect this chunk is the reconstructed
+            # open-dwell seed, so refresh provenance for exactly those bounded ids. This
+            # preserves the old per-chunk own-command classification even if provenance
+            # for a seed was durably linked after an earlier logical checkpoint.
+            seed_provenance_started = time.perf_counter()
+            seed_history_ids = [
+                int(item[0]["id"]) for item in seed_rows.values() if item
+            ]
+            if persistent_cache and seed_history_ids:
+                refreshed_seed_provenance = selected_history_provenance(
+                    STORE, seed_history_ids
+                )
+                replay_provenance.update(refreshed_seed_provenance)
+                provenance_state = getattr(
+                    self, "_persistent_replay_provenance_state", None
+                )
+                if isinstance(provenance_state, dict):
+                    provenance_state.setdefault("rows", {}).update(
+                        refreshed_seed_provenance
+                    )
+            self.training_phase_timings.update({
+                "provenance_seed_refresh_seconds": round(
+                    time.perf_counter() - seed_provenance_started, 6
+                ),
+                "provenance_seed_refresh_rows": int(
+                    len(seed_history_ids) if persistent_cache else 0
+                ),
+            })
+
             for seed_agent in agents:
                 seed_aid = seed_agent["id"]
                 item = seed_rows.get(seed_aid)
