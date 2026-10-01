@@ -163,7 +163,14 @@ class RuntimeDebugTrace:
             enabled = bool(self.enabled)
             started = self.session_started_at
         telemetry_snapshot = telemetry_snapshot or {}
-        event_metric = ((telemetry_snapshot.get("metrics") or {}).get("event_to_intent") or {})
+        metrics = telemetry_snapshot.get("metrics") or {}
+        event_metric = metrics.get("event_to_decision") or metrics.get("event_to_intent") or {}
+        event_summary = {
+            "count": int(event_metric.get("count") or 0),
+            "p95_ms": event_metric.get("p95_ms"),
+            "recent_count": int(event_metric.get("recent_count") or 0),
+            "recent_p95_ms": event_metric.get("recent_p95_ms"),
+        }
         return {
             "enabled": enabled,
             "session_started_at": started,
@@ -172,12 +179,9 @@ class RuntimeDebugTrace:
             "capacity": self.MAX_ENTRIES,
             "active": active[:12],
             "active_count": len(active),
-            "event_to_intent": {
-                "count": int(event_metric.get("count") or 0),
-                "p95_ms": event_metric.get("p95_ms"),
-                "recent_count": int(event_metric.get("recent_count") or 0),
-                "recent_p95_ms": event_metric.get("recent_p95_ms"),
-            },
+            "event_to_decision": dict(event_summary),
+            # Compatibility alias for diagnostics consumers from <=0.14.117.
+            "event_to_intent": dict(event_summary),
         }
 
     def export(self):
