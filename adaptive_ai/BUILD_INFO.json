@@ -1,9 +1,9 @@
 {
-  "version": "0.14.118",
+  "version": "0.14.119",
   "release_date": "2026-10-01",
-  "base_version": "0.14.117",
-  "base_commit": "08796e8f2b7114a6c294ac2c66d601f8d12982d4",
-  "release_status": "event-decision-hotpath-fix",
+  "base_version": "0.14.118",
+  "base_commit": "0eca6cd0803a30af3b638b05738180d0d41c9778",
+  "release_status": "training-worker-contract-restart-fix",
   "release_validation_tests_passed": 1510,
   "event_decision_hotpath_014118": {
     "evidence": "0.14.117 debug: realtime subscription healthy, inference compute recent p95 ~76.8 ms, but event-to-intent recent p95 ~1.52e6 ms and completed Shadow inference spans still 5-11 s",
@@ -1118,5 +1118,13 @@
     "control_semantics": "unchanged",
     "validation": "1489 unit tests green on Python 3.11 and 3.13 feature-head CI before the release metadata bump; final release CI required",
     "safety": "HA websocket ingestion/state reconciliation, policy, reward, Correct, Candidate lineage, Executor and physical authority unchanged"
+  },
+  "training_worker_restart_014119": {
+    "root_cause": "process-isolated historical training starts in a fresh Python interpreter and did not install the runtime Observation Contract; it therefore used repository defaults Policy v10 / Schema v11 while the realtime parent uses Policy v11 / Schema v12",
+    "observed_failure": "a freshly trained Shadow agent could be usable before restart, but persisted worker output was identified as incompatible on the next startup and the lifecycle became needs_retrain / paused",
+    "fix": "install the exact Observation Contract v12 / Policy v11 feature, schema and replay bindings inside the isolated worker before HistoryManager or policies are constructed",
+    "regression_test": "actual subprocess worker must persist Policy v11 / Schema v12; after marking the result completed, a fresh Store plus observation migration must preserve qualified + shadow",
+    "existing_affected_models": "legacy worker output is not silently reinterpreted because schema11 and schema12 feature semantics differ; one retrain on 0.14.119 is required for agents already quarantined",
+    "control_safety": "no Control qualification, ActionIntent freshness, Executor dispatch, reward or Candidate promotion guard is weakened"
   }
 }

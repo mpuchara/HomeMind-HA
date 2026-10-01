@@ -657,6 +657,24 @@ class ActualWorkerSmoke(unittest.TestCase):
         with tempfile.TemporaryDirectory(prefix="hm-worker-smoke-") as root:
             db = Path(root) / "adaptive_ai.db"
             store = Store(db)
+            # Production creates the Observation Contract journal schema in the realtime
+            # parent before an isolated training worker can be admitted. Mirror only the
+            # fast-journal read surface here without importing observation_contract into
+            # this parent unittest process; the child is the contract under test.
+            with store.lock, store.conn() as c:
+                c.executescript("""
+                    CREATE TABLE IF NOT EXISTS feature_observation_events (
+                        event_key TEXT PRIMARY KEY, contract_version INTEGER NOT NULL,
+                        entity_id TEXT NOT NULL, event_time REAL NOT NULL,
+                        received_time REAL NOT NULL, state TEXT,
+                        attributes_json TEXT NOT NULL DEFAULT '{}',
+                        last_changed TEXT, last_updated TEXT, source TEXT NOT NULL,
+                        quality REAL NOT NULL, protected_until REAL NOT NULL DEFAULT 0);
+                    CREATE INDEX IF NOT EXISTS idx_feature_obs_entity_time
+                        ON feature_observation_events(entity_id,event_time,received_time);
+                    CREATE INDEX IF NOT EXISTS idx_feature_obs_entity_received_time
+                        ON feature_observation_events(entity_id,received_time,event_time);
+                """)
             agent = store.create_agent({
                 "name": "Worker smoke",
                 "target_entity": "switch.target",
@@ -771,6 +789,15 @@ class ActualWorkerSmoke(unittest.TestCase):
             model = store.get_model(agent["id"])
             self.assertIsNotNone(model)
             self.assertGreaterEqual(int(model.get("_history_watermark") or 0), 1)
+            # A clean isolated process must publish the exact contract installed by
+            # the shipped realtime runtime: Policy v11 / Observation Schema v12.
+            # tests/test_model_contract_restart.py independently proves that this
+            # contract survives a fresh Store/startup migration in Shadow.
+            self.assertEqual(int(model.get("version") or 0), 11)
+            self.assertEqual(
+                int((model.get("schema") or {}).get("version") or 0),
+                12,
+            )
 
 
 if __name__ == "__main__":

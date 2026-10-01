@@ -1421,7 +1421,22 @@ class ObservationSQLiteTemporalTracker(replay_module.SQLiteTemporalTracker):
     <= the replay query time. Forward advancement therefore consumes rows that became
     newly eligible by either time axis; late packets are merged back into the bounded
     per-entity history without rewinding the whole tracker.
+
+    The fast journal is additive. A process-isolated training fixture or an upgraded
+    database may temporarily expose only the long-term archive; in that case replay keeps
+    exact archive semantics instead of failing on a missing optional journal table.
     """
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        try:
+            row = self.conn.execute(
+                "SELECT 1 FROM sqlite_master "
+                "WHERE type='table' AND name='feature_observation_events' LIMIT 1"
+            ).fetchone()
+            self._feature_journal_available = bool(row)
+        except sqlite3.Error:
+            self._feature_journal_available = False
 
     @staticmethod
     def _row_order(row):
@@ -1434,6 +1449,8 @@ class ObservationSQLiteTemporalTracker(replay_module.SQLiteTemporalTracker):
         )
 
     def _feature_bulk_before(self, entity_ids, ts, count):
+        if not getattr(self, "_feature_journal_available", False):
+            return []
         result = []
         count = max(1, int(count))
         for ids in self._chunks(entity_ids):
@@ -1472,6 +1489,8 @@ class ObservationSQLiteTemporalTracker(replay_module.SQLiteTemporalTracker):
         The branches are disjoint. Each keeps at most HISTORY_SAMPLES newest rows and
         Python restores the exact previous per-entity top-64 ordering after the UNION.
         """
+        if not getattr(self, "_feature_journal_available", False):
+            return []
         lo, hi = float(lo), float(hi)
         if hi <= lo:
             return []
@@ -1815,10 +1834,81 @@ def _migrate_models(core):
     return changed
 
 
+def install_training_contract():
+    """Install the exact live observation/policy contract inside an isolated trainer.
+
+    Historical workers are separate Python processes, so runtime monkey-patches installed
+    in the realtime parent do not cross the process boundary. Without this bootstrap a
+    worker imports the repository defaults (policy v10/schema v11), can finish training
+    successfully, and publishes a model that the parent correctly quarantines as
+    NEEDS_RETRAIN on the next restart.
+
+    Return a restore callback as part of the metadata. Production workers exit after the
+    job, but direct worker invocations in tests/tools may share a Python interpreter; the
+    callback prevents the temporary training contract from leaking into unrelated legacy
+    component tests.
+    """
+    missing = object()
+    originals = {
+        "policy_schema": getattr(policy_module, "ExplicitFeatureSchema", missing),
+        "context_schema": getattr(context_module, "ExplicitFeatureSchema", missing),
+        "policy_build_features": getattr(policy_module, "build_explicit_features", missing),
+        "teaching_build_features": getattr(teaching_module, "build_explicit_features", missing),
+        "policy_feature_names": getattr(policy_module, "FEATURE_NAMES", missing),
+        "policy_version": getattr(policy_module.MultiHorizonPolicy, "VERSION", missing),
+        "policy_features": getattr(policy_module.MultiHorizonPolicy, "features", missing),
+        "teaching_signature": getattr(teaching_module, "signature", missing),
+        "replay_tracker": getattr(replay_module, "SQLiteTemporalTracker", missing),
+        "history_tracker": getattr(history_module, "SQLiteTemporalTracker", missing),
+        "teaching_point_context": getattr(teaching_module.Teaching, "point_context", missing),
+    }
+
+    def restore_attr(owner, name, value):
+        if value is missing:
+            if hasattr(owner, name):
+                delattr(owner, name)
+        else:
+            setattr(owner, name, value)
+
+    def restore():
+        restore_attr(policy_module, "ExplicitFeatureSchema", originals["policy_schema"])
+        restore_attr(context_module, "ExplicitFeatureSchema", originals["context_schema"])
+        restore_attr(policy_module, "build_explicit_features", originals["policy_build_features"])
+        restore_attr(teaching_module, "build_explicit_features", originals["teaching_build_features"])
+        restore_attr(policy_module, "FEATURE_NAMES", originals["policy_feature_names"])
+        restore_attr(policy_module.MultiHorizonPolicy, "VERSION", originals["policy_version"])
+        restore_attr(policy_module.MultiHorizonPolicy, "features", originals["policy_features"])
+        restore_attr(teaching_module, "signature", originals["teaching_signature"])
+        restore_attr(replay_module, "SQLiteTemporalTracker", originals["replay_tracker"])
+        restore_attr(history_module, "SQLiteTemporalTracker", originals["history_tracker"])
+        restore_attr(teaching_module.Teaching, "point_context", originals["teaching_point_context"])
+
+    policy_module.ExplicitFeatureSchema = FeatureSchemaV12
+    context_module.ExplicitFeatureSchema = FeatureSchemaV12
+    policy_module.build_explicit_features = build_observation_features
+    teaching_module.build_explicit_features = build_observation_features
+    policy_module.FEATURE_NAMES = HOME_FEATURE_NAMES
+    policy_module.MultiHorizonPolicy.VERSION = POLICY_VERSION
+    policy_module.MultiHorizonPolicy.features = policy_features
+    teaching_module.signature = teaching_signature
+    replay_module.SQLiteTemporalTracker = ObservationSQLiteTemporalTracker
+    history_module.SQLiteTemporalTracker = ObservationSQLiteTemporalTracker
+    _patch_teaching_point_context()
+    return {
+        "policy_version": POLICY_VERSION,
+        "schema_version": SCHEMA_VERSION,
+        "feature_contract_version": FEATURE_CONTRACT_VERSION,
+        "restore": restore,
+    }
+
+
 def install(core):
     engine, store = core.ENGINE, core.STORE
     if engine is None or store is None or getattr(engine, "_observation_contract_installed", False):
         return engine
+    # Keep the shipped parent-runtime composition explicit and unchanged. The isolated
+    # training process calls install_training_contract() separately because it starts in
+    # a fresh interpreter and cannot inherit these bindings.
     policy_module.ExplicitFeatureSchema = FeatureSchemaV12
     context_module.ExplicitFeatureSchema = FeatureSchemaV12
     policy_module.build_explicit_features = build_observation_features
