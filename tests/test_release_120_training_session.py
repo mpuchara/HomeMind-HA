@@ -125,7 +125,6 @@ class Release120SourceContractTests(unittest.TestCase):
             encoding="utf-8"
         )
         self.assertIn("_persistent_feature_snapshot_cache", source)
-        self.assertIn('"session_persistent" =', source.replace("[", "").replace("]", "")) if False else None
         self.assertIn("feature_snapshot_cache_reused = False", source)
         self.assertIn("feature_snapshot_cache_diagnostics", source)
         self.assertIn("full_archive_count_skipped", source)
