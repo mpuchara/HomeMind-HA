@@ -781,6 +781,27 @@ class ActualWorkerSmoke(unittest.TestCase):
                 SCHEMA_VERSION,
             )
 
+            # Once a completed worker result is marked Shadow-ready, a fresh Store plus
+            # observation-contract migration must leave that lifecycle untouched.
+            store.set_training_state(
+                agent["id"], "qualified", score=.95, samples=40,
+                source="recorded-behaviour",
+                detail={
+                    "threshold": .78, "minimum_samples": 12,
+                    "class_coverage": True,
+                },
+                shadow_after_completion=True,
+            )
+            restarted = Store(db)
+            from observation_contract import _migrate_models
+            migrated = _migrate_models(
+                SimpleNamespace(STORE=restarted, ENGINE=None)
+            )
+            self.assertNotIn(agent["id"], migrated)
+            after_restart = restarted.get_agent_config(agent["id"])
+            self.assertEqual(after_restart["training_state"], "qualified")
+            self.assertEqual(after_restart["mode"], "shadow")
+
 
 if __name__ == "__main__":
     unittest.main()
