@@ -6,7 +6,7 @@
 - Continue refreshing provenance for the exact selected seed history id, preserving the 0.14.121 own-command exclusion contract.
 - Add Diagnostics counters for continuation cache hits, SQLite fallback loads, rows reduced and target rows whose SQLite re-read was avoided.
 - Add regressions for reducer parity, boundary exclusion, empty-overlap cache hits, coverage/scope fallback, cleanup and session-profile aggregation.
-- Expected full suite after these regressions: **1531 tests** on Python 3.11 and 3.13; final release status is confirmed by CI before merge.
+- Validation: **1531 tests green** on Python 3.11 and 3.13; image build/smoke, stateful continuation parity benchmark, persistent-worker gates and Stage 18 product runtime are green.
 
 # 0.14.121 — 2026-10-01
 
