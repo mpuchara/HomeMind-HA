@@ -144,6 +144,9 @@ class HistoryManager(threading.Thread):
         self.temporal_replay_stats = {}
         self.training_phase_timings = {}
         self.training_job_timings = {}
+        # Keep the last bounded per-agent profiles after lightweight session objects are
+        # released so Diagnostics can explain a completed multi-hour Train/Rebuild.
+        self.recent_training_profiles = {}
         # Explicit per-agent training has a global pass progress/ETA contract separate
         # from the current Recorder/replay stage counters. The stage work may reset for
         # every 6 h chunk; these fields never do until the whole selected agent finishes.
@@ -279,6 +282,9 @@ class HistoryManager(threading.Thread):
                 "training_job_timings": dict(
                     getattr(self, "training_job_timings", {}) or {}
                 ),
+                "recent_training_profiles": dict(
+                    getattr(self, "recent_training_profiles", {}) or {}
+                ),
                 "discovery_job_active": bool(self.discovery_job_active),
                 "discovery_job_started_at": self.discovery_job_started_at,
                 "discovery_classified": bool(self.discovery_classified),
@@ -298,6 +304,15 @@ class HistoryManager(threading.Thread):
                     "message": session.message,
                     "started_at": session.training_job_started_at,
                     "training_process": dict(session.training_process_status or {}),
+                    "training_phase_timings": dict(
+                        session.training_phase_timings or {}
+                    ),
+                    "training_job_timings": dict(
+                        session.training_job_timings or {}
+                    ),
+                    "training_feature_snapshot_cache": dict(
+                        session.training_feature_snapshot_cache_status or {}
+                    ),
                 })
             process_rows = [row["training_process"] for row in rows]
             worker_cpu_total = sum(
@@ -604,6 +619,52 @@ class HistoryManager(threading.Thread):
                         and final_state in ("qualified", "paused")
                         and failure_text is None
                     )
+                    finished_profile = {
+                        "agent_id": agent_id,
+                        "name": agent.get("name") or agent_id,
+                        "finished_at": now_ts(),
+                        "completed": bool(completed),
+                        "state": final_state,
+                        "progress": float(final_progress),
+                        "training_job_timings": dict(
+                            session.training_job_timings or {}
+                        ),
+                        "training_phase_timings": dict(
+                            session.training_phase_timings or {}
+                        ),
+                        "training_process": dict(
+                            session.training_process_status or {}
+                        ),
+                        "training_feature_snapshot_cache": dict(
+                            session.training_feature_snapshot_cache_status or {}
+                        ),
+                        "temporal_replay": dict(
+                            session.temporal_replay_stats or {}
+                        ),
+                    }
+                    with self.lock:
+                        self.recent_training_profiles.pop(agent_id, None)
+                        self.recent_training_profiles[agent_id] = finished_profile
+                        while len(self.recent_training_profiles) > 8:
+                            oldest = next(iter(self.recent_training_profiles))
+                            self.recent_training_profiles.pop(oldest, None)
+                        # Backwards-compatible single-result surfaces follow the most
+                        # recently completed training session.
+                        self.training_job_timings = dict(
+                            session.training_job_timings or {}
+                        )
+                        self.training_phase_timings = dict(
+                            session.training_phase_timings or {}
+                        )
+                        self.training_feature_snapshot_cache_status = dict(
+                            session.training_feature_snapshot_cache_status or {}
+                        )
+                        self.temporal_replay_stats = dict(
+                            session.temporal_replay_stats or {}
+                        )
+                        self.training_process_status = dict(
+                            session.training_process_status or {}
+                        )
                     with self.agent_jobs_lock:
                         self.agent_jobs.discard(agent_id)
                         self.training_sessions.pop(agent_id, None)
