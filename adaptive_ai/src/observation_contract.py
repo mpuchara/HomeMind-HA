@@ -1829,32 +1829,40 @@ def install_training_contract():
     callback prevents the temporary training contract from leaking into unrelated legacy
     component tests.
     """
+    missing = object()
     originals = {
-        "policy_schema": policy_module.ExplicitFeatureSchema,
-        "context_schema": context_module.ExplicitFeatureSchema,
-        "policy_build_features": policy_module.build_explicit_features,
-        "teaching_build_features": teaching_module.build_explicit_features,
-        "policy_feature_names": policy_module.FEATURE_NAMES,
-        "policy_version": policy_module.MultiHorizonPolicy.VERSION,
-        "policy_features": policy_module.MultiHorizonPolicy.features,
-        "teaching_signature": teaching_module.signature,
-        "replay_tracker": replay_module.SQLiteTemporalTracker,
-        "history_tracker": history_module.SQLiteTemporalTracker,
-        "teaching_point_context": teaching_module.Teaching.point_context,
+        "policy_schema": getattr(policy_module, "ExplicitFeatureSchema", missing),
+        "context_schema": getattr(context_module, "ExplicitFeatureSchema", missing),
+        "policy_build_features": getattr(policy_module, "build_explicit_features", missing),
+        "teaching_build_features": getattr(teaching_module, "build_explicit_features", missing),
+        "policy_feature_names": getattr(policy_module, "FEATURE_NAMES", missing),
+        "policy_version": getattr(policy_module.MultiHorizonPolicy, "VERSION", missing),
+        "policy_features": getattr(policy_module.MultiHorizonPolicy, "features", missing),
+        "teaching_signature": getattr(teaching_module, "signature", missing),
+        "replay_tracker": getattr(replay_module, "SQLiteTemporalTracker", missing),
+        "history_tracker": getattr(history_module, "SQLiteTemporalTracker", missing),
+        "teaching_point_context": getattr(teaching_module.Teaching, "point_context", missing),
     }
 
+    def restore_attr(owner, name, value):
+        if value is missing:
+            if hasattr(owner, name):
+                delattr(owner, name)
+        else:
+            setattr(owner, name, value)
+
     def restore():
-        policy_module.ExplicitFeatureSchema = originals["policy_schema"]
-        context_module.ExplicitFeatureSchema = originals["context_schema"]
-        policy_module.build_explicit_features = originals["policy_build_features"]
-        teaching_module.build_explicit_features = originals["teaching_build_features"]
-        policy_module.FEATURE_NAMES = originals["policy_feature_names"]
-        policy_module.MultiHorizonPolicy.VERSION = originals["policy_version"]
-        policy_module.MultiHorizonPolicy.features = originals["policy_features"]
-        teaching_module.signature = originals["teaching_signature"]
-        replay_module.SQLiteTemporalTracker = originals["replay_tracker"]
-        history_module.SQLiteTemporalTracker = originals["history_tracker"]
-        teaching_module.Teaching.point_context = originals["teaching_point_context"]
+        restore_attr(policy_module, "ExplicitFeatureSchema", originals["policy_schema"])
+        restore_attr(context_module, "ExplicitFeatureSchema", originals["context_schema"])
+        restore_attr(policy_module, "build_explicit_features", originals["policy_build_features"])
+        restore_attr(teaching_module, "build_explicit_features", originals["teaching_build_features"])
+        restore_attr(policy_module, "FEATURE_NAMES", originals["policy_feature_names"])
+        restore_attr(policy_module.MultiHorizonPolicy, "VERSION", originals["policy_version"])
+        restore_attr(policy_module.MultiHorizonPolicy, "features", originals["policy_features"])
+        restore_attr(teaching_module, "signature", originals["teaching_signature"])
+        restore_attr(replay_module, "SQLiteTemporalTracker", originals["replay_tracker"])
+        restore_attr(history_module, "SQLiteTemporalTracker", originals["history_tracker"])
+        restore_attr(teaching_module.Teaching, "point_context", originals["teaching_point_context"])
 
     policy_module.ExplicitFeatureSchema = FeatureSchemaV12
     context_module.ExplicitFeatureSchema = FeatureSchemaV12
