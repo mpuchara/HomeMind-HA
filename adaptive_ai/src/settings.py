@@ -447,8 +447,8 @@ def load_options():
                 options["training_max_continuous_work_ms"] = 35
             if data.get("training_throttle_max_sleep_seconds") == 2.0:
                 options["training_throttle_max_sleep_seconds"] = 0.50
-            if data.get("training_experience_batch_rows") == 64:
-                options["training_experience_batch_rows"] = 128
+            if data.get("training_experience_batch_rows") in (64, 128):
+                options["training_experience_batch_rows"] = 256
             if data.get("training_replay_ram_cache_rows") in (8192, 16384):
                 options["training_replay_ram_cache_rows"] = 65536
             if data.get("training_replay_ram_cache_entry_rows") == 1024:
