@@ -141,6 +141,11 @@ class Store:
                 );
                 CREATE INDEX IF NOT EXISTS idx_entity_history_ts ON entity_history(ts);
                 CREATE INDEX IF NOT EXISTS idx_entity_history_entity_ts ON entity_history(entity_id, ts);
+                CREATE TABLE IF NOT EXISTS entity_history_revision (
+                    id INTEGER PRIMARY KEY CHECK (id=1),
+                    revision INTEGER NOT NULL DEFAULT 0
+                );
+                INSERT OR IGNORE INTO entity_history_revision(id,revision) VALUES(1,0);
                 CREATE TABLE IF NOT EXISTS historical_experiences (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     agent_id TEXT NOT NULL,
@@ -183,7 +188,45 @@ class Store:
             # Legacy/Recorder-imported rows keep NULL here: their receive time is unknown
             # and replay falls back to event time without fabricating provenance.
             self._ensure_column(c, "entity_history", "received_ts", "REAL")
+            # 0.14.123: each sanctioned history mutation receives one durable,
+            # cross-process revision. Existing rows remain revision 0 until touched.
+            self._ensure_column(
+                c, "entity_history", "mutation_revision",
+                "INTEGER NOT NULL DEFAULT 0",
+            )
             c.execute("CREATE INDEX IF NOT EXISTS idx_entity_history_received_ts ON entity_history(received_ts)")
+            # Defensive triggers cover any legacy/raw SQL writer that bypasses the Store
+            # helpers. Normal archive_upsert/archive_batch supply a non-zero revision, so
+            # these triggers stay cold on the performance-sensitive normal path.
+            c.executescript(
+                """
+                CREATE TRIGGER IF NOT EXISTS trg_entity_history_insert_revision
+                AFTER INSERT ON entity_history
+                WHEN NEW.mutation_revision=0
+                BEGIN
+                  UPDATE entity_history_revision
+                     SET revision=revision+1 WHERE id=1;
+                  UPDATE entity_history
+                     SET mutation_revision=(
+                       SELECT revision FROM entity_history_revision WHERE id=1
+                     )
+                   WHERE id=NEW.id;
+                END;
+                CREATE TRIGGER IF NOT EXISTS trg_entity_history_update_revision
+                AFTER UPDATE OF received_ts,state,attributes_json,context_user_id,source
+                ON entity_history
+                WHEN NEW.mutation_revision=OLD.mutation_revision
+                BEGIN
+                  UPDATE entity_history_revision
+                     SET revision=revision+1 WHERE id=1;
+                  UPDATE entity_history
+                     SET mutation_revision=(
+                       SELECT revision FROM entity_history_revision WHERE id=1
+                     )
+                   WHERE id=NEW.id;
+                END;
+                """
+            )
             c.execute("UPDATE agents SET mode='shadow' WHERE mode='learn'")
             # v0.7.8 lifecycle migration: dormant becomes PAUSED, candidate becomes TRAINING.
             c.execute("UPDATE agents SET training_state='paused', mode='paused' WHERE training_state='dormant'")
@@ -753,18 +796,60 @@ class Store:
             row = c.execute("SELECT id FROM agents WHERE target_entity=? AND target_property=?", (entity_id, property_name)).fetchone()
         return self.get_agent(row[0]) if row else None
 
+    @staticmethod
+    def _next_entity_history_revision(c):
+        c.execute(
+            "UPDATE entity_history_revision SET revision=revision+1 WHERE id=1"
+        )
+        row = c.execute(
+            "SELECT revision FROM entity_history_revision WHERE id=1"
+        ).fetchone()
+        if row is None:
+            raise RuntimeError("entity_history revision row is missing")
+        return int(row[0])
+
+    def archive_window_fingerprint(self, entity_ids, start_ts, end_ts):
+        """Cheap mutation guard for one exact target-history overlap.
+
+        COUNT detects deletion. MAX(mutation_revision) detects every sanctioned INSERT
+        or UPDATE without invalidating the cache for newer rows outside this window.
+        """
+        ids = sorted({str(entity_id) for entity_id in (entity_ids or ())})
+        start_ts, end_ts = float(start_ts), float(end_ts)
+        if not ids or end_ts <= start_ts:
+            return (0, 0)
+        placeholders = ",".join("?" for _ in ids)
+        with self.conn() as c:
+            row = c.execute(
+                f"""SELECT COUNT(*) AS n,
+                           COALESCE(MAX(mutation_revision),0) AS revision
+                      FROM entity_history
+                     WHERE entity_id IN ({placeholders})
+                       AND ts>=? AND ts<?""",
+                [*ids, start_ts, end_ts],
+            ).fetchone()
+        return (int(row["n"] or 0), int(row["revision"] or 0))
+
     def archive_upsert(self, entity_id, ts, state, attributes=None, user_id=None, source="live"):
         attrs = json.dumps(attributes or {}, separators=(",", ":"), ensure_ascii=False)
         with self.lock, self.conn() as c:
+            revision = self._next_entity_history_revision(c)
             c.execute(
-                """INSERT INTO entity_history(entity_id,ts,state,attributes_json,context_user_id,source)
-                   VALUES(?,?,?,?,?,?)
+                """INSERT INTO entity_history(
+                       entity_id,ts,state,attributes_json,context_user_id,source,
+                       mutation_revision
+                   )
+                   VALUES(?,?,?,?,?,?,?)
                    ON CONFLICT(entity_id,ts) DO UPDATE SET
                      state=excluded.state,
                      attributes_json=CASE WHEN excluded.attributes_json!='{}' THEN excluded.attributes_json ELSE entity_history.attributes_json END,
                      context_user_id=COALESCE(excluded.context_user_id, entity_history.context_user_id),
-                     source=CASE WHEN excluded.source='ha_history_full' THEN excluded.source ELSE entity_history.source END""",
-                (entity_id, float(ts), None if state is None else str(state), attrs, user_id, source),
+                     source=CASE WHEN excluded.source='ha_history_full' THEN excluded.source ELSE entity_history.source END,
+                     mutation_revision=excluded.mutation_revision""",
+                (
+                    entity_id, float(ts), None if state is None else str(state),
+                    attrs, user_id, source, revision,
+                ),
             )
 
     def archive_batch(self, rows):
@@ -788,10 +873,13 @@ class Store:
 
         packed = [pack(row) for row in rows]
         with self.lock, self.conn() as c:
+            revision = self._next_entity_history_revision(c)
+            versioned = [(*item, revision) for item in packed]
             c.executemany(
                 """INSERT INTO entity_history
-                   (entity_id,ts,received_ts,state,attributes_json,context_user_id,source)
-                   VALUES(?,?,?,?,?,?,?)
+                   (entity_id,ts,received_ts,state,attributes_json,context_user_id,source,
+                    mutation_revision)
+                   VALUES(?,?,?,?,?,?,?,?)
                    ON CONFLICT(entity_id,ts) DO UPDATE SET
                      received_ts=CASE
                        WHEN entity_history.source='live' THEN entity_history.received_ts
@@ -801,8 +889,9 @@ class Store:
                      state=excluded.state,
                      attributes_json=CASE WHEN excluded.attributes_json!='{}' THEN excluded.attributes_json ELSE entity_history.attributes_json END,
                      context_user_id=COALESCE(excluded.context_user_id, entity_history.context_user_id),
-                     source=CASE WHEN excluded.source='ha_history_full' THEN excluded.source ELSE entity_history.source END""",
-                packed,
+                     source=CASE WHEN excluded.source='ha_history_full' THEN excluded.source ELSE entity_history.source END,
+                     mutation_revision=excluded.mutation_revision""",
+                versioned,
             )
         return len(packed)
 
