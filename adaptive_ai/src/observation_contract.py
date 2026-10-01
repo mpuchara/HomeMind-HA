@@ -2042,7 +2042,7 @@ def install(core):
     engine.refresh_states = refresh_states
 
     original_submit = engine.executor.submit
-    def submit(intent, features=None, action_index=None):
+    def submit(intent, features=None, action_index=None, agent_snapshot=None):
         with engine.lock:
             agent = dict(getattr(engine, "agent_configs", {}).get(intent.agent_id) or {})
         policy = engine.models.get(intent.agent_id)
