@@ -1018,9 +1018,12 @@ def install(core):
 
     original_submit = engine.executor.submit
 
-    def submit(intent, features=None, action_index=None):
+    def submit(intent, features=None, action_index=None, agent_snapshot=None):
+        # Preserve the scheduler's immutable routing snapshot through this observer-only
+        # wrapper. Dropping it would force the inner Shadow executor back onto
+        # engine.lock and reintroduce the post-decision stall fixed in 0.14.118.
         result = original_submit(
-            intent, features, action_index
+            intent, features, action_index, agent_snapshot=agent_snapshot
         )
         try:
             service.start_action(intent, result)
