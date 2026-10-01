@@ -1,3 +1,13 @@
+# 0.14.123 — 2026-10-01
+
+- Bind the 0.14.122 persistent continuation seed cache to the exact version of the target rows that produced it. Each `entity_history` mutation now receives a durable cross-process `mutation_revision`.
+- Before reusing a continuation seed, compare the exact target overlap fingerprint `COUNT + MAX(mutation_revision)`; any late INSERT or UPDATE inside the overlap forces the established SQLite fallback.
+- Capture the fingerprint from the same streamed rows used to build the seed, closing the race where a Recorder/backfill row arrives after the replay cursor passed but before cache publication.
+- Keep newer target events outside the overlap cacheable, so the safety guard does not turn normal household activity into global cache invalidation.
+- Cover legacy/raw SQL INSERT/UPDATE paths with defensive revision triggers.
+- Add regressions for late INSERT, `ON CONFLICT UPDATE`, unaffected rows outside the overlap, raw SQL INSERT/UPDATE and the source contract.
+- Validation before release bump: Python 3.11 and 3.13 full suites green, image build/smoke green, and the full benchmark pipeline including HA ingress, Correct, stateful replay and persistent worker green.
+
 # 0.14.122 — 2026-10-01
 
 - While the persistent worker is already replaying a chunk, pre-reduce target rows from the *next* overlap window into the exact legacy open-dwell seed. The following 6-hour checkpoint can reuse that tiny seed directly instead of re-reading and re-reducing the same SQLite rows.
