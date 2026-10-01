@@ -1177,9 +1177,9 @@
   },
   "release_014122": {
     "scope": "persistent_selected_agent_continuation_acceleration",
-    "continuation_cache": "reuse the previous chunk's exact target-only overlap rows to reconstruct the next open-dwell seed without re-reading them from SQLite",
-    "reuse_guard": "exact agent/target/property/deadband scope plus full requested overlap coverage; otherwise authoritative SQLite fallback",
-    "semantic_parity": "the same stateful continuation reducer runs over cached rows, boundary rows remain excluded and _pending_from_row reconstructs features under the current chunk",
+    "continuation_cache": "pre-reduce target rows from the next overlap window during the current replay and retain only the exact legacy open-dwell seed for the following checkpoint",
+    "reuse_guard": "exact agent/target/property/deadband scope plus exact requested overlap window; otherwise authoritative SQLite fallback",
+    "semantic_parity": "the same reducer is applied online while rows are already streaming, boundary rows remain excluded and _pending_from_row reconstructs features under the current chunk",
     "provenance_safety": "selected seed history ids still receive an exact provenance refresh before replay",
     "diagnostics": [
       "continuation_seed_load_seconds",
@@ -1189,7 +1189,7 @@
       "continuation_seed_db_rows_avoided",
       "continuation_cached_rows"
     ],
-    "memory": "bounded to target rows inside the configured next-overlap window and released with persistent worker resources",
+    "memory": "constant-size seed row/value per agent plus exact overlap window and source-row count; released with persistent worker resources",
     "fallback": "restart, scope changes, uncovered or non-monotonic windows keep the existing SQLite stateful_continuation_seed_rows path",
     "semantics": "no reward, feature, validation, policy-update order, Correct, Candidate, ActionIntent, Executor or physical-control semantics changed",
     "validation": "1531 tests expected on Python 3.11 and 3.13; CI confirmation pending"
