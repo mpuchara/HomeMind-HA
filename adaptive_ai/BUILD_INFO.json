@@ -4,7 +4,7 @@
   "base_version": "0.14.120",
   "base_commit": "b7262abf0bba495196cca383324c8c42eceaa9a3",
   "release_status": "persistent-replay-session-transport-acceleration",
-  "release_validation_tests_passed": 0,
+  "release_validation_tests_passed": 1523,
   "event_decision_hotpath_014118": {
     "evidence": "0.14.117 debug: realtime subscription healthy, inference compute recent p95 ~76.8 ms, but event-to-intent recent p95 ~1.52e6 ms and completed Shadow inference spans still 5-11 s",
     "metric_root_cause": "busy-target resubmit replaced real changed dependency entities with the target entity, so latency could reuse an arbitrarily old target receive timestamp; timer target hints could do the same",
@@ -1154,7 +1154,7 @@
     "semantics": "no reward/sample selection/feature contract/validation boundary/policy update order/Correct/Candidate/ActionIntent/Executor/physical control change",
     "validation": "1517 tests expected on Python 3.11 and 3.13; final CI confirmation required before merge"
   },
-  "release_validation_pending": true,
+  "release_validation_pending": false,
   "release_014121": {
     "scope": "persistent_selected_agent_transport_acceleration",
     "durable_experience_ids": "loaded once per selected-agent worker sequence; accepted ids join the session set only after successful batch persistence",
@@ -1172,6 +1172,7 @@
     ],
     "checkpoint_contract": "6 h logical checkpoint and rollback boundaries unchanged",
     "semantics": "no reward, feature, validation, policy-update order, Correct, Candidate, ActionIntent, Executor or physical-control semantics changed",
-    "continuation_seed_provenance": "refresh exact seed history ids before replay so cached overlap cannot stale own-command attribution"
+    "continuation_seed_provenance": "refresh exact seed history ids before replay so cached overlap cannot stale own-command attribution",
+    "validation": "1523 tests green on Python 3.11 and 3.13; image build/smoke green on pull request CI"
   }
 }
