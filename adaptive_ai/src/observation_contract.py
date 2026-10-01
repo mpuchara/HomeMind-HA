@@ -1421,7 +1421,22 @@ class ObservationSQLiteTemporalTracker(replay_module.SQLiteTemporalTracker):
     <= the replay query time. Forward advancement therefore consumes rows that became
     newly eligible by either time axis; late packets are merged back into the bounded
     per-entity history without rewinding the whole tracker.
+
+    The fast journal is additive. A process-isolated training fixture or an upgraded
+    database may temporarily expose only the long-term archive; in that case replay keeps
+    exact archive semantics instead of failing on a missing optional journal table.
     """
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        try:
+            row = self.conn.execute(
+                "SELECT 1 FROM sqlite_master "
+                "WHERE type='table' AND name='feature_observation_events' LIMIT 1"
+            ).fetchone()
+            self._feature_journal_available = bool(row)
+        except sqlite3.Error:
+            self._feature_journal_available = False
 
     @staticmethod
     def _row_order(row):
@@ -1434,6 +1449,8 @@ class ObservationSQLiteTemporalTracker(replay_module.SQLiteTemporalTracker):
         )
 
     def _feature_bulk_before(self, entity_ids, ts, count):
+        if not getattr(self, "_feature_journal_available", False):
+            return []
         result = []
         count = max(1, int(count))
         for ids in self._chunks(entity_ids):
@@ -1472,6 +1489,8 @@ class ObservationSQLiteTemporalTracker(replay_module.SQLiteTemporalTracker):
         The branches are disjoint. Each keeps at most HISTORY_SAMPLES newest rows and
         Python restores the exact previous per-entity top-64 ordering after the UNION.
         """
+        if not getattr(self, "_feature_journal_available", False):
+            return []
         lo, hi = float(lo), float(hi)
         if hi <= lo:
             return []
