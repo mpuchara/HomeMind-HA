@@ -1,3 +1,13 @@
+# 0.14.121 — 2026-10-01
+
+- Accelerate the complete selected-agent persistent training sequence without changing reward semantics, feature construction, validation boundaries, policy update order, Correct, Candidate, Executor or physical-control authority.
+- Keep the durable historical-experience id set in the persistent worker and reuse it across logical 6-hour checkpoints. Newly accepted ids enter the session cache only after the batched SQLite write succeeds; excluded `own_command` rows remain chunk-local exactly as before.
+- Keep target provenance in one monotonic in-memory window. Overlapping chunks reuse the already-covered range and query only the uncovered tail; target-scope changes or backwards ranges force an exact full reload.
+- Add granular training timers for tracker construction, dedup/provenance loading, TinyMLP finalization, held-out folding, policy serialization/persistence, benchmark persistence and qualification.
+- Extend persistent training session profiling with dedup/provenance transport counters so Diagnostics can separate replay math from repeated persistence overhead.
+- Add regressions for one-time experience-id loading, incremental provenance extension, backwards/scope-change fallback, cleanup, and session-profile aggregation.
+- The 6-hour checkpoint/rollback contract remains intact in this release; the next optimization can therefore target persistent tracker state or TinyMLP finalization using measured on-device timings.
+
 # 0.14.120 — 2026-10-01
 
 - Speed up selected-agent Train/Rebuild without changing reward, feature semantics, validation boundaries or policy update order.
