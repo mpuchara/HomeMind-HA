@@ -1822,10 +1822,40 @@ def install_training_contract():
     in the realtime parent do not cross the process boundary. Without this bootstrap a
     worker imports the repository defaults (policy v10/schema v11), can finish training
     successfully, and publishes a model that the parent correctly quarantines as
-    NEEDS_RETRAIN on the next restart. Keep this helper side-effect-light: it only aligns
-    feature/schema/policy classes used by replay; it does not run model migration, start
-    writers, or wrap live inference.
+    NEEDS_RETRAIN on the next restart.
+
+    Return a restore callback as part of the metadata. Production workers exit after the
+    job, but direct worker invocations in tests/tools may share a Python interpreter; the
+    callback prevents the temporary training contract from leaking into unrelated legacy
+    component tests.
     """
+    originals = {
+        "policy_schema": policy_module.ExplicitFeatureSchema,
+        "context_schema": context_module.ExplicitFeatureSchema,
+        "policy_build_features": policy_module.build_explicit_features,
+        "teaching_build_features": teaching_module.build_explicit_features,
+        "policy_feature_names": policy_module.FEATURE_NAMES,
+        "policy_version": policy_module.MultiHorizonPolicy.VERSION,
+        "policy_features": policy_module.MultiHorizonPolicy.features,
+        "teaching_signature": teaching_module.signature,
+        "replay_tracker": replay_module.SQLiteTemporalTracker,
+        "history_tracker": history_module.SQLiteTemporalTracker,
+        "teaching_point_context": teaching_module.Teaching.point_context,
+    }
+
+    def restore():
+        policy_module.ExplicitFeatureSchema = originals["policy_schema"]
+        context_module.ExplicitFeatureSchema = originals["context_schema"]
+        policy_module.build_explicit_features = originals["policy_build_features"]
+        teaching_module.build_explicit_features = originals["teaching_build_features"]
+        policy_module.FEATURE_NAMES = originals["policy_feature_names"]
+        policy_module.MultiHorizonPolicy.VERSION = originals["policy_version"]
+        policy_module.MultiHorizonPolicy.features = originals["policy_features"]
+        teaching_module.signature = originals["teaching_signature"]
+        replay_module.SQLiteTemporalTracker = originals["replay_tracker"]
+        history_module.SQLiteTemporalTracker = originals["history_tracker"]
+        teaching_module.Teaching.point_context = originals["teaching_point_context"]
+
     policy_module.ExplicitFeatureSchema = FeatureSchemaV12
     context_module.ExplicitFeatureSchema = FeatureSchemaV12
     policy_module.build_explicit_features = build_observation_features
@@ -1841,6 +1871,7 @@ def install_training_contract():
         "policy_version": POLICY_VERSION,
         "schema_version": SCHEMA_VERSION,
         "feature_contract_version": FEATURE_CONTRACT_VERSION,
+        "restore": restore,
     }
 
 
