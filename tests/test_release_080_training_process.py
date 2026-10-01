@@ -657,6 +657,11 @@ class ActualWorkerSmoke(unittest.TestCase):
         with tempfile.TemporaryDirectory(prefix="hm-worker-smoke-") as root:
             db = Path(root) / "adaptive_ai.db"
             store = Store(db)
+            # Production creates the Observation Contract journal schema in the realtime
+            # parent before an isolated training worker can be admitted. Mirror that
+            # parent bootstrap here; the child intentionally never runs broad schema DDL.
+            from observation_contract import FeatureJournal
+            FeatureJournal(store)
             agent = store.create_agent({
                 "name": "Worker smoke",
                 "target_entity": "switch.target",
