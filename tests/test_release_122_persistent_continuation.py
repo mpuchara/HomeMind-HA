@@ -68,7 +68,7 @@ class PersistentContinuationCacheTests(unittest.TestCase):
         manager = history_module.HistoryManager.__new__(
             history_module.HistoryManager
         )
-        manager._persistent_continuation_rows_state = None
+        manager._persistent_continuation_seed_state = None
         return manager
 
     def test_exact_covered_window_uses_cached_target_rows(self):
@@ -79,8 +79,11 @@ class PersistentContinuationCacheTests(unittest.TestCase):
             row(2, 110.0, "on"),
             row(3, 120.0, "on"),
         ]
-        manager._remember_persistent_continuation_rows(
-            [a], rows, 100.0, 130.0
+        seeds, scanned = stateful_continuation_seed_rows_from_rows(
+            rows, [a], {"light.test": [a]}, 100.0, 130.0
+        )
+        manager._remember_persistent_continuation_seed(
+            [a], seeds, scanned, 100.0, 130.0
         )
 
         result = manager._persistent_continuation_seed_rows_for(
@@ -96,8 +99,8 @@ class PersistentContinuationCacheTests(unittest.TestCase):
     def test_empty_cached_overlap_is_a_valid_cache_hit(self):
         manager = self.manager()
         a = agent()
-        manager._remember_persistent_continuation_rows(
-            [a], [], 100.0, 130.0
+        manager._remember_persistent_continuation_seed(
+            [a], {}, 0, 100.0, 130.0
         )
 
         result = manager._persistent_continuation_seed_rows_for(
@@ -109,8 +112,12 @@ class PersistentContinuationCacheTests(unittest.TestCase):
     def test_uncovered_or_changed_scope_falls_back(self):
         manager = self.manager()
         a = agent()
-        manager._remember_persistent_continuation_rows(
-            [a], [row(1, 100.0, "off")], 100.0, 130.0
+        manager._remember_persistent_continuation_seed(
+            [a],
+            {"agent-a": (row(1, 100.0, "off"), 0.0)},
+            1,
+            100.0,
+            130.0,
         )
 
         self.assertIsNone(
@@ -135,11 +142,14 @@ class PersistentContinuationCacheTests(unittest.TestCase):
         manager._persistent_feature_snapshot_cache = None
         manager._persistent_experience_ids = {}
         manager._persistent_replay_provenance_state = None
-        manager._persistent_continuation_rows_state = {"rows": [row(1, 1, "off")]}
+        manager._persistent_continuation_seed_state = {
+            "rows": 1,
+            "seeds": {"agent-a": (row(1, 1, "off"), 0.0)},
+        }
 
         manager.close_persistent_training_resources()
 
-        self.assertIsNone(manager._persistent_continuation_rows_state)
+        self.assertIsNone(manager._persistent_continuation_seed_state)
 
 
 class ContinuationProfileTests(unittest.TestCase):
@@ -187,9 +197,10 @@ class Release122SourceContractTests(unittest.TestCase):
             encoding="utf-8"
         )
         for marker in (
-            "_persistent_continuation_rows_state",
+            "_persistent_continuation_seed_state",
             "_persistent_continuation_seed_rows_for",
-            "_remember_persistent_continuation_rows",
+            "_remember_persistent_continuation_seed",
+            "_apply_stateful_continuation_seed_row",
             "stateful_continuation_seed_rows(",
             "continuation_seed_cache_hits",
             "continuation_seed_db_loads",
