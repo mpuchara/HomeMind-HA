@@ -767,7 +767,7 @@ def aggregate_training_sequence_profile(chunk_reports):
                 seconds[key] = float(seconds.get(key, 0.0)) + float(value)
             elif str(key).endswith((
                 "_rows", "_lookups", "_hits", "_misses", "_builds",
-                "_timestamps", "_dwells",
+                "_timestamps", "_dwells", "_processed", "_planned",
             )):
                 counters[key] = float(counters.get(key, 0.0)) + float(value)
 
