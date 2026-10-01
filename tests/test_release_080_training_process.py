@@ -771,6 +771,15 @@ class ActualWorkerSmoke(unittest.TestCase):
             model = store.get_model(agent["id"])
             self.assertIsNotNone(model)
             self.assertGreaterEqual(int(model.get("_history_watermark") or 0), 1)
+            # A clean isolated process must publish the same durable contract as the
+            # realtime parent. This is the restart regression that previously produced
+            # v10/schema11 models which became NEEDS_RETRAIN only after app restart.
+            from observation_contract import POLICY_VERSION, SCHEMA_VERSION
+            self.assertEqual(int(model.get("version") or 0), POLICY_VERSION)
+            self.assertEqual(
+                int((model.get("schema") or {}).get("version") or 0),
+                SCHEMA_VERSION,
+            )
 
 
 if __name__ == "__main__":
