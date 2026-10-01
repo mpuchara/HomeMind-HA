@@ -1342,6 +1342,7 @@ def worker_main(job_path):
     # HistoryManager constructs any policy or tracker so the durable model it publishes
     # is restart-compatible with the parent.
     worker_contract = install_training_contract()
+    restore_training_contract = worker_contract["restore"]
     from history import HistoryManager
     _worker_boot_status(
         job,
@@ -1600,6 +1601,10 @@ def worker_main(job_path):
     finally:
         try:
             history.close_persistent_training_resources()
+        except Exception:
+            pass
+        try:
+            restore_training_contract()
         except Exception:
             pass
         budget.end()
