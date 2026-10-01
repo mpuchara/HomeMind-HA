@@ -162,7 +162,7 @@ class ContinuationProfileTests(unittest.TestCase):
                     "continuation_seed_cache_hits": 0,
                     "continuation_seed_db_loads": 1,
                     "continuation_seed_rows": 20,
-                    "continuation_seed_db_rows_avoided": 0,
+                    "continuation_seed_avoided_db_rows": 0,
                     "continuation_cached_rows": 20,
                 },
             },
@@ -173,7 +173,7 @@ class ContinuationProfileTests(unittest.TestCase):
                     "continuation_seed_cache_hits": 1,
                     "continuation_seed_db_loads": 0,
                     "continuation_seed_rows": 20,
-                    "continuation_seed_db_rows_avoided": 20,
+                    "continuation_seed_avoided_db_rows": 20,
                     "continuation_cached_rows": 18,
                 },
             },
@@ -183,7 +183,7 @@ class ContinuationProfileTests(unittest.TestCase):
 
         self.assertEqual(profile["counters"]["continuation_seed_cache_hits"], 1)
         self.assertEqual(profile["counters"]["continuation_seed_db_loads"], 1)
-        self.assertEqual(profile["counters"]["continuation_seed_db_rows_avoided"], 20)
+        self.assertEqual(profile["counters"]["continuation_seed_avoided_db_rows"], 20)
         self.assertEqual(profile["counters"]["continuation_cached_rows"], 38)
         self.assertAlmostEqual(
             profile["phase_seconds"]["continuation_seed_load_seconds"], 0.021
@@ -205,7 +205,7 @@ class Release122SourceContractTests(unittest.TestCase):
             "continuation_seed_cache_hits",
             "continuation_seed_db_loads",
             "continuation_seed_rows",
-            "continuation_seed_db_rows_avoided",
+            "continuation_seed_avoided_db_rows",
             "continuation_cached_rows",
         ):
             self.assertIn(marker, source)
