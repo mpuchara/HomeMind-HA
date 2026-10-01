@@ -1815,10 +1815,17 @@ def _migrate_models(core):
     return changed
 
 
-def install(core):
-    engine, store = core.ENGINE, core.STORE
-    if engine is None or store is None or getattr(engine, "_observation_contract_installed", False):
-        return engine
+def install_training_contract():
+    """Install the exact live observation/policy contract inside an isolated trainer.
+
+    Historical workers are separate Python processes, so runtime monkey-patches installed
+    in the realtime parent do not cross the process boundary. Without this bootstrap a
+    worker imports the repository defaults (policy v10/schema v11), can finish training
+    successfully, and publishes a model that the parent correctly quarantines as
+    NEEDS_RETRAIN on the next restart. Keep this helper side-effect-light: it only aligns
+    feature/schema/policy classes used by replay; it does not run model migration, start
+    writers, or wrap live inference.
+    """
     policy_module.ExplicitFeatureSchema = FeatureSchemaV12
     context_module.ExplicitFeatureSchema = FeatureSchemaV12
     policy_module.build_explicit_features = build_observation_features
@@ -1830,6 +1837,18 @@ def install(core):
     replay_module.SQLiteTemporalTracker = ObservationSQLiteTemporalTracker
     history_module.SQLiteTemporalTracker = ObservationSQLiteTemporalTracker
     _patch_teaching_point_context()
+    return {
+        "policy_version": POLICY_VERSION,
+        "schema_version": SCHEMA_VERSION,
+        "feature_contract_version": FEATURE_CONTRACT_VERSION,
+    }
+
+
+def install(core):
+    engine, store = core.ENGINE, core.STORE
+    if engine is None or store is None or getattr(engine, "_observation_contract_installed", False):
+        return engine
+    install_training_contract()
 
     journal = FeatureJournal(store)
     engine.feature_journal = journal
