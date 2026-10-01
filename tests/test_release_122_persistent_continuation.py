@@ -4,6 +4,7 @@ from pathlib import Path
 
 import history as history_module
 from history import stateful_continuation_seed_rows_from_rows
+from training_process import aggregate_training_sequence_profile
 
 
 def row(row_id, ts, state, entity_id="light.test"):
@@ -139,6 +140,44 @@ class PersistentContinuationCacheTests(unittest.TestCase):
         manager.close_persistent_training_resources()
 
         self.assertIsNone(manager._persistent_continuation_rows_state)
+
+
+class ContinuationProfileTests(unittest.TestCase):
+    def test_session_profile_aggregates_cache_hits_and_avoided_db_rows(self):
+        reports = [
+            {
+                "elapsed_seconds": 1.0,
+                "training_phase_timings": {
+                    "continuation_seed_load_seconds": 0.02,
+                    "continuation_seed_cache_hits": 0,
+                    "continuation_seed_db_loads": 1,
+                    "continuation_seed_rows": 20,
+                    "continuation_seed_db_rows_avoided": 0,
+                    "continuation_cached_rows": 20,
+                },
+            },
+            {
+                "elapsed_seconds": 0.5,
+                "training_phase_timings": {
+                    "continuation_seed_load_seconds": 0.001,
+                    "continuation_seed_cache_hits": 1,
+                    "continuation_seed_db_loads": 0,
+                    "continuation_seed_rows": 20,
+                    "continuation_seed_db_rows_avoided": 20,
+                    "continuation_cached_rows": 18,
+                },
+            },
+        ]
+
+        profile = aggregate_training_sequence_profile(reports)
+
+        self.assertEqual(profile["counters"]["continuation_seed_cache_hits"], 1)
+        self.assertEqual(profile["counters"]["continuation_seed_db_loads"], 1)
+        self.assertEqual(profile["counters"]["continuation_seed_db_rows_avoided"], 20)
+        self.assertEqual(profile["counters"]["continuation_cached_rows"], 38)
+        self.assertAlmostEqual(
+            profile["phase_seconds"]["continuation_seed_load_seconds"], 0.021
+        )
 
 
 class Release122SourceContractTests(unittest.TestCase):
