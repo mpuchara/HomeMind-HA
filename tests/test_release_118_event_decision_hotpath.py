@@ -122,7 +122,7 @@ class EventDecisionHotpath118Tests(unittest.TestCase):
     def test_overview_event_latency_is_recent_only_with_sample_count(self):
         source = (SRC / 'static' / 'p0.js').read_text(encoding='utf-8')
         self.assertIn('metrics?.event_to_decision', source)
-        self.assertIn('recentCount=Number(latency.recent_count||0)', source)
+        self.assertIn('liveCount=Number(latency.recent_count||0)', source)
         self.assertIn('waiting · 0 samples', source)
         self.assertNotIn('latency.p95_ms', source)
 
