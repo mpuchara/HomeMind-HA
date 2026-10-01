@@ -2051,7 +2051,7 @@ def install(core):
         if agent and policy and is_fast_reactive_agent(agent):
             queue_window("decision:" + str(intent.intent_id), intent.agent_id,
                          policy.schema.entities, intent.created_at, "decision")
-        return original_submit(intent, features, action_index)
+        return original_submit(intent, features, action_index, agent_snapshot=agent_snapshot)
     engine.executor.submit = submit
 
     original_process_agent = engine.process_agent
