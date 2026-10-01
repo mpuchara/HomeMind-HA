@@ -22,7 +22,10 @@ if str(SRC) not in sys.path:
 _IMPORT_SCRATCH = tempfile.TemporaryDirectory(prefix="hm-stage8-import-")
 os.environ.setdefault("ADAPTIVE_AI_DATA", _IMPORT_SCRATCH.name)
 
-from history import stateful_continuation_seed_rows
+from history import (
+    stateful_continuation_seed_rows,
+    stateful_continuation_seed_rows_from_rows,
+)
 from storage import Store
 
 
@@ -103,9 +106,19 @@ def main():
         }
         target_map = {target: [agent]}
 
+        # Benchmark setup keeps one immutable copy of the synthetic target stream so
+        # 0.14.122 can verify that a seed pre-reduced while the previous chunk was
+        # already streaming is byte/semantically identical to the established DB scan.
+        target_rows_fixture = list(
+            store.archive_iter(base, end, [target], chunk_size=512)
+        )
+
         legacy_plans = []
         stateful_plans = []
         seed_rows = 0
+        persistent_seed_rows_avoided = 0
+        persistent_seed_parity = True
+        cached_seed = None
         logical_hours = 0.0
         unique_hours = 0.0
         avoided_hours = 0.0
@@ -118,11 +131,35 @@ def main():
                 scan_start = logical_start
             else:
                 scan_start = cursor
-                _seeds, scanned = stateful_continuation_seed_rows(
+                db_seeds, scanned = stateful_continuation_seed_rows(
                     store, [agent], target_map, logical_start, scan_start
                 )
                 seed_rows += int(scanned)
+                if cached_seed is None:
+                    persistent_seed_parity = False
+                else:
+                    cached_seeds, cached_scanned, cached_start, cached_end = cached_seed
+                    persistent_seed_parity = bool(
+                        persistent_seed_parity
+                        and abs(float(cached_start) - float(logical_start)) <= 1e-9
+                        and abs(float(cached_end) - float(scan_start)) <= 1e-9
+                        and int(cached_scanned) == int(scanned)
+                        and cached_seeds == db_seeds
+                    )
+                    persistent_seed_rows_avoided += int(scanned)
             stateful_plans.append((scan_start, chunk_end))
+
+            next_overlap_start = max(base, chunk_end - overlap_seconds)
+            next_rows = [
+                row for row in target_rows_fixture
+                if next_overlap_start <= float(row["ts"]) < float(chunk_end)
+            ]
+            next_seeds, next_scanned = stateful_continuation_seed_rows_from_rows(
+                next_rows, [agent], target_map, next_overlap_start, chunk_end
+            )
+            cached_seed = (
+                next_seeds, next_scanned, next_overlap_start, chunk_end
+            )
             unique_hours += (chunk_end - scan_start) / 3600.0
             avoided_hours += max(0.0, scan_start - logical_start) / 3600.0
 
@@ -149,6 +186,11 @@ def main():
             "legacy_rows_scanned": legacy_rows,
             "stateful_forward_rows_scanned": forward_rows,
             "stateful_seed_target_rows": seed_rows,
+            "persistent_seed_parity": bool(persistent_seed_parity),
+            "persistent_seed_db_rows_avoided": int(
+                persistent_seed_rows_avoided
+            ),
+            "persistent_seed_db_rows_remaining": 0,
             "stateful_total_rows_scanned": stateful_rows,
             "row_reduction_fraction": row_reduction,
             "legacy_iteration_seconds": legacy_seconds,
@@ -156,6 +198,12 @@ def main():
         }
         if avoided_hours <= 0:
             raise AssertionError("benchmark did not exercise overlap")
+        if not persistent_seed_parity:
+            raise AssertionError("persistent continuation seed diverged from DB scan")
+        if persistent_seed_rows_avoided != seed_rows:
+            raise AssertionError(
+                "persistent continuation did not eliminate all repeated seed DB rows"
+            )
         if stateful_rows >= legacy_rows:
             raise AssertionError("stateful continuation did not reduce replay rows")
         if row_reduction < 0.10:
