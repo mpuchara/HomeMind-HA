@@ -4090,9 +4090,11 @@ class HistoryManager(threading.Thread):
                     time.perf_counter() - continuation_seed_started, 6
                 ),
                 "continuation_seed_cache_hits": int(continuation_seed_cache_hit),
-                "continuation_seed_db_scans": int(not continuation_seed_cache_hit),
-                "continuation_seed_rows_scanned": int(
+                "continuation_seed_db_loads": int(not continuation_seed_cache_hit),
+                "continuation_seed_rows": int(continuation_seed_target_rows),
+                "continuation_seed_db_rows_avoided": int(
                     continuation_seed_target_rows
+                    if continuation_seed_cache_hit else 0
                 ),
             })
 
@@ -4236,7 +4238,7 @@ class HistoryManager(threading.Thread):
         )
         self.training_phase_timings["replay_driver_rows_processed"] = int(replay_done)
         self.training_phase_timings["rewarded_dwells"] = int(new_count)
-        self.training_phase_timings["continuation_rows_cached"] = int(
+        self.training_phase_timings["continuation_cached_rows"] = int(
             len(continuation_capture_rows) if persistent_cache else 0
         )
         finalization_wall_started = time.perf_counter()
