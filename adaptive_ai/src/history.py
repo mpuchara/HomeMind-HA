@@ -4101,7 +4101,7 @@ class HistoryManager(threading.Thread):
                 "continuation_seed_cache_hits": int(continuation_seed_cache_hit),
                 "continuation_seed_db_loads": int(not continuation_seed_cache_hit),
                 "continuation_seed_rows": int(continuation_seed_target_rows),
-                "continuation_seed_db_rows_avoided": int(
+                "continuation_seed_avoided_db_rows": int(
                     continuation_seed_target_rows
                     if continuation_seed_cache_hit else 0
                 ),
