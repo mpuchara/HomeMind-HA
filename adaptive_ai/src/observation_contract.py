@@ -2043,8 +2043,10 @@ def install(core):
 
     original_submit = engine.executor.submit
     def submit(intent, features=None, action_index=None, agent_snapshot=None):
-        with engine.lock:
-            agent = dict(getattr(engine, "agent_configs", {}).get(intent.agent_id) or {})
+        agent = dict(agent_snapshot or {})
+        if not agent:
+            with engine.lock:
+                agent = dict(getattr(engine, "agent_configs", {}).get(intent.agent_id) or {})
         policy = engine.models.get(intent.agent_id)
         if agent and policy and is_fast_reactive_agent(agent):
             queue_window("decision:" + str(intent.intent_id), intent.agent_id,
