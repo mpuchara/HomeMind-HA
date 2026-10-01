@@ -67,7 +67,7 @@ function renderHome(status){
     ?'event → Candidate decision p95 · '+eventMetric.count+' samples · last 60 s'
     :eventMetric.source==='live'
       ?'event → decision p95 · '+eventMetric.count+' samples · last 60 s'
-      :'event → decision p95 · waiting · 0 samples';
+      :'event → decision p95 · waiting for relevant HA event · 0 samples';
   const running=['IMPORTING','TRAINING'].includes(b.state), names=h.area_names||{};
   const paths=(h.top_transitions||[]).slice(0,5);
   $('#homePanel').innerHTML='<div class="history-head"><div><b>Home Intelligence</b><span>Shared occupancy and trajectory model · live learning is automatic</span></div><strong>'+esc(b.state||'IDLE')+'</strong></div>'+
