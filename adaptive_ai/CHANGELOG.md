@@ -1,3 +1,13 @@
+# 0.14.122 — 2026-10-01
+
+- Reuse the previous persistent worker chunk's exact bounded target-row overlap when reconstructing the open dwell at the next 6-hour checkpoint. This removes repeated SQLite row transport and Python reduction over the same overlap without changing reward, feature, validation or policy-update semantics.
+- Keep the continuation cache target-only, process-local and bounded to the configured overlap window. Cache reuse requires the exact agent/target/property/deadband scope and full requested time coverage; restart, scope changes or non-monotonic ranges fall back to the established SQLite scan.
+- Preserve the existing continuation semantics by running the same reducer over cached rows: rows at the boundary remain invisible, duplicate target values obey the same deadband rule, and the seed is rebuilt under the current chunk's policy/schema before learning resumes.
+- Continue refreshing provenance for the exact selected seed history id, preserving the 0.14.121 own-command exclusion contract.
+- Add Diagnostics counters for continuation cache hits, SQLite fallback loads, rows reduced and target rows whose SQLite re-read was avoided.
+- Add regressions for reducer parity, boundary exclusion, empty-overlap cache hits, coverage/scope fallback, cleanup and session-profile aggregation.
+- Expected full suite after these regressions: **1531 tests** on Python 3.11 and 3.13; final release status is confirmed by CI before merge.
+
 # 0.14.121 — 2026-10-01
 
 - Accelerate the complete selected-agent persistent training sequence without changing reward semantics, feature construction, validation boundaries, policy update order, Correct, Candidate, Executor or physical-control authority.
