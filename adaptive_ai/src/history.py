@@ -180,6 +180,12 @@ class HistoryManager(threading.Thread):
         # exact causal entity revisions and Home Context revision, so extending
         # lifetime across logical 6 h checkpoints cannot turn stale data into a hit.
         self._persistent_feature_snapshot_cache = None
+        # 0.14.121: transport/dedup state may survive logical 6 h checkpoints inside
+        # one selected-agent worker. These caches never drive rewards/features/policy
+        # ordering; they only avoid re-reading durable facts already observed earlier in
+        # the same monotonic training sequence.
+        self._persistent_experience_ids = {}
+        self._persistent_replay_provenance_state = None
         self._persistent_replay_sqlite_connection = None
         self.neural_training_artifacts = {}
         self.training_process_status = {
@@ -1224,6 +1230,79 @@ class HistoryManager(threading.Thread):
         self._persistent_ram_replay_index = None
         self._persistent_transition_edge_index = None
         self._persistent_feature_snapshot_cache = None
+        self._persistent_experience_ids = {}
+        self._persistent_replay_provenance_state = None
+
+    def _persistent_experience_ids_for(self, agent_id, loader):
+        """Reuse durable historical-experience ids across one worker sequence.
+
+        The returned set contains only ids that are already durable. Per-chunk excluded
+        own-command rows remain chunk-local so this cache preserves the old boundary
+        semantics exactly.
+        """
+        cache = getattr(self, "_persistent_experience_ids", None)
+        if cache is None:
+            cache = {}
+            self._persistent_experience_ids = cache
+        aid = str(agent_id)
+        ids = cache.get(aid)
+        if ids is not None:
+            return ids, True
+        ids = set(loader(aid))
+        cache[aid] = ids
+        return ids, False
+
+    def _persistent_replay_provenance_for(
+        self, loader, start_ts, end_ts, entity_ids
+    ):
+        """Incrementally extend the target-provenance window for a monotonic sequence.
+
+        Logical chunks overlap for crash/checkpoint equivalence. Query only the uncovered
+        tail while keeping a contiguous in-memory map keyed by target history id. A
+        backwards range or target-scope change falls back to a full exact reload.
+        """
+        scope = tuple(sorted(set(str(x) for x in (entity_ids or ()) if x)))
+        start_ts = float(start_ts)
+        end_ts = float(end_ts)
+        state = getattr(self, "_persistent_replay_provenance_state", None)
+        reload_full = bool(
+            not isinstance(state, dict)
+            or tuple(state.get("scope") or ()) != scope
+            or start_ts < float(state.get("start_ts", start_ts)) - 1e-9
+        )
+        loaded = {}
+        db_loads = 0
+        reused = False
+        if reload_full:
+            loaded = dict(loader(start_ts, end_ts, scope) or {})
+            db_loads = 1
+            state = {
+                "scope": scope,
+                "start_ts": start_ts,
+                "end_ts": end_ts,
+                "rows": dict(loaded),
+            }
+            self._persistent_replay_provenance_state = state
+        else:
+            reused = True
+            covered_end = float(state.get("end_ts", start_ts))
+            if end_ts > covered_end + 1e-9:
+                # Inclusive overlap at covered_end is intentional and idempotent; it
+                # avoids floating-point timestamp gaps at chunk boundaries.
+                loaded = dict(loader(covered_end, end_ts, scope) or {})
+                db_loads = 1
+                state["rows"].update(loaded)
+                state["end_ts"] = end_ts
+            self._persistent_replay_provenance_state = state
+        rows = state["rows"]
+        return rows, {
+            "reused": bool(reused),
+            "db_loads": int(db_loads),
+            "loaded_rows": len(loaded),
+            "cached_rows": len(rows),
+            "coverage_start_ts": float(state["start_ts"]),
+            "coverage_end_ts": float(state["end_ts"]),
+        }
 
     def request_discovery_rescan(self, *, threshold_override=1, reason="manual"):
         """Run the bounded Recorder/discovery job outside the caller thread.
@@ -2664,6 +2743,7 @@ class HistoryManager(threading.Thread):
             "transition_edge_index_reused": bool(edge_index_reused),
         })
 
+        tracker_init_started = time.perf_counter()
         timeline = SQLiteTemporalTracker(
             STORE, watched_entities, self.engine.context, start_ts, end_ts,
             query_cache=replay_query_cache,
@@ -2681,6 +2761,9 @@ class HistoryManager(threading.Thread):
             connection=replay_connection,
             ram_replay_index=ram_replay_index,
             transition_edge_index=transition_edge_index,
+        )
+        self.training_phase_timings["tracker_init_seconds"] = round(
+            time.perf_counter() - tracker_init_started, 6
         )
 
         if neural_enabled:
@@ -2899,19 +2982,76 @@ class HistoryManager(threading.Thread):
         continuation_seed_target_rows = 0
         continuation_seed_agents = 0
 
-        # Replay used to commit one SQLite transaction per completed dwell.  Keep the
-        # same uniqueness semantics in memory, then persist bounded batches.  A failed
-        # training pass is still rolled back by discard_uncommitted_experiences() because
-        # model watermarks are advanced only after the final batch has been flushed.
-        existing_experience_ids = {
-            a["id"]: STORE.historical_experience_target_ids(a["id"])
-            for a in agents
-        }
+        # Replay used to commit one SQLite transaction per completed dwell. Keep the same
+        # uniqueness semantics, but a persistent selected-agent worker now loads durable
+        # ids once per sequence instead of rebuilding the growing set every 6 h chunk.
+        dedup_load_started = time.perf_counter()
+        existing_experience_ids = {}
+        chunk_seen_experience_ids = {}
+        dedup_db_loads = 0
+        dedup_cache_hits = 0
+        for agent in agents:
+            aid = str(agent["id"])
+            if persistent_cache:
+                ids, reused = self._persistent_experience_ids_for(
+                    aid, STORE.historical_experience_target_ids
+                )
+                dedup_cache_hits += int(reused)
+                dedup_db_loads += int(not reused)
+                existing_experience_ids[aid] = ids
+                chunk_seen_experience_ids[aid] = set()
+            else:
+                existing_experience_ids[aid] = (
+                    STORE.historical_experience_target_ids(aid)
+                )
+        self.training_phase_timings.update({
+            "experience_dedup_load_seconds": round(
+                time.perf_counter() - dedup_load_started, 6
+            ),
+            "experience_dedup_db_loads": int(dedup_db_loads),
+            "experience_dedup_cache_hits": int(dedup_cache_hits),
+            "experience_dedup_cached_ids": sum(
+                len(ids) for ids in existing_experience_ids.values()
+            ),
+        })
+
         provenance_loader = getattr(STORE, "historical_replay_provenance", None)
-        replay_provenance = (
-            provenance_loader(start_ts, end_ts, target_map.keys())
-            if callable(provenance_loader) else {}
-        )
+        provenance_started = time.perf_counter()
+        provenance_diag = {
+            "reused": False, "db_loads": 0, "loaded_rows": 0, "cached_rows": 0,
+        }
+        if callable(provenance_loader):
+            if persistent_cache:
+                replay_provenance, provenance_diag = (
+                    self._persistent_replay_provenance_for(
+                        provenance_loader, start_ts, end_ts, target_map.keys()
+                    )
+                )
+            else:
+                replay_provenance = provenance_loader(
+                    start_ts, end_ts, target_map.keys()
+                )
+                provenance_diag = {
+                    "reused": False,
+                    "db_loads": 1,
+                    "loaded_rows": len(replay_provenance or {}),
+                    "cached_rows": len(replay_provenance or {}),
+                }
+        else:
+            replay_provenance = {}
+        self.training_phase_timings.update({
+            "provenance_load_seconds": round(
+                time.perf_counter() - provenance_started, 6
+            ),
+            "provenance_db_loads": int(provenance_diag.get("db_loads") or 0),
+            "provenance_cache_hits": int(bool(provenance_diag.get("reused"))),
+            "provenance_loaded_rows": int(
+                provenance_diag.get("loaded_rows") or 0
+            ),
+            "provenance_cached_rows": int(
+                provenance_diag.get("cached_rows") or 0
+            ),
+        })
         experience_batch = []
         experience_batch_rows = max(
             8, min(512, int(OPTIONS.get("training_experience_batch_rows", 256)))
@@ -2935,6 +3075,15 @@ class HistoryManager(threading.Thread):
                 raise RuntimeError(
                     f"Historical experience batch mismatch: inserted {inserted}/{expected_inserted}"
                 )
+            if persistent_cache and inserted:
+                for row in batch:
+                    if str(
+                        (row.get("_provenance") or {}).get("origin") or "unknown"
+                    ) == "own_command":
+                        continue
+                    existing_experience_ids.setdefault(
+                        str(row["agent_id"]), set()
+                    ).add(int(row["target_history_id"]))
             experience_batch.clear()
             TRAINING_BUDGET.checkpoint("historical_experience_batch_flush", force=True)
             return inserted
@@ -3262,8 +3411,10 @@ class HistoryManager(threading.Thread):
             reward = historical_reward(agent, dwell, old.get("user_id"), next_user_id)
             primary_h = min(old["features_by_horizon"])
             target_history_id = int(old["history_id"])
-            seen = existing_experience_ids.setdefault(agent["id"], set())
-            if target_history_id in seen:
+            aid = str(agent["id"])
+            seen = existing_experience_ids.setdefault(aid, set())
+            chunk_seen = chunk_seen_experience_ids.setdefault(aid, set())
+            if target_history_id in seen or target_history_id in chunk_seen:
                 return False
 
             provenance = dict(replay_provenance.get(target_history_id) or {
@@ -3290,7 +3441,12 @@ class HistoryManager(threading.Thread):
                 "user_id": old.get("user_id"),
                 "_provenance": provenance,
             })
-            seen.add(target_history_id)
+            if persistent_cache:
+                # Keep excluded own-command ids local to this logical chunk. Accepted
+                # rows move into the durable/session set only after batch persistence.
+                chunk_seen.add(target_history_id)
+            else:
+                seen.add(target_history_id)
             flush_experience_batch()
 
             # Preserve the Stage-06 provenance boundary before any policy mutation:
@@ -3636,8 +3792,17 @@ class HistoryManager(threading.Thread):
                         reference_end,
                         checkpoint=TRAINING_BUDGET.checkpoint,
                     )
-                    seen = existing_experience_ids.setdefault(agent["id"], set())
-                    unseen = filter_unseen_candidates(selected, seen)
+                    aid = str(agent["id"])
+                    seen = existing_experience_ids.setdefault(aid, set())
+                    if persistent_cache and chunk_seen_experience_ids.get(aid):
+                        seen_for_selection = (
+                            set(seen) | set(chunk_seen_experience_ids[aid])
+                        )
+                    else:
+                        seen_for_selection = seen
+                    unseen = filter_unseen_candidates(
+                        selected, seen_for_selection
+                    )
                     provenance = selected_history_provenance(
                         STORE, [row["history_id"] for row in unseen]
                     )
@@ -3965,6 +4130,7 @@ class HistoryManager(threading.Thread):
         # Stage 4 supervised challenger is trained before Ridge heldout rows are folded
         # back into the final checkpoint. Tournament therefore sees the exact untouched
         # chronological holdout used by the established recorded-behaviour benchmark.
+        tiny_mlp_finalize_started = time.perf_counter()
         self.neural_training_artifacts = {}
         if neural_enabled:
             import json
@@ -4086,6 +4252,11 @@ class HistoryManager(threading.Thread):
                 self.neural_training_artifacts[aid] = artifact
                 TRAINING_BUDGET.checkpoint("tiny_mlp_tournament", force=True)
 
+        self.training_phase_timings["tiny_mlp_finalization_seconds"] = round(
+            time.perf_counter() - tiny_mlp_finalize_started, 6
+        )
+
+        heldout_fold_started = time.perf_counter()
         # The newest slice was held out while confidence was calibrated. Once its
         # out-of-sample score is recorded, fold it into the final policy so no history is
         # wasted. Calibration remains a genuine chronological backtest.
@@ -4093,12 +4264,17 @@ class HistoryManager(threading.Thread):
             policy.update(horizon, action_idx, features, reward, sample_ts)
             TRAINING_BUDGET.checkpoint("heldout_update")
 
+        self.training_phase_timings["heldout_fold_seconds"] = round(
+            time.perf_counter() - heldout_fold_started, 6
+        )
+
         if progress_enabled:
             self.set_status(progress=validation_end, message=f"{progress_label}: serializing policy model",
                             stage_eta_seconds=0, work_done=replay_total, work_total=replay_total,
                             work_unit="finalization", eta_source="bounded finalization",
                             phase_detail="Replay complete · applying bounded model checkpoint")
 
+        policy_persist_started = time.perf_counter()
         training_audit_summaries = {}
         for agent in agents:
             TRAINING_BUDGET.checkpoint("before_policy_serialize")
@@ -4124,17 +4300,26 @@ class HistoryManager(threading.Thread):
             self._remember_training_schema(agent, exported)
             TRAINING_BUDGET.checkpoint("after_model_save")
 
+        self.training_phase_timings["policy_serialize_persist_seconds"] = round(
+            time.perf_counter() - policy_persist_started, 6
+        )
+
         if progress_enabled:
             self.set_status(progress=model_end, message=f"{progress_label}: saving held-out benchmark",
                             stage_eta_seconds=0, work_done=replay_total, work_total=replay_total,
                             work_unit="finalization", eta_source="bounded finalization",
                             phase_detail="Policy model saved · finalizing benchmark")
 
+        benchmark_persist_started = time.perf_counter()
         if benchmark:
             for agent in agents:
                 TRAINING_BUDGET.checkpoint("before_partial_benchmark")
                 STORE.set_partial_benchmark(agent["id"], benchmark_stats.get(agent["id"]) or {})
                 TRAINING_BUDGET.checkpoint("after_partial_benchmark")
+
+        self.training_phase_timings["benchmark_persist_seconds"] = round(
+            time.perf_counter() - benchmark_persist_started, 6
+        )
 
         if progress_enabled:
             self.set_status(progress=benchmark_end, message=f"{progress_label}: final qualification checks",
@@ -4142,6 +4327,7 @@ class HistoryManager(threading.Thread):
                             work_unit="finalization", eta_source="bounded finalization",
                             phase_detail="Benchmark saved · checking qualification")
 
+        qualification_started = time.perf_counter()
         qualification_summary = None
         if qualify:
             threshold = clamp(float(OPTIONS.get("candidate_benchmark_threshold", 0.78)), 0.0, 1.0)
@@ -4265,6 +4451,10 @@ class HistoryManager(threading.Thread):
                 self.engine.wake_event.set()
             if agent_ids is None:
                 STORE.meta_set("candidate_qualification_complete", "1")
+
+        self.training_phase_timings["qualification_seconds"] = round(
+            time.perf_counter() - qualification_started, 6
+        )
 
         TRAINING_BUDGET.checkpoint("before_training_event")
         if new_count or qualification_summary:
