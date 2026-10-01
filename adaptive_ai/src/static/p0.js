@@ -32,11 +32,16 @@
     const control=lastAgents.filter(a=>a.mode==='control').length, shadow=lastAgents.filter(a=>a.mode==='shadow').length;
     const latency=status.telemetry?.metrics?.event_to_decision
       ||status.telemetry?.metrics?.event_to_intent||{};
-    const recentCount=Number(latency.recent_count||0);
-    const p95=recentCount>0&&latency.recent_p95_ms!=null?latency.recent_p95_ms:null;
-    const p95Label=p95!=null
-      ?'event → decision p95 · '+recentCount+' samples · last 60 s'
-      :'event → decision p95 · waiting · 0 samples';
+    const candidateLatency=status.telemetry?.metrics?.candidate_event_to_decision||{};
+    const liveCount=Number(latency.recent_count||0), candidateCount=Number(candidateLatency.recent_count||0);
+    const liveRecent=liveCount>0&&latency.recent_p95_ms!=null?latency.recent_p95_ms:null;
+    const candidateRecent=candidateCount>0&&candidateLatency.recent_p95_ms!=null?candidateLatency.recent_p95_ms:null;
+    const p95=liveRecent??candidateRecent;
+    const p95Label=liveRecent!=null
+      ?'event → decision p95 · '+liveCount+' samples · last 60 s'
+      :candidateRecent!=null
+        ?'event → Candidate decision p95 · '+candidateCount+' samples · last 60 s'
+        :'event → decision p95 · waiting · 0 samples';
     $('#overview').innerHTML=`<div class="metric"><b>${lastAgents.length||status.agent_count||0}</b><span>agents</span></div><div class="metric"><b>${control}</b><span>Control · ${shadow} Shadow</span></div><div class="metric"><b>${status.state_count||0}</b><span>HA entities</span></div><div class="metric"><b>${p95==null?'—':ms(p95)}</b><span>${p95Label}</span></div>`;
     const c=$('#connection'), s=status.startup||{}, rt=status.realtime||{};
     if (!s.ready) { c.textContent=s.error?'Startup error':`Starting · ${s.step||0}/${s.steps||7}`; c.className='pill'; return; }
