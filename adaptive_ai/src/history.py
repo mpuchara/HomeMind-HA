@@ -2302,6 +2302,37 @@ class HistoryManager(threading.Thread):
             # used through group/device/script automations.
             for eid, driver_score in (fast_driver_scores.get(agent["id"]) or {}).items():
                 normalized[eid] = max(float(normalized.get(eid, 0.0)), float(driver_score))
+
+            # False-activation observer evidence is feature-selection context only.
+            # It must never become a reward or direct policy update. Repeated cross-area
+            # suspected episodes, or an explicit user-verified episode, can keep the
+            # corresponding behavioural sensor in a future compact fast-light schema so
+            # the normal learner can model interactions such as:
+            # local bathroom radar × hallway motion -> remain OFF.
+            suppressor_scores = {}
+            try:
+                from automatic_correct_rewards import (
+                    false_activation_suppressor_scores,
+                )
+                suppressor_scores = {
+                    eid: float(score)
+                    for eid, score in false_activation_suppressor_scores(
+                        STORE, agent["id"]
+                    ).items()
+                    if eid in context_candidates
+                }
+            except Exception:
+                suppressor_scores = {}
+            for eid, suppressor_score in suppressor_scores.items():
+                normalized[eid] = max(
+                    float(normalized.get(eid, 0.0)),
+                    float(suppressor_score),
+                )
+            if not hasattr(self.engine, "context_suppressor_relevance"):
+                self.engine.context_suppressor_relevance = {}
+            self.engine.context_suppressor_relevance[agent["id"]] = dict(
+                suppressor_scores
+            )
             self.engine.context_relevance[agent["id"]] = normalized
             # If this training revision is being rebuilt, force schema creation after the
             # precursor scores are known.
