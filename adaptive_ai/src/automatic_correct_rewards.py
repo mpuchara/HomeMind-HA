@@ -1542,6 +1542,19 @@ def install(core):
             "verified_same_area_presence_transition",
         ],
         "silence_semantics": "unknown_not_positive_reward",
+        "false_activation_observer": {
+            "version": 1,
+            "window_seconds": float(
+                OPTIONS.get("false_activation_observer_seconds", 12.0)
+            ),
+            "pre_action_seconds": float(
+                OPTIONS.get("fast_upstream_lead_seconds", 4.0)
+            ),
+            "classes": sorted(ACTIVATION_CLASSES),
+            "suspected_reward_effect": "none",
+            "verified_requires_existing_trusted_evidence": True,
+            "feature_selection_only": True,
+        },
         "deduplication": (
             "one resolution_key per decision or trial"
         ),
