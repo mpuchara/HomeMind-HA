@@ -199,6 +199,10 @@ DEFAULT_OPTIONS = {
     # performs no policy update from reward experiences.
     "automatic_correct_min_confidence": 0.80,
     "automatic_correct_min_source_reliability": 0.80,
+    # Observer-only false-activation context window. It is intentionally much shorter
+    # than the 90 s reward window so unrelated later household motion is not attributed
+    # to the original light activation.
+    "false_activation_observer_seconds": 12.0,
     # Stage-7 conservative Offline RL. Trusted Stage-6 rows are the only reward input.
     "offline_rl_min_trusted_samples": 24,
     "offline_rl_max_trusted_samples": 512,
