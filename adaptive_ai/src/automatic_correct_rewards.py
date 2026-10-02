@@ -489,7 +489,9 @@ def false_activation_suppressor_scores(store, agent_id):
                      'verified_false_activation'
                  )
                  AND activation_source_entity_id IS NOT NULL
-                 AND activation_source_entity_id!=''""",
+                 AND activation_source_entity_id!=''
+               ORDER BY COALESCE(resolved_ts,created_ts) DESC
+               LIMIT 512""",
             (str(agent_id),),
         ).fetchall()
     counts = {}
