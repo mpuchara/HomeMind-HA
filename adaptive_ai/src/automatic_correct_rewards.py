@@ -26,8 +26,12 @@ from home_sources import source_kind
 from observation_space import observation_as_of, select_observation_mask
 from settings import OPTIONS
 
-CONTRACT_VERSION = 1
+CONTRACT_VERSION = 2
 STATUSES = {"pending", "trusted", "unknown", "rejected"}
+ACTIVATION_CLASSES = {
+    "confirmed_use", "suspected_false_activation",
+    "verified_false_activation", "unknown",
+}
 _JSON_FIELDS = {
     "observation_json": ("observation", {}),
     "observation_mask_json": ("observation_mask", {}),
@@ -35,6 +39,7 @@ _JSON_FIELDS = {
     "background_dependencies_json": ("background_dependencies", []),
     "outcome_sources_json": ("outcome_sources", {}),
     "reward_sources_json": ("reward_sources", []),
+    "activation_evidence_json": ("activation_evidence", {}),
     "metadata_json": ("metadata", {}),
 }
 
@@ -101,6 +106,7 @@ class AutomaticRewardJournal:
         self._lock = threading.RLock()
         self._latest = {}
         self._counts = {}
+        self._activation_counts = {}
         self._migrate()
         self._interrupt_stale_pending()
         self._warm_cache()
@@ -145,6 +151,11 @@ class AutomaticRewardJournal:
                     source_origin TEXT,
                     source_reliability REAL NOT NULL DEFAULT 0,
                     unknown_reason TEXT,
+                    activation_class TEXT,
+                    activation_confidence REAL NOT NULL DEFAULT 0,
+                    activation_source_entity_id TEXT,
+                    activation_source_area_id TEXT,
+                    activation_evidence_json TEXT NOT NULL DEFAULT '{}',
                     metadata_json TEXT NOT NULL DEFAULT '{}'
                 );
                 CREATE INDEX IF NOT EXISTS idx_auto_reward_agent_time
@@ -159,6 +170,25 @@ class AutomaticRewardJournal:
                     WHERE decision_id IS NOT NULL AND decision_id!='';
                 """
             )
+            columns = {
+                str(row[1])
+                for row in c.execute(
+                    "PRAGMA table_info(automatic_reward_experiences)"
+                ).fetchall()
+            }
+            additions = (
+                ("activation_class", "TEXT"),
+                ("activation_confidence", "REAL NOT NULL DEFAULT 0"),
+                ("activation_source_entity_id", "TEXT"),
+                ("activation_source_area_id", "TEXT"),
+                ("activation_evidence_json", "TEXT NOT NULL DEFAULT '{}'"),
+            )
+            for name, ddl in additions:
+                if name not in columns:
+                    c.execute(
+                        "ALTER TABLE automatic_reward_experiences "
+                        f"ADD COLUMN {name} {ddl}"
+                    )
 
     def _interrupt_stale_pending(self):
         now = float(self.clock())
@@ -183,6 +213,7 @@ class AutomaticRewardJournal:
 
     def _warm_cache(self):
         counts = {}
+        activation_counts = {}
         latest = {}
         with self.store.conn() as c:
             for row in c.execute(
@@ -191,6 +222,16 @@ class AutomaticRewardJournal:
             ).fetchall():
                 counts.setdefault(str(row["agent_id"]), {})[
                     str(row["status"])
+                ] = int(row["n"])
+            for row in c.execute(
+                """SELECT agent_id,activation_class,COUNT(*) AS n
+                   FROM automatic_reward_experiences
+                   WHERE activation_class IS NOT NULL
+                     AND activation_class!=''
+                   GROUP BY agent_id,activation_class"""
+            ).fetchall():
+                activation_counts.setdefault(str(row["agent_id"]), {})[
+                    str(row["activation_class"])
                 ] = int(row["n"])
             rows = c.execute(
                 """SELECT * FROM automatic_reward_experiences
@@ -201,6 +242,7 @@ class AutomaticRewardJournal:
             latest.setdefault(str(decoded["agent_id"]), decoded)
         with self._lock:
             self._counts = counts
+            self._activation_counts = activation_counts
             self._latest = latest
 
     def _cache_transition(self, row, previous_status=None):
@@ -215,6 +257,12 @@ class AutomaticRewardJournal:
                 bucket[status] = int(bucket.get(status, 0)) + 1
             elif previous_status is None:
                 bucket[status] = int(bucket.get(status, 0)) + 1
+            activation_class = str(row.get("activation_class") or "")
+            if activation_class and previous_status:
+                activation_bucket = self._activation_counts.setdefault(aid, {})
+                activation_bucket[activation_class] = (
+                    int(activation_bucket.get(activation_class, 0)) + 1
+                )
             self._latest[aid] = dict(row)
 
     def get(self, resolution_key):
@@ -282,10 +330,17 @@ class AutomaticRewardJournal:
                 trusted_reward=None, confidence=0.0, attribution_reason=None,
                 source_entity_id=None, source_event_id=None, source_origin=None,
                 source_reliability=0.0, unknown_reason=None, outcome_sources=None,
-                reward_sources=None, metadata=None, resolved_ts=None):
+                reward_sources=None, metadata=None, resolved_ts=None,
+                activation_class=None, activation_confidence=0.0,
+                activation_source_entity_id=None,
+                activation_source_area_id=None, activation_evidence=None):
         status = str(status)
         if status not in STATUSES - {"pending"}:
             raise ValueError("invalid Automatic Correct resolution status")
+        if activation_class is not None:
+            activation_class = str(activation_class)
+            if activation_class not in ACTIVATION_CLASSES:
+                raise ValueError("invalid false-activation observer class")
         key = str(resolution_key)
         now = float(self.clock() if resolved_ts is None else resolved_ts)
         current = self.get(key)
@@ -309,7 +364,10 @@ class AutomaticRewardJournal:
                      resolved_ts=?,status=?,outcome=?,proposed_reward=?,trusted_reward=?,
                      confidence=?,attribution_reason=?,source_entity_id=?,source_event_id=?,
                      source_origin=?,source_reliability=?,unknown_reason=?,
-                     outcome_sources_json=?,reward_sources_json=?,metadata_json=?
+                     outcome_sources_json=?,reward_sources_json=?,
+                     activation_class=?,activation_confidence=?,
+                     activation_source_entity_id=?,activation_source_area_id=?,
+                     activation_evidence_json=?,metadata_json=?
                    WHERE resolution_key=? AND status='pending'""",
                 (
                     now, status, str(outcome), _finite(proposed_reward),
@@ -319,7 +377,10 @@ class AutomaticRewardJournal:
                     source_origin,
                     max(0.0, min(1.0, float(source_reliability or 0.0))),
                     unknown_reason, _dumps(sources or {}),
-                    _dumps(reward_src or []), _dumps(merged_meta), key,
+                    _dumps(reward_src or []), activation_class,
+                    max(0.0, min(1.0, float(activation_confidence or 0.0))),
+                    activation_source_entity_id, activation_source_area_id,
+                    _dumps(activation_evidence or {}), _dumps(merged_meta), key,
                 ),
             )
             changed = bool(cur.rowcount)
@@ -336,6 +397,9 @@ class AutomaticRewardJournal:
         aid = str(agent_id)
         with self._lock:
             counts = dict(self._counts.get(aid) or {})
+            activation_counts = dict(
+                self._activation_counts.get(aid) or {}
+            )
             latest = dict(self._latest.get(aid) or {})
         compact = None
         if latest:
@@ -347,7 +411,9 @@ class AutomaticRewardJournal:
                     "source_reliability", "unknown_reason", "trial_id",
                     "decision_id", "action_ts", "observation_start",
                     "observation_end", "area_id", "observation_schema_id",
-                    "observation_mask_id",
+                    "observation_mask_id", "activation_class",
+                    "activation_confidence", "activation_source_entity_id",
+                    "activation_source_area_id",
                 )
             }
             compact["reward_sources"] = list(
@@ -362,6 +428,20 @@ class AutomaticRewardJournal:
                 "trusted": int(counts.get("trusted", 0)),
                 "unknown": int(counts.get("unknown", 0)),
                 "rejected": int(counts.get("rejected", 0)),
+            },
+            "activation_counts": {
+                "confirmed_use": int(
+                    activation_counts.get("confirmed_use", 0)
+                ),
+                "suspected_false_activation": int(
+                    activation_counts.get("suspected_false_activation", 0)
+                ),
+                "verified_false_activation": int(
+                    activation_counts.get("verified_false_activation", 0)
+                ),
+                "unknown": int(
+                    activation_counts.get("unknown", 0)
+                ),
             },
             "latest": compact,
         }
