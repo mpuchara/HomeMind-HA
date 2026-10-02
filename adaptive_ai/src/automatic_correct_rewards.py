@@ -787,9 +787,9 @@ class TrustedAutomaticRewardService:
                 continue
             event_time, event_id, origin = latest
             if not (
-                observer_start
+                float(row["observation_start"])
                 <= float(event_time)
-                <= observer_end
+                <= float(row["observation_end"])
             ):
                 continue
             detail = {
@@ -893,9 +893,9 @@ class TrustedAutomaticRewardService:
                 continue
             event_time, event_id, origin = latest
             if not (
-                float(row["observation_start"])
+                observer_start
                 <= float(event_time)
-                <= float(row["observation_end"])
+                <= observer_end
             ):
                 continue
             detail = {
