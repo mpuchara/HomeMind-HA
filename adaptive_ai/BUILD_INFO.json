@@ -1,10 +1,10 @@
 {
-  "version": "0.14.123",
-  "release_date": "2026-10-01",
-  "base_version": "0.14.122",
-  "base_commit": "758f0da7267cfb27c2fc5a6af53535fbcd30b5b3",
-  "release_status": "continuation-history-revision-guard",
-  "release_validation_tests_passed": 1537,
+  "version": "0.14.124",
+  "release_date": "2026-10-02",
+  "base_version": "0.14.123",
+  "base_commit": "ddd79b4faabd06096ce912985a959245f167fae3",
+  "release_status": "bathroom-causal-history-replay",
+  "release_validation_tests_passed": 0,
   "release_014123": {
     "scope": "persistent_continuation_history_mutation_guard",
     "root_cause": "0.14.122 continuation cache keyed scope and overlap timestamps but not the entity_history revision that produced the seed",
@@ -1203,5 +1203,13 @@
     "fallback": "restart, scope changes, uncovered or non-monotonic windows keep the existing SQLite stateful_continuation_seed_rows path",
     "semantics": "no reward, feature, validation, policy-update order, Correct, Candidate, ActionIntent, Executor or physical-control semantics changed",
     "validation": "1531 tests green on Python 3.11 and 3.13; image build/smoke green; stateful continuation parity benchmark, persistent-worker gates and Stage 18 product runtime green"
+  },
+  "release_014124": {
+    "scope": "numeric_threshold_replay_and_frozen_validation_for_fast_automation_lights",
+    "causal_driver": "continuous distance and radar activity remain features; only discrete occupancy or explicit numeric automation edges can mark historical ON/OFF",
+    "historical_hold": "replay ON > threshold and OFF < threshold for required number of seconds",
+    "correct_safety": "legacy parent model requires explicit Live retrain before Candidate Correct",
+    "model_compatibility": "older persisted model revisions remain untouched; explicit agent Train/Rebuild required if incompatible",
+    "package": "full repository and addon-root ZIPs after CI succeeds"
   }
 }
