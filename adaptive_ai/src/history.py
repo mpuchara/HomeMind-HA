@@ -2256,6 +2256,7 @@ class HistoryManager(threading.Thread):
         activity_candidates = {
             eid for eid in behaviour_candidates
             if "activity" in entity_capability_tags(eid, discovery_states.get(eid) or {})
+            and "distance" not in eid.lower()
         }
         fast_driver_scores = {}
         for agent in fast_agents:
