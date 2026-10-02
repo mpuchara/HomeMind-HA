@@ -737,7 +737,7 @@ class TrustedAutomaticRewardService:
             if not (
                 float(row["observation_start"])
                 <= float(event_time)
-                <= float(row["observation_end"])
+                <= observer_end
             ):
                 continue
             detail = {
@@ -812,6 +812,13 @@ class TrustedAutomaticRewardService:
             registry = dict(self.engine.entity_registry)
         latest_events = dict(
             getattr(self.engine, "_provenance_latest_events", {}) or {}
+        )
+        observer_end = min(
+            float(row["observation_end"]),
+            float(row["action_ts"]) + max(
+                2.0,
+                float(OPTIONS.get("false_activation_observer_seconds", 12.0)),
+            ),
         )
         local = []
         remote = []
