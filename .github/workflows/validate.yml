@@ -221,7 +221,7 @@ jobs:
       - name: Upload install packages
         uses: actions/upload-artifact@v4
         with:
-          name: HomeMind-Adaptive-AI-main
+          name: HomeMind-Adaptive-AI-${{ github.ref == 'refs/heads/main' && 'main' || 'bathroom-0.14.124' }}
           path: |
             HomeMind-Adaptive-AI-repository.zip
             HomeMind-Adaptive-AI-addon-root.zip
