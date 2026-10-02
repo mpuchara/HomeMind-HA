@@ -632,6 +632,16 @@ def select_context_entities(agent, state_map, registry, hint_entities, max_entit
         if not is_context_candidate_entity(eid, st, excluded_context_entities):
             continue
         considered += 1
+        if fast and "*" in requested and (
+            edomain in ("update", "button")
+            or any(token in eid.lower() for token in (
+                "_battery", "_bateria", "_firmware", "_rssi",
+            ))
+        ):
+            # Diagnostic/maintenance telemetry cannot predict a one-second
+            # actuator transition. Do not spend the scarce fast policy slots
+            # on same-area batteries or firmware switches.
+            continue
         if is_esphome_sensor_entity(eid, registry):
             esphome_candidates += 1
         if eid == target:
