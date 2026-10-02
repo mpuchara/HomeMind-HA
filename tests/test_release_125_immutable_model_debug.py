@@ -15,7 +15,7 @@ from support import agent, state
 from policy import MultiHorizonPolicy
 from policy_backend import model_checksum, verify_model_checksum
 from correct_learning_debug import (
-    _automation_raw_sources, _current_context,
+    _automation_raw_sources, _current_context, _context_at_label,
 )
 
 
@@ -59,6 +59,37 @@ class ImmutableModelSnapshotTests(unittest.TestCase):
         second = MultiHorizonPolicy(a, states, {}, set(), model=raw)
         second.predict({0: 1.0, 1: 0.45})
         self.assertEqual(model_checksum(raw), original_hash)
+
+    def test_correct_label_debug_reconstructs_the_same_checksum_snapshot_twice(self):
+        a = agent(id="bathroom", target_entity="switch.bathroom",
+                  target_property="power", mode="shadow")
+        states = {"switch.bathroom": state("switch.bathroom", "off")}
+        policy = MultiHorizonPolicy(a, states, {}, set())
+        horizon = policy.horizons[0]
+        policy.update(horizon, 1, {0: 1.0}, 1.0)
+        policy.heads[horizon].last_decay_ts = time.time() - 7200.0
+        raw = policy.serialize()
+        digest = model_checksum(raw)
+        engine = SimpleNamespace(
+            lock=threading.RLock(),
+            state_map=states,
+            entity_registry={},
+            context_relevance={},
+            context=SimpleNamespace(excluded=set()),
+            teaching=SimpleNamespace(
+                point_context=lambda *args, **kwargs: (states, None, None)
+            ),
+        )
+        store = SimpleNamespace(get_model=lambda agent_id: raw)
+        with patch.object(MultiHorizonPolicy, "features",
+                          return_value=({0: 1.0}, {0: ["bias"]}, {})):
+            result = _context_at_label(
+                engine, store, a, {"sample_ts": time.time() - 600}
+            )
+        self.assertNotIn("error", result, result)
+        self.assertEqual(result["prediction"]["value"], 1.0)
+        self.assertEqual(model_checksum(raw), digest)
+        self.assertTrue(verify_model_checksum(raw))
 
     def test_loaded_heads_are_independent_of_each_other(self):
         a = agent(id="bathroom", target_entity="switch.bathroom",
