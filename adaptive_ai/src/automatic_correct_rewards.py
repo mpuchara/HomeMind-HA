@@ -469,6 +469,58 @@ class AutomaticRewardJournal:
         return [self._decode(row) for row in rows]
 
 
+def false_activation_suppressor_scores(store, agent_id):
+    """Return conservative feature-selection evidence from observer episodes.
+
+    This never creates reward and never updates a policy. Scores only help a future
+    Train/Rebuild keep cross-area behavioural sensors in the candidate schema so the
+    ordinary historical/supervised learner can model interactions with local radar input.
+    Suspected-only evidence requires repetition; one explicit verified reversal is enough
+    to make a remote context sensor structurally relevant.
+    """
+    with store.conn() as c:
+        rows = c.execute(
+            """SELECT activation_class,activation_source_entity_id,target_entity
+               FROM automatic_reward_experiences
+               WHERE agent_id=?
+                 AND activation_class IN (
+                     'suspected_false_activation',
+                     'verified_false_activation'
+                 )
+                 AND activation_source_entity_id IS NOT NULL
+                 AND activation_source_entity_id!=''""",
+            (str(agent_id),),
+        ).fetchall()
+    counts = {}
+    for row in rows:
+        entity_id = str(row["activation_source_entity_id"] or "")
+        if not entity_id or entity_id == str(row["target_entity"] or ""):
+            continue
+        bucket = counts.setdefault(entity_id, {"suspected": 0, "verified": 0})
+        if row["activation_class"] == "verified_false_activation":
+            bucket["verified"] += 1
+        else:
+            bucket["suspected"] += 1
+    scores = {}
+    for entity_id, bucket in counts.items():
+        suspected = int(bucket["suspected"])
+        verified = int(bucket["verified"])
+        if verified:
+            score = min(
+                0.95,
+                0.65 + 0.08 * max(0, verified - 1)
+                + 0.02 * min(10, suspected),
+            )
+        elif suspected >= 4:
+            # Four repeated weak observations start below the ordinary causal-driver
+            # threshold; about eight consistent episodes are needed to reach 0.50.
+            score = min(0.70, 0.30 + 0.05 * max(0, suspected - 4))
+        else:
+            continue
+        scores[entity_id] = float(score)
+    return scores
+
+
 class TrustedAutomaticRewardService:
     def __init__(self, core):
         self.core = core
@@ -996,8 +1048,24 @@ class TrustedAutomaticRewardService:
                         {
                             "class": "verified_false_activation",
                             "confidence": 1.0,
-                            "source_entity_id": source["entity_id"],
-                            "source_area_id": row.get("area_id"),
+                            # Keep the cross-area context entity, if one was already
+                            # observed, as the suppressor candidate. Verification itself
+                            # remains the exact-target user event in the normal reward
+                            # provenance columns.
+                            "source_entity_id": (
+                                activation.get("source_entity_id")
+                                if activation
+                                and activation.get("class")
+                                == "suspected_false_activation"
+                                else None
+                            ),
+                            "source_area_id": (
+                                activation.get("source_area_id")
+                                if activation
+                                and activation.get("class")
+                                == "suspected_false_activation"
+                                else None
+                            ),
                             "evidence": {
                                 "contract": "false_activation_observer_v1",
                                 "observer_only": True,
@@ -1009,6 +1077,9 @@ class TrustedAutomaticRewardService:
                                     "target inside the observation window"
                                 ),
                                 "target_user_event": source,
+                                "prior_observer_episode": dict(
+                                    (activation or {}).get("evidence") or {}
+                                ),
                             },
                         }
                         if self._is_on_activation(row)
