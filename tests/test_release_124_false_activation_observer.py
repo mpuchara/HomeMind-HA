@@ -213,7 +213,7 @@ class FalseActivationObserverTests(unittest.TestCase):
         row = self._seed("local-confirmed")
         event_id = self._event(
             "binary_sensor.bathroom_pir", "on",
-            event_time=999.7, area="bathroom",
+            event_time=1002.0, area="bathroom",
         )
         # Trusted anticipation remains the existing Stage-6 reward path.
         row["prediction_inputs"] = ["binary_sensor.bathroom_pir"]
