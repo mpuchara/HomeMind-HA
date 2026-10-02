@@ -152,7 +152,8 @@ jobs:
           assert row["scalar_reference"]["decision_parity"], row["scalar_reference"]
           PY
   package:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: tests
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/fix/014124-bathroom-historical-causality')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
