@@ -787,7 +787,7 @@ class TrustedAutomaticRewardService:
                 continue
             event_time, event_id, origin = latest
             if not (
-                float(row["observation_start"])
+                observer_start
                 <= float(event_time)
                 <= observer_end
             ):
@@ -865,9 +865,13 @@ class TrustedAutomaticRewardService:
         latest_events = dict(
             getattr(self.engine, "_provenance_latest_events", {}) or {}
         )
+        action_ts = float(row["action_ts"])
+        observer_start = action_ts - max(
+            1.0, float(OPTIONS.get("fast_upstream_lead_seconds", 4.0))
+        )
         observer_end = min(
             float(row["observation_end"]),
-            float(row["action_ts"]) + max(
+            action_ts + max(
                 2.0,
                 float(OPTIONS.get("false_activation_observer_seconds", 12.0)),
             ),
