@@ -294,7 +294,13 @@ def entity_capability_tags(entity_id, state):
     caps = set()
     if (domain in ("person", "device_tracker") or dc in ("occupancy", "motion", "presence")
             or any(x in text for x in ("occupancy", "presence", "motion", "obecno"))):
-        caps.add("occupancy")
+        # Numeric radar energy and target distance are not boolean occupancy.
+        # They remain useful *continuous* policy features, but must never
+        # become transition clocks for a different room.
+        if domain != "sensor" or not any(
+            term in text for term in ("distance", "odleglosc", "odległość", "energy", "score")
+        ):
+            caps.add("occupancy")
     # ESPHome mmWave/camera helpers often expose the actual causal signal as a numeric
     # percentage or score rather than a binary_sensor. Examples from real installations:
     # "Still Energy" (%), "Move Energy" (%), and "AI detection" (points).
@@ -305,7 +311,7 @@ def entity_capability_tags(entity_id, state):
         "move target", "still target distance", "stationary target distance",
         "moving target distance", "move target distance",
     )
-    if any(x in text for x in activity_terms):
+    if any(x in text for x in activity_terms) and "distance" not in text:
         caps.add("activity")
     if "illuminance" in text or "lux" in text or unit == "lx": caps.add("illuminance")
     if domain == "sun" or "sun elevation" in text or "solar elevation" in text: caps.add("sun")
@@ -319,6 +325,21 @@ def entity_capability_tags(entity_id, state):
     if "power" in text or unit in ("w", "kw"): caps.add("power")
     if "noise" in text or "sound" in text: caps.add("ambient_noise")
     return caps
+
+
+def is_discrete_occupancy_entity(entity_id, state=None):
+    """Only real binary presence/motion sources can anchor an ON/OFF dwell.
+
+    HA numeric sensor names such as kitchen_presence_still_distance are never
+    used as boolean transition sources, even if they are historically correlated.
+    Numeric threshold automations are interpreted by fast_automation_replay.
+    """
+    domain = str(entity_id or "").split(".", 1)[0]
+    if domain not in ("binary_sensor", "person", "device_tracker"):
+        return False
+    if state is None:
+        return domain in ("binary_sensor", "person", "device_tracker")
+    return "occupancy" in entity_capability_tags(entity_id, state)
 
 
 def _name_tokens(entity_id, state):
@@ -667,7 +688,9 @@ def select_context_entities(agent, state_map, registry, hint_entities, max_entit
         causal_reserve = min(limit, max(0, int(OPTIONS.get("fast_causal_driver_reserve", 2))))
         causal_ranked = [
             x for x in ranked
-            if (x[3]["occupancy"] or x[3].get("activity")) and float((relevance_scores or {}).get(x[1], 0.0)) >= causal_min
+            if (is_discrete_occupancy_entity(x[1], state_map.get(x[1]))
+                or x[3].get("activity"))
+            and float((relevance_scores or {}).get(x[1], 0.0)) >= causal_min
         ]
         causal_ranked.sort(key=lambda x: (-float((relevance_scores or {}).get(x[1], 0.0)), -x[0], x[1]))
         selected.extend([eid for _, eid, _, _ in causal_ranked[:causal_reserve]])
@@ -676,7 +699,10 @@ def select_context_entities(agent, state_map, registry, hint_entities, max_entit
     # upstream/global features. Causal history wins if HA area metadata is wrong/missing.
     reserve = min(limit, max(0, int(OPTIONS.get("primary_local_sensor_reserve", 4)))) if fast else 0
     local_ranked = [x for x in ranked if x[3]["local"]]
-    local_occupancy_ranked = [x for x in local_ranked if x[3]["occupancy"]]
+    local_occupancy_ranked = [
+        x for x in local_ranked
+        if is_discrete_occupancy_entity(x[1], state_map.get(x[1]))
+    ]
     local_target_count = min(limit, len(selected) + reserve)
     for _, eid, _, _ in local_occupancy_ranked + local_ranked:
         if eid not in selected:
@@ -737,8 +763,15 @@ def select_context_entities(agent, state_map, registry, hint_entities, max_entit
             [row for row in ranked if row[1] in selected_set]
         )
     }
-    primary_local = [eid for _, eid, _, loc in ranked if eid in selected_set and loc["local"] and loc["occupancy"]]
-    occupancy_selected = [x for x in ranked if x[1] in selected_set and x[3]["occupancy"]]
+    primary_local = [
+        eid for _, eid, _, loc in ranked
+        if eid in selected_set and loc["local"]
+        and is_discrete_occupancy_entity(eid, state_map.get(eid))
+    ]
+    occupancy_selected = [
+        x for x in ranked if x[1] in selected_set
+        and is_discrete_occupancy_entity(x[1], state_map.get(x[1]))
+    ]
     occupancy_selected.sort(key=lambda x: (
         -float((relevance_scores or {}).get(x[1], 0.0)),
         0 if "causal-behaviour" in x[2] else 1,
@@ -751,7 +784,11 @@ def select_context_entities(agent, state_map, registry, hint_entities, max_entit
         for _, eid, reasons, loc in occupancy_selected[:6]
         if float((relevance_scores or {}).get(eid, 0.0)) > 0
     }
-    behavioural_selected = [x for x in ranked if x[1] in selected_set and (x[3]["occupancy"] or x[3].get("activity"))]
+    behavioural_selected = [
+        x for x in ranked if x[1] in selected_set
+        and (is_discrete_occupancy_entity(x[1], state_map.get(x[1]))
+             or x[3].get("activity"))
+    ]
     behavioural_selected.sort(key=lambda x: (-float((relevance_scores or {}).get(x[1], 0.0)), -x[0], x[1]))
     behavioural_scores = {
         eid: round(float((relevance_scores or {}).get(eid, 0.0)), 4)
