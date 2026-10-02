@@ -45,7 +45,7 @@ class FalseActivationObserverTests(unittest.TestCase):
     def tearDown(self):
         self.fixture.tearDown()
 
-    def _seed(self, key, *, action_value=1.0):
+    def _seed(self, key, *, action_value=1.0, prediction_inputs=None):
         payload = {
             "resolution_key": "decision:" + key,
             "agent_id": self.a["id"],
@@ -72,7 +72,7 @@ class FalseActivationObserverTests(unittest.TestCase):
                 "mask_id": "mask-test",
                 "features": [],
             },
-            "prediction_inputs": [],
+            "prediction_inputs": list(prediction_inputs or []),
             "background_dependencies": [],
             "outcome_sources": {},
             "reward_sources": [],
@@ -144,6 +144,56 @@ class FalseActivationObserverTests(unittest.TestCase):
         summary = self.service.summary(self.a["id"])
         self.assertEqual(
             summary["activation_counts"]["suspected_false_activation"], 1
+        )
+
+    def test_same_radar_binary_presence_cannot_confirm_its_own_raw_trigger(self):
+        raw = "sensor.bathroom_stationary_energy"
+        same_device_presence = "binary_sensor.bathroom_radar_presence"
+        self.e.state_map[raw] = state(
+            raw, "80", unit_of_measurement="%",
+            friendly_name="Bathroom Stationary Energy",
+        )
+        self.e.state_map[same_device_presence] = state(
+            same_device_presence, "off", device_class="presence",
+        )
+        self.e.entity_registry[raw] = {
+            "area_id": "bathroom", "device_id": "bathroom-radar",
+        }
+        self.e.entity_registry[same_device_presence] = {
+            "area_id": "bathroom", "device_id": "bathroom-radar",
+        }
+        row = self._seed(
+            "same-radar-self-confirmation",
+            prediction_inputs=[raw],
+        )
+        self._event(
+            same_device_presence, "on",
+            event_time=999.6, area="bathroom",
+            device_class="presence",
+        )
+        # Preserve the physical-device identity after the test helper updates area data.
+        self.e.entity_registry[same_device_presence]["device_id"] = "bathroom-radar"
+        self._event(
+            "binary_sensor.hall_motion", "on",
+            event_time=999.5, area="hall",
+        )
+        resolved = self.service.resolve_runtime(
+            self.a, self._runtime(row), .15,
+            "weak acceptance after settling",
+        )
+        self.assertEqual(
+            resolved["activation_class"],
+            "suspected_false_activation",
+        )
+        rejected = resolved["activation_evidence"][
+            "correlated_local_rejected"
+        ]
+        self.assertEqual(
+            rejected[0]["entity_id"], same_device_presence
+        )
+        self.assertIn(
+            "same physical device",
+            rejected[0]["rejected_reason"],
         )
 
     def test_remote_motion_after_short_observer_window_is_not_attributed(self):
