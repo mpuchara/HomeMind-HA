@@ -18,10 +18,22 @@ class DiagonalLinUCB:
         n = len(self.actions)
         valid = bool(model and int(model.get("dims", -1)) == self.dims and len(model.get("actions", [])) == n)
         if valid:
-            self.a = model["a"]; self.b = model["b"]
-            self.counts = model.get("counts", [0] * n); self.reward_sums = model.get("reward_sums", [0.0] * n)
-            self.ctx_sum = model.get("ctx_sum", [[0.0] * self.dims for _ in range(n)])
-            self.ctx_sq = model.get("ctx_sq", [[0.0] * self.dims for _ in range(n)])
+            # A persisted model snapshot is immutable input. Prediction calls lazy
+            # decay(), which edits these matrices in place. Aliasing them to the
+            # decoded JSON used by another policy (e.g. two Correct diagnostic
+            # comparisons) invalidates its checksum after the first prediction.
+            # Copy only the mutable numeric arrays, once during cold policy load;
+            # inference and training hot loops retain their existing cost.
+            self.a = [list(row) for row in model["a"]]
+            self.b = [list(row) for row in model["b"]]
+            self.counts = list(model.get("counts", [0] * n))
+            self.reward_sums = list(model.get("reward_sums", [0.0] * n))
+            self.ctx_sum = [list(row) for row in model.get(
+                "ctx_sum", [[0.0] * self.dims for _ in range(n)]
+            )]
+            self.ctx_sq = [list(row) for row in model.get(
+                "ctx_sq", [[0.0] * self.dims for _ in range(n)]
+            )]
             self.total_updates = float(model.get("total_updates", sum(self.counts)))
             self.validation_weight = float(model.get("validation_weight", 0.0))
             self.validation_correct_weight = float(model.get("validation_correct_weight", 0.0))
