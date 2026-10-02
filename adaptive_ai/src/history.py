@@ -453,6 +453,64 @@ class HistoryManager(threading.Thread):
         }
         return seed
 
+    def _false_activation_schema_rescreen(self, agent, seed):
+        """Return strong observer suppressors missing from a preserved fast-agent schema.
+
+        Rebuild normally preserves the previous schema to avoid an expensive whole-home
+        re-screen. A sufficiently repeated/verified false-activation suppressor is the
+        narrow exception: keeping the old seed would make it impossible for that newly
+        relevant cross-area sensor to enter the model at all.
+        """
+        if not is_fast_reactive_agent(agent):
+            return {}
+        if "*" not in set(agent.get("input_entities") or ["*"]):
+            return {}
+        if not isinstance(seed, dict):
+            return {}
+        existing = set((seed.get("schema") or {}).get("entities") or [])
+        try:
+            from automatic_correct_rewards import (
+                false_activation_suppressor_scores,
+            )
+            scores = false_activation_suppressor_scores(
+                STORE, agent["id"]
+            )
+        except Exception:
+            return {}
+        threshold = float(
+            OPTIONS.get("fast_causal_driver_min_score", 0.50)
+        )
+        with self.engine.lock:
+            states = dict(self.engine.state_map)
+            registry = dict(self.engine.entity_registry)
+        excluded_control, _ = controllable_context_exclusions(
+            states, registry
+        )
+        excluded_electrical, _ = electrical_context_exclusions(
+            states, registry
+        )
+        excluded = excluded_control | excluded_electrical
+        missing = {}
+        for entity_id, score in scores.items():
+            if (
+                float(score) < threshold
+                or entity_id in existing
+                or entity_id == agent.get("target_entity")
+            ):
+                continue
+            state = states.get(entity_id)
+            if state is None or not is_context_candidate_entity(
+                entity_id, state, excluded
+            ):
+                continue
+            missing[str(entity_id)] = float(score)
+        return dict(
+            sorted(
+                missing.items(),
+                key=lambda item: (-item[1], item[0]),
+            )[:4]
+        )
+
     def training_schema_seed(self, agent_id, agent=None):
         aid = str(agent_id)
         lock = getattr(self, "agent_jobs_lock", None)
@@ -556,7 +614,28 @@ class HistoryManager(threading.Thread):
             with self.engine.executor.target_lock(agent["target_entity"]):
                 if rebuild:
                     # Capture schema/input selection before deleting learned weights.
-                    self._remember_training_schema(agent)
+                    seed = self._remember_training_schema(agent)
+                    suppressors = self._false_activation_schema_rescreen(
+                        agent, seed
+                    )
+                    if suppressors:
+                        # Deliberately drop only the in-RAM schema seed. The normal
+                        # rebuild path will broad-refresh Recorder context and perform
+                        # the established causal/behavioural feature screen from scratch.
+                        self.training_schema_cache.pop(agent_id, None)
+                        STORE.event(
+                            agent_id, "info",
+                            "false_activation_schema_rescreen",
+                            (
+                                "Rebuild will re-screen context because "
+                                "new false-activation suppressors were learned"
+                            ),
+                            {
+                                "suppressor_scores": suppressors,
+                                "reward_effect": "none",
+                                "policy_update": False,
+                            },
+                        )
                     STORE.clear_learning(agent_id)
                     self.engine.models.pop(agent_id, None)
                     self.engine.runtime.pop(agent_id, None)
