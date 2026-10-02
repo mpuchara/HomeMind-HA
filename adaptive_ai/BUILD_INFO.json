@@ -1,9 +1,9 @@
 {
-  "version": "0.14.124",
+  "version": "0.14.125",
   "release_date": "2026-10-02",
-  "base_version": "0.14.123",
-  "base_commit": "ddd79b4faabd06096ce912985a959245f167fae3",
-  "release_status": "bathroom-causal-history-replay",
+  "base_version": "0.14.124",
+  "base_commit": "daad7ed4700f152e3f0fae768faf49a18d5358a5",
+  "release_status": "immutable-model-snapshot-and-roombelief-source-diagnostic",
   "release_validation_tests_passed": 0,
   "release_014123": {
     "scope": "persistent_continuation_history_mutation_guard",
@@ -1211,5 +1211,12 @@
     "correct_safety": "legacy parent model requires explicit Live retrain before Candidate Correct",
     "model_compatibility": "older persisted model revisions remain untouched; explicit agent Train/Rebuild required if incompatible",
     "package": "full repository and addon-root ZIPs after CI succeeds"
+  },
+  "release_014125": {
+    "scope": "correct-diagnostic-immutable-model-and-room-source-audit",
+    "fix": "DiagonalLinUCB copies loaded mutable weight arrays to prevent prediction/lazy decay modifying the persisted JSON snapshot and invalidating its checksum",
+    "room_context": "Diagnostics report status and actual HA area of automation radar without changing RoomBelief's source mapping or perception behavior",
+    "migration": "No changed model/schema versions, database or hardware dispatch semantics; automatic control unchanged",
+    "tests": "Checksum-preservation, independent reconstructed models, missing-area and different-area source audit; full CI to be evaluated"
   }
 }
