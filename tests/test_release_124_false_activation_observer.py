@@ -3,7 +3,10 @@ from pathlib import Path
 from types import SimpleNamespace
 import unittest
 
-from automatic_correct_rewards import install as install_automatic_correct
+from automatic_correct_rewards import (
+    false_activation_suppressor_scores,
+    install as install_automatic_correct,
+)
 from provenance_runtime import install as install_provenance
 from support import state
 import test_executor as executor_fixture
@@ -143,6 +146,19 @@ class FalseActivationObserverTests(unittest.TestCase):
             summary["activation_counts"]["suspected_false_activation"], 1
         )
 
+    def test_remote_motion_after_short_observer_window_is_not_attributed(self):
+        row = self._seed("remote-late")
+        self._event(
+            "binary_sensor.hall_motion", "on",
+            event_time=1030.0, area="hall",
+        )
+        resolved = self.service.resolve_runtime(
+            self.a, self._runtime(row), .15,
+            "weak acceptance after settling",
+        )
+        self.assertEqual(resolved["activation_class"], "unknown")
+        self.assertIsNone(resolved["activation_source_entity_id"])
+
     def test_same_area_presence_confirms_use_and_keeps_existing_reward_contract(self):
         row = self._seed("local-confirmed")
         event_id = self._event(
@@ -173,6 +189,10 @@ class FalseActivationObserverTests(unittest.TestCase):
     def test_explicit_target_user_reversal_marks_verified_false_activation(self):
         row = self._seed("manual-reversal")
         self._event(
+            "binary_sensor.hall_motion", "on",
+            event_time=1000.5, area="hall",
+        )
+        self._event(
             self.a["target_entity"], "off",
             event_time=1001.0, area="bathroom",
             origin="user", user_id="human", device_class=None,
@@ -189,8 +209,18 @@ class FalseActivationObserverTests(unittest.TestCase):
         )
         self.assertEqual(resolved["activation_confidence"], 1.0)
         self.assertEqual(
+            resolved["activation_source_entity_id"],
+            "binary_sensor.hall_motion",
+        )
+        self.assertEqual(
             resolved["activation_evidence"]["reward_effect"],
             "none_beyond_existing_manual_correction",
+        )
+        scores = false_activation_suppressor_scores(
+            self.service.store, self.a["id"]
+        )
+        self.assertGreaterEqual(
+            scores["binary_sensor.hall_motion"], .65
         )
 
     def test_off_action_is_not_classified_as_false_activation(self):
@@ -232,6 +262,14 @@ class FalseActivationSourceContracts(unittest.TestCase):
         self.assertIn("False activation observer:", source)
         self.assertIn("False activation episodes:", source)
         self.assertIn("observer only / no reward", source)
+
+    def test_history_uses_suppressor_only_for_feature_relevance(self):
+        source = (
+            ROOT / "adaptive_ai" / "src" / "history.py"
+        ).read_text(encoding="utf-8")
+        self.assertIn("false_activation_suppressor_scores", source)
+        self.assertIn("feature-selection context only", source)
+        self.assertIn("context_suppressor_relevance", source)
 
 
 if __name__ == "__main__":
