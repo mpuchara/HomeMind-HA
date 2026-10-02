@@ -107,6 +107,49 @@ class BathroomCausalReplayTests(unittest.TestCase):
             radar["entity_id"], radar
         ))
 
+    def test_context_selection_keeps_radar_but_not_kitchen_as_primary(self):
+        target = "switch.shellyplus1pm_441793a613bc_switch_0"
+        radar = "sensor.espen4_stationary_energy"
+        kitchen_distance = "sensor.kitchen_presence_still_distance"
+        kitchen_energy = "sensor.kitchen_presence_move_energy"
+        battery = "sensor.sonoff_snzb_02wd_bateria"
+        firmware = "update.sonoff_snzb_02wd_firmware"
+        states = {
+            target: {"entity_id": target, "state": "off", "attributes": {}},
+            radar: {"entity_id": radar, "state": "19", "attributes": {
+                "friendly_name": "ESPEN4 Stationary Energy",
+                "unit_of_measurement": "%"}},
+            kitchen_distance: {"entity_id": kitchen_distance, "state": "450",
+                               "attributes": {"unit_of_measurement": "cm"}},
+            kitchen_energy: {"entity_id": kitchen_energy, "state": "38",
+                             "attributes": {"unit_of_measurement": "%"}},
+            battery: {"entity_id": battery, "state": "70",
+                      "attributes": {"unit_of_measurement": "%"}},
+            firmware: {"entity_id": firmware, "state": "off",
+                       "attributes": {}},
+        }
+        registry = {
+            target: {"area_id": "lazienka", "device_id": "light-0"},
+            radar: {"area_id": "lazienka", "device_id": "radar-0"},
+            kitchen_distance: {"area_id": "kuchnia", "device_id": "radar-1"},
+            kitchen_energy: {"area_id": "kuchnia", "device_id": "radar-1"},
+            battery: {"area_id": "lazienka", "device_id": "battery-0"},
+            firmware: {"area_id": "lazienka", "device_id": "battery-0"},
+        }
+        agent = {"id": "bathroom", "target_entity": target,
+                 "target_property": "power", "input_entities": ["*"]}
+        selected, meta = select_context_entities(
+            agent, states, registry, {radar},
+            relevance_scores={
+                radar: 0.80, kitchen_distance: 1.0, kitchen_energy: 0.78,
+            },
+        )
+        self.assertIn(radar, selected)
+        self.assertNotIn(battery, selected)
+        self.assertNotIn(firmware, selected)
+        self.assertIsNone(meta["primary_occupancy_sensor"])
+        self.assertEqual(meta["primary_behavioural_drivers"][0], radar)
+
     def test_binary_presence_remains_eligible(self):
         occupancy = {
             "entity_id": "binary_sensor.bathroom_presence",
