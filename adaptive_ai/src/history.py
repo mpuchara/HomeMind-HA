@@ -21,6 +21,8 @@ from training_budget import TRAINING_BUDGET
 from policy import MultiHorizonPolicy
 from training_balance_audit import TrainingBalanceAudit
 from training_evidence import evidence_weight_for, normalized_dwell_sample_mass
+from fast_automation_replay import paired_numeric_baseline, threshold_event
+from context import is_discrete_occupancy_entity
 from frozen_validation import (
     FrozenRidgeSnapshot, empty_holdout_counts, holdout_summary,
     prediction_is_correct, record_holdout_result,
@@ -3353,22 +3355,54 @@ class HistoryManager(threading.Thread):
 
         def _primary_occupancy_sensor(policy):
             meta = policy.selection_meta or {}
-            return meta.get("primary_occupancy_sensor") or meta.get("primary_local_sensor") or next(iter(meta.get("primary_local_sensors") or []), None)
+            # Stored policies can predate the discrete-vs-numeric occupancy fix.
+            # Never interpret numeric distance/energy as binary presence edges.
+            for eid in (
+                meta.get("primary_occupancy_sensor"),
+                meta.get("primary_local_sensor"),
+                *(meta.get("primary_local_sensors") or ()),
+            ):
+                if eid and is_discrete_occupancy_entity(eid):
+                    return eid
+            return None
 
         def _fast_anchor(agent, policy, action_value, action_ts, tracker=None):
             tracker = tracker or timeline
             if not is_fast_reactive_agent(agent):
                 return float(action_ts), None
             positive = float(action_value) >= 0.5
+            window = float(OPTIONS.get(
+                "fast_precursor_on_seconds" if positive else "fast_precursor_off_seconds",
+                8 if positive else 120,
+            ))
+            # Numeric HA automations are threshold crossings (e.g. ON >22, OFF <12
+            # sustained 3 s), not zero/nonzero occupancy transitions.
+            pair = paired_numeric_baseline(policy.selection_meta)
+            if pair is not None:
+                edge = threshold_event(
+                    tracker, pair["sensor"], action_ts - window, action_ts,
+                    pair["on_threshold"] if positive else pair["off_threshold"],
+                    above=positive,
+                    hold_seconds=pair["on_hold"] if positive else pair["off_hold"],
+                    latest=True,
+                )
+                if edge is not None:
+                    return float(edge), None
             primary = _primary_occupancy_sensor(policy)
-            local_ts = None
-            if primary:
-                window = float(OPTIONS.get("fast_precursor_on_seconds", 8) if positive else OPTIONS.get("fast_precursor_off_seconds", 120))
-                local_ts = tracker.directional_transition_before(primary, action_ts, positive, window)
+            local_ts = (
+                tracker.directional_transition_before(primary, action_ts, positive, window)
+                if primary else None
+            )
             upstream_ts = None
             if positive:
                 for eid in (policy.selection_meta or {}).get("upstream_sensors") or []:
-                    ts = tracker.directional_transition_before(eid, action_ts, True, float(OPTIONS.get("fast_precursor_on_seconds", 8)))
+                    # Weak upstream anticipation is legal only for discrete occupancy.
+                    # A distance sensor's 0->positive crossing is not an arrival.
+                    if not is_discrete_occupancy_entity(eid):
+                        continue
+                    ts = tracker.directional_transition_before(
+                        eid, action_ts, True, window
+                    )
                     if ts is not None and (upstream_ts is None or ts > upstream_ts):
                         upstream_ts = ts
             return float(local_ts if local_ts is not None else action_ts), upstream_ts
@@ -3377,14 +3411,27 @@ class HistoryManager(threading.Thread):
             tracker = tracker or timeline
             if not is_fast_reactive_agent(agent):
                 return float(end_ts)
+            pair = paired_numeric_baseline(policy.selection_meta)
+            if pair is not None:
+                # Do not reinforce an observed dwell after the *opposite* legacy
+                # automation condition was satisfied. OFF hold is honored: a brief
+                # sensor fluctuation below the threshold must not end an ON dwell.
+                next_positive = float(action_value) < 0.5
+                edge = threshold_event(
+                    tracker, pair["sensor"], start_ts, end_ts,
+                    pair["on_threshold"] if next_positive else pair["off_threshold"],
+                    above=next_positive,
+                    hold_seconds=pair["on_hold"] if next_positive else pair["off_hold"],
+                )
+                if edge is not None:
+                    return min(float(end_ts), float(edge))
             primary = _primary_occupancy_sensor(policy)
             if not primary:
                 return float(end_ts)
-            # Stop reinforcing ON as soon as the dedicated local occupancy sensor becomes
-            # vacant, and stop reinforcing OFF when it becomes occupied. This removes
-            # inherited one-minute automation delays from desired-state learning.
             opposite_positive = float(action_value) < 0.5
-            edge = tracker.first_directional_transition_after(primary, start_ts, end_ts, opposite_positive)
+            edge = tracker.first_directional_transition_after(
+                primary, start_ts, end_ts, opposite_positive
+            )
             return min(float(end_ts), float(edge)) if edge is not None else float(end_ts)
 
         def learn_or_validate(
@@ -4561,6 +4608,10 @@ class HistoryManager(threading.Thread):
                 )
                 frozen_gate_enabled = bool(
                     OPTIONS.get("candidate_frozen_holdout_gate_enabled", False)
+                    or (
+                        is_fast_reactive_agent(agent)
+                        and bool(automation_infos_by_agent.get(agent["id"]))
+                    )
                 )
                 frozen_score = frozen_summary.get("score")
                 frozen_gate_passed = bool(
@@ -4614,7 +4665,14 @@ class HistoryManager(threading.Thread):
                     "frozen_holdout_gate": {
                         "enabled": frozen_gate_enabled,
                         "passed": frozen_gate_passed if frozen_gate_enabled else None,
-                        "mode": "qualification_gate" if frozen_gate_enabled else "audit_only",
+                        "mode": (
+                            "automation_fast_target_required"
+                            if frozen_gate_enabled
+                            and is_fast_reactive_agent(agent)
+                            and bool(automation_infos_by_agent.get(agent["id"]))
+                            else "qualification_gate" if frozen_gate_enabled
+                            else "audit_only"
+                        ),
                     },
                     "reason": reason,
                 }
