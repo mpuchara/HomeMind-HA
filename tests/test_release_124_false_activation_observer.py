@@ -119,7 +119,7 @@ class FalseActivationObserverTests(unittest.TestCase):
         row = self._seed("remote-only")
         self._event(
             "binary_sensor.hall_motion", "on",
-            event_time=1002.0, area="hall",
+            event_time=999.5, area="hall",
         )
         resolved = self.service.resolve_runtime(
             self.a, self._runtime(row), .15,
@@ -163,7 +163,7 @@ class FalseActivationObserverTests(unittest.TestCase):
         row = self._seed("local-confirmed")
         event_id = self._event(
             "binary_sensor.bathroom_pir", "on",
-            event_time=1002.0, area="bathroom",
+            event_time=999.7, area="bathroom",
         )
         # Trusted anticipation remains the existing Stage-6 reward path.
         row["prediction_inputs"] = ["binary_sensor.bathroom_pir"]
@@ -190,7 +190,7 @@ class FalseActivationObserverTests(unittest.TestCase):
         row = self._seed("manual-reversal")
         self._event(
             "binary_sensor.hall_motion", "on",
-            event_time=1000.5, area="hall",
+            event_time=999.5, area="hall",
         )
         self._event(
             self.a["target_entity"], "off",
