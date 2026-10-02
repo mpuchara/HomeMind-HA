@@ -787,6 +787,150 @@ class TrustedAutomaticRewardService:
             "the observation window",
         )
 
+    @staticmethod
+    def _is_on_activation(row):
+        if str(row.get("target_property") or "") != "power":
+            return False
+        value = _finite(row.get("action_value"))
+        return value is not None and value >= 0.5
+
+    def _observer_presence_events(self, row):
+        """Return bounded in-RAM local/remote presence-like events for ON diagnostics.
+
+        This path is observer-only. It scans the current in-memory state/registry snapshot
+        once when an action outcome resolves; it never reads history/SQLite and never
+        changes reward or policy state. Latest-event timestamps are still checked against
+        the original observation window so later household activity cannot become evidence.
+        """
+        if not self._is_on_activation(row):
+            return [], []
+        target_area = row.get("area_id")
+        if not target_area:
+            return [], []
+        with self.engine.lock:
+            states = dict(self.engine.state_map)
+            registry = dict(self.engine.entity_registry)
+        latest_events = dict(
+            getattr(self.engine, "_provenance_latest_events", {}) or {}
+        )
+        local = []
+        remote = []
+        for eid, state in states.items():
+            if str(eid) == str(row.get("target_entity") or ""):
+                continue
+            reg = registry.get(eid, {}) or {}
+            kind, _reason = source_kind(eid, state, reg)
+            if kind not in {"binary", "tracker"}:
+                continue
+            source_area = reg.get("area_id")
+            if not source_area or not _active_state(state):
+                continue
+            latest = latest_events.get(eid)
+            if not latest:
+                continue
+            event_time, event_id, origin = latest
+            if not (
+                float(row["observation_start"])
+                <= float(event_time)
+                <= float(row["observation_end"])
+            ):
+                continue
+            detail = {
+                "entity_id": str(eid),
+                "event_id": str(event_id),
+                "origin": str(origin or "unknown"),
+                "reliability": _source_reliability(kind),
+                "area_id": str(source_area),
+                "kind": kind,
+                "event_time": float(event_time),
+            }
+            if str(source_area) == str(target_area):
+                local.append(detail)
+            else:
+                remote.append(detail)
+        key = lambda item: (
+            abs(float(item["event_time"]) - float(row["action_ts"])),
+            item["entity_id"],
+        )
+        local.sort(key=key)
+        remote.sort(key=key)
+        return local, remote
+
+    def _activation_episode(self, row):
+        """Classify an ON action without creating reward evidence.
+
+        A local presence-like event is confirmation. Remote activity without any local
+        confirmation is only a *suspected* false activation: absence of proof is never
+        converted into a negative reward. Explicit exact-target user reversal is upgraded
+        separately to verified_false_activation because that evidence is already trusted
+        by the existing Automatic Correct contract.
+        """
+        if not self._is_on_activation(row):
+            return None
+        local, remote = self._observer_presence_events(row)
+        if local:
+            source = local[0]
+            return {
+                "class": "confirmed_use",
+                "confidence": min(0.95, float(source["reliability"])),
+                "source_entity_id": source["entity_id"],
+                "source_area_id": source["area_id"],
+                "evidence": {
+                    "contract": "false_activation_observer_v1",
+                    "observer_only": True,
+                    "reward_effect": "none",
+                    "local_confirmation": source,
+                    "remote_context": remote[:4],
+                },
+            }
+        if remote:
+            source = remote[0]
+            return {
+                "class": "suspected_false_activation",
+                # Cross-area activity plus missing local confirmation is useful context,
+                # but deliberately capped below the trusted Automatic Correct threshold.
+                "confidence": min(
+                    0.70, 0.70 * float(source["reliability"])
+                ),
+                "source_entity_id": source["entity_id"],
+                "source_area_id": source["area_id"],
+                "evidence": {
+                    "contract": "false_activation_observer_v1",
+                    "observer_only": True,
+                    "reward_effect": "none",
+                    "reason": (
+                        "cross-area presence-like event occurred inside the "
+                        "action window without independent same-area confirmation"
+                    ),
+                    "remote_context": remote[:4],
+                    "local_confirmation": None,
+                },
+            }
+        return {
+            "class": "unknown",
+            "confidence": 0.0,
+            "source_entity_id": None,
+            "source_area_id": None,
+            "evidence": {
+                "contract": "false_activation_observer_v1",
+                "observer_only": True,
+                "reward_effect": "none",
+                "reason": "no independent local or cross-area presence evidence",
+            },
+        }
+
+    @staticmethod
+    def _activation_kwargs(episode):
+        if not episode:
+            return {}
+        return {
+            "activation_class": episode.get("class"),
+            "activation_confidence": episode.get("confidence", 0.0),
+            "activation_source_entity_id": episode.get("source_entity_id"),
+            "activation_source_area_id": episode.get("source_area_id"),
+            "activation_evidence": dict(episode.get("evidence") or {}),
+        }
+
     def _trusted(self, *, reward, confidence, source_reliability):
         return (
             reward is not None
@@ -814,6 +958,7 @@ class TrustedAutomaticRewardService:
             "legacy_reward_components": components,
             "legacy_reason": reason_text,
         }
+        activation = self._activation_episode(row)
 
         if reason_text == "manual correction":
             source = self._latest_target_user_event(
@@ -840,6 +985,28 @@ class TrustedAutomaticRewardService:
                     source_reliability=source["reliability"],
                     reward_sources=["explicit_user_reversal"],
                     metadata=metadata,
+                    **self._activation_kwargs(
+                        {
+                            "class": "verified_false_activation",
+                            "confidence": 1.0,
+                            "source_entity_id": source["entity_id"],
+                            "source_area_id": row.get("area_id"),
+                            "evidence": {
+                                "contract": "false_activation_observer_v1",
+                                "observer_only": True,
+                                "reward_effect": (
+                                    "none_beyond_existing_manual_correction"
+                                ),
+                                "reason": (
+                                    "explicit user reversed the exact controlled "
+                                    "target inside the observation window"
+                                ),
+                                "target_user_event": source,
+                            },
+                        }
+                        if self._is_on_activation(row)
+                        else activation
+                    ),
                 )[0]
             return self.journal.resolve(
                 row["resolution_key"],
@@ -856,6 +1023,7 @@ class TrustedAutomaticRewardService:
                     "was an explicit user action"
                 ),
                 metadata=metadata,
+                **self._activation_kwargs(activation),
             )[0]
 
         if reason_text in {
@@ -891,6 +1059,22 @@ class TrustedAutomaticRewardService:
                     },
                     reward_sources=[source["entity_id"]],
                     metadata=metadata,
+                    **self._activation_kwargs(
+                        {
+                            "class": "confirmed_use",
+                            "confidence": source["reliability"],
+                            "source_entity_id": source["entity_id"],
+                            "source_area_id": source["area_id"],
+                            "evidence": {
+                                "contract": "false_activation_observer_v1",
+                                "observer_only": True,
+                                "reward_effect": "none",
+                                "local_confirmation": source,
+                            },
+                        }
+                        if self._is_on_activation(row)
+                        else activation
+                    ),
                 )[0]
             status = (
                 "rejected"
@@ -910,6 +1094,7 @@ class TrustedAutomaticRewardService:
                 ),
                 unknown_reason=rejected_reason,
                 metadata=metadata,
+                **self._activation_kwargs(activation),
             )[0]
 
         if reason_text == "weak acceptance after settling":
@@ -930,6 +1115,7 @@ class TrustedAutomaticRewardService:
                 ),
                 reward_sources=["absence_of_override_only"],
                 metadata=metadata,
+                **self._activation_kwargs(activation),
             )[0]
 
         return self.journal.resolve(
@@ -946,6 +1132,7 @@ class TrustedAutomaticRewardService:
                 reason_text or "unknown runtime outcome"
             ),
             metadata=metadata,
+            **self._activation_kwargs(activation),
         )[0]
 
     def resolve_experiment(
