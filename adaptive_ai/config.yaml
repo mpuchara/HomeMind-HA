@@ -156,6 +156,7 @@ options:
   tiny_mlp_correct_min_correction_fit: 0.95
   automatic_correct_min_confidence: 0.80
   automatic_correct_min_source_reliability: 0.80
+  false_activation_observer_seconds: 12.0
   offline_rl_min_trusted_samples: 24
   offline_rl_max_trusted_samples: 512
   offline_rl_holdout_fraction: 0.25
@@ -361,6 +362,7 @@ schema:
   tiny_mlp_correct_min_correction_fit: "float(0.0,1.0)"
   automatic_correct_min_confidence: "float(0.0,1.0)"
   automatic_correct_min_source_reliability: "float(0.0,1.0)"
+  false_activation_observer_seconds: "float(2.0,60.0)"
   offline_rl_min_trusted_samples: "int(8,4096)"
   offline_rl_max_trusted_samples: "int(16,8192)"
   offline_rl_holdout_fraction: "float(0.10,0.40)"
