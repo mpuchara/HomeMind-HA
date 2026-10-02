@@ -22,6 +22,7 @@ import threading
 import time
 
 from control import timing_for
+from context import entity_capability_tags
 from home_sources import source_kind
 from observation_space import observation_as_of, select_observation_mask
 from settings import OPTIONS
@@ -855,10 +856,10 @@ class TrustedAutomaticRewardService:
         the original observation window so later household activity cannot become evidence.
         """
         if not self._is_on_activation(row):
-            return [], []
+            return [], [], []
         target_area = row.get("area_id")
         if not target_area:
-            return [], []
+            return [], [], []
         with self.engine.lock:
             states = dict(self.engine.state_map)
             registry = dict(self.engine.entity_registry)
@@ -876,8 +877,23 @@ class TrustedAutomaticRewardService:
                 float(OPTIONS.get("false_activation_observer_seconds", 12.0)),
             ),
         )
+        trigger_device_ids = set()
+        for eid in row.get("prediction_inputs") or []:
+            state = states.get(eid)
+            reg = registry.get(eid, {}) or {}
+            if (
+                state is None
+                or str(reg.get("area_id") or "") != str(target_area)
+                or "activity" not in entity_capability_tags(eid, state)
+            ):
+                continue
+            device_id = reg.get("device_id")
+            if device_id:
+                trigger_device_ids.add(str(device_id))
+
         local = []
         remote = []
+        correlated_local = []
         for eid, state in states.items():
             if str(eid) == str(row.get("target_entity") or ""):
                 continue
@@ -898,17 +914,28 @@ class TrustedAutomaticRewardService:
                 <= observer_end
             ):
                 continue
+            device_id = reg.get("device_id")
             detail = {
                 "entity_id": str(eid),
                 "event_id": str(event_id),
                 "origin": str(origin or "unknown"),
                 "reliability": _source_reliability(kind),
                 "area_id": str(source_area),
+                "device_id": device_id,
                 "kind": kind,
                 "event_time": float(event_time),
             }
             if str(source_area) == str(target_area):
-                local.append(detail)
+                if (
+                    device_id
+                    and str(device_id) in trigger_device_ids
+                ):
+                    detail["rejected_reason"] = (
+                        "same physical device as local activity trigger"
+                    )
+                    correlated_local.append(detail)
+                else:
+                    local.append(detail)
             else:
                 remote.append(detail)
         key = lambda item: (
@@ -917,7 +944,8 @@ class TrustedAutomaticRewardService:
         )
         local.sort(key=key)
         remote.sort(key=key)
-        return local, remote
+        correlated_local.sort(key=key)
+        return local, remote, correlated_local
 
     def _activation_episode(self, row):
         """Classify an ON action without creating reward evidence.
@@ -930,7 +958,7 @@ class TrustedAutomaticRewardService:
         """
         if not self._is_on_activation(row):
             return None
-        local, remote = self._observer_presence_events(row)
+        local, remote, correlated_local = self._observer_presence_events(row)
         if local:
             source = local[0]
             return {
@@ -944,6 +972,7 @@ class TrustedAutomaticRewardService:
                     "reward_effect": "none",
                     "local_confirmation": source,
                     "remote_context": remote[:4],
+                    "correlated_local_rejected": correlated_local[:4],
                 },
             }
         if remote:
@@ -967,6 +996,7 @@ class TrustedAutomaticRewardService:
                     ),
                     "remote_context": remote[:4],
                     "local_confirmation": None,
+                    "correlated_local_rejected": correlated_local[:4],
                 },
             }
         return {
@@ -979,6 +1009,7 @@ class TrustedAutomaticRewardService:
                 "observer_only": True,
                 "reward_effect": "none",
                 "reason": "no independent local or cross-area presence evidence",
+                "correlated_local_rejected": correlated_local[:4],
             },
         }
 
