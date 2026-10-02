@@ -311,7 +311,7 @@ def entity_capability_tags(entity_id, state):
         "move target", "still target distance", "stationary target distance",
         "moving target distance", "move target distance",
     )
-    if any(x in text for x in activity_terms) and "distance" not in text:
+    if any(x in text for x in activity_terms):
         caps.add("activity")
     if "illuminance" in text or "lux" in text or unit == "lx": caps.add("illuminance")
     if domain == "sun" or "sun elevation" in text or "solar elevation" in text: caps.add("sun")
@@ -699,7 +699,7 @@ def select_context_entities(agent, state_map, registry, hint_entities, max_entit
         causal_ranked = [
             x for x in ranked
             if (is_discrete_occupancy_entity(x[1], state_map.get(x[1]))
-                or x[3].get("activity"))
+                or (x[3].get("activity") and "distance" not in x[1].lower()))
             and float((relevance_scores or {}).get(x[1], 0.0)) >= causal_min
         ]
         causal_ranked.sort(key=lambda x: (-float((relevance_scores or {}).get(x[1], 0.0)), -x[0], x[1]))
@@ -797,7 +797,7 @@ def select_context_entities(agent, state_map, registry, hint_entities, max_entit
     behavioural_selected = [
         x for x in ranked if x[1] in selected_set
         and (is_discrete_occupancy_entity(x[1], state_map.get(x[1]))
-             or x[3].get("activity"))
+             or (x[3].get("activity") and "distance" not in x[1].lower()))
     ]
     behavioural_selected.sort(key=lambda x: (-float((relevance_scores or {}).get(x[1], 0.0)), -x[0], x[1]))
     behavioural_scores = {
