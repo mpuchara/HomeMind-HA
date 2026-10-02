@@ -153,7 +153,7 @@ jobs:
           PY
   package:
     needs: tests
-    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/fix/014124-bathroom-historical-causality')
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || (github.ref == 'refs/heads/fix/014124-bathroom-historical-causality' || github.ref == 'refs/heads/fix/014125-immutable-model-debug'))
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -221,7 +221,7 @@ jobs:
       - name: Upload install packages
         uses: actions/upload-artifact@v4
         with:
-          name: HomeMind-Adaptive-AI-${{ github.ref == 'refs/heads/main' && 'main' || 'bathroom-0.14.124' }}
+          name: HomeMind-Adaptive-AI-${{ github.ref == 'refs/heads/main' && 'main' || github.ref == 'refs/heads/fix/014125-immutable-model-debug' && '0.14.125-diagnostics' || 'bathroom-0.14.124' }}
           path: |
             HomeMind-Adaptive-AI-repository.zip
             HomeMind-Adaptive-AI-addon-root.zip
