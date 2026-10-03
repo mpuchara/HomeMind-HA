@@ -15,7 +15,7 @@ try:
 except Exception:
     ws_connect = None
 
-APP_VERSION = "0.14.124"
+APP_VERSION = "0.14.126"
 HISTORY_BOOTSTRAP_REVISION = "target-attrs-v2"
 TRAINING_REVISION = "shared-home-intents-v19"
 DATA_DIR = Path(os.environ.get("ADAPTIVE_AI_DATA", "/data"))
@@ -199,9 +199,9 @@ DEFAULT_OPTIONS = {
     # performs no policy update from reward experiences.
     "automatic_correct_min_confidence": 0.80,
     "automatic_correct_min_source_reliability": 0.80,
-    # Observer-only false-activation context window. It is intentionally much shorter
+    # Observer-only false-activation context window. Kept intentionally much shorter
     # than the 90 s reward window so unrelated later household motion is not attributed
-    # to the original light activation.
+    # to the original fast-light activation.
     "false_activation_observer_seconds": 12.0,
     # Stage-7 conservative Offline RL. Trusted Stage-6 rows are the only reward input.
     "offline_rl_min_trusted_samples": 24,
