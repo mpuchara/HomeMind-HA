@@ -171,7 +171,15 @@ function observationSelection(a){
   const shown=rows.map(x=>`${esc(x.name||x.id)} [${Number(x.score||0).toFixed(1)}; ${esc((x.selection_reason||[]).join(', ')||'selected')}]`).join(' · ');
   return `<div class="context-list"><b>Stage-2 observation space:</b> ${num(o.selected_feature_count||0)}/${num(o.global_feature_count||0)} selected · ${num(o.missing_feature_count||0)} missing<br><b>Schema:</b> ${esc(o.schema_id||'—')}<br><b>Mask:</b> ${esc(o.mask_id||'—')}<br><b>Selected features:</b> ${shown||'—'}${(o.features||[]).length>12?' …':''}</div>`;
 }
-function displayValue(a,v){if(v==null)return '—';if(a.target_property==='power')return Number(v)>=.5?'ON':'OFF';if(a.target_property==='option_index'&&a.runtime?.last_prediction_label&&Number(v)===Number(a.runtime?.last_prediction))return esc(a.runtime.last_prediction_label);return Number(v).toFixed(1);}
+function binaryStateDisplay(a){
+  const property=String(a?.target_property||'');
+  if(property==='power')return true;
+  if(property!=='brightness_pct')return false;
+  const rt=a?.runtime||{};
+  const values=[rt.current_value,rt.last_prediction].filter(v=>v!=null&&Number.isFinite(Number(v)));
+  return values.length>0&&values.every(v=>{const n=Number(v);return n<=.5||n>=99.5;});
+}
+function displayValue(a,v){if(v==null)return '—';if(binaryStateDisplay(a))return Number(v)>=.5?'ON':'OFF';if(a.target_property==='option_index'&&a.runtime?.last_prediction_label&&Number(v)===Number(a.runtime?.last_prediction))return esc(a.runtime.last_prediction_label);return Number(v).toFixed(1);}
 function prediction(a){const rt=a.runtime||{};if(rt.last_prediction_label)return esc(rt.last_prediction_label);return displayValue(a,rt.last_prediction);}
 function currentValue(a){return displayValue(a,a.runtime?.current_value);}
 function sortedFilteredAgents(){
