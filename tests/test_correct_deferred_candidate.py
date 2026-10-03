@@ -90,6 +90,19 @@ class CorrectDeferredCandidateTests(unittest.TestCase):
         self.insert_label(102, fingerprint="other")
         self.assertEqual(self.counts(), {"correct_labels_total": 1, "correct_labels_pending": 1})
 
+    def test_candidate_inherited_parent_labels_are_not_new_points(self):
+        self.generation = {
+            "generation_id": "candidate:g1",
+            "generation_type": "candidate",
+            "created_ts": 150,
+        }
+        self.insert_label(100)  # Inherited from parent when Candidate was created
+        self.insert_label(160)  # Explicitly collected on this Candidate
+        self.assertEqual(
+            self.counts(),
+            {"correct_labels_total": 2, "correct_labels_pending": 1},
+        )
+
     def test_correct_ui_never_dispatches_candidate_from_point_save(self):
         source = (STATIC / "agent_workflow_ui.js").read_text(encoding="utf-8")
         candidate = (STATIC / "candidate_ui.js").read_text(encoding="utf-8")
