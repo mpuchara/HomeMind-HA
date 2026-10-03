@@ -1064,6 +1064,20 @@ def install(core, manager):
     def start_build(row):
         reason = str(row.get("reason") or "")
         if reason in conservative._CORRECT_REASONS:
+            # A Candidate cannot repair an obsolete Live feature contract by
+            # rebuilding itself against newly selected inputs. The old labels and
+            # root policy are kept, but Live must receive an explicit historical
+            # Train/Rebuild first. Otherwise the child can become an all-ON model
+            # with no same-schema OFF benchmark (bathroom regression).
+            parent_model = manager.store.get_model(str(row.get("parent_agent_id") or ""))
+            if parent_model is not None and not _stable_model_schema_compatible(parent_model):
+                manager._fail(
+                    row,
+                    "Live policy feature schema is incompatible with this release. "
+                    "Train/Rebuild the Live agent before running Correct again; "
+                    "existing Correct labels are retained.",
+                )
+                return True
             raw_model = manager.store.get_model(str(row.get("candidate_id") or ""))
             if raw_model is not None and not _stable_model_schema_compatible(raw_model):
                 now = time.time()

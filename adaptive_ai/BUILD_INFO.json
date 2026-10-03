@@ -1,10 +1,22 @@
 {
-  "version": "0.14.126",
+  "version": "0.14.127",
   "release_date": "2026-10-03",
-  "base_version": "0.14.125",
-  "base_commit": "553c5b94c1eade271152c5b41acbbb7d442387b3",
-  "release_status": "deferred-correct-candidate-build",
-  "release_validation_tests_passed": 1551,
+  "base_version": "0.14.126",
+  "base_commit": "e6b11b0d905445e1bdea84e5d8fa6b0176410daf",
+  "release_status": "integrated-open-rcs-causal-fast-replay-immutable-snapshots",
+  "release_validation_tests_passed": 1574,
+  "release_014127": {
+    "scope": "integrate_open_prs_235_236_239_on_top_of_014126",
+    "fast_replay": "paired Home Assistant numeric_state ON/OFF thresholds become bounded historical anchors for fast binary agents, including hold times",
+    "occupancy_guard": "numeric distance/energy telemetry is no longer treated as a boolean occupancy transition clock",
+    "correct_guard": "Correct refuses to build a child from an obsolete Live feature schema; labels are retained until explicit Live Train/Rebuild",
+    "immutable_snapshot": "cold policy construction copies mutable numeric arrays so read-only prediction/decay cannot mutate decoded persisted model snapshots",
+    "diagnostics": "Correct debug export audits automation raw-source area/admission metadata without granting occupancy authority",
+    "qualification": "automation-backed fast targets require the frozen holdout gate during qualification",
+    "release_workflow": "install package publishing now waits for the full test matrix and includes fast_automation_replay.py in package verification",
+    "physical_control": "unchanged by these integration fixes",
+    "validation": "1574 unit/regression tests on the integrated suite; Python 3.11/3.13, image smoke and benchmark pipeline are the release gate"
+  },
   "release_014126": {
     "scope": "deferred_correct_collection_and_explicit_candidate_build",
     "correct_collection": "saving Correct points is persistence-only and never starts Candidate training",
