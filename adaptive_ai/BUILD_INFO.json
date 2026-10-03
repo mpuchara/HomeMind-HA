@@ -1,10 +1,18 @@
 {
-  "version": "0.14.124",
+  "version": "0.14.125",
   "release_date": "2026-10-03",
-  "base_version": "0.14.123",
-  "base_commit": "ddd79b4faabd06096ce912985a959245f167fae3",
-  "release_status": "false-activation-observer-suppressor-context",
+  "base_version": "0.14.124",
+  "base_commit": "b834cf9398ccab833d0169882a947d50b8485598",
+  "release_status": "binary-light-state-labels",
   "release_validation_tests_passed": 1546,
+  "release_014125": {
+    "scope": "binary_light_state_labels",
+    "live_ui": "brightness_pct agents display OFF/ON only when all currently observed Current/Desired values are endpoint states (0/100)",
+    "continuous_guard": "any intermediate brightness keeps the numeric display so genuine dimming is never hidden",
+    "candidate_ui": "Candidate Current/Desired tiles use the same endpoint-only binary rule",
+    "runtime_semantics": "no RL, reward, training, action selection, Executor, Home Assistant service or physical-control behavior changed",
+    "regression": "frontend test covers an IKEA-style brightness_pct agent and verifies both binary endpoint labels and intermediate numeric brightness"
+  },
   "release_014124": {
     "scope": "observer_only_false_activation_and_suppressor_feature_context",
     "observer": "for ON power actions, classify independent local confirmation, cross-area suspected false activation, explicit-user verified false activation, or unknown from bounded in-RAM provenance",
