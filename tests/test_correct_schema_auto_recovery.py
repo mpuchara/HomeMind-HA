@@ -1,4 +1,6 @@
 """Regression coverage for one-click Correct schema recovery."""
+import sqlite3
+import threading
 import unittest
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
@@ -16,6 +18,20 @@ class FakeStore:
     def __init__(self, model):
         self.model = model
         self.event = Mock()
+        self.lock = threading.RLock()
+        self._conn = sqlite3.connect(":memory:")
+        self._conn.row_factory = sqlite3.Row
+        self._conn.execute(
+            """CREATE TABLE agent_correct_operations (
+               operation_id TEXT PRIMARY KEY,
+               candidate_id TEXT,
+               status TEXT NOT NULL,
+               detail_json TEXT NOT NULL DEFAULT '{}'
+            )"""
+        )
+
+    def conn(self):
+        return self._conn
 
     def get_model(self, agent_id):
         return self.model
@@ -76,6 +92,14 @@ class CorrectSchemaAutoRecoveryTests(unittest.TestCase):
             "last_error": LIVE_SCHEMA_INCOMPATIBLE + " Train/Rebuild Live first.",
         }
         manager, queue = self.manager({"legacy": True}, candidate=failed)
+        with manager.store.conn() as c:
+            c.execute(
+                """INSERT INTO agent_correct_operations
+                   (operation_id,candidate_id,status,detail_json)
+                   VALUES(?,?,?,?)""",
+                ("old-request", "candidate-1", "committed", "{}"),
+            )
+        failed["candidate_id"] = "candidate-1"
         with patch("agent_workflow_actions._live_schema_compatible", return_value=False):
             result = _live_schema_recovery(
                 manager, self.generation(), self.agent()
@@ -90,7 +114,14 @@ class CorrectSchemaAutoRecoveryTests(unittest.TestCase):
             queue.enqueued[0]["rebuild_reason"],
             "incompatible_persisted_model",
         )
-        manager.store.event.assert_called_once()
+        self.assertGreaterEqual(manager.store.event.call_count, 2)
+        with manager.store.conn() as c:
+            operation = c.execute(
+                "SELECT status,detail_json FROM agent_correct_operations WHERE operation_id=?",
+                ("old-request",),
+            ).fetchone()
+        self.assertEqual(operation["status"], "failed")
+        self.assertIn("reopened_for_schema_recovery", operation["detail_json"])
 
     def test_request_waits_while_rebuild_has_temporarily_cleared_live_model(self):
         active = {
