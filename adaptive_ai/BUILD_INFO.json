@@ -1,22 +1,27 @@
 {
-  "version": "0.14.124",
+  "version": "0.14.126",
   "release_date": "2026-10-03",
-  "base_version": "0.14.123",
-  "base_commit": "ddd79b4faabd06096ce912985a959245f167fae3",
-  "release_status": "false-activation-observer-suppressor-context",
-  "release_validation_tests_passed": 1546,
-  "release_014124": {
-    "scope": "observer_only_false_activation_and_suppressor_feature_context",
-    "observer": "for ON power actions, classify independent local confirmation, cross-area suspected false activation, explicit-user verified false activation, or unknown from bounded in-RAM provenance",
-    "causal_window": "up to 4 seconds before the action and 12 seconds after it; the existing Automatic Correct reward window remains unchanged",
-    "independence_guard": "same-device radar/presence channels cannot confirm a local raw activity trigger from that physical device",
-    "reward_contract": "suspected and unknown episodes never create trusted reward; explicit exact-target user reversal keeps the existing trusted negative reward path",
-    "suppressor_selection": "durable cross-area evidence is bounded to the latest 512 episodes; repeated suspected evidence or one verified episode may trigger schema rescreen and enter future feature relevance without direct OFF training",
-    "rebuild_contract": "only fast agents with wildcard context and a strong missing suppressor drop the preserved schema seed; ordinary rebuilds retain the previous bounded schema path",
-    "runtime_cost": "observer scans current in-memory states and latest provenance only at outcome resolution; no history replay or policy update is added to realtime inference",
-    "ui": "Automatic Correct diagnostics expose confirmed, suspected, verified and unknown activation episodes and explicitly label observer evidence as no-reward",
+  "base_version": "0.14.125",
+  "base_commit": "33e73b5b7a51e062049bf9bd93a605c713db9b61",
+  "release_status": "014125-plus-false-activation-suppressor-context",
+  "release_validation_tests_passed": 0,
+  "release_014126": {
+    "scope": "combine_014125_immutable_snapshot_and_radar_audit_with_false_activation_observer",
+    "inherits_014125": "preserves immutable persisted policy snapshots and read-only automation_source_audit for HA radar/area diagnosis",
+    "observer": "fast binary ON episodes are classified as confirmed_use, suspected_false_activation, verified_false_activation, or unknown using bounded in-RAM provenance",
+    "causal_window": "up to 4 seconds before the action and 12 seconds after it; existing Automatic Correct reward timing remains unchanged",
+    "independence_guard": "same physical radar/device cannot confirm its own raw activity trigger through a sibling presence channel",
+    "reward_contract": "suspected/unknown episodes never create trusted reward or direct OFF updates; explicit exact-target user reversal remains authoritative",
+    "suppressor_selection": "bounded cross-area evidence may raise feature relevance and request a broad schema re-screen on explicit Rebuild without directly mutating policy",
+    "runtime_cost": "no history replay or synchronous SQLite scan is added to realtime inference; observer work happens at outcome resolution from current RAM state/provenance",
     "physical_control": "unchanged",
-    "validation": "1546 tests on the expanded suite plus Python 3.11/3.13, image smoke and full benchmark gate are required green for merge"
+    "validation": "pending branch CI on Python 3.11/3.13, image smoke and full benchmark gate"
+  },
+  "release_014125": {
+    "scope": "immutable_model_snapshot_and_roombelief_source_diagnostic",
+    "fix": "copy persisted policy numeric arrays on cold construction so lazy decay/prediction cannot mutate decoded durable snapshots",
+    "diagnostic": "add bounded read-only automation_source_audit to distinguish unmapped/different-area/nonadmitted HA radar sources without assigning occupancy authority",
+    "physical_control": "unchanged"
   },
   "release_014123": {
     "scope": "persistent_continuation_history_mutation_guard",
@@ -1216,5 +1221,20 @@
     "fallback": "restart, scope changes, uncovered or non-monotonic windows keep the existing SQLite stateful_continuation_seed_rows path",
     "semantics": "no reward, feature, validation, policy-update order, Correct, Candidate, ActionIntent, Executor or physical-control semantics changed",
     "validation": "1531 tests green on Python 3.11 and 3.13; image build/smoke green; stateful continuation parity benchmark, persistent-worker gates and Stage 18 product runtime green"
+  },
+  "release_014124": {
+    "scope": "numeric_threshold_replay_and_frozen_validation_for_fast_automation_lights",
+    "causal_driver": "continuous distance and radar activity remain features; only discrete occupancy or explicit numeric automation edges can mark historical ON/OFF",
+    "historical_hold": "replay ON > threshold and OFF < threshold for required number of seconds",
+    "correct_safety": "legacy parent model requires explicit Live retrain before Candidate Correct",
+    "model_compatibility": "older persisted model revisions remain untouched; explicit agent Train/Rebuild required if incompatible",
+    "package": "full repository and addon-root ZIPs after CI succeeds"
+  },
+  "release_014125": {
+    "scope": "correct-diagnostic-immutable-model-and-room-source-audit",
+    "fix": "DiagonalLinUCB copies loaded mutable weight arrays to prevent prediction/lazy decay modifying the persisted JSON snapshot and invalidating its checksum",
+    "room_context": "Diagnostics report status and actual HA area of automation radar without changing RoomBelief's source mapping or perception behavior",
+    "migration": "No changed model/schema versions, database or hardware dispatch semantics; automatic control unchanged",
+    "tests": "Checksum-preservation, independent reconstructed models, missing-area and different-area source audit; full CI to be evaluated"
   }
 }
