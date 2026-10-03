@@ -1,10 +1,28 @@
 {
-  "version": "0.14.125",
-  "release_date": "2026-10-02",
-  "base_version": "0.14.124",
-  "base_commit": "daad7ed4700f152e3f0fae768faf49a18d5358a5",
-  "release_status": "immutable-model-snapshot-and-roombelief-source-diagnostic",
+  "version": "0.14.126",
+  "release_date": "2026-10-03",
+  "base_version": "0.14.125",
+  "base_commit": "33e73b5b7a51e062049bf9bd93a605c713db9b61",
+  "release_status": "014125-plus-false-activation-suppressor-context",
   "release_validation_tests_passed": 0,
+  "release_014126": {
+    "scope": "combine_014125_immutable_snapshot_and_radar_audit_with_false_activation_observer",
+    "inherits_014125": "preserves immutable persisted policy snapshots and read-only automation_source_audit for HA radar/area diagnosis",
+    "observer": "fast binary ON episodes are classified as confirmed_use, suspected_false_activation, verified_false_activation, or unknown using bounded in-RAM provenance",
+    "causal_window": "up to 4 seconds before the action and 12 seconds after it; existing Automatic Correct reward timing remains unchanged",
+    "independence_guard": "same physical radar/device cannot confirm its own raw activity trigger through a sibling presence channel",
+    "reward_contract": "suspected/unknown episodes never create trusted reward or direct OFF updates; explicit exact-target user reversal remains authoritative",
+    "suppressor_selection": "bounded cross-area evidence may raise feature relevance and request a broad schema re-screen on explicit Rebuild without directly mutating policy",
+    "runtime_cost": "no history replay or synchronous SQLite scan is added to realtime inference; observer work happens at outcome resolution from current RAM state/provenance",
+    "physical_control": "unchanged",
+    "validation": "pending branch CI on Python 3.11/3.13, image smoke and full benchmark gate"
+  },
+  "release_014125": {
+    "scope": "immutable_model_snapshot_and_roombelief_source_diagnostic",
+    "fix": "copy persisted policy numeric arrays on cold construction so lazy decay/prediction cannot mutate decoded durable snapshots",
+    "diagnostic": "add bounded read-only automation_source_audit to distinguish unmapped/different-area/nonadmitted HA radar sources without assigning occupancy authority",
+    "physical_control": "unchanged"
+  },
   "release_014123": {
     "scope": "persistent_continuation_history_mutation_guard",
     "root_cause": "0.14.122 continuation cache keyed scope and overlap timestamps but not the entity_history revision that produced the seed",
