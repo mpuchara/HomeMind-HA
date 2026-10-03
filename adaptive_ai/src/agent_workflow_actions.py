@@ -41,6 +41,7 @@ OBSERVED_STALE_SECONDS = 95.0
 CORRECT_REASON = "teach_train"
 CHANGE_REASON = "wrong_decision"
 AUTONOMOUS_REASON = "autonomous"
+LIVE_SCHEMA_INCOMPATIBLE = "Live policy feature schema is incompatible with this release."
 
 
 def ensure_workflow_tables(store):
@@ -386,6 +387,102 @@ def _correct_label_counts(manager, generation, agent):
     }
 
 
+def _live_schema_compatible(raw_model):
+    if raw_model is None:
+        return False
+    # Local import avoids coupling startup/install order. The compatibility predicate is
+    # pure and checks checksum + current policy/schema semantics.
+    from correct_schema_evolution import _stable_model_schema_compatible
+    return bool(_stable_model_schema_compatible(raw_model))
+
+
+def _live_schema_recovery(manager, generation, agent):
+    """Return a durable defer result while an obsolete Live schema is rebuilt.
+
+    Correct labels use a target-only fingerprint, so changing the mutable input schema
+    does not invalidate or rewrite saved user supervision.
+    """
+    if str(generation.get("generation_type") or "") != "live":
+        return None
+    agent_id = str(agent["id"])
+    queue = manager._queue()
+    queue_status = queue.status_for(agent_id) if queue is not None else None
+    raw_model = manager.store.get_model(agent_id)
+
+    if raw_model is not None and _live_schema_compatible(raw_model):
+        return None
+
+    # During the rebuild HistoryManager intentionally clears the old model first. Keep
+    # this same durable Correct request waiting instead of turning that transient gap into
+    # a terminal "Generation has no usable model" failure.
+    if raw_model is None:
+        if queue_status:
+            return {
+                "ok": True,
+                "deferred": True,
+                "phase": "rebuilding_live_schema",
+                "retry_seconds": 1.0,
+                "root_agent_id": agent_id,
+                "training_queue": queue_status,
+                "message": "Live schema rebuild is still running; Correct points are retained.",
+            }
+        return None
+
+    # We have a persisted model, but it is from an older semantic feature contract.
+    # A previous release may already have created a child and failed it on this exact
+    # guard. That failed surrogate is safe to retire: it never became promotable and all
+    # authoritative Correct labels live on the root agent.
+    existing = manager._candidate_row(agent_id)
+    if existing:
+        state = str(existing.get("state") or "")
+        error = str(existing.get("last_error") or "")
+        if state == "failed" and LIVE_SCHEMA_INCOMPATIBLE in error:
+            discarded = manager.discard(agent_id)
+            if not bool((discarded or {}).get("discarded")):
+                return {
+                    "ok": True,
+                    "deferred": True,
+                    "phase": "discarding_incompatible_candidate",
+                    "retry_seconds": 1.0,
+                    "root_agent_id": agent_id,
+                    "message": "Retiring the failed incompatible Candidate before rebuilding Live.",
+                }
+        else:
+            raise ValueError(
+                "Resolve the current Candidate before repairing the Live feature schema"
+            )
+
+    if queue is None:
+        raise RuntimeError("Training queue is unavailable for Live schema recovery")
+
+    queue_status = queue.status_for(agent_id)
+    if not queue_status:
+        queue_status = queue.enqueue(
+            agent_id,
+            rebuild=True,
+            reason="full_rebuild",
+            rebuild_reason="incompatible_persisted_model",
+        )
+        manager.store.event(
+            agent_id, "warning", "correct_live_schema_rebuild_queued",
+            "Create Candidate queued an explicit Live rebuild because the persisted feature schema is obsolete",
+            {
+                "generation_id": generation.get("generation_id"),
+                "correct_labels_retained": True,
+                "rebuild_reason": "incompatible_persisted_model",
+            },
+        )
+    return {
+        "ok": True,
+        "deferred": True,
+        "phase": "rebuilding_live_schema",
+        "retry_seconds": 1.0,
+        "root_agent_id": agent_id,
+        "training_queue": queue_status,
+        "message": "Rebuilding Live under the current feature schema; Correct points are retained.",
+    }
+
+
 def _store_correct_label(manager, generation, agent, desired, sample_ts):
     point = _correct_point(manager, generation, agent, sample_ts)
     if point.get("desired") is None:
@@ -549,6 +646,10 @@ def install(manager):
         state_map, _, current = _current_snapshot(manager, agent)
         predicted, confidence = _latest_prediction(manager, generation, agent)
         meta = model_metadata(manager.store.get_model(agent["id"]))
+        root_model = manager.store.get_model(str(generation["root_agent_id"]))
+        live_schema_compatible = (
+            _live_schema_compatible(root_model) if root_model is not None else None
+        )
         return {
             "root_agent_id": generation["root_agent_id"],
             "generation_id": generation["generation_id"],
@@ -561,6 +662,8 @@ def install(manager):
             "model_revision": meta.get("model_revision"), "schema_revision": meta.get("schema_revision"),
             "settings_editable": generation.get("generation_type") == "live",
             "state_entities": len(state_map),
+            "live_schema_compatible": live_schema_compatible,
+            "live_schema_repair_required": live_schema_compatible is False,
             **_correct_label_counts(manager, generation, agent),
         }
 
@@ -572,7 +675,24 @@ def install(manager):
         )
 
     def workflow_correct_commit(ref, request_id=None):
+        # Resolve the Live identity without requiring a model first. A schema-recovery
+        # rebuild clears the obsolete model while it trains; the durable request must
+        # survive that interval and resume automatically when the new model is ready.
+        generation_hint = (
+            lineage_row(manager.store, generation_id=str(ref))
+            or lineage_row(manager.store, agent_id=str(ref))
+        )
+        if generation_hint and generation_hint.get("generation_type") == "live":
+            agent_hint = manager.store.get_agent_config(str(generation_hint.get("agent_id") or ""))
+            if agent_hint:
+                recovery = _live_schema_recovery(manager, generation_hint, agent_hint)
+                if recovery:
+                    return recovery
+
         generation, agent = _resolve_generation(manager, ref)
+        recovery = _live_schema_recovery(manager, generation, agent)
+        if recovery:
+            return recovery
         fp = rl_fingerprint(agent)
         operation_id = str(request_id or uuid.uuid4())
         now = time.time()
