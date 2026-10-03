@@ -112,6 +112,10 @@ class CorrectDeferredCandidateTests(unittest.TestCase):
         self.assertIn("post(ref,'correct-label'", source)
         self.assertNotIn("data-apply", source)
         self.assertIn("pendingRequest(key)", source)
+        self.assertIn("Repair & Create Candidate", candidate)
+        self.assertIn("createRef=schemaRecovery?(c.root_agent_id||c.parent_agent_id):ref", candidate)
+        self.assertIn("live_schema_repair_required", source)
+        self.assertIn("Naprawiam Live…", source)
 
 
 if __name__ == "__main__":
