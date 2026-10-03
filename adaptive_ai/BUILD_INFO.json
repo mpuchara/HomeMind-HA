@@ -23,6 +23,19 @@
     "diagnostic": "add bounded read-only automation_source_audit to distinguish unmapped/different-area/nonadmitted HA radar sources without assigning occupancy authority",
     "physical_control": "unchanged"
   },
+  "release_014124": {
+    "scope": "observer_only_false_activation_and_suppressor_feature_context",
+    "observer": "for ON power actions, classify independent local confirmation, cross-area suspected false activation, explicit-user verified false activation, or unknown from bounded in-RAM provenance",
+    "causal_window": "up to 4 seconds before the action and 12 seconds after it; the existing Automatic Correct reward window remains unchanged",
+    "independence_guard": "same-device radar/presence channels cannot confirm a local raw activity trigger from that physical device",
+    "reward_contract": "suspected and unknown episodes never create trusted reward; explicit exact-target user reversal keeps the existing trusted negative reward path",
+    "suppressor_selection": "durable cross-area evidence is bounded to the latest 512 episodes; repeated suspected evidence or one verified episode may trigger schema rescreen and enter future feature relevance without direct OFF training",
+    "rebuild_contract": "only fast agents with wildcard context and a strong missing suppressor drop the preserved schema seed; ordinary rebuilds retain the previous bounded schema path",
+    "runtime_cost": "observer scans current in-memory states and latest provenance only at outcome resolution; no history replay or policy update is added to realtime inference",
+    "ui": "Automatic Correct diagnostics expose confirmed, suspected, verified and unknown activation episodes and explicitly label observer evidence as no-reward",
+    "physical_control": "unchanged",
+    "validation": "1546 tests on the expanded suite plus Python 3.11/3.13, image smoke and full benchmark gate are required green for merge"
+  },
   "release_014123": {
     "scope": "persistent_continuation_history_mutation_guard",
     "root_cause": "0.14.122 continuation cache keyed scope and overlap timestamps but not the entity_history revision that produced the seed",
@@ -1221,20 +1234,5 @@
     "fallback": "restart, scope changes, uncovered or non-monotonic windows keep the existing SQLite stateful_continuation_seed_rows path",
     "semantics": "no reward, feature, validation, policy-update order, Correct, Candidate, ActionIntent, Executor or physical-control semantics changed",
     "validation": "1531 tests green on Python 3.11 and 3.13; image build/smoke green; stateful continuation parity benchmark, persistent-worker gates and Stage 18 product runtime green"
-  },
-  "release_014124": {
-    "scope": "numeric_threshold_replay_and_frozen_validation_for_fast_automation_lights",
-    "causal_driver": "continuous distance and radar activity remain features; only discrete occupancy or explicit numeric automation edges can mark historical ON/OFF",
-    "historical_hold": "replay ON > threshold and OFF < threshold for required number of seconds",
-    "correct_safety": "legacy parent model requires explicit Live retrain before Candidate Correct",
-    "model_compatibility": "older persisted model revisions remain untouched; explicit agent Train/Rebuild required if incompatible",
-    "package": "full repository and addon-root ZIPs after CI succeeds"
-  },
-  "release_014125": {
-    "scope": "correct-diagnostic-immutable-model-and-room-source-audit",
-    "fix": "DiagonalLinUCB copies loaded mutable weight arrays to prevent prediction/lazy decay modifying the persisted JSON snapshot and invalidating its checksum",
-    "room_context": "Diagnostics report status and actual HA area of automation radar without changing RoomBelief's source mapping or perception behavior",
-    "migration": "No changed model/schema versions, database or hardware dispatch semantics; automatic control unchanged",
-    "tests": "Checksum-preservation, independent reconstructed models, missing-area and different-area source audit; full CI to be evaluated"
   }
 }
