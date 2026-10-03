@@ -347,6 +347,39 @@ def _correct_history(manager, generation, agent, start, end):
     return history
 
 
+def _correct_label_counts(manager, generation, agent):
+    """Read-only Correct inventory for the selected direct-parent generation.
+
+    A Correct point never starts a build. Only points committed after the most
+    recent successful Correct operation count as newly pending for a build.
+    The full active label set remains available to cumulative Candidate learning.
+    """
+    fp = rl_fingerprint(agent)
+    with manager.store.conn() as c:
+        previous = c.execute(
+            """SELECT committed_ts FROM agent_correct_operations
+               WHERE parent_generation_id=? AND status='committed'
+               ORDER BY committed_ts DESC,created_ts DESC LIMIT 1""",
+            (str(generation["generation_id"]),),
+        ).fetchone()
+        cutoff = (
+            float(previous["committed_ts"])
+            if previous and previous["committed_ts"] is not None else None
+        )
+        counts = c.execute(
+            """SELECT COUNT(*) AS total,
+                      COALESCE(SUM(CASE WHEN ? IS NULL OR created_ts>?
+                                        THEN 1 ELSE 0 END), 0) AS pending
+               FROM teaching_rl_labels
+               WHERE agent_id=? AND fingerprint=? AND undone_ts IS NULL""",
+            (cutoff, cutoff, str(agent["id"]), fp),
+        ).fetchone()
+    return {
+        "correct_labels_total": int(counts["total"]),
+        "correct_labels_pending": int(counts["pending"]),
+    }
+
+
 def _store_correct_label(manager, generation, agent, desired, sample_ts):
     point = _correct_point(manager, generation, agent, sample_ts)
     if point.get("desired") is None:
@@ -522,6 +555,7 @@ def install(manager):
             "model_revision": meta.get("model_revision"), "schema_revision": meta.get("schema_revision"),
             "settings_editable": generation.get("generation_type") == "live",
             "state_entities": len(state_map),
+            **_correct_label_counts(manager, generation, agent),
         }
 
     def workflow_autonomous(ref):
