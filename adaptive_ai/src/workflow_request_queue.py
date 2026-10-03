@@ -17,7 +17,7 @@ import uuid
 from urllib.parse import unquote, urlsplit
 
 
-CONTRACT_VERSION = 1
+CONTRACT_VERSION = 2
 ACTION_CORRECT = "correct"
 STATE_ACCEPTED = "accepted"
 STATE_PROCESSING = "processing"
@@ -327,5 +327,5 @@ def install(manager, *, start_worker=True):
         "correct_commit_is_durable_idempotent_202_then_async_candidate_orchestration_"
         "with_waiting_live_schema_recovery"
     )
-    manager.workflow_request_contract_version = CONTRACT_VERSION + 1
+    manager.workflow_request_contract_version = CONTRACT_VERSION
     return manager
