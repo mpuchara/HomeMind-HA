@@ -147,7 +147,7 @@ function sensorRecommendations(a){const recs=a.runtime?.sensor_recommendations||
 function contextInfluence(a){const xs=a.runtime?.top_context||[];if(!xs.length)return 'Not enough rewarded history to rank context yet.';return xs.map(x=>`${esc(x.feature)} (${Number(x.contribution)>=0?'+':''}${Number(x.contribution).toFixed(2)})`).join(' · ');}
 function automationPrior(a){const xs=a.runtime?.automation_priors||[];if(!xs.length)return `<span class="muted">No automation targeting this entity was found.</span>`;return xs.map(x=>`<span class="prior-chip" title="${x.context_count||0} context entities">${esc(x.name||x.entity_id)}</span>`).join('');}
 function automaticCorrectDiagnostics(rt){
-  const ac=rt?.automatic_correct||{},counts=ac.counts||{},last=ac.latest||null;
+  const ac=rt?.automatic_correct||{},counts=ac.counts||{},activations=ac.activation_counts||{},last=ac.latest||null;
   if(!last)return `<b>Automatic Correct:</b> collecting outcome evidence only · policy updates disabled · trusted 0 · unknown 0 · rejected 0`;
   const proposed=last.proposed_reward==null?'—':Number(last.proposed_reward).toFixed(2);
   const trusted=last.trusted_reward==null?'—':Number(last.trusted_reward).toFixed(2);
@@ -159,7 +159,10 @@ function automaticCorrectDiagnostics(rt){
   const windowStart=last.observation_start?new Date(Number(last.observation_start)*1000).toLocaleTimeString():'—';
   const windowEnd=last.observation_end?new Date(Number(last.observation_end)*1000).toLocaleTimeString():'—';
   const why=last.unknown_reason||last.attribution_reason||'—';
-  return `<b>Automatic Correct:</b> ${esc(last.status||'unknown')} · outcome ${esc(last.outcome||'—')} · proposed ${proposed} · trusted ${trusted}<br><b>Automatic Correct confidence/source:</b> ${confidence} · ${esc(source)} · reliability ${reliability}<br><b>Automatic Correct attribution:</b> ${esc(last.attribution_reason||'—')}<br><b>Automatic Correct trial/action:</b> ${esc(trial)} · ${esc(actionAt)} · window ${esc(windowStart)}–${esc(windowEnd)}<br><b>Automatic Correct unknown/rejected:</b> ${esc(why)}<br><b>Automatic Correct buffer:</b> trusted ${num(counts.trusted||0)} · unknown ${num(counts.unknown||0)} · rejected ${num(counts.rejected||0)} · pending ${num(counts.pending||0)} · reward learning OFF`;
+  const activation=last.activation_class||'—';
+  const activationConfidence=last.activation_class?(last.activation_confidence==null?'—':pct(Number(last.activation_confidence))):'—';
+  const activationSource=last.activation_source_entity_id||last.activation_source_area_id||'—';
+  return `<b>Automatic Correct:</b> ${esc(last.status||'unknown')} · outcome ${esc(last.outcome||'—')} · proposed ${proposed} · trusted ${trusted}<br><b>Automatic Correct confidence/source:</b> ${confidence} · ${esc(source)} · reliability ${reliability}<br><b>Automatic Correct attribution:</b> ${esc(last.attribution_reason||'—')}<br><b>Automatic Correct trial/action:</b> ${esc(trial)} · ${esc(actionAt)} · window ${esc(windowStart)}–${esc(windowEnd)}<br><b>Automatic Correct unknown/rejected:</b> ${esc(why)}<br><b>False activation observer:</b> ${esc(activation)} · confidence ${activationConfidence} · context ${esc(activationSource)} · observer only / no reward<br><b>False activation episodes:</b> confirmed ${num(activations.confirmed_use||0)} · suspected ${num(activations.suspected_false_activation||0)} · verified ${num(activations.verified_false_activation||0)} · unknown ${num(activations.unknown||0)}<br><b>Automatic Correct buffer:</b> trusted ${num(counts.trusted||0)} · unknown ${num(counts.unknown||0)} · rejected ${num(counts.rejected||0)} · pending ${num(counts.pending||0)} · reward learning OFF`;
 }
 function observationSelection(a){
   const o=a.runtime?.observation_space||{};
