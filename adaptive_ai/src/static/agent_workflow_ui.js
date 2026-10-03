@@ -107,12 +107,11 @@ Parent pozostaje bez zmian. Wynik przejdzie offline gate i Shadow A/B; nie dosta
 
   function shell(){
     dialog.innerHTML=`<div class="teach-head"><h2 data-title>Correct: ${html(subject.name)} · Gen ${subject.generation_number}</h2><button class="ghost" data-close>Zamknij</button></div>
-      <p>Kliknij wykres, aby wskazać moment, albo przeciągnij poziomo po wykresie, aby zaznaczyć zakres i go przybliżyć. Kółko myszy przybliża wokół kursora. Correct nie zmienia Gen ${subject.generation_number} w miejscu — po zatwierdzeniu utworzy child Candidate.</p>
+      <p>Kliknij wykres, aby wskazać moment, albo przeciągnij poziomo po wykresie, aby zaznaczyć zakres i go przybliżyć. Kółko myszy przybliża wokół kursora. Zapis punktu Correct nie uruchamia treningu ani nie zmienia modelu. Zbieraj punkty przez kilka dni; Create Candidate jest osobnym przyciskiem na karcie generacji.</p>
       <div class="teach-range"><label>Od<input data-start type="datetime-local" step="1"></label><label>Do<input data-end type="datetime-local" step="1"></label><button class="ghost" data-load>Pokaż</button><button class="ghost" data-retry>Połącz ponownie</button><button class="ghost" data-prev>←</button><button class="ghost" data-next>→</button><button class="ghost" data-in>+</button><button class="ghost" data-out>−</button></div>
       <p class="teach-legend" data-legend></p>
       <div class="teach-chart" data-chart></div><p data-status role="status"></p><p data-error role="alert"></p>
-      <form data-point><label>Wybrany moment<input data-time type="datetime-local" step="1" required></label><button type="button" class="ghost" data-inspect>Sprawdź punkt</button><p data-point-info>Wybierz moment na wykresie.</p><label>Poprawne Desired<input data-value type="number" step="any" required></label><button class="primary" type="submit" data-save disabled>Dodaj Correct</button><button class="ghost" type="button" data-undo>Cofnij ostatni Correct</button></form>
-      <div class="dialog-actions"><button class="primary" type="button" data-apply>Apply Correct · create child Candidate</button></div>
+      <form data-point><label>Wybrany moment<input data-time type="datetime-local" step="1" required></label><button type="button" class="ghost" data-inspect>Sprawdź punkt</button><p data-point-info>Wybierz moment na wykresie.</p><label>Poprawne Desired<input data-value type="number" step="any" required></label><button class="primary" type="submit" data-save disabled>Zapisz punkt Correct</button><button class="ghost" type="button" data-undo>Cofnij ostatni Correct</button></form>
       <p>Wykres używa wyłącznie observed generation decision history. Candidate jest porównywany tylko z bezpośrednim parentem; brak runtime pozostaje luką i nie jest odtwarzany obecną policy.</p>`;
     dialog.querySelector('[data-close]').onclick=()=>dialog.close();
     dialog.querySelector('[data-load]').onclick=()=>{const a=Date.parse(dialog.querySelector('[data-start]').value)/1000,b=Date.parse(dialog.querySelector('[data-end]').value)/1000;if(Number.isFinite(a)&&Number.isFinite(b)){range={start:a,end:b};load();}};
@@ -122,7 +121,6 @@ Parent pozostaje bez zmian. Wynik przejdzie offline gate i Shadow A/B; nie dosta
     dialog.querySelector('[data-inspect]').onclick=()=>inspect(Date.parse(dialog.querySelector('[data-time]').value)/1000);
     dialog.querySelector('[data-time]').oninput=()=>{selected=null;dialog.querySelector('[data-save]').disabled=true;};
     dialog.querySelector('[data-undo]').onclick=undo;
-    dialog.querySelector('[data-apply]').onclick=apply;
     dialog.querySelector('[data-point]').onsubmit=save;
   }
 
@@ -184,10 +182,51 @@ Parent pozostaje bez zmian. Wynik przejdzie offline gate i Shadow A/B; nie dosta
     const statusNode=dialog.querySelector('[data-status]');
     if(statusNode)statusNode.textContent='Correct ma trwały request ID i będzie przetwarzany w tle. Możesz zamknąć okno i wrócić później.';
     setBusy(false);
-    const applyButton=dialog.querySelector('[data-apply]');
-    if(applyButton)applyButton.disabled=true;
     return null;
   }
+
+
+  // Explicit operation: saved Correct labels alone never start Candidate training.
+  window.workflowCreateCorrectCandidate=async (generationRef,button)=>{
+    const key=String(generationRef);
+    if(button?.dataset.correctCreateRunning==='1')return;
+    if(button){button.dataset.correctCreateRunning='1';button.disabled=true;}
+    const originalText=button?.textContent;
+    try{
+      let requestId=pendingRequest(key);
+      if(!requestId){
+        const s=await status(key);
+        const total=Number(s.correct_labels_total||0),pending=Number(s.correct_labels_pending||0);
+        if(!pending){alert('Brak nowych punktów Correct. Zebrano: '+total+'. Dodaj punkty przez Correct i wróć tutaj.');return;}
+        if(!confirm('Utworzyć Candidate z punktów Correct dla '+s.name+' · Gen '+s.generation_number+'?\n\n'+
+          'Aktywne korekty: '+total+'\nNowe punkty: '+pending+
+          '\n\nDopiero teraz uruchomimy trening. Rodzic pozostaje bez zmian.'))return;
+        requestId=newRequestId();
+        rememberRequest(key,requestId);
+        try{await post(key,'correct',{request_id:requestId});}
+        catch(e){
+          if(e.status>=400&&e.status<500){clearRequest(key);throw e;}
+          // An ambiguous network/5xx error may follow durable acceptance.
+        }
+      }
+      for(let attempt=0;attempt<40;attempt++){
+        if(button)button.textContent='Candidate: kolejka…';
+        let state=null;
+        try{state=await api('api/agent-workflow-requests/'+encodeURIComponent(requestId));}
+        catch(e){if(e.status&&e.status!==404)throw e;}
+        if(state?.state==='done'){
+          clearRequest(key);await refresh();
+          alert('Candidate utworzony/zaktualizowany. Trening odbywa się osobno w kolejce.');
+          return state;
+        }
+        if(state?.state==='failed'){clearRequest(key);throw Error(state.error||'Nie udało się utworzyć Candidate');}
+        if(button&&state?.state==='processing')button.textContent='Candidate: tworzę…';
+        await sleep(500);
+      }
+      alert('Żądanie Candidate jest zapisane. Po odświeżeniu ponowne użycie przycisku sprawdzi ten sam request ID.');
+    }catch(e){notifyError(e);}
+    finally{if(button){button.disabled=false;button.textContent=originalText;delete button.dataset.correctCreateRunning;}}
+  };
 
   window.openWorkflowCorrect=async generationRef=>{
     ref=String(generationRef);subject=provisionalSubject(ref);
@@ -231,7 +270,8 @@ Parent pozostaje bez zmian. Wynik przejdzie offline gate i Shadow A/B; nie dosta
       const observed=out.chart_mode==='candidate_vs_parent'
         ? `Current ${current} · Parent ${parentPoints} · Candidate ${candidatePoints}`
         : `Current ${current} · Live Desired ${livePoints}`;
-      dialog.querySelector('[data-status]').textContent=`${observed} · ${labels} Correct points${gaps?` · ${gaps} luk runtime`:''}. Direct parent comparison; policy replay wyłączony.`;
+      const pending=Number(subject?.correct_labels_pending??labels);
+      dialog.querySelector('[data-status]').textContent=`${observed} · ${labels} zapisanych punktów Correct · ${pending} nowych do treningu${gaps?` · ${gaps} luk runtime`:''}. Zapis punktu nie uruchamia treningu.`;
       dialog.querySelector('[data-undo]').disabled=!labels;
     }catch(e){if(seq===requestSeq)error(e);}
   }
@@ -259,30 +299,11 @@ Parent pozostaje bez zmian. Wynik przejdzie offline gate i Shadow A/B; nie dosta
     ev.preventDefault();if(!selected)return;
     const desired=Number(dialog.querySelector('[data-value]').value);if(!Number.isFinite(desired)){error(Error('Podaj poprawne Desired'));return;}
     setBusy(true);
-    try{await post(ref,'correct-label',{sample_ts:selected.ts,desired_value:desired});selected=null;await load();}
+    try{await post(ref,'correct-label',{sample_ts:selected.ts,desired_value:desired});selected=null;try{subject=await status(ref);}catch(_){ }await load();}
     catch(e){error(e);}finally{setBusy(false);}
   }
 
-  async function undo(){setBusy(true);try{await post(ref,'correct-undo');selected=null;await load();}catch(e){error(e);}finally{setBusy(false);}}
-  async function apply(){
-    const requestId=newRequestId();
-    rememberRequest(ref,requestId);
-    setBusy(true);dialog.querySelector('[data-error]').textContent='';
-    dialog.querySelector('[data-status]').textContent='Zapisuję trwałe żądanie Correct…';
-    let postFailed=false;
-    try{
-      await post(ref,'correct',{request_id:requestId});
-    }catch(e){
-      postFailed=true;
-      dialog.querySelector('[data-status]').textContent='Nie mam potwierdzenia odpowiedzi HTTP. Sprawdzam request ID zamiast ponawiać korektę…';
-    }
-    try{
-      return await monitorCorrectRequest(requestId,{postFailed});
-    }catch(e){
-      clearRequest(ref);setBusy(false);error(e);
-      return null;
-    }
-  }
+  async function undo(){setBusy(true);try{await post(ref,'correct-undo');selected=null;try{subject=await status(ref);}catch(_){ }await load();}catch(e){error(e);}finally{setBusy(false);}}
 
   function draw(){
     const box=dialog.querySelector('[data-chart]');if(!box||!data)return;
@@ -358,11 +379,12 @@ Parent pozostaje bez zmian. Wynik przejdzie offline gate i Shadow A/B; nie dosta
 
     const resume=state.paused?'<button class="ghost resume" data-wf="resume">Resume training</button>':'';
     const shadow=a.mode==='paused'?'<button class="primary" data-wf="shadow">Start Shadow</button>':a.mode==='shadow'?'<button class="ghost" data-wf="shadow">Pause Shadow</button>':'';
-    actions.innerHTML=`${shadow}${resume}<button class="ghost" data-wf="auto">Autonomous</button><button class="primary" data-wf="correct">Correct</button><button class="ghost" data-wf="offline-rl" title="Trusted Automatic Correct → conservative Offline RL Candidate">Offline RL</button><button class="ghost" data-wf="explore" disabled title="Explore będzie aktywowane przez warstwę Explore">Explore</button><button class="ghost" data-wf="change">Change decision</button><button class="ghost" data-wf="settings">Settings</button><button class="ghost" data-wf="debug">Export debug</button>`;
+    actions.innerHTML=`${shadow}${resume}<button class="ghost" data-wf="auto">Autonomous</button><button class="primary" data-wf="correct">Correct</button><button class="ghost" data-wf="create-correct" title="Train a Candidate explicitly from saved Correct points">Create Candidate</button><button class="ghost" data-wf="offline-rl" title="Trusted Automatic Correct → conservative Offline RL Candidate">Offline RL</button><button class="ghost" data-wf="explore" disabled title="Explore będzie aktywowane przez warstwę Explore">Explore</button><button class="ghost" data-wf="change">Change decision</button><button class="ghost" data-wf="settings">Settings</button><button class="ghost" data-wf="debug">Export debug</button>`;
     if(actions.querySelector('[data-wf=shadow]'))actions.querySelector('[data-wf=shadow]').onclick=()=>window.setMode?.(a.id,a.mode==='shadow'?'paused':'shadow');
     if(state.paused)actions.querySelector('[data-wf=resume]').onclick=()=>window.resumeLearning?.(a.id);
     actions.querySelector('[data-wf=auto]').onclick=e=>workflowAutonomous(a.id,e.currentTarget);
     actions.querySelector('[data-wf=correct]').onclick=()=>openWorkflowCorrect(a.id);
+    actions.querySelector('[data-wf=create-correct]').onclick=e=>window.workflowCreateCorrectCandidate(a.id,e.currentTarget);
     actions.querySelector('[data-wf=offline-rl]').onclick=e=>workflowOfflineRL(a.id,e.currentTarget);
     actions.querySelector('[data-wf=change]').onclick=e=>workflowChangeDecision(a.id,e.currentTarget);
     actions.querySelector('[data-wf=settings]').onclick=()=>liveSettings(a);

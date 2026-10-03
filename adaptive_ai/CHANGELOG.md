@@ -1,3 +1,12 @@
+# 0.14.126 — 2026-10-03
+
+- Decouple **collecting Correct points** from Candidate training: saving a point is persistence-only and can be repeated across sessions without starting a long build.
+- Add a separate **Create Candidate** action on Live and Candidate cards. It shows active/new Correct counts and asks for confirmation before the expensive training request is queued.
+- Keep Candidate creation idempotent through the existing durable workflow request ID, so a lost/ambiguous HTTP response does not silently enqueue a second build.
+- Count only points added after the previous committed build as pending. For Candidate generations, inherited parent labels remain cumulative training evidence but are not misreported as new points.
+- Preserve parent-generation safety: the parent model is not changed by saving Correct points or by building the child Candidate.
+- Existing Correct labels remain retained. This release does not silently rewrite an incompatible Live feature schema.
+
 # 0.14.125 — 2026-10-03
 
 - Restore semantic **OFF / ON** labels for light agents whose controlled property is `brightness_pct` but whose live Current/Desired values are endpoint-only (0% / 100%).
