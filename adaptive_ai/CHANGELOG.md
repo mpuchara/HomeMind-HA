@@ -1,21 +1,32 @@
 # 0.14.126 — 2026-10-03
 
 - Build directly on the installed **0.14.125 RC** rather than downgrading to the separate 0.14.124 main line.
-- Preserve 0.14.125 immutable serialized-policy snapshots: prediction/lazy decay can no longer mutate the decoded persisted model used by Correct/history reconstruction.
-- Preserve the 0.14.125 read-only Home Context `automation_source_audit`, including effective/registry/device area diagnosis for radar sources; it still grants no new occupancy or physical-control authority.
-- Add observer-only false-activation classification for fast binary ON decisions: `confirmed_use`, `suspected_false_activation`, `verified_false_activation`, or `unknown`.
-- Attribute causal context in a bounded window of up to 4 s before and 12 s after the ON action. Activity later in the normal 90 s reward window cannot become false-trigger evidence.
-- Cross-area motion without independent same-area confirmation remains diagnostic only: it never becomes trusted negative reward and never directly trains OFF.
-- Explicit exact-target user reversal remains the authoritative way to verify a false activation; same-device radar/presence siblings cannot circularly confirm the raw trigger.
-- Keep suppressor evidence bounded and use it only for future feature selection. Repeated/verified cross-area evidence can make a sensor structurally relevant and request broad context re-screen on explicit Rebuild.
-- Automatic Correct UI exposes confirmed/suspected/verified/unknown false-activation counts and labels observer evidence as no-reward.
-- No new physical ActionIntent/Executor authority and no synchronous historical replay is added to the realtime path.
+- Preserve 0.14.125 immutable serialized-policy snapshots and the read-only Home Context `automation_source_audit`.
+- Add bounded false-activation observation for fast binary ON decisions: `confirmed_use`, `suspected_false_activation`, `verified_false_activation`, or `unknown`.
+- Use a causal window of up to 4 s before and 12 s after the ON action; later motion in the normal reward window cannot become false-trigger evidence.
+- Cross-area motion without independent local confirmation remains diagnostic-only and cannot create trusted negative reward or directly train OFF.
+- Explicit exact-target user reversal remains authoritative verification; same-device radar/presence siblings cannot circularly confirm their own raw trigger.
+- Repeated/verified suppressor evidence may enter future feature relevance and request broad context re-screen on explicit Rebuild.
+- No new physical ActionIntent/Executor authority and no synchronous historical replay is added to realtime inference.
 
 # 0.14.125 — 2026-10-02
 
 - Make persisted policy snapshots immutable across read-only Correct/history reconstruction by copying numeric policy arrays at cold construction.
-- Add a bounded, read-only `automation_source_audit` to Home Context diagnostics for HA automation radar sources, showing effective/registry/device area, admission status, reason and role.
+- Add bounded, read-only `automation_source_audit` diagnostics for HA radar sources, including effective/registry/device area and admission reason.
 - Keep radar area audit diagnostic-only: no automatic area reassignment, occupancy authority, reward change or physical-control change.
+
+# 0.14.124 — 2026-10-03
+
+- Add an observer-only false-activation episode contract for fast binary ON decisions: `confirmed_use`, `suspected_false_activation`, `verified_false_activation`, or `unknown`.
+- Keep weak evidence safe: cross-area activity without independent local confirmation is diagnostic only, stays below the Automatic Correct trusted threshold and never creates reward or directly updates a policy.
+- Preserve Manual Correct / explicit target reversal as authoritative evidence. A verified reversal of an ON action can mark the episode as `verified_false_activation` while retaining the existing exact-target reward provenance.
+- Use a short causal observer window (up to 4 s before the action and 12 s after it), separate from the existing 90 s reward window, so unrelated later household motion is not attributed to the light activation.
+- Reject circular confirmation: a binary presence channel from the same physical radar/device as a local raw activity trigger cannot confirm that trigger as real room use.
+- Persist false-activation evidence and counts in Automatic Correct diagnostics and expose them in the agent UI as observer-only / no-reward data.
+- Derive bounded suppressor feature evidence from at most the latest 512 classified episodes. Repeated suspected evidence or one user-verified episode can make a cross-area sensor structurally relevant for the next Train/Rebuild.
+- When a strong suppressor (score ≥ the existing fast causal threshold) is missing from an existing wildcard fast-agent schema, Rebuild drops only the preserved schema seed and runs the established broad context screen so the sensor can enter the model naturally. Other agents keep the existing cheap schema-preserving rebuild path.
+- No new physical-control authority, no direct OFF learning from suspicion, and no realtime history/SQLite scan were added.
+- Validation gate: expanded suite has 1546 tests; release is merged only after Python 3.11/3.13, image smoke and the existing full benchmark pipeline are green.
 
 # 0.14.123 — 2026-10-01
 
