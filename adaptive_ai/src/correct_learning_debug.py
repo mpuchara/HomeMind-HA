@@ -581,11 +581,26 @@ def _cross_generation_predictions(engine, store, generations, sample_ts):
     return out
 
 
-def _current_context(engine, root_agent, debug_entities):
+def _automation_raw_sources(lineage):
+    """Bounded source IDs already referenced by this agent's HA automations."""
+    ids = set()
+    for row in lineage:
+        selection = (row.get("model") or {}).get("selection_meta") or {}
+        for automation in selection.get("automation_baseline_automations") or ():
+            for rule in automation.get("baseline_rules") or ():
+                if rule.get("source") == "trigger" and rule.get("kind") == "numeric_state":
+                    eid = str(rule.get("entity_id") or "")
+                    if eid:
+                        ids.add(eid)
+    return sorted(ids)[:16]
+
+
+def _current_context(engine, root_agent, debug_entities, automation_sources=()):
     target = root_agent["target_entity"]
     now = time.time()
     with engine.lock:
         states = dict(engine.state_map)
+        registry = dict(engine.entity_registry)
     area = engine.context.area_for(target)
     try:
         forecast = _base_room_forecast_read_only(engine.context, target, now)
@@ -606,11 +621,48 @@ def _current_context(engine, root_agent, debug_entities):
             "occupancy_authority": source.get("occupancy_authority"),
             "selected_presence_source": bool(source.get("selected")),
         })
+
+    # Automations may refer to a valid radar that RoomBelief deliberately excludes
+    # because HA assigned it to another room or did not assign an area. Diagnose
+    # that mapping *without* silently relabelling a remote source as local.
+    source_audit = []
+    for eid in list(automation_sources or ())[:16]:
+        source = engine.context.evidence_metadata(eid)
+        resolved_area = engine.context.area_for(eid)
+        reg = registry.get(eid) or {}
+        device = (getattr(engine.context, "devices", {}) or {}).get(
+            reg.get("device_id")
+        ) or {}
+        if eid not in states:
+            status = "missing_live_state"
+        elif eid in (getattr(engine.context, "excluded", set()) or set()):
+            status = "excluded_from_room_sources"
+        elif eid not in (getattr(engine.context, "admitted", set()) or set()):
+            status = "not_admitted"
+        elif not resolved_area:
+            status = "unmapped_area"
+        elif resolved_area != area:
+            status = "different_area"
+        else:
+            status = "admitted_local"
+        source_audit.append({
+            "entity_id": eid,
+            "target_area_id": area,
+            "source_area_id": resolved_area,
+            "registry_area_id": reg.get("area_id"),
+            "device_area_id": device.get("area_id"),
+            "status": status,
+            "role": source.get("role"),
+            "admission_reason": source.get("reason"),
+            "admitted": eid in (getattr(engine.context, "admitted", set()) or set()),
+            "available": source.get("available"),
+        })
     return {
         "ts": now,
         "area_id": area,
         "forecast": forecast,
         "sources": sources,
+        "automation_source_audit": source_audit,
     }
 
 
@@ -819,7 +871,10 @@ class CorrectLearningDebugService:
                 str(aid): dict((getattr(self.engine, "context_relevance", {}) or {}).get(str(aid)) or {})
                 for aid in agent_ids
             },
-            "current_context": _current_context(self.engine, root_agent, debug_entities),
+            "current_context": _current_context(
+                self.engine, root_agent, debug_entities,
+                _automation_raw_sources(lineage),
+            ),
             "warnings": warnings,
         }
 
