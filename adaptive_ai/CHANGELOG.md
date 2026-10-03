@@ -1,3 +1,11 @@
+# 0.14.125 — 2026-10-03
+
+- Restore semantic **OFF / ON** labels for light agents whose controlled property is `brightness_pct` but whose live Current/Desired values are endpoint-only (0% / 100%).
+- Keep real dimming visible: as soon as Current or Desired contains an intermediate brightness value, the UI stays numeric instead of collapsing it to ON/OFF.
+- Apply the same rule to Candidate Current/Desired cards so parent/child comparisons do not regress to raw `0.0 / 100.0` for binary light behaviour.
+- Add an IKEA/TRÅDFRI-style frontend regression covering both endpoint-only binary behaviour and an intermediate 35% brightness case.
+- UI-only change: no RL, reward, training, action selection, Home Assistant service call or physical-control semantics changed.
+
 # 0.14.124 — 2026-10-03
 
 - Add an observer-only false-activation episode contract for fast binary ON decisions: `confirmed_use`, `suspected_false_activation`, `verified_false_activation`, or `unknown`.

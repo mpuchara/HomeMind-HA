@@ -33,11 +33,18 @@
     valueNode.textContent=value;
   };
 
+  const binaryState=c=>{
+    const property=String(c?.target_property||'');
+    if(property==='power')return true;
+    if(property!=='brightness_pct')return false;
+    const values=[c?.shadow_current,c?.parent_desired,c?.candidate_desired].filter(v=>v!=null&&v!==''&&Number.isFinite(Number(v)));
+    return values.length>0&&values.every(v=>{const n=Number(v);return n<=.5||n>=99.5;});
+  };
   const decisionValue=(c,v)=>{
     if(v==null||v==='')return '—';
     const n=Number(v);
     if(!Number.isFinite(n))return '—';
-    if(String(c.target_property||'')==='power')return n>=.5?'ON':'OFF';
+    if(binaryState(c))return n>=.5?'ON':'OFF';
     const abs=Math.abs(n);
     return n.toFixed(abs<10?2:1);
   };

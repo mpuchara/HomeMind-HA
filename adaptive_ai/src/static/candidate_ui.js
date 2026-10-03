@@ -4,7 +4,14 @@
   const sec=v=>v==null?'—':`${Number(v).toFixed(1)} s`;
   const signedSec=v=>v==null?'—':`${Number(v)>=0?'+':''}${Number(v).toFixed(1)} s`;
   const pp=v=>v==null?'—':`${Number(v)>=0?'+':''}${(Number(v)*100).toFixed(1)} pp`;
-  const val=v=>v==null?'—':Number(v).toFixed(Math.abs(Number(v))<10?2:1);
+  const binaryState=c=>{
+    const property=String(c?.target_property||'');
+    if(property==='power')return true;
+    if(property!=='brightness_pct')return false;
+    const values=[c?.shadow_current,c?.parent_desired,c?.candidate_desired].filter(v=>v!=null&&Number.isFinite(Number(v)));
+    return values.length>0&&values.every(v=>{const n=Number(v);return n<=.5||n>=99.5;});
+  };
+  const val=(c,v)=>v==null?'—':binaryState(c)?(Number(v)>=.5?'ON':'OFF'):Number(v).toFixed(Math.abs(Number(v))<10?2:1);
   const parentGain=v=>v==null?'vs Parent —':`vs Parent ${Number(v)>=0?'+':''}${(Number(v)*100).toFixed(1)}%`;
   const api=async(path,opts={})=>{const r=await fetch(path,{headers:{'Content-Type':'application/json'},...opts});const b=await r.json();if(!r.ok)throw Error(b.error||`HTTP ${r.status}`);return b;};
   let busy=false;
@@ -108,8 +115,8 @@
       <p class="candidate-small"><b>Physical Candidate mode: ${esc(c.candidate_physical_mode||'shadow').toUpperCase()}</b> · promotion target ${esc(targetMode.toUpperCase())} · current Live ${esc((c.live_mode||'shadow').toUpperCase())}. Target mode never grants Candidate dispatch authority.</p>
       <p class="candidate-small">${statusText(c,m,perAction)}</p>
       <details class="candidate-details" ${draft.detailsOpen?'open':''}><summary>Details</summary><div class="candidate-compare candidate-compare-details">
-        <div><span>Current</span><b>${val(c.shadow_current)}</b></div>
-        <div><span>Candidate Desired</span><b>${val(c.candidate_desired)}</b></div>
+        <div><span>Current</span><b>${val(c,c.shadow_current)}</b></div>
+        <div><span>Candidate Desired</span><b>${val(c,c.candidate_desired)}</b></div>
         <div><span>Confidence</span><b>${pct(c.candidate_confidence)}</b></div>
         <div><span>Correction fit</span><b>${esc(correctionFit)}</b></div>
         <div><span>Historical regression</span><b>${esc(regression)}</b></div>

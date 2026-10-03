@@ -18,6 +18,12 @@ const c={document:{hidden:false,body:{append(){}},createElement(){return {addEve
    return Promise.resolve({ok:true,json:async()=>({configs:[{id:'a',mode:'shadow'}],agents:[{id:'a',current_value:1,last_prediction:0,last_confidence:.87,last_inference_ts:123}]})});}
 };c.window=c;vm.createContext(c);
 vm.runInContext(fs.readFileSync('adaptive_ai/src/static/app.js','utf8'),c);
+c.binaryAgent={target_entity:'light.ikea_tradfri',target_property:'brightness_pct',runtime:{current_value:0,last_prediction:100}};
+assert.equal(vm.runInContext('currentValue(binaryAgent)',c),'OFF');
+assert.equal(vm.runInContext('prediction(binaryAgent)',c),'ON');
+c.binaryAgent.runtime.last_prediction=35;
+assert.equal(vm.runInContext('currentValue(binaryAgent)',c),'0.0');
+assert.equal(vm.runInContext('prediction(binaryAgent)',c),'35.0');
 c.renderAgents=()=>{renders++;c.applyLiveValues();};
 vm.runInContext(fs.readFileSync('adaptive_ai/src/static/manual_feedback.js','utf8'),c);
 setImmediate(()=>{
