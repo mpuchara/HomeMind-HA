@@ -308,8 +308,9 @@ class GenerationWorkflowAcceptanceTests(unittest.TestCase):
         })
         self.root_model = {
             "version": 10,
+            "dims": 128,
             "model_revision": "g0-r0",
-            "schema": {"version": 11, "entities": ["binary_sensor.presence"]},
+            "schema": {"version": 11, "dims": 128, "entities": ["binary_sensor.presence"]},
             "selection_meta": {"schema_revision": 1},
             # G0 is already balanced on unrelated held-out history (keys 2/3) but wrong
             # in the explicit Correct context (key 1). This lets the real offline gate

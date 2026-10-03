@@ -1,3 +1,13 @@
+# 0.14.128 — 2026-10-03
+
+- Fix the `Live policy feature schema is incompatible with this release` dead-end when creating a Candidate from saved Correct points.
+- `Create Candidate` now performs one-click recovery when the Live model is on an obsolete feature schema: it retires only the Candidate that failed on this exact schema guard, queues an explicit Live rebuild, waits durably, then automatically resumes Candidate creation.
+- Correct points are not lost. If the failed Candidate had already marked its Correct operation as committed, that operation is reopened so the same labels become pending again instead of asking the user to mark them a second time.
+- The durable Correct request gains a `waiting` state and keeps the same request ID across the potentially long Live rebuild.
+- A schema-failed Candidate card shows **Repair & Create Candidate** and routes the recovery through the Live root.
+- Correct fingerprints deliberately exclude the mutable input schema, so changing selected features during the Live rebuild does not invalidate saved target corrections.
+- Other active Candidates are never auto-discarded, and no new physical-control authority is introduced.
+
 # 0.14.127 — 2026-10-03
 
 - Integrate all remaining open RC work from PRs **#235, #236 and #239** on top of the deployed 0.14.126 line.

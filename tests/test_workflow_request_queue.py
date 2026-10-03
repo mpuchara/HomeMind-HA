@@ -10,6 +10,7 @@ from workflow_request_queue import (
     STATE_DONE,
     STATE_FAILED,
     STATE_PROCESSING,
+    STATE_WAITING,
     WorkflowRequestQueue,
 )
 
@@ -71,6 +72,42 @@ class WorkflowRequestQueueTests(unittest.TestCase):
         self.assertEqual(status["state"], STATE_DONE)
         self.assertEqual(status["result"]["child_generation_id"], "candidate:g1")
         self.assertIsNotNone(status["finished_ts"])
+
+    def test_deferred_correct_request_waits_and_retries_same_request_id(self):
+        self.commit.side_effect = [
+            {
+                "ok": True,
+                "deferred": True,
+                "phase": "rebuilding_live_schema",
+                "retry_seconds": 0.01,
+            },
+            {
+                "ok": True,
+                "child_generation_id": "candidate:g1",
+                "coalesced": False,
+            },
+        ]
+        self.queue.enqueue_correct("root:abc", "req-wait")
+        self.assertTrue(self.queue.process_once())
+        waiting = self.queue.status("req-wait")
+        self.assertEqual(waiting["state"], STATE_WAITING)
+        self.assertEqual(waiting["result"]["phase"], "rebuilding_live_schema")
+        self.assertIsNone(waiting["finished_ts"])
+
+        with self.store.lock, self.store.conn() as c:
+            c.execute(
+                "UPDATE agent_workflow_requests SET updated_ts=0 WHERE request_id=?",
+                ("req-wait",),
+            )
+        self.assertTrue(self.queue.process_once())
+        done = self.queue.status("req-wait")
+        self.assertEqual(done["state"], STATE_DONE)
+        self.assertEqual(done["result"]["child_generation_id"], "candidate:g1")
+        self.assertEqual(self.commit.call_count, 2)
+        self.assertEqual(
+            [call.kwargs["request_id"] for call in self.commit.call_args_list],
+            ["req-wait", "req-wait"],
+        )
 
     def test_processing_request_is_recovered_after_restart(self):
         self.queue.enqueue_correct("root:abc", "req-3")
