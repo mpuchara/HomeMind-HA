@@ -166,8 +166,8 @@ class AgentWorkflowActionTests(unittest.TestCase):
             "exploration_step": 1, "input_entities": ["binary_sensor.presence"],
         })
         self.root_model = {
-            "version": 10, "model_revision": "root-r1",
-            "schema": {"version": 11, "entities": ["binary_sensor.presence"]},
+            "version": 10, "dims": 128, "model_revision": "root-r1",
+            "schema": {"version": 11, "dims": 128, "entities": ["binary_sensor.presence"]},
             "selection_meta": {"schema_revision": 7},
             "prediction": 0.0, "weights": {"root": 1},
         }
