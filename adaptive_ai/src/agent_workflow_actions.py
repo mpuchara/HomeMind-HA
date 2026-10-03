@@ -437,7 +437,46 @@ def _live_schema_recovery(manager, generation, agent):
         state = str(existing.get("state") or "")
         error = str(existing.get("last_error") or "")
         if state == "failed" and LIVE_SCHEMA_INCOMPATIBLE in error:
+            # Candidate creation is committed before its asynchronous build finishes.
+            # Therefore the failed child may already have "consumed" these labels from
+            # the pending counter even though no usable Candidate was ever produced.
+            # Reopen only the Correct operation(s) that point at this failed surrogate;
+            # older successful generations remain committed and auditable.
+            candidate_id = str(existing.get("candidate_id") or "")
+            reopened = 0
+            if candidate_id:
+                with manager.store.lock, manager.store.conn() as c:
+                    operations = c.execute(
+                        """SELECT operation_id,detail_json FROM agent_correct_operations
+                           WHERE candidate_id=? AND status='committed'""",
+                        (candidate_id,),
+                    ).fetchall()
+                    for operation in operations:
+                        detail = _json(operation["detail_json"], {})
+                        detail.update({
+                            "reopened_for_schema_recovery": True,
+                            "failed_candidate_id": candidate_id,
+                        })
+                        c.execute(
+                            """UPDATE agent_correct_operations
+                               SET status='failed',detail_json=?
+                               WHERE operation_id=?""",
+                            (
+                                json.dumps(detail, separators=(",", ":"), default=str),
+                                str(operation["operation_id"]),
+                            ),
+                        )
+                        reopened += 1
             discarded = manager.discard(agent_id)
+            manager.store.event(
+                agent_id, "warning", "correct_failed_candidate_reopened",
+                "Failed schema-incompatible Candidate was retired and its Correct labels were reopened",
+                {
+                    "candidate_id": candidate_id,
+                    "reopened_operations": reopened,
+                    "correct_labels_retained": True,
+                },
+            )
             if not bool((discarded or {}).get("discarded")):
                 return {
                     "ok": True,
