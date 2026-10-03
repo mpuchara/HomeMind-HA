@@ -22,12 +22,17 @@ import threading
 import time
 
 from control import timing_for
+from context import entity_capability_tags
 from home_sources import source_kind
 from observation_space import observation_as_of, select_observation_mask
 from settings import OPTIONS
 
-CONTRACT_VERSION = 1
+CONTRACT_VERSION = 2
 STATUSES = {"pending", "trusted", "unknown", "rejected"}
+ACTIVATION_CLASSES = {
+    "confirmed_use", "suspected_false_activation",
+    "verified_false_activation", "unknown",
+}
 _JSON_FIELDS = {
     "observation_json": ("observation", {}),
     "observation_mask_json": ("observation_mask", {}),
@@ -35,6 +40,7 @@ _JSON_FIELDS = {
     "background_dependencies_json": ("background_dependencies", []),
     "outcome_sources_json": ("outcome_sources", {}),
     "reward_sources_json": ("reward_sources", []),
+    "activation_evidence_json": ("activation_evidence", {}),
     "metadata_json": ("metadata", {}),
 }
 
@@ -101,6 +107,7 @@ class AutomaticRewardJournal:
         self._lock = threading.RLock()
         self._latest = {}
         self._counts = {}
+        self._activation_counts = {}
         self._migrate()
         self._interrupt_stale_pending()
         self._warm_cache()
@@ -145,6 +152,11 @@ class AutomaticRewardJournal:
                     source_origin TEXT,
                     source_reliability REAL NOT NULL DEFAULT 0,
                     unknown_reason TEXT,
+                    activation_class TEXT,
+                    activation_confidence REAL NOT NULL DEFAULT 0,
+                    activation_source_entity_id TEXT,
+                    activation_source_area_id TEXT,
+                    activation_evidence_json TEXT NOT NULL DEFAULT '{}',
                     metadata_json TEXT NOT NULL DEFAULT '{}'
                 );
                 CREATE INDEX IF NOT EXISTS idx_auto_reward_agent_time
@@ -159,6 +171,25 @@ class AutomaticRewardJournal:
                     WHERE decision_id IS NOT NULL AND decision_id!='';
                 """
             )
+            columns = {
+                str(row[1])
+                for row in c.execute(
+                    "PRAGMA table_info(automatic_reward_experiences)"
+                ).fetchall()
+            }
+            additions = (
+                ("activation_class", "TEXT"),
+                ("activation_confidence", "REAL NOT NULL DEFAULT 0"),
+                ("activation_source_entity_id", "TEXT"),
+                ("activation_source_area_id", "TEXT"),
+                ("activation_evidence_json", "TEXT NOT NULL DEFAULT '{}'"),
+            )
+            for name, ddl in additions:
+                if name not in columns:
+                    c.execute(
+                        "ALTER TABLE automatic_reward_experiences "
+                        f"ADD COLUMN {name} {ddl}"
+                    )
 
     def _interrupt_stale_pending(self):
         now = float(self.clock())
@@ -183,6 +214,7 @@ class AutomaticRewardJournal:
 
     def _warm_cache(self):
         counts = {}
+        activation_counts = {}
         latest = {}
         with self.store.conn() as c:
             for row in c.execute(
@@ -191,6 +223,16 @@ class AutomaticRewardJournal:
             ).fetchall():
                 counts.setdefault(str(row["agent_id"]), {})[
                     str(row["status"])
+                ] = int(row["n"])
+            for row in c.execute(
+                """SELECT agent_id,activation_class,COUNT(*) AS n
+                   FROM automatic_reward_experiences
+                   WHERE activation_class IS NOT NULL
+                     AND activation_class!=''
+                   GROUP BY agent_id,activation_class"""
+            ).fetchall():
+                activation_counts.setdefault(str(row["agent_id"]), {})[
+                    str(row["activation_class"])
                 ] = int(row["n"])
             rows = c.execute(
                 """SELECT * FROM automatic_reward_experiences
@@ -201,6 +243,7 @@ class AutomaticRewardJournal:
             latest.setdefault(str(decoded["agent_id"]), decoded)
         with self._lock:
             self._counts = counts
+            self._activation_counts = activation_counts
             self._latest = latest
 
     def _cache_transition(self, row, previous_status=None):
@@ -215,6 +258,12 @@ class AutomaticRewardJournal:
                 bucket[status] = int(bucket.get(status, 0)) + 1
             elif previous_status is None:
                 bucket[status] = int(bucket.get(status, 0)) + 1
+            activation_class = str(row.get("activation_class") or "")
+            if activation_class and previous_status:
+                activation_bucket = self._activation_counts.setdefault(aid, {})
+                activation_bucket[activation_class] = (
+                    int(activation_bucket.get(activation_class, 0)) + 1
+                )
             self._latest[aid] = dict(row)
 
     def get(self, resolution_key):
@@ -282,10 +331,17 @@ class AutomaticRewardJournal:
                 trusted_reward=None, confidence=0.0, attribution_reason=None,
                 source_entity_id=None, source_event_id=None, source_origin=None,
                 source_reliability=0.0, unknown_reason=None, outcome_sources=None,
-                reward_sources=None, metadata=None, resolved_ts=None):
+                reward_sources=None, metadata=None, resolved_ts=None,
+                activation_class=None, activation_confidence=0.0,
+                activation_source_entity_id=None,
+                activation_source_area_id=None, activation_evidence=None):
         status = str(status)
         if status not in STATUSES - {"pending"}:
             raise ValueError("invalid Automatic Correct resolution status")
+        if activation_class is not None:
+            activation_class = str(activation_class)
+            if activation_class not in ACTIVATION_CLASSES:
+                raise ValueError("invalid false-activation observer class")
         key = str(resolution_key)
         now = float(self.clock() if resolved_ts is None else resolved_ts)
         current = self.get(key)
@@ -309,7 +365,10 @@ class AutomaticRewardJournal:
                      resolved_ts=?,status=?,outcome=?,proposed_reward=?,trusted_reward=?,
                      confidence=?,attribution_reason=?,source_entity_id=?,source_event_id=?,
                      source_origin=?,source_reliability=?,unknown_reason=?,
-                     outcome_sources_json=?,reward_sources_json=?,metadata_json=?
+                     outcome_sources_json=?,reward_sources_json=?,
+                     activation_class=?,activation_confidence=?,
+                     activation_source_entity_id=?,activation_source_area_id=?,
+                     activation_evidence_json=?,metadata_json=?
                    WHERE resolution_key=? AND status='pending'""",
                 (
                     now, status, str(outcome), _finite(proposed_reward),
@@ -319,7 +378,10 @@ class AutomaticRewardJournal:
                     source_origin,
                     max(0.0, min(1.0, float(source_reliability or 0.0))),
                     unknown_reason, _dumps(sources or {}),
-                    _dumps(reward_src or []), _dumps(merged_meta), key,
+                    _dumps(reward_src or []), activation_class,
+                    max(0.0, min(1.0, float(activation_confidence or 0.0))),
+                    activation_source_entity_id, activation_source_area_id,
+                    _dumps(activation_evidence or {}), _dumps(merged_meta), key,
                 ),
             )
             changed = bool(cur.rowcount)
@@ -336,6 +398,9 @@ class AutomaticRewardJournal:
         aid = str(agent_id)
         with self._lock:
             counts = dict(self._counts.get(aid) or {})
+            activation_counts = dict(
+                self._activation_counts.get(aid) or {}
+            )
             latest = dict(self._latest.get(aid) or {})
         compact = None
         if latest:
@@ -347,7 +412,9 @@ class AutomaticRewardJournal:
                     "source_reliability", "unknown_reason", "trial_id",
                     "decision_id", "action_ts", "observation_start",
                     "observation_end", "area_id", "observation_schema_id",
-                    "observation_mask_id",
+                    "observation_mask_id", "activation_class",
+                    "activation_confidence", "activation_source_entity_id",
+                    "activation_source_area_id",
                 )
             }
             compact["reward_sources"] = list(
@@ -362,6 +429,20 @@ class AutomaticRewardJournal:
                 "trusted": int(counts.get("trusted", 0)),
                 "unknown": int(counts.get("unknown", 0)),
                 "rejected": int(counts.get("rejected", 0)),
+            },
+            "activation_counts": {
+                "confirmed_use": int(
+                    activation_counts.get("confirmed_use", 0)
+                ),
+                "suspected_false_activation": int(
+                    activation_counts.get("suspected_false_activation", 0)
+                ),
+                "verified_false_activation": int(
+                    activation_counts.get("verified_false_activation", 0)
+                ),
+                "unknown": int(
+                    activation_counts.get("unknown", 0)
+                ),
             },
             "latest": compact,
         }
@@ -387,6 +468,60 @@ class AutomaticRewardJournal:
                 (limit,),
             ).fetchall()
         return [self._decode(row) for row in rows]
+
+
+def false_activation_suppressor_scores(store, agent_id):
+    """Return conservative feature-selection evidence from observer episodes.
+
+    This never creates reward and never updates a policy. Scores only help a future
+    Train/Rebuild keep cross-area behavioural sensors in the candidate schema so the
+    ordinary historical/supervised learner can model interactions with local radar input.
+    Suspected-only evidence requires repetition; one explicit verified reversal is enough
+    to make a remote context sensor structurally relevant.
+    """
+    with store.conn() as c:
+        rows = c.execute(
+            """SELECT activation_class,activation_source_entity_id,target_entity
+               FROM automatic_reward_experiences
+               WHERE agent_id=?
+                 AND activation_class IN (
+                     'suspected_false_activation',
+                     'verified_false_activation'
+                 )
+                 AND activation_source_entity_id IS NOT NULL
+                 AND activation_source_entity_id!=''
+               ORDER BY COALESCE(resolved_ts,created_ts) DESC
+               LIMIT 512""",
+            (str(agent_id),),
+        ).fetchall()
+    counts = {}
+    for row in rows:
+        entity_id = str(row["activation_source_entity_id"] or "")
+        if not entity_id or entity_id == str(row["target_entity"] or ""):
+            continue
+        bucket = counts.setdefault(entity_id, {"suspected": 0, "verified": 0})
+        if row["activation_class"] == "verified_false_activation":
+            bucket["verified"] += 1
+        else:
+            bucket["suspected"] += 1
+    scores = {}
+    for entity_id, bucket in counts.items():
+        suspected = int(bucket["suspected"])
+        verified = int(bucket["verified"])
+        if verified:
+            score = min(
+                0.95,
+                0.65 + 0.08 * max(0, verified - 1)
+                + 0.02 * min(10, suspected),
+            )
+        elif suspected >= 4:
+            # Four repeated weak observations start below the ordinary causal-driver
+            # threshold; about eight consistent episodes are needed to reach 0.50.
+            score = min(0.70, 0.30 + 0.05 * max(0, suspected - 4))
+        else:
+            continue
+        scores[entity_id] = float(score)
+    return scores
 
 
 class TrustedAutomaticRewardService:
@@ -707,6 +842,191 @@ class TrustedAutomaticRewardService:
             "the observation window",
         )
 
+    @staticmethod
+    def _is_on_activation(row):
+        if str(row.get("target_property") or "") != "power":
+            return False
+        value = _finite(row.get("action_value"))
+        return value is not None and value >= 0.5
+
+    def _observer_presence_events(self, row):
+        """Return bounded in-RAM local/remote presence-like events for ON diagnostics.
+
+        This path is observer-only. It scans the current in-memory state/registry snapshot
+        once when an action outcome resolves; it never reads history/SQLite and never
+        changes reward or policy state. Latest-event timestamps are still checked against
+        the original observation window so later household activity cannot become evidence.
+        """
+        if not self._is_on_activation(row):
+            return [], [], []
+        target_area = row.get("area_id")
+        if not target_area:
+            return [], [], []
+        with self.engine.lock:
+            states = dict(self.engine.state_map)
+            registry = dict(self.engine.entity_registry)
+        latest_events = dict(
+            getattr(self.engine, "_provenance_latest_events", {}) or {}
+        )
+        action_ts = float(row["action_ts"])
+        observer_start = action_ts - max(
+            1.0, float(OPTIONS.get("fast_upstream_lead_seconds", 4.0))
+        )
+        observer_end = min(
+            float(row["observation_end"]),
+            action_ts + max(
+                2.0,
+                float(OPTIONS.get("false_activation_observer_seconds", 12.0)),
+            ),
+        )
+        trigger_device_ids = set()
+        for eid in row.get("prediction_inputs") or []:
+            state = states.get(eid)
+            reg = registry.get(eid, {}) or {}
+            if (
+                state is None
+                or str(reg.get("area_id") or "") != str(target_area)
+                or "activity" not in entity_capability_tags(eid, state)
+            ):
+                continue
+            device_id = reg.get("device_id")
+            if device_id:
+                trigger_device_ids.add(str(device_id))
+
+        local = []
+        remote = []
+        correlated_local = []
+        for eid, state in states.items():
+            if str(eid) == str(row.get("target_entity") or ""):
+                continue
+            reg = registry.get(eid, {}) or {}
+            kind, _reason = source_kind(eid, state, reg)
+            if kind not in {"binary", "tracker"}:
+                continue
+            source_area = reg.get("area_id")
+            if not source_area or not _active_state(state):
+                continue
+            latest = latest_events.get(eid)
+            if not latest:
+                continue
+            event_time, event_id, origin = latest
+            if not (
+                observer_start
+                <= float(event_time)
+                <= observer_end
+            ):
+                continue
+            device_id = reg.get("device_id")
+            detail = {
+                "entity_id": str(eid),
+                "event_id": str(event_id),
+                "origin": str(origin or "unknown"),
+                "reliability": _source_reliability(kind),
+                "area_id": str(source_area),
+                "device_id": device_id,
+                "kind": kind,
+                "event_time": float(event_time),
+            }
+            if str(source_area) == str(target_area):
+                if (
+                    device_id
+                    and str(device_id) in trigger_device_ids
+                ):
+                    detail["rejected_reason"] = (
+                        "same physical device as local activity trigger"
+                    )
+                    correlated_local.append(detail)
+                else:
+                    local.append(detail)
+            else:
+                remote.append(detail)
+        key = lambda item: (
+            abs(float(item["event_time"]) - float(row["action_ts"])),
+            item["entity_id"],
+        )
+        local.sort(key=key)
+        remote.sort(key=key)
+        correlated_local.sort(key=key)
+        return local, remote, correlated_local
+
+    def _activation_episode(self, row):
+        """Classify an ON action without creating reward evidence.
+
+        A local presence-like event is confirmation. Remote activity without any local
+        confirmation is only a *suspected* false activation: absence of proof is never
+        converted into a negative reward. Explicit exact-target user reversal is upgraded
+        separately to verified_false_activation because that evidence is already trusted
+        by the existing Automatic Correct contract.
+        """
+        if not self._is_on_activation(row):
+            return None
+        local, remote, correlated_local = self._observer_presence_events(row)
+        if local:
+            source = local[0]
+            return {
+                "class": "confirmed_use",
+                "confidence": min(0.95, float(source["reliability"])),
+                "source_entity_id": source["entity_id"],
+                "source_area_id": source["area_id"],
+                "evidence": {
+                    "contract": "false_activation_observer_v1",
+                    "observer_only": True,
+                    "reward_effect": "none",
+                    "local_confirmation": source,
+                    "remote_context": remote[:4],
+                    "correlated_local_rejected": correlated_local[:4],
+                },
+            }
+        if remote:
+            source = remote[0]
+            return {
+                "class": "suspected_false_activation",
+                # Cross-area activity plus missing local confirmation is useful context,
+                # but deliberately capped below the trusted Automatic Correct threshold.
+                "confidence": min(
+                    0.70, 0.70 * float(source["reliability"])
+                ),
+                "source_entity_id": source["entity_id"],
+                "source_area_id": source["area_id"],
+                "evidence": {
+                    "contract": "false_activation_observer_v1",
+                    "observer_only": True,
+                    "reward_effect": "none",
+                    "reason": (
+                        "cross-area presence-like event occurred inside the "
+                        "action window without independent same-area confirmation"
+                    ),
+                    "remote_context": remote[:4],
+                    "local_confirmation": None,
+                    "correlated_local_rejected": correlated_local[:4],
+                },
+            }
+        return {
+            "class": "unknown",
+            "confidence": 0.0,
+            "source_entity_id": None,
+            "source_area_id": None,
+            "evidence": {
+                "contract": "false_activation_observer_v1",
+                "observer_only": True,
+                "reward_effect": "none",
+                "reason": "no independent local or cross-area presence evidence",
+                "correlated_local_rejected": correlated_local[:4],
+            },
+        }
+
+    @staticmethod
+    def _activation_kwargs(episode):
+        if not episode:
+            return {}
+        return {
+            "activation_class": episode.get("class"),
+            "activation_confidence": episode.get("confidence", 0.0),
+            "activation_source_entity_id": episode.get("source_entity_id"),
+            "activation_source_area_id": episode.get("source_area_id"),
+            "activation_evidence": dict(episode.get("evidence") or {}),
+        }
+
     def _trusted(self, *, reward, confidence, source_reliability):
         return (
             reward is not None
@@ -734,6 +1054,7 @@ class TrustedAutomaticRewardService:
             "legacy_reward_components": components,
             "legacy_reason": reason_text,
         }
+        activation = self._activation_episode(row)
 
         if reason_text == "manual correction":
             source = self._latest_target_user_event(
@@ -760,6 +1081,47 @@ class TrustedAutomaticRewardService:
                     source_reliability=source["reliability"],
                     reward_sources=["explicit_user_reversal"],
                     metadata=metadata,
+                    **self._activation_kwargs(
+                        {
+                            "class": "verified_false_activation",
+                            "confidence": 1.0,
+                            # Keep the cross-area context entity, if one was already
+                            # observed, as the suppressor candidate. Verification itself
+                            # remains the exact-target user event in the normal reward
+                            # provenance columns.
+                            "source_entity_id": (
+                                activation.get("source_entity_id")
+                                if activation
+                                and activation.get("class")
+                                == "suspected_false_activation"
+                                else None
+                            ),
+                            "source_area_id": (
+                                activation.get("source_area_id")
+                                if activation
+                                and activation.get("class")
+                                == "suspected_false_activation"
+                                else None
+                            ),
+                            "evidence": {
+                                "contract": "false_activation_observer_v1",
+                                "observer_only": True,
+                                "reward_effect": (
+                                    "none_beyond_existing_manual_correction"
+                                ),
+                                "reason": (
+                                    "explicit user reversed the exact controlled "
+                                    "target inside the observation window"
+                                ),
+                                "target_user_event": source,
+                                "prior_observer_episode": dict(
+                                    (activation or {}).get("evidence") or {}
+                                ),
+                            },
+                        }
+                        if self._is_on_activation(row)
+                        else activation
+                    ),
                 )[0]
             return self.journal.resolve(
                 row["resolution_key"],
@@ -776,6 +1138,7 @@ class TrustedAutomaticRewardService:
                     "was an explicit user action"
                 ),
                 metadata=metadata,
+                **self._activation_kwargs(activation),
             )[0]
 
         if reason_text in {
@@ -811,6 +1174,22 @@ class TrustedAutomaticRewardService:
                     },
                     reward_sources=[source["entity_id"]],
                     metadata=metadata,
+                    **self._activation_kwargs(
+                        {
+                            "class": "confirmed_use",
+                            "confidence": source["reliability"],
+                            "source_entity_id": source["entity_id"],
+                            "source_area_id": source["area_id"],
+                            "evidence": {
+                                "contract": "false_activation_observer_v1",
+                                "observer_only": True,
+                                "reward_effect": "none",
+                                "local_confirmation": source,
+                            },
+                        }
+                        if self._is_on_activation(row)
+                        else activation
+                    ),
                 )[0]
             status = (
                 "rejected"
@@ -830,6 +1209,7 @@ class TrustedAutomaticRewardService:
                 ),
                 unknown_reason=rejected_reason,
                 metadata=metadata,
+                **self._activation_kwargs(activation),
             )[0]
 
         if reason_text == "weak acceptance after settling":
@@ -850,6 +1230,7 @@ class TrustedAutomaticRewardService:
                 ),
                 reward_sources=["absence_of_override_only"],
                 metadata=metadata,
+                **self._activation_kwargs(activation),
             )[0]
 
         return self.journal.resolve(
@@ -866,6 +1247,7 @@ class TrustedAutomaticRewardService:
                 reason_text or "unknown runtime outcome"
             ),
             metadata=metadata,
+            **self._activation_kwargs(activation),
         )[0]
 
     def resolve_experiment(
@@ -1193,6 +1575,19 @@ def install(core):
             "verified_same_area_presence_transition",
         ],
         "silence_semantics": "unknown_not_positive_reward",
+        "false_activation_observer": {
+            "version": 1,
+            "window_seconds": float(
+                OPTIONS.get("false_activation_observer_seconds", 12.0)
+            ),
+            "pre_action_seconds": float(
+                OPTIONS.get("fast_upstream_lead_seconds", 4.0)
+            ),
+            "classes": sorted(ACTIVATION_CLASSES),
+            "suspected_reward_effect": "none",
+            "verified_requires_existing_trusted_evidence": True,
+            "feature_selection_only": True,
+        },
         "deduplication": (
             "one resolution_key per decision or trial"
         ),
