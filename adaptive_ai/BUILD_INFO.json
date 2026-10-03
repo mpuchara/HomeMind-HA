@@ -1,10 +1,20 @@
 {
-  "version": "0.14.125",
+  "version": "0.14.126",
   "release_date": "2026-10-03",
-  "base_version": "0.14.124",
-  "base_commit": "b834cf9398ccab833d0169882a947d50b8485598",
-  "release_status": "binary-light-state-labels",
-  "release_validation_tests_passed": 1546,
+  "base_version": "0.14.125",
+  "base_commit": "553c5b94c1eade271152c5b41acbbb7d442387b3",
+  "release_status": "deferred-correct-candidate-build",
+  "release_validation_tests_passed": 1551,
+  "release_014126": {
+    "scope": "deferred_correct_collection_and_explicit_candidate_build",
+    "correct_collection": "saving Correct points is persistence-only and never starts Candidate training",
+    "explicit_build": "Create Candidate is a separate card action with pending-label count and confirmation",
+    "durable_request": "Candidate creation keeps the existing durable request ID queue so ambiguous HTTP failures do not duplicate work",
+    "inherited_labels": "Candidate pending count excludes labels inherited from its parent snapshot; only new points selected on that Candidate are pending",
+    "parent_safety": "parent generation remains unchanged while the child Candidate trains",
+    "schema_note": "this release does not silently rewrite an incompatible Live feature schema; existing Correct labels remain retained",
+    "regression": "tests cover accumulation, committed cutoff, undo/fingerprint filtering, inherited Candidate labels and separated UI actions"
+  },
   "release_014125": {
     "scope": "binary_light_state_labels",
     "live_ui": "brightness_pct agents display OFF/ON only when all currently observed Current/Desired values are endpoint states (0/100)",
