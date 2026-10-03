@@ -1,10 +1,21 @@
 {
-  "version": "0.14.127",
+  "version": "0.14.128",
   "release_date": "2026-10-03",
-  "base_version": "0.14.126",
-  "base_commit": "e6b11b0d905445e1bdea84e5d8fa6b0176410daf",
-  "release_status": "integrated-open-rcs-causal-fast-replay-immutable-snapshots",
-  "release_validation_tests_passed": 1574,
+  "base_version": "0.14.127",
+  "base_commit": "1db13618314866af9e52fefb9fd314d4971c5463",
+  "release_status": "correct-live-schema-auto-recovery",
+  "release_validation_tests_passed": 1579,
+  "release_014128": {
+    "scope": "one_click_recovery_for_correct_candidate_on_obsolete_live_schema",
+    "trigger": "explicit Create Candidate request only",
+    "recovery": "retire only a Candidate failed by the exact Live feature-schema guard, then rebuild Live with incompatible_persisted_model",
+    "labels": "Correct labels are retained; committed operations tied to the failed surrogate are reopened so the same points become pending again",
+    "durable_request": "the same request_id enters waiting state during Live rebuild and resumes automatically when a compatible Live model exists",
+    "ui": "schema-failed Candidate shows Repair & Create Candidate and routes recovery through the Live root",
+    "safety": "other active Candidates are never auto-discarded; parent physical-control authority is unchanged",
+    "fingerprint": "Correct target fingerprint excludes mutable input_entities, so schema rebuild does not invalidate saved labels",
+    "validation": "1579 unit/regression tests plus Python 3.11/3.13, image smoke and benchmark pipeline are the release gate"
+  },
   "release_014127": {
     "scope": "integrate_open_prs_235_236_239_on_top_of_014126",
     "fast_replay": "paired Home Assistant numeric_state ON/OFF thresholds become bounded historical anchors for fast binary agents, including hold times",
