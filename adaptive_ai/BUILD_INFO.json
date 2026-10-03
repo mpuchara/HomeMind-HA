@@ -4,7 +4,7 @@
   "base_version": "0.14.125",
   "base_commit": "33e73b5b7a51e062049bf9bd93a605c713db9b61",
   "release_status": "014125-plus-false-activation-suppressor-context",
-  "release_validation_tests_passed": 0,
+  "release_validation_tests_passed": 1569,
   "release_014126": {
     "scope": "combine_014125_immutable_snapshot_and_radar_audit_with_false_activation_observer",
     "inherits_014125": "preserves immutable persisted policy snapshots and read-only automation_source_audit for HA radar/area diagnosis",
@@ -15,7 +15,7 @@
     "suppressor_selection": "bounded cross-area evidence may raise feature relevance and request a broad schema re-screen on explicit Rebuild without directly mutating policy",
     "runtime_cost": "no history replay or synchronous SQLite scan is added to realtime inference; observer work happens at outcome resolution from current RAM state/provenance",
     "physical_control": "unchanged",
-    "validation": "pending branch CI on Python 3.11/3.13, image smoke and full benchmark gate"
+    "validation": "1569 tests green on Python 3.11 and 3.13; image smoke, install package build and full benchmark gate green before merge"
   },
   "release_014125": {
     "scope": "immutable_model_snapshot_and_roombelief_source_diagnostic",
