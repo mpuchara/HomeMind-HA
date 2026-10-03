@@ -1,3 +1,15 @@
+# 0.14.127 — 2026-10-03
+
+- Integrate all remaining open RC work from PRs **#235, #236 and #239** on top of the deployed 0.14.126 line.
+- Add causal replay for paired Home Assistant `numeric_state` automations: fast binary agents can anchor historical ON/OFF behaviour to the real numeric threshold crossing, including `for:` hold time, instead of treating arbitrary non-zero radar values as occupancy.
+- Stop numeric radar distance/energy channels from acting as boolean occupancy transition clocks; they remain available as continuous context features.
+- Add a safety guard for Correct: if the Live policy still uses an incompatible feature schema, child Candidate training is rejected until explicit Live Train/Rebuild; existing Correct points remain stored.
+- Make decoded persisted policy snapshots immutable inputs by copying mutable numeric arrays on cold policy construction.
+- Add read-only automation-source diagnostics to Correct debug export so wrong/missing HA area mapping can be inspected without granting occupancy authority.
+- Require the frozen holdout gate for automation-backed fast targets during qualification.
+- Package publishing now waits for the full test matrix, and package verification explicitly requires `fast_automation_replay.py`.
+- No new physical-control authority is introduced by these changes.
+
 # 0.14.126 — 2026-10-03
 
 - Decouple **collecting Correct points** from Candidate training: saving a point is persistence-only and can be repeated across sessions without starting a long build.
