@@ -1,3 +1,22 @@
+# 0.14.126 — 2026-10-03
+
+- Build directly on the installed **0.14.125 RC** rather than downgrading to the separate 0.14.124 main line.
+- Preserve 0.14.125 immutable serialized-policy snapshots: prediction/lazy decay can no longer mutate the decoded persisted model used by Correct/history reconstruction.
+- Preserve the 0.14.125 read-only Home Context `automation_source_audit`, including effective/registry/device area diagnosis for radar sources; it still grants no new occupancy or physical-control authority.
+- Add observer-only false-activation classification for fast binary ON decisions: `confirmed_use`, `suspected_false_activation`, `verified_false_activation`, or `unknown`.
+- Attribute causal context in a bounded window of up to 4 s before and 12 s after the ON action. Activity later in the normal 90 s reward window cannot become false-trigger evidence.
+- Cross-area motion without independent same-area confirmation remains diagnostic only: it never becomes trusted negative reward and never directly trains OFF.
+- Explicit exact-target user reversal remains the authoritative way to verify a false activation; same-device radar/presence siblings cannot circularly confirm the raw trigger.
+- Keep suppressor evidence bounded and use it only for future feature selection. Repeated/verified cross-area evidence can make a sensor structurally relevant and request broad context re-screen on explicit Rebuild.
+- Automatic Correct UI exposes confirmed/suspected/verified/unknown false-activation counts and labels observer evidence as no-reward.
+- No new physical ActionIntent/Executor authority and no synchronous historical replay is added to the realtime path.
+
+# 0.14.125 — 2026-10-02
+
+- Make persisted policy snapshots immutable across read-only Correct/history reconstruction by copying numeric policy arrays at cold construction.
+- Add a bounded, read-only `automation_source_audit` to Home Context diagnostics for HA automation radar sources, showing effective/registry/device area, admission status, reason and role.
+- Keep radar area audit diagnostic-only: no automatic area reassignment, occupancy authority, reward change or physical-control change.
+
 # 0.14.123 — 2026-10-01
 
 - Bind the 0.14.122 persistent continuation seed cache to the exact version of the target rows that produced it. Each `entity_history` mutation now receives a durable cross-process `mutation_revision`.
