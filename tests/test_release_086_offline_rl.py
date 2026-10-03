@@ -709,7 +709,10 @@ class Stage7ShadowAndSourceContracts(unittest.TestCase):
             / "candidate_ui.js"
         ).read_text(encoding="utf-8")
         self.assertIn("Correct points", workflow)
-        self.assertIn("Apply Correct · create child Candidate", workflow)
+        self.assertIn("window.workflowCreateCorrectCandidate=", workflow)
+        self.assertNotIn("data-apply", workflow)
+        self.assertIn('data-wf="create-correct"', workflow)
+        self.assertIn('data-wf="create-correct"', candidate)
         self.assertIn('data-wf="offline-rl"', workflow)
         self.assertIn('data-wf="correct"', candidate)
         self.assertIn('data-wf="offline-rl"', candidate)
