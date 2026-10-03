@@ -152,6 +152,7 @@ jobs:
           assert row["scalar_reference"]["decision_parity"], row["scalar_reference"]
           PY
   package:
+    needs: tests
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
@@ -203,6 +204,7 @@ jobs:
                       prefix+'src/tiny_mlp_training_benchmark.py',
                       prefix+'src/tiny_mlp_correct_benchmark.py',
                       prefix+'src/automatic_correct_rewards.py',
+                      prefix+'src/fast_automation_replay.py',
                       prefix+'src/automatic_correct_benchmark.py',
                       prefix+'src/policy_tiny_mlp_offline_rl.py',
                       prefix+'src/offline_rl_process.py',
