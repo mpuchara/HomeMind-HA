@@ -249,6 +249,9 @@ class Engine(threading.Thread):
         self.initial_inference_pending = True
         self.models = {}
         self.context_relevance = {}
+        # Observer-derived cross-area signals are kept separate for diagnostics even
+        # though Train/Rebuild may merge them into ordinary feature relevance.
+        self.context_suppressor_relevance = {}
         # Realtime routing cache. Event dispatch must not hit SQLite or recompute every
         # agent's dependency set on each HA state_changed event.
         self.agent_index_at = 0.0
