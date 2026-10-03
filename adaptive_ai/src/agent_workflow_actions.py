@@ -366,6 +366,12 @@ def _correct_label_counts(manager, generation, agent):
             float(previous["committed_ts"])
             if previous and previous["committed_ts"] is not None else None
         )
+        # Candidate models inherit the parent's Teach labels with historical
+        # created_ts values. Inherited examples belong to cumulative training,
+        # but they are NOT new Correct points selected on this Candidate.
+        if generation.get("generation_type") == "candidate" and generation.get("created_ts") is not None:
+            born = float(generation["created_ts"])
+            cutoff = max(born, cutoff) if cutoff is not None else born
         counts = c.execute(
             """SELECT COUNT(*) AS total,
                       COALESCE(SUM(CASE WHEN ? IS NULL OR created_ts>?
