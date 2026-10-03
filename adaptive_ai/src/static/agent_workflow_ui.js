@@ -204,12 +204,15 @@ Parent pozostaje bez zmian. Wynik przejdzie offline gate i Shadow A/B; nie dosta
       if(!requestId){
         const s=await status(key);
         const total=Number(s.correct_labels_total||0),pending=Number(s.correct_labels_pending||0);
-        if(!pending){alert('Brak nowych punktów Correct. Zebrano: '+total+'. Dodaj punkty przez Correct i wróć tutaj.');return;}
-        const repairNote=s.live_schema_repair_required
+        const schemaRepair=Boolean(s.live_schema_repair_required);
+        if(!pending&&!schemaRepair){alert('Brak nowych punktów Correct. Zebrano: '+total+'. Dodaj punkty przez Correct i wróć tutaj.');return;}
+        if(!pending&&schemaRepair&&!total){alert('Live wymaga naprawy schematu, ale nie ma zapisanych punktów Correct do utworzenia Candidate.');return;}
+        const repairNote=schemaRepair
           ? '\n\nModel Live ma starszy schemat cech. Najpierw automatycznie przebudujemy Live do aktualnego schematu; zapisane punkty Correct pozostaną zachowane. Dopiero potem utworzymy Candidate.'
           : '';
         if(!confirm('Utworzyć Candidate z punktów Correct dla '+s.name+' · Gen '+s.generation_number+'?\n\n'+
           'Aktywne korekty: '+total+'\nNowe punkty: '+pending+
+          (schemaRepair&&!pending?'\nPunkty z nieudanego Candidate zostaną automatycznie ponownie użyte.':'')+
           '\n\nDopiero teraz uruchomimy trening. Rodzic pozostaje bez zmian.'+repairNote))return;
         requestId=newRequestId();
         rememberRequest(key,requestId);
