@@ -40,6 +40,26 @@ def _values(rows, field):
     return out
 
 
+def _pairs(rows, field):
+    """Compact wire representation of one observed chart series."""
+    out = []
+    for row in rows or []:
+        value = row.get(field)
+        if value is None:
+            continue
+        try:
+            out.append([float(row["ts"]), float(value)])
+        except (KeyError, TypeError, ValueError):
+            continue
+    return out
+
+
+def _series(label, rows, field, compact=False):
+    if compact:
+        return {"label": str(label), "pairs": _pairs(rows, field)}
+    return {"label": str(label), "points": _values(rows, field)}
+
+
 def _active_labels(manager, agent):
     return [
         row for row in manager.engine.rl_teaching.labels(agent["id"])
@@ -221,7 +241,7 @@ def _base_payload(generation, agent, start, end):
     }
 
 
-def build_correct_history(manager, ref, start, end, legacy_history):
+def build_correct_history(manager, ref, start, end, legacy_history, compact=False):
     TRAINING_BUDGET.request_interactive_window(1.0, reason="correct_history")
     total_started = time.perf_counter()
     token = RUNTIME_DEBUG.begin(
@@ -275,16 +295,20 @@ def build_correct_history(manager, ref, start, end, legacy_history):
                 "parent_generation_id": None,
                 "series_order": ["current", "live_desired", "correct"],
                 "series": {
-                    "current": {"label": "Current", "points": _values(points, "current")},
-                    "live_desired": {"label": "Live Desired", "points": _values(points, "desired")},
+                    "current": _series("Current", points, "current", compact=compact),
+                    "live_desired": _series("Live Desired", points, "desired", compact=compact),
                 },
                 "labels": labels,
-                "points": points,
                 "gaps": list(observed.get("gaps") or []),
                 "stale_after_seconds": observed.get("stale_after_seconds"),
                 "desired_source": observed.get("desired_source"),
                 "desired_semantics": observed.get("desired_semantics"),
             })
+            if compact:
+                payload["compact"] = True
+                payload["series_encoding"] = "pairs_v1"
+            else:
+                payload["points"] = points
             return payload
 
         stage_started = time.perf_counter()
@@ -328,14 +352,11 @@ def build_correct_history(manager, ref, start, end, legacy_history):
             "parent_generation_type": parent["generation_type"],
             "series_order": ["current", "parent_desired", "candidate_desired", "correct"],
             "series": {
-                "current": {"label": "Current", "points": _values(current_points, "current")},
-                "parent_desired": {"label": _generation_label(parent), "points": _values(parent_points, "desired")},
-                "candidate_desired": {"label": _generation_label(generation), "points": _values(child_points, "desired")},
+                "current": _series("Current", current_points, "current", compact=compact),
+                "parent_desired": _series(_generation_label(parent), parent_points, "desired", compact=compact),
+                "candidate_desired": _series(_generation_label(generation), child_points, "desired", compact=compact),
             },
             "labels": labels,
-            # Keep the selected generation's observed rows available for backwards-compatible
-            # consumers. No values below are synthesized from a policy replay.
-            "points": child_points,
             "gaps": list(child_history.get("gaps") or []),
             "parent_gaps": list(parent_history.get("gaps") or []),
             "desired_source": "observed_candidate_generation_shadow_runtime",
@@ -343,6 +364,11 @@ def build_correct_history(manager, ref, start, end, legacy_history):
             "desired_semantics": "Candidate Desired actually observed from the selected generation",
             "parent_desired_semantics": "Parent Desired actually observed from the direct parent generation",
         })
+        if compact:
+            payload["compact"] = True
+            payload["series_encoding"] = "pairs_v1"
+        else:
+            payload["points"] = child_points
         return payload
     except Exception as exc:
         outcome = "error"
@@ -419,8 +445,8 @@ def install(manager):
     handler = manager.core.Handler
     original_get = handler.do_GET
 
-    def correct_history(ref, start, end):
-        return build_correct_history(manager, ref, start, end, original_history)
+    def correct_history(ref, start, end, compact=False):
+        return build_correct_history(manager, ref, start, end, original_history, compact=bool(compact))
 
     def correct_point(ref, timestamp):
         return build_correct_point(manager, ref, timestamp, original_point)
@@ -438,7 +464,9 @@ def install(manager):
                     now = time.time()
                     start = float((query.get("start") or [now - 600])[0])
                     end = float((query.get("end") or [now])[0])
-                    return http.send_json(200, correct_history(ref, start, end))
+                    compact_raw = str((query.get("compact") or ["0"])[0]).strip().lower()
+                    compact = compact_raw in {"1", "true", "yes", "on"}
+                    return http.send_json(200, correct_history(ref, start, end, compact=compact))
                 ts = float((query.get("ts") or [time.time()])[0])
                 return http.send_json(200, correct_point(ref, ts))
             except (TypeError, ValueError) as exc:
