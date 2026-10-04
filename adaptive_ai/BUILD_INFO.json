@@ -1,10 +1,21 @@
 {
-  "version": "0.14.128",
-  "release_date": "2026-10-03",
-  "base_version": "0.14.127",
-  "base_commit": "1db13618314866af9e52fefb9fd314d4971c5463",
-  "release_status": "correct-live-schema-auto-recovery",
-  "release_validation_tests_passed": 1579,
+  "version": "0.14.129",
+  "release_date": "2026-10-04",
+  "base_version": "0.14.128",
+  "base_commit": "7a18b9772cd2e7fcba03d99278d689d6ce3cd9ff",
+  "release_status": "candidate-only-schema-upgrade",
+  "release_validation_tests_passed": 1580,
+  "release_014129": {
+    "scope": "restore_candidate_isolation_for_obsolete_feature_schema",
+    "live_behavior": "Create Candidate never queues, clears or rebuilds the Live parent because of schema incompatibility",
+    "candidate_behavior": "the direct-parent snapshot is copied first; if its schema is obsolete, only the hidden Candidate is routed through schema_upgrade_rebuild from history under the current schema",
+    "correct_labels": "saved Correct labels remain on the parent and are synced into the Candidate rebuild; no re-marking is required",
+    "upgrade_recovery": "Candidates failed by 0.14.127/0.14.128 with the Live schema guard are requeued in place as schema_upgrade_rebuild",
+    "gating": "Candidate historical qualification/offline gate remains required before future A/B and promotion",
+    "promotion": "Promote remains the only operation allowed to replace the Live generation",
+    "removed": "0.14.128 automatic Live rebuild waiting workflow and Repair & Create Candidate UI",
+    "validation": "1580 unit/regression tests plus Python 3.11/3.13, image smoke and benchmark pipeline are the release gate"
+  },
   "release_014128": {
     "scope": "one_click_recovery_for_correct_candidate_on_obsolete_live_schema",
     "trigger": "explicit Create Candidate request only",
