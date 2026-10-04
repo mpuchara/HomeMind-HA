@@ -1,3 +1,15 @@
+# 0.14.135 — 2026-10-04
+
+- Remove direct Candidate ownership of the `Engine.process_agent` monkey-patch.
+- Add a named `process_agent_pipeline` registry as the single owner of process-agent wrapper installation and integrity checks.
+- Preserve the established Candidate observation ordering: Candidate before-hook → Engine.process_agent → Candidate after-hook.
+- Add an inactive-Candidate fast bypass: when the generation-aware active-root index is available and a Live agent has no retained Candidate lineage, Candidate observation hooks are skipped entirely.
+- Keep standalone/legacy compositions compatible: if no active-root index is installed, the historical always-observe behavior remains unchanged.
+- Fail fast when `engine.process_agent` is replaced outside the named pipeline or when final composition order drifts.
+- Expose the process-agent pipeline snapshot in the final runtime composition contract and remove the Candidate process wrapper from the remaining-legacy-overlay list.
+- Add regressions for wrapper semantics, idempotence, direct-overwrite detection, inactive fast bypass, active before/base/after ordering, safe index-failure fallback and shipped source ownership.
+- No reward, policy, Correct, Candidate qualification, ActionIntent, Executor or physical Control authority changes.
+
 # 0.14.134 — 2026-10-04
 
 - Add a named, verifiable composition contract for `Engine.on_state_changed`.
