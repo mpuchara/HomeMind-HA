@@ -15,7 +15,7 @@ try:
 except Exception:
     ws_connect = None
 
-APP_VERSION = "0.14.130"
+APP_VERSION = "0.14.131"
 HISTORY_BOOTSTRAP_REVISION = "target-attrs-v2"
 TRAINING_REVISION = "shared-home-intents-v20"
 DATA_DIR = Path(os.environ.get("ADAPTIVE_AI_DATA", "/data"))
@@ -39,6 +39,9 @@ DEFAULT_OPTIONS = {
     # Delta-only reconciliation makes this temporary fallback cheap enough for Pi 4.
     "realtime_fallback_poll_seconds": 10,
     "proactive_tick_seconds": 1,
+    # Cold startup prediction warm-up fills only free inference-worker slots and never
+    # waits for Home Assistant to become completely quiet.
+    "startup_warmup_targets_per_tick": 2,
     # The 1 s engine tick is a lightweight deadline scheduler, not a global inference loop.
     "fast_idle_inference_interval_seconds": 30,
     "idle_inference_interval_seconds": 30,
