@@ -12,6 +12,7 @@ import math
 import time
 
 from manual_feedback_unified import observe_linked_context
+from state_event_pipeline import install_state_event_wrapper
 
 
 def _trainable_now(agent):
@@ -160,7 +161,14 @@ def install_runtime(core):
                 },
             )
 
-    engine.on_state_changed = on_state_changed
+    def build_state_changed(next_handler):
+        if next_handler is not original_state_changed:
+            raise RuntimeError("manual feedback lifecycle state-event base changed during install")
+        return on_state_changed
+
+    install_state_event_wrapper(
+        engine, "manual_feedback_lifecycle", build_state_changed
+    )
     engine._manual_lifecycle_events_installed = True
     core.STORE.event(
         None, "info", "manual_lifecycle_ready",
