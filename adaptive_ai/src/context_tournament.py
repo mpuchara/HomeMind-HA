@@ -25,6 +25,7 @@ from context import (
     target_value,
 )
 from settings import OPTIONS
+from process_agent_pipeline import install_process_agent_wrapper
 
 
 SHADOW_MODEL_VERSION = 1
@@ -638,6 +639,8 @@ def install(store, engine):
     engine.policy = policy_with_tournament
     engine.runtime_for = runtime_with_tournament
     if callable(original_process_agent):
-        engine.process_agent = process_agent_with_tournament
+        install_process_agent_wrapper(
+            engine, "context_tournament_shadow", lambda _next: process_agent_with_tournament
+        )
     engine.context_tournament = service
     return service
