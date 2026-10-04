@@ -1412,8 +1412,6 @@ def install(manager):
     manager.rebuild_candidate_dependency_index = _rebuild_candidate_dependency_index
     if callable(original_on_state_changed):
         def build_state_changed(next_handler):
-            if next_handler is not original_on_state_changed:
-                raise RuntimeError("candidate shadow state-event base changed during install")
             return candidate_state_changed
 
         install_state_event_wrapper(
