@@ -161,16 +161,9 @@ Parent pozostaje bez zmian. Wynik przejdzie offline gate i Shadow A/B; nie dosta
           clearRequest(ref);
           const terminal=Error(state.error||'Correct request failed');terminal.workflowTerminal=true;throw terminal;
         }
-        if(statusNode){
-          const phase=state?.result?.phase||'';
-          statusNode.textContent=state.state==='waiting'&&phase==='rebuilding_live_schema'
-            ?'Correct jest zapisany trwale · przebudowuję Live do aktualnego schematu · punkty Correct są zachowane…'
-            :state.state==='waiting'&&phase==='discarding_incompatible_candidate'
-              ?'Correct jest zapisany trwale · usuwam nieudanego Candidate przed naprawą Live…'
-              :state.state==='processing'
-                ?'Correct jest zapisany trwale · przygotowuję child Candidate…'
-                :'Correct jest zapisany trwale · oczekuje na obsługę…';
-        }
+        if(statusNode)statusNode.textContent=state.state==='processing'
+          ?'Correct jest zapisany trwale · tworzę child Candidate…'
+          :'Correct jest zapisany trwale · oczekuje na obsługę…';
       }catch(e){
         if(e?.workflowTerminal)throw e;
         lastError=e;
@@ -204,16 +197,10 @@ Parent pozostaje bez zmian. Wynik przejdzie offline gate i Shadow A/B; nie dosta
       if(!requestId){
         const s=await status(key);
         const total=Number(s.correct_labels_total||0),pending=Number(s.correct_labels_pending||0);
-        const schemaRepair=Boolean(s.live_schema_repair_required);
-        if(!pending&&!schemaRepair){alert('Brak nowych punktów Correct. Zebrano: '+total+'. Dodaj punkty przez Correct i wróć tutaj.');return;}
-        if(!pending&&schemaRepair&&!total){alert('Live wymaga naprawy schematu, ale nie ma zapisanych punktów Correct do utworzenia Candidate.');return;}
-        const repairNote=schemaRepair
-          ? '\n\nModel Live ma starszy schemat cech. Najpierw automatycznie przebudujemy Live do aktualnego schematu; zapisane punkty Correct pozostaną zachowane. Dopiero potem utworzymy Candidate.'
-          : '';
+        if(!pending){alert('Brak nowych punktów Correct. Zebrano: '+total+'. Dodaj punkty przez Correct i wróć tutaj.');return;}
         if(!confirm('Utworzyć Candidate z punktów Correct dla '+s.name+' · Gen '+s.generation_number+'?\n\n'+
           'Aktywne korekty: '+total+'\nNowe punkty: '+pending+
-          (schemaRepair&&!pending?'\nPunkty z nieudanego Candidate zostaną automatycznie ponownie użyte.':'')+
-          '\n\nDopiero teraz uruchomimy trening. Rodzic pozostaje bez zmian.'+repairNote))return;
+          '\n\nDopiero teraz uruchomimy trening. Rodzic pozostaje bez zmian.'))return;
         requestId=newRequestId();
         rememberRequest(key,requestId);
         try{await post(key,'correct',{request_id:requestId});}
@@ -233,15 +220,10 @@ Parent pozostaje bez zmian. Wynik przejdzie offline gate i Shadow A/B; nie dosta
           return state;
         }
         if(state?.state==='failed'){clearRequest(key);throw Error(state.error||'Nie udało się utworzyć Candidate');}
-        if(button){
-          const phase=state?.result?.phase||'';
-          if(state?.state==='waiting'&&phase==='rebuilding_live_schema')button.textContent='Naprawiam Live…';
-          else if(state?.state==='waiting'&&phase==='discarding_incompatible_candidate')button.textContent='Usuwam Failed…';
-          else if(state?.state==='processing')button.textContent='Candidate: tworzę…';
-        }
+        if(button&&state?.state==='processing')button.textContent='Candidate: tworzę…';
         await sleep(500);
       }
-      alert('Żądanie Candidate jest zapisane i działa w tle. Jeśli potrzebny jest rebuild Live, ten sam request automatycznie poczeka na jego zakończenie i dopiero potem utworzy Candidate.');
+      alert('Żądanie Candidate jest zapisane. Po odświeżeniu ponowne użycie przycisku sprawdzi ten sam request ID.');
     }catch(e){notifyError(e);}
     finally{if(button){button.disabled=false;button.textContent=originalText;delete button.dataset.correctCreateRunning;}}
   };

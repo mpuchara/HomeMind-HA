@@ -1,3 +1,13 @@
+# 0.14.129 — 2026-10-04
+
+- Restore the intended Candidate isolation contract: **Create Candidate never rebuilds the Live parent because its feature schema is old**.
+- Candidate still starts from the exact direct-parent snapshot. If that copied model uses an obsolete feature contract, only the hidden Candidate is routed through `schema_upgrade_rebuild` and rebuilt from history under the current schema.
+- Saved Correct points remain durable on the parent and are synchronized into the Candidate rebuild; they do not need to be marked again.
+- A Candidate left `Failed` by 0.14.127/0.14.128 with `Live policy feature schema is incompatible with this release` is automatically requeued in place as `schema_upgrade_rebuild` on startup.
+- Remove the 0.14.128 automatic Live rebuild/waiting request path and the `Repair & Create Candidate` UI.
+- Live keeps serving its existing model until an explicitly validated Candidate is promoted. Promotion remains the only workflow that replaces the Live generation.
+- Candidate historical qualification and the offline gate still run before future A/B evidence can make the Candidate promotable.
+
 # 0.14.128 — 2026-10-03
 
 - Fix the `Live policy feature schema is incompatible with this release` dead-end when creating a Candidate from saved Correct points.
