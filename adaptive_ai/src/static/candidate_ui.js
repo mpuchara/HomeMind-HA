@@ -93,7 +93,6 @@
     const policyBackend=c.candidate_policy_backend||correct.source_backend||'diagonal_linucb';
     const correctPath=correct.path||c.correct_path||'—';
     const rebuildReason=correct.rebuild_reason||c.correct_rebuild_reason||null;
-    const schemaRecovery=c.state==='failed'&&String(c.last_error||'').includes('Live policy feature schema is incompatible with this release');
     const schemaLine=c.missing_context
       ? `<p class="candidate-error"><b>Missing context</b> — ${esc(c.schema_evolution_reason||gateReason)}</p>`
       : schemaSelected.length
@@ -156,7 +155,7 @@
         <button class="ghost" data-promote-custom ${customEligible?'':'disabled'}>Promote</button>
       </div>
       ${ownershipDetails(c)}</details>
-      <div class="actions candidate-workflow-actions"><button class="ghost" data-wf="auto">Autonomous</button><button class="primary" data-wf="correct">Correct</button><button class="ghost" data-wf="create-correct" title="${schemaRecovery?'Repair Live schema, retain Correct points, then create a fresh Candidate':'Train a child Candidate explicitly from saved Correct points'}">${schemaRecovery?'Repair & Create Candidate':'Create Candidate'}</button><button class="ghost" data-wf="offline-rl" title="Trusted Automatic Correct → conservative Offline RL child">Offline RL</button><button class="ghost" data-wf="explore">Explore</button><button class="ghost" data-wf="change">Change decision</button><button class="ghost" data-wf="settings">Settings</button><button class="ghost" data-wf="debug">Export debug</button></div>
+      <div class="actions candidate-workflow-actions"><button class="ghost" data-wf="auto">Autonomous</button><button class="primary" data-wf="correct">Correct</button><button class="ghost" data-wf="create-correct" title="Train a child Candidate explicitly from saved Correct points">Create Candidate</button><button class="ghost" data-wf="offline-rl" title="Trusted Automatic Correct → conservative Offline RL child">Offline RL</button><button class="ghost" data-wf="explore">Explore</button><button class="ghost" data-wf="change">Change decision</button><button class="ghost" data-wf="settings">Settings</button><button class="ghost" data-wf="debug">Export debug</button></div>
       <div class="candidate-actions candidate-lifecycle-actions">
         <select data-promote-mode aria-label="Promotion target mode"><option value="shadow" ${targetMode==='shadow'?'selected':''}>Promote as Shadow</option><option value="control" ${targetMode==='control'?'selected':''}>Promote as Control</option></select>
         <button class="primary" data-promote ${c.promotable?'':'disabled'}>Promote</button><button class="ghost" data-discard ${c.state==='discarding'?'disabled':''}>${c.state==='discarding'?'Cancelling…':'Discard'}</button>
@@ -201,9 +200,7 @@
         });
         el.querySelector('[data-wf=auto]').onclick=e=>window.workflowAutonomous?.(ref,e.currentTarget);
         el.querySelector('[data-wf=correct]').onclick=()=>window.openWorkflowCorrect?.(ref);
-        const schemaRecovery=c.state==='failed'&&String(c.last_error||'').includes('Live policy feature schema is incompatible with this release');
-        const createRef=schemaRecovery?(c.root_agent_id||c.parent_agent_id):ref;
-        el.querySelector('[data-wf=create-correct]').onclick=e=>window.workflowCreateCorrectCandidate?.(createRef,e.currentTarget);
+        el.querySelector('[data-wf=create-correct]').onclick=e=>window.workflowCreateCorrectCandidate?.(ref,e.currentTarget);
         el.querySelector('[data-wf=offline-rl]').onclick=e=>window.workflowOfflineRL?.(ref,e.currentTarget);
         el.querySelector('[data-wf=explore]').onclick=()=>window.openExplore?.(ref);
         el.querySelector('[data-wf=change]').onclick=e=>window.workflowChangeDecision?.(ref,e.currentTarget);
