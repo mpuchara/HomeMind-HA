@@ -2,6 +2,7 @@ from urllib.error import HTTPError
 from urllib.error import URLError
 from collections import deque
 import gc
+import json
 import math
 import sqlite3
 import threading
@@ -210,6 +211,12 @@ class HistoryManager(threading.Thread):
         # overlap window into the exact legacy continuation seed. The next checkpoint
         # can then reuse one tiny seed/agent instead of re-reading or retaining rows.
         self._persistent_continuation_seed_state = None
+        # 0.14.130: TinyMLP supervised rows are retained across the logical 6 h
+        # checkpoints of one persistent selected-agent worker. Ridge checkpoints remain
+        # durable every 6 h; the optional Shadow challenger is trained/tournamented only
+        # once at the final checkpoint instead of repeating the same bounded optimizer
+        # work for every chunk.
+        self._persistent_neural_sample_state = {}
         self._persistent_replay_sqlite_connection = None
         self.neural_training_artifacts = {}
         self.training_process_status = {
@@ -221,7 +228,10 @@ class HistoryManager(threading.Thread):
         # Recorder imports are global archive data, not model state. Repeated Rebuilds
         # in one process therefore reuse successful per-entity coverage and fetch only
         # a short overlap + new tail instead of downloading the same 7 days again.
-        self.training_recorder_coverage = {}
+        self.training_recorder_coverage = (
+            self._load_training_recorder_coverage()
+            if not self.worker_mode and not self.session_mode else {}
+        )
         self.training_recorder_coverage_hits = 0
         self.training_recorder_coverage_misses = 0
         self.recorder_skipped_slices = 0
@@ -848,15 +858,91 @@ class HistoryManager(threading.Thread):
             if entity_capability_tags(eid, current.get(eid) or {}) & {"occupancy", "activity"}
         )
 
+    RECORDER_COVERAGE_META_KEY = "training_recorder_coverage_v1"
+    RECORDER_COVERAGE_MAX_ROWS = 4096
+
+    @classmethod
+    def _decode_training_recorder_coverage(cls, raw):
+        """Decode bounded persisted Recorder coverage; invalid data is only a cache miss."""
+        if not raw:
+            return {}
+        try:
+            payload = json.loads(raw) if isinstance(raw, str) else dict(raw)
+        except Exception:
+            return {}
+        if str(payload.get("contract") or "") != cls.RECORDER_COVERAGE_META_KEY:
+            return {}
+        out = {}
+        for row in list(payload.get("rows") or ())[: cls.RECORDER_COVERAGE_MAX_ROWS]:
+            try:
+                source = str(row["source"])
+                entity_id = str(row["entity_id"])
+                start = float(row["start_ts"])
+                end = float(row["end_ts"])
+            except (KeyError, TypeError, ValueError):
+                continue
+            if not source or not entity_id or not math.isfinite(start) or not math.isfinite(end):
+                continue
+            if end <= start:
+                continue
+            out[(source, entity_id)] = (start, end)
+        return out
+
+    def _load_training_recorder_coverage(self):
+        try:
+            return self._decode_training_recorder_coverage(
+                STORE.meta_get(self.RECORDER_COVERAGE_META_KEY)
+            )
+        except Exception:
+            return {}
+
+    def _persist_training_recorder_coverage(self):
+        """Persist only the performance watermark; archive rows remain authoritative."""
+        rows = []
+        for (source, entity_id), bounds in (
+            getattr(self, "training_recorder_coverage", {}) or {}
+        ).items():
+            try:
+                start, end = float(bounds[0]), float(bounds[1])
+            except (TypeError, ValueError, IndexError):
+                continue
+            if end <= start:
+                continue
+            rows.append({
+                "source": str(source),
+                "entity_id": str(entity_id),
+                "start_ts": start,
+                "end_ts": end,
+            })
+        # This is a cache, never semantic state. Keep the most recently extended ranges
+        # if a pathological installation exceeds the bounded metadata budget.
+        rows.sort(key=lambda row: (float(row["end_ts"]), row["source"], row["entity_id"]), reverse=True)
+        rows = rows[: self.RECORDER_COVERAGE_MAX_ROWS]
+        try:
+            STORE.meta_set(
+                self.RECORDER_COVERAGE_META_KEY,
+                json.dumps(
+                    {"contract": self.RECORDER_COVERAGE_META_KEY, "rows": rows},
+                    separators=(",", ":"),
+                    sort_keys=True,
+                ),
+            )
+        except Exception:
+            # Coverage persistence may only affect performance. Never fail explicit Train
+            # after Recorder data has already been imported successfully.
+            return False
+        return True
+
     def _training_recorder_import(self, entity_ids, start_ts, end_ts, *, batch_size,
                                   minimal, no_attributes, source, label, max_hours):
         """Reuse successful Recorder coverage inside one process and fetch only deltas.
 
         The local entity_history archive is shared by Live and Candidate generations.
         Re-downloading the same seven-day Recorder interval on every Rebuild adds wall
-        clock time without adding training evidence. Coverage is intentionally RAM-only:
-        after restart we perform one authoritative refresh again. Any skipped Recorder
-        slice prevents the attempted range from being cached.
+        clock time without adding training evidence. Successful coverage is persisted as
+        a performance watermark so restart fetches only a short overlap + new tail. The
+        local archive remains authoritative, and any skipped Recorder slice prevents the
+        attempted range from being cached.
         """
         ids = sorted(set(str(eid) for eid in (entity_ids or ()) if eid))
         if not ids or float(end_ts) <= float(start_ts):
@@ -890,6 +976,7 @@ class HistoryManager(threading.Thread):
             return 0
 
         inserted = 0
+        coverage_changed = False
         for plan_ids, plan_start, plan_end, plan_kind in plans:
             skipped_before = int(getattr(self, "recorder_skipped_slices", 0) or 0)
             inserted += self._import_section(
@@ -911,6 +998,9 @@ class HistoryManager(threading.Thread):
                         )
                     else:
                         self.training_recorder_coverage[key] = (plan_start, plan_end)
+                    coverage_changed = True
+        if coverage_changed:
+            self._persist_training_recorder_coverage()
         return inserted
 
     def _refresh_agent_history(self, agent, start_ts, end_ts, rebuild=False):
@@ -1131,6 +1221,18 @@ class HistoryManager(threading.Thread):
             and OPTIONS.get("training_persistent_worker_enabled", True)
             and len(chunks) > 1
         )
+        if persistent:
+            # Ridge remains checkpointed every 6 h for crash recovery and exact
+            # continuation. The optional neural Shadow challenger keeps a bounded sample
+            # reservoir in this same child process and is finalized only once, after the
+            # complete selected-agent pass.
+            for index, chunk in enumerate(chunks):
+                chunk["train_kwargs"]["finalize_neural"] = (
+                    index == len(chunks) - 1
+                )
+                chunk["checkpoint_meta"]["neural_finalization"] = (
+                    "final" if index == len(chunks) - 1 else "deferred"
+                )
         if persistent and not self.stop_event.is_set():
             from training_process import run_isolated_training_sequence
             run_isolated_training_sequence(self, chunks)
@@ -1336,6 +1438,26 @@ class HistoryManager(threading.Thread):
         self._persistent_experience_ids = {}
         self._persistent_replay_provenance_state = None
         self._persistent_continuation_seed_state = None
+        self._persistent_neural_sample_state = {}
+
+    def _persistent_neural_train_buffer(self, agent_id, identity, maxlen):
+        """Return one bounded session buffer, resetting it on schema/mask changes."""
+        aid = str(agent_id)
+        identity = tuple(identity or ())
+        maxlen = max(1, int(maxlen))
+        state = getattr(self, "_persistent_neural_sample_state", None)
+        if not isinstance(state, dict):
+            state = {}
+            self._persistent_neural_sample_state = state
+        item = state.get(aid)
+        if (
+            not isinstance(item, dict)
+            or tuple(item.get("identity") or ()) != identity
+            or getattr(item.get("train"), "maxlen", None) != maxlen
+        ):
+            item = {"identity": identity, "train": deque(maxlen=maxlen)}
+            state[aid] = item
+        return item["train"]
 
     @staticmethod
     def _continuation_scope(agents):
@@ -2092,7 +2214,7 @@ class HistoryManager(threading.Thread):
                 self.engine.models.pop(aid, None)
             raise
 
-    def _train_from_archive(self, start_ts, end_ts, *, qualify=False, agent_ids=None, include_candidates=False, benchmark=None, accumulate_benchmark=False, progress_lo=None, progress_hi=None, progress_label=None, continuation_from_ts=None, include_long_memory=False, long_memory_recent_start_ts=None, long_memory_reference_end_ts=None):
+    def _train_from_archive(self, start_ts, end_ts, *, qualify=False, agent_ids=None, include_candidates=False, benchmark=None, accumulate_benchmark=False, progress_lo=None, progress_hi=None, progress_label=None, continuation_from_ts=None, include_long_memory=False, long_memory_recent_start_ts=None, long_memory_reference_end_ts=None, finalize_neural=True):
         chunk_wall_started = time.perf_counter()
         benchmark = bool(qualify) if benchmark is None else bool(benchmark)
         self.temporal_replay_stats = {}
@@ -2100,6 +2222,7 @@ class HistoryManager(threading.Thread):
             "contract": "single_agent_training_phase_timing_v1",
             "start_ts": float(start_ts),
             "end_ts": float(end_ts),
+            "neural_finalize_requested": bool(finalize_neural),
         }
         agents = [a for a in STORE.list_agent_configs() if a["enabled"]]
         if agent_ids is not None:
@@ -2472,6 +2595,11 @@ class HistoryManager(threading.Thread):
         # Stage 4 trains a tiny supervised challenger beside the established Ridge model.
         # It is deliberately tied to explicit benchmarked historical training only:
         # no periodic reward update, no live feedback mutation, no Control authority.
+        persistent_session_cache = bool(
+            self.worker_mode
+            and OPTIONS.get("training_persistent_worker_enabled", True)
+            and OPTIONS.get("training_persistent_worker_cache_enabled", True)
+        )
         neural_enabled = bool(
             benchmark
             and OPTIONS.get("tiny_mlp_supervised_training_enabled", True)
@@ -2540,43 +2668,57 @@ class HistoryManager(threading.Thread):
                         ),
                     )
                 backend = None
-                if (
-                    record
-                    and record.get("model")
-                    and record.get("source_policy_revision") == source_revision
-                ):
-                    try:
-                        backend = TinyMLPBackend.deserialize(
-                            record["model"],
-                            expected_schema_id=mask.schema_id,
-                            expected_mask_id=mask.mask_id,
-                            expected_feature_ids=mask.feature_ids,
-                            expected_actions=policy.actions,
-                            expected_horizons=policy.horizons,
-                        )
-                        if tuple(backend.hidden) != tuple(hidden):
+                if finalize_neural:
+                    if (
+                        record
+                        and record.get("model")
+                        and record.get("source_policy_revision") == source_revision
+                    ):
+                        try:
+                            backend = TinyMLPBackend.deserialize(
+                                record["model"],
+                                expected_schema_id=mask.schema_id,
+                                expected_mask_id=mask.mask_id,
+                                expected_feature_ids=mask.feature_ids,
+                                expected_actions=policy.actions,
+                                expected_horizons=policy.horizons,
+                            )
+                            if tuple(backend.hidden) != tuple(hidden):
+                                backend = None
+                        except Exception:
                             backend = None
-                    except Exception:
-                        backend = None
-                if backend is None:
-                    seed_material = (
-                        f"{base_seed}|{aid}|{mask.schema_id}|{mask.mask_id}"
-                    ).encode("utf-8")
-                    seed = int.from_bytes(
-                        hashlib.sha256(seed_material).digest()[:8], "big"
-                    ) & 0x7FFFFFFFFFFFFFFF
-                    backend = TinyMLPBackend(
-                        actions=policy.actions,
-                        horizons=policy.horizons,
-                        feature_ids=mask.feature_ids,
-                        schema_id=mask.schema_id,
-                        mask_id=mask.mask_id,
-                        hidden=hidden,
-                        init_seed=seed,
-                    )
+                    if backend is None:
+                        seed_material = (
+                            f"{base_seed}|{aid}|{mask.schema_id}|{mask.mask_id}"
+                        ).encode("utf-8")
+                        seed = int.from_bytes(
+                            hashlib.sha256(seed_material).digest()[:8], "big"
+                        ) & 0x7FFFFFFFFFFFFFFF
+                        backend = TinyMLPBackend(
+                            actions=policy.actions,
+                            horizons=policy.horizons,
+                            feature_ids=mask.feature_ids,
+                            schema_id=mask.schema_id,
+                            mask_id=mask.mask_id,
+                            hidden=hidden,
+                            init_seed=seed,
+                        )
                 neural_masks[aid] = mask
                 neural_backends[aid] = backend
-                neural_train_samples[aid] = deque(maxlen=train_cap)
+                if persistent_session_cache:
+                    identity = (
+                        str(mask.schema_id), str(mask.mask_id),
+                        tuple(mask.feature_ids), tuple(float(x) for x in policy.actions),
+                        tuple(int(x) for x in policy.horizons), int(train_cap),
+                    )
+                    neural_train_samples[aid] = self._persistent_neural_train_buffer(
+                        aid, identity, train_cap
+                    )
+                else:
+                    neural_train_samples[aid] = deque(maxlen=train_cap)
+                # Tournament rows remain the exact current chunk holdout so Ridge and
+                # MLP are compared on identical paired examples. Only training evidence
+                # is accumulated across the persistent sequence.
                 neural_holdout_samples[aid] = deque(maxlen=holdout_cap)
                 neural_chunk_benchmark[aid] = {
                     "samples": 0,
@@ -2673,11 +2815,7 @@ class HistoryManager(threading.Thread):
                 min(feature_cache_units, 8192),
             ) or 0)
 
-        persistent_cache = bool(
-            self.worker_mode
-            and OPTIONS.get("training_persistent_worker_enabled", True)
-            and OPTIONS.get("training_persistent_worker_cache_enabled", True)
-        )
+        persistent_cache = persistent_session_cache
         replay_query_cache = (
             self._persistent_replay_query_cache if persistent_cache else None
         )
@@ -4488,7 +4626,14 @@ class HistoryManager(threading.Thread):
         # chronological holdout used by the established recorded-behaviour benchmark.
         tiny_mlp_finalize_started = time.perf_counter()
         self.neural_training_artifacts = {}
-        if neural_enabled:
+        self.training_phase_timings["tiny_mlp_finalization_deferred"] = bool(
+            neural_enabled and not finalize_neural
+        )
+        self.training_phase_timings["neural_train_samples_buffered"] = int(
+            sum(len(rows) for rows in neural_train_samples.values())
+            if neural_enabled else 0
+        )
+        if neural_enabled and finalize_neural:
             import json
             from policy_tiny_mlp_training import (
                 build_training_artifact,
@@ -4640,8 +4785,14 @@ class HistoryManager(threading.Thread):
             audit_summary = audit.finalize(
                 policy,
                 benchmark=benchmark_stats.get(agent["id"]) or {},
-                neural_train_rows=list(neural_train_samples.get(aid) or ()) if neural_enabled else (),
-                neural_holdout_rows=list(neural_holdout_samples.get(aid) or ()) if neural_enabled else (),
+                neural_train_rows=(
+                    list(neural_train_samples.get(aid) or ())
+                    if neural_enabled and finalize_neural else ()
+                ),
+                neural_holdout_rows=(
+                    list(neural_holdout_samples.get(aid) or ())
+                    if neural_enabled and finalize_neural else ()
+                ),
                 neural_artifact=self.neural_training_artifacts.get(aid),
             ) if audit is not None else {}
             training_audit_summaries[aid] = audit_summary

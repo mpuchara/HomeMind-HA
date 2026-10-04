@@ -630,6 +630,7 @@ def _build_job(history, start_ts, end_ts, kwargs):
             "include_long_memory": bool(kwargs.get("include_long_memory", False)),
             "long_memory_recent_start_ts": kwargs.get("long_memory_recent_start_ts"),
             "long_memory_reference_end_ts": kwargs.get("long_memory_reference_end_ts"),
+            "finalize_neural": bool(kwargs.get("finalize_neural", True)),
         },
         "status_path": str(root / f"{job_id}.status.json"),
         "result_path": str(root / f"{job_id}.result.json"),
@@ -798,6 +799,21 @@ def aggregate_training_sequence_profile(chunk_reports):
         (reports[-1].get("training_feature_snapshot_cache") or {})
         if reports else {}
     )
+    neural_deferred_chunks = 0
+    neural_executed_chunks = 0
+    for report in reports:
+        timings = dict((report or {}).get("training_phase_timings") or {})
+        requested = bool(timings.get("neural_finalize_requested"))
+        deferred = bool(timings.get("tiny_mlp_finalization_deferred"))
+        if deferred:
+            neural_deferred_chunks += 1
+        elif requested:
+            neural_executed_chunks += 1
+    final_neural_rows = int(
+        (((reports[-1] if reports else {}).get("training_phase_timings") or {}).get(
+            "neural_train_samples_buffered"
+        )) or 0
+    )
     return {
         "contract": "persistent_training_session_profile_v1",
         "chunks": len(reports),
@@ -810,6 +826,12 @@ def aggregate_training_sequence_profile(chunk_reports):
             for key, value in sorted(counters.items())
         },
         "slowest_chunks": slowest,
+        "neural_finalization": {
+            "deferred_chunks": int(neural_deferred_chunks),
+            "executed_chunks": int(neural_executed_chunks),
+            "final_buffered_train_rows": int(final_neural_rows),
+            "contract": "final_chunk_neural_finalize_v1",
+        },
         "feature_snapshot_session": {
             "persistent": bool(final_cache.get("session_persistent")),
             "entries": int(final_cache.get("entries") or 0),
