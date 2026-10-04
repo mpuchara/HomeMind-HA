@@ -125,6 +125,7 @@ class ShippedProcessAgentContractTests(unittest.TestCase):
         expected = {
             "manual_feedback.py": "manual_feedback_physical_equivalence",
             "context_tournament.py": "context_tournament_shadow",
+            "teach_rl_rebenchmark.py": "teach_rl_rebenchmark",
             "agent_candidates.py": "candidate_observation",
             "provenance_runtime.py": "provenance",
             "observation_contract.py": "observation",
