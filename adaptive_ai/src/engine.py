@@ -245,8 +245,19 @@ class Engine(threading.Thread):
             "idle_skips": 0,
             "last_timer_targets": 0,
             "initial_full_passes": 0,
+            "startup_warmup_total_targets": 0,
+            "startup_warmup_scheduled_targets": 0,
+            "startup_warmup_remaining_targets": 0,
+            "startup_warmup_started_at": None,
+            "startup_warmup_completed_at": None,
         }
         self.initial_inference_pending = True
+        # 0.14.131: startup warm-up is no longer allowed to wait for a completely quiet
+        # Home Assistant event loop. Busy homes can emit state_changed traffic continuously,
+        # which previously postponed the one all-agent cold pass for minutes. Keep one
+        # bounded target queue and admit work only when a control worker slot is free.
+        self._startup_warmup_targets = None
+        self._startup_warmup_scheduled = set()
         self.models = {}
         self.context_relevance = {}
         # Observer-derived cross-area signals are kept separate for diagnostics even
@@ -413,7 +424,10 @@ class Engine(threading.Thread):
             registry_refresh_stats = dict(self.registry_refresh_stats)
             housekeeping_stats = dict(self.housekeeping_stats)
             inference_scheduler = dict(self.inference_scheduler)
-        agents = STORE.list_agents()
+        # Status is polled before/through startup and must never aggregate the complete
+        # feedback/experience tables from cold microSD. Detailed per-agent counters are
+        # loaded by /api/agents after readiness; status needs only lightweight configs.
+        agents = STORE.list_agent_configs()
         confidences = [runtime_conf.get(a["id"]) for a in agents]
         confidences = [x for x in confidences if x is not None]
         history = self.history_manager.status() if self.history_manager is not None else {"phase": "starting", "archive": {"n": 0, "days": 0, "entities": 0}}
@@ -437,8 +451,9 @@ class Engine(threading.Thread):
             "ha_base_url": HA_BASE_URL,
             "agent_count": len(agents),
             "average_confidence": sum(confidences) / len(confidences) if confidences else 0.0,
-            "feedback_count": sum(int(a.get("feedback_count") or 0) for a in agents),
-            "historical_experience_count": sum(int(a.get("historical_count") or 0) for a in agents),
+            "feedback_count": None,
+            "historical_experience_count": None,
+            "agent_metrics_deferred": True,
             "realtime": {
                 "connected": ws_connected,
                 "subscription_confirmed": ws_subscription_confirmed,
@@ -1012,6 +1027,96 @@ class Engine(threading.Thread):
         self.poll_future = self.poll_worker.submit(self.refresh_states)
         return True
 
+    def _startup_warmup_step(self, state_map):
+        """Schedule cold startup inference without waiting for a quiet HA event loop.
+
+        This is scheduling-only: process()/process_target()/Executor keep all existing
+        inference and Control semantics. At most the currently free worker slots are
+        admitted, so startup cannot build an unbounded executor queue or starve Ingress.
+        """
+        if not self.initial_inference_pending:
+            return 0
+        self._refresh_agent_index()
+        now = now_ts()
+        with self.lock:
+            if self._startup_warmup_targets is None:
+                self._startup_warmup_targets = tuple(
+                    sorted(str(target) for target in self.active_agents_by_target)
+                )
+                self.inference_scheduler["startup_warmup_total_targets"] = len(
+                    self._startup_warmup_targets
+                )
+                self.inference_scheduler["startup_warmup_started_at"] = now
+
+            targets = tuple(self._startup_warmup_targets or ())
+            active_targets = set(self.active_agents_by_target)
+            # A target already being processed because of genuine realtime traffic has
+            # effectively received its startup warm-up. Do not schedule it a second time.
+            for target in targets:
+                future = self.in_flight.get(target)
+                if future is not None and not future.done():
+                    self._startup_warmup_scheduled.add(target)
+                    continue
+                agent_ids = self.active_agents_by_target.get(target, ())
+                if any(
+                    float((self.runtime.get(aid) or {}).get("last_inference_ts") or 0.0) > 0.0
+                    for aid in agent_ids
+                ):
+                    self._startup_warmup_scheduled.add(target)
+
+            pending = [
+                target for target in targets
+                if target in active_targets
+                and target not in self._startup_warmup_scheduled
+            ]
+            outstanding = sum(
+                1 for future in self.in_flight.values()
+                if future is not None and not future.done()
+            )
+            capacity = max(0, int(self.control_worker_count) - int(outstanding))
+            configured = max(
+                1,
+                int(OPTIONS.get("startup_warmup_targets_per_tick", 2) or 2),
+            )
+            selected = pending[: min(capacity, configured)]
+            self.inference_scheduler["startup_warmup_scheduled_targets"] = len(
+                self._startup_warmup_scheduled
+            )
+            self.inference_scheduler["startup_warmup_remaining_targets"] = len(pending)
+
+        if selected:
+            # Target ids are timer/scheduling hints, not HA event timestamps.
+            self.process(state_map, set(selected), event_driven=False)
+            with self.lock:
+                self._startup_warmup_scheduled.update(selected)
+                remaining = [
+                    target for target in (self._startup_warmup_targets or ())
+                    if target in self.active_agents_by_target
+                    and target not in self._startup_warmup_scheduled
+                ]
+                self.inference_scheduler["startup_warmup_scheduled_targets"] = len(
+                    self._startup_warmup_scheduled
+                )
+                self.inference_scheduler["startup_warmup_remaining_targets"] = len(remaining)
+                if not remaining:
+                    self.initial_inference_pending = False
+                    self.inference_scheduler["initial_full_passes"] += 1
+                    self.inference_scheduler["startup_warmup_completed_at"] = now_ts()
+            return len(selected)
+
+        with self.lock:
+            remaining = [
+                target for target in (self._startup_warmup_targets or ())
+                if target in self.active_agents_by_target
+                and target not in self._startup_warmup_scheduled
+            ]
+            self.inference_scheduler["startup_warmup_remaining_targets"] = len(remaining)
+            if not remaining:
+                self.initial_inference_pending = False
+                self.inference_scheduler["initial_full_passes"] += 1
+                self.inference_scheduler["startup_warmup_completed_at"] = now_ts()
+        return 0
+
     def run(self):
         print(f"Adaptive AI {APP_VERSION} starting; HA={HA_BASE_URL}", flush=True)
         STORE.event(None, "info", "startup", f"Adaptive AI {APP_VERSION} started", None)
@@ -1049,22 +1154,25 @@ class Engine(threading.Thread):
                         if changed_entities:
                             with self.lock:
                                 self.dirty_entities.update(changed_entities)
-                    elif event_wakeup and changed_entities:
-                        with self.lock:
-                            self.inference_scheduler["event_passes"] += 1
-                        if RUNTIME_DEBUG.enabled:
-                            RUNTIME_DEBUG.instant("event_pass", changed_count=len(changed_entities), changed_entities=sorted(changed_entities)[:24])
-                        self.process(state_map, changed_entities)
-                    elif self.initial_inference_pending:
-                        # Exactly one complete inference pass warms all qualified agents
-                        # after startup. Later empty wakeups (REST resync, queue/lifecycle
-                        # nudges) must never regain the old "process every agent" meaning.
-                        self.initial_inference_pending = False
-                        with self.lock:
-                            self.inference_scheduler["initial_full_passes"] += 1
-                        self.process(state_map, set())
                     else:
-                        due_targets = self._due_inference_targets()
+                        handled_realtime = False
+                        if event_wakeup and changed_entities:
+                            handled_realtime = True
+                            with self.lock:
+                                self.inference_scheduler["event_passes"] += 1
+                            if RUNTIME_DEBUG.enabled:
+                                RUNTIME_DEBUG.instant("event_pass", changed_count=len(changed_entities), changed_entities=sorted(changed_entities)[:24])
+                            self.process(state_map, changed_entities)
+
+                        # Warm-up is independent from HA quietness. Genuine event work is
+                        # always admitted first; cold targets then fill only idle worker
+                        # slots. This avoids the old busy-home starvation mode while
+                        # preserving realtime priority and the bounded worker pool.
+                        warmup_scheduled = self._startup_warmup_step(state_map)
+                        if handled_realtime or self.initial_inference_pending or warmup_scheduled:
+                            due_targets = set()
+                        else:
+                            due_targets = self._due_inference_targets()
                         if due_targets:
                             with self.lock:
                                 self.inference_scheduler["timer_passes"] += 1
