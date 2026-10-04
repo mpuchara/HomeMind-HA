@@ -1,10 +1,21 @@
 {
-  "version": "0.14.129",
+  "version": "0.14.130",
   "release_date": "2026-10-04",
-  "base_version": "0.14.128",
-  "base_commit": "7a18b9772cd2e7fcba03d99278d689d6ce3cd9ff",
-  "release_status": "candidate-only-schema-upgrade",
-  "release_validation_tests_passed": 1580,
+  "base_version": "0.14.129",
+  "base_commit": "90a45ae823d4792827811174349fa8f47ba06592",
+  "release_status": "fast-full-training",
+  "release_validation_tests_passed": 0,
+  "release_014130": {
+    "scope": "reduce_repeated_full_training_overhead_without_shortening_recent_history",
+    "ridge_checkpoint": "Ridge policy, experience durability, partial benchmark and training cursor remain checkpointed every logical 6 hours",
+    "neural_finalization": "persistent selected-agent workers retain bounded supervised train rows across chunks and run TinyMLP training/tournament only at the final checkpoint",
+    "neural_holdout": "final tournament keeps Ridge and TinyMLP paired on the identical final-chunk holdout rows",
+    "recorder_coverage": "successful per-source/entity Recorder ranges persist across add-on restarts; future rebuilds request only overlap plus missing tail",
+    "recorder_safety": "coverage metadata is performance-only, bounded and fail-open; skipped/failed slices are never cached",
+    "history_window": "full-resolution recent replay remains 7 days and sparse long memory remains unchanged",
+    "training_revision": "shared-home-intents-v20",
+    "validation": "targeted regression tests added; full repository CI required before merge"
+  },
   "release_014129": {
     "scope": "restore_candidate_isolation_for_obsolete_feature_schema",
     "live_behavior": "Create Candidate never queues, clears or rebuilds the Live parent because of schema incompatibility",
