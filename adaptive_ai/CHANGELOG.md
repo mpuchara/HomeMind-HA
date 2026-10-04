@@ -1,3 +1,13 @@
+# 0.14.133 — 2026-10-04
+
+- Add optional `compact=1` transport to generation Correct history; legacy callers retain the existing JSON response unchanged.
+- Encode compact chart series as `pairs_v1` `[timestamp,value]` rows and omit duplicate top-level observed point arrays from compact responses.
+- Make the Correct UI request compact transport and normalize it back to the existing browser series shape before rendering, preserving chart, zoom, inspection and saved Correct semantics.
+- Gate compact transport size in the deterministic Correct benchmark at less than 45% of the legacy wire payload for every tested history size.
+- Align the Raspberry Pi 4 Stage-9 release gate with the shipped adaptive training runtime: up to two isolated training workers are valid while CPU, RSS and MemAvailable safety gates remain unchanged.
+- Update Stage-9 documentation for the adaptive 1–2 worker contract.
+- No reward, policy, Candidate, Correct labeling/training semantics, ActionIntent, Executor or physical Control authority changes.
+
 # 0.14.132 — 2026-10-04
 
 - Harden deferred provenance persistence: a failed Shadow decision batch is restored to RAM and retried instead of being lost after the queue was cleared.
