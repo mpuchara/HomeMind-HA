@@ -770,31 +770,40 @@ def shutdown_runtime():
                 if thread is not None and thread.is_alive():
                     thread.join(timeout=2.5)
 
-            ENGINE.context.save(force=True)
-            try:
-                ENGINE.teaching.flush(force=True)
-                ENGINE.flush_archive(force=True)
+            def shutdown_step(name, callback):
+                try:
+                    return callback()
+                except Exception as exc:
+                    print(
+                        f"[shutdown] {name} failed: {type(exc).__name__}: {exc}",
+                        flush=True,
+                    )
+                    traceback.print_exc()
+                    return None
 
-                flush_all_provenance = getattr(STORE, "_flush_all_provenance", None)
-                if callable(flush_all_provenance):
-                    flush_all_provenance()
-                else:
-                    # Compatibility with older compositions/tests.
-                    for name in (
-                        "_flush_provenance_events",
-                        "_flush_provenance_decisions",
-                        "_flush_provenance_acks",
-                    ):
-                        callback = getattr(STORE, name, None)
-                        if callable(callback):
-                            callback()
+            shutdown_step("context", lambda: ENGINE.context.save(force=True))
+            shutdown_step("teaching", lambda: ENGINE.teaching.flush(force=True))
+            shutdown_step("archive", lambda: ENGINE.flush_archive(force=True))
 
-                flush_features = getattr(ENGINE, "flush_feature_journal", None)
-                if callable(flush_features):
-                    flush_features()
-                STORE.flush_events()
-            except Exception:
-                traceback.print_exc()
+            flush_all_provenance = getattr(STORE, "_flush_all_provenance", None)
+            if callable(flush_all_provenance):
+                shutdown_step("provenance", flush_all_provenance)
+            else:
+                # Compatibility with older compositions/tests. Each class is attempted
+                # independently so one failed audit table cannot suppress the others.
+                for name in (
+                    "_flush_provenance_events",
+                    "_flush_provenance_decisions",
+                    "_flush_provenance_acks",
+                ):
+                    callback = getattr(STORE, name, None)
+                    if callable(callback):
+                        shutdown_step(name, callback)
+
+            flush_features = getattr(ENGINE, "flush_feature_journal", None)
+            if callable(flush_features):
+                shutdown_step("feature_journal", flush_features)
+            shutdown_step("runtime_events", STORE.flush_events)
     except Exception:
         traceback.print_exc()
 

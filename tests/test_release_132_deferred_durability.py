@@ -137,6 +137,8 @@ class ShutdownContractTests(unittest.TestCase):
         self.assertIn("shutdown(wait=True, cancel_futures=True)", shutdown)
         self.assertIn("thread.join(timeout=2.5)", shutdown)
         self.assertIn('getattr(ENGINE, "flush_feature_journal", None)', shutdown)
+        self.assertIn('shutdown_step("provenance", flush_all_provenance)', shutdown)
+        self.assertIn('shutdown_step("feature_journal", flush_features)', shutdown)
 
 
 if __name__ == "__main__":

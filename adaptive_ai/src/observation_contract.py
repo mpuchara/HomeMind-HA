@@ -2029,6 +2029,7 @@ def install(core):
                 for row in reversed(batch):
                     observation_rows.appendleft(row)
                 observation_stats["errors"] += 1
+            journal_event.set()
             raise
         with journal_lock:
             observation_stats["flushed"] += len(batch)
@@ -2049,6 +2050,7 @@ def install(core):
                 for row in reversed(batch):
                     window_rows.appendleft(row)
                 window_stats["errors"] += 1
+            journal_event.set()
             raise
         with journal_lock:
             window_stats["flushed"] += len(batch)

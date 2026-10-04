@@ -266,6 +266,7 @@ def install(core):
                     deferred_acks[row_key] = _merge_ack(
                         deferred_acks.get(row_key), row
                     )
+            deferred_event.set()
             raise
         with deferred_lock:
             ack_stats["flushed"] += len(batch)
@@ -351,6 +352,10 @@ def install(core):
                 except Exception:
                     pass
                 time.sleep(0.1)
+            if journal.pending_event_count():
+                # Continue draining a large backlog immediately on the next loop while
+                # still giving decisions and ACKs one turn on every cycle.
+                deferred_event.set()
         try:
             flush_all_provenance()
         except Exception:
