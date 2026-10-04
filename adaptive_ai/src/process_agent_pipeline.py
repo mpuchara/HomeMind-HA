@@ -10,15 +10,15 @@ from dataclasses import dataclass
 
 
 CONTRACT_VERSION = 1
-EXPECTED_INSTALL_ORDER = (
+BASE_INSTALL_ORDER = (
     "manual_feedback_physical_equivalence",
     "context_tournament_shadow",
     "teach_rl_rebenchmark",
     "candidate_observation",
     "provenance",
     "observation",
-    "tiny_mlp_shadow",
 )
+EXPECTED_INSTALL_ORDER = BASE_INSTALL_ORDER + ("tiny_mlp_shadow",)
 
 
 class ProcessAgentPipelineError(RuntimeError):
