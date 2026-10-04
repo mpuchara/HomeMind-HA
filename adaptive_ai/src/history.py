@@ -939,9 +939,10 @@ class HistoryManager(threading.Thread):
 
         The local entity_history archive is shared by Live and Candidate generations.
         Re-downloading the same seven-day Recorder interval on every Rebuild adds wall
-        clock time without adding training evidence. Coverage is intentionally RAM-only:
-        after restart we perform one authoritative refresh again. Any skipped Recorder
-        slice prevents the attempted range from being cached.
+        clock time without adding training evidence. Successful coverage is persisted as
+        a performance watermark so restart fetches only a short overlap + new tail. The
+        local archive remains authoritative, and any skipped Recorder slice prevents the
+        attempted range from being cached.
         """
         ids = sorted(set(str(eid) for eid in (entity_ids or ()) if eid))
         if not ids or float(end_ts) <= float(start_ts):
@@ -1438,6 +1439,25 @@ class HistoryManager(threading.Thread):
         self._persistent_replay_provenance_state = None
         self._persistent_continuation_seed_state = None
         self._persistent_neural_sample_state = {}
+
+    def _persistent_neural_train_buffer(self, agent_id, identity, maxlen):
+        """Return one bounded session buffer, resetting it on schema/mask changes."""
+        aid = str(agent_id)
+        identity = tuple(identity or ())
+        maxlen = max(1, int(maxlen))
+        state = getattr(self, "_persistent_neural_sample_state", None)
+        if not isinstance(state, dict):
+            state = {}
+            self._persistent_neural_sample_state = state
+        item = state.get(aid)
+        if (
+            not isinstance(item, dict)
+            or tuple(item.get("identity") or ()) != identity
+            or getattr(item.get("train"), "maxlen", None) != maxlen
+        ):
+            item = {"identity": identity, "train": deque(maxlen=maxlen)}
+            state[aid] = item
+        return item["train"]
 
     @staticmethod
     def _continuation_scope(agents):
@@ -2691,16 +2711,9 @@ class HistoryManager(threading.Thread):
                         tuple(mask.feature_ids), tuple(float(x) for x in policy.actions),
                         tuple(int(x) for x in policy.horizons), int(train_cap),
                     )
-                    sample_state = self._persistent_neural_sample_state.get(aid)
-                    if not isinstance(sample_state, dict) or tuple(
-                        sample_state.get("identity") or ()
-                    ) != identity:
-                        sample_state = {
-                            "identity": identity,
-                            "train": deque(maxlen=train_cap),
-                        }
-                        self._persistent_neural_sample_state[aid] = sample_state
-                    neural_train_samples[aid] = sample_state["train"]
+                    neural_train_samples[aid] = self._persistent_neural_train_buffer(
+                        aid, identity, train_cap
+                    )
                 else:
                     neural_train_samples[aid] = deque(maxlen=train_cap)
                 # Tournament rows remain the exact current chunk holdout so Ridge and
