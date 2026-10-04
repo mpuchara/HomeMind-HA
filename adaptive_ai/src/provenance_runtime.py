@@ -10,6 +10,7 @@ from contextlib import contextmanager
 import threading
 import time
 
+from state_event_pipeline import install_state_event_wrapper
 from provenance import ProvenanceJournal, UNKNOWN
 from rewards import RewardEngine
 from settings import now_ts, parse_ts
@@ -431,7 +432,12 @@ def install(core):
         finally:
             _TLS.event_id, _TLS.event_origin = previous_event, previous_origin
 
-    engine.on_state_changed = on_state_changed
+    def build_state_changed(next_handler):
+        if next_handler is not original_on_state_changed:
+            raise RuntimeError("provenance state-event base changed during install")
+        return on_state_changed
+
+    install_state_event_wrapper(engine, "provenance", build_state_changed)
 
     original_queue_archive = engine._queue_archive_state
 
