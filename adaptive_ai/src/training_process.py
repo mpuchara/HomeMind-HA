@@ -630,6 +630,7 @@ def _build_job(history, start_ts, end_ts, kwargs):
             "include_long_memory": bool(kwargs.get("include_long_memory", False)),
             "long_memory_recent_start_ts": kwargs.get("long_memory_recent_start_ts"),
             "long_memory_reference_end_ts": kwargs.get("long_memory_reference_end_ts"),
+            "finalize_neural": bool(kwargs.get("finalize_neural", True)),
         },
         "status_path": str(root / f"{job_id}.status.json"),
         "result_path": str(root / f"{job_id}.result.json"),
