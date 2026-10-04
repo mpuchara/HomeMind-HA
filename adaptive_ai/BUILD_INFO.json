@@ -1,10 +1,19 @@
 {
-  "version": "0.14.134",
+  "version": "0.14.135",
   "release_date": "2026-10-04",
-  "base_version": "0.14.133",
-  "base_commit": "832e8f2d8bd37d43973fb9d335ad5ab9a4e17721",
-  "release_status": "named-state-event-composition-guard",
+  "base_version": "0.14.134",
+  "base_commit": "11a7a6a9914a9dd12a0db5a36f830b4c3871d4ba",
+  "release_status": "named-process-agent-pipeline-and-candidate-fast-bypass",
   "release_validation_tests_passed": 1598,
+  "release_014135": {
+    "scope": "named_process_agent_wrapper_ownership_and_inactive_candidate_hot_path_bypass",
+    "pipeline": "Candidate process observation installs through process_agent_pipeline; AgentCandidateManager no longer assigns engine.process_agent directly",
+    "fast_bypass": "when candidate_hot_active is available and false for a Live root, Candidate before/after observation hooks are skipped entirely",
+    "compatibility": "standalone or legacy compositions without candidate_hot_active preserve historical always-observe behavior",
+    "guard": "duplicate named install is idempotent; direct process_agent overwrite or order drift fails final composition",
+    "control_semantics_changed": false,
+    "validation_tests_expected": 1614
+  },
   "release_014134": {
     "scope": "named_and_verified_engine_state_event_wrapper_composition",
     "install_order": "manual_feedback_lifecycle -> candidate_shadow -> provenance -> observation",
