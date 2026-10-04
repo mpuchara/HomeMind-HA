@@ -5,6 +5,7 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import history as history_module
+from training_process import aggregate_training_sequence_profile
 
 
 class PersistentNeuralTrainingBufferTests(unittest.TestCase):
@@ -165,6 +166,41 @@ class DurableRecorderCoverageTests(unittest.TestCase):
                 ("ha_history_full", "light.test")
             ],
             (0.0, 10800.0),
+        )
+
+
+class DeferredNeuralFinalizationProfileTests(unittest.TestCase):
+    def test_profile_counts_deferred_and_final_neural_work(self):
+        reports = [
+            {
+                "training_phase_timings": {
+                    "neural_finalize_requested": False,
+                    "tiny_mlp_finalization_deferred": True,
+                    "neural_train_samples_buffered": 40,
+                }
+            },
+            {
+                "training_phase_timings": {
+                    "neural_finalize_requested": False,
+                    "tiny_mlp_finalization_deferred": True,
+                    "neural_train_samples_buffered": 80,
+                }
+            },
+            {
+                "training_phase_timings": {
+                    "neural_finalize_requested": True,
+                    "tiny_mlp_finalization_deferred": False,
+                    "neural_train_samples_buffered": 120,
+                }
+            },
+        ]
+
+        profile = aggregate_training_sequence_profile(reports)
+
+        self.assertEqual(profile["neural_finalization"]["deferred_chunks"], 2)
+        self.assertEqual(profile["neural_finalization"]["executed_chunks"], 1)
+        self.assertEqual(
+            profile["neural_finalization"]["final_buffered_train_rows"], 120
         )
 
 
