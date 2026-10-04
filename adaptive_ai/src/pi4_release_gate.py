@@ -31,7 +31,9 @@ DEFAULT_THRESHOLDS = {
     "max_disconnect_rate": 0.01,
     "max_consecutive_disconnect_samples": 1,
     "max_combined_rss_p95_mb": 768.0,
-    "max_training_workers": 1,
+    # 0.14.109 may admit two isolated agent workers on >=4-core hosts with enough RAM.
+    # CPU/RSS/MemAvailable gates remain authoritative for whether that concurrency is safe.
+    "max_training_workers": 2,
     "min_available_memory_mb": 256.0,
     "max_temperature_c": 80.0,
 }
@@ -295,7 +297,7 @@ def evaluate_reports(reports, thresholds=None):
         if scenario in ("training", "training-correct"):
             _check(
                 checks,
-                f"{scenario}.single_training_worker",
+                f"{scenario}.bounded_training_workers",
                 "inconclusive" if workers is None else ("pass" if workers <= thresholds["max_training_workers"] else "fail"),
                 value=workers,
                 limit={"max": thresholds["max_training_workers"]},

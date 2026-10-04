@@ -12,10 +12,12 @@ explicit controlled-rollout change.
 Run all scenarios on the same installed release and the same Raspberry Pi 4:
 
 1. `idle` — normal runtime, no explicit training.
-2. `training` — one agent actively training.
+2. `training` — active training; one or two isolated agent workers are valid when the
+   adaptive parallel-admission rules allow the second worker.
 3. `correct` — use the normal multi-point Correct UI while collecting; pass the current
    Correct history GET as `--correct-path`.
-4. `training-correct` — one training worker plus normal Correct interaction.
+4. `training-correct` — active training (up to the shipped two-worker bound) plus
+   normal Correct interaction.
 
 Generate real HA state changes during every scenario so `telemetry.event_to_intent` is
 present. The profiler never generates service calls or synthetic HA traffic.
@@ -75,7 +77,8 @@ Exit codes:
 - training and training+Correct `event_to_intent` p95 <= 2x idle;
 - <= 1% local status probe failures and no more than one consecutive failure;
 - <= 1% HA/realtime disconnect samples and no more than one consecutive disconnected sample;
-- never more than one training worker;
+- never more than two training workers; the second worker is only valid when the runtime
+  admits it under CPU/RAM headroom, while the gate still enforces CPU, RSS and MemAvailable;
 - Adaptive AI runtime+worker average CPU <= 50% of the Pi's total CPU capacity;
 - whole-system CPU p95 <= 90%;
 - combined runtime+worker p95 RSS <= 768 MB;
