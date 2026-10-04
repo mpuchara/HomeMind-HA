@@ -219,6 +219,7 @@ class RuntimeCompositionRoot:
             assert_state_event_pipeline,
         )
         from process_agent_pipeline import (
+            BASE_INSTALL_ORDER as BASE_PROCESS_AGENT_INSTALL_ORDER,
             EXPECTED_INSTALL_ORDER as EXPECTED_PROCESS_AGENT_INSTALL_ORDER,
             assert_process_agent_pipeline,
         )
@@ -235,7 +236,7 @@ class RuntimeCompositionRoot:
         # process pipeline is now the only owner of that wrapper and must already be
         # complete before later Candidate services decorate before/after observation.
         process_agent_contract = assert_process_agent_pipeline(
-            engine, EXPECTED_PROCESS_AGENT_INSTALL_ORDER
+            engine, BASE_PROCESS_AGENT_INSTALL_ORDER
         )
         # Stage 12 is opt-in and observer-only. Disabled mode performs no inference or learning.
         policy_shadow = install_policy_backend_shadow(engine, self.core.STORE)
