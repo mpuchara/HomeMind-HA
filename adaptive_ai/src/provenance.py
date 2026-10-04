@@ -54,7 +54,14 @@ class ProvenanceJournal:
         self._history_event_cache = OrderedDict()
         self._pending_events = OrderedDict()
         self._event_cache_limit = 8192
+        # Soft overload threshold. Reaching it now triggers a synchronous batch flush
+        # instead of deleting the oldest uncommitted event. Exact event origin is part of
+        # the own-command replay exclusion boundary, so silent loss is not acceptable.
         self._pending_event_limit = 8192
+        self._pending_event_overflow_sync = 0
+        self._pending_event_overflow_errors = 0
+        self._max_pending_events = 0
+        # Backwards-compatible diagnostic counter. 0.14.132 never increments it.
         self._dropped_pending_events = 0
         self._migrate()
         self._load_recent_event_cache()
@@ -330,12 +337,38 @@ class ProvenanceJournal:
             "state_json": _json(payload) if payload is not None else None,
             "processed_time": None,
         }
-        self._remember_event(row)
         with self._event_cache_lock:
-            if len(self._pending_events) >= self._pending_event_limit:
-                self._pending_events.popitem(last=False)
-                self._dropped_pending_events += 1
+            overflow = len(self._pending_events) >= self._pending_event_limit
+            if overflow:
+                self._pending_event_overflow_sync += 1
+
+        if overflow:
+            # This path is exceptional (>8k uncommitted events). Prefer bounded
+            # backpressure to silently deleting provenance. flush_events_batch restores
+            # its own batch on failure; we then keep the new row in RAM as well, so an
+            # extended SQLite outage may temporarily exceed the soft limit but never turns
+            # a known own_command into UNKNOWN merely because the writer was busy.
+            try:
+                self.flush_events_batch(
+                    min(512, max(1, int(self._pending_event_limit) // 4))
+                )
+            except Exception:
+                with self._event_cache_lock:
+                    self._pending_event_overflow_errors += 1
+
+        # Recheck after the overload flush because another thread may have recorded the
+        # same stable event id while this thread was outside the cache lock.
+        with self._event_cache_lock:
+            existing = self._event_cache.get(str(event_id)) or self._pending_events.get(
+                str(event_id)
+            )
+            if existing is not None:
+                return str(event_id), False
+            self._remember_event(row)
             self._pending_events[str(event_id)] = dict(row)
+            self._max_pending_events = max(
+                int(self._max_pending_events), len(self._pending_events)
+            )
         return str(event_id), True
 
     def event(self, event_id):

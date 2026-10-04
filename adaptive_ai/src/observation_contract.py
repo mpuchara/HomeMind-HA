@@ -1966,10 +1966,22 @@ def install(core):
                     journal_event.set()
         if overflow:
             # Preserve evidence rather than silently dropping it. This deliberately
-            # reintroduces backpressure only after >8k queued records, an observable
-            # overload state rather than an unbounded memory leak.
-            keys = journal.record_batch([prepared])
-            return keys[0] if keys else None
+            # reintroduces backpressure only after >8k queued records. If SQLite is
+            # temporarily unavailable, put the row back in RAM rather than propagating a
+            # persistence failure into HA event ingestion.
+            try:
+                keys = journal.record_batch([prepared])
+                return keys[0] if keys else None
+            except Exception:
+                with journal_lock:
+                    observation_rows.append(prepared)
+                    observation_stats["queued"] += 1
+                    observation_stats["errors"] += 1
+                    observation_stats["max_queue"] = max(
+                        observation_stats["max_queue"], len(observation_rows)
+                    )
+                journal_event.set()
+                return prepared["event_key"]
         return prepared["event_key"]
 
     def queue_window(window_id, agent_id, entities, anchor_time, kind):
@@ -1990,7 +2002,17 @@ def install(core):
                 if len(window_rows) >= 64:
                     journal_event.set()
         if overflow:
-            journal.open_windows_batch([row])
+            try:
+                journal.open_windows_batch([row])
+            except Exception:
+                with journal_lock:
+                    window_rows.append(row)
+                    window_stats["queued"] += 1
+                    window_stats["errors"] += 1
+                    window_stats["max_queue"] = max(
+                        window_stats["max_queue"], len(window_rows)
+                    )
+                journal_event.set()
         return row["window_id"]
 
     def flush_observations(limit=512):
@@ -2007,6 +2029,7 @@ def install(core):
                 for row in reversed(batch):
                     observation_rows.appendleft(row)
                 observation_stats["errors"] += 1
+            journal_event.set()
             raise
         with journal_lock:
             observation_stats["flushed"] += len(batch)
@@ -2027,6 +2050,7 @@ def install(core):
                 for row in reversed(batch):
                     window_rows.appendleft(row)
                 window_stats["errors"] += 1
+            journal_event.set()
             raise
         with journal_lock:
             window_stats["flushed"] += len(batch)
@@ -2040,6 +2064,29 @@ def install(core):
                 "windows": {**window_stats, "pending": len(window_rows)},
             }
 
+    def flush_feature_journal():
+        """Drain both replay-evidence queues; one failed class never skips the other."""
+        totals = {"observations": 0, "windows": 0}
+        while True:
+            errors = []
+            progressed = False
+            try:
+                count = int(flush_observations() or 0)
+                totals["observations"] += count
+                progressed = progressed or bool(count)
+            except Exception as exc:
+                errors.append(f"observations: {type(exc).__name__}: {exc}")
+            try:
+                count = int(flush_windows() or 0)
+                totals["windows"] += count
+                progressed = progressed or bool(count)
+            except Exception as exc:
+                errors.append(f"windows: {type(exc).__name__}: {exc}")
+            if errors:
+                raise RuntimeError("; ".join(errors))
+            if not progressed:
+                return totals
+
     def journal_writer():
         while not engine.stop_event.is_set():
             # Replay/audit evidence can tolerate short RAM residency. Sparse sensors
@@ -2048,11 +2095,7 @@ def install(core):
             journal_event.wait(2.0)
             journal_event.clear()
             try:
-                while True:
-                    observations = flush_observations()
-                    windows = flush_windows()
-                    if not observations and not windows:
-                        break
+                flush_feature_journal()
             except Exception as exc:
                 try:
                     store.event(
@@ -2064,18 +2107,21 @@ def install(core):
                     pass
                 time.sleep(0.1)
         try:
-            while flush_observations() or flush_windows():
-                pass
+            flush_feature_journal()
         except Exception:
             pass
 
     engine.feature_window_deferred_snapshot = journal_snapshot
     engine.feature_observation_deferred_snapshot = journal_snapshot
-    threading.Thread(
+    engine.flush_feature_journal = flush_feature_journal
+    writer_thread = threading.Thread(
         target=journal_writer,
         name="adaptive-ai-feature-journal-writer",
         daemon=True,
-    ).start()
+    )
+    engine.feature_journal_writer_thread = writer_thread
+    engine.feature_journal_writer_event = journal_event
+    writer_thread.start()
 
     def watched():
         marker, values = engine._observation_watch_cache

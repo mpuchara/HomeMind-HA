@@ -1,10 +1,19 @@
 {
-  "version": "0.14.131",
+  "version": "0.14.132",
   "release_date": "2026-10-04",
-  "base_version": "0.14.130",
-  "base_commit": "c429719854ee3d32605c9f68956873d01314772e",
-  "release_status": "fast-startup",
-  "release_validation_tests_passed": 1594,
+  "base_version": "0.14.131",
+  "base_commit": "06a85a727e8000274b5866be013f03b4fd891be7",
+  "release_status": "deferred-persistence-hardening",
+  "release_validation_tests_passed": 1598,
+  "release_014132": {
+    "scope": "deferred_provenance_and_feature_journal_durability",
+    "shadow_decisions": "failed batch writes are restored to RAM and retried",
+    "event_overload": "8192 is a soft backpressure threshold; pending event provenance is never silently dropped",
+    "feature_journal": "failed overload writes are requeued instead of surfacing into HA ingress",
+    "shutdown": "stop producers, drain in-flight workers, join deferred writers, force final persistence",
+    "control_semantics_changed": false,
+    "validation_tests_expected": 1598
+  },
   "release_014131": {
     "scope": "reduce_warm_restart_and_first_prediction_latency",
     "inference_warmup": "realtime events retain priority; cold active targets fill only free bounded control-worker slots and no longer wait for a quiet HA event loop",
