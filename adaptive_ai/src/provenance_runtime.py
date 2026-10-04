@@ -11,6 +11,7 @@ import threading
 import time
 
 from state_event_pipeline import install_state_event_wrapper
+from process_agent_pipeline import install_process_agent_wrapper
 from provenance import ProvenanceJournal, UNKNOWN
 from rewards import RewardEngine
 from settings import now_ts, parse_ts
@@ -697,7 +698,9 @@ def install(core):
                 break
         return result
 
-    engine.process_agent = process_agent
+    install_process_agent_wrapper(
+        engine, "provenance", lambda _next: process_agent
+    )
 
     # --- Experiment idempotency --------------------------------------------
     original_begin = engine.experiments.begin
