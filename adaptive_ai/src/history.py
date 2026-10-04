@@ -4785,8 +4785,14 @@ class HistoryManager(threading.Thread):
             audit_summary = audit.finalize(
                 policy,
                 benchmark=benchmark_stats.get(agent["id"]) or {},
-                neural_train_rows=list(neural_train_samples.get(aid) or ()) if neural_enabled else (),
-                neural_holdout_rows=list(neural_holdout_samples.get(aid) or ()) if neural_enabled else (),
+                neural_train_rows=(
+                    list(neural_train_samples.get(aid) or ())
+                    if neural_enabled and finalize_neural else ()
+                ),
+                neural_holdout_rows=(
+                    list(neural_holdout_samples.get(aid) or ())
+                    if neural_enabled and finalize_neural else ()
+                ),
                 neural_artifact=self.neural_training_artifacts.get(aid),
             ) if audit is not None else {}
             training_audit_summaries[aid] = audit_summary
