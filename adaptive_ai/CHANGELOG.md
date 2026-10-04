@@ -1,3 +1,12 @@
+# 0.14.130 — 2026-10-04
+
+- Speed up full selected-agent training without shortening the 7-day replay window or changing Ridge reward/feature semantics.
+- Keep durable Ridge/model/benchmark checkpoints every 6 hours for rollback and exact continuation, but defer optional TinyMLP supervised training/tournament to the final checkpoint of one persistent worker sequence.
+- Retain a bounded TinyMLP training-row buffer across logical chunks; reset it automatically if the observation schema/mask/action contract changes. The final tournament still uses the exact final-chunk paired holdout for Ridge vs MLP.
+- Persist successful Home Assistant Recorder coverage as a bounded performance watermark. After an add-on restart, explicit Train/Rebuild reuses the local archive and requests only the configured overlap plus the missing tail instead of downloading the same seven-day ranges again.
+- Recorder coverage is non-semantic cache state: corrupt/missing metadata falls back to the existing authoritative Recorder refresh path, and failed/skipped slices are never marked covered.
+- Bump the isolated training contract to `shared-home-intents-v20`; physical-control safety gates remain unchanged.
+
 # 0.14.129 — 2026-10-04
 
 - Restore the intended Candidate isolation contract: **Create Candidate never rebuilds the Live parent because its feature schema is old**.
