@@ -233,6 +233,7 @@ schema:
   realtime_resync_seconds: "int(60,3600)"
   realtime_fallback_poll_seconds: "int(5,60)"
   proactive_tick_seconds: "int(1,10)"
+  startup_warmup_targets_per_tick: "int(1,8)"
   realtime_inference_debounce_ms: "int(10,2000)"
   prediction_lead_seconds: "int(0,300)"
   prediction_horizons_seconds: "str"
