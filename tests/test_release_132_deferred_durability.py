@@ -133,6 +133,7 @@ class ShutdownContractTests(unittest.TestCase):
             shutdown.index("ENGINE.stop_event.set()"),
             shutdown.index("flush_all_provenance"),
         )
+        self.assertIn("EVENT_STREAM.join(timeout=6.0)", shutdown)
         self.assertIn("shutdown(wait=True, cancel_futures=True)", shutdown)
         self.assertIn("thread.join(timeout=2.5)", shutdown)
         self.assertIn('getattr(ENGINE, "flush_feature_journal", None)', shutdown)

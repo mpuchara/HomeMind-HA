@@ -732,6 +732,11 @@ def shutdown_runtime():
         # event/training callback from refilling a deferred queue after we have drained it.
         if EVENT_STREAM is not None:
             EVENT_STREAM.stop_event.set()
+            # HAEventStream can be blocked in ws.recv(timeout=5). Wait through that
+            # bounded receive window so no last state_changed event can refill deferred
+            # provenance after the durability barrier starts.
+            if EVENT_STREAM.is_alive():
+                EVENT_STREAM.join(timeout=6.0)
         if HISTORY is not None:
             HISTORY.stop_event.set()
         if ENGINE is not None:
