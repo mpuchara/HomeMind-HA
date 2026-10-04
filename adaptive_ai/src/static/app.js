@@ -25,13 +25,16 @@ function updateRescanButton(h){
   b.textContent=running?`Scanning… ${Number(h?.chunk_done||0)}/${Number(h?.chunk_total||0)||'…'}`:'Rescan devices';
 }
 function renderOverview(status){
-  const h=status.history||{},pending=discoveryPending(h);
-  const targetText=pending?`${discoveryProgressText(h)} · activity pending`:`${h.active||0} active / ${h.eligible||h.controllable||0} eligible`;
+  const h=status.history||{},pending=discoveryPending(h),warm=status.inference_scheduler||{};
+  const warmRemaining=Number(warm.startup_warmup_remaining_targets||0),warmTotal=Number(warm.startup_warmup_total_targets||0);
+  const warmText=warmRemaining>0?` · warming ${Math.max(0,warmTotal-warmRemaining)}/${warmTotal||"…"} targets`:'';
+  const targetText=(pending?`${discoveryProgressText(h)} · activity pending`:`${h.active||0} active / ${h.eligible||h.controllable||0} eligible`)+warmText;
+  const experienceText=status.historical_experience_count==null?'…':num(status.historical_experience_count||0);
   $('#overview').innerHTML=`
     <div class="metric"><b>${status.state_count||0}</b><span>HA entities in context</span></div>
     <div class="metric"><b>${status.agent_count||0}</b><span>agents · ${targetText}</span></div>
     <div class="metric"><b>${pct(status.average_confidence)}</b><span>average policy confidence</span></div>
-    <div class="metric"><b>${num(status.historical_experience_count||0)}</b><span>predictive RL experiences</span></div>`;
+    <div class="metric"><b>${experienceText}</b><span>predictive RL experiences</span></div>`;
 }
 async function load(){
   if(loadInFlight)return;
@@ -86,6 +89,15 @@ async function load(){
     if(refreshAfterDiscovery)lastDiscoveryAgentRefresh=completedDiscoveryRun;
     lastTrainingQueueAgentRefresh=trainingQueueRevision;
     lastAgents=agentsResult.value;
+    // /api/status deliberately avoids cold full-history aggregates during startup.
+    // Once the detailed agent read completes, fill those overview counters from the
+    // already-returned rows without another SQLite query.
+    if(lastStatus){
+      lastStatus.feedback_count=lastAgents.reduce((n,a)=>n+Number(a.feedback_count||0),0);
+      lastStatus.historical_experience_count=lastAgents.reduce((n,a)=>n+Number(a.historical_count||0),0);
+      lastStatus.agent_metrics_deferred=false;
+      renderOverview(lastStatus);
+    }
     window.__adaptiveAiAgents=lastAgents;
     window.dispatchEvent(new CustomEvent('adaptive-ai:agents',{detail:lastAgents}));
     renderAgents();
