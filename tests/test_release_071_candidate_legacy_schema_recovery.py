@@ -48,11 +48,24 @@ class CandidateLegacySchemaRecoveryTests(unittest.TestCase):
         self.assertIn("manager._start_build = start_build", source)
         self.assertIn("agent_candidate_schema_upgrade_rebuild", source)
 
+    def test_incompatible_live_parent_is_not_rebuilt_or_failed_by_correct(self):
+        source = (
+            ROOT / "adaptive_ai" / "src" / "correct_schema_evolution.py"
+        ).read_text(encoding="utf-8")
+        start = source.split("def start_build(row):", 1)[1].split(
+            "manager._start_build = start_build", 1
+        )[0]
+        self.assertNotIn("parent_model = manager.store.get_model", start)
+        self.assertNotIn("Train/Rebuild the Live agent before running Correct again", start)
+        self.assertIn('manager.store.get_model(str(row.get("candidate_id") or ""))', start)
+        self.assertIn("_SCHEMA_UPGRADE_REASON", start)
+
     def test_previous_01470_failure_is_requeued_without_discarding_candidate(self):
         source = (
             ROOT / "adaptive_ai" / "src" / "agent_candidates.py"
         ).read_text(encoding="utf-8")
         self.assertIn("Stable correction base schema is incompatible", source)
+        self.assertIn("Live policy feature schema is incompatible with this release", source)
         self.assertIn("reason='schema_upgrade_rebuild'", source)
         self.assertIn("state='queued'", source)
         self.assertNotIn(
