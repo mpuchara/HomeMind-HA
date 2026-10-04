@@ -129,6 +129,7 @@ class ShippedProcessAgentContractTests(unittest.TestCase):
             "agent_candidates.py": "candidate_observation",
             "provenance_runtime.py": "provenance",
             "observation_contract.py": "observation",
+            "tiny_mlp_shadow.py": "tiny_mlp_shadow",
         }
         for filename, layer in expected.items():
             source = (SRC / filename).read_text(encoding="utf-8")
