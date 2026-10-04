@@ -15,6 +15,7 @@ from __future__ import annotations
 import time
 
 import manual_feedback_legacy as _legacy
+from process_agent_pipeline import install_process_agent_wrapper
 
 
 # Preserve the complete historical module surface, including private helpers imported by
@@ -187,7 +188,9 @@ def install_runtime_physical_equivalence(core, engine):
                 )
         return result
 
-    engine.process_agent = process_agent
+    install_process_agent_wrapper(
+        engine, "manual_feedback_physical_equivalence", lambda _next: process_agent
+    )
     engine._manual_feedback_equivalence_installed = True
 
 
