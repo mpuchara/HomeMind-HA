@@ -162,8 +162,6 @@ def install_runtime(core):
             )
 
     def build_state_changed(next_handler):
-        if next_handler is not original_state_changed:
-            raise RuntimeError("manual feedback lifecycle state-event base changed during install")
         return on_state_changed
 
     install_state_event_wrapper(
