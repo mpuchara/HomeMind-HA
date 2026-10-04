@@ -31,6 +31,19 @@ class _Layer:
     next_handler: object
 
 
+def _same_callable(left, right):
+    if left is right:
+        return True
+    left_self, right_self = getattr(left, "__self__", None), getattr(right, "__self__", None)
+    left_func, right_func = getattr(left, "__func__", None), getattr(right, "__func__", None)
+    return (
+        left_self is not None
+        and left_self is right_self
+        and left_func is not None
+        and left_func is right_func
+    )
+
+
 def _state(engine):
     state = getattr(engine, "_state_event_pipeline_state", None)
     if state is None:
@@ -62,7 +75,7 @@ def install_state_event_wrapper(engine, name, factory):
         return existing.handler
 
     current = getattr(engine, "on_state_changed", None)
-    if current is not state["top_handler"]:
+    if not _same_callable(current, state["top_handler"]):
         raise StateEventPipelineError(
             "engine.on_state_changed was replaced outside the named state-event pipeline "
             f"before installing {name!r}"
@@ -91,8 +104,9 @@ def state_event_pipeline_snapshot(engine):
         "install_order_inner_to_outer": install_order,
         "call_entry_order_outer_to_inner": list(reversed(install_order)),
         "registered_layers": len(install_order),
-        "top_handler_registered": getattr(engine, "on_state_changed", None)
-        is state["top_handler"],
+        "top_handler_registered": _same_callable(
+            getattr(engine, "on_state_changed", None), state["top_handler"]
+        ),
     }
 
 
@@ -106,14 +120,16 @@ def assert_state_event_pipeline(engine, expected=EXPECTED_INSTALL_ORDER):
             "unexpected state-event install order: "
             f"expected={expected!r} actual={actual!r}"
         )
-    if getattr(engine, "on_state_changed", None) is not state["top_handler"]:
+    if not _same_callable(
+        getattr(engine, "on_state_changed", None), state["top_handler"]
+    ):
         raise StateEventPipelineError(
             "engine.on_state_changed top handler was replaced outside the named pipeline"
         )
 
     previous = state["base_handler"]
     for layer in state["layers"]:
-        if layer.next_handler is not previous:
+        if not _same_callable(layer.next_handler, previous):
             raise StateEventPipelineError(
                 f"broken state-event link before layer {layer.name!r}"
             )
