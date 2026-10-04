@@ -155,6 +155,11 @@ class RuntimeCompositionRoot:
                 "handler_strategy": "per_server_subclass_no_shared_main_Handler_mutation",
                 "fallback": "legacy_class_binding_only_for_entrypoints_without_exposed_server",
             },
+            "state_events": (
+                engine.state_event_pipeline_snapshot()
+                if callable(getattr(engine, "state_event_pipeline_snapshot", None))
+                else None
+            ),
             "dependencies": {
                 "clock": type(self.clock).__name__,
                 "repository": type(self.core.STORE).__name__ if self.core.STORE is not None else None,
@@ -205,9 +210,19 @@ class RuntimeCompositionRoot:
             register_routes as register_automatic_correct_routes,
         )
         from candidate_offline_rl import register_routes as register_offline_rl_routes
+        from state_event_pipeline import (
+            EXPECTED_INSTALL_ORDER as EXPECTED_STATE_EVENT_INSTALL_ORDER,
+            assert_state_event_pipeline,
+        )
 
         # Existing fast + preference + episode composition is the characterized base.
         self.base_prepare_engine_extensions()
+        # 0.14.134 makes the historically implicit state-change wrapper order explicit.
+        # Assert immediately after the base stack is composed, before later services can
+        # start workers or accidentally hide a direct handler reassignment.
+        state_event_contract = assert_state_event_pipeline(
+            engine, EXPECTED_STATE_EVENT_INSTALL_ORDER
+        )
         # Stage 12 is opt-in and observer-only. Disabled mode performs no inference or learning.
         policy_shadow = install_policy_backend_shadow(engine, self.core.STORE)
         manager = getattr(engine, "agent_candidates", None)
@@ -267,6 +282,14 @@ class RuntimeCompositionRoot:
         install_hybrid_policy_runtime(self.core)
         manager = install_candidate_neural_shadow(manager)
         engine.agent_candidates = manager
+
+        # Later Stage-3/HTTP services must not replace the registered event top handler.
+        # A second assertion turns such a regression into an initialization failure
+        # instead of silently shipping a different event ordering.
+        state_event_contract = assert_state_event_pipeline(
+            engine, EXPECTED_STATE_EVENT_INSTALL_ORDER
+        )
+        engine.state_event_pipeline_contract = state_event_contract
 
         self.dependencies = RuntimeDependencies(clock=self.clock, repository=self.core.STORE, transport=router)
         self.contracts = self._contract_snapshot(manager, router)
