@@ -1,3 +1,13 @@
+# 0.14.131 — 2026-10-04
+
+- Speed up warm restart/full UI readiness without changing policy, reward, Candidate or Control semantics.
+- Replace the old startup inference rule that waited for a completely quiet HA event loop. Realtime events keep priority, while cold target warm-up fills only free bounded inference-worker slots until every active target has been scheduled once.
+- Make `/api/status` use lightweight agent configuration rows instead of cold `COUNT/AVG` aggregation over feedback and historical-experience tables.
+- Keep detailed counters in `/api/agents`, but aggregate each feedback/history table once per read rather than running correlated aggregate subqueries once per agent.
+- The frontend temporarily shows predictive-experience totals as pending, then hydrates them from the detailed agent response without another database query.
+- Expose per-phase startup timings and startup warm-up target counts so Pi startup can be profiled directly from diagnostics.
+- Add `startup_warmup_targets_per_tick=2`; the effective admission remains capped by currently free inference-worker slots.
+
 # 0.14.130 — 2026-10-04
 
 - Speed up full selected-agent training without shortening the 7-day replay window or changing Ridge reward/feature semantics.

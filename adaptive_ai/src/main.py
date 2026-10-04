@@ -34,11 +34,25 @@ STARTUP = {
     "ready": False,
     "error": None,
     "started_at": time.time(),
+    "state_started_monotonic": time.monotonic(),
+    "timings": {},
 }
 
 
 def set_startup(state, step, message, *, ready=False, error=None):
+    now_mono = time.monotonic()
     with STARTUP_LOCK:
+        previous = str(STARTUP.get("state") or "")
+        previous_started = float(STARTUP.get("state_started_monotonic") or now_mono)
+        if previous and previous != str(state):
+            timings = dict(STARTUP.get("timings") or {})
+            timings[previous] = round(
+                float(timings.get(previous) or 0.0)
+                + max(0.0, now_mono - previous_started),
+                4,
+            )
+            STARTUP["timings"] = timings
+            STARTUP["state_started_monotonic"] = now_mono
         STARTUP.update(
             state=str(state), step=int(step), message=str(message),
             ready=bool(ready), error=None if error is None else str(error),
@@ -48,7 +62,13 @@ def set_startup(state, step, message, *, ready=False, error=None):
 def startup_snapshot():
     with STARTUP_LOCK:
         data = dict(STARTUP)
+        data["timings"] = dict(STARTUP.get("timings") or {})
     data["elapsed_seconds"] = max(0.0, time.time() - float(data.get("started_at") or time.time()))
+    data["current_state_seconds"] = max(
+        0.0,
+        time.monotonic() - float(data.get("state_started_monotonic") or time.monotonic()),
+    )
+    data.pop("state_started_monotonic", None)
     return data
 
 

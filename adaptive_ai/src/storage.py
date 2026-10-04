@@ -270,17 +270,35 @@ class Store:
             c.execute(f"ALTER TABLE {table} ADD COLUMN {column} {ddl}")
 
     def list_agents(self):
+        """UI/detail path: aggregate feedback/history tables once, not once per agent."""
         with self.conn() as c:
             rows = c.execute(
                 """
                 SELECT a.*,
-                       (SELECT COUNT(*) FROM rl_feedback f WHERE f.agent_id=a.id) AS feedback_count,
-                       (SELECT COUNT(*) FROM rl_feedback f WHERE f.agent_id=a.id AND f.reward > 0) AS positive_count,
-                       (SELECT COUNT(*) FROM rl_feedback f WHERE f.agent_id=a.id AND f.reward < 0) AS negative_count,
-                       (SELECT AVG(f.reward) FROM rl_feedback f WHERE f.agent_id=a.id) AS average_reward,
-                       (SELECT COUNT(*) FROM historical_experiences h WHERE h.agent_id=a.id) AS historical_count,
-                       (SELECT AVG(h.reward) FROM historical_experiences h WHERE h.agent_id=a.id) AS historical_average_reward
-                FROM agents a ORDER BY a.created_at
+                       COALESCE(f.feedback_count, 0) AS feedback_count,
+                       COALESCE(f.positive_count, 0) AS positive_count,
+                       COALESCE(f.negative_count, 0) AS negative_count,
+                       f.average_reward AS average_reward,
+                       COALESCE(h.historical_count, 0) AS historical_count,
+                       h.historical_average_reward AS historical_average_reward
+                FROM agents a
+                LEFT JOIN (
+                    SELECT agent_id,
+                           COUNT(*) AS feedback_count,
+                           SUM(CASE WHEN reward > 0 THEN 1 ELSE 0 END) AS positive_count,
+                           SUM(CASE WHEN reward < 0 THEN 1 ELSE 0 END) AS negative_count,
+                           AVG(reward) AS average_reward
+                    FROM rl_feedback
+                    GROUP BY agent_id
+                ) f ON f.agent_id=a.id
+                LEFT JOIN (
+                    SELECT agent_id,
+                           COUNT(*) AS historical_count,
+                           AVG(reward) AS historical_average_reward
+                    FROM historical_experiences
+                    GROUP BY agent_id
+                ) h ON h.agent_id=a.id
+                ORDER BY a.created_at
                 """
             ).fetchall()
         return [self._agent_dict(r) for r in rows]
