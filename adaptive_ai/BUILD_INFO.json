@@ -1,10 +1,20 @@
 {
-  "version": "0.14.130",
+  "version": "0.14.131",
   "release_date": "2026-10-04",
-  "base_version": "0.14.129",
-  "base_commit": "90a45ae823d4792827811174349fa8f47ba06592",
-  "release_status": "fast-full-training",
-  "release_validation_tests_passed": 1589,
+  "base_version": "0.14.130",
+  "base_commit": "c429719854ee3d32605c9f68956873d01314772e",
+  "release_status": "fast-startup",
+  "release_validation_tests_passed": 0,
+  "release_014131": {
+    "scope": "reduce_warm_restart_and_first_prediction_latency",
+    "inference_warmup": "realtime events retain priority; cold active targets fill only free bounded control-worker slots and no longer wait for a quiet HA event loop",
+    "status": "api/status reads config-only agent rows and defers expensive feedback/history aggregates",
+    "agent_ui": "api/agents aggregates feedback and historical_experiences once per table instead of correlated per-agent aggregate subqueries",
+    "frontend": "experience totals hydrate from the detailed agent payload after the first ready read",
+    "diagnostics": "startup phase durations and startup warmup target progress are exposed",
+    "safety": "no policy/reward/Candidate/Executor/Control semantics changed",
+    "validation": "full repository CI required before merge"
+  },
   "release_014130": {
     "scope": "reduce_repeated_full_training_overhead_without_shortening_recent_history",
     "ridge_checkpoint": "Ridge policy, experience durability, partial benchmark and training cursor remain checkpointed every logical 6 hours",
