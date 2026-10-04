@@ -1,3 +1,14 @@
+# 0.14.134 — 2026-10-04
+
+- Add a named, verifiable composition contract for `Engine.on_state_changed`.
+- Register the four shipped event layers explicitly in their existing inner→outer order: Manual Feedback Lifecycle → Candidate Shadow → Provenance → Observation Contract.
+- Preserve every existing wrapper body and event-processing semantic; this release changes composition ownership, not learning or Control behavior.
+- Make duplicate named wrapper registration idempotent and reject direct/unregistered `engine.on_state_changed` replacement once the named pipeline is active.
+- Assert the exact event-layer order immediately after the characterized base stack and again after final runtime composition, before workers become authoritative.
+- Expose a runtime composition snapshot with install order, call-entry order, layer count and top-handler integrity.
+- Add regressions for entry/exit ordering, duplicate install, direct overwrite detection, wrong-order rejection and shipped source registration.
+- No reward, policy, Candidate qualification, Correct semantics, ActionIntent, Executor or physical Control authority changes.
+
 # 0.14.133 — 2026-10-04
 
 - Add optional `compact=1` transport to generation Correct history; legacy callers retain the existing JSON response unchanged.
