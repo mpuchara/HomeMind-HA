@@ -4,7 +4,7 @@
   "base_version": "0.14.130",
   "base_commit": "c429719854ee3d32605c9f68956873d01314772e",
   "release_status": "fast-startup",
-  "release_validation_tests_passed": 0,
+  "release_validation_tests_passed": 1594,
   "release_014131": {
     "scope": "reduce_warm_restart_and_first_prediction_latency",
     "inference_warmup": "realtime events retain priority; cold active targets fill only free bounded control-worker slots and no longer wait for a quiet HA event loop",
@@ -13,7 +13,7 @@
     "frontend": "experience totals hydrate from the detailed agent payload after the first ready read",
     "diagnostics": "startup phase durations and startup warmup target progress are exposed",
     "safety": "no policy/reward/Candidate/Executor/Control semantics changed",
-    "validation": "full repository CI required before merge"
+    "validation": "1594 unit/regression tests green on Python 3.11 and 3.13; compileall, full benchmark pipeline, image build and smoke green"
   },
   "release_014130": {
     "scope": "reduce_repeated_full_training_overhead_without_shortening_recent_history",
