@@ -433,8 +433,6 @@ def install(core):
             _TLS.event_id, _TLS.event_origin = previous_event, previous_origin
 
     def build_state_changed(next_handler):
-        if next_handler is not original_on_state_changed:
-            raise RuntimeError("provenance state-event base changed during install")
         return on_state_changed
 
     install_state_event_wrapper(engine, "provenance", build_state_changed)
