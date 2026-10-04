@@ -17,6 +17,7 @@ EXPECTED_INSTALL_ORDER = (
     "candidate_observation",
     "provenance",
     "observation",
+    "tiny_mlp_shadow",
 )
 
 
