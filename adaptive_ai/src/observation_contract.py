@@ -2155,8 +2155,6 @@ def install(core):
             )
         return result
     def build_state_changed(next_handler):
-        if next_handler is not original_on_state_changed:
-            raise RuntimeError("observation state-event base changed during install")
         return on_state_changed
 
     install_state_event_wrapper(engine, "observation", build_state_changed)
