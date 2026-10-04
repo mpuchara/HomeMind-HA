@@ -6,13 +6,13 @@
   "release_status": "named-process-agent-pipeline-and-candidate-fast-bypass",
   "release_validation_tests_passed": 1598,
   "release_014135": {
-    "scope": "named_process_agent_wrapper_ownership_and_inactive_candidate_hot_path_bypass",
-    "pipeline": "Candidate process observation installs through process_agent_pipeline; AgentCandidateManager no longer assigns engine.process_agent directly",
+    "scope": "complete_named_process_agent_wrapper_ownership_and_inactive_candidate_hot_path_bypass",
+    "pipeline": "Manual Feedback, Context Tournament, Candidate observation, Provenance and Observation all install through process_agent_pipeline; feature installers no longer assign engine.process_agent directly",
     "fast_bypass": "when candidate_hot_active is available and false for a Live root, Candidate before/after observation hooks are skipped entirely",
     "compatibility": "standalone or legacy compositions without candidate_hot_active preserve historical always-observe behavior",
     "guard": "duplicate named install is idempotent; direct process_agent overwrite or order drift fails final composition",
     "control_semantics_changed": false,
-    "validation_tests_expected": 1614
+    "validation_tests_expected": 1615
   },
   "release_014134": {
     "scope": "named_and_verified_engine_state_event_wrapper_composition",
