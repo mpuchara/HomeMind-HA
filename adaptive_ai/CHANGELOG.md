@@ -1,8 +1,8 @@
 # 0.14.135 — 2026-10-04
 
-- Remove direct feature ownership of the `Engine.process_agent` monkey-patch across Manual Feedback, Context Tournament, Teach-RL rebenchmark, Candidate observation, Provenance and Observation.
+- Remove direct feature ownership of the `Engine.process_agent` monkey-patch across Manual Feedback, Context Tournament, Teach-RL rebenchmark, Candidate observation, Provenance, Observation and Tiny MLP Shadow.
 - Add a named `process_agent_pipeline` registry as the single owner of the complete shipped process-agent wrapper stack and its integrity checks.
-- Preserve the established inner→outer installation order: Manual Feedback → Context Tournament → Teach-RL rebenchmark → Candidate → Provenance → Observation, and therefore the exact reverse call-entry order.
+- Preserve the established inner→outer installation order: Manual Feedback → Context Tournament → Teach-RL rebenchmark → Candidate → Provenance → Observation → Tiny MLP Shadow, and therefore the exact reverse call-entry order.
 - Preserve Candidate observation semantics: Candidate before-hook → lower process stack → Candidate after-hook whenever the root has an active Candidate lineage.
 - Add an inactive-Candidate fast bypass: when the generation-aware active-root index is available and a Live agent has no retained Candidate lineage, Candidate observation hooks are skipped entirely.
 - Keep standalone/legacy compositions compatible: if no active-root index is installed, the historical always-observe behavior remains unchanged.
