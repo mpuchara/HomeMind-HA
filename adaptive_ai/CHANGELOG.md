@@ -8,7 +8,7 @@
 - Keep standalone/legacy compositions compatible: if no active-root index is installed, the historical always-observe behavior remains unchanged.
 - Fail fast when `engine.process_agent` is replaced outside the named pipeline or when final composition order drifts.
 - Expose the process-agent pipeline snapshot in the final runtime composition contract and remove the Candidate process wrapper from the remaining-legacy-overlay list.
-- Add regressions for complete wrapper ordering, idempotence, direct-overwrite detection, inactive fast bypass, active before/base/after ordering, safe index-failure fallback, named registration of all five layers and an AST guard forbidding direct process-agent assignment outside the pipeline.
+- Add regressions for complete wrapper ordering, idempotence, direct-overwrite detection, inactive fast bypass, active before/base/after ordering, safe index-failure fallback, named registration of all shipped layers and an AST guard forbidding direct process-agent assignment outside the pipeline; the byte-for-byte retained `manual_feedback_legacy.py` compatibility module is the sole explicit source-only exception.
 - No reward, policy, Correct, Candidate qualification, ActionIntent, Executor or physical Control authority changes.
 
 # 0.14.134 — 2026-10-04
