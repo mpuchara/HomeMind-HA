@@ -22,6 +22,7 @@ from observation_space import (
 )
 from policy_tiny_mlp import TinyMLPBackend
 from settings import OPTIONS
+from process_agent_pipeline import install_process_agent_wrapper
 
 
 def _parse_hidden(value):
@@ -818,7 +819,9 @@ def install(core):
             service.record_error(aid, exc)
         return finish(result)
 
-    engine.process_agent = process_agent_with_tiny_mlp_shadow
+    install_process_agent_wrapper(
+        engine, "tiny_mlp_shadow", lambda _next: process_agent_with_tiny_mlp_shadow
+    )
     engine._tiny_mlp_shadow_installed = True
     core.STORE.event(
         None,
