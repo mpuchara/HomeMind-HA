@@ -725,31 +725,71 @@ def shutdown_runtime():
                                 "Some Control leases could not be restored during shutdown", {"errors": errors})
             except Exception:
                 traceback.print_exc()
+            if ENGINE.home_bootstrap:
+                ENGINE.home_bootstrap.cancel()
+
+        # Stop producers before the final durability barrier. This prevents a late HA
+        # event/training callback from refilling a deferred queue after we have drained it.
+        if EVENT_STREAM is not None:
+            EVENT_STREAM.stop_event.set()
+        if HISTORY is not None:
+            HISTORY.stop_event.set()
+        if ENGINE is not None:
+            ENGINE.stop_event.set()
+
+            # No new inference/poll work may be admitted after stop_event. Let already
+            # running jobs finish before stopping the deferred writers so their final
+            # decision/observation rows are included in the durability barrier.
+            ENGINE.control_workers.shutdown(wait=True, cancel_futures=True)
+            ENGINE.poll_worker.shutdown(wait=True, cancel_futures=True)
+            registry_worker = getattr(ENGINE, "registry_worker", None)
+            if registry_worker is not None:
+                registry_worker.shutdown(wait=True, cancel_futures=True)
+            housekeeping_worker = getattr(ENGINE, "housekeeping_worker", None)
+            if housekeeping_worker is not None:
+                housekeeping_worker.shutdown(wait=True, cancel_futures=True)
+
+            for event_name in (
+                "provenance_writer_event",
+                "feature_journal_writer_event",
+            ):
+                event = getattr(ENGINE, event_name, None)
+                if event is not None:
+                    event.set()
+
+            for thread_name in (
+                "provenance_writer_thread",
+                "feature_journal_writer_thread",
+            ):
+                thread = getattr(ENGINE, thread_name, None)
+                if thread is not None and thread.is_alive():
+                    thread.join(timeout=2.5)
+
             ENGINE.context.save(force=True)
             try:
                 ENGINE.teaching.flush(force=True)
                 ENGINE.flush_archive(force=True)
-                flush_provenance = getattr(STORE, "_flush_provenance_events", None)
-                if callable(flush_provenance):
-                    flush_provenance()
+
+                flush_all_provenance = getattr(STORE, "_flush_all_provenance", None)
+                if callable(flush_all_provenance):
+                    flush_all_provenance()
+                else:
+                    # Compatibility with older compositions/tests.
+                    for name in (
+                        "_flush_provenance_events",
+                        "_flush_provenance_decisions",
+                        "_flush_provenance_acks",
+                    ):
+                        callback = getattr(STORE, name, None)
+                        if callable(callback):
+                            callback()
+
+                flush_features = getattr(ENGINE, "flush_feature_journal", None)
+                if callable(flush_features):
+                    flush_features()
                 STORE.flush_events()
             except Exception:
                 traceback.print_exc()
-            if ENGINE.home_bootstrap:
-                ENGINE.home_bootstrap.cancel()
-            ENGINE.stop_event.set()
-            ENGINE.control_workers.shutdown(wait=False, cancel_futures=True)
-            ENGINE.poll_worker.shutdown(wait=False, cancel_futures=True)
-            registry_worker = getattr(ENGINE, "registry_worker", None)
-            if registry_worker is not None:
-                registry_worker.shutdown(wait=False, cancel_futures=True)
-            housekeeping_worker = getattr(ENGINE, "housekeeping_worker", None)
-            if housekeeping_worker is not None:
-                housekeeping_worker.shutdown(wait=False, cancel_futures=True)
-        if HISTORY is not None:
-            HISTORY.stop_event.set()
-        if EVENT_STREAM is not None:
-            EVENT_STREAM.stop_event.set()
     except Exception:
         traceback.print_exc()
 

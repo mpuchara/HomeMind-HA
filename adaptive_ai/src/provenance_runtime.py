@@ -93,11 +93,14 @@ def install(core):
     deferred_lock = threading.RLock()
     deferred_event = threading.Event()
     deferred_rows = []
+    decision_limit = 8192
     deferred_stats = {
         "queued": 0,
         "flushed": 0,
         "flushes": 0,
         "max_queue": 0,
+        "overflow_sync": 0,
+        "errors": 0,
     }
     deferred_acks = {}
     ack_stats = {
@@ -150,22 +153,63 @@ def install(core):
                 deferred_rows[:] = [
                     row for row in deferred_rows if str(row.get("agent_id")) != aid
                 ]
-        inserted = journal.record_decisions_batch(batch)
+        try:
+            inserted = journal.record_decisions_batch(batch)
+        except Exception:
+            # record_decisions_batch is outside the RAM lock so live Shadow inference can
+            # continue. If SQLite fails, restore the exact batch before surfacing the
+            # failure; otherwise a transient writer error would permanently erase audit
+            # evidence that explicit reads and later replay expect to exist.
+            with deferred_lock:
+                deferred_rows[:0] = batch
+                deferred_stats["errors"] += 1
+                deferred_stats["max_queue"] = max(
+                    int(deferred_stats["max_queue"]), len(deferred_rows)
+                )
+            deferred_event.set()
+            raise
         with deferred_lock:
             deferred_stats["flushed"] += len(batch)
             deferred_stats["flushes"] += 1
         return inserted
 
     def queue_deferred(row):
+        prepared = dict(row)
         with deferred_lock:
-            deferred_rows.append(dict(row))
-            deferred_stats["queued"] += 1
-            deferred_stats["max_queue"] = max(
-                int(deferred_stats["max_queue"]), len(deferred_rows)
-            )
-            wake = len(deferred_rows) >= 32
+            overflow = len(deferred_rows) >= decision_limit
+            if overflow:
+                deferred_stats["overflow_sync"] += 1
+                wake = False
+            else:
+                deferred_rows.append(prepared)
+                deferred_stats["queued"] += 1
+                deferred_stats["max_queue"] = max(
+                    int(deferred_stats["max_queue"]), len(deferred_rows)
+                )
+                wake = len(deferred_rows) >= 32
+        if overflow:
+            # Normal Shadow stays RAM-first. Only a saturated queue applies synchronous
+            # backpressure, matching FeatureJournal's overload contract. If the writer is
+            # unavailable, preserve the row in RAM rather than dropping provenance.
+            try:
+                journal.record_decisions_batch([prepared])
+            except Exception:
+                with deferred_lock:
+                    deferred_rows.append(prepared)
+                    deferred_stats["queued"] += 1
+                    deferred_stats["errors"] += 1
+                    deferred_stats["max_queue"] = max(
+                        int(deferred_stats["max_queue"]), len(deferred_rows)
+                    )
+                deferred_event.set()
+                return False
+            with deferred_lock:
+                deferred_stats["flushed"] += 1
+                deferred_stats["flushes"] += 1
+            return True
         if wake:
             deferred_event.set()
+        return True
 
     def _merge_ack(existing, incoming):
         if existing is None:
@@ -239,33 +283,63 @@ def install(core):
             "events": {
                 **event_stats,
                 "pending": journal.pending_event_count(),
+                "max_pending": int(getattr(journal, "_max_pending_events", 0) or 0),
+                "overflow_sync": int(
+                    getattr(journal, "_pending_event_overflow_sync", 0) or 0
+                ),
+                "overflow_errors": int(
+                    getattr(journal, "_pending_event_overflow_errors", 0) or 0
+                ),
+                # Kept for backwards-compatible diagnostics. 0.14.132 no longer drops
+                # pending event provenance when the soft queue limit is reached.
                 "dropped": int(getattr(journal, "_dropped_pending_events", 0) or 0),
             },
         }
 
-    def flush_event_provenance():
+    def flush_event_provenance(max_batches=None):
         total = 0
+        batches = 0
+        batch_limit = None if max_batches is None else max(1, int(max_batches))
         while journal.pending_event_count():
+            if batch_limit is not None and batches >= batch_limit:
+                break
             written = journal.flush_events_batch(512)
             if not written:
                 break
             total += int(written)
+            batches += 1
         if total:
             event_stats["flushed"] += total
             event_stats["flushes"] += 1
         return total
 
+    def flush_all_provenance(*, max_event_batches=None):
+        """Attempt every deferred provenance class even if one SQLite write fails."""
+        results = {}
+        errors = []
+        callbacks = (
+            ("events", lambda: flush_event_provenance(max_batches=max_event_batches)),
+            ("decisions", flush_deferred),
+            ("acks", flush_deferred_acks),
+        )
+        for name, callback in callbacks:
+            try:
+                results[name] = int(callback() or 0)
+            except Exception as exc:
+                errors.append(f"{name}: {type(exc).__name__}: {exc}")
+        if errors:
+            raise RuntimeError("; ".join(errors))
+        return results
+
     def provenance_writer():
         while not engine.stop_event.is_set():
             # Sparse event streams otherwise degenerate into one SQLite transaction per
-            # event. Keep observational provenance in RAM for up to 2 seconds; large
-            # Shadow decision batches still wake this writer early.
+            # event. Keep observational provenance in RAM for up to 2 seconds. Bound each
+            # event turn so a very large event backlog cannot starve Shadow decisions/ACKs.
             deferred_event.wait(2.0)
             deferred_event.clear()
             try:
-                flush_event_provenance()
-                flush_deferred()
-                flush_deferred_acks()
+                flush_all_provenance(max_event_batches=4)
             except Exception as exc:
                 event_stats["errors"] += 1
                 try:
@@ -278,9 +352,7 @@ def install(core):
                     pass
                 time.sleep(0.1)
         try:
-            flush_event_provenance()
-            flush_deferred()
-            flush_deferred_acks()
+            flush_all_provenance()
         except Exception:
             pass
 
@@ -288,12 +360,16 @@ def install(core):
     store._flush_provenance_decisions = flush_deferred
     store._flush_provenance_events = flush_event_provenance
     store._flush_provenance_acks = flush_deferred_acks
+    store._flush_all_provenance = flush_all_provenance
     engine.provenance_deferred_snapshot = deferred_snapshot
-    threading.Thread(
+    writer_thread = threading.Thread(
         target=provenance_writer,
         name="adaptive-ai-provenance-writer",
         daemon=True,
-    ).start()
+    )
+    engine.provenance_writer_thread = writer_thread
+    engine.provenance_writer_event = deferred_event
+    writer_thread.start()
 
     @contextmanager
     def command_origin(origin):

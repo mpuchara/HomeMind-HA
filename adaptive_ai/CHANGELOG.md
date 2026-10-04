@@ -1,3 +1,14 @@
+# 0.14.132 — 2026-10-04
+
+- Harden deferred provenance persistence: a failed Shadow decision batch is restored to RAM and retried instead of being lost after the queue was cleared.
+- Replace the 8192-event provenance drop policy with a soft overload threshold. Saturation now attempts a bounded synchronous flush and preserves new events in RAM when SQLite is temporarily unavailable, protecting the own-command replay exclusion boundary.
+- Bound normal Shadow decision buffering at 8192 rows with overload-only synchronous backpressure; failed overload writes remain queued rather than disappearing.
+- Make the provenance writer fair under large event backlogs by limiting each background event turn before flushing deferred decisions and acknowledgements.
+- Harden FeatureJournal overload behavior so failed synchronous observation/window persistence is requeued instead of surfacing into HA event ingestion.
+- Expose explicit full-drain hooks and writer thread handles for provenance and FeatureJournal.
+- Reorder shutdown into a durability barrier: stop event/history producers, drain in-flight executor work, wake and join deferred writers, then force final archive/provenance/feature/event persistence.
+- No reward, policy, Correct, Candidate, training semantics, ActionIntent, Executor or physical Control authority changes.
+
 # 0.14.131 — 2026-10-04
 
 - Speed up warm restart/full UI readiness without changing policy, reward, Candidate or Control semantics.
