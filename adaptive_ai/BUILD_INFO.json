@@ -4,7 +4,7 @@
   "base_version": "0.14.129",
   "base_commit": "90a45ae823d4792827811174349fa8f47ba06592",
   "release_status": "fast-full-training",
-  "release_validation_tests_passed": 0,
+  "release_validation_tests_passed": 1589,
   "release_014130": {
     "scope": "reduce_repeated_full_training_overhead_without_shortening_recent_history",
     "ridge_checkpoint": "Ridge policy, experience durability, partial benchmark and training cursor remain checkpointed every logical 6 hours",
@@ -14,7 +14,7 @@
     "recorder_safety": "coverage metadata is performance-only, bounded and fail-open; skipped/failed slices are never cached",
     "history_window": "full-resolution recent replay remains 7 days and sparse long memory remains unchanged",
     "training_revision": "shared-home-intents-v20",
-    "validation": "targeted regression tests added; full repository CI required before merge"
+    "validation": "1589 unit/regression tests green on Python 3.11 and 3.13; compileall, benchmark pipeline, image build and smoke green"
   },
   "release_014129": {
     "scope": "restore_candidate_isolation_for_obsolete_feature_schema",
