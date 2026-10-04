@@ -23,6 +23,7 @@ from fast_runtime import is_fast_target
 from settings import parse_ts
 from inference_hot_path_metrics import observe_elapsed
 from telemetry import TELEMETRY
+from state_event_pipeline import install_state_event_wrapper
 
 
 DECISION_STALE_SECONDS = 95.0
@@ -1410,7 +1411,14 @@ def install(manager):
     manager.candidate_dependency_roots = candidate_dependency_roots
     manager.rebuild_candidate_dependency_index = _rebuild_candidate_dependency_index
     if callable(original_on_state_changed):
-        manager.engine.on_state_changed = candidate_state_changed
+        def build_state_changed(next_handler):
+            if next_handler is not original_on_state_changed:
+                raise RuntimeError("candidate shadow state-event base changed during install")
+            return candidate_state_changed
+
+        install_state_event_wrapper(
+            manager.engine, "candidate_shadow", build_state_changed
+        )
     manager.generation_history = generation_history
     manager.generation_decision_at = generation_decision_at
     manager.generation_comparison = generation_comparison
