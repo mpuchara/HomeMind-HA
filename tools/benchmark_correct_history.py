@@ -18,7 +18,7 @@ SRC = ROOT / "adaptive_ai" / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
-from agent_correct_generation_history import _live_observed_points
+from agent_correct_generation_history import _live_observed_points, _pairs, _values
 from teach_observed_history import DESIRED_STALE_SECONDS
 
 
@@ -96,16 +96,42 @@ def run(sizes):
         if optimized != legacy:
             raise AssertionError(f"semantic mismatch at {n} rows/stream")
 
-        payload = {"points": optimized[0], "gaps": optimized[1]}
+        points, gaps = optimized
+        payload = {"points": points, "gaps": gaps}
         json_bytes = len(
             json.dumps(payload, separators=(",", ":"), allow_nan=False).encode("utf-8")
         )
+        legacy_response = {
+            "points": points,
+            "gaps": gaps,
+            "series": {
+                "current": {"label": "Current", "points": _values(points, "current")},
+                "live_desired": {"label": "Live Desired", "points": _values(points, "desired")},
+            },
+        }
+        compact_response = {
+            "compact": True,
+            "series_encoding": "pairs_v1",
+            "gaps": gaps,
+            "series": {
+                "current": {"label": "Current", "pairs": _pairs(points, "current")},
+                "live_desired": {"label": "Live Desired", "pairs": _pairs(points, "desired")},
+            },
+        }
+        legacy_response_bytes = len(json.dumps(legacy_response, separators=(",", ":"), allow_nan=False).encode("utf-8"))
+        compact_response_bytes = len(json.dumps(compact_response, separators=(",", ":"), allow_nan=False).encode("utf-8"))
+        compact_ratio = compact_response_bytes / max(1, legacy_response_bytes)
+        if compact_ratio >= 0.45:
+            raise AssertionError(f"compact Correct transport too large at {n}: {compact_ratio:.3f}")
         legacy_work = len(optimized[0]) * (len(decisions) + len(currents))
         sample = {
             "rows_per_stream": n,
             "points": len(optimized[0]),
             "gaps": len(optimized[1]),
             "json_bytes": json_bytes,
+            "legacy_response_json_bytes": legacy_response_bytes,
+            "compact_response_json_bytes": compact_response_bytes,
+            "compact_response_ratio": compact_ratio,
             "legacy_seconds": legacy_seconds,
             "optimized_seconds": optimized_seconds,
             "wall_speedup": (
@@ -136,7 +162,7 @@ def run(sizes):
         if legacy_ratio <= 3.5:
             raise AssertionError(f"legacy oracle no longer demonstrates quadratic growth: {growth[-1]}")
     return {
-        "contract": "correct_history_observed_stream_merge_v1",
+        "contract": "correct_history_observed_stream_merge_v2",
         "sizes": sizes,
         "samples": samples,
         "growth": growth,

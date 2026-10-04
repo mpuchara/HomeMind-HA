@@ -3,6 +3,15 @@
   const COLORS={current:'#73dbec',parent:'#c2a6ff',candidate:'#ff9f43',correct:'#ffd166'};
   const html=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const api=async(path,opts={})=>{const r=await fetch(path,{headers:{'Content-Type':'application/json'},...opts});let b={};try{b=await r.json();}catch(_){ }if(!r.ok){const e=Error(b.error||`HTTP ${r.status}`);e.status=r.status;throw e;}return b;};
+  const normalizeCompactSeries=payload=>{
+    const series=payload?.series||{};
+    for(const item of Object.values(series)){
+      if(Array.isArray(item?.points)||!Array.isArray(item?.pairs))continue;
+      item.points=item.pairs.map(pair=>({ts:Number(pair?.[0]),value:Number(pair?.[1])})).filter(point=>Number.isFinite(point.ts)&&Number.isFinite(point.value));
+      delete item.pairs;
+    }
+    return payload;
+  };
   const fmt=(subject,v)=>v==null?'—':subject?.target_property==='power'?(Number(v)>=.5?'ON':'OFF'):Number(v).toFixed(3).replace(/\.000$/,'');
   const local=ts=>{const d=new Date(Number(ts)*1000);return new Date(d-d.getTimezoneOffset()*60000).toISOString().slice(0,19);};
   const notifyError=e=>alert(e?.message||String(e));
@@ -259,7 +268,7 @@ Parent pozostaje bez zmian. Wynik przejdzie offline gate i Shadow A/B; nie dosta
     if(!Number.isFinite(range.start)||!Number.isFinite(end)||end<=range.start||end-range.start>31*86400){error(Error('Wybierz zakres od 1 sekundy do 31 dni'));return;}
     dialog.querySelector('[data-start]').value=local(range.start);dialog.querySelector('[data-end]').value=local(end);dialog.querySelector('[data-error]').textContent='';dialog.querySelector('[data-status]').textContent='Ładuję zaobserwowane decyzje generacji…';
     try{
-      const out=await api(`api/agent-workflow/${encodeURIComponent(ref)}/correct-history?start=${range.start}&end=${end}`);
+      const out=normalizeCompactSeries(await api(`api/agent-workflow/${encodeURIComponent(ref)}/correct-history?start=${range.start}&end=${end}&compact=1`));
       if(seq!==requestSeq||!dialog.open)return;
       data=out;renderLegend();draw();
       const current=(out.series?.current?.points||[]).length,labels=(out.labels||[]).length;

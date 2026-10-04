@@ -1,10 +1,17 @@
 {
-  "version": "0.14.132",
+  "version": "0.14.133",
   "release_date": "2026-10-04",
-  "base_version": "0.14.131",
-  "base_commit": "06a85a727e8000274b5866be013f03b4fd891be7",
-  "release_status": "deferred-persistence-hardening",
+  "base_version": "0.14.132",
+  "base_commit": "5a841f29dcbae3721687c94a3492c4d21a50a6c2",
+  "release_status": "correct-transport-and-pi4-gate-alignment",
   "release_validation_tests_passed": 1598,
+  "release_014133": {
+    "scope": "compact_correct_transport_and_pi4_worker_gate_alignment",
+    "correct_transport": "UI requests compact=1; pairs_v1 removes duplicated chart point objects while legacy API remains unchanged",
+    "pi4_gate": "Stage-9 accepts the shipped adaptive 1-2 isolated worker contract while CPU/RSS/MemAvailable gates remain unchanged",
+    "control_semantics_changed": false,
+    "validation_tests_expected": 1602
+  },
   "release_014132": {
     "scope": "deferred_provenance_and_feature_journal_durability",
     "shadow_decisions": "failed batch writes are restored to RAM and retried",

@@ -137,12 +137,19 @@ class Release088Pi4GateTests(unittest.TestCase):
         self.assertEqual(result["decision"], "fail")
         self.assertIn("training-correct.correct_http_p95", result["failures"])
 
-    def test_two_training_workers_fail_single_heavy_job_gate(self):
+    def test_two_training_workers_match_current_parallel_product_contract(self):
         suite = green_suite()
         suite["training"]["worker_concurrency"]["max"] = 2
+        suite["training"]["worker_concurrency"]["samples_over_one"] = 20
+        result = evaluate_reports(suite)
+        self.assertEqual(result["decision"], "pass")
+
+    def test_three_training_workers_fail_bounded_worker_gate(self):
+        suite = green_suite()
+        suite["training"]["worker_concurrency"]["max"] = 3
         result = evaluate_reports(suite)
         self.assertEqual(result["decision"], "fail")
-        self.assertIn("training.single_training_worker", result["failures"])
+        self.assertIn("training.bounded_training_workers", result["failures"])
 
     def test_realtime_disconnects_fail_gate(self):
         suite = green_suite()
