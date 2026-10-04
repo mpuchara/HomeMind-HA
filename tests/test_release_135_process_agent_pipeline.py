@@ -1,4 +1,5 @@
 """0.14.135 named process_agent composition and Candidate fast-bypass regressions."""
+import ast
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
@@ -37,25 +38,26 @@ class ProcessAgentPipelineTests(unittest.TestCase):
             return handler
         return factory
 
-    def test_named_process_wrapper_preserves_call_semantics(self):
+    def test_named_process_wrappers_preserve_complete_shipped_call_order(self):
         calls = []
         engine = self.engine(calls)
-        install_process_agent_wrapper(
-            engine, "candidate_observation", self.layer(calls, "candidate_observation")
-        )
+        for name in EXPECTED_INSTALL_ORDER:
+            install_process_agent_wrapper(engine, name, self.layer(calls, name))
         result = engine.process_agent({"id": "a"}, {}, {"sensor.x"})
         self.assertEqual(result, "base-result")
         self.assertEqual(
             calls,
-            [
-                ("candidate_observation", "enter"),
-                ("base", "a"),
-                ("candidate_observation", "exit"),
-            ],
+            [(name, "enter") for name in reversed(EXPECTED_INSTALL_ORDER)]
+            + [("base", "a")]
+            + [(name, "exit") for name in EXPECTED_INSTALL_ORDER],
         )
         snapshot = assert_process_agent_pipeline(engine)
         self.assertEqual(
             snapshot["install_order_inner_to_outer"], list(EXPECTED_INSTALL_ORDER)
+        )
+        self.assertEqual(
+            snapshot["call_entry_order_outer_to_inner"],
+            list(reversed(EXPECTED_INSTALL_ORDER)),
         )
         self.assertTrue(snapshot["top_handler_registered"])
 
@@ -71,9 +73,8 @@ class ProcessAgentPipelineTests(unittest.TestCase):
     def test_direct_process_agent_replacement_is_rejected(self):
         calls = []
         engine = self.engine(calls)
-        install_process_agent_wrapper(
-            engine, "candidate_observation", self.layer(calls, "candidate_observation")
-        )
+        for name in EXPECTED_INSTALL_ORDER:
+            install_process_agent_wrapper(engine, name, self.layer(calls, name))
         engine.process_agent = lambda *args, **kwargs: None
         with self.assertRaises(ProcessAgentPipelineError):
             assert_process_agent_pipeline(engine)
@@ -120,17 +121,42 @@ class CandidateProcessFastBypassTests(unittest.TestCase):
 
 
 class ShippedProcessAgentContractTests(unittest.TestCase):
-    def test_candidate_no_longer_owns_direct_process_agent_assignment(self):
-        candidate_source = (SRC / "agent_candidates.py").read_text(encoding="utf-8")
+    def test_all_shipped_process_layers_register_through_named_pipeline(self):
+        expected = {
+            "manual_feedback.py": "manual_feedback_physical_equivalence",
+            "context_tournament.py": "context_tournament_shadow",
+            "agent_candidates.py": "candidate_observation",
+            "provenance_runtime.py": "provenance",
+            "observation_contract.py": "observation",
+        }
+        for filename, layer in expected.items():
+            source = (SRC / filename).read_text(encoding="utf-8")
+            self.assertIn("install_process_agent_wrapper(", source)
+            self.assertIn(f'"{layer}"', source)
+
         pipeline_source = (SRC / "process_agent_pipeline.py").read_text(encoding="utf-8")
         root_source = (SRC / "runtime_composition.py").read_text(encoding="utf-8")
-
-        self.assertIn("install_process_agent_wrapper(", candidate_source)
-        self.assertNotIn("self.engine.process_agent = process", candidate_source)
         self.assertIn("engine.process_agent = handler", pipeline_source)
         self.assertIn("assert_process_agent_pipeline(", root_source)
         self.assertIn('"process_agent"', root_source)
         self.assertNotIn("Candidate process_agent observation wrapper", root_source)
+
+    def test_no_installer_directly_assigns_process_agent_outside_pipeline(self):
+        offenders = []
+        for path in sorted(SRC.glob("*.py")):
+            if path.name == "process_agent_pipeline.py":
+                continue
+            tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+            for node in ast.walk(tree):
+                targets = []
+                if isinstance(node, ast.Assign):
+                    targets = node.targets
+                elif isinstance(node, (ast.AnnAssign, ast.AugAssign)):
+                    targets = [node.target]
+                for target in targets:
+                    if isinstance(target, ast.Attribute) and target.attr == "process_agent":
+                        offenders.append((path.name, getattr(node, "lineno", None)))
+        self.assertEqual(offenders, [])
 
 
 if __name__ == "__main__":
