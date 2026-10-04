@@ -17,11 +17,10 @@ import uuid
 from urllib.parse import unquote, urlsplit
 
 
-CONTRACT_VERSION = 2
+CONTRACT_VERSION = 1
 ACTION_CORRECT = "correct"
 STATE_ACCEPTED = "accepted"
 STATE_PROCESSING = "processing"
-STATE_WAITING = "waiting"
 STATE_DONE = "done"
 STATE_FAILED = "failed"
 
@@ -167,18 +166,16 @@ class WorkflowRequestQueue(threading.Thread):
         with self.store.lock, self.store.conn() as c:
             row = c.execute(
                 """SELECT * FROM agent_workflow_requests
-                   WHERE state=? OR (state=? AND updated_ts<=?)
-                   ORDER BY created_ts,request_id LIMIT 1""",
-                (STATE_ACCEPTED, STATE_WAITING, now),
+                   WHERE state=? ORDER BY created_ts,request_id LIMIT 1""",
+                (STATE_ACCEPTED,),
             ).fetchone()
             if row is None:
                 return None
-            prior_state = str(row["state"])
             updated = c.execute(
                 """UPDATE agent_workflow_requests
                    SET state=?,started_ts=COALESCE(started_ts,?),updated_ts=?
                    WHERE request_id=? AND state=?""",
-                (STATE_PROCESSING, now, now, row["request_id"], prior_state),
+                (STATE_PROCESSING, now, now, row["request_id"], STATE_ACCEPTED),
             )
             if updated.rowcount != 1:
                 return None
@@ -198,20 +195,6 @@ class WorkflowRequestQueue(threading.Thread):
                 (state, raw, None if error is None else str(error), now, now, str(request_id)),
             )
 
-    def _defer(self, request_id, result=None, *, retry_seconds=1.0):
-        """Keep a durable Correct request alive while an explicit prerequisite runs."""
-        now = time.time()
-        raw = json.dumps(result or {}, separators=(",", ":"), default=str)
-        retry_at = now + max(self.poll_seconds, float(retry_seconds))
-        with self.store.lock, self.store.conn() as c:
-            c.execute(
-                """UPDATE agent_workflow_requests
-                   SET state=?,result_json=?,error=NULL,finished_ts=NULL,updated_ts=?
-                   WHERE request_id=?""",
-                (STATE_WAITING, raw, retry_at, str(request_id)),
-            )
-        self.wake_event.set()
-
     def process_once(self):
         row = self._claim_next()
         if row is None:
@@ -223,12 +206,6 @@ class WorkflowRequestQueue(threading.Thread):
             result = self.manager.workflow_correct_commit(
                 str(row["generation_ref"]), request_id=rid
             )
-            if isinstance(result, dict) and result.get("deferred"):
-                self._defer(
-                    rid, result,
-                    retry_seconds=float(result.get("retry_seconds") or 1.0),
-                )
-                return True
             self._finish(rid, state=STATE_DONE, result=result)
             try:
                 self.store.event(
@@ -324,8 +301,7 @@ def install(manager, *, start_worker=True):
     manager.workflow_requests = queue
     manager._workflow_request_queue_installed = True
     manager.workflow_request_contract = (
-        "correct_commit_is_durable_idempotent_202_then_async_candidate_orchestration_"
-        "with_waiting_live_schema_recovery"
+        "correct_commit_is_durable_idempotent_202_then_async_candidate_orchestration"
     )
     manager.workflow_request_contract_version = CONTRACT_VERSION
     return manager
