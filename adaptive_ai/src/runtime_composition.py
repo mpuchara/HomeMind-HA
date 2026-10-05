@@ -171,7 +171,7 @@ class RuntimeCompositionRoot:
                 "transport": type(router).__name__,
             },
             "remaining_legacy_overlays": [
-                "older compatibility Handler routes outside the characterized Workflow/Correct/Explore/Confidence transport scope",
+                "Handler.status_payload lifecycle/diagnostic decorators only; final feature HTTP routing no longer depends on do_GET/do_POST/do_PATCH/do_DELETE/static fallback ownership",
             ],
         }
 
@@ -217,6 +217,8 @@ class RuntimeCompositionRoot:
             register_routes as register_workflow_request_routes,
         )
         from runtime_http import install_dispatch, register_feedback_routes, register_promotion_routes
+        from candidate_http_routes import register_routes as register_candidate_routes
+        from manual_feedback_static import register_routes as register_manual_feedback_static_routes
         from runtime_debug_log import register_runtime_debug_routes
         from tiny_mlp_shadow import install as install_tiny_mlp_shadow
         from hybrid_policy_runtime import install as install_hybrid_policy_runtime
@@ -306,6 +308,8 @@ class RuntimeCompositionRoot:
         register_explore_read_routes(router, manager)
         register_explore_mutation_routes(router, manager)
         register_confidence_read_routes(router, self.core)
+        register_manual_feedback_static_routes(router, self.core)
+        register_candidate_routes(router, self.core, manager)
         register_feedback_routes(router, self.core)
         register_promotion_routes(router, self.core, manager)
         register_correct_learning_debug_route(router, self.core, manager)
@@ -435,6 +439,13 @@ class RuntimeCompositionRoot:
 def bind_final_composition(runtime, *, clock=None):
     """Bind one final prepare hook; repeated binding never stacks another wrapper."""
     core = runtime.core
+    # Mark the shipped stack before HTTP server construction. Candidate feature installers
+    # run later inside base composition and keep legacy Handler wrappers only for standalone
+    # compositions. Manual-feedback static is installed at import time, so remove exactly
+    # that tagged compatibility wrapper before ThreadingHTTPServer captures Handler.
+    core._final_explicit_http_only = True
+    from manual_feedback_static import uninstall_legacy as uninstall_manual_feedback_static_legacy
+    uninstall_manual_feedback_static_legacy(core)
     existing = getattr(core, "RUNTIME_COMPOSITION_ROOT", None)
     if existing is not None:
         return existing
