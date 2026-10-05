@@ -92,8 +92,9 @@ def install(core):
     if getattr(core, "_agent_live_card_refresh_installed", False):
         return core
 
-    handler = core.Handler
-    original_get = handler.do_GET
+    legacy_http = not bool(getattr(core, "_final_explicit_http_only", False))
+    handler = core.Handler if legacy_http else None
+    original_get = handler.do_GET if legacy_http else None
 
     def do_get(http):
         parsed = urlsplit(http.path)
@@ -107,7 +108,8 @@ def install(core):
             )
         return original_get(http)
 
-    handler.do_GET = do_get
+    if legacy_http:
+        handler.do_GET = do_get
     core._agent_live_card_refresh_installed = True
     core.live_agent_payload = lambda include_configs=False: live_agent_payload(
         core, include_configs=include_configs

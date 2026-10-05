@@ -12,12 +12,14 @@ from collections import OrderedDict
 from urllib.parse import urlsplit
 
 
-CONTRACT_VERSION = 3
+CONTRACT_VERSION = 4
 
 
 # Route callbacks may explicitly delegate to the captured compatibility Handler.
-# This is used by migrated legacy guards that only handle a request conditionally.
+# FALLTHROUGH exits explicit routing immediately. CONTINUE lets a higher-priority
+# compatibility guard pass the request to the next matching explicit route.
 FALLTHROUGH = object()
+CONTINUE = object()
 
 
 class ExplicitRouteRegistry:
@@ -73,9 +75,12 @@ class ExplicitRouteRegistry:
             if row["require_runtime"] and not http.require_runtime():
                 return True
             result = row["callback"](http, match.groupdict())
+            if result is CONTINUE:
+                # A higher-priority explicit compatibility guard may deliberately pass
+                # ownership to the next matching explicit route.
+                continue
             if result is FALLTHROUGH:
-                # Explicit compatibility guards are registered below all native explicit
-                # routes. FALLTHROUGH means "delegate to the captured Handler now", not
+                # FALLTHROUGH means "delegate to the captured Handler now", not
                 # "try another lower-priority explicit route".
                 return False
             return True
@@ -89,6 +94,7 @@ class ExplicitRouteRegistry:
             "fallback": "legacy_handler_chain_for_unmigrated_routes",
             "idempotency": "method+route_name_replaces_in_place_without_stacking",
             "conditional_fallback": "callback may return runtime_http.FALLTHROUGH to delegate to captured Handler",
+            "conditional_continue": "callback may return runtime_http.CONTINUE to evaluate the next matching explicit route",
             "mutable_module_globals": False,
             "binding": dict(self._binding),
         }

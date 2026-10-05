@@ -137,7 +137,7 @@ class FinalCompositionGetOwnershipTests(unittest.TestCase):
         self.assertIn("register_confidence_read_routes(router, self.core)", root)
 
         index = (SRC / "static" / "index.html").read_text(encoding="utf-8")
-        self.assertIn('src="confidence_contract_ui.js?v=0.14.139"', index)
+        self.assertIn('src="confidence_contract_ui.js?v=0.14.140"', index)
 
 
 if __name__ == "__main__":

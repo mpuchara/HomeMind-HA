@@ -538,8 +538,9 @@ def install(manager):
     original_list_status = manager.list_status
     original_lineage_status = getattr(manager, "lineage_status", None)
     original_maintenance = manager._maintenance
-    handler = manager.core.Handler
-    original_get = handler.do_GET
+    legacy_http = not bool(getattr(manager.core, "_final_explicit_http_only", False))
+    handler = manager.core.Handler if legacy_http else None
+    original_get = handler.do_GET if legacy_http else None
 
     shadow_runtime = {}
     deferred_shadow = DeferredCandidateShadowQueue(manager, limit=32)
@@ -1425,7 +1426,8 @@ def install(manager):
     if original_lineage_status is not None:
         manager.lineage_status = lineage_status
     manager._maintenance = maintenance
-    handler.do_GET = do_get
+    if legacy_http:
+        handler.do_GET = do_get
     manager._candidate_shadow_runtime_installed = True
     manager.candidate_shadow_contract = "observed_generation_predictions_deferred_off_live_path_no_executor_plus_passive_event_fallback"
     manager.candidate_event_contract = "state_changed_root_lineage_index_to_candidate_worker_with_parent_path_dedup"

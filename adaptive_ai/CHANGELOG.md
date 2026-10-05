@@ -1,3 +1,15 @@
+# 0.14.140 — 2026-10-05
+
+- Inventory the remaining shipped feature-owned `Handler.do_GET/do_POST/do_DELETE/static` overlays outside the already migrated Workflow/Correct/Explore/Confidence and queue transport.
+- Move manual-feedback, Candidate UI/list, Candidate Teach-RL status/train, generation history/comparison, Candidate live snapshots, fast `/api/live` and Candidate discard to named `ExplicitRouteRegistry` routes.
+- Restore Candidate Teach-RL ownership above the lower-priority queue compatibility routes, preserving Candidate-aware status and Candidate build admission.
+- Add runtime HTTP contract v4 `CONTINUE`: a higher-priority explicit compatibility guard can continue to the next matching explicit route, while `FALLTHROUGH` still delegates immediately to the captured compatibility Handler.
+- Preserve the Candidate-before-rebuild safety rule on `DELETE /api/agents/{id}/learning`; an active Candidate returns 409, otherwise the request continues to the existing queue full-rebuild route.
+- Disable Candidate/Live Handler mutations only in shipped final composition through `_final_explicit_http_only`; standalone/test installers retain legacy wrappers by default.
+- Remove the import-time manual-feedback static wrapper before the final HTTP server binds; keep `manual_feedback.js` available through the base native static bootstrap and make the explicit route authoritative once runtime composition is ready.
+- Keep only lifecycle/diagnostic `Handler.status_payload` decorators as remaining Handler-class debt; they are not route fallbacks and are deferred to a separate stage.
+- No reward, policy, Candidate learning/qualification, ActionIntent, Executor or physical Control authority changes.
+
 # 0.14.139 — 2026-10-05
 
 - Move shipped Agent Workflow POST mutations from Handler wrappers to named `ExplicitRouteRegistry` routes.
