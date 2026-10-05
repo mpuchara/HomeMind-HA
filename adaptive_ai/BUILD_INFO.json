@@ -1,10 +1,21 @@
 {
-  "version": "0.14.139",
+  "version": "0.14.140",
   "release_date": "2026-10-05",
-  "base_version": "0.14.138",
-  "base_commit": "b4be9a7849b102bc725e60971e69bc6f95cdd9b9",
-  "release_status": "workflow-durable-correct-explore-mutation-explicit-http-routes",
-  "release_validation_tests_passed": 1627,
+  "base_version": "0.14.139",
+  "base_commit": "dda2f768227b615470a59367682ad060e651dccb",
+  "release_status": "candidate-live-manual-feedback-explicit-http-routes",
+  "release_validation_tests_passed": 1634,
+  "release_014140": {
+    "scope": "inventory_and_remove_remaining_shipped_feature_Handler_fallbacks_for_Candidate_Live_and_manual_feedback_transport",
+    "explicit_routes": "manual_feedback.js, candidate_ui.js, candidate_preference_ui.js, /api/candidates, Candidate Teach-RL status/train, generation history/comparison, /api/candidate-live, /api/live and Candidate discard",
+    "precedence": "Candidate Teach-RL status/train routes are explicit at priority 220 and remain authoritative over lower queue compatibility routes",
+    "learning_guard": "Candidate rebuild veto is an explicit guard; runtime_http contract v4 CONTINUE passes an allowed request to queue.training.learning_rebuild instead of the legacy Handler",
+    "compatibility": "standalone/test feature compositions retain historical Handler wrappers; shipped final composition sets _final_explicit_http_only and skips them",
+    "manual_feedback": "the import-time manual_feedback.js Handler wrapper is removed before ThreadingHTTPServer binds and the asset is served explicitly",
+    "remaining_legacy": "Handler.status_payload lifecycle/diagnostic decorators only; no shipped feature do_GET/do_POST/do_PATCH/do_DELETE/static fallback ownership",
+    "control_semantics_changed": false,
+    "validation_tests_expected": 1634
+  },
   "release_014139": {
     "scope": "workflow_actions_durable_correct_requests_and_explore_mutations_migrated_to_explicit_http_registry_in_final_composition",
     "workflow_mutations": "autonomous, correct-label, correct-undo and change-decision use named POST routes",
