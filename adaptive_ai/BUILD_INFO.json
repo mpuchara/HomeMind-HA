@@ -1,10 +1,19 @@
 {
-  "version": "0.14.136",
+  "version": "0.14.137",
   "release_date": "2026-10-05",
-  "base_version": "0.14.135",
-  "base_commit": "ce2e27230592148641c9f6e449c6cc45e86580a4",
-  "release_status": "queue-read-explicit-http-routes",
-  "release_validation_tests_passed": 1617,
+  "base_version": "0.14.136",
+  "base_commit": "bc3c1ce2da7eedab4ae6edfb3416086c1ea48668",
+  "release_status": "queue-mutation-explicit-http-routes",
+  "release_validation_tests_passed": 1620,
+  "release_014137": {
+    "scope": "queue_owned_post_patch_delete_routes_migrated_to_explicit_http_registry",
+    "routes": "Teach-RL mutation/train, train/resume, queued-edit PATCH guard, learning rebuild and delete guard",
+    "fallthrough": "runtime_http contract v3 adds explicit FALLTHROUGH delegation to the captured compatibility Handler",
+    "precedence": "queue compatibility routes use very low priority so already-migrated explicit endpoints remain authoritative",
+    "legacy_surface": "queue_main no longer assigns Handler.do_GET/POST/PATCH/DELETE; only lifecycle and status-payload enrichment remain",
+    "control_semantics_changed": false,
+    "validation_tests_expected": 1620
+  },
   "release_014136": {
     "scope": "queue_owned_get_and_static_routes_migrated_to_explicit_http_registry",
     "routes": "queue.js, Teach-RL history/point/status and queue-aware /api/agents",

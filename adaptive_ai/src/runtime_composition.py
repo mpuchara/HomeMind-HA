@@ -171,7 +171,6 @@ class RuntimeCompositionRoot:
                 "transport": type(router).__name__,
             },
             "remaining_legacy_overlays": [
-                "queue_main POST/PATCH/DELETE compatibility chain for mutating training routes",
                 "unmigrated feature GET/static routes outside queue ownership",
             ],
         }

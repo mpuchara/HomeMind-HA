@@ -10,6 +10,7 @@ from urllib.parse import parse_qs, urlsplit
 import main as core
 from training_queue import TrainingQueue
 from training_request_semantics import train_request_decision
+from runtime_http import FALLTHROUGH, install_dispatch
 
 
 TRAINING_QUEUE = None
@@ -18,13 +19,20 @@ TRAINING_QUEUE = None
 _original_initialize_runtime = core.initialize_runtime
 _original_shutdown_runtime = core.shutdown_runtime
 _original_status_payload = core.Handler.status_payload
-_original_do_post = core.Handler.do_POST
-_original_do_patch = core.Handler.do_PATCH
-_original_do_delete = core.Handler.do_DELETE
 
 
 def initialize_runtime():
     global TRAINING_QUEUE
+
+    # Bind/reuse the explicit dispatcher before base runtime initialization. At this
+    # point the compatibility Handler chain is already fully composed by the entrypoint,
+    # so FALLTHROUGH delegates to the same captured handlers that queue_main wrapped
+    # historically.
+    registry = getattr(core, "EXPLICIT_HTTP_ROUTES", None)
+    if registry is None:
+        registry = install_dispatch(core)
+    register_mutation_routes(registry)
+
     _original_initialize_runtime()
     if not core.runtime_available() or core.HISTORY is None:
         return
@@ -35,13 +43,7 @@ def initialize_runtime():
     # Runtime HTTP dispatch is created inside the base initialize path before the queue
     # becomes authoritative. Register queue-owned GET routes only after TRAINING_QUEUE
     # exists, preserving the historical early-start fallback behavior.
-    registry = getattr(core, "EXPLICIT_HTTP_ROUTES", None)
-    if registry is None:
-        # Compatibility entrypoints that run queue_main directly do not install final
-        # runtime composition. Give them the same explicit dispatcher rather than
-        # resurrecting a queue-owned Handler.do_GET wrapper.
-        from runtime_http import install_dispatch
-        registry = install_dispatch(core)
+    registry = getattr(core, "EXPLICIT_HTTP_ROUTES", None) or registry
     register_read_routes(registry)
 
     # The composition snapshot is created before TrainingQueue becomes authoritative.
@@ -59,6 +61,21 @@ def initialize_runtime():
                 "queue.teach_rl.point",
                 "queue.teach_rl.status",
                 "queue.agents",
+            ],
+        }
+        contract["queue_mutation_routes"] = {
+            "owner": "ExplicitRouteRegistry",
+            "registered_before_base_runtime_initialize": True,
+            "conditional_delegate": "runtime_http.FALLTHROUGH",
+            "routes": [
+                "queue.teach_rl.add",
+                "queue.teach_rl.undo",
+                "queue.teach_rl.train",
+                "queue.training.train",
+                "queue.training.resume",
+                "queue.training.patch_guard",
+                "queue.training.learning_rebuild",
+                "queue.training.delete_guard",
             ],
         }
 
@@ -225,59 +242,79 @@ def _teach_queue_busy(agent_id):
     return queued if queued and queued.get("state") in ("queued", "active") else None
 
 
-def do_post(self):
-    path, _, _ = self.path.partition("?")
+def register_mutation_routes(registry):
+    """Move queue-owned POST/PATCH/DELETE behavior into the explicit route registry."""
 
-    if path.startswith("/api/agents/") and path.endswith(("/teach-rl", "/undo-teach-rl", "/teach-rl-train")):
-        if not self.require_trusted_client() or not self.require_runtime():
-            return
-        agent_id = path.split("/")[3]
+    def teach_rl(http, params, action):
+        agent_id = params["agent_id"]
         agent = core.STORE.get_agent_config(agent_id)
         if not agent:
-            return self.send_json(404, {"error": "agent not found"})
+            return http.send_json(404, {"error": "agent not found"})
         try:
             service = _rl_teaching()
             busy = _teach_queue_busy(agent_id)
-            if path.endswith("/teach-rl-train"):
+            if action == "train":
                 if busy:
                     status = service.status(agent_id)
                     status["training_queue"] = busy
-                    return self.send_json(202, status)
+                    return http.send_json(202, status)
                 report = service.prepare_retrain(agent)
                 if TRAINING_QUEUE is None:
                     raise RuntimeError("Training queue is not ready")
                 queued = TRAINING_QUEUE.enqueue(
-                    agent_id, rebuild=True, reason="teach_rl",
+                    agent_id,
+                    rebuild=True,
+                    reason="teach_rl",
                     rebuild_reason="feature_mask_change",
                 )
-                return self.send_json(202, {"ok": True, "report": report, "training_queue": queued})
+                return http.send_json(
+                    202, {"ok": True, "report": report, "training_queue": queued}
+                )
             if busy:
-                return self.send_json(409, {"error": "Poczekaj na zakończenie Teach RL przed zmianą punktów", "training_queue": busy})
-            if path.endswith("/undo-teach-rl"):
-                return self.send_json(200, service.undo(agent))
-            payload = self.read_json()
+                return http.send_json(
+                    409,
+                    {
+                        "error": "Poczekaj na zakończenie Teach RL przed zmianą punktów",
+                        "training_queue": busy,
+                    },
+                )
+            if action == "undo":
+                return http.send_json(200, service.undo(agent))
+            payload = http.read_json()
             payload = payload if isinstance(payload, dict) else {}
             if payload.get("sample_ts") is None or payload.get("desired_value") is None:
-                return self.send_json(400, {"error": "sample_ts and desired_value are required"})
-            return self.send_json(200, service.add_label(agent, payload["desired_value"], payload["sample_ts"]))
+                return http.send_json(
+                    400, {"error": "sample_ts and desired_value are required"}
+                )
+            return http.send_json(
+                200,
+                service.add_label(
+                    agent, payload["desired_value"], payload["sample_ts"]
+                ),
+            )
         except ValueError as exc:
-            return self.send_json(400, {"error": str(exc)})
+            return http.send_json(400, {"error": str(exc)})
         except Exception as exc:
             traceback.print_exc()
-            return self.send_json(502, {"error": f"Teach RL failed: {type(exc).__name__}: {exc}"})
+            return http.send_json(
+                502, {"error": f"Teach RL failed: {type(exc).__name__}: {exc}"}
+            )
 
-    if TRAINING_QUEUE is not None and path.startswith("/api/agents/") and path.endswith("/train"):
-        if not self.require_trusted_client() or not self.require_runtime():
-            return
-        agent_id = path.split("/")[3]
+    def train(http, params):
+        if TRAINING_QUEUE is None:
+            return FALLTHROUGH
+        if not http.require_trusted_client() or not http.require_runtime():
+            return None
+        agent_id = params["agent_id"]
         agent = core.STORE.get_agent(agent_id)
         if not agent:
-            return self.send_json(404, {"error": "agent/history engine not found"})
+            return http.send_json(404, {"error": "agent/history engine not found"})
         decision = train_request_decision(
             agent, core.STORE.get_model(agent_id) is not None
         )
         return _queue_agent(
-            self, agent_id,
+            http,
+            agent_id,
             rebuild=bool(decision["rebuild"]),
             reason="training",
             resumed=bool(decision["resumed"]),
@@ -285,18 +322,23 @@ def do_post(self):
             learning_path=decision.get("learning_path"),
         )
 
-    if TRAINING_QUEUE is not None and path.startswith("/api/agents/") and path.endswith("/resume"):
-        if not self.require_trusted_client() or not self.require_runtime():
-            return
-        agent_id = path.split("/")[3]
+    def resume(http, params):
+        if TRAINING_QUEUE is None:
+            return FALLTHROUGH
+        if not http.require_trusted_client() or not http.require_runtime():
+            return None
+        agent_id = params["agent_id"]
         agent = core.STORE.get_agent(agent_id)
         if not agent:
-            return self.send_json(404, {"error": "agent/history engine not found"})
+            return http.send_json(404, {"error": "agent/history engine not found"})
         existing = TRAINING_QUEUE.status_for(agent_id)
         if existing:
             return _queue_agent(
-                self, agent_id, rebuild=bool(existing.get("rebuild")),
-                reason="resume_training", resumed=True,
+                http,
+                agent_id,
+                rebuild=bool(existing.get("rebuild")),
+                reason="resume_training",
+                resumed=True,
                 rebuild_reason=existing.get("rebuild_reason"),
                 learning_path=(
                     "rebuild" if existing.get("rebuild")
@@ -304,47 +346,122 @@ def do_post(self):
                 ),
             )
         if agent.get("training_state") not in ("paused", "waiting", "training"):
-            return self.send_json(409, {"error": "Resume is available only for paused/waiting training"})
-        return _queue_agent(self, agent_id, rebuild=False,
-                            reason="resume_training", resumed=True)
-
-    return _original_do_post(self)
-
-
-def do_patch(self):
-    path, _, _ = self.path.partition("?")
-    if TRAINING_QUEUE is not None and path.startswith("/api/agents/"):
-        agent_id = path.split("/")[3]
-        queued = TRAINING_QUEUE.status_for(agent_id)
-        if queued:
-            return self.send_json(409, {
-                "error": "Wait for queued/active training before editing this agent",
-                "training_queue": queued,
-            })
-    return _original_do_patch(self)
-
-
-def do_delete(self):
-    path, _, _ = self.path.partition("?")
-    if TRAINING_QUEUE is not None and path.startswith("/api/agents/") and path.endswith("/learning"):
-        if not self.require_trusted_client() or not self.require_runtime():
-            return
-        agent_id = path.split("/")[3]
+            return http.send_json(
+                409, {"error": "Resume is available only for paused/waiting training"}
+            )
         return _queue_agent(
-            self, agent_id, rebuild=True, reason="full_rebuild", resumed=False,
-            rebuild_reason="explicit_manual_rebuild", learning_path="rebuild",
+            http, agent_id, rebuild=False, reason="resume_training", resumed=True
         )
 
-    if TRAINING_QUEUE is not None and path.startswith("/api/agents/"):
-        if not self.require_trusted_client() or not self.require_runtime():
-            return
-        agent_id = path.split("/")[3]
+    def patch_guard(http, params):
+        if TRAINING_QUEUE is None:
+            return FALLTHROUGH
+        queued = TRAINING_QUEUE.status_for(params["agent_id"])
+        if queued:
+            return http.send_json(
+                409,
+                {
+                    "error": "Wait for queued/active training before editing this agent",
+                    "training_queue": queued,
+                },
+            )
+        return FALLTHROUGH
+
+    def rebuild_learning(http, params):
+        if TRAINING_QUEUE is None:
+            return FALLTHROUGH
+        if not http.require_trusted_client() or not http.require_runtime():
+            return None
+        return _queue_agent(
+            http,
+            params["agent_id"],
+            rebuild=True,
+            reason="full_rebuild",
+            resumed=False,
+            rebuild_reason="explicit_manual_rebuild",
+            learning_path="rebuild",
+        )
+
+    def delete_guard(http, params):
+        if TRAINING_QUEUE is None:
+            return FALLTHROUGH
+        if not http.require_trusted_client() or not http.require_runtime():
+            return None
+        agent_id = params["agent_id"]
         queued = TRAINING_QUEUE.status_for(agent_id)
         if queued and queued.get("state") == "active":
-            return self.send_json(409, {"error": "Wait for active training before deleting this agent"})
+            return http.send_json(
+                409, {"error": "Wait for active training before deleting this agent"}
+            )
         TRAINING_QUEUE.cancel(agent_id)
-    return _original_do_delete(self)
+        return FALLTHROUGH
 
+    # These routes historically lived in the compatibility Handler chain, below native
+    # explicit routes. Keep them at a deliberately low priority so any already-migrated
+    # endpoint remains authoritative before queue compatibility logic is considered.
+    compatibility_priority = -10000
+
+    for action, suffix in (
+        ("add", "teach-rl"),
+        ("undo", "undo-teach-rl"),
+        ("train", "teach-rl-train"),
+    ):
+        registry.register(
+            "POST",
+            f"queue.teach_rl.{action}",
+            rf"^/api/agents/(?P<agent_id>[^/]+)/{suffix}$",
+            lambda http, params, action=action: teach_rl(http, params, action),
+            require_trusted=True,
+            require_runtime=True,
+            priority=compatibility_priority,
+        )
+
+    registry.register(
+        "POST",
+        "queue.training.train",
+        r"^/api/agents/(?P<agent_id>[^/]+)/train$",
+        train,
+        require_trusted=False,
+        require_runtime=False,
+        priority=compatibility_priority,
+    )
+    registry.register(
+        "POST",
+        "queue.training.resume",
+        r"^/api/agents/(?P<agent_id>[^/]+)/resume$",
+        resume,
+        require_trusted=False,
+        require_runtime=False,
+        priority=compatibility_priority,
+    )
+    registry.register(
+        "PATCH",
+        "queue.training.patch_guard",
+        r"^/api/agents/(?P<agent_id>[^/]+)(?:/.*)?$",
+        patch_guard,
+        require_trusted=False,
+        require_runtime=False,
+        priority=compatibility_priority,
+    )
+    registry.register(
+        "DELETE",
+        "queue.training.learning_rebuild",
+        r"^/api/agents/(?P<agent_id>[^/]+)/learning$",
+        rebuild_learning,
+        require_trusted=False,
+        require_runtime=False,
+        priority=compatibility_priority + 1,
+    )
+    registry.register(
+        "DELETE",
+        "queue.training.delete_guard",
+        r"^/api/agents/(?P<agent_id>[^/]+)(?:/.*)?$",
+        delete_guard,
+        require_trusted=False,
+        require_runtime=False,
+        priority=compatibility_priority,
+    )
+    return registry
 
 def shutdown_runtime():
     if TRAINING_QUEUE is not None:
@@ -355,9 +472,6 @@ def shutdown_runtime():
 core.initialize_runtime = initialize_runtime
 core.shutdown_runtime = shutdown_runtime
 core.Handler.status_payload = status_payload
-core.Handler.do_POST = do_post
-core.Handler.do_PATCH = do_patch
-core.Handler.do_DELETE = do_delete
 
 
 if __name__ == "__main__":
