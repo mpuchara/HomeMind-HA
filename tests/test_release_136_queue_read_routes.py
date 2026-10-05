@@ -18,6 +18,7 @@ class QueueReadRouteSourceContractTests(unittest.TestCase):
         self.assertNotIn("core.Handler.do_GET =", source)
         self.assertNotIn("def do_get(", source)
         self.assertIn("def register_read_routes(registry):", source)
+        self.assertIn("registry = install_dispatch(core)", source)
         self.assertLess(
             source.index("TRAINING_QUEUE.start()"),
             source.index("register_read_routes(registry)"),
