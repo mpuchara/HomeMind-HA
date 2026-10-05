@@ -434,7 +434,7 @@ def build_correct_point(manager, ref, timestamp, legacy_point):
     return point
 
 
-def install(manager):
+def install(manager, *, legacy_get=True):
     if getattr(manager, "_correct_generation_history_installed", False):
         return manager
     if not callable(getattr(manager, "workflow_correct_history", None)):
@@ -443,7 +443,7 @@ def install(manager):
     original_history = manager.workflow_correct_history
     original_point = manager.workflow_correct_point
     handler = manager.core.Handler
-    original_get = handler.do_GET
+    original_get = handler.do_GET if legacy_get else None
 
     def correct_history(ref, start, end, compact=False):
         return build_correct_history(manager, ref, start, end, original_history, compact=bool(compact))
@@ -475,7 +475,11 @@ def install(manager):
 
     manager.workflow_correct_history = correct_history
     manager.workflow_correct_point = correct_point
-    handler.do_GET = do_get
+    if legacy_get:
+        handler.do_GET = do_get
     manager._correct_generation_history_installed = True
     manager.correct_history_contract = CHART_CONTRACT
+    manager.correct_history_http_contract = (
+        "workflow_explicit_registry_final_composition_legacy_get_optional"
+    )
     return manager

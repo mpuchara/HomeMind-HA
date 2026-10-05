@@ -1,10 +1,20 @@
 {
-  "version": "0.14.137",
+  "version": "0.14.138",
   "release_date": "2026-10-05",
-  "base_version": "0.14.136",
-  "base_commit": "bc3c1ce2da7eedab4ae6edfb3416086c1ea48668",
-  "release_status": "queue-mutation-explicit-http-routes",
-  "release_validation_tests_passed": 1620,
+  "base_version": "0.14.137",
+  "base_commit": "4b48aeb426ff5ae1f601b8f066ff173f1dffe3db",
+  "release_status": "workflow-correct-explore-confidence-read-explicit-http-routes",
+  "release_validation_tests_passed": 1623,
+  "release_014138": {
+    "scope": "workflow_correct_explore_confidence_get_static_routes_migrated_to_explicit_http_registry_in_final_composition",
+    "workflow_reads": "agent_workflow_ui.js, workflow status, optimized Correct history/point and Explore status",
+    "confidence_ui": "final index already includes confidence_contract_ui.js, so final composition disables the legacy index/static injector and serves the asset through ExplicitRouteRegistry",
+    "compatibility": "feature installers retain legacy GET/static wrappers by default for standalone/test compositions; shipped final root explicitly disables them",
+    "correct_transport": "explicit workflow history route calls manager.workflow_correct_history dynamically, preserving optimized generation-aware compact=1 behavior",
+    "remaining_legacy": "workflow/explore POST compatibility routes and older uncharacterized Handler fallbacks",
+    "control_semantics_changed": false,
+    "validation_tests_expected": 1623
+  },
   "release_014137": {
     "scope": "queue_owned_post_patch_delete_routes_migrated_to_explicit_http_registry",
     "routes": "Teach-RL mutation/train, train/resume, queued-edit PATCH guard, learning rebuild and delete guard",

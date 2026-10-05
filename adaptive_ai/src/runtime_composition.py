@@ -171,7 +171,8 @@ class RuntimeCompositionRoot:
                 "transport": type(router).__name__,
             },
             "remaining_legacy_overlays": [
-                "unmigrated feature GET/static routes outside queue ownership",
+                "workflow/explore POST compatibility routes",
+                "older compatibility Handler routes outside the characterized Workflow/Correct/Explore/Confidence GET-static scope",
             ],
         }
 
@@ -185,11 +186,20 @@ class RuntimeCompositionRoot:
 
         # Imports remain off the pre-HTTP path; final composition happens in the
         # background runtime-init thread after Ingress is already listening.
-        from agent_workflow_actions import install as install_agent_workflow_actions
+        from agent_workflow_actions import (
+            install as install_agent_workflow_actions,
+            register_read_routes as register_workflow_read_routes,
+        )
         from agent_correct_generation_history import install as install_correct_generation_history
-        from agent_explore import install as install_agent_explore
+        from agent_explore import (
+            install as install_agent_explore,
+            register_read_routes as register_explore_read_routes,
+        )
         from cold_start_drift import install as install_cold_start_drift
-        from confidence_contract import install as install_confidence_contract
+        from confidence_contract import (
+            install as install_confidence_contract,
+            register_read_routes as register_confidence_read_routes,
+        )
         from confidence_runtime import install_runtime_semantics
         from device_agents import install_runtime as install_device_agent_runtime
         from correct_learning_debug import register_correct_learning_debug_route
@@ -254,15 +264,15 @@ class RuntimeCompositionRoot:
         # These are user-facing product capabilities. Install them explicitly in the
         # shipped root rather than depending on a legacy overlay side effect. Both
         # installers are idempotent, so upgrades never stack duplicate HTTP handlers.
-        manager = install_agent_workflow_actions(manager)
+        manager = install_agent_workflow_actions(manager, legacy_get=False)
         manager = install_workflow_request_queue(manager)
         # The optimized generation-aware Correct reader used to exist only as tested
         # library code and was never bound into the shipped final composition. Install
         # it after the durable workflow queue so the established request-queue ordering
-        # remains intact, while its GET wrapper still becomes the authoritative Correct
-        # history/point read path before later HTTP adapters.
-        manager = install_correct_generation_history(manager)
-        manager = install_agent_explore(manager)
+        # remains intact. Its manager methods become authoritative before the final
+        # explicit Workflow GET routes are registered below.
+        manager = install_correct_generation_history(manager, legacy_get=False)
+        manager = install_agent_explore(manager, legacy_get=False)
 
         # RPi resource control changes scheduling only, never learning semantics.
         manager = install_rpi_low_power_runtime(self.core, manager)
@@ -271,7 +281,7 @@ class RuntimeCompositionRoot:
         # Trial knowledge intentionally wraps generation-aware Explore.
         manager = install_trial_knowledge(manager)
         install_automatic_correct_rewards(self.core)
-        manager = install_confidence_contract(manager)
+        manager = install_confidence_contract(manager, legacy_http=False)
         install_runtime_semantics(engine, manager.confidence_probability_journal)
         manager = install_cold_start_drift(manager)
         install_device_agent_runtime(engine)
@@ -282,6 +292,9 @@ class RuntimeCompositionRoot:
         engine.agent_candidates = manager
 
         router = install_dispatch(self.core)
+        register_workflow_read_routes(router, manager)
+        register_explore_read_routes(router, manager)
+        register_confidence_read_routes(router, self.core)
         register_feedback_routes(router, self.core)
         register_promotion_routes(router, self.core, manager)
         register_correct_learning_debug_route(router, self.core, manager)

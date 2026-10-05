@@ -30,9 +30,9 @@ class Release015UiPowerTests(unittest.TestCase):
         composition = (ROOT/'adaptive_ai/src/runtime_composition.py').read_text(encoding='utf-8')
         self.assertIn('install_agent_workflow_actions', composition)
         self.assertIn('install_agent_explore', composition)
-        self.assertLess(composition.index('manager = install_agent_workflow_actions(manager)'),
-                        composition.index('manager = install_agent_explore(manager)'))
-        self.assertLess(composition.index('manager = install_agent_explore(manager)'),
+        self.assertLess(composition.index('manager = install_agent_workflow_actions(manager, legacy_get=False)'),
+                        composition.index('manager = install_agent_explore(manager, legacy_get=False)'))
+        self.assertLess(composition.index('manager = install_agent_explore(manager, legacy_get=False)'),
                         composition.index('manager = install_trial_knowledge(manager)'))
 
     def test_candidate_live_http_is_collapsed_when_idle(self):
