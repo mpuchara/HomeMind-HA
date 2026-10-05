@@ -63,6 +63,21 @@ def initialize_runtime():
                 "queue.agents",
             ],
         }
+        contract["queue_mutation_routes"] = {
+            "owner": "ExplicitRouteRegistry",
+            "registered_before_base_runtime_initialize": True,
+            "conditional_delegate": "runtime_http.FALLTHROUGH",
+            "routes": [
+                "queue.teach_rl.add",
+                "queue.teach_rl.undo",
+                "queue.teach_rl.train",
+                "queue.training.train",
+                "queue.training.resume",
+                "queue.training.patch_guard",
+                "queue.training.learning_rebuild",
+                "queue.training.delete_guard",
+            ],
+        }
 
     core.STORE.event(None, "info", "training_queue_ready",
                      "Priority training queue ready; heavy jobs will run one at a time", None)
