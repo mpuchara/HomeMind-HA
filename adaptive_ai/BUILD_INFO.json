@@ -1,10 +1,18 @@
 {
-  "version": "0.14.135",
-  "release_date": "2026-10-04",
-  "base_version": "0.14.134",
-  "base_commit": "11a7a6a9914a9dd12a0db5a36f830b4c3871d4ba",
-  "release_status": "named-process-agent-pipeline-and-candidate-fast-bypass",
-  "release_validation_tests_passed": 1598,
+  "version": "0.14.136",
+  "release_date": "2026-10-05",
+  "base_version": "0.14.135",
+  "base_commit": "ce2e27230592148641c9f6e449c6cc45e86580a4",
+  "release_status": "queue-read-explicit-http-routes",
+  "release_validation_tests_passed": 1617,
+  "release_014136": {
+    "scope": "queue_owned_get_and_static_routes_migrated_to_explicit_http_registry",
+    "routes": "queue.js, Teach-RL history/point/status and queue-aware /api/agents",
+    "startup_semantics": "routes register only after TrainingQueue.start; early HTTP requests retain legacy fallback behavior",
+    "legacy_surface": "queue_main no longer assigns Handler.do_GET; POST/PATCH/DELETE queue mutation compatibility remains for later migration",
+    "control_semantics_changed": false,
+    "validation_tests_expected": 1617
+  },
   "release_014135": {
     "scope": "complete_named_process_agent_wrapper_ownership_and_inactive_candidate_hot_path_bypass",
     "pipeline": "Manual Feedback, Context Tournament, Teach-RL rebenchmark, Candidate observation, Provenance, Observation and Tiny MLP Shadow all install through process_agent_pipeline; shipped feature installers no longer assign engine.process_agent directly",
