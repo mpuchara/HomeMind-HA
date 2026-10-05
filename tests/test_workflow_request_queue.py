@@ -124,11 +124,10 @@ class WorkflowRequestUiContractTests(unittest.TestCase):
             "from workflow_request_queue import install as install_workflow_request_queue",
             source,
         )
-        self.assertIn(
-            "manager = install_agent_workflow_actions(manager, legacy_get=False)\n"
-            "        manager = install_workflow_request_queue(manager)",
-            source,
-        )
+        workflow = source.index("manager = install_agent_workflow_actions(")
+        request_queue = source.index("manager = install_workflow_request_queue(")
+        self.assertLess(workflow, request_queue)
+        self.assertIn("legacy_http=False", source[request_queue:request_queue + 120])
 
 
 if __name__ == "__main__":
