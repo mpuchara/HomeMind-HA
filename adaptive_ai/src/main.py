@@ -334,6 +334,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self.static("debug_export_ui.js", "application/javascript; charset=utf-8")
             if path == "/runtime_debug_ui.js":
                 return self.static("runtime_debug_ui.js", "application/javascript; charset=utf-8")
+            if path == "/manual_feedback.js":
+                return self.static("manual_feedback.js", "application/javascript; charset=utf-8")
             if path == "/p0.js":
                 return self.static("p0.js", "application/javascript; charset=utf-8")
             if path == "/experiments.js":
