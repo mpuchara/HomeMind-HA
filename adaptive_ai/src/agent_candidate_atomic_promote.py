@@ -195,8 +195,9 @@ def install(manager):
     original_list_status = manager.list_status
     original_lineage_status = getattr(manager, "lineage_status", None)
     original_runtime_for = getattr(manager.engine, "runtime_for", None)
-    handler = manager.core.Handler
-    original_post = handler.do_POST
+    legacy_http = not bool(getattr(manager.core, "_final_explicit_http_only", False))
+    handler = manager.core.Handler if legacy_http else None
+    original_post = handler.do_POST if legacy_http else None
 
     def decorate(result):
         if not result:
@@ -589,7 +590,8 @@ def install(manager):
         manager.lineage_status = lineage_status
     manager.set_promotion_target_mode = set_promotion_target_mode
     manager.promote = promote
-    handler.do_POST = do_post
+    if legacy_http:
+        handler.do_POST = do_post
     manager._candidate_atomic_promote_installed = True
     manager.candidate_promotion_contract = "atomic_generation_swap_preserve_live_mode_or_explicit_target"
     manager.candidate_control_promote_contract = "target_lock_preserve_ownership_lease_no_release_reacquire"
