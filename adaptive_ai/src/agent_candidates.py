@@ -19,6 +19,7 @@ import time
 
 from telemetry import RUNTIME_DEBUG
 from inference_hot_path_metrics import observe_elapsed
+from process_agent_pipeline import install_process_agent_wrapper
 
 
 _TLS = threading.local()
@@ -1059,22 +1060,42 @@ class AgentCandidateManager(threading.Thread):
     def _install_process_wrapper(self):
         if getattr(self.engine, "_agent_candidate_process_hook", False):
             return
-        original = self.engine.process_agent
 
-        def process(agent, state_map, changed_entities=None):
-            wrapper_started_ns = time.perf_counter_ns()
-            stage_started_ns = time.perf_counter_ns()
-            self.before_live_process(agent, state_map)
-            observe_elapsed(self.engine, "candidate_before_live", stage_started_ns)
-            result = original(agent, state_map, changed_entities)
-            stage_started_ns = time.perf_counter_ns()
-            self.after_live_process(agent, state_map)
-            observe_elapsed(self.engine, "candidate_shadow_enqueue", stage_started_ns)
-            observe_elapsed(self.engine, "candidate_wrapper_total", wrapper_started_ns)
-            return result
+        def build_process_wrapper(original):
+            def process(agent, state_map, changed_entities=None):
+                # Final runtime installs candidate_hot_active from the generation-aware
+                # Shadow service. When that index is available, ordinary Live agents with
+                # no retained Candidate lineage bypass all Candidate observation hooks.
+                # Standalone/legacy compositions without the index preserve the historical
+                # always-observe behavior for compatibility.
+                active = getattr(self, "candidate_hot_active", None)
+                if callable(active):
+                    try:
+                        if not active((agent or {}).get("id")):
+                            return original(agent, state_map, changed_entities)
+                    except Exception:
+                        # A diagnostic/index helper must never block Live inference.
+                        pass
 
-        self.engine.process_agent = process
+                wrapper_started_ns = time.perf_counter_ns()
+                stage_started_ns = time.perf_counter_ns()
+                self.before_live_process(agent, state_map)
+                observe_elapsed(self.engine, "candidate_before_live", stage_started_ns)
+                result = original(agent, state_map, changed_entities)
+                stage_started_ns = time.perf_counter_ns()
+                self.after_live_process(agent, state_map)
+                observe_elapsed(self.engine, "candidate_shadow_enqueue", stage_started_ns)
+                observe_elapsed(self.engine, "candidate_wrapper_total", wrapper_started_ns)
+                return result
+            return process
+
+        install_process_agent_wrapper(
+            self.engine, "candidate_observation", build_process_wrapper
+        )
         self.engine._agent_candidate_process_hook = True
+        self.candidate_process_contract = (
+            "named_process_agent_pipeline_candidate_observation_with_inactive_root_fast_bypass"
+        )
 
     def _install_http(self):
         handler = self.core.Handler

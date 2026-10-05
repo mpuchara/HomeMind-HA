@@ -20,6 +20,7 @@ import time
 
 from context import action_values, target_value
 from qualification import assess_control_qualification
+from process_agent_pipeline import install_process_agent_wrapper
 
 
 BENCHMARK_SOURCE = "teach-rl-shadow"
@@ -362,7 +363,9 @@ def install_teach_rl_rebenchmark(store, engine, teaching_service=None):
             result = original_process(agent, state_map, changed_entities)
             service.after_process(agent)
             return result
-        engine.process_agent = process_with_teach_rebenchmark
+        install_process_agent_wrapper(
+            engine, "teach_rl_rebenchmark", lambda _next: process_with_teach_rebenchmark
+        )
 
     teaching = teaching_service or getattr(engine, "rl_teaching", None)
     if teaching is not None and not getattr(teaching, "_rebenchmark_finalize_wrapped", False):

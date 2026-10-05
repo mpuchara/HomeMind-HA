@@ -31,6 +31,7 @@ from provenance import stable_event_id
 from settings import OPTIONS, clamp, iso_now, now_ts, parse_ts
 from training_budget import TRAINING_BUDGET
 from state_event_pipeline import install_state_event_wrapper
+from process_agent_pipeline import install_process_agent_wrapper
 
 SCHEMA_VERSION = 12
 POLICY_VERSION = 11
@@ -2211,7 +2212,9 @@ def install(core):
                     agent["id"], policy.schema.entities, correction[1], "correction",
                 )
         return result
-    engine.process_agent = process_agent
+    install_process_agent_wrapper(
+        engine, "observation", lambda _next: process_agent
+    )
 
     migrated = _migrate_models(core)
     store.event(None, "info", "observation_feature_contract_ready",

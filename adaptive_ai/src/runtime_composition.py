@@ -160,6 +160,11 @@ class RuntimeCompositionRoot:
                 if callable(getattr(engine, "state_event_pipeline_snapshot", None))
                 else None
             ),
+            "process_agent": (
+                engine.process_agent_pipeline_snapshot()
+                if callable(getattr(engine, "process_agent_pipeline_snapshot", None))
+                else None
+            ),
             "dependencies": {
                 "clock": type(self.clock).__name__,
                 "repository": type(self.core.STORE).__name__ if self.core.STORE is not None else None,
@@ -167,7 +172,6 @@ class RuntimeCompositionRoot:
             },
             "remaining_legacy_overlays": [
                 "queue_main Handler compatibility chain for unmigrated routes",
-                "Candidate process_agent observation wrapper",
                 "unmigrated feature GET/static routes",
             ],
         }
@@ -214,6 +218,11 @@ class RuntimeCompositionRoot:
             EXPECTED_INSTALL_ORDER as EXPECTED_STATE_EVENT_INSTALL_ORDER,
             assert_state_event_pipeline,
         )
+        from process_agent_pipeline import (
+            BASE_INSTALL_ORDER as BASE_PROCESS_AGENT_INSTALL_ORDER,
+            EXPECTED_INSTALL_ORDER as EXPECTED_PROCESS_AGENT_INSTALL_ORDER,
+            assert_process_agent_pipeline,
+        )
 
         # Existing fast + preference + episode composition is the characterized base.
         self.base_prepare_engine_extensions()
@@ -222,6 +231,12 @@ class RuntimeCompositionRoot:
         # start workers or accidentally hide a direct handler reassignment.
         state_event_contract = assert_state_event_pipeline(
             engine, EXPECTED_STATE_EVENT_INSTALL_ORDER
+        )
+        # 0.14.135 removes Candidate-owned direct process_agent replacement. The shared
+        # process pipeline is now the only owner of that wrapper and must already be
+        # complete before later Candidate services decorate before/after observation.
+        process_agent_contract = assert_process_agent_pipeline(
+            engine, BASE_PROCESS_AGENT_INSTALL_ORDER
         )
         # Stage 12 is opt-in and observer-only. Disabled mode performs no inference or learning.
         policy_shadow = install_policy_backend_shadow(engine, self.core.STORE)
@@ -290,6 +305,10 @@ class RuntimeCompositionRoot:
             engine, EXPECTED_STATE_EVENT_INSTALL_ORDER
         )
         engine.state_event_pipeline_contract = state_event_contract
+        process_agent_contract = assert_process_agent_pipeline(
+            engine, EXPECTED_PROCESS_AGENT_INSTALL_ORDER
+        )
+        engine.process_agent_pipeline_contract = process_agent_contract
 
         self.dependencies = RuntimeDependencies(clock=self.clock, repository=self.core.STORE, transport=router)
         self.contracts = self._contract_snapshot(manager, router)
