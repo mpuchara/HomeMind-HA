@@ -45,19 +45,19 @@ USER_EVIDENCE_ORIGINS = frozenset({
 def evidence_weight_for(origin, source):
     """Reliability of one historical observation, independent of reward utility.
 
-    Direct accepted onsets are authoritative target observations. Persistence from an
-    explicit user action is equally strong; ambiguous external/automation persistence is
-    slightly weaker. Upstream precursor cues are deliberately weak evidence. Our own
-    command echoes remain excluded entirely by the replay provenance gate.
+    A repeated automatic state is a demonstration, not proof of preference. Explicit
+    user evidence stays strong, recognized automation is weaker, and missing provenance
+    is weaker still. Upstream cues cannot define OFF/occupancy persistence. These are
+    provisional priors, separate from reward and the per-dwell sample budget.
     """
     origin = str(origin or "unknown")
     source = str(source or "onset")
     if origin == "own_command":
         return 0.0
-    if source == "upstream":
-        return 0.35
-    if source == "onset":
-        return 1.0
     if origin in USER_EVIDENCE_ORIGINS:
-        return 1.0
-    return 0.8
+        reliability = 1.0
+    elif origin in {"automation", "automation_assisted"}:
+        reliability = 0.5
+    else:
+        reliability = 0.25
+    return reliability * (0.35 if source == "upstream" else 1.0)

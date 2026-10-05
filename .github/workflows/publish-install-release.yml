@@ -1,0 +1,40 @@
+name: Publish verified install release
+on:
+  workflow_run:
+    workflows: [Validate HomeMind]
+    branches: [main]
+    types: [completed]
+permissions:
+  contents: write
+jobs:
+  publish:
+    if: github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Require current main and package verified sources
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          test "$(gh api repos/${{ github.repository }}/commits/main --jq .sha)" = "$SOURCE_SHA"
+          python tools/package_install_release.py
+      - name: Publish install ZIPs and checksums
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          VERSION=$(python -c 'import json; print(json.load(open("adaptive_ai/BUILD_INFO.json"))["version"])')
+          NOTES="docs/RELEASE_${VERSION//./_}_PL.md"
+          if [ ! -f "$NOTES" ]; then NOTES=adaptive_ai/CHANGELOG.md; fi
+          if gh release view "v$VERSION" >/dev/null 2>&1; then
+            test "$(gh api repos/${{ github.repository }}/git/ref/tags/v$VERSION --jq .object.sha)" = "$SOURCE_SHA"
+            gh release upload "v$VERSION" dist/*.zip dist/*.sha256 --clobber
+          else
+            gh release create "v$VERSION" dist/*.zip dist/*.sha256 --target "$SOURCE_SHA" --title "Adaptive AI $VERSION" --notes-file "$NOTES"
+          fi

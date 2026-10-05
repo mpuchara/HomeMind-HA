@@ -1,5 +1,5 @@
 name: "Adaptive AI"
-version: "0.14.140"
+version: "0.14.141"
 slug: "adaptive_ai"
 description: >-
   History-first local reinforcement-learning policies for Home Assistant. Imports
@@ -55,6 +55,10 @@ options:
   fast_causal_driver_min_score: 0.50
   fast_causal_driver_reserve: 2
   fast_precursor_on_seconds: 8
+  historical_light_ambiguous_override_seconds: 90
+  training_pattern_weighting_enabled: true
+  training_pattern_min_days: 3
+  training_light_outcome_enabled: true
   fast_precursor_off_seconds: 120
   fast_upstream_lead_seconds: 4
   primary_local_sensor_reserve: 4
@@ -262,6 +266,10 @@ schema:
   fast_causal_driver_min_score: "float(0.10,0.95)"
   fast_causal_driver_reserve: "int(1,4)"
   fast_precursor_on_seconds: "int(1,30)"
+  historical_light_ambiguous_override_seconds: "int(8,300)"
+  training_pattern_weighting_enabled: bool
+  training_pattern_min_days: "int(1,14)"
+  training_light_outcome_enabled: bool
   fast_precursor_off_seconds: "int(10,300)"
   fast_upstream_lead_seconds: "int(1,15)"
   primary_local_sensor_reserve: "int(1,12)"

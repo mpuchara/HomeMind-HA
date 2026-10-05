@@ -101,6 +101,9 @@ jobs:
       - name: Agent Training vNext sparse long-memory boundedness benchmark
         if: matrix.python == '3.11'
         run: python tools/benchmark_long_memory.py --days 28 --transitions-per-day 192 --max-samples 96 --compact
+      - name: Independent preference rollouts for historical training quality
+        if: matrix.python == '3.11'
+        run: python tools/benchmark_training_quality.py --compact
       - name: 0.14.88 Stage-9 Pi4 gate CLI smoke
         if: matrix.python == '3.11'
         run: python tools/evaluate_pi4_release.py --help

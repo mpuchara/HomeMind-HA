@@ -86,10 +86,10 @@ class EvidenceWeightTests(unittest.TestCase):
 
     def test_provenance_defaults_are_conservative_and_own_command_is_zero(self):
         self.assertEqual(evidence_weight_for("user", "onset"), 1.0)
-        self.assertEqual(evidence_weight_for("unknown", "onset"), 1.0)
+        self.assertEqual(evidence_weight_for("unknown", "onset"), 0.25)
         self.assertEqual(evidence_weight_for("user_intent", "persistence"), 1.0)
-        self.assertEqual(evidence_weight_for("unknown", "persistence"), 0.8)
-        self.assertEqual(evidence_weight_for("unknown", "upstream"), 0.35)
+        self.assertEqual(evidence_weight_for("unknown", "persistence"), 0.25)
+        self.assertAlmostEqual(evidence_weight_for("unknown", "upstream"), 0.0875)
         self.assertEqual(evidence_weight_for("own_command", "onset"), 0.0)
 
     def test_deferred_update_carries_sample_and_evidence_weights(self):

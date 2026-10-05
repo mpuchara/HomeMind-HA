@@ -1603,6 +1603,22 @@ class SQLiteTemporalTracker:
                 return ts
         return None
 
+    def observation_known_between(self, entity_ids, start, end):
+        """Bounded negative-evidence gate; a sensing gap is never proof of absence."""
+        ids = sorted(set(entity_ids or ()))
+        if not ids:
+            return False
+        rows = self._base_interval_rows(ids, float(start), float(end), per_entity_limit=4097)
+        counts = {}
+        for row in rows:
+            eid = str(row["entity_id"])
+            counts[eid] = counts.get(eid, 0) + 1
+            if (counts[eid] > 4096
+                    or str(row.get("state") or "").lower() in ("unknown", "unavailable", "none", "")
+                    or state_scalar(archived_state(row)) is None):
+                return False
+        return True
+
     def stats(self):
         out = dict(self._metrics)
         legacy = int(out.get("legacy_asof_queries_estimate") or 0)

@@ -22,6 +22,7 @@ from training_budget import TRAINING_BUDGET
 from policy import MultiHorizonPolicy
 from training_balance_audit import TrainingBalanceAudit
 from training_evidence import evidence_weight_for, normalized_dwell_sample_mass
+from training_quality import ConditionalPatternMemory, sensor_snapshot, light_dwell_reward
 from fast_automation_replay import paired_numeric_baseline, threshold_event
 from context import is_discrete_occupancy_entity
 from frozen_validation import (
@@ -2564,6 +2565,9 @@ class HistoryManager(threading.Thread):
                 ),
             )
         policies = {a["id"]: self.engine.policy(a) for a in agents}
+        quality_registry = self.engine.context.resolved_registry()
+        quality_memory = {}
+        quality_outcomes = {}
         automation_infos_by_agent = {
             a["id"]: list(AUTOMATION_KNOWLEDGE.hints_for_target(a["target_entity"])[1] or [])
             for a in agents
@@ -2575,6 +2579,15 @@ class HistoryManager(threading.Thread):
         for a in agents:
             prior_model = STORE.get_model(a["id"]) or {} if accumulate_benchmark else {}
             prior_models[str(a["id"])] = prior_model
+            aid = str(a["id"])
+            identity = [list(policies[a["id"]].schema.entities), list(policies[a["id"]].actions)]
+            prior_quality = prior_model.get("_training_quality_state") or {}
+            quality_memory[aid] = ConditionalPatternMemory(
+                len(policies[a["id"]].actions),
+                prior_quality.get("memory") if prior_quality.get("identity") == identity else None,
+                min_days=int(OPTIONS.get("training_pattern_min_days", 3)),
+            )
+            quality_outcomes[aid] = {}
             prior = (prior_model.get("_benchmark_counts") or (a.get("benchmark_detail") or {}).get("counts") or {}) if accumulate_benchmark else {}
             benchmark_stats[a["id"]] = {
                 "samples": int(prior.get("samples") or 0),
@@ -3656,6 +3669,28 @@ class HistoryManager(threading.Thread):
                         upstream_ts = ts
             return float(local_ts if local_ts is not None else action_ts), upstream_ts
 
+        def _safe_presence_boundary(agent, policy, action_value, edge, end_ts, tracker):
+            if (not OPTIONS.get("training_light_outcome_enabled", True)
+                    or not agent.get("target_entity", "").startswith("light.")
+                    or float(action_value) < .5):
+                return min(float(end_ts), float(edge))
+            tracker.advance(float(edge))
+            snapshot = sensor_snapshot(agent, policy.schema.entities, tracker.state_map, quality_registry)
+            occupied = set(snapshot.get("active") or ()) & set(snapshot.get("reliable") or ())
+            if not occupied:
+                return min(float(end_ts), float(edge))
+            # A motion timeout must not truncate stationary occupancy evidence.
+            # Follow the persistent sources already known active at that boundary.
+            ends = [tracker.first_directional_transition_after(eid, edge, end_ts, False)
+                    for eid in sorted(occupied)]
+            if any(ts is None for ts in ends):
+                return float(end_ts)
+            candidate = max(float(ts) for ts in ends)
+            tracker.advance(candidate)
+            final = sensor_snapshot(agent, policy.schema.entities, tracker.state_map, quality_registry)
+            still_occupied = set(final.get("active") or ()) & set(final.get("reliable") or ())
+            return candidate if occupied <= set(final.get("absent") or ()) and not still_occupied else float(end_ts)
+
         def _effective_fast_dwell_end(agent, policy, action_value, start_ts, end_ts, tracker=None):
             tracker = tracker or timeline
             if not is_fast_reactive_agent(agent):
@@ -3673,7 +3708,7 @@ class HistoryManager(threading.Thread):
                     hold_seconds=pair["on_hold"] if next_positive else pair["off_hold"],
                 )
                 if edge is not None:
-                    return min(float(end_ts), float(edge))
+                    return _safe_presence_boundary(agent, policy, action_value, edge, end_ts, tracker)
             primary = _primary_occupancy_sensor(policy)
             if not primary:
                 return float(end_ts)
@@ -3681,7 +3716,7 @@ class HistoryManager(threading.Thread):
             edge = tracker.first_directional_transition_after(
                 primary, start_ts, end_ts, opposite_positive
             )
-            return min(float(end_ts), float(edge)) if edge is not None else float(end_ts)
+            return _safe_presence_boundary(agent, policy, action_value, edge, end_ts, tracker) if edge is not None else float(end_ts)
 
         def learn_or_validate(
             policy, horizon, action_idx, features, reward, sample_ts,
@@ -3702,6 +3737,40 @@ class HistoryManager(threading.Thread):
                     horizon, action_idx, features, reward, sample_ts,
                     sample_mass=sample_mass, evidence_weight=evidence_weight,
                 )
+
+        def quality_reward(agent, policy, old, end_time, reward, tracker, origin):
+            aid = str(agent["id"])
+            reason = "historical_prior"
+            if (OPTIONS.get("training_light_outcome_enabled", True)
+                    and agent.get("target_entity", "").startswith("light.")
+                    and agent.get("target_property") == "power" and reward > 0):
+                before = old.get("quality_sensors") or {}
+                after, positive, complete = before, False, False
+                # A normal confirmed-use ON and an occupied OFF need no extra
+                # end-of-dwell reconstruction. Only candidate vacancy/conflict
+                # evidence requires later outcome reads; keep the hot replay bounded.
+                if (float(old["action_value"]) >= .5 and before.get("reliable")
+                        and (not before.get("active") or
+                             set(before["reliable"]) <= set(before.get("absent") or ()))):
+                    tracker.advance(float(end_time))
+                    after = sensor_snapshot(agent, policy.schema.entities, tracker.state_map, quality_registry)
+                    positive = any(tracker.first_directional_transition_after(
+                        eid, float(old["ts"]), float(end_time), True
+                    ) is not None for eid in before["reliable"])
+                    complete = tracker.observation_known_between(
+                        before["reliable"], old["ts"], end_time
+                    )
+                reward, reason = light_dwell_reward(
+                    old["action_value"], reward, before, after, positive,
+                    explicit_user=bool(old.get("user_id") or origin in (
+                        "user", "user_intent", "manual", "manual_feedback", "manual_demonstration"
+                    )),
+                    observation_complete=complete,
+                )
+            counts = quality_outcomes[aid]
+            counts[reason] = int(counts.get(reason) or 0) + 1
+            old["quality_reason"] = reason
+            return reward
 
         def record_behavior_benchmark(agent, policy, old, reward):
             """Chronological held-out benchmark against the target's recorded behaviour.
@@ -3794,7 +3863,10 @@ class HistoryManager(threading.Thread):
             nonlocal new_count
             effective_end = _effective_fast_dwell_end(agent, policy, old["action_value"], old["ts"], end_time)
             dwell = max(0.0, float(effective_end) - old["ts"])
-            reward = historical_reward(agent, dwell, old.get("user_id"), next_user_id)
+            reward = historical_reward(
+                agent, dwell, old.get("user_id"), next_user_id,
+                observed_dwell_seconds=max(0.0, float(end_time) - old["ts"]),
+            )
             primary_h = min(old["features_by_horizon"])
             target_history_id = int(old["history_id"])
             aid = str(agent["id"])
@@ -3807,9 +3879,19 @@ class HistoryManager(threading.Thread):
                 "origin": "unknown", "source": "unknown", "event_id": None,
             })
             origin = str(provenance.get("origin") or "unknown")
+            if origin == "unknown" and old.get("user_id"):
+                origin = "user"
+            reward = quality_reward(agent, policy, old, end_time, reward, timeline, origin)
+            signature = (old.get("quality_sensors") or {}).get("signature") or []
+            pattern_factor = quality_memory[aid].factor(
+                signature, old["action_idx"], float(old.get("anchor_ts", old["ts"])), origin
+            ) if OPTIONS.get("training_pattern_weighting_enabled", True) and reward > 0 else 1.0
             onset_evidence_weight = evidence_weight_for(origin, "onset")
             upstream_evidence_weight = evidence_weight_for(origin, "upstream")
             persistence_evidence_weight = evidence_weight_for(origin, "persistence")
+            onset_evidence_weight *= pattern_factor
+            upstream_evidence_weight *= pattern_factor
+            persistence_evidence_weight *= pattern_factor
             audit = training_audits.get(str(agent["id"]))
             if audit is not None:
                 audit.record_dwell(
@@ -3841,6 +3923,16 @@ class HistoryManager(threading.Thread):
             # the batched persistence adapter.
             if origin == "own_command":
                 return False
+            if reward == 0.0:
+                if audit is not None:
+                    audit.record_excluded(
+                        "ambiguous_user_override" if old.get("quality_reason") == "historical_prior"
+                        else "unknown_sensor_outcome"
+                    )
+                return False
+            quality_memory[aid].observe(
+                signature, old["action_idx"], old["ts"], end_time, reward
+            )
 
             # Score the held-out transition before it is folded into training. This is
             # the behavioural benchmark against the legacy HA automations.
@@ -4052,6 +4144,7 @@ class HistoryManager(threading.Thread):
 
             snapshots = {}
             neural_snapshots = {}
+            quality_snapshots = {}
             for query_ts in sorted(query_times):
                 features, meta, neural_snapshot = historical_feature_snapshot(
                     agent,
@@ -4061,6 +4154,9 @@ class HistoryManager(threading.Thread):
                     include_neural=bool(neural_enabled),
                 )
                 snapshots[query_ts] = (dict(features), dict(meta or {}))
+                quality_snapshots[query_ts] = sensor_snapshot(
+                    agent, policy.schema.entities, tracker.state_map, quality_registry
+                )
                 if neural_enabled:
                     neural_snapshots[query_ts] = neural_snapshot
 
@@ -4106,6 +4202,7 @@ class HistoryManager(threading.Thread):
                 "action_idx": action_idx,
                 "action_value": actions[action_idx],
                 "user_id": row.get("context_user_id"),
+                "quality_sensors": quality_snapshots.get(float(anchor_ts), {}),
             }
 
 
@@ -4276,9 +4373,22 @@ class HistoryManager(threading.Thread):
                                 dwell,
                                 candidate.get("user_id"),
                                 candidate.get("next_user_id"),
+                                observed_dwell_seconds=max(
+                                    0.0, float(candidate["end_ts"]) - float(old["ts"])
+                                ),
                             )
                             origin = str(prov.get("origin") or "unknown")
+                            if origin == "unknown" and candidate.get("user_id"):
+                                origin = "user"
+                            reward = quality_reward(
+                                agent, policy, old, candidate["end_ts"], reward, long_tracker, origin
+                            )
+                            signature = (old.get("quality_sensors") or {}).get("signature") or []
+                            factor = quality_memory[aid].factor(
+                                signature, old["action_idx"], old["anchor_ts"], origin
+                            ) if OPTIONS.get("training_pattern_weighting_enabled", True) and reward > 0 else 1.0
                             evidence = evidence_weight_for(origin, "onset")
+                            evidence *= factor
                             primary_h = min(old["features_by_horizon"])
 
                             experience_batch.append({
@@ -4296,6 +4406,16 @@ class HistoryManager(threading.Thread):
                             flush_experience_batch()
 
                             audit = training_audits.get(aid)
+                            if reward == 0.0:
+                                if audit is not None:
+                                    audit.record_excluded(
+                                        "ambiguous_user_override" if old.get("quality_reason") == "historical_prior"
+                                        else "unknown_sensor_outcome"
+                                    )
+                                continue
+                            quality_memory[aid].observe(
+                                signature, old["action_idx"], old["ts"], candidate["end_ts"], reward
+                            )
                             for horizon, features in old["features_by_horizon"].items():
                                 policy.update(
                                     horizon,
@@ -4800,6 +4920,15 @@ class HistoryManager(threading.Thread):
             TRAINING_BUDGET.checkpoint("after_policy_serialize")
             exported['_benchmark_counts'] = benchmark_stats.get(agent['id'], {})
             exported['_frozen_holdout_counts'] = frozen_benchmark_stats.get(aid, {})
+            exported['_training_quality_state'] = {
+                "identity": [list(policy.schema.entities), list(policy.actions)],
+                "memory": quality_memory[aid].export(),
+            }
+            exported['_training_quality'] = {
+                "patterns": quality_memory[aid].status(), "outcomes": quality_outcomes[aid],
+                "historical_accuracy_is_superiority_proof": False,
+            }
+            audit_summary["quality"] = exported['_training_quality']
             if audit is not None:
                 exported['_training_balance_audit_state'] = audit.export_state()
                 exported['_training_balance_audit'] = audit_summary

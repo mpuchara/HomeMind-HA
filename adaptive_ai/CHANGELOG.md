@@ -1,3 +1,18 @@
+# 0.14.141 — 2026-10-05
+
+- Add bounded, checkpointed conditional pattern evidence based on causal selected-sensor context, with one vote per action/day/context and a three-independent-day warm-up. Downweight inconsistent automatic demonstrations while preserving explicit user exceptions and a minority floor.
+- Score fast-light outcomes against local persistent occupancy: occupied OFF is negative, verified vacancy across an ON dwell is negative, conflicting sensors are unknown, motion OFF alone never proves vacancy, and sensing gaps disable negative vacancy attribution.
+- Persist quality counters and bounded pattern memory with normal per-chunk model checkpoints; outcome availability strictly gates pattern queries to prevent future evidence leaking into earlier decisions.
+- Add independent synthetic baseline/learned-policy rollouts for stationary occupancy, false motion, departure, sensor failure and rare explicit needs, with per-scenario regression gates. These test shipped learning components, not household performance or physical dispatch.
+- Publish versioned repository/add-on ZIPs and checksums only after all main CI gates succeed.
+
+- Treat recognized automation and unknown history as weaker demonstrations than explicit user evidence; keep upstream cues weaker and own-command echoes excluded.
+- Treat later human light changes inside a configurable 90-second window as ambiguous rather than rewarding the previous automatic state. Persist the event but skip neutral training/benchmark updates, including sparse long memory.
+- Use actual target dwell for correction attribution; a sensor-truncated persistence interval cannot manufacture an earlier human override.
+- Exclude rejected/neutral historical actions from Candidate Correct's regression reference labels.
+- Bump the semantic training revision to v21. Existing models require explicit Train/Rebuild to acquire the new learning behavior; no feature schema change.
+- Add a Polish development plan and 12 quality regressions, including a real isolated Ridge/TinyMLP replay. Initial reliability weights are provisional, not calibrated household preferences.
+
 # 0.14.140 — 2026-10-05
 
 - Inventory the remaining shipped feature-owned `Handler.do_GET/do_POST/do_DELETE/static` overlays outside the already migrated Workflow/Correct/Explore/Confidence and queue transport.

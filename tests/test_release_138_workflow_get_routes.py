@@ -1,5 +1,6 @@
 """0.14.139 Workflow/Correct/Explore/Confidence GET reads use ExplicitRouteRegistry."""
 import unittest
+from settings import APP_VERSION
 from pathlib import Path
 
 from support import ROOT
@@ -137,7 +138,7 @@ class FinalCompositionGetOwnershipTests(unittest.TestCase):
         self.assertIn("register_confidence_read_routes(router, self.core)", root)
 
         index = (SRC / "static" / "index.html").read_text(encoding="utf-8")
-        self.assertIn('src="confidence_contract_ui.js?v=0.14.140"', index)
+        self.assertIn(f'src="confidence_contract_ui.js?v={APP_VERSION}"', index)
 
 
 if __name__ == "__main__":
