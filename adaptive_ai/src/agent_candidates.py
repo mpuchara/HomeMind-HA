@@ -1098,6 +1098,8 @@ class AgentCandidateManager(threading.Thread):
         )
 
     def _install_http(self):
+        if getattr(self.core, "_final_explicit_http_only", False):
+            return
         handler = self.core.Handler
         if getattr(handler, "_agent_candidates_installed", False):
             return
