@@ -269,8 +269,8 @@ class RuntimeCompositionRoot:
         # The optimized generation-aware Correct reader used to exist only as tested
         # library code and was never bound into the shipped final composition. Install
         # it after the durable workflow queue so the established request-queue ordering
-        # remains intact, while its GET wrapper still becomes the authoritative Correct
-        # history/point read path before later HTTP adapters.
+        # remains intact. Its manager methods become authoritative before the final
+        # explicit Workflow GET routes are registered below.
         manager = install_correct_generation_history(manager, legacy_get=False)
         manager = install_agent_explore(manager, legacy_get=False)
 
