@@ -140,10 +140,10 @@ class CorrectRuntimeComposition116Tests(unittest.TestCase):
             "from agent_correct_generation_history import install as install_correct_generation_history",
             source,
         )
-        workflow = source.index("manager = install_agent_workflow_actions(manager, legacy_get=False)")
-        request_queue = source.index("manager = install_workflow_request_queue(manager)")
-        generation = source.index("manager = install_correct_generation_history(manager, legacy_get=False)")
-        explore = source.index("manager = install_agent_explore(manager, legacy_get=False)")
+        workflow = source.index("manager = install_agent_workflow_actions(")
+        request_queue = source.index("manager = install_workflow_request_queue(")
+        generation = source.index("manager = install_correct_generation_history(")
+        explore = source.index("manager = install_agent_explore(")
         self.assertLess(workflow, request_queue)
         self.assertLess(request_queue, generation)
         self.assertLess(generation, explore)
