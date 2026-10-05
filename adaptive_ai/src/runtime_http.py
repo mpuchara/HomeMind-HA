@@ -12,7 +12,7 @@ from collections import OrderedDict
 from urllib.parse import urlsplit
 
 
-CONTRACT_VERSION = 3
+CONTRACT_VERSION = 4
 
 
 # Route callbacks may explicitly delegate to the captured compatibility Handler.
