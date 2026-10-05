@@ -1,3 +1,15 @@
+# 0.14.137 — 2026-10-05
+
+- Remove queue-owned `Handler.do_POST`, `Handler.do_PATCH` and `Handler.do_DELETE` compatibility wrappers from `queue_main.py`.
+- Register Teach-RL mutations/training, normal train/resume, queued-edit PATCH protection, learning rebuild and queued-delete protection as named `ExplicitRouteRegistry` routes.
+- Extend the explicit HTTP contract with `FALLTHROUGH`: migrated compatibility guards can conditionally delegate to the captured base Handler without reintroducing monkeypatch ownership.
+- Preserve existing explicit-route precedence by registering queue compatibility routes at a deliberately low priority.
+- Register queue mutation routes before base runtime initialization so Teach-RL keeps its historical early-runtime protection; train/resume and guards explicitly fall through while TrainingQueue is absent.
+- Preserve DELETE semantics: active training blocks deletion, queued work is cancelled before delegation, and `/learning` continues to enqueue a full rebuild.
+- Remove queue HTTP method overlays from the final runtime composition legacy list; queue_main now retains only lifecycle and status-payload enrichment.
+- Add regressions for FALLTHROUGH delegation, source ownership, early queue absence, Teach-RL mutation behavior, train admission, PATCH blocking, DELETE blocking/cancellation and learning rebuild.
+- No reward, policy, Candidate, Correct, training semantics, ActionIntent, Executor or physical Control authority changes.
+
 # 0.14.136 — 2026-10-05
 
 - Remove the queue-owned `Handler.do_GET` compatibility wrapper from `queue_main.py`.
