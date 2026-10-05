@@ -1,3 +1,14 @@
+# 0.14.136 — 2026-10-05
+
+- Remove the queue-owned `Handler.do_GET` compatibility wrapper from `queue_main.py`.
+- Register `/queue.js`, Teach-RL history/point/status and queue-aware `/api/agents` as named `ExplicitRouteRegistry` GET routes.
+- Register those routes only after `TrainingQueue.start()`, preserving the historical early-start HTTP fallback before the queue becomes authoritative.
+- Keep trusted-client/runtime requirements and Teach-RL error semantics unchanged.
+- Refresh the runtime transport descriptor after late queue-route registration so diagnostics expose the actual final route set.
+- Narrow the remaining queue HTTP legacy surface to mutating POST/PATCH/DELETE routes; those are intentionally deferred to a later stage.
+- Add isolated route-dispatch regressions plus a source guard preventing reintroduction of `queue_main` `do_GET` ownership.
+- No reward, policy, Candidate, Correct, ActionIntent, Executor or physical Control authority changes.
+
 # 0.14.135 — 2026-10-04
 
 - Remove direct feature ownership of the `Engine.process_agent` monkey-patch across Manual Feedback, Context Tournament, Teach-RL rebenchmark, Candidate observation, Provenance, Observation and Tiny MLP Shadow.
