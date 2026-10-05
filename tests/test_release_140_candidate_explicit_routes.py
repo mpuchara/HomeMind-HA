@@ -238,6 +238,8 @@ class FinalCompositionOwnershipTests(unittest.TestCase):
         self.assertIn("register_candidate_routes(router, self.core, manager)", root)
         self.assertIn("register_manual_feedback_static_routes(router, self.core)", root)
         self.assertIn("uninstall_manual_feedback_static_legacy(core)", root)
+        main = (SRC / "main.py").read_text(encoding="utf-8")
+        self.assertIn('path == "/manual_feedback.js"', main)
 
         for filename in (
             "agent_candidates.py",
