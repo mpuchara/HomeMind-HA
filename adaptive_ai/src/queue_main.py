@@ -5,6 +5,7 @@ training queue hooks before calling it, so a busy low-memory training slot becom
 "queued" instead of an HTTP 409.
 """
 import traceback
+from urllib.parse import parse_qs, urlsplit
 
 import main as core
 from training_queue import TrainingQueue
@@ -17,7 +18,6 @@ TRAINING_QUEUE = None
 _original_initialize_runtime = core.initialize_runtime
 _original_shutdown_runtime = core.shutdown_runtime
 _original_status_payload = core.Handler.status_payload
-_original_do_get = core.Handler.do_GET
 _original_do_post = core.Handler.do_POST
 _original_do_patch = core.Handler.do_PATCH
 _original_do_delete = core.Handler.do_DELETE
@@ -31,6 +31,14 @@ def initialize_runtime():
     TRAINING_QUEUE = TrainingQueue(core.HISTORY, core.STORE, core.ENGINE)
     core.TRAINING_QUEUE = TRAINING_QUEUE
     TRAINING_QUEUE.start()
+
+    # Runtime HTTP dispatch is created inside the base initialize path before the queue
+    # becomes authoritative. Register queue-owned GET routes only after TRAINING_QUEUE
+    # exists, preserving the historical early-start fallback behavior.
+    registry = getattr(core, "EXPLICIT_HTTP_ROUTES", None)
+    if registry is not None:
+        register_read_routes(registry)
+
     core.STORE.event(None, "info", "training_queue_ready",
                      "Priority training queue ready; heavy jobs will run one at a time", None)
 
@@ -77,55 +85,82 @@ def _rl_teaching():
     return service
 
 
-def do_get(self):
-    path, _, query = self.path.partition("?")
-    if path == "/queue.js":
-        if not self.require_trusted_client():
-            return
-        return self.static("queue.js", "application/javascript; charset=utf-8")
+def register_read_routes(registry):
+    """Move queue-owned GET/static endpoints out of the Handler wrapper chain."""
 
-    # Historical Teach has its own base-RL replay endpoints.  The old /teaching routes
-    # remain untouched because Wrong decision already depends on their immediate logic.
-    if path.startswith("/api/agents/") and path.endswith(("/teach-rl-history", "/teach-rl-point", "/teach-rl-status")):
-        if not self.require_trusted_client() or not self.require_runtime():
-            return
-        agent_id = path.split("/")[3]
+    def queue_js(http, _params):
+        return http.static("queue.js", "application/javascript; charset=utf-8")
+
+    def teach_rl(http, params, action):
+        agent_id = params["agent_id"]
         agent = core.STORE.get_agent_config(agent_id)
         if not agent:
-            return self.send_json(404, {"error": "agent not found"})
+            return http.send_json(404, {"error": "agent not found"})
         try:
             service = _rl_teaching()
-            if path.endswith("/teach-rl-status"):
+            query = parse_qs(urlsplit(http.path).query)
+            if action == "status":
                 result = service.status(agent_id)
-                result["training_queue"] = TRAINING_QUEUE.status_for(agent_id) if TRAINING_QUEUE else None
+                result["training_queue"] = (
+                    TRAINING_QUEUE.status_for(agent_id) if TRAINING_QUEUE else None
+                )
                 if core.HISTORY is not None:
                     result["history"] = core.HISTORY.status()
-                return self.send_json(200, result)
-            from urllib.parse import parse_qs
-            params = parse_qs(query)
-            if path.endswith("/teach-rl-point"):
-                return self.send_json(200, service.point(agent, params.get("ts", [None])[0]))
-            return self.send_json(200, service.history(
-                agent, params.get("start", [None])[0], params.get("end", [None])[0]
-            ))
+                return http.send_json(200, result)
+            if action == "point":
+                return http.send_json(
+                    200, service.point(agent, (query.get("ts") or [None])[0])
+                )
+            return http.send_json(
+                200,
+                service.history(
+                    agent,
+                    (query.get("start") or [None])[0],
+                    (query.get("end") or [None])[0],
+                ),
+            )
         except (ValueError, TypeError) as exc:
-            return self.send_json(400, {"error": str(exc)})
+            return http.send_json(400, {"error": str(exc)})
         except Exception as exc:
             traceback.print_exc()
-            return self.send_json(500, {"error": str(exc)})
+            return http.send_json(500, {"error": str(exc)})
 
-    if path == "/api/agents" and TRAINING_QUEUE is not None:
-        if not self.require_trusted_client():
-            return
+    def agents(http, _params):
         try:
-            if not self.require_runtime():
-                return
-            return self.send_json(200, _agent_payloads(self))
+            return http.send_json(200, _agent_payloads(http))
         except Exception as exc:
             traceback.print_exc()
-            return self.send_json(500, {"error": str(exc)})
-    return _original_do_get(self)
+            return http.send_json(500, {"error": str(exc)})
 
+    registry.register(
+        "GET",
+        "queue.static",
+        r"^/queue\.js$",
+        queue_js,
+        require_trusted=True,
+        require_runtime=False,
+        priority=180,
+    )
+    for action in ("history", "point", "status"):
+        registry.register(
+            "GET",
+            f"queue.teach_rl.{action}",
+            rf"^/api/agents/(?P<agent_id>[^/]+)/teach-rl-{action}$",
+            lambda http, params, action=action: teach_rl(http, params, action),
+            require_trusted=True,
+            require_runtime=True,
+            priority=180,
+        )
+    registry.register(
+        "GET",
+        "queue.agents",
+        r"^/api/agents$",
+        agents,
+        require_trusted=True,
+        require_runtime=True,
+        priority=180,
+    )
+    return registry
 
 def _queue_agent(self, agent_id, *, rebuild, reason, resumed=False,
                  rebuild_reason=None, learning_path=None):
@@ -297,7 +332,6 @@ def shutdown_runtime():
 core.initialize_runtime = initialize_runtime
 core.shutdown_runtime = shutdown_runtime
 core.Handler.status_payload = status_payload
-core.Handler.do_GET = do_get
 core.Handler.do_POST = do_post
 core.Handler.do_PATCH = do_patch
 core.Handler.do_DELETE = do_delete
