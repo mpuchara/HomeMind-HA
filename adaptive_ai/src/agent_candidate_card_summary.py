@@ -207,8 +207,9 @@ def install(manager):
     original_status = manager.status
     original_list_status = manager.list_status
     original_lineage_status = getattr(manager, "lineage_status", None)
-    handler = manager.core.Handler
-    original_get = handler.do_GET
+    legacy_http = not bool(getattr(manager.core, "_final_explicit_http_only", False))
+    handler = manager.core.Handler if legacy_http else None
+    original_get = handler.do_GET if legacy_http else None
 
     def status(parent_id):
         return decorate_candidate_status(manager.store, original_status(parent_id))
@@ -237,7 +238,8 @@ def install(manager):
     manager.live_snapshots = lambda: live_candidate_snapshots(manager)
     if original_lineage_status is not None:
         manager.lineage_status = lineage_status
-    handler.do_GET = do_get
+    if legacy_http:
+        handler.do_GET = do_get
     manager._candidate_card_summary_installed = True
     manager.candidate_card_decision_contract = (
         "ram_first_current_plus_last_observed_parent_and_candidate_desired_"
