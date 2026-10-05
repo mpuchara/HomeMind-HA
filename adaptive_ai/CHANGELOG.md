@@ -2,7 +2,7 @@
 
 - Remove the queue-owned `Handler.do_GET` compatibility wrapper from `queue_main.py`.
 - Register `/queue.js`, Teach-RL history/point/status and queue-aware `/api/agents` as named `ExplicitRouteRegistry` GET routes.
-- Register those routes only after `TrainingQueue.start()`, preserving the historical early-start HTTP fallback before the queue becomes authoritative.
+- Register those routes only after `TrainingQueue.start()`, preserving the historical early-start HTTP fallback before the queue becomes authoritative; standalone `queue_main` installs the same explicit dispatcher if final composition is absent.
 - Keep trusted-client/runtime requirements and Teach-RL error semantics unchanged.
 - Refresh the runtime transport descriptor after late queue-route registration so diagnostics expose the actual final route set.
 - Narrow the remaining queue HTTP legacy surface to mutating POST/PATCH/DELETE routes; those are intentionally deferred to a later stage.
