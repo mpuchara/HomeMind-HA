@@ -1,10 +1,18 @@
 {
-  "version": "0.14.133",
+  "version": "0.14.134",
   "release_date": "2026-10-04",
-  "base_version": "0.14.132",
-  "base_commit": "5a841f29dcbae3721687c94a3492c4d21a50a6c2",
-  "release_status": "correct-transport-and-pi4-gate-alignment",
+  "base_version": "0.14.133",
+  "base_commit": "832e8f2d8bd37d43973fb9d335ad5ab9a4e17721",
+  "release_status": "named-state-event-composition-guard",
   "release_validation_tests_passed": 1598,
+  "release_014134": {
+    "scope": "named_and_verified_engine_state_event_wrapper_composition",
+    "install_order": "manual_feedback_lifecycle -> candidate_shadow -> provenance -> observation",
+    "guard": "duplicate named registration is a no-op; direct handler overwrite or order drift fails before runtime workers start",
+    "behavior_change": "none; established wrapper bodies and event semantics are preserved",
+    "control_semantics_changed": false,
+    "validation_tests_expected": 1607
+  },
   "release_014133": {
     "scope": "compact_correct_transport_and_pi4_worker_gate_alignment",
     "correct_transport": "UI requests compact=1; pairs_v1 removes duplicated chart point objects while legacy API remains unchanged",

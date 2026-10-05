@@ -30,6 +30,7 @@ from home_state import FEATURE_NAMES as LEGACY_HOME_FEATURE_NAMES
 from provenance import stable_event_id
 from settings import OPTIONS, clamp, iso_now, now_ts, parse_ts
 from training_budget import TRAINING_BUDGET
+from state_event_pipeline import install_state_event_wrapper
 
 SCHEMA_VERSION = 12
 POLICY_VERSION = 11
@@ -2153,7 +2154,10 @@ def install(core):
                 source="ha_state_changed",
             )
         return result
-    engine.on_state_changed = on_state_changed
+    def build_state_changed(next_handler):
+        return on_state_changed
+
+    install_state_event_wrapper(engine, "observation", build_state_changed)
 
     original_refresh_states = engine.refresh_states
     def refresh_states():
