@@ -1624,7 +1624,28 @@ def _decorate_summary(manager, epochs, row, summary, parent, candidate):
     return summary
 
 
-def install(manager):
+
+def register_read_routes(registry, core):
+    """Bind the final Confidence UI asset without Handler/static monkeypatching."""
+
+    def confidence_ui(http, _params):
+        return http.static(
+            "confidence_contract_ui.js",
+            "application/javascript; charset=utf-8",
+        )
+
+    registry.register(
+        "GET",
+        "confidence.static",
+        r"^/confidence_contract_ui\.js$",
+        confidence_ui,
+        require_trusted=True,
+        require_runtime=False,
+        priority=220,
+    )
+    return registry
+
+def install(manager, *, legacy_http=True):
     """Install Stage-13 semantics after the existing Candidate/Trial composition."""
     if getattr(manager, "_confidence_contract_installed", False):
         return manager
@@ -1682,7 +1703,7 @@ def install(manager):
         manager.lineage_status = lambda ref: _decorate(original_lineage_status(ref))
 
     handler = getattr(manager.core, "Handler", None)
-    if handler is not None:
+    if legacy_http and handler is not None:
         original_get = handler.do_GET
         original_static = handler.static
 
@@ -1712,6 +1733,9 @@ def install(manager):
         handler.static = static
 
     manager.confidence_contract = contract_descriptor()
+    manager.confidence_http_contract = (
+        "explicit_registry_final_composition_index_script_native_legacy_injector_optional"
+    )
     manager.record_independent_candidate_label = (
         lambda **kwargs: record_independent_candidate_label(manager.store, **kwargs)
     )
