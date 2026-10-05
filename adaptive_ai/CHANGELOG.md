@@ -1,3 +1,15 @@
+# 0.14.138 — 2026-10-05
+
+- Move shipped Agent Workflow GET/static ownership from Handler wrappers to named `ExplicitRouteRegistry` routes.
+- Serve `/agent_workflow_ui.js`, workflow status, generation-aware Correct history/point and Explore status through the final explicit router.
+- Keep optimized Correct history authoritative by routing through the current `manager.workflow_correct_history` / `workflow_correct_point` methods after the generation-history installer has replaced them.
+- Preserve `compact=1` Correct transport on the migrated explicit route.
+- Disable legacy GET wrapping for Workflow, generation Correct and Explore only in final composition; standalone/test installations retain their previous compatibility wrappers by default.
+- Remove the final Confidence UI Handler/static injector from shipped composition. The current native `index.html` already loads `confidence_contract_ui.js`; the asset itself is now an explicit static route.
+- Keep Workflow and Explore POST compatibility handlers unchanged for a later mutation-route migration.
+- Add explicit-dispatch regressions for Workflow UI/status, optimized compact Correct history, Correct point, Explore status and Confidence UI plus final-composition source guards.
+- No reward, policy, Candidate, Correct learning semantics, ActionIntent, Executor or physical Control authority changes.
+
 # 0.14.137 — 2026-10-05
 
 - Remove queue-owned `Handler.do_POST`, `Handler.do_PATCH` and `Handler.do_DELETE` compatibility wrappers from `queue_main.py`.
