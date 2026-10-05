@@ -75,9 +75,12 @@ class ExplicitRouteRegistry:
             if row["require_runtime"] and not http.require_runtime():
                 return True
             result = row["callback"](http, match.groupdict())
+            if result is CONTINUE:
+                # A higher-priority explicit compatibility guard may deliberately pass
+                # ownership to the next matching explicit route.
+                continue
             if result is FALLTHROUGH:
-                # Explicit compatibility guards are registered below all native explicit
-                # routes. FALLTHROUGH means "delegate to the captured Handler now", not
+                # FALLTHROUGH means "delegate to the captured Handler now", not
                 # "try another lower-priority explicit route".
                 return False
             return True
