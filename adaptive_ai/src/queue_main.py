@@ -38,6 +38,22 @@ def initialize_runtime():
     registry = getattr(core, "EXPLICIT_HTTP_ROUTES", None)
     if registry is not None:
         register_read_routes(registry)
+        # The composition snapshot is created before TrainingQueue becomes authoritative.
+        # Refresh only its transport descriptor after late queue-route registration.
+        contract = getattr(core, "RUNTIME_COMPOSITION_CONTRACT", None)
+        if isinstance(contract, dict):
+            contract["transport"] = registry.descriptor()
+            contract["queue_read_routes"] = {
+                "owner": "ExplicitRouteRegistry",
+                "registered_after_training_queue_start": True,
+                "routes": [
+                    "queue.static",
+                    "queue.teach_rl.history",
+                    "queue.teach_rl.point",
+                    "queue.teach_rl.status",
+                    "queue.agents",
+                ],
+            }
 
     core.STORE.event(None, "info", "training_queue_ready",
                      "Priority training queue ready; heavy jobs will run one at a time", None)
