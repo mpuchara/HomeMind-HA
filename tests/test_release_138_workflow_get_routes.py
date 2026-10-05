@@ -1,4 +1,4 @@
-"""0.14.138 Workflow/Correct/Explore/Confidence GET reads use ExplicitRouteRegistry."""
+"""0.14.139 Workflow/Correct/Explore/Confidence GET reads use ExplicitRouteRegistry."""
 import unittest
 from pathlib import Path
 
@@ -128,16 +128,16 @@ class WorkflowReadRouteTests(unittest.TestCase):
 class FinalCompositionGetOwnershipTests(unittest.TestCase):
     def test_final_root_disables_legacy_get_static_wrappers(self):
         root = (SRC / "runtime_composition.py").read_text(encoding="utf-8")
-        self.assertIn("install_agent_workflow_actions(manager, legacy_get=False)", root)
+        self.assertIn("legacy_get=False, legacy_post=False", root)
         self.assertIn("install_correct_generation_history(manager, legacy_get=False)", root)
-        self.assertIn("install_agent_explore(manager, legacy_get=False)", root)
+        self.assertIn("manager, legacy_get=False, legacy_post=False", root)
         self.assertIn("install_confidence_contract(manager, legacy_http=False)", root)
         self.assertIn("register_workflow_read_routes(router, manager)", root)
         self.assertIn("register_explore_read_routes(router, manager)", root)
         self.assertIn("register_confidence_read_routes(router, self.core)", root)
 
         index = (SRC / "static" / "index.html").read_text(encoding="utf-8")
-        self.assertIn('src="confidence_contract_ui.js?v=0.14.138"', index)
+        self.assertIn('src="confidence_contract_ui.js?v=0.14.139"', index)
 
 
 if __name__ == "__main__":

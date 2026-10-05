@@ -659,7 +659,39 @@ def register_read_routes(registry, manager):
     )
     return registry
 
-def install(manager, *, legacy_get=True):
+
+def register_mutation_routes(registry, manager):
+    """Bind final Explore mutations to ExplicitRouteRegistry."""
+
+    def explore(http, params):
+        try:
+            payload = http.read_json()
+            return http.send_json(
+                202,
+                manager.workflow_explore(
+                    unquote(params["ref"]),
+                    payload if isinstance(payload, dict) else {},
+                ),
+            )
+        except ValueError as exc:
+            return http.send_json(409, {"error": str(exc)})
+        except Exception as exc:
+            return http.send_json(
+                500, {"error": f"Explore failed: {type(exc).__name__}: {exc}"}
+            )
+
+    registry.register(
+        "POST",
+        "workflow.explore",
+        r"^/api/agent-workflow/(?P<ref>[^/]+)/explore$",
+        explore,
+        require_trusted=True,
+        require_runtime=True,
+        priority=220,
+    )
+    return registry
+
+def install(manager, *, legacy_get=True, legacy_post=True):
     if getattr(manager, "_agent_explore_installed", False):
         return manager
     ensure_explore_tables(manager.store)
@@ -671,7 +703,7 @@ def install(manager, *, legacy_get=True):
 
     handler = manager.core.Handler
     original_get = handler.do_GET if legacy_get else None
-    original_post = handler.do_POST
+    original_post = handler.do_POST if legacy_post else None
     original_start = manager._start_build
     original_finish_build = manager._finish_build_if_ready
     original_status = manager.status
@@ -892,7 +924,8 @@ def install(manager, *, legacy_get=True):
 
     if legacy_get:
         handler.do_GET = do_get
-    handler.do_POST = do_post
+    if legacy_post:
+        handler.do_POST = do_post
     manager.workflow_explore = workflow_explore
     manager.workflow_explore_status = workflow_explore_status
     manager._agent_explore_installed = True
@@ -901,5 +934,8 @@ def install(manager, *, legacy_get=True):
     manager.agent_explore_targeted_contract = "forced_challenger_priority_only_future_prequential_quality_gain_safety"
     manager.explore_read_http_contract = (
         "explicit_registry_final_composition_legacy_get_optional"
+    )
+    manager.explore_mutation_http_contract = (
+        "explicit_registry_final_composition_legacy_post_optional"
     )
     return manager

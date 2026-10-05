@@ -613,7 +613,68 @@ def register_read_routes(registry, manager):
     )
     return registry
 
-def install(manager, *, legacy_get=True):
+
+def register_mutation_routes(registry, manager):
+    """Bind final non-durable Workflow mutations to ExplicitRouteRegistry.
+
+    Durable Correct commit admission is intentionally owned by workflow_request_queue.
+    """
+
+    def mutation(http, params, action):
+        ref = unquote(params["ref"])
+        try:
+            payload = http.read_json()
+            payload = payload if isinstance(payload, dict) else {}
+            if action == "autonomous":
+                return http.send_json(202, manager.workflow_autonomous(ref))
+            if action == "correct-label":
+                return http.send_json(
+                    200,
+                    manager.workflow_add_correct_label(
+                        ref, payload.get("desired_value"), payload.get("sample_ts")
+                    ),
+                )
+            if action == "correct-undo":
+                return http.send_json(200, manager.workflow_undo_correct_label(ref))
+            if action == "change-decision":
+                return http.send_json(
+                    202,
+                    manager.workflow_change_decision(
+                        ref, payload.get("desired_value")
+                    ),
+                )
+            return http.send_json(404, {"error": "unsupported workflow action"})
+        except ValueError as exc:
+            return http.send_json(409, {"error": str(exc)})
+        except Exception as exc:
+            return http.send_json(
+                500,
+                {
+                    "error": (
+                        "Generation workflow failed: "
+                        f"{type(exc).__name__}: {exc}"
+                    )
+                },
+            )
+
+    for action in (
+        "autonomous",
+        "correct-label",
+        "correct-undo",
+        "change-decision",
+    ):
+        registry.register(
+            "POST",
+            f"workflow.{action.replace('-', '_')}",
+            rf"^/api/agent-workflow/(?P<ref>[^/]+)/{action}$",
+            lambda http, params, action=action: mutation(http, params, action),
+            require_trusted=True,
+            require_runtime=True,
+            priority=220,
+        )
+    return registry
+
+def install(manager, *, legacy_get=True, legacy_post=True):
     if getattr(manager, "_agent_workflow_actions_installed", False):
         return manager
 
@@ -624,7 +685,7 @@ def install(manager, *, legacy_get=True):
     original_finish = manager._finish_build_if_ready
     handler = manager.core.Handler
     original_get = handler.do_GET if legacy_get else None
-    original_post = handler.do_POST
+    original_post = handler.do_POST if legacy_post else None
 
     def workflow_subject(ref):
         generation, agent = _resolve_generation(manager, ref)
@@ -1047,12 +1108,17 @@ def install(manager, *, legacy_get=True):
     )
     if legacy_get:
         handler.do_GET = do_get
-    handler.do_POST = do_post
+    if legacy_post:
+        handler.do_POST = do_post
     manager._agent_workflow_actions_installed = True
     manager.agent_workflow_contract = "autonomous_correct_change_decision_generation_children_parent_model_immutable"
     manager.agent_workflow_coalescing_contract = "same_parent_generation_only"
     manager.agent_autonomous_contract = "exact_parent_snapshot_resume_history_no_clear_learning_schema_preserving"
     manager.workflow_read_http_contract = (
         "explicit_registry_final_composition_legacy_get_optional"
+    )
+    manager.workflow_mutation_http_contract = (
+        "explicit_registry_final_composition_legacy_post_optional_"
+        "durable_correct_owned_by_workflow_request_queue"
     )
     return manager

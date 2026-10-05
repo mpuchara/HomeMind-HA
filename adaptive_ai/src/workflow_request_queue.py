@@ -244,14 +244,69 @@ class WorkflowRequestQueue(threading.Thread):
         self.wake_event.set()
 
 
-def install(manager, *, start_worker=True):
+
+def register_routes(registry, manager):
+    """Bind durable Correct request admission/status to ExplicitRouteRegistry."""
+    queue = manager.workflow_requests
+
+    def status(http, params):
+        request_id = unquote(params["request_id"])
+        try:
+            result = queue.status(request_id)
+        except ValueError as exc:
+            return http.send_json(400, {"error": str(exc)})
+        if result is None:
+            return http.send_json(404, {"error": "workflow request not found"})
+        return http.send_json(200, result)
+
+    def correct(http, params):
+        ref = unquote(params["ref"])
+        try:
+            payload = http.read_json()
+            payload = payload if isinstance(payload, dict) else {}
+            accepted = queue.enqueue_correct(ref, payload.get("request_id"))
+            return http.send_json(202, accepted)
+        except ValueError as exc:
+            return http.send_json(409, {"error": str(exc)})
+        except Exception as exc:
+            return http.send_json(
+                500,
+                {
+                    "error": (
+                        "Could not durably accept Correct request: "
+                        f"{type(exc).__name__}: {exc}"
+                    )
+                },
+            )
+
+    registry.register(
+        "GET",
+        "workflow_request.status",
+        r"^/api/agent-workflow-requests/(?P<request_id>[^/]+)$",
+        status,
+        require_trusted=True,
+        require_runtime=True,
+        priority=230,
+    )
+    registry.register(
+        "POST",
+        "workflow_request.correct",
+        r"^/api/agent-workflow/(?P<ref>[^/]+)/correct$",
+        correct,
+        require_trusted=True,
+        require_runtime=True,
+        priority=230,
+    )
+    return registry
+
+def install(manager, *, start_worker=True, legacy_http=True):
     if getattr(manager, "_workflow_request_queue_installed", False):
         return manager
 
     queue = WorkflowRequestQueue(manager, start_worker=start_worker)
     handler = manager.core.Handler
-    original_get = handler.do_GET
-    original_post = handler.do_POST
+    original_get = handler.do_GET if legacy_http else None
+    original_post = handler.do_POST if legacy_http else None
     original_stop = manager.stop
 
     def do_get(http):
@@ -295,8 +350,9 @@ def install(manager, *, start_worker=True):
         queue.stop()
         return original_stop()
 
-    handler.do_GET = do_get
-    handler.do_POST = do_post
+    if legacy_http:
+        handler.do_GET = do_get
+        handler.do_POST = do_post
     manager.stop = stop_with_requests
     manager.workflow_requests = queue
     manager._workflow_request_queue_installed = True
@@ -304,4 +360,7 @@ def install(manager, *, start_worker=True):
         "correct_commit_is_durable_idempotent_202_then_async_candidate_orchestration"
     )
     manager.workflow_request_contract_version = CONTRACT_VERSION
+    manager.workflow_request_http_contract = (
+        "explicit_registry_final_composition_legacy_http_optional"
+    )
     return manager
