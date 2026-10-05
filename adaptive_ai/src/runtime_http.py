@@ -16,8 +16,10 @@ CONTRACT_VERSION = 3
 
 
 # Route callbacks may explicitly delegate to the captured compatibility Handler.
-# This is used by migrated legacy guards that only handle a request conditionally.
+# FALLTHROUGH exits explicit routing immediately. CONTINUE lets a higher-priority
+# compatibility guard pass the request to the next matching explicit route.
 FALLTHROUGH = object()
+CONTINUE = object()
 
 
 class ExplicitRouteRegistry:
@@ -89,6 +91,7 @@ class ExplicitRouteRegistry:
             "fallback": "legacy_handler_chain_for_unmigrated_routes",
             "idempotency": "method+route_name_replaces_in_place_without_stacking",
             "conditional_fallback": "callback may return runtime_http.FALLTHROUGH to delegate to captured Handler",
+            "conditional_continue": "callback may return runtime_http.CONTINUE to evaluate the next matching explicit route",
             "mutable_module_globals": False,
             "binding": dict(self._binding),
         }
