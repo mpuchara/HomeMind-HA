@@ -531,7 +531,89 @@ def _install_candidate_teaching_overlay(manager):
     shadow_module._workflow_teaching_overlay_installed = True
 
 
-def install(manager):
+
+def register_read_routes(registry, manager):
+    """Bind final Workflow/Correct GET + static reads to ExplicitRouteRegistry."""
+
+    def workflow_ui(http, _params):
+        return http.static(
+            "agent_workflow_ui.js", "application/javascript; charset=utf-8"
+        )
+
+    def status(http, params):
+        try:
+            return http.send_json(
+                200, manager.workflow_subject(unquote(params["ref"]))
+            )
+        except (TypeError, ValueError) as exc:
+            return http.send_json(404, {"error": str(exc)})
+
+    def correct_history(http, params):
+        try:
+            query = parse_qs(urlsplit(http.path).query)
+            now = time.time()
+            start = float((query.get("start") or [now - 600])[0])
+            end = float((query.get("end") or [now])[0])
+            compact_raw = str((query.get("compact") or ["0"])[0]).strip().lower()
+            compact = compact_raw in {"1", "true", "yes", "on"}
+            return http.send_json(
+                200,
+                manager.workflow_correct_history(
+                    unquote(params["ref"]), start, end, compact=compact
+                ),
+            )
+        except (TypeError, ValueError) as exc:
+            return http.send_json(404, {"error": str(exc)})
+
+    def correct_point(http, params):
+        try:
+            query = parse_qs(urlsplit(http.path).query)
+            ts = float((query.get("ts") or [time.time()])[0])
+            return http.send_json(
+                200, manager.workflow_correct_point(unquote(params["ref"]), ts)
+            )
+        except (TypeError, ValueError) as exc:
+            return http.send_json(404, {"error": str(exc)})
+
+    registry.register(
+        "GET",
+        "workflow.static",
+        r"^/agent_workflow_ui\.js$",
+        workflow_ui,
+        require_trusted=True,
+        require_runtime=False,
+        priority=220,
+    )
+    registry.register(
+        "GET",
+        "workflow.status",
+        r"^/api/agent-workflow/(?P<ref>[^/]+)/status$",
+        status,
+        require_trusted=True,
+        require_runtime=True,
+        priority=220,
+    )
+    registry.register(
+        "GET",
+        "workflow.correct_history",
+        r"^/api/agent-workflow/(?P<ref>[^/]+)/correct-history$",
+        correct_history,
+        require_trusted=True,
+        require_runtime=True,
+        priority=220,
+    )
+    registry.register(
+        "GET",
+        "workflow.correct_point",
+        r"^/api/agent-workflow/(?P<ref>[^/]+)/correct-point$",
+        correct_point,
+        require_trusted=True,
+        require_runtime=True,
+        priority=220,
+    )
+    return registry
+
+def install(manager, *, legacy_get=True):
     if getattr(manager, "_agent_workflow_actions_installed", False):
         return manager
 
@@ -541,7 +623,7 @@ def install(manager):
     original_start = manager._start_build
     original_finish = manager._finish_build_if_ready
     handler = manager.core.Handler
-    original_get = handler.do_GET
+    original_get = handler.do_GET if legacy_get else None
     original_post = handler.do_POST
 
     def workflow_subject(ref):
@@ -951,7 +1033,7 @@ def install(manager):
     manager.workflow_autonomous = workflow_autonomous
     manager.workflow_correct_commit = workflow_correct_commit
     manager.workflow_change_decision = workflow_change_decision
-    manager.workflow_correct_history = lambda ref, start, end: _correct_history(
+    manager.workflow_correct_history = lambda ref, start, end, compact=False: _correct_history(
         manager, *_resolve_generation(manager, ref), start, end
     )
     manager.workflow_correct_point = lambda ref, ts: _correct_point(
@@ -963,10 +1045,14 @@ def install(manager):
     manager.workflow_undo_correct_label = lambda ref: _undo_correct_label(
         manager, *_resolve_generation(manager, ref)
     )
-    handler.do_GET = do_get
+    if legacy_get:
+        handler.do_GET = do_get
     handler.do_POST = do_post
     manager._agent_workflow_actions_installed = True
     manager.agent_workflow_contract = "autonomous_correct_change_decision_generation_children_parent_model_immutable"
     manager.agent_workflow_coalescing_contract = "same_parent_generation_only"
     manager.agent_autonomous_contract = "exact_parent_snapshot_resume_history_no_clear_learning_schema_preserving"
+    manager.workflow_read_http_contract = (
+        "explicit_registry_final_composition_legacy_get_optional"
+    )
     return manager
