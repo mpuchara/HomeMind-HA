@@ -636,7 +636,30 @@ def _install_shadow_overlay():
     shadow_module._explore_targeted_overlay_installed = True
 
 
-def install(manager):
+
+def register_read_routes(registry, manager):
+    """Bind final Explore status reads to ExplicitRouteRegistry."""
+
+    def status(http, params):
+        try:
+            return http.send_json(
+                200, manager.workflow_explore_status(unquote(params["ref"]))
+            )
+        except ValueError as exc:
+            return http.send_json(404, {"error": str(exc)})
+
+    registry.register(
+        "GET",
+        "workflow.explore_status",
+        r"^/api/agent-workflow/(?P<ref>[^/]+)/explore$",
+        status,
+        require_trusted=True,
+        require_runtime=True,
+        priority=220,
+    )
+    return registry
+
+def install(manager, *, legacy_get=True):
     if getattr(manager, "_agent_explore_installed", False):
         return manager
     ensure_explore_tables(manager.store)
@@ -647,7 +670,7 @@ def install(manager):
         return manager
 
     handler = manager.core.Handler
-    original_get = handler.do_GET
+    original_get = handler.do_GET if legacy_get else None
     original_post = handler.do_POST
     original_start = manager._start_build
     original_finish_build = manager._finish_build_if_ready
@@ -867,7 +890,8 @@ def install(manager):
                 return http.send_json(500, {"error": f"Explore failed: {type(exc).__name__}: {exc}"})
         return original_post(http)
 
-    handler.do_GET = do_get
+    if legacy_get:
+        handler.do_GET = do_get
     handler.do_POST = do_post
     manager.workflow_explore = workflow_explore
     manager.workflow_explore_status = workflow_explore_status
@@ -875,4 +899,7 @@ def install(manager):
     manager.agent_explore_contract = "existing_experiments_plus_sensor_tournament_generation_child"
     manager.agent_explore_free_contract = "live_executor_only_residual_learner_then_child_continuation"
     manager.agent_explore_targeted_contract = "forced_challenger_priority_only_future_prequential_quality_gain_safety"
+    manager.explore_read_http_contract = (
+        "explicit_registry_final_composition_legacy_get_optional"
+    )
     return manager
