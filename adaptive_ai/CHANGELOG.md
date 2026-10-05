@@ -1,3 +1,15 @@
+# 0.14.139 — 2026-10-05
+
+- Move shipped Agent Workflow POST mutations from Handler wrappers to named `ExplicitRouteRegistry` routes.
+- Route Autonomous, Correct label add/undo and Change decision through the final explicit router while preserving their existing 200/202/409/500 semantics.
+- Keep final Correct commit admission owned by `WorkflowRequestQueue`: `POST /api/agent-workflow/{ref}/correct` still returns durable/idempotent 202 acceptance and Candidate orchestration remains asynchronous.
+- Move `GET /api/agent-workflow-requests/{request_id}` status polling to the explicit router as part of the same durable request transport.
+- Move `POST /api/agent-workflow/{ref}/explore` to an explicit route with unchanged generation-aware Explore orchestration.
+- Disable legacy Workflow/Explore POST and WorkflowRequestQueue GET/POST wrappers only in final composition; standalone/test installs keep legacy HTTP behavior by default.
+- Remove the Workflow/Explore POST compatibility item from the final runtime legacy-overlay descriptor.
+- Add regressions proving durable Correct ownership, URL decoding, mutation status codes, request-status 404 behavior and final-composition POST-wrapper opt-out.
+- No reward, policy, Candidate, Correct learning semantics, ActionIntent, Executor or physical Control authority changes.
+
 # 0.14.138 — 2026-10-05
 
 - Move shipped Agent Workflow GET/static ownership from Handler wrappers to named `ExplicitRouteRegistry` routes.
