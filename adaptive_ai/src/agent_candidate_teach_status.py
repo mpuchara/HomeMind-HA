@@ -134,6 +134,9 @@ def install(core, manager=None):
     ):
         install_observed_history(store, core.ENGINE, service)
 
+    if getattr(core, "_final_explicit_http_only", False):
+        return manager
+
     handler = core.Handler
     if getattr(handler, "_agent_candidate_teach_status", False):
         return manager
