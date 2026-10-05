@@ -8,7 +8,7 @@
   "release_014136": {
     "scope": "queue_owned_get_and_static_routes_migrated_to_explicit_http_registry",
     "routes": "queue.js, Teach-RL history/point/status and queue-aware /api/agents",
-    "startup_semantics": "routes register only after TrainingQueue.start; early HTTP requests retain legacy fallback behavior",
+    "startup_semantics": "routes register only after TrainingQueue.start; early HTTP requests retain fallback behavior, and standalone queue_main installs the same explicit dispatcher if final composition is absent",
     "legacy_surface": "queue_main no longer assigns Handler.do_GET; POST/PATCH/DELETE queue mutation compatibility remains for later migration",
     "control_semantics_changed": false,
     "validation_tests_expected": 1617
