@@ -171,8 +171,7 @@ class RuntimeCompositionRoot:
                 "transport": type(router).__name__,
             },
             "remaining_legacy_overlays": [
-                "workflow/explore POST compatibility routes",
-                "older compatibility Handler routes outside the characterized Workflow/Correct/Explore/Confidence GET-static scope",
+                "older compatibility Handler routes outside the characterized Workflow/Correct/Explore/Confidence transport scope",
             ],
         }
 
@@ -189,11 +188,13 @@ class RuntimeCompositionRoot:
         from agent_workflow_actions import (
             install as install_agent_workflow_actions,
             register_read_routes as register_workflow_read_routes,
+            register_mutation_routes as register_workflow_mutation_routes,
         )
         from agent_correct_generation_history import install as install_correct_generation_history
         from agent_explore import (
             install as install_agent_explore,
             register_read_routes as register_explore_read_routes,
+            register_mutation_routes as register_explore_mutation_routes,
         )
         from cold_start_drift import install as install_cold_start_drift
         from confidence_contract import (
@@ -211,7 +212,10 @@ class RuntimeCompositionRoot:
         from promotion_validation import install as install_promotion_validation
         from policy_backend_shadow import install_policy_backend_shadow
         from rpi_low_power_runtime import install as install_rpi_low_power_runtime
-        from workflow_request_queue import install as install_workflow_request_queue
+        from workflow_request_queue import (
+            install as install_workflow_request_queue,
+            register_routes as register_workflow_request_routes,
+        )
         from runtime_http import install_dispatch, register_feedback_routes, register_promotion_routes
         from runtime_debug_log import register_runtime_debug_routes
         from tiny_mlp_shadow import install as install_tiny_mlp_shadow
@@ -264,15 +268,19 @@ class RuntimeCompositionRoot:
         # These are user-facing product capabilities. Install them explicitly in the
         # shipped root rather than depending on a legacy overlay side effect. Both
         # installers are idempotent, so upgrades never stack duplicate HTTP handlers.
-        manager = install_agent_workflow_actions(manager, legacy_get=False)
-        manager = install_workflow_request_queue(manager)
+        manager = install_agent_workflow_actions(
+            manager, legacy_get=False, legacy_post=False
+        )
+        manager = install_workflow_request_queue(manager, legacy_http=False)
         # The optimized generation-aware Correct reader used to exist only as tested
         # library code and was never bound into the shipped final composition. Install
         # it after the durable workflow queue so the established request-queue ordering
         # remains intact. Its manager methods become authoritative before the final
         # explicit Workflow GET routes are registered below.
         manager = install_correct_generation_history(manager, legacy_get=False)
-        manager = install_agent_explore(manager, legacy_get=False)
+        manager = install_agent_explore(
+            manager, legacy_get=False, legacy_post=False
+        )
 
         # RPi resource control changes scheduling only, never learning semantics.
         manager = install_rpi_low_power_runtime(self.core, manager)
@@ -293,7 +301,10 @@ class RuntimeCompositionRoot:
 
         router = install_dispatch(self.core)
         register_workflow_read_routes(router, manager)
+        register_workflow_mutation_routes(router, manager)
+        register_workflow_request_routes(router, manager)
         register_explore_read_routes(router, manager)
+        register_explore_mutation_routes(router, manager)
         register_confidence_read_routes(router, self.core)
         register_feedback_routes(router, self.core)
         register_promotion_routes(router, self.core, manager)
