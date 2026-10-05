@@ -279,8 +279,9 @@ def install(manager):
     original_before = manager.before_live_process
     original_after = manager.after_live_process
     original_promote = manager.promote
-    handler = manager.core.Handler
-    original_post = handler.do_POST
+    legacy_http = not bool(getattr(manager.core, "_final_explicit_http_only", False))
+    handler = manager.core.Handler if legacy_http else None
+    original_post = handler.do_POST if legacy_http else None
 
     def comparison_summary(row, parent=None, candidate=None):
         out = original_summary(row, parent, candidate)
@@ -363,7 +364,8 @@ def install(manager):
     manager.before_live_process = before_live_process
     manager.after_live_process = after_live_process
     manager.promote_custom = promote_custom
-    handler.do_POST = do_post
+    if legacy_http:
+        handler.do_POST = do_post
     manager._candidate_user_promotion_installed = True
     manager.candidate_custom_promotion_contract = (
         "custom_evidence_and_explicit_offline_overrides_only_hard_named_gates_preserved"
