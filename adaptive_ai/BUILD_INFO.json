@@ -1,10 +1,20 @@
 {
-  "version": "0.14.138",
+  "version": "0.14.139",
   "release_date": "2026-10-05",
-  "base_version": "0.14.137",
-  "base_commit": "4b48aeb426ff5ae1f601b8f066ff173f1dffe3db",
-  "release_status": "workflow-correct-explore-confidence-read-explicit-http-routes",
-  "release_validation_tests_passed": 1623,
+  "base_version": "0.14.138",
+  "base_commit": "b4be9a7849b102bc725e60971e69bc6f95cdd9b9",
+  "release_status": "workflow-durable-correct-explore-mutation-explicit-http-routes",
+  "release_validation_tests_passed": 1627,
+  "release_014139": {
+    "scope": "workflow_actions_durable_correct_requests_and_explore_mutations_migrated_to_explicit_http_registry_in_final_composition",
+    "workflow_mutations": "autonomous, correct-label, correct-undo and change-decision use named POST routes",
+    "durable_correct": "POST /api/agent-workflow/{ref}/correct and GET /api/agent-workflow-requests/{request_id} remain owned by WorkflowRequestQueue with durable 202/idempotent request semantics",
+    "explore_mutation": "POST /api/agent-workflow/{ref}/explore uses the final explicit router",
+    "compatibility": "feature installers retain legacy Handler POST/GET wrappers by default; shipped final root disables them",
+    "remaining_legacy": "older uncharacterized Handler fallbacks outside Workflow/Correct/Explore/Confidence transport",
+    "control_semantics_changed": false,
+    "validation_tests_expected": 1627
+  },
   "release_014138": {
     "scope": "workflow_correct_explore_confidence_get_static_routes_migrated_to_explicit_http_registry_in_final_composition",
     "workflow_reads": "agent_workflow_ui.js, workflow status, optimized Correct history/point and Explore status",
