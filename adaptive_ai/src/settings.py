@@ -15,9 +15,9 @@ try:
 except Exception:
     ws_connect = None
 
-APP_VERSION = "0.14.140"
+APP_VERSION = "0.14.141"
 HISTORY_BOOTSTRAP_REVISION = "target-attrs-v2"
-TRAINING_REVISION = "shared-home-intents-v20"
+TRAINING_REVISION = "shared-home-intents-v21"
 DATA_DIR = Path(os.environ.get("ADAPTIVE_AI_DATA", "/data"))
 DB_PATH = DATA_DIR / "adaptive_ai.db"
 OPTIONS_PATH = DATA_DIR / "options.json"
@@ -27,6 +27,10 @@ HA_BASE_URL = os.environ.get("HA_BASE_URL", "http://supervisor/core/api").rstrip
 HA_TOKEN = os.environ.get("HA_TOKEN") or os.environ.get("SUPERVISOR_TOKEN", "")
 
 DEFAULT_OPTIONS = {
+    "training_pattern_weighting_enabled": True,
+    "training_pattern_min_days": 3,
+    "training_light_outcome_enabled": True,
+    "historical_light_ambiguous_override_seconds": 90,
     "policy_half_life_days": 30,
     "home_model_half_life_days": 45,
     "entity_area_mapping": "{}",

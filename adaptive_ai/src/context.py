@@ -1193,7 +1193,8 @@ def historical_acceptance_seconds(agent):
     }.get(domain, 600)
 
 
-def historical_reward(agent, dwell_seconds, user_id=None, next_user_id=None):
+def historical_reward(agent, dwell_seconds, user_id=None, next_user_id=None,
+                      *, observed_dwell_seconds=None):
     """Infer a conservative offline reward from how long a desired state persisted.
 
     v0.6 deliberately does *not* use the live 90 s correction window as a historical
@@ -1202,6 +1203,11 @@ def historical_reward(agent, dwell_seconds, user_id=None, next_user_id=None):
     non-user/automatic action (or an almost immediate user re-correction).
     """
     dwell = max(0.0, float(dwell_seconds))
+    # A sensor edge may truncate useful persistence, but it must not move a later
+    # user's action backwards in time and manufacture a rapid correction.
+    observed_dwell = dwell if observed_dwell_seconds is None else max(
+        0.0, float(observed_dwell_seconds)
+    )
     prop = str(agent.get("target_property") or "")
     domain = str(agent.get("target_entity") or "").split(".", 1)[0]
 
@@ -1220,13 +1226,21 @@ def historical_reward(agent, dwell_seconds, user_id=None, next_user_id=None):
 
     # A quick explicit human override of an automatic/external action is the clearest
     # negative preference signal we can recover from Recorder history.
-    if next_user_id and not user_id and dwell <= correction_window:
-        severity = 1.0 - 0.45 * (dwell / max(correction_window, 1.0))
+    if next_user_id and not user_id and observed_dwell <= correction_window:
+        severity = 1.0 - 0.45 * (observed_dwell / max(correction_window, 1.0))
         return -clamp(severity, 0.45, 1.0)
+    # A later human change of a light might be a delayed correction or a new need.
+    # Neither can be established from duration alone. Do not reward the old action
+    # and do not invent a negative label. Never extend this rule to slow actuators.
+    if (domain == "light" and not user_id and next_user_id
+            and observed_dwell <= max(correction_window, float(
+                OPTIONS.get("historical_light_ambiguous_override_seconds", 90)
+            ))):
+        return 0.0
     # If the same user changes a setting almost immediately, treat it as a likely
     # correction; after that, a short dwell is allowed to be intentional.
-    if next_user_id and user_id and dwell <= min(2.0, correction_window):
-        return -clamp(1.0 - 0.25 * dwell, 0.5, 1.0)
+    if next_user_id and user_id and observed_dwell <= min(2.0, correction_window):
+        return -clamp(1.0 - 0.25 * observed_dwell, 0.5, 1.0)
 
     # Persistence itself is positive desired-state evidence. Saturation is domain aware:
     # binary lights become informative within seconds; HVAC setpoints need minutes.

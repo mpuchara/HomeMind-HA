@@ -328,7 +328,7 @@ def _history_rows(store, agent_id, teach_times=()):
             """SELECT h.id,h.target_history_id,h.action_index,h.action_value,h.features_json,e.ts
                FROM historical_experiences h
                LEFT JOIN entity_history e ON e.id=h.target_history_id
-               WHERE h.agent_id=? ORDER BY h.id""",
+               WHERE h.agent_id=? AND h.reward>0 ORDER BY h.id""",
             (str(agent_id),),
         ).fetchall()]
 

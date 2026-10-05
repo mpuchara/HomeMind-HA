@@ -1,4 +1,7 @@
-# HomeMind-HA / Adaptive AI 0.11.0
+# HomeMind-HA / Adaptive AI 0.14.141
+
+0.14.141: poprawa jakości nauki historycznej, powtarzalność warunkowa i ocena skutków ON/OFF. Po aktualizacji wykonaj ręczny Train/Rebuild i sprawdź Shadow. [Opis wydania](docs/RELEASE_0_14_141_PL.md).
+
 
 Karta agenta ma cztery akcje: **Shadow/Control**, **Wrong decision**, **Settings** i **Teach**. Wrong decision uczy poprawnego Desired. Teach otwiera powiększalny wykres historii z wyborem dokładnej chwili i zapisem poprawnego Desired. Cofanie ostatniej korekty jest dostępne w Teach oraz Settings; pozostałe operacje i diagnostyka są w Settings.
 
