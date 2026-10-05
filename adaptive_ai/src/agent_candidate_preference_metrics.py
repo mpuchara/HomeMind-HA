@@ -468,9 +468,10 @@ def install(manager):
     original_status = manager.status
     original_list_status = manager.list_status
     original_lineage_status = getattr(manager, "lineage_status", None)
-    handler = manager.core.Handler
-    original_get = handler.do_GET
-    original_static = handler.static
+    legacy_http = not bool(getattr(manager.core, "_final_explicit_http_only", False))
+    handler = manager.core.Handler if legacy_http else None
+    original_get = handler.do_GET if legacy_http else None
+    original_static = handler.static if legacy_http else None
 
     def comparison_summary(row, parent=None, candidate=None):
         out = original_summary(row, parent, candidate)
@@ -564,8 +565,9 @@ def install(manager):
     manager.list_status = list_status
     if original_lineage_status is not None:
         manager.lineage_status = lineage_status
-    handler.do_GET = do_get
-    handler.static = static
+    if legacy_http:
+        handler.do_GET = do_get
+        handler.static = static
     manager._candidate_preference_metrics_installed = True
     manager.candidate_preference_contract = (
         "named_fast_promotion_gates_preserve_hard_vetoes_and_expose_reasons"
