@@ -125,7 +125,7 @@ class WorkflowRequestUiContractTests(unittest.TestCase):
             source,
         )
         self.assertIn(
-            "manager = install_agent_workflow_actions(manager)\n"
+            "manager = install_agent_workflow_actions(manager, legacy_get=False)\n"
             "        manager = install_workflow_request_queue(manager)",
             source,
         )
