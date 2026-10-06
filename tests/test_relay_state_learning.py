@@ -36,6 +36,17 @@ class BinaryDesiredStateTests(unittest.TestCase):
         for energy, expected in ((.08, 0), (.24, 1), (.28, 1), (.55, 1)):
             self.assertEqual(head.choose({0: 1, 5: energy})[0]["index"], expected)
 
+    def test_noisy_demonstrations_do_not_erase_weaker_stationary_pattern(self):
+        head = DiagonalLinUCB(12, [0, 1], desired_state_learning=True)
+        for i in range(200):
+            for energy, desired in ((.08, 0), (.24, 1), (.55, 1)):
+                observed = 1 - desired if i % 7 == 0 else desired
+                head.update(observed, {0: 1, 5: energy}, .8, evidence_weight=.25)
+        head.state_classifier.fit()
+        for energy, expected in ((.08, 0), (.24, 1), (.55, 1)):
+            self.assertEqual(head.choose({0: 1, 5: energy})[0]["index"], expected)
+        self.assertEqual(head.state_classifier.active, (5,))
+
     def test_serialization_and_frozen_snapshot_keep_actual_decision_rule(self):
         head = self.head()
         raw = json.loads(json.dumps(head.export()))

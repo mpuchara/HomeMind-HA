@@ -26,6 +26,8 @@ class BinaryStateClassifier:
         self.center = [0.0] * self.dims
         self.scale = [1.0] * self.dims
         self.weights = [0.0] * self.dims
+        self.hinge_weights = [[0.0] * self.dims for _ in range(3)]
+        self.active = ()
         self.bias = 0.0
         if raw:
             if raw.get("contract") != self.CONTRACT or raw.get("dims") != self.dims:
@@ -37,6 +39,11 @@ class BinaryStateClassifier:
                 setattr(self, name, values)
             if any(v <= 0 for v in self.scale):
                 raise ValueError("NEEDS_RETRAIN: invalid binary desired-state scale")
+            hinges = raw.get("hinge_weights") or [[0.0] * self.dims for _ in range(3)]
+            self.hinge_weights = [[float(v) for v in row] for row in hinges]
+            if len(self.hinge_weights) != 3 or any(len(row) != self.dims or
+                    any(not math.isfinite(v) for v in row) for row in self.hinge_weights):
+                raise ValueError("NEEDS_RETRAIN: invalid binary desired-state hinges")
             self.bias = float(raw.get("bias", 0))
             if not math.isfinite(self.bias):
                 raise ValueError("NEEDS_RETRAIN: invalid binary desired-state bias")
@@ -61,6 +68,11 @@ class BinaryStateClassifier:
             self.pending = max(0, min(self.FIT_INTERVAL, int(raw.get("pending", 0))))
             self.fits = max(0, int(raw.get("fits", 0)))
             self.ready = bool(raw.get("ready"))
+            self._refresh_active()
+
+    def _refresh_active(self):
+        self.active = tuple(i for i in range(self.dims) if self.weights[i] or
+                            any(row[i] for row in self.hinge_weights))
 
     def add(self, action, features, weight):
         if not math.isfinite(float(weight)) or weight <= 0:
@@ -105,15 +117,22 @@ class BinaryStateClassifier:
         center = (matrix * masses[:, None]).sum(axis=0)
         variance = ((matrix - center) ** 2 * masses[:, None]).sum(axis=0)
         scale = np.maximum(np.sqrt(variance), .05)
-        z = np.clip((matrix - center) / scale, -6, 6)
-        weights = np.zeros(self.dims, dtype=np.float64)
+        varying = variance > 1e-10
+        z = np.clip((matrix - center) / scale, -6, 6) * varying
+        # Data-relative bounded hinges allow several ON signal levels to share a
+        # plateau despite noisy labels. A single linear boundary can incorrectly
+        # push the weaker stationary level into OFF when entry pulses are stronger.
+        design = np.concatenate([z] + [np.clip(z - knot, 0, 1) * varying for knot in (-1, 0, 1)], axis=1)
+        weights = np.zeros(4 * self.dims, dtype=np.float64)
         bias = 0.0
         for _ in range(160):
-            logits = np.clip(z @ weights + bias, -30, 30)
+            logits = np.clip(design @ weights + bias, -30, 30)
             error = (1 / (1 + np.exp(-logits)) - labels) * masses
-            weights -= .35 * (z.T @ error + .002 * weights)
+            weights -= .25 * (design.T @ error + .002 * weights)
             bias -= .35 * float(error.sum())
-        self.center, self.scale, self.weights = center.tolist(), scale.tolist(), weights.tolist()
+        self.center, self.scale, self.weights = center.tolist(), scale.tolist(), weights[:self.dims].tolist()
+        self.hinge_weights = [weights[i*self.dims:(i+1)*self.dims].tolist() for i in (1, 2, 3)]
+        self._refresh_active()
         self.bias = float(bias)
         self.ready = True
         self.pending = 0
@@ -121,10 +140,14 @@ class BinaryStateClassifier:
 
     def score(self, features):
         logit = self.bias
-        for i, coefficient in enumerate(self.weights):
-            if coefficient:
+        for i in self.active:
+            coefficient = self.weights[i]
+            hinges = [row[i] for row in self.hinge_weights]
+            if coefficient or any(hinges):
                 value = (float(features.get(i, 0.0)) - self.center[i]) / self.scale[i]
-                logit += coefficient * max(-6.0, min(6.0, value))
+                z = max(-6.0, min(6.0, value))
+                logit += coefficient * z
+                logit += sum(w * max(0.0, min(1.0, z - knot)) for w, knot in zip(hinges, (-1, 0, 1)))
         return math.tanh(logit / 2)
 
     def decay(self, factor):
@@ -138,6 +161,7 @@ class BinaryStateClassifier:
     def export(self):
         return {"contract": self.CONTRACT, "dims": self.dims, "ready": self.ready,
                 "center": self.center, "scale": self.scale, "weights": self.weights,
+                "hinge_weights": self.hinge_weights,
                 "bias": self.bias, "pending": self.pending, "fits": self.fits,
                 "rows": [list(rows) for rows in self.rows], "seen": self.seen,
                 "recent": [list(rows) for rows in self.recent]}

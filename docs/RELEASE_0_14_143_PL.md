@@ -8,7 +8,9 @@ Model szybkiego urządzenia binarnego uczy teraz żądanego stanu ON/OFF z
 zaakceptowanych przykładów. Dotychczasowa suma dodatnich nagród dla osobnych
 akcji mogła preferować OFF również dla dodatniej energii charakterystycznej
 dla obecności. Klasyfikator uczy granicy z danych danego agenta, bez wspólnego
-progu energii dla wszystkich radarów. Oddzielne statystyki wsparcia,
+progu energii dla wszystkich radarów. Ograniczone nieliniowe funkcje względem
+rozkładu danych pozwalają zachować słabszy sygnał nieruchomego celu również
+przy częściowo błędnych etykietach i mocniejszych impulsach wejścia. Oddzielne statystyki wsparcia,
 niepewności, kalibracji i ujemny feedback pozostają częścią polityki.
 
 ON i OFF mają równą łączną masę w dopasowaniu klasyfikatora; wewnątrz klasy
@@ -49,5 +51,6 @@ Test procesu izolowanego workera, archiwum SQLite i zapisanego modelu obejmuje
 240 okresów z liczbową energią tła, impulsem wejścia, nieruchomym celem oraz
 wyjściem. Ta sama ścieżka sprawdza przebudowę starszego szablonu oraz turniej
 TinyMLP. Dodatkowe regresje obejmują jednostki, źródła radaru, zapis i odczyt
-modelu, zamrożone decyzje, ograniczenie pamięci i ujemny feedback. Wynik
+modelu, zamrożone decyzje, ograniczenie pamięci i ujemny feedback. Osobna regresja odwraca co siódmą etykietę i sprawdza
+rozpoznanie dominujących wzorców pustego pokoju, nieruchomego celu oraz wejścia. Wynik
 syntetyczny nie jest pomiarem jakości na konkretnej instalacji.
