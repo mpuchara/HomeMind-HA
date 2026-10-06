@@ -8,13 +8,14 @@ import math
 
 from context import context_scalar, occupancy_state_bool
 from training_evidence import USER_EVIDENCE_ORIGINS
+from radar_context import radar_role
 
 CONTRACT = "conditional_light_training_quality_v1"
 
 
 def sensor_snapshot(agent, entities, states, registry):
     target_area = (registry.get(agent.get("target_entity")) or {}).get("area_id")
-    signature, active, absent, reliable = [], [], [], []
+    signature, active, absent, reliable, radar = [], [], [], [], []
     for eid in sorted(set(entities))[:64]:
         domain = eid.split(".", 1)[0]
         if eid == agent.get("target_entity") or domain not in (
@@ -29,17 +30,29 @@ def sensor_snapshot(agent, entities, states, registry):
         signature.append((eid, bucket))
         same_area = bool(target_area and (registry.get(eid) or {}).get("area_id") == target_area)
         device_class = str((state.get("attributes") or {}).get("device_class") or "")
-        if same_area and domain == "binary_sensor" and device_class in ("occupancy", "presence", "motion"):
+        role = radar_role(eid, state)
+        if same_area and role:
+            radar.append(eid)
+        if same_area and domain == "binary_sensor" and (device_class in ("occupancy", "presence", "motion") or role in ("presence", "still", "moving")):
             present = occupancy_state_bool(state) if available else None
             if present is True:
                 active.append(eid)
             # Motion OFF never proves vacancy. Only persistent occupancy sources can.
-            if device_class in ("occupancy", "presence"):
+            if role in ("presence", "still") or (role != "moving" and device_class in ("occupancy", "presence")):
                 if present is not None:
                     reliable.append(eid)
-                if present is False:
+                # Still OFF alone is compatible with a moving occupant. Require
+                # its same-device moving channel to be known OFF as well.
+                device = (registry.get(eid) or {}).get("device_id")
+                moving_off = bool(device) and any(
+                    radar_role(other, states.get(other)) == "moving"
+                    and (registry.get(other) or {}).get("device_id") == device
+                    and occupancy_state_bool(states.get(other) or {}) is False
+                    for other in entities
+                )
+                if present is False and (role != "still" or moving_off):
                     absent.append(eid)
-    return {"signature": signature, "active": active, "absent": absent, "reliable": reliable}
+    return {"signature": signature, "active": active, "absent": absent, "reliable": reliable, "radar": radar}
 
 
 def light_dwell_reward(action, reward, before, after, positive_during, *,

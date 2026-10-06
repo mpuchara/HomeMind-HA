@@ -1,3 +1,12 @@
+## 0.14.142
+
+- Recognize LD2410 Still/Static Target presence even without occupancy device class.
+- Reserve core local radar channels before per-gate energy and generic context.
+- Preserve observed light ON training intervals across motion dropouts unless persistent absence is confirmed.
+- Normalize distance consistently across cm/m/mm without saturating room-scale features.
+- Require same-device moving OFF before Still Target OFF can certify absence.
+- New training revision requires Train/Rebuild. Added seven radar regression tests.
+
 # 0.14.141 — 2026-10-05
 
 - Add bounded, checkpointed conditional pattern evidence based on causal selected-sensor context, with one vote per action/day/context and a three-independent-day warm-up. Downweight inconsistent automatic demonstrations while preserving explicit user exceptions and a minority floor.

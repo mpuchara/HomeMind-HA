@@ -1,10 +1,10 @@
 {
-  "version": "0.14.141",
-  "release_date": "2026-10-05",
-  "base_version": "0.14.140",
-  "base_commit": "3fec5ec70f3497b6d2431a3a81ed6fbd94ed7b68",
-  "release_status": "conditional-historical-training-quality",
-  "release_validation_tests_passed": 1662,
+  "version": "0.14.142",
+  "release_date": "2026-10-06",
+  "base_version": "0.14.141",
+  "base_commit": "b1e6f27e3b54d80b940972a15f64ec916e784d0d",
+  "release_status": "radar-stationary-training-quality",
+  "release_validation_tests_passed": 1669,
   "release_014140": {
     "scope": "inventory_and_remove_remaining_shipped_feature_Handler_fallbacks_for_Candidate_Live_and_manual_feedback_transport",
     "explicit_routes": "manual_feedback.js, candidate_ui.js, candidate_preference_ui.js, /api/candidates, Candidate Teach-RL status/train, generation history/comparison, /api/candidate-live, /api/live and Candidate discard",
@@ -250,7 +250,7 @@
   "pi4_release_gate_contract": "pi4_release_gate_v1",
   "pi4_real_hardware_required": true,
   "stage7_offline_rl_control_unlock": false,
-  "tests_passed": 1662,
+  "tests_passed": 1669,
   "profile": "rpi4-ram-first-complete-discovery-manual-agent-selection",
   "manual_agent_training": true,
   "max_concurrent_training_jobs": 1,
@@ -1380,5 +1380,9 @@
     "sensing_failure": "unknown; never absence",
     "validation": "Full Linux suite and GitHub Python 3.11/3.13 plus image gates required before publication",
     "physical_authority": "existing ActionIntent, Executor and Control gates retained; synthetic benchmark is not household proof"
+  },
+  "release_014142": {
+    "scope": "LD2410 stationary presence, radar bundle selection and room-scale distance features",
+    "training_revision": "shared-home-intents-v22"
   }
 }
