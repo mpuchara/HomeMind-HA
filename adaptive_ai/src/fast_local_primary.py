@@ -179,6 +179,13 @@ def install(store, engine):
 
             restricted = dict(agent)
             restricted["input_entities"] = sorted(baseline)
+            baseline_selected, _ = original_select(
+                restricted, state_map, registry, baseline,
+                max_entities=max_entities, relevance_scores=relevance_scores,
+            )
+            from radar_context import radar_context_entities
+            bundle = radar_context_entities(agent, baseline, state_map, registry)
+            restricted["input_entities"] = sorted(baseline | set(bundle))
             selected, meta = original_select(
                 restricted, state_map, registry, baseline,
                 max_entities=max_entities, relevance_scores=relevance_scores,
@@ -190,13 +197,17 @@ def install(store, engine):
                 )
 
             meta = dict(meta or {})
+            selected = list(dict.fromkeys(baseline_selected + selected))[:len(selected)]
             rows = _automation_diagnostics(infos)
             meta["automation_baseline_candidates"] = sorted(baseline)
-            meta["automation_baseline_entities"] = list(selected)
+            meta["automation_baseline_entities"] = [eid for eid in selected if eid in baseline]
             meta["automation_baseline_automations"] = rows
             meta["automation_baseline_current"] = any(row.get("enabled") for row in rows)
             meta["automation_baseline_mode"] = "automation_first"
-            meta["automation_baseline_extra_sensors"] = "sensor_tournament"
+            meta["automation_baseline_extra_sensors"] = (
+                "bounded_radar_bundle_then_sensor_tournament" if bundle else "sensor_tournament"
+            )
+            meta["radar_context_entities"] = [eid for eid in selected if eid in bundle]
             return selected, meta
 
         policy_module.select_context_entities = select_with_automation_baseline

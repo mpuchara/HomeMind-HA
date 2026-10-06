@@ -32,7 +32,7 @@ def main():
         with zipfile.ZipFile(path) as archive:
             assert archive.testzip() is None
             addon = "adaptive_ai/" if kind == "repository" else ""
-            for required in ("config.yaml", "Dockerfile", "src/run.sh", "src/training_quality.py", "src/training_quality_benchmark.py"):
+            for required in ("config.yaml", "Dockerfile", "src/run.sh", "src/training_quality.py", "src/training_quality_benchmark.py", "src/binary_state_classifier.py", "src/observation_contract.py"):
                 assert addon + required in archive.namelist()
             for name, data in contents.items():
                 assert archive.read(name) == data

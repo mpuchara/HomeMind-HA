@@ -1,3 +1,11 @@
+## 0.14.143
+
+- Learn binary desired state from accepted weighted labels rather than ranking only positive per-action utility on numeric radar contexts. Bound fitting and training memory; preserve support/calibration and rejected-action penalties.
+- Apply radar units, centered source metadata, occupancy quality and ambient photometry to the actual shipped relay training/live observation contract. Preserve old feature contracts on load; upgrade only empty rebuild seeds.
+- Extend automatic automation context with bounded same-device radar channels; respect explicit inputs and schema limits.
+- Require frozen interior-dwell ON/OFF validation with one vote per completed dwell. Compare Ridge and TinyMLP on identical full episodes and gate maintenance separately.
+- Display maintenance diagnostics and publish a real isolated worker regression benchmark. Training revision v23; explicit Rebuild required.
+
 ## 0.14.142
 
 - Recognize LD2410 Still/Static Target presence even without occupancy device class.

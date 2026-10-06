@@ -13,7 +13,7 @@ from home_state import FEATURE_NAMES
 
 class DiagonalLinUCB:
     """Per-horizon lightweight RL head with context-support statistics."""
-    def __init__(self, dims, actions, alpha=0.65, model=None):
+    def __init__(self, dims, actions, alpha=0.65, model=None, desired_state_learning=False):
         self.dims = int(dims); self.actions = [float(x) for x in actions]; self.alpha = float(alpha)
         n = len(self.actions)
         valid = bool(model and int(model.get("dims", -1)) == self.dims and len(model.get("actions", [])) == n)
@@ -57,6 +57,15 @@ class DiagonalLinUCB:
 
         self.last_decay_ts = float((model or {}).get("last_decay_ts", now_ts()))
         self.half_life_days = float(OPTIONS.get("policy_half_life_days", 30))
+        from binary_state_classifier import BinaryStateClassifier
+        classifier = (model or {}).get("binary_state_classifier") if valid else None
+        enabled = bool(classifier) if valid else bool(desired_state_learning)
+        self.state_classifier = BinaryStateClassifier(self.dims, classifier) if enabled and n == 2 else None
+        rejection = (model or {}).get("rejection_b") if valid else None
+        if rejection is not None and (len(rejection) != n or any(len(row) != self.dims or
+                any(not math.isfinite(float(v)) for v in row) for row in rejection)):
+            raise ValueError("NEEDS_RETRAIN: invalid rejection coefficients")
+        self.rejection_b = [list(row) for row in rejection] if rejection is not None else [[0.0] * self.dims for _ in range(n)]
 
     def decay(self, now=None):
         now = now_ts() if now is None else float(now)
@@ -69,6 +78,7 @@ class DiagonalLinUCB:
                 # Ridge prior remains 1, only empirical evidence decays.
                 self.a[arm][idx] = 1 + (self.a[arm][idx]-1)*factor
                 self.b[arm][idx] *= factor
+                self.rejection_b[arm][idx] *= factor
                 self.ctx_sum[arm][idx] *= factor
                 self.ctx_sq[arm][idx] *= factor
             self.counts[arm] *= factor
@@ -80,6 +90,8 @@ class DiagonalLinUCB:
         self.validation_correct_weight *= factor
         self.validation_samples *= factor
         self.last_decay_ts = now
+        if self.state_classifier:
+            self.state_classifier.decay(factor)
 
     def sample_weight(self, sample_ts=None):
         if sample_ts is None:
@@ -123,10 +135,15 @@ class DiagonalLinUCB:
 
     def evaluate(self, x):
         arms = []
+        state_score = self.state_classifier.score(x) if self.state_classifier and self.state_classifier.ready else None
         _, novelty = self.context_support(0, x)
         global_coverage = 1.0 - math.exp(-max(0, self.total_updates) / 20.0)
         for i, value in enumerate(self.actions):
             mean, uncertainty = self._arm(i, x)
+            if state_score is not None:
+                penalty = min(0.0, sum(self.rejection_b[i][index] * value / max(self.a[i][index], 1e-9)
+                                      for index, value in x.items() if 0 <= index < self.dims))
+                mean = (state_score if i == 1 else -state_score) + penalty
             support = clamp(global_coverage * (1-novelty) * (0.55 + 0.45*(1-math.exp(-self.counts[i]/3.0))), 0, 1)
             arms.append({"index": i, "value": value, "mean": mean, "uncertainty": uncertainty,
                          "ucb": mean + self.alpha * uncertainty, "count": int(self.counts[i]),
@@ -261,8 +278,12 @@ class DiagonalLinUCB:
         for idx, value in x.items():
             if idx >= self.dims: continue
             aa[idx] += weight * value * value; bb[idx] += weight * reward * value
+            if reward < 0:
+                self.rejection_b[action_idx][idx] += weight * reward * value
             ss[idx] += weight * value; sq[idx] += weight * value * value
         self.counts[action_idx] += weight; self.reward_sums[action_idx] += weight * reward; self.total_updates += weight
+        if self.state_classifier and reward > 0:
+            self.state_classifier.add(action_idx, x, weight * reward)
 
     def export(self):
         return {"last_decay_ts": self.last_decay_ts, "version": 5, "dims": self.dims, "actions": self.actions, "alpha": self.alpha,
@@ -272,7 +293,9 @@ class DiagonalLinUCB:
                 "validation_correct_weight": self.validation_correct_weight,
                 "validation_samples": self.validation_samples,
                 "validation_pred_weight": self.validation_pred_weight,
-                "validation_pred_correct_weight": self.validation_pred_correct_weight}
+                "validation_pred_correct_weight": self.validation_pred_correct_weight,
+                "binary_state_classifier": self.state_classifier.export() if self.state_classifier else None,
+                "rejection_b": self.rejection_b}
 
 
 class MultiHorizonPolicy(PolicyBackend):
@@ -340,7 +363,10 @@ class MultiHorizonPolicy(PolicyBackend):
             "hot_path_active": False,
         }
         raw_heads = (model or {}).get("heads", {}) if model and int(model.get("version", 0)) == self.VERSION else {}
-        self.heads = {h: DiagonalLinUCB(self.dims, self.actions, self.alpha, raw_heads.get(str(h))) for h in self.horizons}
+        from context import is_fast_reactive_agent
+        desired_state_learning = bool(is_fast_reactive_agent(agent) and getattr(self.schema, "feature_contract_version", 0) >= 3)
+        self.heads = {h: DiagonalLinUCB(self.dims, self.actions, self.alpha, raw_heads.get(str(h)),
+                                     desired_state_learning=desired_state_learning) for h in self.horizons}
 
     def materialize_observation_mask(
         self, state_map, registry, hint_entities, relevance_scores=None
@@ -482,5 +508,10 @@ class MultiHorizonPolicy(PolicyBackend):
                         'effective_updates': head.total_updates, 'counts': head.counts,
                         'context_sum': [sum(a[i] for a in head.ctx_sum) for i in range(self.dims)],
                         'context_sq': [sum(a[i] for a in head.ctx_sq) for i in range(self.dims)],
-                        'calibration': [head.calibration(i) for i in range(len(self.actions))]}
+                        'calibration': [head.calibration(i) for i in range(len(self.actions))],
+                        'prediction_rule': 'binary_desired_state_v1' if head.state_classifier and head.state_classifier.ready else 'diagonal_mean',
+                        'binary_state_classifier': ({k: v for k, v in head.state_classifier.export().items()
+                            if k not in ('rows', 'recent', 'seen', 'pending', 'fits')} if head.state_classifier else None),
+                        'rejection_theta': [[b / a for b, a in zip(row, aa)]
+                            for row, aa in zip(head.rejection_b, head.a)]}
                         for h,head in self.heads.items()}}

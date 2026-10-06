@@ -664,7 +664,13 @@ def _numpy_prediction_indices(backend, rows):
 
 def evaluate_supervised(backend, agent, samples):
     rows = list(samples or ())
-    predicted_indices = _numpy_prediction_indices(backend, rows)
+    expanded = []
+    groups = []
+    for row in rows:
+        observations = row.get("observations") or [row["observation"]]
+        groups.append((len(expanded), len(observations)))
+        expanded.extend({**row, "observation": observation} for observation in observations)
+    predicted_indices = _numpy_prediction_indices(backend, expanded)
     stats = {"samples": 0, "correct": 0, "per_action": {}}
     paired = {
         "contract": "paired_holdout_correctness_v1",
@@ -682,15 +688,15 @@ def evaluate_supervised(backend, agent, samples):
         target = int(row.get("action_idx", -1))
         if not (0 <= target < len(backend.actions)):
             continue
-        if predicted_indices is None:
-            chosen = backend.predict(row["observation"])[0]
-            predicted = int(chosen["index"])
-        else:
-            predicted = int(predicted_indices[row_index])
-        if len(backend.actions) <= 2 or str(agent.get("target_property")) == "power":
-            correct = predicted == target
-        else:
-            correct = abs(float(backend.actions[predicted]) - float(backend.actions[target])) <= tolerance
+        start, count = groups[row_index]
+        correctness = []
+        for index in range(start, start + count):
+            predicted = (int(backend.predict(expanded[index]["observation"])[0]["index"])
+                         if predicted_indices is None else int(predicted_indices[index]))
+            correctness.append(predicted == target if len(backend.actions) <= 2 or
+                               str(agent.get("target_property")) == "power" else
+                               abs(float(backend.actions[predicted]) - float(backend.actions[target])) <= tolerance)
+        correct = all(correctness)
         stats["samples"] += 1
         stats["correct"] += int(correct)
         slot = stats["per_action"].setdefault(str(target), {"samples": 0, "correct": 0})

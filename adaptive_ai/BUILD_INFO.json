@@ -1,10 +1,10 @@
 {
-  "version": "0.14.142",
+  "version": "0.14.143",
   "release_date": "2026-10-06",
-  "base_version": "0.14.141",
-  "base_commit": "b1e6f27e3b54d80b940972a15f64ec916e784d0d",
-  "release_status": "radar-stationary-training-quality",
-  "release_validation_tests_passed": 1669,
+  "base_version": "0.14.142",
+  "base_commit": "10d8ad856282bcca0cf1b8e2b74afb3e7dfcc9f6",
+  "release_status": "relay-binary-state-learning",
+  "release_validation_tests_passed": 1685,
   "release_014140": {
     "scope": "inventory_and_remove_remaining_shipped_feature_Handler_fallbacks_for_Candidate_Live_and_manual_feedback_transport",
     "explicit_routes": "manual_feedback.js, candidate_ui.js, candidate_preference_ui.js, /api/candidates, Candidate Teach-RL status/train, generation history/comparison, /api/candidate-live, /api/live and Candidate discard",
@@ -1384,5 +1384,17 @@
   "release_014142": {
     "scope": "LD2410 stationary presence, radar bundle selection and room-scale distance features",
     "training_revision": "shared-home-intents-v22"
+  },
+  "release_014143": {
+    "scope": "actual isolated worker and live observation contract for fast relay and numeric radar desired-state learning",
+    "feature_contract": 3,
+    "legacy_contracts_preserved": [
+      1,
+      2
+    ],
+    "maintenance_validation": "one held-out completed dwell per vote, all bounded interior predictions correct, ON and OFF individually above qualification threshold",
+    "classifier": "bounded balanced logistic desired-state labels, 128 reservoir + 8 recent per action, negative feedback produces no alternative positive label",
+    "validation_tests_expected": 1685,
+    "household_performance_measured": false
   }
 }

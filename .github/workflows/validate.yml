@@ -27,6 +27,8 @@ jobs:
       - name: 0.14.112 transition-edge index component benchmark
         if: matrix.python == '3.11'
         run: python tools/benchmark_transition_edges.py --entities 4 --rows-per-entity 1600 --queries 800 --compact
+      - name: Numeric radar and relay full training benchmark
+        run: python tools/benchmark_stationary_relay.py
       - name: 0.14.113 feature snapshot full replay benchmark
         if: matrix.python == '3.11'
         run: python tools/benchmark_feature_snapshot_reuse.py --compact

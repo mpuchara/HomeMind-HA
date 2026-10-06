@@ -117,7 +117,13 @@ class FrozenRidgeSnapshot:
                     tuple(_finite(value, 0.0) for value in row)
                     for row in exported.get("b") or ()
                 ),
+                "classifier": None,
+                "rejection_b": tuple(tuple(row) for row in exported.get("rejection_b") or ()),
             }
+            raw_classifier = exported.get("binary_state_classifier")
+            if raw_classifier and raw_classifier.get("ready"):
+                from binary_state_classifier import BinaryStateClassifier
+                self.heads[int(horizon)]["classifier"] = BinaryStateClassifier(self.dims, raw_classifier)
 
     def predict(self, horizon, features):
         state = self.heads[int(horizon)]
@@ -125,6 +131,8 @@ class FrozenRidgeSnapshot:
         b_rows = state["b"]
         best_idx = 0
         best_mean = None
+        classifier = state.get("classifier")
+        state_score = classifier.score(features) if classifier else None
         for action_idx in range(len(self.actions)):
             a = a_rows[action_idx]
             b = b_rows[action_idx]
@@ -138,6 +146,11 @@ class FrozenRidgeSnapshot:
                     _finite(b[idx])
                     / max(_finite(a[idx], 1.0), 1e-9)
                 ) * value
+            if state_score is not None:
+                rejection = state["rejection_b"][action_idx]
+                penalty = min(0.0, sum(rejection[int(i)] * _finite(v) / max(a[int(i)], 1e-9)
+                                      for i, v in features.items() if 0 <= int(i) < self.dims))
+                mean = (state_score if action_idx == 1 else -state_score) + penalty
             if best_mean is None or mean > best_mean:
                 best_idx = action_idx
                 best_mean = mean
