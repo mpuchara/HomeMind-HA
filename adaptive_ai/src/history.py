@@ -3670,12 +3670,15 @@ class HistoryManager(threading.Thread):
             return float(local_ts if local_ts is not None else action_ts), upstream_ts
 
         def _safe_presence_boundary(agent, policy, action_value, edge, end_ts, tracker):
+            from radar_context import retain_observed_on_dwell
             if (not OPTIONS.get("training_light_outcome_enabled", True)
                     or not agent.get("target_entity", "").startswith("light.")
                     or float(action_value) < .5):
                 return min(float(end_ts), float(edge))
             tracker.advance(float(edge))
             snapshot = sensor_snapshot(agent, policy.schema.entities, tracker.state_map, quality_registry)
+            if retain_observed_on_dwell(snapshot):
+                return float(end_ts)
             occupied = set(snapshot.get("active") or ()) & set(snapshot.get("reliable") or ())
             if not occupied:
                 return min(float(end_ts), float(edge))

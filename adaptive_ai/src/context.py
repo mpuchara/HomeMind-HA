@@ -100,6 +100,10 @@ def numeric_scale(state, attr_name=None):
     device_class = str(attrs.get("device_class") or "").lower()
     entity_id = state.get("entity_id", "").lower()
     token = " ".join((unit, device_class, entity_id, str(attr_name or "").lower()))
+    if device_class == "distance" or "distance" in entity_id or unit in ("cm", "mm", "m", "in", "ft"):
+        # LD2410 normally reports centimetres. Keep room-scale changes separable
+        # instead of saturating tanh(distance/10) for almost every occupied spot.
+        return {"m": 6.0, "cm": 600.0, "mm": 6000.0, "in": 236.22, "ft": 19.685}.get(unit, 600.0)
     if "temperature" in token or "°c" in token or "°f" in token:
         return 35.0
     if "%" in token or "humidity" in token or "battery" in token or "position" in token or "brightness" in token:
@@ -281,10 +285,11 @@ def context_scalar(entity_id, state, agent=None):
         pass
     if is_electrical_measurement_entity(entity_id, state):
         return None
-    return state_scalar(state)
+    return state_scalar(state if state.get("entity_id") == entity_id else dict(state, entity_id=entity_id))
 
 
 def entity_capability_tags(entity_id, state):
+    from radar_context import radar_role
     attrs = (state or {}).get("attributes") or {}
     dc = str(attrs.get("device_class") or "").lower()
     unit = str(attrs.get("unit_of_measurement") or "").lower()
@@ -292,6 +297,11 @@ def entity_capability_tags(entity_id, state):
     text = f"{entity_id.lower()} {dc} {unit} {name}".replace('_', ' ')
     domain = entity_id.split(".", 1)[0]
     caps = set()
+    role = radar_role(entity_id, state)
+    if role in ("presence", "still", "moving"):
+        caps.add("occupancy")
+    if role:
+        caps.add("activity")
     if (domain in ("person", "device_tracker") or dc in ("occupancy", "motion", "presence")
             or any(x in text for x in ("occupancy", "presence", "motion", "obecno"))):
         # Numeric radar energy and target distance are not boolean occupancy.
@@ -707,6 +717,17 @@ def select_context_entities(agent, state_map, registry, hint_entities, max_entit
 
     # Then reserve structurally local occupancy/context before filling the remainder with
     # upstream/global features. Causal history wins if HA area metadata is wrong/missing.
+    if fast:
+        from radar_context import radar_role
+        role_order = {"presence": 0, "still": 1, "moving": 2, "energy": 3, "distance": 4, "gate_energy": 5}
+        radar_ranked = [x for x in ranked if x[3]["local"] and radar_role(x[1], state_map.get(x[1]))]
+        radar_ranked.sort(key=lambda x: (role_order[radar_role(x[1], state_map.get(x[1]))], -x[0], x[1]))
+        # A bounded bundle preserves stationary evidence before generic room context.
+        for _, eid, _, _ in radar_ranked[:8]:
+            if len(selected) >= limit:
+                break
+            if eid not in selected:
+                selected.append(eid)
     reserve = min(limit, max(0, int(OPTIONS.get("primary_local_sensor_reserve", 4)))) if fast else 0
     local_ranked = [x for x in ranked if x[3]["local"]]
     local_occupancy_ranked = [
@@ -715,6 +736,8 @@ def select_context_entities(agent, state_map, registry, hint_entities, max_entit
     ]
     local_target_count = min(limit, len(selected) + reserve)
     for _, eid, _, _ in local_occupancy_ranked + local_ranked:
+        if len(selected) >= local_target_count:
+            break
         if eid not in selected:
             selected.append(eid)
         if len(selected) >= local_target_count:
@@ -732,6 +755,8 @@ def select_context_entities(agent, state_map, registry, hint_entities, max_entit
     automation_ranked = [x for x in ranked if "automation" in x[2]]
     added_automation = 0
     for _, eid, _, _ in automation_ranked:
+        if added_automation >= automation_reserve or len(selected) >= limit:
+            break
         if eid in selected:
             continue
         selected.append(eid)
@@ -745,6 +770,8 @@ def select_context_entities(agent, state_map, registry, hint_entities, max_entit
         # sensors that match the target's declared needs.  This is intentionally sparse:
         # a lamp controlled by one presence sensor should look like a one-sensor problem.
         for _, eid, reasons, loc in ranked:
+            if len(selected) >= limit:
+                break
             if eid in selected:
                 continue
             rel = float((relevance_scores or {}).get(eid, 0.0))
