@@ -15,15 +15,15 @@ TARGET = "switch.shellyplus1pm_441793a613bc_switch_0"
 RADAR = "sensor.espen4_stationary_energy"
 
 
-def run(feature_contract=3, neural=False):
+def run(feature_contract=3, neural=False, contradictory_binary=False):
     contract = install_training_contract()
     try:
-        return _run(feature_contract, neural)
+        return _run(feature_contract, neural, contradictory_binary)
     finally:
         contract["restore"]()
 
 
-def _run(feature_contract, neural):
+def _run(feature_contract, neural, contradictory_binary):
     with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
         root = Path(tmp)
         db, aid, base, end, _, _ = fixture.seed_database(root)
@@ -31,10 +31,13 @@ def _run(feature_contract, neural):
         durations = [600 + (phase % 3) * 120 for phase in range(phases + 1)]
         end = base + sum(durations[:phases])
         store = fixture.Store(db)
+        inputs = [RADAR]
+        if contradictory_binary:
+            inputs += ["binary_sensor.espen4_still_target", "binary_sensor.espen4_moving_target"]
         with store.conn() as conn:
             conn.execute("DELETE FROM entity_history")
             conn.execute("UPDATE agents SET target_entity=?, input_entities=? WHERE id=?",
-                         (TARGET, json.dumps([RADAR]), aid))
+                         (TARGET, json.dumps(inputs), aid))
         rows = []
         attrs = {"friendly_name": "ESPEN4 Stationary Energy", "unit_of_measurement": "%"}
         t = base
@@ -44,12 +47,17 @@ def _run(feature_contract, neural):
             for offset in range(0, durations[phase], 10):
                 value = (55 if offset < 20 else 24) if on else 8
                 rows.append((RADAR, t + offset, str(value), attrs, None, "test", t + offset + .05))
+                for eid in inputs[1:]:
+                    rows.append((eid, t + offset, "off", {}, None, "test", t + offset + .05))
             t += durations[phase]
         store.archive_batch(sorted(rows, key=lambda row: row[1]))
         states = {TARGET: {"entity_id": TARGET, "state": "off", "attributes": {}},
                   RADAR: {"entity_id": RADAR, "state": "8", "attributes": attrs}}
         registry = {TARGET: {"area_id": "lazienka", "device_id": "relay"},
                     RADAR: {"area_id": "lazienka", "device_id": "radar"}}
+        for eid in inputs[1:]:
+            states[eid] = {"entity_id": eid, "state": "off", "attributes": {}}
+            registry[eid] = {"area_id": "lazienka", "device_id": "radar"}
         original = fixture.worker_job
 
         def job(*args, **kwargs):
@@ -62,9 +70,9 @@ def _run(feature_contract, neural):
             data["options"]["prediction_horizons_seconds"] = "1"
             data["train_kwargs"]["qualify"] = True
             data["options"]["tiny_mlp_supervised_training_enabled"] = neural
-            data["schema_cache_item"] = {"input_fingerprint": [RADAR], "model": {
+            data["schema_cache_item"] = {"input_fingerprint": sorted(inputs), "model": {
                 "version": MultiHorizonPolicy.VERSION, "dims": 128, "actions": [0, 1], "horizons": [1],
-                "schema": FeatureSchemaV12(128, [RADAR], feature_contract).export(), "heads": {},
+                "schema": FeatureSchemaV12(128, inputs, feature_contract).export(), "heads": {},
                 "selection_meta": {"selection_reasons": {RADAR: ["automation"]},
                                    "automation_baseline_automations": rules}}}
             data["checksum"] = descriptor_checksum(data)
@@ -106,6 +114,10 @@ def _run(feature_contract, neural):
                 temporal.add(RADAR, sample_time, sample)
                 home.observe(RADAR, sample, sample_time, learn=False,
                              event_ts=sample_time, received_ts=sample_time)
+                for eid in inputs[1:]:
+                    temporal.add(eid, sample_time, states[eid])
+                    home.observe(eid, states[eid], sample_time, learn=False,
+                                 event_ts=sample_time, received_ts=sample_time)
             states[RADAR] = state
             features, _, _ = policy.features(states, temporal, at)
             chosen, _, arms, *_ = policy.predict(features)

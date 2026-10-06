@@ -30,3 +30,8 @@ class StationaryRelayWorkerTests(unittest.TestCase):
         self.assertIsNotNone(tournament)
         self.assertIn("maintenance_holdout", tournament)
         self.assertEqual(tournament["samples"], report["maintenance_holdout"]["samples"])
+
+    def test_numeric_pattern_survives_derived_binary_flags_below_threshold(self):
+        report = run(contradictory_binary=True)
+        self.assertTrue(report["pass"], report["predictions"])
+        self.assertTrue(report["maintenance_holdout"]["passed"], report["maintenance_holdout"])

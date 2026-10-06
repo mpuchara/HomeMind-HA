@@ -25,7 +25,10 @@ Potwierdzenia własnych poleceń nadal nie są niezależnymi demonstracjami.
 Nowy kontrakt cech 3 obejmuje liczbowe energie LD2410, odległości cm/m/mm oraz
 neutralne metadane zdrowych źródeł również dla przekaźników. Automatyczny dobór
 dołącza ograniczony zestaw kanałów tego samego radaru. Zachowuje pierwszeństwo
-wejść automatyzacji, limity wymiarów i jawny ręczny wybór encji.
+wejść automatyzacji, limity wymiarów i jawny ręczny wybór encji. Binarne flagi OFF nie dowodzą nieobecności, gdy
+kanały liczbowe tego samego radaru nadal raportują sygnał: mogą działać
+poniżej skonfigurowanego progu wykrywania. To nie tworzy etykiety obecności;
+zachowuje niepewność i pozwala uczyć ON/OFF z zaobserwowanych przykładów.
 
 Kwalifikacja wymaga teraz także poprawnego utrzymywania ON i OFF na zamrożonym
 modelu w późniejszym fragmencie historii. Jeden pobyt to jeden głos, zaliczony
@@ -50,7 +53,7 @@ rozróżnić sytuacje, lecz nie są samodzielnym dowodem fizycznej obecności.
 Test procesu izolowanego workera, archiwum SQLite i zapisanego modelu obejmuje
 240 okresów z liczbową energią tła, impulsem wejścia, nieruchomym celem oraz
 wyjściem. Ta sama ścieżka sprawdza przebudowę starszego szablonu oraz turniej
-TinyMLP. Dodatkowe regresje obejmują jednostki, źródła radaru, zapis i odczyt
+TinyMLP. Osobny przebieg obejmuje dodatnią energię i błędne binarne flagi OFF. Dodatkowe regresje obejmują jednostki, źródła radaru, zapis i odczyt
 modelu, zamrożone decyzje, ograniczenie pamięci i ujemny feedback. Osobna regresja odwraca co siódmą etykietę i sprawdza
 rozpoznanie dominujących wzorców pustego pokoju, nieruchomego celu oraz wejścia. Wynik
 syntetyczny nie jest pomiarem jakości na konkretnej instalacji.

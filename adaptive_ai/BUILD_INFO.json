@@ -4,7 +4,7 @@
   "base_version": "0.14.142",
   "base_commit": "10d8ad856282bcca0cf1b8e2b74afb3e7dfcc9f6",
   "release_status": "relay-binary-state-learning",
-  "release_validation_tests_passed": 1686,
+  "release_validation_tests_passed": 1688,
   "release_014140": {
     "scope": "inventory_and_remove_remaining_shipped_feature_Handler_fallbacks_for_Candidate_Live_and_manual_feedback_transport",
     "explicit_routes": "manual_feedback.js, candidate_ui.js, candidate_preference_ui.js, /api/candidates, Candidate Teach-RL status/train, generation history/comparison, /api/candidate-live, /api/live and Candidate discard",
@@ -1394,7 +1394,8 @@
     ],
     "maintenance_validation": "one held-out completed dwell per vote, all bounded interior predictions correct, ON and OFF individually above qualification threshold",
     "classifier": "bounded balanced logistic desired-state labels with data-relative bounded hinges, 128 reservoir + 8 recent per action; negative feedback produces no alternative positive label",
-    "validation_tests_expected": 1686,
-    "household_performance_measured": false
+    "validation_tests_expected": 1688,
+    "household_performance_measured": false,
+    "radar_absence": "derived binary OFF with positive same-device numeric signal is unresolved, never positive occupancy or verified vacancy"
   }
 }
