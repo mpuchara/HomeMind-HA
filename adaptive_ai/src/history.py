@@ -459,6 +459,22 @@ class HistoryManager(threading.Thread):
             # Empty heads are deliberate: Rebuild relearns policy values from scratch.
             "heads": {},
         }
+        if int(schema.get("version") or 0) == 12:
+            # This cache contains no coefficients. Upgrade only the next rebuilt
+            # generation; never reinterpret the live model's existing feature slots.
+            from observation_contract import FeatureSchemaV12, FEATURE_CONTRACT_VERSION
+            entities = list(schema.get("entities") or [])
+            if is_fast_reactive_agent(agent) and "*" in set(agent.get("input_entities") or ["*"]):
+                from radar_context import radar_context_entities
+                with self.engine.lock:
+                    states = dict(self.engine.state_map)
+                    registry = dict(self.engine.entity_registry)
+                bundle = radar_context_entities(agent, entities, states, registry)
+                entities = list(dict.fromkeys(entities + bundle))
+                seed["selection_meta"]["radar_context_entities"] = bundle
+            seed["schema"] = FeatureSchemaV12(
+                seed["dims"], entities, feature_contract_version=FEATURE_CONTRACT_VERSION
+            ).export()
         self.training_schema_cache[str(agent["id"])] = {
             "model": seed,
             "input_fingerprint": self._training_input_fingerprint(agent),
@@ -2575,6 +2591,7 @@ class HistoryManager(threading.Thread):
         benchmark_stats = {}
         frozen_benchmark_stats = {}
         frozen_chunk_stats = {}
+        frozen_dwell_stats = {}
         prior_models = {}
         for a in agents:
             prior_model = STORE.get_model(a["id"]) or {} if accumulate_benchmark else {}
@@ -2604,6 +2621,9 @@ class HistoryManager(threading.Thread):
             ) if accumulate_benchmark else {}
             frozen_benchmark_stats[str(a["id"])] = empty_holdout_counts(prior_frozen)
             frozen_chunk_stats[str(a["id"])] = empty_holdout_counts()
+            frozen_dwell_stats[aid] = empty_holdout_counts(
+                prior_model.get("_frozen_dwell_counts") if accumulate_benchmark else None
+            )
 
         # Stage 4 trains a tiny supervised challenger beside the established Ridge model.
         # It is deliberately tied to explicit benchmarked historical training only:
@@ -3460,6 +3480,9 @@ class HistoryManager(threading.Thread):
                 return
             for frozen_agent in agents:
                 frozen_aid = str(frozen_agent["id"])
+                for head in policies[frozen_agent["id"]].heads.values():
+                    if getattr(head, "state_classifier", None) and head.state_classifier.pending:
+                        head.state_classifier.fit()
                 frozen_policy_snapshots[frozen_aid] = FrozenRidgeSnapshot(
                     policies[frozen_agent["id"]]
                 )
@@ -3672,7 +3695,7 @@ class HistoryManager(threading.Thread):
         def _safe_presence_boundary(agent, policy, action_value, edge, end_ts, tracker):
             from radar_context import retain_observed_on_dwell
             if (not OPTIONS.get("training_light_outcome_enabled", True)
-                    or not agent.get("target_entity", "").startswith("light.")
+                    or not is_fast_reactive_agent(agent)
                     or float(action_value) < .5):
                 return min(float(end_ts), float(edge))
             tracker.advance(float(edge))
@@ -3745,7 +3768,7 @@ class HistoryManager(threading.Thread):
             aid = str(agent["id"])
             reason = "historical_prior"
             if (OPTIONS.get("training_light_outcome_enabled", True)
-                    and agent.get("target_entity", "").startswith("light.")
+                    and is_fast_reactive_agent(agent)
                     and agent.get("target_property") == "power" and reward > 0):
                 before = old.get("quality_sensors") or {}
                 after, positive, complete = before, False, False
@@ -3840,9 +3863,7 @@ class HistoryManager(threading.Thread):
                 if observation is not None:
                     # Ridge and MLP tournament rows must be identical. Score the frozen
                     # Ridge snapshot only for rows that have the exact MLP observation.
-                    chunk = neural_chunk_benchmark[aid]
-                    record_holdout_result(chunk, actual, frozen_correct)
-                    neural_holdout_samples[aid].append({
+                    row = {
                         "observation": observation,
                         "action_idx": actual,
                         "weight": float(reward),
@@ -3850,7 +3871,12 @@ class HistoryManager(threading.Thread):
                         "source": "heldout_onset",
                         "ridge_correct": bool(frozen_correct),
                         "paired_holdout_id": int(old.get("history_id") or 0),
-                    })
+                    }
+                    if getattr(policy.schema, "feature_contract_version", 0) >= 3 and is_fast_reactive_agent(agent):
+                        old["_neural_heldout_onset"] = row
+                    else:
+                        record_holdout_result(neural_chunk_benchmark[aid], actual, frozen_correct)
+                        neural_holdout_samples[aid].append(row)
             infos = automation_infos_by_agent.get(agent["id"]) or []
             origin = "manual" if old.get("user_id") else ("automation_assisted" if infos else "anonymous_external")
             stat["origin_counts"][origin] = int(stat["origin_counts"].get(origin) or 0) + 1
@@ -4063,6 +4089,13 @@ class HistoryManager(threading.Thread):
             # Heads are independent. Sorting their observation timestamps does not change
             # reward/order within any head, but avoids artificial cursor rewinds between
             # horizons of the same dwell.
+            dwell_correctness = []
+            dwell_neural = []
+            evaluate_dwell = bool(
+                benchmark and reward > 0 and old["ts"] >= validation_start
+                and is_fast_reactive_agent(agent)
+                and getattr(policy.schema, "feature_contract_version", 0) >= 3
+            )
             for target_time, h in sorted(persistence_tasks, key=lambda item: (item[0], item[1])):
                 sample_mass = normalized_dwell_sample_mass(
                     persistence_count_by_horizon.get(h, 0)
@@ -4071,7 +4104,7 @@ class HistoryManager(threading.Thread):
                 include_neural_snapshot = bool(
                     neural_enabled
                     and float(reward) > 0.0
-                    and target_time < validation_start
+                    and (target_time < validation_start or (evaluate_dwell and h == min(policy.horizons)))
                 )
                 features, persistence_meta, persistence_neural = (
                     historical_feature_snapshot(
@@ -4086,6 +4119,16 @@ class HistoryManager(threading.Thread):
                     if audit is not None:
                         audit.record_excluded("validation_boundary")
                     continue
+                if evaluate_dwell and h == min(policy.horizons):
+                    frozen = frozen_policy_snapshots.get(aid)
+                    if frozen is None:
+                        frozen = FrozenRidgeSnapshot(policy)
+                        frozen_policy_snapshots[aid] = frozen
+                    dwell_correctness.append(prediction_is_correct(
+                        agent, policy.actions, frozen.predict(h, features), old["action_idx"]
+                    ))
+                    if persistence_neural is not None:
+                        dwell_neural.append(persistence_neural)
                 if audit is not None:
                     audit.record_sample(
                         "persistence", old["action_idx"], reward, target_time,
@@ -4095,8 +4138,7 @@ class HistoryManager(threading.Thread):
                         evidence_weight=persistence_evidence_weight,
                     )
                 if target_time >= validation_start:
-                    # Correlated samples within a dwell are training evidence,
-                    # not independent validation trials. Validate onset only.
+                    # Score the whole dwell once above, before any prequential update.
                     heldout_updates.append((
                         policy, h, old["action_idx"], features, float(reward),
                         float(target_time), sample_mass, persistence_evidence_weight,
@@ -4120,6 +4162,17 @@ class HistoryManager(threading.Thread):
                                 "source": "persistence",
                             })
 
+            if dwell_correctness:
+                record_holdout_result(frozen_dwell_stats[aid], old["action_idx"], all(dwell_correctness))
+            neural_row = old.get("_neural_heldout_onset")
+            if neural_row is not None:
+                if dwell_neural and len(dwell_neural) == len(dwell_correctness):
+                    neural_row["observations"] = [neural_row["observation"]] + dwell_neural
+                    neural_row["maintenance_observations"] = dwell_neural
+                    neural_row["ridge_maintenance_correct"] = all(dwell_correctness)
+                    neural_row["ridge_correct"] = neural_row["ridge_correct"] and all(dwell_correctness)
+                record_holdout_result(neural_chunk_benchmark[aid], old["action_idx"], neural_row["ridge_correct"])
+                neural_holdout_samples[aid].append(neural_row)
             new_count += 1
             return True
 
@@ -4865,6 +4918,23 @@ class HistoryManager(threading.Thread):
                         or 524288
                     ),
                 )
+                if getattr(policy.schema, "feature_contract_version", 0) >= 3 and is_fast_reactive_agent(agent):
+                    maintenance_rows = [
+                        {**row, "observations": row["maintenance_observations"],
+                         "ridge_correct": row.get("ridge_maintenance_correct", False)}
+                        for row in holdout_rows if row.get("maintenance_observations")
+                    ]
+                    maintenance = evaluate_supervised(backend, agent, maintenance_rows)
+                    maintenance_passed = bool(
+                        maintenance["samples"] >= tournament_min_samples and maintenance["class_coverage"]
+                        and all(value > tournament_threshold for value in maintenance["per_action_accuracy"].values())
+                    )
+                    tournament["maintenance_holdout"] = maintenance
+                    tournament["maintenance_passed"] = maintenance_passed
+                    if not maintenance_passed:
+                        tournament["selected_backend"] = "diagonal_linucb"
+                        tournament["passed"] = False
+                        tournament["reason"] = "maintenance_holdout_not_qualified"
                 artifact = build_training_artifact(
                     agent=agent,
                     policy=policy,
@@ -4891,6 +4961,10 @@ class HistoryManager(threading.Thread):
         self.training_phase_timings["heldout_fold_seconds"] = round(
             time.perf_counter() - heldout_fold_started, 6
         )
+        for policy in policies.values():
+            for head in policy.heads.values():
+                if getattr(head, "state_classifier", None) and head.state_classifier.pending:
+                    head.state_classifier.fit()
 
         if progress_enabled:
             self.set_status(progress=validation_end, message=f"{progress_label}: serializing policy model",
@@ -4923,6 +4997,7 @@ class HistoryManager(threading.Thread):
             TRAINING_BUDGET.checkpoint("after_policy_serialize")
             exported['_benchmark_counts'] = benchmark_stats.get(agent['id'], {})
             exported['_frozen_holdout_counts'] = frozen_benchmark_stats.get(aid, {})
+            exported['_frozen_dwell_counts'] = frozen_dwell_stats.get(aid, {})
             exported['_training_quality_state'] = {
                 "identity": [list(policy.schema.entities), list(policy.actions)],
                 "memory": quality_memory[aid].export(),
@@ -5013,10 +5088,19 @@ class HistoryManager(threading.Thread):
                     and frozen_score is not None
                     and float(frozen_score) > threshold
                 )
+                dwell_gate_enabled = bool(is_fast_reactive_agent(agent) and
+                    getattr(policies[agent["id"]].schema, "feature_contract_version", 0) >= 3)
+                dwell_summary = holdout_summary(agent, policies[agent["id"]].actions,
+                    frozen_dwell_stats.get(str(agent["id"])) or {}, minimum_samples=min_samples)
+                dwell_gate_passed = bool(dwell_summary["status"] == "ok" and
+                    all(value > threshold for value in dwell_summary["per_action_accuracy"].values()))
+                if dwell_gate_enabled:
+                    score = min(score, float(dwell_summary.get("balanced_accuracy") or 0.0))
                 passed = bool(
                     enough
                     and score > threshold
                     and (not frozen_gate_enabled or frozen_gate_passed)
+                    and (not dwell_gate_enabled or dwell_gate_passed)
                 )
                 state = "qualified" if passed else "paused"
                 origin_counts = {str(k): int(v or 0) for k, v in (stat.get("origin_counts") or {}).items()}
@@ -5025,6 +5109,8 @@ class HistoryManager(threading.Thread):
                     reason = "recorded-behaviour benchmark passed"
                 elif not enough:
                     reason = f"insufficient held-out behaviour samples ({samples}/{min_samples})"
+                elif dwell_gate_enabled and not dwell_gate_passed:
+                    reason = "held-out state maintenance has insufficient evidence or failed ON/OFF accuracy"
                 elif score <= threshold:
                     reason = f"recorded-behaviour benchmark {score:.1%} below {threshold:.0%}"
                 elif frozen_gate_enabled and frozen_summary.get("status") != "ok":
@@ -5055,6 +5141,9 @@ class HistoryManager(threading.Thread):
                                "origin_counts": origin_counts},
                     "prequential_holdout": prequential_summary,
                     "frozen_holdout": frozen_summary,
+                    "maintenance_holdout": {**dwell_summary, "enabled": dwell_gate_enabled,
+                                            "passed": dwell_gate_passed if dwell_gate_enabled else None,
+                                            "unit": "one completed dwell; all bounded interior predictions correct"},
                     "prequential_minus_frozen": validation_delta,
                     "frozen_holdout_gate": {
                         "enabled": frozen_gate_enabled,

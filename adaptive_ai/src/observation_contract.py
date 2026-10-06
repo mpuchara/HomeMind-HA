@@ -37,11 +37,13 @@ SCHEMA_VERSION = 12
 POLICY_VERSION = 11
 CONTRACT_VERSION = 1
 # Feature semantics are versioned per persisted schema. Contract 1 is the exact v12
-# representation already stored in released models. Fresh/rebuilt models use contract 2,
-# which removes fast-light photometric own-action leakage without reinterpreting old
-# vectors or forcing a global model migration.
+# representation already stored in released models. Contract 2 removed fast-light
+# photometric leakage. Fresh/rebuilt contract 3 extends that to relays, canonicalizes
+# radar units and enables supervised binary desired-state learning. Old columns retain
+# their meaning until an explicit rebuild creates a new, empty-head generation.
 LEGACY_FEATURE_CONTRACT_VERSION = 1
-FEATURE_CONTRACT_VERSION = 2
+PHOTOMETRIC_FEATURE_CONTRACT_VERSION = 2
+FEATURE_CONTRACT_VERSION = 3
 HOME_FEATURE_NAMES = tuple(LEGACY_HOME_FEATURE_NAMES) + ("known",)
 HOME_TAIL = len(HOME_FEATURE_NAMES)
 
@@ -127,7 +129,7 @@ def _numeric_raw(state):
     return value if math.isfinite(value) else None
 
 
-def _canonical_numeric(state, value):
+def _canonical_numeric(state, value, radar_units=False):
     """Return canonical physical value and scale."""
     attrs = _attrs(state)
     unit = _normalized_unit(state)
@@ -135,6 +137,14 @@ def _canonical_numeric(state, value):
     eid = str((state or {}).get("entity_id") or "").lower()
     token = " ".join((unit, dc, eid))
     value = float(value)
+
+    if radar_units:
+        from radar_context import radar_role
+        role = radar_role(eid, state)
+        if role == "distance" and unit in ("m", "cm", "mm"):
+            return value / {"m": 1.0, "cm": 100.0, "mm": 1000.0}[unit], 6.0, "m"
+        if role in ("energy", "gate_energy"):
+            return value, 100.0, "%"
 
     if dc == "temperature" or "temperature" in token or unit in ("°c", "c", "°f", "f", "k"):
         if unit in ("°f", "f"):
@@ -165,7 +175,7 @@ def _category_bits(text):
     return tuple(1.0 if digest & (1 << i) else -1.0 for i in range(3))
 
 
-def observation_value(state):
+def observation_value(state, radar_units=False):
     """Canonical observation: value/category are separate from validity."""
     if state is None:
         return {"valid": 0.0, "value": 0.0, "category": (0.0, 0.0, 0.0),
@@ -179,7 +189,7 @@ def observation_value(state):
                 "category": (0.0, 0.0, 0.0), "kind": "semantic", "canonical_unit": None}
     raw = _numeric_raw(state)
     if raw is not None:
-        canonical, scale, unit = _canonical_numeric(state, raw)
+        canonical, scale, unit = _canonical_numeric(state, raw, radar_units=radar_units)
         return {"valid": 1.0, "value": math.tanh(canonical / max(scale, 1e-9)),
                 "physical_value": canonical, "category": (0.0, 0.0, 0.0),
                 "kind": "numeric", "canonical_unit": unit}
@@ -341,7 +351,7 @@ class FeatureSchemaV12:
         self.dims = int(dims)
         self.feature_contract_version = int(feature_contract_version)
         if self.feature_contract_version not in (
-            LEGACY_FEATURE_CONTRACT_VERSION, FEATURE_CONTRACT_VERSION
+            LEGACY_FEATURE_CONTRACT_VERSION, PHOTOMETRIC_FEATURE_CONTRACT_VERSION, FEATURE_CONTRACT_VERSION
         ):
             raise ValueError("unsupported feature contract version")
         max_entities = max(1, (self.dims - 5 - HOME_TAIL) // ENTITY_WIDTH)
@@ -368,7 +378,7 @@ class FeatureSchemaV12:
             "feature_contract_version", LEGACY_FEATURE_CONTRACT_VERSION
         ))
         if feature_contract not in (
-            LEGACY_FEATURE_CONTRACT_VERSION, FEATURE_CONTRACT_VERSION
+            LEGACY_FEATURE_CONTRACT_VERSION, PHOTOMETRIC_FEATURE_CONTRACT_VERSION, FEATURE_CONTRACT_VERSION
         ):
             return None
         return cls(dims, raw.get("entities") or [], feature_contract_version=feature_contract)
@@ -496,16 +506,16 @@ def _darkness_observation(state):
 def _feature_observation(schema, entity_id, state, agent, state_map, temporal,
                          query_ts, knowledge_ts):
     """Return one feature observation under the persisted model's semantic contract."""
-    legacy = observation_value(state)
     feature_contract = int(getattr(
         schema, "feature_contract_version", LEGACY_FEATURE_CONTRACT_VERSION
     ))
+    legacy = observation_value(state, radar_units=feature_contract >= 3)
     fast_light = bool(
         agent and is_fast_reactive_agent(agent)
-        and str(agent.get("target_entity") or "").split(".", 1)[0] == "light"
+        and (feature_contract >= 3 or str(agent.get("target_entity") or "").split(".", 1)[0] == "light")
         and str(agent.get("target_property") or "") == "power"
     )
-    if feature_contract < FEATURE_CONTRACT_VERSION or not fast_light or not _is_illuminance_state(state):
+    if feature_contract < PHOTOMETRIC_FEATURE_CONTRACT_VERSION or not fast_light or not _is_illuminance_state(state):
         return legacy, None
 
     target_power = _target_power_at(agent, state_map, temporal, query_ts, knowledge_ts)
@@ -614,8 +624,8 @@ def build_observation_features(schema, state_map, temporal, at_ts=None, agent=No
         if received is None:
             reasons.append(f"{eid}:communication_time_unknown")
         fast_light_v2 = bool(
-            feature_contract >= FEATURE_CONTRACT_VERSION and fast_profile and agent
-            and str(agent.get("target_entity") or "").split(".", 1)[0] == "light"
+            feature_contract >= PHOTOMETRIC_FEATURE_CONTRACT_VERSION and fast_profile and agent
+            and (feature_contract >= 3 or str(agent.get("target_entity") or "").split(".", 1)[0] == "light")
             and str(agent.get("target_property") or "") == "power"
         )
         if fast_light_v2:
@@ -629,7 +639,8 @@ def build_observation_features(schema, state_map, temporal, at_ts=None, agent=No
             communication_feature = (
                 0.0 if received is None else _age_feature(communication_age)
             )
-            event_feature = 0.0 if not obs["valid"] else _age_feature(event_age)
+            event_feature = (0.0 if not obs["valid"] or
+                             (feature_contract >= 3 and event_ts is None) else _age_feature(event_age))
             if not obs["valid"]:
                 quality_feature = -1.0
             elif received is None and reporting_mode in ("stateful_sparse", "sparse_numeric"):

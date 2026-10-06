@@ -42,3 +42,23 @@ def retain_observed_on_dwell(snapshot):
         reliable and reliable <= set(snapshot.get("absent") or ())
         and not snapshot.get("active")
     )
+
+
+def radar_context_entities(agent, baseline, states, registry, limit=8):
+    """Bounded siblings of the automation radar, or radar channels in its room."""
+    anchors = [eid for eid in baseline if radar_role(eid, states.get(eid))]
+    devices = {(registry.get(eid) or {}).get("device_id") for eid in anchors} - {None, ""}
+    areas = {(registry.get(eid) or {}).get("area_id") for eid in anchors} - {None, ""}
+    if not areas:
+        area = (registry.get(agent.get("target_entity")) or {}).get("area_id")
+        if area:
+            areas.add(area)
+    order = {"presence": 0, "still": 1, "moving": 2, "energy": 3, "distance": 4, "gate_energy": 5}
+    candidates = []
+    for eid, state in states.items():
+        role = radar_role(eid, state)
+        reg = registry.get(eid) or {}
+        local = reg.get("device_id") in devices if devices else reg.get("area_id") in areas
+        if role and local and eid not in baseline:
+            candidates.append((order[role], eid))
+    return [eid for _, eid in sorted(candidates)[:limit]]

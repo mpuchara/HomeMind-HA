@@ -52,6 +52,14 @@ class RadarStationaryTests(unittest.TestCase):
         self.assertFalse(snapshot["absent"])
         self.assertEqual(radar_role(self.distance), "distance")
 
+    def test_binary_threshold_flags_do_not_veto_uncalibrated_numeric_pattern(self):
+        snapshot = self.snapshot("off", "off", "24", "0")
+        self.assertFalse(snapshot["active"])
+        self.assertNotIn(self.still, snapshot["absent"])
+        self.assertTrue(retain_observed_on_dwell(snapshot))
+        self.assertEqual(light_dwell_reward(1, 1, snapshot, snapshot, False)[0], 1)
+        self.assertEqual(light_dwell_reward(0, 1, snapshot, snapshot, False)[0], 1)
+
     def test_room_distances_are_distinguishable_and_units_equivalent(self):
         def value(raw, unit):
             return context_scalar(self.distance, {"state": str(raw), "attributes": {

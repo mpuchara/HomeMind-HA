@@ -16,6 +16,7 @@ CONTRACT = "conditional_light_training_quality_v1"
 def sensor_snapshot(agent, entities, states, registry):
     target_area = (registry.get(agent.get("target_entity")) or {}).get("area_id")
     signature, active, absent, reliable, radar = [], [], [], [], []
+    unresolved_radar_devices = set()
     for eid in sorted(set(entities))[:64]:
         domain = eid.split(".", 1)[0]
         if eid == agent.get("target_entity") or domain not in (
@@ -33,6 +34,14 @@ def sensor_snapshot(agent, entities, states, registry):
         role = radar_role(eid, state)
         if same_area and role:
             radar.append(eid)
+            if role in ("energy", "distance") and available:
+                try:
+                    measurement = float(raw)
+                except (ValueError, TypeError):
+                    measurement = 0.0
+                device = (registry.get(eid) or {}).get("device_id")
+                if device and math.isfinite(measurement) and measurement > 0:
+                    unresolved_radar_devices.add(device)
         if same_area and domain == "binary_sensor" and (device_class in ("occupancy", "presence", "motion") or role in ("presence", "still", "moving")):
             present = occupancy_state_bool(state) if available else None
             if present is True:
@@ -52,6 +61,12 @@ def sensor_snapshot(agent, entities, states, registry):
                 )
                 if present is False and (role != "still" or moving_off):
                     absent.append(eid)
+    # The radar's binary flags share its configured thresholds; they are not
+    # independent confirmation of absence while numeric channels still report a
+    # signal. Positive energy can also be empty-room background, so it does not
+    # create presence. Keep this unresolved and learn the observed state/weights.
+    absent = [eid for eid in absent if
+              (registry.get(eid) or {}).get("device_id") not in unresolved_radar_devices]
     return {"signature": signature, "active": active, "absent": absent, "reliable": reliable, "radar": radar}
 
 
