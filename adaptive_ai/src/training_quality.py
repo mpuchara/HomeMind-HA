@@ -8,7 +8,7 @@ import math
 
 from context import context_scalar, occupancy_state_bool
 from training_evidence import USER_EVIDENCE_ORIGINS
-from radar_context import radar_role
+from radar_context import radar_family, radar_role
 
 CONTRACT = "conditional_light_training_quality_v1"
 
@@ -17,6 +17,12 @@ def sensor_snapshot(agent, entities, states, registry, *, local_radars=()):
     target_area = (registry.get(agent.get("target_entity")) or {}).get("area_id")
     signature, active, absent, reliable, radar = [], [], [], [], []
     unresolved_radar_devices = set()
+    def radar_group(eid):
+        reg = registry.get(eid) or {}
+        if reg.get('device_id'):
+            return reg['device_id']
+        family = radar_family(eid)
+        return ('radar_family', family, reg.get('area_id')) if family else None
     for eid in sorted(set(entities))[:64]:
         domain = eid.split(".", 1)[0]
         if eid == agent.get("target_entity") or domain not in (
@@ -44,7 +50,7 @@ def sensor_snapshot(agent, entities, states, registry, *, local_radars=()):
                     measurement = float(raw)
                 except (ValueError, TypeError):
                     measurement = 0.0
-                device = (registry.get(eid) or {}).get("device_id")
+                device = radar_group(eid)
                 if device and math.isfinite(measurement) and measurement > 0:
                     unresolved_radar_devices.add(device)
         if same_area and domain == "binary_sensor" and (device_class in ("occupancy", "presence", "motion") or role in ("presence", "still", "moving")):
@@ -57,10 +63,10 @@ def sensor_snapshot(agent, entities, states, registry, *, local_radars=()):
                     reliable.append(eid)
                 # Still OFF alone is compatible with a moving occupant. Require
                 # its same-device moving channel to be known OFF as well.
-                device = (registry.get(eid) or {}).get("device_id")
+                device = radar_group(eid)
                 moving_off = bool(device) and any(
                     radar_role(other, states.get(other)) == "moving"
-                    and (registry.get(other) or {}).get("device_id") == device
+                    and radar_group(other) == device
                     and occupancy_state_bool(states.get(other) or {}) is False
                     for other in entities
                 )
@@ -71,7 +77,7 @@ def sensor_snapshot(agent, entities, states, registry, *, local_radars=()):
     # signal. Positive energy can also be empty-room background, so it does not
     # create presence. Keep this unresolved and learn the observed state/weights.
     absent = [eid for eid in absent if
-              (registry.get(eid) or {}).get("device_id") not in unresolved_radar_devices]
+              radar_group(eid) not in unresolved_radar_devices]
     return {"signature": signature, "active": active, "absent": absent, "reliable": reliable, "radar": radar}
 
 
