@@ -1,6 +1,6 @@
-# HomeMind-HA / Adaptive AI 0.14.143
+# HomeMind-HA / Adaptive AI 0.14.144
 
-0.14.143: nauka historyczna uwzględnia wiarygodność źródła, powtarzalność kontekstu i potwierdzone skutki światła. Nowe zasady wymagają ręcznego Train/Rebuild; brak ruchu nie jest dowodem nieobecności.
+0.14.144: nauka historyczna uwzględnia wiarygodność źródła, powtarzalność kontekstu i potwierdzone skutki światła. Nowe zasady wymagają ręcznego Train/Rebuild; brak ruchu nie jest dowodem nieobecności.
 
 
 Cztery akcje każdego agenta: Shadow/Control, Wrong decision, Settings, Teach.

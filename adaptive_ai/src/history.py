@@ -469,8 +469,21 @@ class HistoryManager(threading.Thread):
                 with self.engine.lock:
                     states = dict(self.engine.state_map)
                     registry = dict(self.engine.entity_registry)
-                bundle = radar_context_entities(agent, entities, states, registry)
-                entities = list(dict.fromkeys(entities + bundle))
+                from fast_local_primary import automation_baseline_entities
+                _, infos = AUTOMATION_KNOWLEDGE.hints_for_target(agent["target_entity"])
+                baseline = automation_baseline_entities(infos) or set(
+                    seed["selection_meta"].get("automation_baseline_entities") or [])
+                bundle = radar_context_entities(agent, baseline or entities, states, registry)
+                # Rebuild has no coefficients to preserve. Reserve the causal radar
+                # before old correlated features consume every slot.
+                if baseline and bundle:
+                    entities = list(dict.fromkeys(sorted(baseline) + bundle))
+                    seed["selection_meta"] = {
+                        "automation_baseline_entities": sorted(baseline),
+                        "automation_baseline_mode": "automation_first",
+                    }
+                else:
+                    entities = list(dict.fromkeys(entities + bundle))
                 seed["selection_meta"]["radar_context_entities"] = bundle
             seed["schema"] = FeatureSchemaV12(
                 seed["dims"], entities, feature_contract_version=FEATURE_CONTRACT_VERSION

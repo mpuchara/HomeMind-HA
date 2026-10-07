@@ -1,5 +1,5 @@
 {
-  "version": "0.14.143",
+  "version": "0.14.144",
   "release_date": "2026-10-06",
   "base_version": "0.14.142",
   "base_commit": "10d8ad856282bcca0cf1b8e2b74afb3e7dfcc9f6",
@@ -1397,5 +1397,14 @@
     "validation_tests_expected": 1688,
     "household_performance_measured": false,
     "radar_absence": "derived binary OFF with positive same-device numeric signal is unresolved, never positive occupancy or verified vacancy"
+  },
+  "release_014144": {
+    "scope": "radar_context_rebuild_and_worker_parity",
+    "worker": "parent automation snapshot and automation-first selector installed before policy construction",
+    "rebuild": "reserve automation radar and bounded siblings before correlated old slots",
+    "unmapped_radar": "exact channel family fallback when device registry missing; conflicting known areas rejected",
+    "migration": "preserve feature contract and remap desired-state coefficients, bounded evidence and rejection penalties",
+    "diagnostics": "app version, feature contract and desired-state head readiness",
+    "validation_tests_expected": 1692
   }
 }

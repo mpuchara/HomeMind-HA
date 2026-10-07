@@ -15,15 +15,15 @@ TARGET = "switch.shellyplus1pm_441793a613bc_switch_0"
 RADAR = "sensor.espen4_stationary_energy"
 
 
-def run(feature_contract=3, neural=False, contradictory_binary=False):
+def run(feature_contract=3, neural=False, contradictory_binary=False, wildcard_unmapped=False):
     contract = install_training_contract()
     try:
-        return _run(feature_contract, neural, contradictory_binary)
+        return _run(feature_contract, neural, contradictory_binary, wildcard_unmapped)
     finally:
         contract["restore"]()
 
 
-def _run(feature_contract, neural, contradictory_binary):
+def _run(feature_contract, neural, contradictory_binary, wildcard_unmapped):
     with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
         root = Path(tmp)
         db, aid, base, end, _, _ = fixture.seed_database(root)
@@ -34,10 +34,13 @@ def _run(feature_contract, neural, contradictory_binary):
         inputs = [RADAR]
         if contradictory_binary:
             inputs += ["binary_sensor.espen4_still_target", "binary_sensor.espen4_moving_target"]
+        foreign = [f"sensor.kitchen_presence_g{i}_still_energy" for i in range(7)]
+        if wildcard_unmapped:
+            inputs += ["sensor.espen4_moving_energy"] + foreign
         with store.conn() as conn:
             conn.execute("DELETE FROM entity_history")
             conn.execute("UPDATE agents SET target_entity=?, input_entities=? WHERE id=?",
-                         (TARGET, json.dumps(inputs), aid))
+                         (TARGET, json.dumps(["*"] if wildcard_unmapped else inputs), aid))
         rows = []
         attrs = {"friendly_name": "ESPEN4 Stationary Energy", "unit_of_measurement": "%"}
         t = base
@@ -48,7 +51,10 @@ def _run(feature_contract, neural, contradictory_binary):
                 value = (55 if offset < 20 else 24) if on else 8
                 rows.append((RADAR, t + offset, str(value), attrs, None, "test", t + offset + .05))
                 for eid in inputs[1:]:
-                    rows.append((eid, t + offset, "off", {}, None, "test", t + offset + .05))
+                    if wildcard_unmapped and eid in foreign and offset:
+                        continue
+                    extra_value = str(value) if wildcard_unmapped else "off"
+                    rows.append((eid, t + offset, extra_value, {}, None, "test", t + offset + .05))
             t += durations[phase]
         store.archive_batch(sorted(rows, key=lambda row: row[1]))
         states = {TARGET: {"entity_id": TARGET, "state": "off", "attributes": {}},
@@ -58,6 +64,11 @@ def _run(feature_contract, neural, contradictory_binary):
         for eid in inputs[1:]:
             states[eid] = {"entity_id": eid, "state": "off", "attributes": {}}
             registry[eid] = {"area_id": "lazienka", "device_id": "radar"}
+        if wildcard_unmapped:
+            registry.pop(RADAR)
+            registry.pop("sensor.espen4_moving_energy")
+            for eid in foreign:
+                registry[eid] = {"area_id": "kitchen", "device_id": "foreign"}
         original = fixture.worker_job
 
         def job(*args, **kwargs):
@@ -68,11 +79,16 @@ def _run(feature_contract, neural, contradictory_binary):
                      {"entity_id": "automation.off", "enabled": True, "action_services": ["switch.turn_off"],
                       "baseline_rules": [{"source": "trigger", "kind": "numeric_state", "entity_id": RADAR, "below": 12, "for_seconds": 3}]}]
             data["options"]["prediction_horizons_seconds"] = "1"
+            for rule in rules:
+                rule["context_entities"] = [RADAR]
+            data["automation_infos"] = rules
+            data["automation_hints"] = [RADAR]
             data["train_kwargs"]["qualify"] = True
             data["options"]["tiny_mlp_supervised_training_enabled"] = neural
-            data["schema_cache_item"] = {"input_fingerprint": sorted(inputs), "model": {
+            seed_entities = foreign + [RADAR] if wildcard_unmapped else inputs
+            data["schema_cache_item"] = {"input_fingerprint": ["*"] if wildcard_unmapped else sorted(inputs), "model": {
                 "version": MultiHorizonPolicy.VERSION, "dims": 128, "actions": [0, 1], "horizons": [1],
-                "schema": FeatureSchemaV12(128, inputs, feature_contract).export(), "heads": {},
+                "schema": FeatureSchemaV12(128, seed_entities, feature_contract).export(), "heads": {},
                 "selection_meta": {"selection_reasons": {RADAR: ["automation"]},
                                    "automation_baseline_automations": rules}}}
             data["checksum"] = descriptor_checksum(data)
@@ -137,6 +153,7 @@ def _run(feature_contract, neural, contradictory_binary):
                 "frozen_onset": (agent.get("benchmark_detail") or {}).get("frozen_holdout"),
                 "feature_contract": feature_contract,
                 "persisted_feature_contract": raw["schema"]["feature_contract_version"],
+                "persisted_entities": raw["schema"]["entities"],
                 "worker_wall_seconds": result["wall_seconds"],
                 "neural_tournament": (fixture.load_training_record(result["store"], aid) or {}).get("tournament"),
                 "pass": all(row["expected"] == row["predicted"] for row in predictions)}

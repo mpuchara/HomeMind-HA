@@ -113,7 +113,9 @@ def normalize_fast_primary(agent, policy, engine, automation_infos=None):
 
     old = meta.get("primary_occupancy_sensor")
     if chosen is None:
-        chosen = old if old in selected and old in occupancy else None
+        # A numeric automation radar is a behavioural anchor, not binary occupancy.
+        # Do not fall back to an unrelated room's historically correlated presence.
+        chosen = old if not selected_baseline and old in selected and old in occupancy else None
         source = "existing" if chosen else "none"
 
     changed = bool(chosen and chosen != old)
@@ -121,6 +123,8 @@ def normalize_fast_primary(agent, policy, engine, automation_infos=None):
         meta["primary_occupancy_previous"] = old
     if chosen:
         meta["primary_occupancy_sensor"] = chosen
+    else:
+        meta["primary_occupancy_sensor"] = None
 
     automation_rows = _automation_diagnostics(automation_infos)
     if baseline:

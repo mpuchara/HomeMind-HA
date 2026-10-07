@@ -584,7 +584,7 @@ def _build_job(history, start_ts, end_ts, kwargs):
         raise ValueError("agent not found")
 
     state_map, registry, relevance = _snapshot_parent_context(history, agent_id)
-    hints, _ = AUTOMATION_KNOWLEDGE.hints_for_target(agent["target_entity"])
+    hints, automation_infos = AUTOMATION_KNOWLEDGE.hints_for_target(agent["target_entity"])
     schema_item = dict(
         (getattr(history, "training_schema_cache", {}) or {}).get(agent_id) or {}
     )
@@ -609,6 +609,7 @@ def _build_job(history, start_ts, end_ts, kwargs):
         "entity_registry": registry,
         "context_relevance": relevance,
         "automation_hints": list(hints or ()),
+        "automation_infos": list(automation_infos or ()),
         "schema_cache_item": schema_item,
         "options": dict(OPTIONS),
         "context_snapshot": {
@@ -1466,6 +1467,15 @@ def worker_main(job_path):
 
     STORE.checkpointed_archive_reads = True
     engine = TrainingWorkerEngine(job, STORE)
+    # Use the exact parent automation snapshot, including enabled controllers and
+    # numeric thresholds. Cached HA discovery can be older than this job.
+    from ha import AUTOMATION_KNOWLEDGE
+    if "automation_infos" in job:
+        agent = STORE.get_agent_config(str(job["agent_id"]))
+        with AUTOMATION_KNOWLEDGE.lock:
+            AUTOMATION_KNOWLEDGE.by_target[agent["target_entity"]] = list(job["automation_infos"])
+    from fast_local_primary import install as install_fast_local_primary
+    install_fast_local_primary(STORE, engine)
     _worker_boot_status(
         job,
         "Compact worker context initialized",
@@ -1498,6 +1508,9 @@ def worker_main(job_path):
     history.agent_jobs.add(aid)
     if isinstance(job.get("schema_cache_item"), dict) and job["schema_cache_item"]:
         history.training_schema_cache[aid] = dict(job["schema_cache_item"])
+        seed = job["schema_cache_item"].get("model")
+        if isinstance(seed, dict) and not seed.get("heads"):
+            history._remember_training_schema(STORE.get_agent_config(aid), seed)
     _worker_status_writer(history, job["status_path"])
 
     expected_agent = str(job["agent_fingerprint"])

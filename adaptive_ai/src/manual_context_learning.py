@@ -307,7 +307,10 @@ def _canonical_label(labels):
 def _migrate_schema(policy, new_entities, new_meta):
     """Change explicit entity slots while preserving evidence for matching features."""
     schema_type = type(policy.schema)
-    new_schema = schema_type(policy.dims, new_entities)
+    schema_kwargs = {}
+    if hasattr(policy.schema, "feature_contract_version"):
+        schema_kwargs["feature_contract_version"] = policy.schema.feature_contract_version
+    new_schema = schema_type(policy.dims, new_entities, **schema_kwargs)
     old_entities = list(policy.schema.entities)
     if old_entities == list(new_schema.entities):
         policy.selection_meta = dict(new_meta or policy.selection_meta or {})
@@ -352,6 +355,13 @@ def _migrate_schema(policy, new_entities, new_meta):
             head.b[arm] = new_b
             head.ctx_sum[arm] = new_sum
             head.ctx_sq[arm] = new_sq
+            if hasattr(head, "rejection_b"):
+                old_rejection = head.rejection_b[arm]
+                head.rejection_b[arm] = [old_rejection[mapping[i]] if i in mapping else 0.0
+                                         for i in range(policy.dims)]
+        classifier = getattr(head, "state_classifier", None)
+        if classifier is not None:
+            classifier.remap(mapping)
     policy.schema = new_schema
     policy.selection_meta = dict(new_meta or {})
     policy.model_revision = str(uuid.uuid4())
