@@ -8,6 +8,16 @@ def radar_role(entity_id, state=None):
     return _radar_role(str(entity_id), str(attrs.get("friendly_name") or ""))
 
 
+def radar_family(entity_id):
+    """Exact ESPHome radar channel suffix, only when device registry is absent."""
+    name = str(entity_id).split(".", 1)[-1]
+    match = re.fullmatch(
+        r"(.+)_(?:(?:stationary|still|static|moving|move|motion)_"
+        r"(?:energy|target_distance|distance|target)|has_target)", name
+    )
+    return match.group(1) if match else None
+
+
 @lru_cache(maxsize=2048)
 def _radar_role(entity_id, friendly_name):
     text = re.sub(r"[_\-]+", " ", entity_id + " " + friendly_name).lower()
@@ -50,10 +60,7 @@ def radar_context_entities(agent, baseline, states, registry, limit=8):
     devices = {(registry.get(eid) or {}).get("device_id") for eid in anchors} - {None, ""}
     # ESPHome REST/imported entities can lack a device/area registry entry.
     # Match the complete role suffix, never a loose common word such as "presence".
-    def family(eid):
-        name = eid.split(".", 1)[-1]
-        match = re.match(r"^(.+)_(?:stationary|still|static|moving|move|motion)_(?:energy|target_distance|distance|target)$", name)
-        return match.group(1) if match else None
+    family = radar_family
     families = {family(eid) for eid in anchors if not (registry.get(eid) or {}).get("device_id")} - {None}
     areas = {(registry.get(eid) or {}).get("area_id") for eid in anchors} - {None, ""}
     if not areas:

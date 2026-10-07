@@ -694,6 +694,8 @@ def _current_context(engine, root_agent, debug_entities, automation_sources=()):
             "status": status,
             "role": source.get("role"),
             "admission_reason": source.get("reason"),
+            "area_mapping_origin": source.get("area_mapping_origin"),
+            "area_mapping_evidence": source.get("area_mapping_evidence"),
             "admitted": eid in (getattr(engine.context, "admitted", set()) or set()),
             "available": source.get("available"),
         })
@@ -701,6 +703,7 @@ def _current_context(engine, root_agent, debug_entities, automation_sources=()):
         "ts": now,
         "area_id": area,
         "forecast": forecast,
+        "trajectory_event_sources": list(getattr(engine.context, 'trajectory_sources_for', lambda _target: ())(target)),
         "sources": sources,
         "automation_source_audit": source_audit,
     }

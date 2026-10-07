@@ -1,3 +1,10 @@
+## 0.14.146
+
+- Route learned predecessor/competing-branch presence events to the target agent, invalidate routing on new paths, and refresh active 1/3/5 s forecasts after one second.
+- Resolve unassigned paired-automation radar areas with audited, conflict-aware device/channel-family fallback; numeric energy remains activity, never presence truth.
+- Build bounded causal room statistics during training without a manual home backfill; preserve receive-time causality and rewind isolation.
+- Expose trajectory event sources and inferred mapping origin in diagnostics. Full Rebuild required (`shared-home-intents-v26`).
+
 ## 0.14.145
 
 - Trening kotwiczy zmiany radaru dopiero w chwili odebrania próbki, bez używania przyszłych danych.

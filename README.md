@@ -1,6 +1,6 @@
-# HomeMind-HA / Adaptive AI 0.14.145
+# HomeMind-HA / Adaptive AI 0.14.146
 
-0.14.145: trening uwzględnia czas odebrania sygnału i krótkie spadki podczas pobytu, zachowując poprawne krótkie wizyty; Current i Desired odświeżają się bez dodatkowego cache, a Correct ma tryb Na żywo. [Opis wydania](docs/RELEASE_0_14_145_PL.md).
+0.14.146: wyuczone trajektorie uruchamiają decyzję agenta, a trening odtwarza je przyczynowo bez ręcznego backfillu. Brakujący obszar jednoznacznego radaru automatyzacji ma audytowalne uzupełnienie. [Opis wydania](docs/RELEASE_0_14_146_PL.md).
 
 
 Karta agenta ma cztery akcje: **Shadow/Control**, **Wrong decision**, **Settings** i **Teach**. Wrong decision uczy poprawnego Desired. Teach otwiera powiększalny wykres historii z wyborem dokładnej chwili i zapisem poprawnego Desired. Cofanie ostatniej korekty jest dostępne w Teach oraz Settings; pozostałe operacje i diagnostyka są w Settings.

@@ -277,6 +277,8 @@ class Engine(threading.Thread):
         self.agent_configs = {}
         self.active_agents_by_target = {}
         self.dependency_agents = {}
+        self.agent_index_context_signature = None
+        self._automation_context_marker = None
         # A pass-level immutable revision snapshot is shared by all agents dispatched
         # from one coalesced event pass. Thread-local binding preserves the existing
         # process_agent(agent, states, changed) public signature used by extensions.
@@ -810,6 +812,13 @@ class Engine(threading.Thread):
             hold_until = 0.0
         if hold_until > now:
             due = hold_until
+        if fast and hold_until <= now:
+            forecast = (rt.get('context_meta') or {}).get('home_forecast') or {}
+            if (float(forecast.get('arrival_probability') or 0.0) > 0.0
+                    or float(forecast.get('departure_probability') or 0.0) > 0.0):
+                # A 1/3/5 s forecast can change before any next HA event. Limit this
+                # timer to an active movement forecast, not every lamp in the house.
+                due = min(due, now + 1.0)
 
         # Fast-light statistical OFF confirmation must complete close to its exact 6 s
         # deadline even if no HA entity changes in the meantime.
@@ -1235,15 +1244,47 @@ class Engine(threading.Thread):
             and str(agent.get("training_state") or "") == "qualified"
         )
 
+    def refresh_automation_context(self):
+        """Resolve structural radar areas before live routing or worker snapshots."""
+        marker = (getattr(AUTOMATION_KNOWLEDGE, 'last_scan', None), self.context.registry_revision)
+        with self.lock, self.context.lock:
+            if marker == self._automation_context_marker:
+                return False
+            with AUTOMATION_KNOWLEDGE.lock:
+                hints = {target: [dict(info) for info in infos]
+                         for target, infos in AUTOMATION_KNOWLEDGE.by_target.items()}
+            old_mapping = dict(self.context.mapping)
+            self.context.configure(self.state_map, automation_hints=hints)
+            self.entity_registry = self.context.resolved_registry()
+            changed = {eid for eid in set(old_mapping) | set(self.context.mapping)
+                       if old_mapping.get(eid) != self.context.mapping.get(eid)}
+            if changed:
+                # Reconstruct current evidence, not a fabricated arrival at remap time.
+                stamp = now_ts()
+                with self.context.home.lock:
+                    for eid in changed:
+                        previous = self.context.home.sources.pop(eid, None)
+                        if previous:
+                            self.context.home.area_sources.get(previous['area'], set()).discard(eid)
+                        st = self.state_map.get(eid)
+                        event_ts = parse_ts((st or {}).get('last_updated') or (st or {}).get('last_changed')) or stamp
+                        self.context.observe(eid, st, stamp, learn=False, event_ts=event_ts, received_ts=stamp)
+                    self.context.home.reset_movement_state()
+            self._automation_context_marker = (getattr(AUTOMATION_KNOWLEDGE, 'last_scan', None), self.context.registry_revision)
+            return bool(changed)
+
     def _refresh_agent_index(self, force=False):
         """Refresh live agent configs and entity->agent routing outside the hot event path."""
         now = time.monotonic()
+        self.refresh_automation_context()
+        context_signature = (self.context.registry_revision, self.context.home.routing_revision)
         store_revision = int(getattr(STORE, "_agent_index_revision", 0))
         with self.lock:
             if (
                 not force
                 and float(self.agent_index_at or 0.0) > 0.0
                 and int(self.agent_index_revision) == store_revision
+                and self.agent_index_context_signature == context_signature
                 and now - float(self.agent_index_at or 0.0) < self.agent_index_ttl_seconds
             ):
                 return
@@ -1286,6 +1327,7 @@ class Engine(threading.Thread):
             self.dependency_agents = dependency_agents
             self.agent_index_at = now
             self.agent_index_revision = store_revision
+            self.agent_index_context_signature = context_signature
         for aid in removed:
             try:
                 self.experiments.cancel(aid, "mode, training or availability changed")
@@ -1310,8 +1352,8 @@ class Engine(threading.Thread):
         """Entities whose change can materially alter this agent's next decision.
 
         Policy schema already carries selected local/upstream predictors. RoomBelief's
-        additive home features also depend on occupancy sources in the target's own area.
-        Critically, we do *not* add every admitted presence source in the whole house.
+        additive home features depend on local occupancy and learned trajectory routes,
+        including competing branches. Unrelated rooms do not cause whole-house fanout.
         """
         deps = {str(agent.get("target_entity") or "")}
         configured_inputs = agent.get("input_entities") or ()
@@ -1328,12 +1370,12 @@ class Engine(threading.Thread):
                 str(eid)
                 for eid in getattr(self.context.home, "area_sources", {}).get(area, ())
             )
-            # Explicit boundary mappings are sparse and intentional. They are the only
-            # cross-area RoomBelief dependencies added automatically; arbitrary remote
-            # PIR/radar sources still require schema selection, avoiding whole-home fanout.
+            # Explicit boundaries and learned paths are sparse. Their events must reach
+            # the policy even when automation-first selects only the local raw radar.
             deps.update(
                 str(eid) for eid in self.context.boundary_sources_for(target_entity)
             )
+            deps.update(self.context.trajectory_sources_for(target_entity))
         try:
             deps.update(str(eid) for eid in self.experiments.watches(agent["id"]))
         except Exception:
@@ -2183,6 +2225,7 @@ class Engine(threading.Thread):
             "model": "Tiny MLP action selector (when tournament-selected) + Ridge safety/confidence fallback → scoped instruction/preference → ActionIntent → Executor",
             "intent": rt.get('intent'), "last_intent": rt.get('last_intent'),
             "home_forecast": self.context.forecast(agent['target_entity'], now_ts()),
+            "trajectory_event_sources": list(self.context.trajectory_sources_for(agent['target_entity'])),
             "behavior_summary": rt.get('behavior_summary'),
             "reward_components": rt.get('last_reward_components', {}),
             "policy_diagnostics": policy.diagnostics() if policy else {},

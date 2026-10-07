@@ -1,10 +1,10 @@
 {
-  "version": "0.14.145",
-  "release_date": "2026-10-07",
-  "base_version": "0.14.144",
-  "base_commit": "adbc2d6cbd95e655d2a35346e7199209138adc7a",
-  "release_status": "causal-episode-training-live-history",
-  "release_validation_tests_passed": 1701,
+  "version": "0.14.146",
+  "release_date": "2026-10-08",
+  "base_version": "0.14.145",
+  "base_commit": "15f96ced9c0ad1493a2690abbe26b446dfcbbe05",
+  "release_status": "causal-trajectory-training-and-event-routing",
+  "release_validation_tests_passed": 1716,
   "release_014140": {
     "scope": "inventory_and_remove_remaining_shipped_feature_Handler_fallbacks_for_Candidate_Live_and_manual_feedback_transport",
     "explicit_routes": "manual_feedback.js, candidate_ui.js, candidate_preference_ui.js, /api/candidates, Candidate Teach-RL status/train, generation history/comparison, /api/candidate-live, /api/live and Candidate discard",
@@ -1418,5 +1418,16 @@
     "known_limit": "synthetic regression is not household replay or proof of full-product superiority",
     "validation_tests_expected": 1701,
     "unmapped_baseline": "exact automation numeric source preserves recorded ON uncertainty even without area, never creates occupancy and rejects known area conflict"
+  },
+  "release_014146": {
+    "scope": "causal trajectories in training and sparse live event routing",
+    "training_revision": "shared-home-intents-v26",
+    "validation_tests_expected": 1716,
+    "mapping": "audited unambiguous paired-automation radar fallback; HA/explicit conflicts retain authority",
+    "trajectories": "direct presence only; no numeric magnitude or controlled-target occupancy labels",
+    "history": "causal prefix snapshots bounded to 8 MiB, receive-time ordering, no current live graph in past examples",
+    "routing": "learned predecessors, departures and competing branches; topology revision invalidates index",
+    "timer": "one second only during an active arrival/departure forecast, manual hold preserved",
+    "household_performance_measured": false
   }
 }

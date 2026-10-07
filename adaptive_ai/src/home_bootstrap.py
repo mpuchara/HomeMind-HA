@@ -133,6 +133,7 @@ class HomeBootstrap:
                             self.store._meta_cache[ContextEngine.ROOM_MODEL_KEY] = raw
                     current = self.context.home
                     current.graph, current.dwell = model.graph, model.dwell
+                    current.routing_revision += 1
                     current.calibration = model.calibration
                     current.updated = model.updated
                     current.revision += 1

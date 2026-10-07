@@ -38,6 +38,10 @@ class ContextEngine:
         self.bootstrap_started = 0
         self.source_details = {}
         self.boundary_sources_by_area = {}
+        self.automation_area_hints = {}
+        self.inferred_mapping = {}
+        self.mapping_audit = []
+        self._trajectory_source_cache = {}
         self.room_checkpoint_source = None
         reliability_raw = None
         if store:
@@ -93,7 +97,7 @@ class ContextEngine:
         if isinstance(raw, dict):
             self._last_saved_room_model_raw = json.dumps(raw, separators=(',', ':'), sort_keys=True)
 
-    def configure(self, states, entities=None, devices=None, areas=None):
+    def configure(self, states, entities=None, devices=None, areas=None, automation_hints=None):
         with self.lock:
             if entities is not None:
                 self.entities = entities
@@ -101,6 +105,8 @@ class ContextEngine:
                 self.devices = {d['id']: d for d in devices if d.get('id')}
             if areas is not None:
                 self.areas = {a['area_id']: a for a in areas if a.get('area_id')}
+            if automation_hints is not None:
+                self.automation_area_hints = automation_hints
             raw = self.options.get('entity_area_mapping', '{}')
             try:
                 explicit = json.loads(raw) if isinstance(raw, str) else raw
@@ -116,12 +122,21 @@ class ContextEngine:
                 area = reg.get('area_id') or self.devices.get(reg.get('device_id'), {}).get('area_id') or explicit.get(eid)
                 if isinstance(area, str) and area:
                     self.mapping[eid] = area
+            from home_mapping import automation_radar_mapping
+            self.inferred_mapping, self.mapping_audit = automation_radar_mapping(
+                states, self.entities, self.mapping, self.automation_area_hints
+            )
+            self.mapping.update({eid: row['area_id'] for eid, row in self.inferred_mapping.items()})
             control, _ = controllable_context_exclusions(states, self.entities)
             electrical, _ = electrical_context_exclusions(states, self.entities)
             self.excluded = control | electrical
             self.admitted, self.source_details = select_sources(
                 states, self.entities, self.mapping, self.excluded
             )
+            for eid, row in self.inferred_mapping.items():
+                if eid in self.source_details:
+                    self.source_details[eid]['area_mapping_origin'] = row['origin']
+                    self.source_details[eid]['area_mapping_evidence'] = row['evidence']
             boundary_index = {}
             for source_id, detail in self.source_details.items():
                 if not detail.get('selected'):
@@ -135,6 +150,7 @@ class ContextEngine:
                 for eid in self.admitted
             }
             self.registry_revision += 1
+            self._trajectory_source_cache.clear()
             # Mapping/source changes invalidate virtual hysteresis. Do not carry an ON
             # belief across a remap or a source-role reclassification.
             self.adaptive_presence.reset_live_state()
@@ -142,7 +158,31 @@ class ContextEngine:
 
     def resolved_registry(self):
         with self.lock:
-            return {eid: {**reg, 'area_id': self.mapping.get(eid)} for eid, reg in self.entities.items()}
+            return {eid: {**self.entities.get(eid, {}), 'area_id': self.mapping.get(eid),
+                          **({'area_mapping_origin': self.inferred_mapping[eid]['origin']}
+                             if eid in self.inferred_mapping else {})}
+                    for eid in set(self.entities) | set(self.mapping)}
+
+    def trajectory_sources_for(self, target_entity):
+        """Sparse predecessors and competing branches that can change this forecast."""
+        with self.lock:
+            key = (self.registry_revision, self.home.routing_revision, target_entity)
+            cached = self._trajectory_source_cache.get(key)
+            if cached is not None:
+                return cached
+            area = self.area_for(target_entity)
+            related = self.home.trajectory_areas_for(area)
+            result = tuple(sorted(eid for eid, detail in self.source_details.items()
+                                 if detail.get('selected') and self.mapping.get(eid) in related
+                                 and detail.get('occupancy_authority')))
+            # Drop retired topology versions; never grow with every new path/agent.
+            self._trajectory_source_cache = {
+                old: value for old, value in self._trajectory_source_cache.items() if old[:2] == key[:2]
+            }
+            if len(self._trajectory_source_cache) >= 256:
+                self._trajectory_source_cache.clear()
+            self._trajectory_source_cache[key] = result
+            return result
 
     def area_for(self, eid):
         return self.mapping.get(eid)
@@ -493,6 +533,8 @@ class ContextEngine:
                 'semantic_reliability': self.semantic_reliability.diagnostics(),
                 'bootstrap_live_updates': self.bootstrap_delta.updated if self.bootstrap_delta else 0,
                 'mapping_error': self.mapping_error,
+                'inferred_area_sources': len(self.inferred_mapping),
+                'area_mapping_audit': list(self.mapping_audit)[:128],
                 'area_names': {k: v.get('name', k) for k, v in self.areas.items()},
                 'checkpoint_key': self.room_checkpoint_source,
                 'checkpoint_contract': 'room_belief_v2_additive_legacy_v1_read_only',
