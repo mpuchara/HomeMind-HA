@@ -5,6 +5,7 @@ selected generation and, for Candidate generations, its direct parent. It never 
 the current policy into historical state.
 """
 from bisect import bisect_right
+import json
 import time
 from urllib.parse import parse_qs, unquote, urlsplit
 
@@ -67,6 +68,26 @@ def _active_labels(manager, agent):
     ]
 
 
+def _pending_current_rows(engine, entity_id, end):
+    """Read the same observed archive queue without forcing its SQLite writer."""
+    queue = getattr(engine, "pending_archive", None)
+    if queue is None:
+        return []
+    lock = getattr(engine, "lock", None)
+    if lock is None:
+        pending = list(queue[-4096:])
+    else:
+        with lock:
+            pending = list(queue[-4096:])
+    rows = []
+    for row in pending:
+        if len(row) >= 6 and str(row[0]) == entity_id and float(row[1]) <= float(end):
+            rows.append({"entity_id": entity_id, "ts": float(row[1]), "state": row[2],
+                         "attributes_json": json.dumps(row[3] or {}),
+                         "context_user_id": row[4], "source": row[5]})
+    return rows
+
+
 def _current_rows(manager, agent, start, end):
     """Observed physical target-state curve projected across the selected chart range.
 
@@ -77,6 +98,7 @@ def _current_rows(manager, agent, start, end):
     """
     entity_id = str(agent["target_entity"])
     start = float(start); end = float(end)
+    pending_before = _pending_current_rows(manager.engine, entity_id, end)
     with manager.store.conn() as c:
         seed = c.execute(
             "SELECT * FROM entity_history WHERE entity_id=? AND ts<=? "
@@ -90,6 +112,17 @@ def _current_rows(manager, agent, start, end):
                 (entity_id, start, end),
             ).fetchall()
         ]
+
+    # Snapshot both sides of the SQL read, as for Desired: archive batching must
+    # not make Current arrive seconds later or lose a row during a concurrent flush.
+    merged = {float(row["ts"]): dict(row) for row in rows}
+    if seed:
+        merged[float(seed["ts"])] = dict(seed)
+    for row in pending_before + _pending_current_rows(manager.engine, entity_id, end):
+        merged[float(row["ts"])] = row
+    before = [ts for ts in merged if ts <= start]
+    seed = merged[max(before)] if before else None
+    rows = [merged[ts] for ts in sorted(merged) if start < ts <= end]
 
     out = []
     last_value = None

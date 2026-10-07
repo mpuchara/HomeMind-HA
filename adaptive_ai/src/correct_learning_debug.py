@@ -30,6 +30,38 @@ DEFAULT_LABELS = 64
 DEFAULT_WINDOW_SECONDS = 120.0
 EXPORT_JOB_TTL_SECONDS = 600.0
 MAX_CONCURRENT_EXPORT_JOBS = 1
+MAX_RECENT_ROWS = 2048
+
+
+def _recent_observations(store, engine, agent_id, entities, end):
+    """Export actual recent signals and decisions even when no Correct was saved."""
+    start = float(end) - 600.0
+    entities = list(dict.fromkeys(str(e) for e in entities if e))[:12]
+    marks = ",".join("?" for _ in entities)
+    signals, decisions = [], []
+    with store.conn() as conn:
+        if entities:
+            signals = [dict(r) for r in conn.execute(
+                f"SELECT entity_id,ts,state,received_ts,source FROM entity_history "
+                f"WHERE entity_id IN ({marks}) AND ts>=? AND ts<=? "
+                "ORDER BY ts DESC,id DESC LIMIT ?",
+                (*entities, start, float(end), MAX_RECENT_ROWS + 1),
+            )]
+        if _table_exists(conn, "decision_history"):
+            decisions = [dict(r) for r in conn.execute(
+                "SELECT ts,current,desired FROM decision_history WHERE agent_id=? "
+                "AND ts>=? AND ts<=? ORDER BY ts DESC LIMIT 257",
+                (str(agent_id), start, float(end)),
+            )]
+    from teach_observed_history import _buffer_snapshot
+    decisions.extend(r for r in _buffer_snapshot(engine, agent_id, end) if r["ts"] >= start)
+    unique = {float(r["ts"]): r for r in decisions}
+    return {"start": start, "end": float(end), "entities": entities,
+            "signals_truncated": len(signals) > MAX_RECENT_ROWS,
+            "signals": sorted(signals[:MAX_RECENT_ROWS], key=lambda r: float(r["ts"])),
+            "decisions_truncated": len(unique) > 256,
+            "observed_decisions": [unique[t] for t in sorted(unique)[-256:]],
+            "source": "archived sensor observations and recorded runtime; no policy replay"}
 
 
 def _table_exists(conn, name):
@@ -886,6 +918,16 @@ class CorrectLearningDebugService:
             ),
             "warnings": warnings,
         }
+        # Explicit export only, bounded SQL reads; no background sampler or model mutation.
+        selected_entities = []
+        for item in lineage:
+            if str(item.get("agent_id")) == str(root):
+                selected_entities = (item.get("model") or {}).get("schema_entities") or []
+                break
+        result["recent_observations"] = _recent_observations(
+            self.store, self.engine, root,
+            [root_agent.get("target_entity"), *selected_entities], result["generated_ts"],
+        )
 
         tournament = getattr(self.engine, "context_tournament", None)
         if tournament is not None:

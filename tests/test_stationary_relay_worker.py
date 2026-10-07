@@ -7,6 +7,15 @@ from benchmark_stationary_relay import run
 
 
 class StationaryRelayWorkerTests(unittest.TestCase):
+    def test_worker_learns_short_dropout_and_preserves_brief_handwashing_visits(self):
+        report = run(noisy=True, wildcard_unmapped=True)
+        by_phase = {row["phase"]: row for row in report["predictions"]}
+        for phase in ("empty", "entry", "stationary", "washbasin", "exit", "short_dip",
+                      "short_visit_entry", "short_visit_stay"):
+            self.assertEqual(by_phase[phase]["predicted"], by_phase[phase]["expected"], by_phase[phase])
+        self.assertIn("sensor.espen4_stationary_target_distance", report["persisted_entities"])
+        self.assertTrue(report["pass"], report["predictions"])
+
     def test_rebuild_full_foreign_schema_with_unmapped_local_radar(self):
         report = run(feature_contract=2, wildcard_unmapped=True)
         self.assertEqual(set(report["persisted_entities"]), {

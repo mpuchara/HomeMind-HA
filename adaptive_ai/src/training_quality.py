@@ -13,7 +13,7 @@ from radar_context import radar_role
 CONTRACT = "conditional_light_training_quality_v1"
 
 
-def sensor_snapshot(agent, entities, states, registry):
+def sensor_snapshot(agent, entities, states, registry, *, local_radars=()):
     target_area = (registry.get(agent.get("target_entity")) or {}).get("area_id")
     signature, active, absent, reliable, radar = [], [], [], [], []
     unresolved_radar_devices = set()
@@ -32,7 +32,12 @@ def sensor_snapshot(agent, entities, states, registry):
         same_area = bool(target_area and (registry.get(eid) or {}).get("area_id") == target_area)
         device_class = str((state.get("attributes") or {}).get("device_class") or "")
         role = radar_role(eid, state)
-        if same_area and role:
+        source_area = (registry.get(eid) or {}).get("area_id")
+        baseline_numeric = (eid in local_radars and role in ("energy", "distance")
+                            and not (source_area and target_area and source_area != target_area))
+        # The exact automation source may have no registry area. This preserves
+        # uncertainty within the recorded ON dwell; it never asserts occupancy.
+        if (same_area or baseline_numeric) and role:
             radar.append(eid)
             if role in ("energy", "distance") and available:
                 try:

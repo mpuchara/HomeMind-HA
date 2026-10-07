@@ -15,23 +15,28 @@ TARGET = "switch.shellyplus1pm_441793a613bc_switch_0"
 RADAR = "sensor.espen4_stationary_energy"
 
 
-def run(feature_contract=3, neural=False, contradictory_binary=False, wildcard_unmapped=False):
+def run(feature_contract=3, neural=False, contradictory_binary=False, wildcard_unmapped=False, noisy=False):
     contract = install_training_contract()
     try:
-        return _run(feature_contract, neural, contradictory_binary, wildcard_unmapped)
+        return _run(feature_contract, neural, contradictory_binary, wildcard_unmapped, noisy)
     finally:
         contract["restore"]()
 
 
-def _run(feature_contract, neural, contradictory_binary, wildcard_unmapped):
+def _run(feature_contract, neural, contradictory_binary, wildcard_unmapped, noisy):
     with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
         root = Path(tmp)
         db, aid, base, end, _, _ = fixture.seed_database(root)
         phases = 240
         durations = [600 + (phase % 3) * 120 for phase in range(phases + 1)]
+        if noisy:
+            durations = [12 if phase % 20 == 19 else value for phase, value in enumerate(durations)]
         end = base + sum(durations[:phases])
         store = fixture.Store(db)
         inputs = [RADAR]
+        distance = "sensor.espen4_stationary_target_distance"
+        if noisy:
+            inputs += [distance]
         if contradictory_binary:
             inputs += ["binary_sensor.espen4_still_target", "binary_sensor.espen4_moving_target"]
         foreign = [f"sensor.kitchen_presence_g{i}_still_energy" for i in range(7)]
@@ -46,6 +51,7 @@ def _run(feature_contract, neural, contradictory_binary, wildcard_unmapped):
         t = base
         for phase in range(phases + 1):
             on = bool(phase % 2)
+            short_visit = noisy and phase % 20 == 19
             rows.append((TARGET, t + 1, "on" if on else "off", {}, None, "test", t + 1.1))
             for offset in range(0, durations[phase], 10):
                 value = (55 if offset < 20 else 24) if on else 8
@@ -54,7 +60,12 @@ def _run(feature_contract, neural, contradictory_binary, wildcard_unmapped):
                     if wildcard_unmapped and eid in foreign and offset:
                         continue
                     extra_value = str(value) if wildcard_unmapped else "off"
+                    if eid == distance:
+                        extra_value = str(380 if short_visit else 110 if on else 0)
                     rows.append((eid, t + offset, extra_value, {}, None, "test", t + offset + .05))
+            if noisy and on and not short_visit:
+                rows.extend([(RADAR, t + 43, "8", attrs, None, "test", t + 43.05),
+                             (RADAR, t + 45, "24", attrs, None, "test", t + 45.05)])
             t += durations[phase]
         store.archive_batch(sorted(rows, key=lambda row: row[1]))
         states = {TARGET: {"entity_id": TARGET, "state": "off", "attributes": {}},
@@ -67,6 +78,7 @@ def _run(feature_contract, neural, contradictory_binary, wildcard_unmapped):
         if wildcard_unmapped:
             registry.pop(RADAR)
             registry.pop("sensor.espen4_moving_energy")
+            registry.pop(distance, None)
             for eid in foreign:
                 registry[eid] = {"area_id": "kitchen", "device_id": "foreign"}
         original = fixture.worker_job
@@ -113,9 +125,12 @@ def _run(feature_contract, neural, contradictory_binary, wildcard_unmapped):
             OPTIONS["feature_dimensions"] = previous_dims
         predictions = []
         at = end + 600
-        for expected, energy, phase in [(0, 8, "empty"), (1, 55, "entry"),
+        probes = [(0, 8, "empty"), (1, 55, "entry"),
                                         (1, 24, "stationary"), (1, 28, "washbasin"),
-                                        (0, 8, "exit")]:
+                                        (0, 8, "exit")]
+        if noisy:
+            probes += [(1, 8, "short_dip"), (1, 55, "short_visit_entry"), (1, 55, "short_visit_stay")]
+        for expected, energy, phase in probes:
             state = {"entity_id": RADAR, "state": str(energy), "attributes": attrs}
             temporal = TemporalHistory()
             home = ContextEngine(OPTIONS)
@@ -123,7 +138,8 @@ def _run(feature_contract, neural, contradictory_binary, wildcard_unmapped):
             temporal.home_context = home
             for offset in range(-600, 1, 10):
                 sample_time = at + offset
-                observed_energy = (8 if phase == "entry" and offset < 0 else
+                observed_energy = (8 if phase in ("entry", "short_visit_entry") and offset < 0 else
+                                   24 if phase == "short_dip" and offset < 0 else
                                    24 if phase == "exit" and offset < 0 else energy)
                 sample = {**state, "state": str(observed_energy), "attributes": {**attrs, "__hm_event_time": sample_time,
                           "__hm_received_time": sample_time, "__hm_quality": 1.0}}
@@ -134,6 +150,11 @@ def _run(feature_contract, neural, contradictory_binary, wildcard_unmapped):
                     extra_sample = states[eid]
                     if wildcard_unmapped and eid == "sensor.espen4_moving_energy":
                         extra_sample = {**sample, "entity_id": eid}
+                        states[eid] = extra_sample
+                    if eid == distance:
+                        extra_sample = {**sample, "entity_id": eid, "state": str(
+                            380 if phase == "short_visit_stay" or (phase == "short_visit_entry" and offset == 0) else
+                            110 if phase not in ("empty", "exit", "short_visit_entry") else 0)}
                         states[eid] = extra_sample
                     temporal.add(eid, sample_time, extra_sample)
                     home.observe(eid, extra_sample, sample_time, learn=False,
@@ -164,6 +185,9 @@ def _run(feature_contract, neural, contradictory_binary, wildcard_unmapped):
 
 
 if __name__ == "__main__":
-    report = run()
+    import argparse
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--noisy", action="store_true", help="Include dropout and legitimate short handwashing visits")
+    report = run(noisy=parser.parse_args().noisy)
     print(json.dumps(report, indent=2))
     raise SystemExit(0 if report["pass"] else 1)

@@ -48,7 +48,7 @@
     }catch(_){/* Heavy diagnostics keep their own connection indicator; next lightweight poll retries. */}
     finally{clearTimeout(timer);liveBusy=false;}
   }
-  async function liveLoop(){await refreshLive();setTimeout(liveLoop,1000);}
+  async function liveLoop(){const started=performance.now();await refreshLive();setTimeout(liveLoop,Math.max(100,500-(performance.now()-started)));}
   document.addEventListener('visibilitychange',()=>{if(!document.hidden)refreshLive();});
   liveLoop();
 

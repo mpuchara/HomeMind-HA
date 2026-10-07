@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import math
 
-from context import archived_state, parse_state_value
+from context import parse_state_value
 from training_budget import TRAINING_BUDGET
 
 
@@ -68,18 +68,37 @@ def numeric_threshold_edges(rows, threshold, *, above, hold_seconds=0.0, end_ts=
     requirement is emitted only after the condition remains true for the
     requested duration. Unknown readings invalidate a pending interval.
     """
+    def available(row):
+        ts = float(row["ts"])
+        received = row.get("received_ts")
+        try:
+            received = float(received)
+        except (ValueError, TypeError):
+            return ts
+        return max(ts, received) if math.isfinite(received) else ts
+
+    # A sensor edge cannot anchor features before HA received that observation.
+    # Late events must not reorder the knowledge available to the model.
+    rows = sorted(rows, key=lambda row: (available(row), float(row["ts"])))
     previous = None
     pending = None
     result = []
+    newest_event = -math.inf
     for index, row in enumerate(rows):
         if index and index % 128 == 0:
             TRAINING_BUDGET.checkpoint("numeric_baseline_edge_scan")
-        raw = parse_state_value(archived_state(row))
+        raw = parse_state_value(row)
         try:
             value = float(raw)
         except (TypeError, ValueError):
             value = math.nan
-        ts = float(row["ts"])
+        ts = available(row)
+        if end_ts is not None and ts > float(end_ts):
+            continue
+        event_ts = float(row["ts"])
+        if event_ts < newest_event:
+            continue
+        newest_event = event_ts
         if not math.isfinite(value):
             previous = None
             pending = None

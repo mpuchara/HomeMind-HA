@@ -12,7 +12,7 @@ const vm=require('node:vm'),fs=require('node:fs'),assert=require('node:assert/st
 const requests=[],nodes=new Map();let renders=0;
 const c={document:{hidden:false,body:{append(){}},createElement(){return {addEventListener(){}}},querySelectorAll(){return []},querySelector(s){if(!nodes.has(s))nodes.set(s,{value:'',classList:{add(){},remove(){}}});return nodes.get(s);},addEventListener(){}},
  localStorage:{getItem(){return null},setItem(){}},AbortController,
- setTimeout(){return 1},clearTimeout(){},setInterval(){},
+ performance:require('node:perf_hooks').performance,setTimeout(){return 1},clearTimeout(){},setInterval(){},
  fetch(path){requests.push(path);if(path==='api/status')return new Promise(()=>{});
    assert.equal(path,'api/live?bootstrap=1');
    return Promise.resolve({ok:true,json:async()=>({configs:[{id:'a',mode:'shadow'}],agents:[{id:'a',current_value:1,last_prediction:0,last_confidence:.87,last_inference_ts:123}]})});}
@@ -45,13 +45,13 @@ setImmediate(()=>{
         self.assertIn("tileText(card,'current',currentValue(a));", text)
         self.assertIn("tileText(card,'desired',prediction(a));", text)
         self.assertIn("tileText(card,'confidence',liveConfidence(a));", text)
-        self.assertIn('setTimeout(liveLoop,1000)', text)
+        self.assertIn('setTimeout(liveLoop,Math.max(100,500-(performance.now()-started)))', text)
         self.assertIn("document.addEventListener('visibilitychange'", text)
 
     def test_shared_polling_broker_keeps_realtime_reads_short_bounded(self):
         text = (ROOT / 'adaptive_ai/src/static/polling_guard.js').read_text(encoding='utf-8')
         self.assertIn("if(base.endsWith('api/live')||base.endsWith('api/candidate-live'))return 2500;", text)
-        self.assertIn('const sharedTimeout=sharedTimeoutFor(key);', text)
+        self.assertIn('sharedTimeout=sharedTimeoutFor(key);', text)
         self.assertIn('sharedInit.adaptiveAiTimeoutMs=Number.isFinite(requested)&&requested>0', text)
         self.assertIn('?Math.min(requested,sharedTimeout):sharedTimeout;', text)
         self.assertIn('delete sharedInit.signal;', text)

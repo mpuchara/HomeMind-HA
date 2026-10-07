@@ -1,10 +1,10 @@
 {
-  "version": "0.14.144",
+  "version": "0.14.145",
   "release_date": "2026-10-07",
-  "base_version": "0.14.142",
-  "base_commit": "10d8ad856282bcca0cf1b8e2b74afb3e7dfcc9f6",
-  "release_status": "relay-binary-state-learning",
-  "release_validation_tests_passed": 1692,
+  "base_version": "0.14.144",
+  "base_commit": "adbc2d6cbd95e655d2a35346e7199209138adc7a",
+  "release_status": "causal-episode-training-live-history",
+  "release_validation_tests_passed": 1701,
   "release_014140": {
     "scope": "inventory_and_remove_remaining_shipped_feature_Handler_fallbacks_for_Candidate_Live_and_manual_feedback_transport",
     "explicit_routes": "manual_feedback.js, candidate_ui.js, candidate_preference_ui.js, /api/candidates, Candidate Teach-RL status/train, generation history/comparison, /api/candidate-live, /api/live and Candidate discard",
@@ -1406,5 +1406,17 @@
     "migration": "preserve feature contract and remap desired-state coefficients, bounded evidence and rejection penalties",
     "diagnostics": "app version, feature contract and desired-state head readiness",
     "validation_tests_expected": 1692
+  },
+  "release_014145": {
+    "scope": "causal episode evidence and realtime Correct history",
+    "episode_evidence": "no duration-only rejection or extra attenuation; legitimate brief visits remain ON demonstrations",
+    "dropout": "one targeted low-energy interior sample per accepted ON dwell; shared persistence mass budget",
+    "causality": "threshold edges begin at max(event,received); late older events do not replace latest known signal",
+    "current_history": "merge pending physical archive queue on both sides of SQLite read, without flushing writer",
+    "frontend": "live GET single-flight without completed-response cache; 500ms cards; rolling Correct chart with pause on inspect/zoom/edit/hidden/closed guards",
+    "diagnostics": "bounded recent 10-minute signal/decision window even without Correct points",
+    "known_limit": "synthetic regression is not household replay or proof of full-product superiority",
+    "validation_tests_expected": 1701,
+    "unmapped_baseline": "exact automation numeric source preserves recorded ON uncertainty even without area, never creates occupancy and rejects known area conflict"
   }
 }

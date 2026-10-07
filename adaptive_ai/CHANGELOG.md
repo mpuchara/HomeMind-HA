@@ -1,3 +1,13 @@
+## 0.14.145
+
+- Trening kotwiczy zmiany radaru dopiero w chwili odebrania próbki, bez używania przyszłych danych.
+- Poprawne krótkie wizyty, w tym mycie rąk, pozostają przykładami ON; nie dodajemy odrzucania ich z powodu samego czasu trwania.
+- Utrzymanie ON uczy się również na krótkim spadku energii wewnątrz zaakceptowanego pobytu, z ograniczonym łącznym budżetem próbek.
+- Wykres Current uwzględnia obserwacje oczekujące na zapis, bez wymuszania zapisu do SQLite.
+- Bieżące Current/Desired nie korzystają z dodatkowego cache; karty odświeżają się co około 0,5 s, a Correct ma zatrzymywalny tryb Na żywo.
+- Eksport zawiera ostatnie sygnały i rzeczywiste decyzje nawet bez punktów Correct.
+- Regresja sprawdza także wejście i utrzymanie światła podczas rzadkich wizyt trwających 12 sekund przy innej odległości radaru.
+
 ## 0.14.144
 
 - Rebuild rezerwuje kanały radaru automatyzacji przed starymi skorelowanymi sensorami.
