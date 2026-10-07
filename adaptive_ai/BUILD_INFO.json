@@ -1,10 +1,10 @@
 {
-  "version": "0.14.143",
-  "release_date": "2026-10-06",
+  "version": "0.14.144",
+  "release_date": "2026-10-07",
   "base_version": "0.14.142",
   "base_commit": "10d8ad856282bcca0cf1b8e2b74afb3e7dfcc9f6",
   "release_status": "relay-binary-state-learning",
-  "release_validation_tests_passed": 1688,
+  "release_validation_tests_passed": 1692,
   "release_014140": {
     "scope": "inventory_and_remove_remaining_shipped_feature_Handler_fallbacks_for_Candidate_Live_and_manual_feedback_transport",
     "explicit_routes": "manual_feedback.js, candidate_ui.js, candidate_preference_ui.js, /api/candidates, Candidate Teach-RL status/train, generation history/comparison, /api/candidate-live, /api/live and Candidate discard",
@@ -413,7 +413,7 @@
   "ha_health_contract": "HA connected means either an authenticated realtime websocket or a successful dedicated /states snapshot. History, automation-config or service-call failures do not redefine core HA reachability.",
   "drift_observer_runtime": "Controlled-drift episode ingestion/detection runs outside device-control inference, reads only unseen EpisodeEvaluator suffixes in bounded batches, uses bounded detection windows and does not re-signal an already pending agent inside the 30 s throttle.",
   "pi_degradation_diagnostics": "Home Intelligence exposes recent process CPU, inference/event scheduler counters, drift observer run/pending/max duration and state-resync changed-count/last/max duration.",
-  "validation_run": 35447229441,
+  "validation_run": null,
   "clean_install_discovery": "During Recorder import, active-device classification is explicitly reported as pending instead of zero. Duplicate Rescan requests are idempotent and the UI disables the button while discovery is already running.",
   "discovery_cpu_scope": "No incremental archive rescans were added. Activity classification still runs once after the bounded Recorder target import, preserving the Raspberry Pi CPU/IO budget.",
   "cold_start_training": "Initial agent training now uses one indexed chronological archive stream for both raw fast-driver evidence and effective-change precursor screening. It reports scan progress from the first rows instead of waiting behind a SQLite LAG/PARTITION window query.",
@@ -1397,5 +1397,14 @@
     "validation_tests_expected": 1688,
     "household_performance_measured": false,
     "radar_absence": "derived binary OFF with positive same-device numeric signal is unresolved, never positive occupancy or verified vacancy"
+  },
+  "release_014144": {
+    "scope": "radar_context_rebuild_and_worker_parity",
+    "worker": "parent automation snapshot and automation-first selector installed before policy construction",
+    "rebuild": "reserve automation radar and bounded siblings before correlated old slots",
+    "unmapped_radar": "exact channel family fallback when device registry missing; conflicting known areas rejected",
+    "migration": "preserve feature contract and remap desired-state coefficients, bounded evidence and rejection penalties",
+    "diagnostics": "app version, feature contract and desired-state head readiness",
+    "validation_tests_expected": 1692
   }
 }

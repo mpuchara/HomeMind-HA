@@ -1,3 +1,11 @@
+## 0.14.144
+
+- Rebuild rezerwuje kanały radaru automatyzacji przed starymi skorelowanymi sensorami.
+- Trening w osobnym procesie otrzymuje aktualne informacje o automatyzacjach i instaluje selektor używany przez Live.
+- Brak wpisu urządzenia/obszaru nie blokuje rozpoznania dokładnie pasujących kanałów jednego radaru.
+- Migracja schematu zachowuje kontrakt cech oraz dopasowuje współczynniki, próbki i kary klasyfikatora ON/OFF.
+- Eksport diagnostyczny pokazuje wersję aplikacji, kontrakt cech i gotowość klasyfikatora.
+
 ## 0.14.143
 
 - Learn binary desired state from accepted weighted labels rather than ranking only positive per-action utility on numeric radar contexts. Bound fitting and training memory; preserve support/calibration and rejected-action penalties.

@@ -74,6 +74,23 @@ class BinaryStateClassifier:
         self.active = tuple(i for i in range(self.dims) if self.weights[i] or
                             any(row[i] for row in self.hinge_weights))
 
+    def remap(self, mapping):
+        """Preserve the same feature identities during an explicit schema migration."""
+        for name, default in (("center", 0.0), ("scale", 1.0), ("weights", 0.0)):
+            old = getattr(self, name)
+            setattr(self, name, [old[mapping[i]] if i in mapping else default for i in range(self.dims)])
+        self.hinge_weights = [[row[mapping[i]] if i in mapping else 0.0
+                               for i in range(self.dims)] for row in self.hinge_weights]
+        for action in (0, 1):
+            visited = set()
+            for record in list(self.rows[action]) + list(self.recent[action]):
+                if id(record) in visited:
+                    continue
+                visited.add(id(record))
+                old = record["x"]
+                record["x"] = {i: old[j] for i, j in mapping.items() if i > 0 and j in old}
+        self._refresh_active()
+
     def add(self, action, features, weight):
         if not math.isfinite(float(weight)) or weight <= 0:
             return

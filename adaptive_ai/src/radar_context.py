@@ -48,6 +48,13 @@ def radar_context_entities(agent, baseline, states, registry, limit=8):
     """Bounded siblings of the automation radar, or radar channels in its room."""
     anchors = [eid for eid in baseline if radar_role(eid, states.get(eid))]
     devices = {(registry.get(eid) or {}).get("device_id") for eid in anchors} - {None, ""}
+    # ESPHome REST/imported entities can lack a device/area registry entry.
+    # Match the complete role suffix, never a loose common word such as "presence".
+    def family(eid):
+        name = eid.split(".", 1)[-1]
+        match = re.match(r"^(.+)_(?:stationary|still|static|moving|move|motion)_(?:energy|target_distance|distance|target)$", name)
+        return match.group(1) if match else None
+    families = {family(eid) for eid in anchors if not (registry.get(eid) or {}).get("device_id")} - {None}
     areas = {(registry.get(eid) or {}).get("area_id") for eid in anchors} - {None, ""}
     if not areas:
         area = (registry.get(agent.get("target_entity")) or {}).get("area_id")
@@ -59,6 +66,9 @@ def radar_context_entities(agent, baseline, states, registry, limit=8):
         role = radar_role(eid, state)
         reg = registry.get(eid) or {}
         local = reg.get("device_id") in devices if devices else reg.get("area_id") in areas
+        if families and family(eid) in families and not reg.get("device_id"):
+            # Explicitly conflicting areas must still win over the fallback.
+            local = not reg.get("area_id") or not areas or reg.get("area_id") in areas
         if role and local and eid not in baseline:
             candidates.append((order[role], eid))
     return [eid for _, eid in sorted(candidates)[:limit]]

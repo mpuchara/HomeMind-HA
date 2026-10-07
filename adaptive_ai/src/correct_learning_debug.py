@@ -19,6 +19,7 @@ from correct_data_foundation import supervision_event_id
 from manual_context_learning import manual_scores
 from policy import MultiHorizonPolicy
 from policy_backend import model_checksum, verify_model_checksum
+from settings import APP_VERSION
 
 
 CONTRACT_VERSION = 2
@@ -110,9 +111,16 @@ def _model_summary(store, agent_id):
         "computed_model_checksum": model_checksum(raw),
         "model_checksum_valid": verify_model_checksum(raw),
         "schema_version": schema.get("version"),
+        "feature_contract_version": schema.get("feature_contract_version", 1),
         "schema_entities": list(schema.get("entities") or []),
         "selection_meta": selection,
         "heads": sorted(str(k) for k in (raw.get("heads") or {})),
+        "desired_state_heads": {
+            str(k): {"present": bool(v.get("binary_state_classifier")),
+                     "ready": bool((v.get("binary_state_classifier") or {}).get("ready")),
+                     "fits": (v.get("binary_state_classifier") or {}).get("fits", 0)}
+            for k, v in (raw.get("heads") or {}).items()
+        },
     }
 
 
@@ -846,6 +854,7 @@ class CorrectLearningDebugService:
             })
 
         result = {
+            "app_version": APP_VERSION,
             "contract": {
                 "name": "correct_learning_debug",
                 "version": CONTRACT_VERSION,

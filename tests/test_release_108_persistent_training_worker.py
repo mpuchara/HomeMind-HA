@@ -389,6 +389,9 @@ class SequenceRollbackTests(unittest.TestCase):
             with (
                 patch.object(history_module, "HistoryManager", FakeHistory),
                 patch.object(training_process, "TrainingWorkerEngine", FakeEngine),
+                # This rollback fixture has no policy implementation; selector
+                # parity is exercised by the actual isolated-worker integration.
+                patch("fast_local_primary.install", return_value=False),
                 patch.object(training_process, "_worker_configure_budget", return_value=FakeBudget()),
                 patch("storage.STORE", store),
                 patch.object(tiny_mlp_shadow, "load_training_record", return_value=None),

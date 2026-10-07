@@ -7,6 +7,13 @@ from benchmark_stationary_relay import run
 
 
 class StationaryRelayWorkerTests(unittest.TestCase):
+    def test_rebuild_full_foreign_schema_with_unmapped_local_radar(self):
+        report = run(feature_contract=2, wildcard_unmapped=True)
+        self.assertEqual(set(report["persisted_entities"]), {
+            "sensor.espen4_stationary_energy", "sensor.espen4_moving_energy"})
+        self.assertEqual(report["persisted_feature_contract"], 3)
+        self.assertTrue(report["pass"], report["predictions"])
+
     def test_real_worker_and_persisted_policy_maintain_stationary_stay(self):
         report = run()
         self.assertGreater(report["updates"], 20)

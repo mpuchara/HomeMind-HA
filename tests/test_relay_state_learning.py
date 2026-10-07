@@ -151,6 +151,56 @@ class RelayObservationContractTests(unittest.TestCase):
                     foreign: {"device_id": "other", "area_id": "bath"}}
         self.assertEqual(radar_context_entities(agent(target_entity=TARGET), [ENERGY], states, registry), [still])
 
+    def test_unmapped_automation_radar_uses_exact_family_not_kitchen_correlation(self):
+        sibling = "sensor.espen4_moving_energy"
+        distance = "sensor.espen4_stationary_target_distance"
+        foreign = "sensor.kitchen_presence_g6_still_energy"
+        states = {eid: state(eid, 24) for eid in (ENERGY, sibling, distance, foreign)}
+        registry = {TARGET: {"area_id": "bath"}, foreign: {"area_id": "kitchen"}}
+        selected = radar_context_entities(agent(target_entity=TARGET), [ENERGY], states, registry)
+        self.assertEqual(set(selected), {sibling, distance})
+        registry[sibling] = {"area_id": "kitchen"}
+        self.assertNotIn(sibling, radar_context_entities(agent(target_entity=TARGET), [ENERGY], states, registry))
+
+    def test_rebuild_replaces_full_correlated_schema_before_truncation(self):
+        import ha
+        import threading
+        sibling = "sensor.espen4_moving_energy"
+        foreign = [f"sensor.kitchen_presence_g{i}_still_energy" for i in range(7)]
+        states = {eid: state(eid, 24) for eid in [ENERGY, sibling] + foreign}
+        contract = install_training_contract()
+        try:
+            manager = object.__new__(HistoryManager)
+            manager.training_schema_cache = {}
+            manager.engine = SimpleNamespace(models={}, lock=threading.RLock(), state_map=states,
+                                             entity_registry={TARGET: {"area_id": "bath"}})
+            raw = {"version": 11, "dims": 128, "actions": [0, 1], "horizons": [1],
+                   "schema": FeatureSchemaV12(128, foreign + [ENERGY], 2).export(),
+                   "selection_meta": {"automation_baseline_entities": [ENERGY]}, "heads": {}}
+            with patch.object(ha.AUTOMATION_KNOWLEDGE, "hints_for_target", return_value=({ENERGY}, [])):
+                seed = manager._remember_training_schema(agent(target_entity=TARGET), raw)
+            self.assertEqual(seed["schema"]["entities"], [ENERGY, sibling])
+        finally:
+            contract["restore"]()
+
+    def test_schema_migration_preserves_contract_and_classifier_feature_identity(self):
+        from manual_context_learning import _migrate_schema
+        from policy import DiagonalLinUCB
+        first, second = ENERGY, "sensor.espen4_moving_energy"
+        schema = FeatureSchemaV12(128, [first, second], 3)
+        head = DiagonalLinUCB(128, [0, 1], .65, desired_state_learning=True)
+        for _ in range(8):
+            head.update(0, {0: 1, 5: -.4, 17: .1}, 1)
+            head.update(1, {0: 1, 5: .4, 17: .1}, 1)
+        before = head.state_classifier.score({5: .4, 17: .1})
+        policy = SimpleNamespace(schema=schema, dims=128, heads={1: head}, selection_meta={})
+        _migrate_schema(policy, [second, first], {})
+        self.assertAlmostEqual(head.state_classifier.score({5: .1, 17: .4}), before)
+        self.assertEqual(policy.schema.feature_contract_version, 3)
+        policy.schema = FeatureSchemaV12(128, [first], 2)
+        _migrate_schema(policy, [second], {})
+        self.assertEqual(policy.schema.feature_contract_version, 2)
+
     def test_installed_selector_keeps_baseline_and_radar_but_respects_manual_inputs(self):
         import ha
         import policy
