@@ -18,6 +18,8 @@ from policy import DiagonalLinUCB, MultiHorizonPolicy
 from replay import SQLiteTemporalTracker
 from settings import DEFAULT_OPTIONS
 from storage import Store
+from training_quality import sensor_snapshot
+from radar_context import retain_observed_on_dwell
 
 
 ENERGY = 'sensor.espen4_stationary_energy'
@@ -62,6 +64,27 @@ def learn_routes(context, states, start=1701000000., count=40):
 
 
 class Trajectory146Tests(unittest.TestCase):
+    def test_inferred_family_binary_off_with_positive_energy_is_unknown_not_vacancy(self):
+        states, _registry, context = fixture()
+        snapshot = sensor_snapshot(agent(target_entity=TARGET), [ENERGY, PRESENCE],
+                                   states, context.resolved_registry())
+        self.assertEqual(snapshot['active'], [])
+        self.assertEqual(snapshot['absent'], [])
+        self.assertTrue(retain_observed_on_dwell(snapshot))
+        states[ENERGY]['state'] = '0'
+        zero = sensor_snapshot(agent(target_entity=TARGET), [ENERGY, PRESENCE],
+                               states, context.resolved_registry())
+        self.assertEqual(zero['absent'], [PRESENCE])
+
+    def test_different_family_or_conflicting_area_cannot_mask_real_local_absence(self):
+        states, _registry, context = fixture()
+        registry = context.resolved_registry()
+        for other, area in [('sensor.other_stationary_energy', 'bathroom'), (ENERGY, 'hall')]:
+            states[other] = state(other, 50, unit_of_measurement='%')
+            registry[other] = {'area_id': area}
+            snapshot = sensor_snapshot(agent(target_entity=TARGET), [other, PRESENCE], states, registry)
+            self.assertEqual(snapshot['absent'], [PRESENCE])
+
     def test_automation_mapping_recovers_exact_radar_and_binary_sibling(self):
         states, registry, context = fixture()
         self.assertEqual(context.area_for(ENERGY), 'bathroom')

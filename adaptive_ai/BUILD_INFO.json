@@ -4,7 +4,7 @@
   "base_version": "0.14.145",
   "base_commit": "15f96ced9c0ad1493a2690abbe26b446dfcbbe05",
   "release_status": "causal-trajectory-training-and-event-routing",
-  "release_validation_tests_passed": 1716,
+  "release_validation_tests_passed": 1718,
   "release_014140": {
     "scope": "inventory_and_remove_remaining_shipped_feature_Handler_fallbacks_for_Candidate_Live_and_manual_feedback_transport",
     "explicit_routes": "manual_feedback.js, candidate_ui.js, candidate_preference_ui.js, /api/candidates, Candidate Teach-RL status/train, generation history/comparison, /api/candidate-live, /api/live and Candidate discard",
@@ -1422,12 +1422,13 @@
   "release_014146": {
     "scope": "causal trajectories in training and sparse live event routing",
     "training_revision": "shared-home-intents-v26",
-    "validation_tests_expected": 1716,
+    "validation_tests_expected": 1718,
     "mapping": "audited unambiguous paired-automation radar fallback; HA/explicit conflicts retain authority",
     "trajectories": "direct presence only; no numeric magnitude or controlled-target occupancy labels",
     "history": "causal prefix snapshots bounded to 8 MiB, receive-time ordering, no current live graph in past examples",
     "routing": "learned predecessors, departures and competing branches; topology revision invalidates index",
     "timer": "one second only during an active arrival/departure forecast, manual hold preserved",
-    "household_performance_measured": false
+    "household_performance_measured": false,
+    "family_absence_guard": "same exact radar family and area preserve uncertainty for binary OFF with positive numeric signal when device registry is missing"
   }
 }
