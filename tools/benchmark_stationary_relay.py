@@ -131,8 +131,12 @@ def _run(feature_contract, neural, contradictory_binary, wildcard_unmapped):
                 home.observe(RADAR, sample, sample_time, learn=False,
                              event_ts=sample_time, received_ts=sample_time)
                 for eid in inputs[1:]:
-                    temporal.add(eid, sample_time, states[eid])
-                    home.observe(eid, states[eid], sample_time, learn=False,
+                    extra_sample = states[eid]
+                    if wildcard_unmapped and eid == "sensor.espen4_moving_energy":
+                        extra_sample = {**sample, "entity_id": eid}
+                        states[eid] = extra_sample
+                    temporal.add(eid, sample_time, extra_sample)
+                    home.observe(eid, extra_sample, sample_time, learn=False,
                                  event_ts=sample_time, received_ts=sample_time)
             states[RADAR] = state
             features, _, _ = policy.features(states, temporal, at)
