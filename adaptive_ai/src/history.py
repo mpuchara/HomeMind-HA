@@ -3705,6 +3705,13 @@ class HistoryManager(threading.Thread):
                         upstream_ts = ts
             return float(local_ts if local_ts is not None else action_ts), upstream_ts
 
+        def _quality_snapshot(agent, policy, tracker):
+            pair = paired_numeric_baseline(policy.selection_meta)
+            return sensor_snapshot(
+                agent, policy.schema.entities, tracker.state_map, quality_registry,
+                local_radars=(pair["sensor"],) if pair else (),
+            )
+
         def _safe_presence_boundary(agent, policy, action_value, edge, end_ts, tracker):
             from radar_context import retain_observed_on_dwell
             if (not OPTIONS.get("training_light_outcome_enabled", True)
@@ -3712,7 +3719,7 @@ class HistoryManager(threading.Thread):
                     or float(action_value) < .5):
                 return min(float(end_ts), float(edge))
             tracker.advance(float(edge))
-            snapshot = sensor_snapshot(agent, policy.schema.entities, tracker.state_map, quality_registry)
+            snapshot = _quality_snapshot(agent, policy, tracker)
             if retain_observed_on_dwell(snapshot):
                 return float(end_ts)
             occupied = set(snapshot.get("active") or ()) & set(snapshot.get("reliable") or ())
@@ -3726,7 +3733,7 @@ class HistoryManager(threading.Thread):
                 return float(end_ts)
             candidate = max(float(ts) for ts in ends)
             tracker.advance(candidate)
-            final = sensor_snapshot(agent, policy.schema.entities, tracker.state_map, quality_registry)
+            final = _quality_snapshot(agent, policy, tracker)
             still_occupied = set(final.get("active") or ()) & set(final.get("reliable") or ())
             return candidate if occupied <= set(final.get("absent") or ()) and not still_occupied else float(end_ts)
 
@@ -3792,7 +3799,7 @@ class HistoryManager(threading.Thread):
                         and (not before.get("active") or
                              set(before["reliable"]) <= set(before.get("absent") or ()))):
                     tracker.advance(float(end_time))
-                    after = sensor_snapshot(agent, policy.schema.entities, tracker.state_map, quality_registry)
+                    after = _quality_snapshot(agent, policy, tracker)
                     positive = any(tracker.first_directional_transition_after(
                         eid, float(old["ts"]), float(end_time), True
                     ) is not None for eid in before["reliable"])
@@ -4065,10 +4072,22 @@ class HistoryManager(threading.Thread):
                     )
 
             # 2) Persistence samples: learn what should remain true while the state is
-            # accepted. Limit to three samples/head so a six-hour dwell cannot dominate
+            # accepted. At most three uniform samples and one dip/head; long stays cannot dominate
             # the policy merely because it lasted longer. Only sample contexts that are
             # safely inside the dwell for that prediction horizon.
             settle = min(20.0, max(3.0, float(OPTIONS.get("temporal_short_seconds", 60)) * 0.10))
+            dip_time = None
+            pair = paired_numeric_baseline(policy.selection_meta)
+            if (pair and float(old["action_value"]) >= .5 and reward > 0
+                    and getattr(policy.schema, "feature_contract_version", 0) >= 3):
+                # Uniform interior samples can miss every short stationary dropout.
+                # Sample one observed below-entry signal inside an accepted ON stay.
+                # The existing causal lags distinguish it from a sustained exit.
+                dip_time = threshold_event(
+                    persistence_timeline, pair["sensor"], old["ts"] + settle,
+                    float(effective_end) - settle, pair["on_threshold"],
+                    above=False, hold_seconds=0,
+                ) if float(effective_end) - old["ts"] > 2 * settle else None
             persistence_tasks = []
             for h in policy.horizons:
                 h = int(h)
@@ -4089,6 +4108,9 @@ class HistoryManager(threading.Thread):
                         continue
                     seen.add(key)
                     persistence_tasks.append((float(target_time), h))
+                if (dip_time is not None and earliest_target < dip_time < latest_target
+                        and int(dip_time) not in seen):
+                    persistence_tasks.append((float(dip_time), h))
 
             # Correlated persistence contexts share one bounded mass budget per dwell/head.
             # We keep all selected contexts, but 1/2/3 samples contribute 1/.5/~.333 each
@@ -4223,9 +4245,7 @@ class HistoryManager(threading.Thread):
                     include_neural=bool(neural_enabled),
                 )
                 snapshots[query_ts] = (dict(features), dict(meta or {}))
-                quality_snapshots[query_ts] = sensor_snapshot(
-                    agent, policy.schema.entities, tracker.state_map, quality_registry
-                )
+                quality_snapshots[query_ts] = _quality_snapshot(agent, policy, tracker)
                 if neural_enabled:
                     neural_snapshots[query_ts] = neural_snapshot
 

@@ -165,7 +165,7 @@ class Release038PiDegradationTests(unittest.TestCase):
         self.assertNotIn("fetch('api/agents'", confidence)
         self.assertNotIn("fetch('api/candidates'", confidence)
         self.assertNotIn("setInterval(refresh,2000)", confidence)
-        self.assertIn("setTimeout(liveLoop,1000)", manual)
+        self.assertIn("setTimeout(liveLoop,Math.max(100,500-(performance.now()-started)))", manual)
         self.assertIn("adaptiveAiTimeoutMs:3500", app)
         self.assertIn("const earlyAgents=wasReady?api('api/agents'):null", app)
         # A clean install must not render "0 active" before the Recorder classifier has

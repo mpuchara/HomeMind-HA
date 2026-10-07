@@ -86,6 +86,15 @@ class BathroomCausalReplayTests(unittest.TestCase):
         )
         self.assertEqual(edges, [18.0])
 
+    def test_edge_features_start_only_after_the_signal_was_received(self):
+        rows = [reading(0, 8), {**reading(10, 55), "received_ts": 10.25}]
+        self.assertEqual(numeric_threshold_edges(rows, 22, above=True, end_ts=11), [10.25])
+        self.assertEqual(numeric_threshold_edges(rows, 22, above=True, end_ts=10.1), [])
+
+    def test_late_old_event_does_not_replace_newer_known_signal(self):
+        rows = [reading(0, 8), reading(10, 8), {**reading(1, 55), "received_ts": 20}]
+        self.assertEqual(numeric_threshold_edges(rows, 22, above=True, end_ts=25), [])
+
     def test_zero_crossing_of_unrelated_distance_is_not_a_presence_edge(self):
         kitchen = {
             "entity_id": "sensor.kitchen_presence_still_distance",

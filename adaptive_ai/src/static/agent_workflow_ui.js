@@ -110,6 +110,26 @@ Parent pozostaje bez zmian. Wynik przejdzie offline gate i Shadow A/B; nie dosta
   dialog.id='correctDialog';
   document.body.append(dialog);
   let subject=null,ref=null,range=null,data=null,selected=null,requestSeq=0;
+  let followLive=false,liveTimer=null,historyReads=0,viewEpoch=0;
+  function setFollowLive(enabled){
+    if(followLive&&!enabled)++requestSeq;
+    followLive=!!enabled;
+    if(liveTimer!=null){clearTimeout(liveTimer);liveTimer=null;}
+    const button=dialog.querySelector('[data-live]');
+    if(button){button.textContent=followLive?'Na żywo · ON':'Na żywo';button.setAttribute('aria-pressed',String(followLive));}
+    if(followLive&&dialog.open)liveTimer=setTimeout(refreshChartLive,1000);
+  }
+  async function refreshChartLive(){
+    if(liveTimer!=null)clearTimeout(liveTimer);
+    liveTimer=null;
+    if(!dialog.open||!followLive)return;
+    if(!document.hidden&&!historyReads){
+      const width=range.end-range.start,end=Date.now()/1000;
+      range={start:end-width,end};
+      await load(true);
+    }
+    if(dialog.open&&followLive&&liveTimer==null)liveTimer=setTimeout(refreshChartLive,1000);
+  }
 
   const error=e=>{const n=dialog.querySelector('[data-error]');if(n)n.textContent=e?.message||String(e);else notifyError(e);};
   const setBusy=busy=>dialog.querySelectorAll('button,input').forEach(el=>{if(!el.hasAttribute('data-close'))el.disabled=!!busy;});
@@ -117,35 +137,39 @@ Parent pozostaje bez zmian. Wynik przejdzie offline gate i Shadow A/B; nie dosta
   function shell(){
     dialog.innerHTML=`<div class="teach-head"><h2 data-title>Correct: ${html(subject.name)} · Gen ${subject.generation_number}</h2><button class="ghost" data-close>Zamknij</button></div>
       <p>Kliknij wykres, aby wskazać moment, albo przeciągnij poziomo po wykresie, aby zaznaczyć zakres i go przybliżyć. Kółko myszy przybliża wokół kursora. Zapis punktu Correct nie uruchamia treningu ani nie zmienia modelu. Zbieraj punkty przez kilka dni; Create Candidate jest osobnym przyciskiem na karcie generacji.</p>
-      <div class="teach-range"><label>Od<input data-start type="datetime-local" step="1"></label><label>Do<input data-end type="datetime-local" step="1"></label><button class="ghost" data-load>Pokaż</button><button class="ghost" data-retry>Połącz ponownie</button><button class="ghost" data-prev>←</button><button class="ghost" data-next>→</button><button class="ghost" data-in>+</button><button class="ghost" data-out>−</button></div>
+      <div class="teach-range"><label>Od<input data-start type="datetime-local" step="1"></label><label>Do<input data-end type="datetime-local" step="1"></label><button class="ghost" data-load>Pokaż</button><button class="ghost" data-live>Na żywo</button><button class="ghost" data-retry>Połącz ponownie</button><button class="ghost" data-prev>←</button><button class="ghost" data-next>→</button><button class="ghost" data-in>+</button><button class="ghost" data-out>−</button></div>
       <p class="teach-legend" data-legend></p>
       <div class="teach-chart" data-chart></div><p data-status role="status"></p><p data-error role="alert"></p>
       <form data-point><label>Wybrany moment<input data-time type="datetime-local" step="1" required></label><button type="button" class="ghost" data-inspect>Sprawdź punkt</button><p data-point-info>Wybierz moment na wykresie.</p><label>Poprawne Desired<input data-value type="number" step="any" required></label><button class="primary" type="submit" data-save disabled>Zapisz punkt Correct</button><button class="ghost" type="button" data-undo>Cofnij ostatni Correct</button></form>
       <p>Wykres używa wyłącznie observed generation decision history. Candidate jest porównywany tylko z bezpośrednim parentem; brak runtime pozostaje luką i nie jest odtwarzany obecną policy.</p>`;
-    dialog.querySelector('[data-close]').onclick=()=>dialog.close();
-    dialog.querySelector('[data-load]').onclick=()=>{const a=Date.parse(dialog.querySelector('[data-start]').value)/1000,b=Date.parse(dialog.querySelector('[data-end]').value)/1000;if(Number.isFinite(a)&&Number.isFinite(b)){range={start:a,end:b};load();}};
+    dialog.querySelector('[data-close]').onclick=()=>{setFollowLive(false);++requestSeq;dialog.close();};
+    dialog.onclose=()=>{setFollowLive(false);++requestSeq;++viewEpoch;};
+    dialog.querySelector('[data-live]').onclick=()=>{setFollowLive(!followLive);if(followLive){selected=null;dialog.querySelector('[data-save]').disabled=true;refreshChartLive();}};
+    dialog.querySelector('[data-load]').onclick=()=>{setFollowLive(false);const a=Date.parse(dialog.querySelector('[data-start]').value)/1000,b=Date.parse(dialog.querySelector('[data-end]').value)/1000;if(Number.isFinite(a)&&Number.isFinite(b)){range={start:a,end:b};load();}};
+    for(const name of ['start','end'])dialog.querySelector(`[data-${name}]`).oninput=()=>setFollowLive(false);
     dialog.querySelector('[data-retry]').onclick=()=>refreshSubjectAndLoad();
     for(const [k,f] of [['in',.5],['out',2]])dialog.querySelector(`[data-${k}]`).onclick=()=>zoom(f);
     for(const [k,d] of [['prev',-1],['next',1]])dialog.querySelector(`[data-${k}]`).onclick=()=>shift(d);
     dialog.querySelector('[data-inspect]').onclick=()=>inspect(Date.parse(dialog.querySelector('[data-time]').value)/1000);
-    dialog.querySelector('[data-time]').oninput=()=>{selected=null;dialog.querySelector('[data-save]').disabled=true;};
+    dialog.querySelector('[data-time]').oninput=()=>{setFollowLive(false);selected=null;dialog.querySelector('[data-save]').disabled=true;};
     dialog.querySelector('[data-undo]').onclick=undo;
     dialog.querySelector('[data-point]').onsubmit=save;
   }
 
   async function refreshSubjectAndLoad(){
     if(!dialog.open)return;
+    const epoch=viewEpoch,requestedRef=ref;
     dialog.querySelector('[data-error]').textContent='';
     dialog.querySelector('[data-status]').textContent='Łączę z Adaptive AI i ładuję historię…';
     try{
-      const fresh=await status(ref);
-      if(!dialog.open)return;
+      const fresh=await status(requestedRef);
+      if(!dialog.open||epoch!==viewEpoch)return;
       subject=fresh;
       const title=dialog.querySelector('[data-title]');
       if(title)title.textContent=`Correct: ${subject.name} · Gen ${subject.generation_number}`;
       await load();
     }catch(e){
-      if(!dialog.open)return;
+      if(!dialog.open||epoch!==viewEpoch)return;
       error(e);
       dialog.querySelector('[data-status]').textContent='Backend jest zajęty. Okno Correct pozostaje otwarte — użyj „Połącz ponownie”, gdy odczyt wróci.';
     }
@@ -238,6 +262,7 @@ Parent pozostaje bez zmian. Wynik przejdzie offline gate i Shadow A/B; nie dosta
   };
 
   window.openWorkflowCorrect=async generationRef=>{
+    setFollowLive(false);++requestSeq;++viewEpoch;
     ref=String(generationRef);subject=provisionalSubject(ref);
     const end=Date.now()/1000;range={start:end-600,end};selected=null;data=null;shell();dialog.showModal();
     const pending=pendingRequest(ref);
@@ -245,11 +270,12 @@ Parent pozostaje bez zmian. Wynik przejdzie offline gate i Shadow A/B; nie dosta
       setBusy(true);
       monitorCorrectRequest(pending).catch(e=>{clearRequest(ref);setBusy(false);error(e);});
     }
+    if(!pending)setFollowLive(true);
     await refreshSubjectAndLoad();
   };
 
-  function zoom(factor,anchor=.5){if(!Number.isFinite(range.end-range.start))return;const oldWidth=range.end-range.start,width=Math.max(10,Math.min(31*86400,oldWidth*factor)),center=range.start+oldWidth*anchor;range={start:center-width*anchor,end:center+width*(1-anchor)};load();}
-  function shift(direction){const width=range.end-range.start;range={start:range.start+direction*width,end:range.end+direction*width};load();}
+  function zoom(factor,anchor=.5){setFollowLive(false);if(!Number.isFinite(range.end-range.start))return;const oldWidth=range.end-range.start,width=Math.max(10,Math.min(31*86400,oldWidth*factor)),center=range.start+oldWidth*anchor;range={start:center-width*anchor,end:center+width*(1-anchor)};load();}
+  function shift(direction){setFollowLive(false);const width=range.end-range.start;range={start:range.start+direction*width,end:range.end+direction*width};load();}
 
   function renderLegend(){
     const legend=dialog.querySelector('[data-legend]');if(!legend||!data)return;
@@ -263,10 +289,11 @@ Parent pozostaje bez zmian. Wynik przejdzie offline gate i Shadow A/B; nie dosta
     legend.innerHTML=rows.map(([label,color,dashed])=>`<span style="color:${color}">${dashed?'┄':'●'} ${html(label)}</span>`).join('');
   }
 
-  async function load(){
+  async function load(quiet=false){
     const seq=++requestSeq,end=Math.min(range.end,Date.now()/1000);range={start:range.start,end};
     if(!Number.isFinite(range.start)||!Number.isFinite(end)||end<=range.start||end-range.start>31*86400){error(Error('Wybierz zakres od 1 sekundy do 31 dni'));return;}
-    dialog.querySelector('[data-start]').value=local(range.start);dialog.querySelector('[data-end]').value=local(end);dialog.querySelector('[data-error]').textContent='';dialog.querySelector('[data-status]').textContent='Ładuję zaobserwowane decyzje generacji…';
+    dialog.querySelector('[data-start]').value=local(range.start);dialog.querySelector('[data-end]').value=local(end);dialog.querySelector('[data-error]').textContent='';if(!quiet)dialog.querySelector('[data-status]').textContent='Ładuję zaobserwowane decyzje generacji…';
+    historyReads++;
     try{
       const out=normalizeCompactSeries(await api(`api/agent-workflow/${encodeURIComponent(ref)}/correct-history?start=${range.start}&end=${end}&compact=1`));
       if(seq!==requestSeq||!dialog.open)return;
@@ -282,10 +309,11 @@ Parent pozostaje bez zmian. Wynik przejdzie offline gate i Shadow A/B; nie dosta
       const pending=Number(subject?.correct_labels_pending??labels);
       dialog.querySelector('[data-status]').textContent=`${observed} · ${labels} zapisanych punktów Correct · ${pending} nowych do treningu${gaps?` · ${gaps} luk runtime`:''}. Zapis punktu nie uruchamia treningu.`;
       dialog.querySelector('[data-undo]').disabled=!labels;
-    }catch(e){if(seq===requestSeq)error(e);}
+    }catch(e){if(seq===requestSeq&&dialog.open)error(e);}finally{historyReads--;}
   }
 
   async function inspect(ts){
+    setFollowLive(false);
     if(!Number.isFinite(ts)){error(Error('Wybierz poprawny moment'));return;}
     selected=null;dialog.querySelector('[data-save]').disabled=true;dialog.querySelector('[data-error]').textContent='';
     try{
@@ -341,7 +369,7 @@ Parent pozostaje bez zmian. Wynik przejdzie offline gate i Shadow A/B; nie dosta
     const hideSelection=()=>selection.setAttribute('visibility','hidden');
     const showSelection=endFraction=>{if(down==null)return;const a=50+930*Math.min(down,endFraction),b=50+930*Math.max(down,endFraction);selection.setAttribute('x',a);selection.setAttribute('width',Math.max(1,b-a));selection.setAttribute('visibility','visible');};
     svg.onwheel=ev=>{ev.preventDefault();zoom(ev.deltaY<0?.5:2,fraction(ev));};
-    hit.onpointerdown=ev=>{down=fraction(ev);showSelection(down);hit.setPointerCapture(ev.pointerId);};
+    hit.onpointerdown=ev=>{setFollowLive(false);down=fraction(ev);showSelection(down);hit.setPointerCapture(ev.pointerId);};
     hit.onpointermove=ev=>{if(down!=null)showSelection(fraction(ev));};
     hit.onpointercancel=()=>{down=null;hideSelection();};
     hit.onlostpointercapture=()=>{if(down!=null){down=null;hideSelection();}};

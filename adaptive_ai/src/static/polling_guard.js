@@ -8,8 +8,6 @@
   const inflight=new Map(),cache=new Map();
   const ttlFor=path=>{
     const base=path.split('?')[0].replace(/^\.?\//,'');
-    if(base.endsWith('api/live'))return 900;
-    if(base.endsWith('api/candidate-live'))return 900;
     if(base.endsWith('api/candidates'))return 1800;
     if(base.endsWith('api/agents'))return 3000;
     if(base.endsWith('api/status'))return 1800;
@@ -41,8 +39,9 @@
   window.fetch=(input,init={})=>{
     const method=String(init?.method||'GET').toUpperCase();
     if(method!=='GET'&&method!=='HEAD')return upstreamFetch(input,init);
-    const key=keyFor(input),ttl=ttlFor(key);
-    if(!ttl)return upstreamFetch(input,init);
+    const key=keyFor(input),ttl=ttlFor(key),sharedTimeout=sharedTimeoutFor(key);
+    const realtime=sharedTimeout!=null;
+    if(!ttl&&!realtime)return upstreamFetch(input,init);
     const now=performance.now(),cached=cache.get(key);
     if(cached&&now-cached.at<ttl)return Promise.resolve(responseFrom(cached.value));
     if(inflight.has(key))return inflight.get(key).then(responseFrom);
@@ -51,14 +50,14 @@
     // route-level deadline instead of falling back to home.js's generic 12 s timeout.
     const sharedInit={...init};
     delete sharedInit.signal;
-    const sharedTimeout=sharedTimeoutFor(key);
+    if(realtime)sharedInit.cache='no-store';
     if(sharedTimeout!=null){
       const requested=Number(sharedInit.adaptiveAiTimeoutMs);
       sharedInit.adaptiveAiTimeoutMs=Number.isFinite(requested)&&requested>0
         ?Math.min(requested,sharedTimeout):sharedTimeout;
     }
     const request=upstreamFetch(input,sharedInit).then(snapshot).then(value=>{
-      if(value.ok)cache.set(key,{at:performance.now(),value});
+      if(value.ok&&ttl)cache.set(key,{at:performance.now(),value});
       return value;
     }).finally(()=>inflight.delete(key));
     inflight.set(key,request);

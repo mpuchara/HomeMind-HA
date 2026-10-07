@@ -74,7 +74,7 @@ assert snapshot['automation_scan_workers'] == 1
         guard = (static/'polling_guard.js').read_text(encoding='utf-8')
         index = (static/'index.html').read_text(encoding='utf-8')
         self.assertIn("if(method!=='GET'&&method!=='HEAD')return upstreamFetch(input,init);", guard)
-        self.assertIn("if(base.endsWith('api/live'))return 900", guard)
+        self.assertIn("if(realtime)sharedInit.cache='no-store'", guard)
         self.assertIn("if(base.endsWith('api/candidates'))return 1800", guard)
         self.assertIn("if(base.endsWith('api/agents'))return 3000", guard)
         self.assertIn('if(inflight.has(key))return inflight.get(key).then(responseFrom);', guard)

@@ -15,9 +15,9 @@ try:
 except Exception:
     ws_connect = None
 
-APP_VERSION = "0.14.144"
+APP_VERSION = "0.14.145"
 HISTORY_BOOTSTRAP_REVISION = "target-attrs-v2"
-TRAINING_REVISION = "shared-home-intents-v24"
+TRAINING_REVISION = "shared-home-intents-v25"
 DATA_DIR = Path(os.environ.get("ADAPTIVE_AI_DATA", "/data"))
 DB_PATH = DATA_DIR / "adaptive_ai.db"
 OPTIONS_PATH = DATA_DIR / "options.json"
