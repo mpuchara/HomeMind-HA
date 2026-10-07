@@ -7,6 +7,7 @@ is trajectory context, never local ground truth. No binary source implies person
 """
 import re
 from context import entity_capability_tags
+from radar_context import radar_family
 
 OCCUPANCY_CLASSES = {'motion', 'occupancy', 'presence'}
 DOOR_CLASSES = {'door', 'opening', 'window', 'garage_door'}
@@ -297,14 +298,19 @@ def select_sources(states, registry, mapping, excluded):
     # Some mmWave integrations name the binary output simply "presence" while exposing
     # sibling raw radar channels. Treat that binary as radar occupancy based on the
     # physical device relationship, not a name guess.
+    def radar_group(eid):
+        device = registry.get(eid, {}).get('device_id')
+        family = radar_family(eid) if not device else None
+        return (('device', device) if device else ('radar_family', family), mapping.get(eid)) if device or family else None
+
     radar_devices = {
-        (registry.get(eid, {}).get('device_id'), mapping.get(eid))
+        radar_group(eid)
         for eid, role in candidates.items()
         if role in {'radar_activity', 'radar_distance'}
-        and registry.get(eid, {}).get('device_id')
+        and radar_group(eid)
     }
     for eid, role in list(candidates.items()):
-        device_area = (registry.get(eid, {}).get('device_id'), mapping.get(eid))
+        device_area = radar_group(eid)
         if role == 'occupancy_binary' and device_area in radar_devices:
             candidates[eid] = 'radar_occupancy'
             details[eid].update(

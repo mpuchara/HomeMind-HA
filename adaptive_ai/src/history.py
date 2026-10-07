@@ -3131,6 +3131,7 @@ class HistoryManager(threading.Thread):
         })
 
         tracker_init_started = time.perf_counter()
+        from causal_home_statistics import CausalHomeStatistics
         timeline = SQLiteTemporalTracker(
             STORE, watched_entities, self.engine.context, start_ts, end_ts,
             query_cache=replay_query_cache,
@@ -3140,6 +3141,11 @@ class HistoryManager(threading.Thread):
             ram_replay_index=ram_replay_index,
             transition_edge_index=transition_edge_index,
         )
+        home_statistics = CausalHomeStatistics(
+            timeline.conn, self.engine.context, ram_cover_start, ram_cover_end
+        )
+        timeline.home_statistics = home_statistics
+        self.training_phase_timings['causal_home_statistics'] = home_statistics.status()
         persistence_timeline = SQLiteTemporalTracker(
             STORE, watched_entities, self.engine.context, start_ts, end_ts,
             query_cache=replay_query_cache,
@@ -3148,6 +3154,7 @@ class HistoryManager(threading.Thread):
             connection=replay_connection,
             ram_replay_index=ram_replay_index,
             transition_edge_index=transition_edge_index,
+            home_statistics=home_statistics,
         )
         self.training_phase_timings["tracker_init_seconds"] = round(
             time.perf_counter() - tracker_init_started, 6

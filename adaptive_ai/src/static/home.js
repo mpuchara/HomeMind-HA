@@ -34,7 +34,7 @@ function homeSources(h,names){
   return '<details class="home-source-details"><summary>Presence sources: '+num(h.mapped_sources)+' mapped · '+num(h.unmapped_sources)+' without area · sensor diagnostics</summary>'+
     '<p class="muted">Counts refer to entities, not physical devices. Radar distance and settings do not mean occupancy. Raw activity remains available to agent policies.</p>'+
     '<div class="home-source-table"><table><thead><tr><th>Entity</th><th>Area</th><th>Use / reason</th></tr></thead><tbody>'+
-    visible.map(s=>'<tr><td>'+esc(s.name)+'<br><small>'+esc(s.entity_id)+'</small></td><td>'+esc(names[s.area_id]||s.area_id||'—')+'</td><td>'+(s.available===false?'Unavailable · ':'')+esc(reasons[s.reason]||s.reason)+'</td></tr>').join('')+
+    visible.map(s=>'<tr><td>'+esc(s.name)+'<br><small>'+esc(s.entity_id)+'</small></td><td>'+esc(names[s.area_id]||s.area_id||'—')+(s.area_mapping_origin==='automation_radar_anchor'?'<br><small>Automation radar fallback</small>':'')+'</td><td>'+(s.available===false?'Unavailable · ':'')+esc(reasons[s.reason]||s.reason)+'</td></tr>').join('')+
     '</tbody></table></div>'+(h.source_details_total>visible.length?'<p class="muted">Showing '+visible.length+' of '+num(h.source_details_total)+' candidate channels.</p>':'')+'</details>';
 }
 function renderHome(status){
@@ -93,6 +93,7 @@ function homeAgentDetails(a){
   return '<div class="detail"><b>Target area:</b> '+esc(f.area_id||'unmapped')+
     '<br><b>Occupancy now / within 1 / 3 / 5 seconds:</b> '+[f.occupancy_now,f.occupancy_in_1s,f.occupancy_in_3s,f.occupancy_in_5s].map(pct).join(' / ')+
     '<br><b>Trajectory confidence:</b> '+pct(f.trajectory_confidence)+' · sensing '+(f.known?'available':'unknown')+
+    '<br><b>Trajectory event sources:</b> '+esc((rt.trajectory_event_sources||[]).join(', ')||'No mapped sources on learned routes yet')+
     '<br><b>Intent:</b> '+esc(rt.intent?.status||'—')+' · '+esc(rt.intent?.reason||'No intent yet')+
     (rt.automation_scan_warning?'<br><b>Automation scan warning:</b> '+esc(rt.automation_scan_warning)+'. Control uses known target mappings; unreadable automations without a saved mapping cannot be matched.':'')+
     '<br><b>Reward components:</b> '+esc(Object.entries(rt.reward_components||{}).filter(([,v])=>v!==0).map(([k,v])=>k+' '+Number(v).toFixed(2)).join(' · ')||'—')+

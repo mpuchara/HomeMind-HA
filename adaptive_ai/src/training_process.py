@@ -49,7 +49,9 @@ TRAINING_STATE_ATTRIBUTE_KEYS = STATE_METADATA_KEYS + (
     "brightness", "temperature", "current_position", "percentage", "volume_level",
     "humidity",
 )
-REGISTRY_METADATA_KEYS = ("device_id", "area_id", "platform", "integration")
+REGISTRY_METADATA_KEYS = ("device_id", "area_id", "platform", "integration",
+                          "area_mapping_origin", "boundary_for", "arrival_precursor_for",
+                          "original_device_class", "disabled_by", "entity_category")
 
 # These knobs affect only worker scheduling/cache pressure. Changing them while a job is
 # running must not invalidate a semantically identical model at publication time.
@@ -564,6 +566,9 @@ def _prune_job_files(keep=12):
 
 
 def _snapshot_parent_context(history, agent_id):
+    refresh = getattr(history.engine, 'refresh_automation_context', None)
+    if callable(refresh):
+        refresh()
     with history.engine.lock:
         state_map = _compact_training_state_map(history.engine.state_map)
         registry = _compact_training_registry(history.engine.entity_registry)

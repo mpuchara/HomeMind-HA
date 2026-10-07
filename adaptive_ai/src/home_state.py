@@ -86,10 +86,12 @@ class RoomBeliefModel:
         self.last_ts = 0.0
         self.last_decay_ts = 0.0
         self.revision = 0
+        self.routing_revision = 0
         self.migrated_from = None
         self.time_contract_loaded = self.TIME_CONTRACT_VERSION
         self.lock = threading.RLock()
         self._load_checkpoint(raw)
+        self.routing_revision += bool(self.graph)
 
     @staticmethod
     def _empty_calibration():
@@ -162,11 +164,16 @@ class RoomBeliefModel:
             if len(self.graph) >= self.MAX_CONTEXTS:
                 del self.graph[min(self.graph, key=lambda key: self.graph[key]['ts'])]
             self.graph[context] = {'ts': float(ts), 'outcomes': {}}
+            self.routing_revision += 1
         row = self.graph[context]
         self._decay_row(row, float(ts))
         key = str(destination or '')
         if key not in row['outcomes'] and len(row['outcomes']) >= 15:
             key = ''
+        if key not in row['outcomes']:
+            self.routing_revision += 1
+        elif not any(row['outcomes'][key]):
+            self.routing_revision += 1
         bins = row['outcomes'].setdefault(key, [0.0] * 7)
         bins[min(6, max(0, int(math.ceil(max(0.0, float(delay))))))] += weight
 
@@ -741,6 +748,26 @@ class RoomBeliefModel:
             probabilities.append(hits / (trials + 2.0))
         return probabilities, support, hypotheses
 
+    def trajectory_areas_for(self, area):
+        """Routing topology only; probabilities/confidence remain learned features.
+
+        A competing destination can replace an arrival hypothesis, so routing only
+        incoming rooms would miss cancellation of an anticipated entry. No unrelated
+        room is included simply because it has a presence sensor.
+        """
+        if not area:
+            return set()
+        related = set()
+        with self.lock:
+            for path, row in self.graph.items():
+                outcomes = {destination for destination, bins in row['outcomes'].items()
+                            if destination and any(float(value) > 0 for value in bins)}
+                if area in outcomes or area in path:
+                    related.update(path)
+                    related.update(outcomes)
+        related.discard(area)
+        return related
+
     def _departure_forecast(self, area, ts, occupancy):
         slot, dwell = self.values.get(area, {}), self.dwell.get(area)
         if occupancy < .5 or not dwell or slot.get('arrival') is None:
@@ -932,6 +959,7 @@ class RoomBeliefModel:
             self.calibration['count'] += int(delta.calibration.get('count') or 0)
             self.calibration['sum_brier'] += float(delta.calibration.get('sum_brier') or 0.0)
             self.updated += delta.updated
+            self.routing_revision += 1
             self.last_decay_ts = max(self.last_decay_ts, delta.last_decay_ts)
 
     def diagnostics(self, ts):

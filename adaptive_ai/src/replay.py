@@ -970,7 +970,7 @@ class SQLiteTemporalTracker:
     def __init__(self, store, watched, context, start, end, query_cache=None,
                  home_context_cache=None, context_cache_contract=None,
                  connection=None, ram_replay_index=None,
-                 transition_edge_index=None):
+                 transition_edge_index=None, home_statistics=None):
         self._owns_connection = connection is None
         self.conn = connection or sqlite3.connect(store.path, timeout=30)
         self.conn.row_factory = sqlite3.Row
@@ -987,6 +987,7 @@ class SQLiteTemporalTracker:
         self.context = context
         self.query_cache = query_cache
         self.home_context_cache = home_context_cache
+        self.home_statistics = home_statistics
         self.ram_replay_index = ram_replay_index
         self.transition_edge_index = transition_edge_index
         self.context_cache_contract = str(
@@ -1377,6 +1378,10 @@ class SQLiteTemporalTracker:
         """
         ts = float(ts)
         view = self.home_view
+        if self.home_statistics is not None:
+            view.stats = self.home_statistics.statistics_at(ts)
+            view.home.graph, view.home.dwell, view.home.calibration = view.stats
+            self._home_checkpoint_revision = self.home_statistics.identity
         self._metrics["home_rebuilds"] += 1
         cache_key = self._historical_context_cache_key(ts)
         self._last_home_context_cache_key = cache_key
