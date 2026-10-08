@@ -270,6 +270,34 @@ class PromotionIntegrationTests(unittest.TestCase):
         finally:
             promotion_options['context_tournament_enabled'] = old
 
+    def test_rollback_preparation_sees_champion_before_migration(self):
+        snapshots = []
+
+        def prepare(agent, policy, new_entities):
+            self.assertIs(policy, self.policy)
+            self.assertEqual(policy.schema.entities, self.active)
+            self.assertIn(self.challenger, new_entities)
+            snapshots.append(policy.serialize())
+
+        self.service.prepare_schema_promotion = prepare
+        self.service.observe_shadow(self.agent, {}, set())
+        self.assertEqual(len(snapshots), 1)
+        self.assertEqual(snapshots[0]['schema']['entities'], self.active)
+        self.assertIn(self.challenger, self.policy.schema.entities)
+
+    def test_failed_rollback_preparation_aborts_before_mutation(self):
+        def prepare(*args):
+            raise ValueError('snapshot failed')
+
+        before = self.policy.serialize()
+        self.service.prepare_schema_promotion = prepare
+        with self.assertRaisesRegex(ValueError, 'snapshot failed'):
+            self.service.observe_shadow(self.agent, {}, set())
+        self.assertEqual(self.policy.serialize(), before)
+        self.assertIsNone(self.store.get_model(self.agent['id']))
+        self.assertIsNone(self.service.promotion_status(self.agent)['last_promotion_ts'])
+        self.assertFalse(self.engine.wake_event.is_set())
+
 
 if __name__ == '__main__':
     unittest.main()

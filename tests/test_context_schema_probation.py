@@ -180,6 +180,9 @@ class FakeService:
 
     def observe_shadow(self, agent, state_map=None, changed_entities=None):
         if not self.promoted:
+            prepare = getattr(self, 'prepare_schema_promotion', None)
+            if callable(prepare):
+                prepare(agent, self.engine.models[agent['id']], self.new_model['schema']['entities'])
             self.promoted = True
             self.store.model = json.loads(json.dumps(self.new_model))
             self.engine.models[agent['id']] = FakeLivePolicy(self.new_model)
@@ -196,6 +199,95 @@ class FakeService:
 
 
 class ProbationIntegrationTests(unittest.TestCase):
+    def setUp(self):
+        original = probation_module.promotion._choose_schema_after_promotion
+        self.addCleanup(setattr, probation_module.promotion, '_choose_schema_after_promotion', original)
+
+    def test_ordinary_observations_do_not_snapshot_warm_or_cold_models(self):
+        with tempfile.TemporaryDirectory() as root:
+            service = FakeService(root)
+            service.promoted = True
+            policy = service.engine.models['agent-a']
+            install_schema_probation(service)
+            state = {'light.test': {'state': 'off', 'attributes': {}}}
+            with patch.object(policy, 'serialize', side_effect=AssertionError('unnecessary snapshot')), patch.object(
+                service.store, 'get_model', side_effect=AssertionError('unnecessary model read')
+            ):
+                for _ in range(10):
+                    service.observe_shadow(service.agent, state, {'light.test'})
+                service.engine.models.clear()
+                for _ in range(10):
+                    service.observe_shadow(service.agent, state, {'light.test'})
+            self.assertIsNone(service.schema_probation('agent-a'))
+
+    def test_snapshot_preserves_latest_champion_before_migration_and_is_detached(self):
+        with tempfile.TemporaryDirectory() as root, patch(
+            'context_schema_probation.MultiHorizonPolicy', FakeClonePolicy
+        ):
+            service = FakeService(root)
+            old_policy = service.engine.models['agent-a']
+            original_observe = service.observe_shadow
+
+            def observe(agent, states, changed):
+                # Simulate a champion update after observation entry but before
+                # the eligible migration. The rollback snapshot must include it.
+                old_policy.raw['model_revision'] = 'latest-champion'
+                old_policy.raw['heads'] = {'1': {'weights': [1, 2, 3]}}
+                result = original_observe(agent, states, changed)
+                old_policy.raw['heads']['1']['weights'][0] = 999
+                return result
+
+            service.observe_shadow = observe
+            install_schema_probation(service)
+            with patch.object(old_policy, 'serialize', wraps=old_policy.serialize) as snapshot:
+                service.observe_shadow(service.agent, {'light.test': {'state': 'off'}}, set())
+            self.assertEqual(snapshot.call_count, 1)
+            previous = service.schema_probation('agent-a')['previous_model']
+            self.assertEqual(previous['model_revision'], 'latest-champion')
+            self.assertEqual(previous['heads']['1']['weights'], [1, 2, 3])
+
+    def test_snapshot_failure_preserves_champion_and_does_not_poison_retry(self):
+        with tempfile.TemporaryDirectory() as root, patch(
+            'context_schema_probation.MultiHorizonPolicy', FakeClonePolicy
+        ):
+            service = FakeService(root)
+            policy = service.engine.models['agent-a']
+            install_schema_probation(service)
+            states = {'light.test': {'state': 'off'}}
+            with patch.object(policy, 'serialize', side_effect=ValueError('snapshot failed')):
+                with self.assertRaisesRegex(ValueError, 'snapshot failed'):
+                    service.observe_shadow(service.agent, states, set())
+            self.assertFalse(service.promoted)
+            self.assertEqual(service._history, [])
+            self.assertIs(service.engine.models['agent-a'], policy)
+            self.assertIsNone(service.schema_probation('agent-a'))
+            service.observe_shadow(service.agent, states, set())
+            self.assertEqual(service.schema_probation('agent-a')['previous_model']['model_revision'], 'old')
+
+    def test_later_failed_attempt_keeps_snapshot_for_completed_promotion(self):
+        with tempfile.TemporaryDirectory() as root, patch(
+            'context_schema_probation.MultiHorizonPolicy', FakeClonePolicy
+        ):
+            service = FakeService(root)
+            original_observe = service.observe_shadow
+
+            def observe(agent, states, changed):
+                result = original_observe(agent, states, changed)
+                # A second eligible attempt captures the new champion but does
+                # not migrate. The completed history row still needs the old one.
+                service.prepare_schema_promotion(
+                    agent, service.engine.models[agent['id']], ['binary_sensor.failed']
+                )
+                return result
+
+            service.observe_shadow = observe
+            install_schema_probation(service)
+            service.observe_shadow(service.agent, {'light.test': {'state': 'off'}}, set())
+            row = service.schema_probation('agent-a')
+            self.assertEqual(row['status'], 'active')
+            self.assertEqual(row['previous_model']['model_revision'], 'old')
+            self.assertEqual(row['promoted_schema'], ['binary_sensor.new'])
+
     def test_underperforming_promoted_policy_restores_exact_previous_model(self):
         original_chooser = probation_module.promotion._choose_schema_after_promotion
         self.addCleanup(

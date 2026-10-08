@@ -132,6 +132,7 @@ class RuntimeDebugLogService:
                 "wrapped_inference_metric": True,
                 "context_shadow_observation_metric": True,
                 "context_observed_pool_metric": True,
+                "context_probation_snapshot_metric": True,
                 "observed_pool_atomic_batch": True,
                 "resubmit_preserves_trigger_entities": True,
                 "shadow_validation": "observation_only_optimistic_revision_read_no_engine_writer_lock",

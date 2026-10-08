@@ -1,6 +1,6 @@
-# HomeMind-HA / Adaptive AI 0.14.148
+# HomeMind-HA / Adaptive AI 0.14.149
 
-0.14.148: mniej połączeń SQLite i serializacji historii podczas obserwacji kontekstu. Zachowane próbki, liczniki i zatwierdzanie zapisów przed przekazaniem sterowania. Aktualizacja nie wymaga Rebuild.
+0.14.149: mniej serializacji modelu w obserwacji kontekstu; zachowany dokładny snapshot sprzed promocji, rollback i weryfikacja integralności kandydatów. Bez Rebuild.
 
 
 Cztery akcje każdego agenta: Shadow/Control, Wrong decision, Settings, Teach.

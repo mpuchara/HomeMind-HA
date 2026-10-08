@@ -220,6 +220,11 @@ def exact_candidate_version_matches(model, raw, target_schema, policy, tournamen
     """Require the persisted challenger to match the exact paired evaluation epoch."""
     if not isinstance(raw, dict) or policy is None or not verify_model_checksum(raw):
         return False
+    return _candidate_epoch_matches(model, raw, target_schema, policy, tournament)
+
+
+def _candidate_epoch_matches(model, raw, target_schema, policy, tournament):
+    """Epoch metadata check for a payload whose checksum was verified by the caller."""
     current_revision = str(getattr(policy, "model_revision", "") or "")
     expected_revision = str((model or {}).get("evaluation_champion_revision") or current_revision)
     policy_version = int(getattr(policy, "VERSION", 0) or 0)
@@ -614,7 +619,7 @@ def install_policy_candidates(service):
         expected_revision = str(model.get("evaluation_champion_revision") or current_revision)
         raw = model.get("candidate_policy") if isinstance(model.get("candidate_policy"), dict) else None
         checksum_valid = bool(raw and verify_model_checksum(raw))
-        valid = exact_candidate_version_matches(model, raw, target_schema, policy, tournament)
+        valid = bool(checksum_valid and _candidate_epoch_matches(model, raw, target_schema, policy, tournament))
         if raw and not checksum_valid:
             # Older builds could deserialize the nested Candidate payload by reference.
             # Lazy decay/training then mutated the persisted dict behind its checksum.

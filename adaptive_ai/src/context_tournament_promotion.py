@@ -408,6 +408,11 @@ def install_promotion(service):
                 model["promotion_blocked_reason"] = "no_replaceable_schema_slot"
                 return False
             new_meta = _selection_meta_for_promotion(policy, challenger, replaced)
+            prepare = getattr(service, "prepare_schema_promotion", None)
+            if callable(prepare):
+                # Probation freezes the exact rollback model before any mutation.
+                # Snapshot failure aborts the promotion while the champion is intact.
+                prepare(agent, policy, new_entities)
             migration = _migrate_schema(policy, new_entities, new_meta)
             if not migration.get("changed"):
                 return False

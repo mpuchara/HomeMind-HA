@@ -1,10 +1,10 @@
 {
-  "version": "0.14.148",
+  "version": "0.14.149",
   "release_date": "2026-10-08",
-  "base_version": "0.14.147",
-  "base_commit": "8d2b6b32d6c852478cda47e3b3262c2abf7a0ac7",
-  "release_status": "context-observation-connection-reuse-and-incremental-persistence",
-  "release_validation_tests_passed": 1725,
+  "base_version": "0.14.148",
+  "base_commit": "e1c727046e5283054ae4da6db34cc3c8f8e422aa",
+  "release_status": "lazy-probation-rollback-snapshots-and-single-candidate-checksum",
+  "release_validation_tests_passed": 1739,
   "release_014140": {
     "scope": "inventory_and_remove_remaining_shipped_feature_Handler_fallbacks_for_Candidate_Live_and_manual_feedback_transport",
     "explicit_routes": "manual_feedback.js, candidate_ui.js, candidate_preference_ui.js, /api/candidates, Candidate Teach-RL status/train, generation history/comparison, /api/candidate-live, /api/live and Candidate discard",
@@ -1465,5 +1465,29 @@
     "training_revision": "shared-home-intents-v26",
     "rebuild_required": false,
     "control_semantics_changed": false
+  },
+  "release_014149": {
+    "scope": "remove unnecessary full policy serialization from ordinary context observations",
+    "probation_snapshot": "capture exact detached champion after eligibility/selection and immediately before migration; snapshot failure prevents mutation; ordinary observations without active probation take no snapshot",
+    "snapshot_selection": "thread-owned observation context matches pre-migration schema to completed promotion history; failed later attempts cannot replace another schema checkpoint",
+    "candidate_integrity": "one mandatory checksum verification per candidate load; public exact-version API still verifies integrity; warm cached candidates remain checked each observation",
+    "diagnostics": "context_probation_snapshot metric and Runtime Debug span cover required promotion and active-probation snapshots",
+    "new_regressions": 8,
+    "validation_tests_expected": 1739,
+    "training_revision": "shared-home-intents-v26",
+    "rebuild_required": false,
+    "training_semantics_changed": false,
+    "control_semantics_changed": false,
+    "local_benchmark": {
+      "platform": "Windows Python 3.11 desktop, actual feature contract, no HA host latency guarantee",
+      "pool_size": 96,
+      "samples_per_sensor": 96,
+      "classifier_rows": 256,
+      "observations": 20,
+      "before_avg_ms": 152.8,
+      "after_avg_ms": 80.14,
+      "before_p95_ms": 163.56,
+      "after_p95_ms": 87.35
+    }
   }
 }
