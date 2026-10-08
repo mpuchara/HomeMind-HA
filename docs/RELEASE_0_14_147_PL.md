@@ -6,7 +6,7 @@ Poprawka usuwa zbędną pracę Sensor Tournament, która zajmowała wątek agent
 
 - Pełna pula obserwowanych sensorów jest zapisywana w jednej atomowej transakcji SQLite zamiast osobnej transakcji dla każdej encji. Zachowane są wszystkie obserwacje dostępności oraz przykłady niezależnych zmian celu.
 - Oceny historycznych przykładów są przeliczane tylko po dopisaniu nowego przykładu lub przy braku oceny. Zmiana sensora bez zmiany celu nie uruchamia ponownego liczenia niezmienionego zbioru.
-- Nowe metryki `wrapped_inference`, `context_shadow_observation` i `context_observed_pool` pokazują koszt całej obsługi agenta, także czynności po przygotowaniu decyzji. Runtime Debug zawiera osobne ślady tych etapów.
+- Nowe metryki `wrapped_inference`, `context_shadow_observation` i `context_observed_pool` pokazują koszt całej obsługi agenta, także czynności po przygotowaniu decyzji. Runtime Debug zawiera osobne ślady tych etapów. Panel Home Intelligence pokazuje też ich p95 obok dotychczasowego czasu obliczenia decyzji.
 
 ## Weryfikacja i ograniczenia
 

@@ -57,6 +57,10 @@ function renderHome(status){
     return {value:null,source:null,count:0};
   };
   const inferenceMetric=pickMetric(inf,candidateInf), eventMetric=pickRecentEventMetric(latency,candidateLatency);
+  const runtimeCost=name=>{
+    const metric=pickMetric(t.metrics?.[name]||{},{});
+    return metric.value==null?'waiting':num(metric.value,2)+' ms · '+(metric.recent?'last 60 s':'retained');
+  };
   const inferenceP95=inferenceMetric.value, eventP95=eventMetric.value;
   const inferenceP95Label=inferenceMetric.source==='candidate'
     ?'Candidate inference p95 · '+(inferenceMetric.recent?'last 60 s':'retained')
@@ -78,6 +82,7 @@ function renderHome(status){
       [inferenceP95==null?'—':num(inferenceP95,2)+' ms',inferenceP95Label],
       [eventP95==null?'—':num(eventP95,2)+' ms',eventP95Label]
     ].map(([v,label])=>'<div><b>'+v+'</b><span>'+label+'</span></div>').join('')+'</div>'+
+    '<div class="history-meta"><span>Full agent p95: '+runtimeCost('wrapped_inference')+'</span><span>Context observation p95: '+runtimeCost('context_shadow_observation')+'</span><span>Sensor pool p95: '+runtimeCost('context_observed_pool')+'</span></div>'+
     '<div class="home-transitions">'+(paths.length?paths.map(p=>'<span>'+p.path.map(id=>esc(names[id]||id)).join(' → ')+' <b>'+pct(p.probability)+'</b></span>').join(''):'No observed area-to-area transitions yet. Existing mapped presence/activity sensors learn the live map automatically as state changes arrive.')+'</div>'+
     '<div class="history-meta"><span>Graph half-life '+num(h.half_life_days)+' days</span><span>Policy half-life '+num(status.options?.policy_half_life_days||30)+' days</span><span>Heavy job: '+esc(status.heavy_job||'idle')+'</span><span>Inference count '+num(inf.count)+' live · '+num(candidateInf.count)+' Candidate</span><span>Event/timer passes '+num(scheduler.event_passes||0)+' / '+num(scheduler.timer_passes||0)+'</span><span>Drift observer '+num(drift.runs||0)+' runs · '+num(drift.pending||0)+' pending · max '+num(drift.max_run_ms||0,1)+' ms</span><span>State resync '+num(resync.last_changed_entities||0)+' changed · '+num(resync.last_duration_ms||0,1)+' ms · max '+num(resync.max_duration_ms||0,1)+' ms</span></div>'+
     (running?'<div class="bar history-bar"><i style="width:'+Math.round((b.progress||0)*100)+'%"></i></div><p>'+num(b.rows)+' rows · '+num(b.rows_per_second)+' rows/s · '+esc(duration(b.eta_seconds)||'ETA pending')+'</p>':'')+
