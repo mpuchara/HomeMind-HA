@@ -235,15 +235,26 @@ def install_sensor_quality(service):
             cache[key] = dict(value)
         return value
 
-    def save_row(agent_id, entity_id, value, now):
-        key = (str(agent_id), str(entity_id))
-        failures = [
-            float(ts) for ts in (value.get("failure_timestamps") or [])
-            if _finite(ts) is not None and float(ts) >= now - RECENT_FAILURE_SECONDS
-        ][-FAILURE_HISTORY_LIMIT:]
-        value["failure_timestamps"] = failures
+    def save_rows(agent_id, values, now):
+        if not values:
+            return
+        prepared = []
+        for entity_id, value in values:
+            key = (str(agent_id), str(entity_id))
+            failures = [
+                float(ts) for ts in (value.get("failure_timestamps") or [])
+                if _finite(ts) is not None and float(ts) >= now - RECENT_FAILURE_SECONDS
+            ][-FAILURE_HISTORY_LIMIT:]
+            value["failure_timestamps"] = failures
+            prepared.append((
+                key[0], key[1], int(value.get("opportunities") or 0),
+                int(value.get("available_count") or 0), int(value.get("unknown_count") or 0),
+                int(value.get("unavailable_count") or 0), int(value.get("event_count") or 0),
+                value.get("first_observed_ts"), value.get("last_observed_ts"),
+                value.get("last_event_ts"), json.dumps(failures, separators=(",", ":")), float(now),
+            ))
         with service.store.lock, service.store.conn() as c:
-            c.execute(
+            c.executemany(
                 """INSERT INTO context_tournament_sensor_quality
                    (agent_id,entity_id,opportunities,available_count,unknown_count,
                     unavailable_count,event_count,first_observed_ts,last_observed_ts,
@@ -260,17 +271,11 @@ def install_sensor_quality(service):
                      last_event_ts=excluded.last_event_ts,
                      failure_timestamps_json=excluded.failure_timestamps_json,
                      updated_ts=excluded.updated_ts""",
-                (
-                    key[0], key[1], int(value.get("opportunities") or 0),
-                    int(value.get("available_count") or 0), int(value.get("unknown_count") or 0),
-                    int(value.get("unavailable_count") or 0), int(value.get("event_count") or 0),
-                    value.get("first_observed_ts"), value.get("last_observed_ts"),
-                    value.get("last_event_ts"), json.dumps(failures, separators=(",", ":")),
-                    float(now),
-                ),
+                prepared,
             )
         with lock:
-            cache[key] = dict(value)
+            for entity_id, value in values:
+                cache[(str(agent_id), str(entity_id))] = dict(value)
 
     def observe_quality(agent, state_map=None, changed_entities=None):
         aid = str(agent["id"])
@@ -285,6 +290,7 @@ def install_sensor_quality(service):
                 seen.add(eid)
         changed = {str(x) for x in (changed_entities or set())}
         now = time.time()
+        values = []
         for entity_id in entities:
             value = load_row(aid, entity_id)
             value["opportunities"] = int(value.get("opportunities") or 0) + 1
@@ -303,7 +309,8 @@ def install_sensor_quality(service):
             if entity_id in changed:
                 value["event_count"] = int(value.get("event_count") or 0) + 1
                 value["last_event_ts"] = now
-            save_row(aid, entity_id, value, now)
+            values.append((entity_id, value))
+        save_rows(aid, values, now)
         # Quality is recorded before the wrapped promotion observer, so an automatic
         # replacement sees the current event's reliability state.
         return original_observe(agent, states, changed_entities)

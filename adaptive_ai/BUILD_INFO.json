@@ -1,10 +1,10 @@
 {
-  "version": "0.14.147",
+  "version": "0.14.148",
   "release_date": "2026-10-08",
-  "base_version": "0.14.146",
-  "base_commit": "14eca77f2e5145711af3c3385c5c2f5a5565c483",
-  "release_status": "batched-observed-pool-and-runtime-latency-diagnostics",
-  "release_validation_tests_passed": 1719,
+  "base_version": "0.14.147",
+  "base_commit": "8d2b6b32d6c852478cda47e3b3262c2abf7a0ac7",
+  "release_status": "context-observation-connection-reuse-and-incremental-persistence",
+  "release_validation_tests_passed": 1725,
   "release_014140": {
     "scope": "inventory_and_remove_remaining_shipped_feature_Handler_fallbacks_for_Candidate_Live_and_manual_feedback_transport",
     "explicit_routes": "manual_feedback.js, candidate_ui.js, candidate_preference_ui.js, /api/candidates, Candidate Teach-RL status/train, generation history/comparison, /api/candidate-live, /api/live and Candidate discard",
@@ -1453,5 +1453,17 @@
       "after_commits": 1
     },
     "validation_tests_expected": 1719
+  },
+  "release_014148": {
+    "scope": "reduce full Shadow context observer overhead without changing learning or control semantics",
+    "connection_session": "thread-owned SQLite connection reuse; independent commit/rollback boundaries retained; nested active transactions keep independent readers",
+    "sensor_quality": "one atomic batch of all current votes before promotion observation",
+    "observed_pool": "scalar counter updates preserve unchanged JSON; full snapshots for new signal history or independent target examples; deleted cached rows recovered atomically",
+    "state_summary": "bounded SQL count instead of repeated full sensor health summaries; detailed UI summaries retained",
+    "validation_tests_expected": 1725,
+    "benchmark_scope": "local Windows/Python 3.11 full context extension chain, 96 sensors x 96 examples, 20 warm unchanged observations; physical connections 44 to 1 and synchronous commits 9 to 2; not Home Assistant device latency",
+    "training_revision": "shared-home-intents-v26",
+    "rebuild_required": false,
+    "control_semantics_changed": false
   }
 }
