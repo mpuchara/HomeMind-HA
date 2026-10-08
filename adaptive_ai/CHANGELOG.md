@@ -1,3 +1,10 @@
+## 0.14.148
+- Obserwacja kontekstu używa jednego połączenia SQLite na przebieg, zachowując osobne zatwierdzanie i wycofywanie operacji.
+- Jakość wszystkich sensorów zapisywana jest zbiorczo przed oceną promocji schematu.
+- Liczniki dostępności nie serializują ponownie niezmienionej historii; nowe sygnały i przykłady nadal zapisują pełny stan.
+- Szybki odczyt liczby sensorów nie przebudowuje ich pełnych podsumowań jakości.
+- Zachowane próbki, głosy i zapisy wymagane przed przekazaniem sterowania. Rebuild nie jest wymagany.
+
 ## 0.14.147
 - Sensor Tournament zapisuje pełną pulę obserwacji jedną atomową transakcją zamiast osobnego zapisu dla każdej encji.
 - Ocena powtarzalności przeliczana jest po nowym niezależnym przykładzie, a nie po każdym zdarzeniu radaru.

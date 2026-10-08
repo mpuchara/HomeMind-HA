@@ -15,6 +15,7 @@ import json
 import math
 import threading
 import time
+from contextlib import nullcontext
 
 from context import (
     action_values,
@@ -636,7 +637,9 @@ def install(store, engine):
             "context_shadow_observation", agent_id=str(agent["id"])
         ) if RUNTIME_DEBUG.enabled else None)
         try:
-            service.observe_shadow(agent, state_map, changed_entities)
+            session = getattr(store, "connection_session", None)
+            with session() if callable(session) else nullcontext():
+                service.observe_shadow(agent, state_map, changed_entities)
         except Exception as exc:
             service.report_runtime_error(exc)
         finally:

@@ -14,6 +14,7 @@ class Store:
         DATA_DIR.mkdir(parents=True, exist_ok=True)
         self.path = str(path)
         self.lock = threading.RLock()
+        self._connection_session = threading.local()
         # Diagnostic events are operational telemetry, not Store transaction state.
         # Keep their tiny RAM ring independently accessible while a large microSD write
         # owns self.lock. This prevents /api/events and diagnostic producers from being
@@ -60,6 +61,13 @@ class Store:
 
     @contextmanager
     def conn(self):
+        borrowed = getattr(self._connection_session, "connection", None)
+        if borrowed is not None and not borrowed.in_transaction:
+            # Reuse setup/page caches, but preserve each caller's transaction boundary.
+            # In particular mode/qualification writes must commit before HA handoff.
+            with borrowed:
+                yield borrowed
+            return
         # Child training is deliberately lower priority than realtime, so let it wait
         # longer for the single WAL writer instead of aborting a multi-minute replay on
         # a transient parent commit. Parent/UI semantics keep the historical 30 s bound.
@@ -81,6 +89,26 @@ class Store:
                 yield c
         finally:
             c.close()
+
+    @contextmanager
+    def connection_session(self):
+        """Reuse one thread-owned connection without merging transactions.
+
+        conn() blocks still commit/rollback independently. A call nested inside
+        an active write transaction gets its own connection as before, so it
+        cannot commit or read another caller's uncommitted changes. The session owns
+        only connection lifetime, and acquires no long-lived Store or writer lock.
+        """
+        existing = getattr(self._connection_session, "connection", None)
+        if existing is not None:
+            yield existing
+            return
+        with self.conn() as connection:
+            self._connection_session.connection = connection
+            try:
+                yield connection
+            finally:
+                del self._connection_session.connection
 
     def _init(self):
         with self.lock, self.conn() as c:

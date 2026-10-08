@@ -306,6 +306,7 @@ def install_policy_candidates(service):
 
     lock = threading.RLock()
     pool_cache, pool_members = {}, {}
+    persisted_pool_keys = set()
     current_context, candidate_cache, pending_training = {}, {}, {}
     last_target, last_own_action = {}, {}
     tls = threading.local()
@@ -348,35 +349,41 @@ def install_policy_candidates(service):
             if not isinstance(value["screening"], dict): value["screening"] = {}
         with lock:
             pool_cache[key] = value
+            if row:
+                persisted_pool_keys.add(key)
         return value
 
+    def pool_counter_args(agent_id, entity_id, row):
+        return (
+            str(agent_id), str(entity_id), POOL_VERSION, int(row.get("opportunities") or 0),
+            int(row.get("available_count") or 0), int(row.get("unknown_count") or 0),
+            int(row.get("unavailable_count") or 0), int(row.get("change_count") or 0),
+            int(row.get("own_action_leak_hits") or 0), row.get("first_seen_ts"),
+            row.get("last_seen_ts"), row.get("last_change_ts"), row.get("last_value"),
+        )
+
     def pool_write_args(agent_id, entity_id, row, now, *, samples_changed):
-        key = (str(agent_id), str(entity_id))
         row["history"] = list(row.get("history") or [])[-MAX_HISTORY:]
         row["samples"] = list(row.get("samples") or [])[-MAX_SCREENING_SAMPLES:]
         # Screening depends only on accepted examples, not availability counters.
         # A radar update must not rescore 96 unchanged example sets.
         if samples_changed or not row.get("screening"):
             row["screening"] = semantic_predictive_score(row["samples"])
-        args = (
-            key[0], key[1], POOL_VERSION, int(row.get("opportunities") or 0),
-            int(row.get("available_count") or 0), int(row.get("unknown_count") or 0),
-            int(row.get("unavailable_count") or 0), int(row.get("change_count") or 0),
-            int(row.get("own_action_leak_hits") or 0), row.get("first_seen_ts"),
-            row.get("last_seen_ts"), row.get("last_change_ts"), row.get("last_value"),
+        args = pool_counter_args(agent_id, entity_id, row) + (
             json.dumps(row.get("history") or [], separators=(",", ":"), sort_keys=True),
             json.dumps(row.get("samples") or [], separators=(",", ":"), sort_keys=True),
             json.dumps(row.get("screening") or {}, separators=(",", ":"), sort_keys=True), float(now),
         )
         return args
 
-    def persist_pool_batch(rows):
-        if not rows:
+    def persist_pool_batch(agent_id, rows, counters, now):
+        if not rows and not counters:
             return
+        aid = str(agent_id)
         # One atomic durable snapshot per observation, instead of one connection
         # and commit per sensor. Retain every availability and causal sample vote.
         with service.store.lock, service.store.conn() as c:
-            c.executemany("""INSERT INTO context_tournament_observed_pool
+            upsert = """INSERT INTO context_tournament_observed_pool
                 (agent_id,entity_id,pool_version,opportunities,available_count,unknown_count,
                  unavailable_count,change_count,own_action_leak_hits,first_seen_ts,last_seen_ts,
                  last_change_ts,last_value,history_json,samples_json,screening_json,updated_ts)
@@ -389,7 +396,32 @@ def install_policy_candidates(service):
                  last_seen_ts=excluded.last_seen_ts,last_change_ts=excluded.last_change_ts,
                  last_value=excluded.last_value,history_json=excluded.history_json,
                  samples_json=excluded.samples_json,screening_json=excluded.screening_json,
-                  updated_ts=excluded.updated_ts""", rows)
+                  updated_ts=excluded.updated_ts"""
+            if rows:
+                c.executemany(upsert, rows)
+            if counters:
+                # Availability is not a new historical example. Leave unchanged
+                # history/sample JSON on disk instead of serializing and binding
+                # all examples for all 96 sensors on every tick.
+                updates = []
+                for entity_id, row in counters:
+                    prefix = pool_counter_args(aid, entity_id, row)
+                    updates.append(prefix[2:] + (float(now),) + prefix[:2])
+                updated = c.executemany(
+                    "UPDATE context_tournament_observed_pool SET pool_version=?,"
+                    "opportunities=?,available_count=?,unknown_count=?,unavailable_count=?,"
+                    "change_count=?,own_action_leak_hits=?,first_seen_ts=?,last_seen_ts=?,"
+                    "last_change_ts=?,last_value=?,updated_ts=? WHERE agent_id=? AND entity_id=?",
+                    updates,
+                )
+                if updated.rowcount != len(updates):
+                    # A reset/delete may remove a cached row. Recover complete
+                    # snapshots atomically, including every retained example.
+                    c.executemany(upsert, [pool_write_args(
+                        aid, eid, row, now, samples_changed=False
+                    ) for eid, row in counters])
+        with lock:
+            persisted_pool_keys.update((str(row[0]), str(row[1])) for row in rows)
 
     def pool_stats(agent_id, entity_id):
         row = load_pool(agent_id, entity_id)
@@ -498,8 +530,10 @@ def install_policy_candidates(service):
 
         own_ts = last_own_action.get(aid)
         writes = []
+        counters = []
         for entity_id in members:
             row = load_pool(aid, entity_id)
+            history_changed = False
             row["opportunities"] = int(row.get("opportunities") or 0) + 1
             if row.get("first_seen_ts") is None:
                 row["first_seen_ts"] = float(now)
@@ -512,10 +546,12 @@ def install_policy_candidates(service):
                 row["last_seen_ts"] = float(now)
                 previous_value = _finite(row.get("last_value"))
                 if previous_value is None:
+                    history_changed = True
                     row["last_value"] = value
                     row["last_change_ts"] = float(now)
                     row["history"] = (list(row.get("history") or []) + [[float(now), value]])[-MAX_HISTORY:]
                 elif abs(value - previous_value) > 1e-9:
+                    history_changed = True
                     row["change_count"] = int(row.get("change_count") or 0) + 1
                     row["last_change_ts"] = float(now); row["last_value"] = value
                     row["history"] = (list(row.get("history") or []) + [[float(now), value]])[-MAX_HISTORY:]
@@ -541,10 +577,14 @@ def install_policy_candidates(service):
                 }
                 sample["trend"] = None if sample["lag_10"] is None else value - float(sample["lag_10"])
                 row["samples"] = (list(row.get("samples") or []) + [sample])[-MAX_SCREENING_SAMPLES:]
-            writes.append(pool_write_args(
-                aid, entity_id, row, now, samples_changed=samples_changed
-            ))
-        persist_pool_batch(writes)
+            if (history_changed or samples_changed or not row.get("screening")
+                    or (aid, entity_id) not in persisted_pool_keys):
+                writes.append(pool_write_args(
+                    aid, entity_id, row, now, samples_changed=samples_changed
+                ))
+            else:
+                counters.append((entity_id, row))
+        persist_pool_batch(aid, writes, counters, now)
         if current is not None:
             last_target[aid] = float(current)
         return independent
@@ -945,7 +985,14 @@ def install_policy_candidates(service):
 
     def state_with_pool(agent_id):
         state = original_state(agent_id)
-        state["observed_pool_count"] = len(all_pool_rows(agent_id))
+        # Hot observers need a count, not health/screening summaries for every
+        # sensor. Keep the same bounded-count contract as all_pool_rows().
+        limit = max(32, int(OPTIONS.get("context_observed_pool_limit", DEFAULT_POOL_LIMIT)) * 2)
+        with service.store.conn() as connection:
+            state["observed_pool_count"] = int(connection.execute(
+                "SELECT COUNT(*) FROM (SELECT 1 FROM context_tournament_observed_pool "
+                "WHERE agent_id=? LIMIT ?)", (str(agent_id), limit),
+            ).fetchone()[0])
         state["active_feature_count"] = len(state.get("active_features") or [])
         return state
 

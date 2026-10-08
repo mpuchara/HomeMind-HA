@@ -1,6 +1,6 @@
-# HomeMind-HA / Adaptive AI 0.14.147
+# HomeMind-HA / Adaptive AI 0.14.148
 
-0.14.147: zbiorczy zapis obserwacji Sensor Tournament, przeliczanie ocen tylko dla nowych przykładów oraz pomiary całej obsługi decyzji. Aktualizacja nie wymaga Rebuild.
+0.14.148: mniej połączeń SQLite i serializacji historii podczas obserwacji kontekstu. Zachowane próbki, liczniki i zatwierdzanie zapisów przed przekazaniem sterowania. Aktualizacja nie wymaga Rebuild.
 
 
 Cztery akcje każdego agenta: Shadow/Control, Wrong decision, Settings, Teach.
