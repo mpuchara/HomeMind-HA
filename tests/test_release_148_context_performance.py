@@ -34,8 +34,11 @@ class ContextPerformance148Tests(unittest.TestCase):
         a = self.store.create_agent(agent(mode='control'))
         errors = []
         observed = []
+        measured_threads = {threading.get_ident()}
+        measured_opens = []
 
         def witness():
+            measured_threads.add(threading.get_ident())
             try:
                 with self.store.conn() as connection:
                     observed.append(connection.execute(
@@ -45,7 +48,14 @@ class ContextPerformance148Tests(unittest.TestCase):
                 errors.append(exc)
 
         original_connect = sqlite3.connect
-        with patch('storage.sqlite3.connect', wraps=original_connect) as connect:
+        def measured_connect(*args, **kwargs):
+            if threading.get_ident() in measured_threads:
+                measured_opens.append(threading.get_ident())
+            return original_connect(*args, **kwargs)
+
+        # Other suite fixtures may still have telemetry writers running. Count
+        # only the session owner and independent handoff witness, not their I/O.
+        with patch('storage.sqlite3.connect', side_effect=measured_connect):
             with self.store.connection_session() as connection:
                 with self.store.connection_session() as nested:
                     self.assertIs(nested, connection)
@@ -58,7 +68,7 @@ class ContextPerformance148Tests(unittest.TestCase):
                 thread.start()
                 thread.join(timeout=3)
                 self.assertFalse(thread.is_alive())
-            self.assertEqual(connect.call_count, 2)  # owner + independent witness
+            self.assertEqual(len(measured_opens), 2)  # owner + independent witness
         self.assertEqual(errors, [])
         self.assertEqual(observed, ['shadow'])
 
@@ -123,10 +133,19 @@ class ContextPerformance148Tests(unittest.TestCase):
             before = {row['entity_id']: dict(row) for row in connection.execute(
                 'SELECT * FROM context_tournament_observed_pool WHERE agent_id=?', (a['id'],)
             )}
-        with patch.object(pool_module.json, 'dumps', wraps=json.dumps) as dumps:
+        owner = threading.get_ident()
+        serializations = []
+        original_dumps = json.dumps
+
+        def measured_dumps(*args, **kwargs):
+            if threading.get_ident() == owner:
+                serializations.append(args)
+            return original_dumps(*args, **kwargs)
+
+        with patch.object(pool_module.json, 'dumps', side_effect=measured_dumps):
             service.observe_shadow(a, states, entities)
             # Warm counter-only ticks do not serialize any historical JSON.
-            self.assertEqual(dumps.call_count, 0)
+            self.assertEqual(serializations, [])
         with self.store.conn() as connection:
             after = {row['entity_id']: dict(row) for row in connection.execute(
                 'SELECT * FROM context_tournament_observed_pool WHERE agent_id=?', (a['id'],)
