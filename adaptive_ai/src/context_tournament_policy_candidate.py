@@ -46,6 +46,20 @@ FEATURE_COST_GAIN_SCALE = 0.020
 FLOAT_EPSILON = 1e-12
 
 
+def _verify_candidate_checksum(raw):
+    """Measure the mandatory integrity check, including warm cached payloads."""
+    started = time.perf_counter()
+    trace = RUNTIME_DEBUG.begin("context_candidate_validation") if RUNTIME_DEBUG.enabled else None
+    status = "error"
+    try:
+        result = verify_model_checksum(raw)
+        status = "ok"
+        return result
+    finally:
+        TELEMETRY.observe("context_candidate_validation", (time.perf_counter() - started) * 1000)
+        RUNTIME_DEBUG.end(trace, status=status)
+
+
 def _finite(value):
     try:
         value = float(value)
@@ -218,7 +232,7 @@ def plan_target_schema(agent, policy, challenger, tournament, health_lookup=None
 
 def exact_candidate_version_matches(model, raw, target_schema, policy, tournament):
     """Require the persisted challenger to match the exact paired evaluation epoch."""
-    if not isinstance(raw, dict) or policy is None or not verify_model_checksum(raw):
+    if not isinstance(raw, dict) or policy is None or not _verify_candidate_checksum(raw):
         return False
     return _candidate_epoch_matches(model, raw, target_schema, policy, tournament)
 
@@ -618,7 +632,7 @@ def install_policy_candidates(service):
         current_revision = str(getattr(policy, "model_revision", "") or "")
         expected_revision = str(model.get("evaluation_champion_revision") or current_revision)
         raw = model.get("candidate_policy") if isinstance(model.get("candidate_policy"), dict) else None
-        checksum_valid = bool(raw and verify_model_checksum(raw))
+        checksum_valid = bool(raw and _verify_candidate_checksum(raw))
         valid = bool(checksum_valid and _candidate_epoch_matches(model, raw, target_schema, policy, tournament))
         if raw and not checksum_valid:
             # Older builds could deserialize the nested Candidate payload by reference.
@@ -862,7 +876,7 @@ def install_policy_candidates(service):
         actions = [float(x) for x in action_values(policy.agent)]
         model = original_load(aid, challenger, len(actions)) if actions else {}
         raw = model.get("candidate_policy") if isinstance(model.get("candidate_policy"), dict) else None
-        if (not raw or not verify_model_checksum(raw)
+        if (not raw or not _verify_candidate_checksum(raw)
                 or list((raw.get("schema") or {}).get("entities") or []) != list(new_entities)):
             return base_migrate(policy, new_entities, new_meta)
         with getattr(service.engine, "lock", threading.RLock()):

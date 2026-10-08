@@ -12,6 +12,7 @@ transitions. This makes shadow comparison cheap enough to run alongside normal i
 while leaving the production control path untouched.
 """
 import json
+import pickle
 import math
 import threading
 import time
@@ -46,6 +47,7 @@ class ContextTournament:
         self._shadow_models = {}
         self._shadow_runtime = {}
         self._shadow_dirty = {}
+        self._shadow_flush_lock = threading.Lock()
         self._shadow_flush_event = threading.Event()
         self._shadow_persistence_stats = {"queued": 0, "flushed": 0, "flushes": 0, "errors": 0}
         self._last_error_ts = 0.0
@@ -327,17 +329,32 @@ class ContextTournament:
         return model
 
     def _flush_shadow_models(self):
+        # A target transition may force a flush alongside the background writer.
+        # Serialize drains so an older batch cannot overwrite a newer durable one.
+        with self._shadow_flush_lock:
+            return self._flush_shadow_batch()
+
+    def _flush_shadow_batch(self):
         with self.lock:
             if not self._shadow_dirty:
                 return 0
             batch = dict(self._shadow_dirty)
             self._shadow_dirty.clear()
         now = time.time()
-        packed = [
-            (key[0], key[1], raw, now)
-            for key, raw in batch.items()
-        ]
         try:
+            started = time.perf_counter()
+            trace = RUNTIME_DEBUG.begin("context_shadow_json", models=len(batch)) if RUNTIME_DEBUG.enabled else None
+            status = "error"
+            try:
+                packed = [
+                    (key[0], key[1], raw if isinstance(raw, str) else json.dumps(
+                        pickle.loads(raw), separators=(",", ":"), sort_keys=True), now)
+                    for key, raw in batch.items()
+                ]
+                status = "ok"
+            finally:
+                TELEMETRY.observe("context_shadow_json", (time.perf_counter() - started) * 1000)
+                RUNTIME_DEBUG.end(trace, status=status)
             with self.store.lock, self.store.conn() as c:
                 c.executemany(
                     """INSERT INTO context_tournament_shadow(agent_id,challenger_entity,model_json,updated_ts)
@@ -392,7 +409,20 @@ class ContextTournament:
 
     def _save_shadow_model(self, agent_id, challenger, model):
         key = (str(agent_id), str(challenger))
-        raw = json.dumps(model, separators=(",", ":"), sort_keys=True)
+        started = time.perf_counter()
+        trace = RUNTIME_DEBUG.begin("context_shadow_snapshot", agent_id=key[0], challenger=key[1]) if RUNTIME_DEBUG.enabled else None
+        status = "error"
+        try:
+            # Private RAM bytes freeze the exact observation before callers mutate
+            # the cached model again. Only our own snapshot is decoded; SQLite,
+            # exports and restarts continue to use canonical JSON exclusively.
+            # Pickle preserves JSON-compatible scalar subclasses without turning
+            # numpy floats into buffer bytes. Never load external/persisted bytes.
+            raw = pickle.dumps(model, protocol=5)
+            status = "ok"
+        finally:
+            TELEMETRY.observe("context_shadow_snapshot", (time.perf_counter() - started) * 1000)
+            RUNTIME_DEBUG.end(trace, status=status)
         with self.lock:
             self._shadow_models[key] = model
             self._shadow_dirty[key] = raw

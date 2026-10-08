@@ -1,10 +1,10 @@
 {
-  "version": "0.14.149",
+  "version": "0.14.150",
   "release_date": "2026-10-08",
-  "base_version": "0.14.148",
-  "base_commit": "e1c727046e5283054ae4da6db34cc3c8f8e422aa",
-  "release_status": "lazy-probation-rollback-snapshots-and-single-candidate-checksum",
-  "release_validation_tests_passed": 1739,
+  "base_version": "0.14.149",
+  "base_commit": "201aa6bbacd2c1dea5f4115e38288c4503f5bb2e",
+  "release_status": "detached-shadow-snapshots-and-deferred-canonical-json",
+  "release_validation_tests_passed": 1748,
   "release_014140": {
     "scope": "inventory_and_remove_remaining_shipped_feature_Handler_fallbacks_for_Candidate_Live_and_manual_feedback_transport",
     "explicit_routes": "manual_feedback.js, candidate_ui.js, candidate_preference_ui.js, /api/candidates, Candidate Teach-RL status/train, generation history/comparison, /api/candidate-live, /api/live and Candidate discard",
@@ -1488,6 +1488,65 @@
       "after_avg_ms": 80.14,
       "before_p95_ms": 163.56,
       "after_p95_ms": 87.35
+    }
+  },
+  "release_014150": {
+    "scope": "reduce synchronous shadow persistence serialization during context observations",
+    "shadow_snapshot": "private immutable in-RAM pickle protocol 5 snapshot captures nested state and JSON-compatible scalar subclasses; only bytes created internally are decoded; database/restart/export formats remain canonical JSON",
+    "persistence": "existing writer coalesces complete snapshots; serialized flush drains prevent old batches overwriting newer durable results; snapshot, encoding and database failures preserve pending observations; independent target-transition forced flush remains",
+    "candidate_integrity": "mandatory checksum verification retained for every load including warm cache, public exact version API and promotion",
+    "diagnostics": "context_shadow_snapshot, context_shadow_json and context_candidate_validation telemetry metrics and Runtime Debug spans",
+    "new_regressions": 9,
+    "validation_tests_expected": 1748,
+    "training_revision": "shared-home-intents-v26",
+    "rebuild_required": false,
+    "training_semantics_changed": false,
+    "control_semantics_changed": false,
+    "development_benchmark": {
+      "scope": "desktop context-observation chain only; populated classifier; production feature contract; 20 warm observations; CPU includes final pending shadow flush",
+      "observed_sensors": 96,
+      "samples_per_sensor": 96,
+      "classifier_examples": 256,
+      "baseline149": {
+        "variant": "baseline149",
+        "observations": 20,
+        "pool_size": 96,
+        "samples_per_sensor": 96,
+        "classifier_rows": 256,
+        "cpu_ms_including_final_drain": 1578.125,
+        "final_drain_ms": 19.381999998586252,
+        "persistence": {
+          "queued": 96,
+          "flushed": 4,
+          "flushes": 1,
+          "errors": 0,
+          "pending": 0
+        },
+        "avg_ms": 87.26125999928627,
+        "p95_ms": 90.70709999650717,
+        "physical_connections_per_observation": 1.0,
+        "commits_per_observation": 2.05
+      },
+      "new150": {
+        "variant": "new150",
+        "observations": 20,
+        "pool_size": 96,
+        "samples_per_sensor": 96,
+        "classifier_rows": 256,
+        "cpu_ms_including_final_drain": 984.375,
+        "final_drain_ms": 60.71670000528684,
+        "persistence": {
+          "queued": 96,
+          "flushed": 4,
+          "flushes": 1,
+          "errors": 0,
+          "pending": 0
+        },
+        "avg_ms": 59.69886500060966,
+        "p95_ms": 71.30129999859491,
+        "physical_connections_per_observation": 1.0,
+        "commits_per_observation": 2.05
+      }
     }
   }
 }
