@@ -1,6 +1,6 @@
-# HomeMind-HA / Adaptive AI 0.14.149
+# HomeMind-HA / Adaptive AI 0.14.150
 
-0.14.149: mniej serializacji modelu w obserwacji kontekstu; zachowany dokładny snapshot sprzed promocji, rollback i weryfikacja integralności kandydatów. Bez Rebuild.
+0.14.150: mniej pracy podczas obserwacji kontekstu dzięki odroczeniu JSON; nowe pomiary kosztu snapshotów, zapisu i kontroli integralności. Bez Rebuild.
 
 
 Cztery akcje każdego agenta: Shadow/Control, Wrong decision, Settings, Teach.

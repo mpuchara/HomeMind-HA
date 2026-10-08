@@ -1,3 +1,10 @@
+## 0.14.150
+- Obserwacja challengera tworzy szybki, odłączony snapshot w RAM; kanoniczny JSON powstaje dopiero podczas zapisu w istniejącym writerze.
+- Kolejne aktualizacje tego samego challengera łączą się w ostatni pełny snapshot z kompletem głosów i przykładów.
+- Blokada kolejności flush chroni nowszy trwały zapis przed starszą partią z wątku tła. Błąd kodowania lub SQLite zachowuje partię do retry.
+- Nowe metryki: context_shadow_snapshot, context_shadow_json i context_candidate_validation. Checksumy kandydatów pozostają obowiązkowe.
+- Zachowane wymuszone zapisy po niezależnym wyniku, format modeli JSON i rewizja treningu. Bez Rebuild.
+
 ## 0.14.149
 - Zwykła obserwacja kontekstu bez aktywnego probation nie eksportuje całego modelu na potrzeby ewentualnego rollbacku.
 - Snapshot poprzedniego modelu powstaje po kwalifikacji promocji, bezpośrednio przed migracją; błąd snapshotu zatrzymuje zmianę.
