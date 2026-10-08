@@ -1,10 +1,10 @@
 {
-  "version": "0.14.146",
+  "version": "0.14.147",
   "release_date": "2026-10-08",
-  "base_version": "0.14.145",
-  "base_commit": "15f96ced9c0ad1493a2690abbe26b446dfcbbe05",
-  "release_status": "causal-trajectory-training-and-event-routing",
-  "release_validation_tests_passed": 1718,
+  "base_version": "0.14.146",
+  "base_commit": "14eca77f2e5145711af3c3385c5c2f5a5565c483",
+  "release_status": "batched-observed-pool-and-runtime-latency-diagnostics",
+  "release_validation_tests_passed": 1719,
   "release_014140": {
     "scope": "inventory_and_remove_remaining_shipped_feature_Handler_fallbacks_for_Candidate_Live_and_manual_feedback_transport",
     "explicit_routes": "manual_feedback.js, candidate_ui.js, candidate_preference_ui.js, /api/candidates, Candidate Teach-RL status/train, generation history/comparison, /api/candidate-live, /api/live and Candidate discard",
@@ -1430,5 +1430,28 @@
     "timer": "one second only during an active arrival/departure forecast, manual hold preserved",
     "household_performance_measured": false,
     "family_absence_guard": "same exact radar family and area preserve uncertainty for binary OFF with positive numeric signal when device registry is missing"
+  },
+  "release_014147": {
+    "scope": "observed pool latency reduction and complete inference diagnostics",
+    "durability": "one atomic transaction per observation retaining all counters and samples",
+    "screening": "recompute only for new independent target samples or missing cached result",
+    "metrics": [
+      "wrapped_inference",
+      "context_shadow_observation",
+      "context_observed_pool"
+    ],
+    "training_semantics_changed": false,
+    "rebuild_required": false,
+    "local_benchmark": {
+      "platform": "Windows Python 3.11 desktop, not deployed HA host",
+      "pool_size": 96,
+      "samples_per_sensor": 96,
+      "observations": 20,
+      "before_avg_ms": 630.87,
+      "after_avg_ms": 58.65,
+      "before_commits": 96,
+      "after_commits": 1
+    },
+    "validation_tests_expected": 1719
   }
 }

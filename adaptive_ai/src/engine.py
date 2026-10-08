@@ -1504,7 +1504,9 @@ class Engine(threading.Thread):
                 try:
                     # Agent snapshots come from the routing cache. Control safety is still
                     # revalidated from durable config inside Executor before any HA call.
+                    wrapped_started = time.perf_counter()
                     self.process_agent(agent, states, changed_entities if changed_entities else None)
+                    TELEMETRY.observe("wrapped_inference", (time.perf_counter() - wrapped_started) * 1000)
                     RUNTIME_DEBUG.end(agent_trace, status="ok")
                 except Exception as exc:
                     RUNTIME_DEBUG.end(agent_trace, status="error", error=f"{type(exc).__name__}: {exc}")

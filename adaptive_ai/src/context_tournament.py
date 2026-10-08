@@ -26,6 +26,7 @@ from context import (
 )
 from settings import OPTIONS
 from process_agent_pipeline import install_process_agent_wrapper
+from telemetry import RUNTIME_DEBUG, TELEMETRY
 
 
 SHADOW_MODEL_VERSION = 1
@@ -630,10 +631,17 @@ def install(store, engine):
         # Production inference/control runs first and remains entirely authoritative.
         # Shadow evaluation only reads its resulting champion prediction afterwards.
         result = original_process_agent(agent, state_map, changed_entities)
+        started = time.perf_counter()
+        trace = (RUNTIME_DEBUG.begin(
+            "context_shadow_observation", agent_id=str(agent["id"])
+        ) if RUNTIME_DEBUG.enabled else None)
         try:
             service.observe_shadow(agent, state_map, changed_entities)
         except Exception as exc:
             service.report_runtime_error(exc)
+        finally:
+            TELEMETRY.observe("context_shadow_observation", (time.perf_counter() - started) * 1000)
+            RUNTIME_DEBUG.end(trace)
         return result
 
     engine.policy = policy_with_tournament
