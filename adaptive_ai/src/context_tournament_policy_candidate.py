@@ -27,6 +27,7 @@ from manual_context_learning import _migrate_schema
 from policy import MultiHorizonPolicy
 from policy_backend import verify_model_checksum
 from settings import OPTIONS
+from telemetry import RUNTIME_DEBUG, TELEMETRY
 
 
 CONTRACT_VERSION = 2
@@ -349,11 +350,14 @@ def install_policy_candidates(service):
             pool_cache[key] = value
         return value
 
-    def save_pool(agent_id, entity_id, row, now):
+    def pool_write_args(agent_id, entity_id, row, now, *, samples_changed):
         key = (str(agent_id), str(entity_id))
         row["history"] = list(row.get("history") or [])[-MAX_HISTORY:]
         row["samples"] = list(row.get("samples") or [])[-MAX_SCREENING_SAMPLES:]
-        row["screening"] = semantic_predictive_score(row["samples"])
+        # Screening depends only on accepted examples, not availability counters.
+        # A radar update must not rescore 96 unchanged example sets.
+        if samples_changed or not row.get("screening"):
+            row["screening"] = semantic_predictive_score(row["samples"])
         args = (
             key[0], key[1], POOL_VERSION, int(row.get("opportunities") or 0),
             int(row.get("available_count") or 0), int(row.get("unknown_count") or 0),
@@ -364,8 +368,15 @@ def install_policy_candidates(service):
             json.dumps(row.get("samples") or [], separators=(",", ":"), sort_keys=True),
             json.dumps(row.get("screening") or {}, separators=(",", ":"), sort_keys=True), float(now),
         )
+        return args
+
+    def persist_pool_batch(rows):
+        if not rows:
+            return
+        # One atomic durable snapshot per observation, instead of one connection
+        # and commit per sensor. Retain every availability and causal sample vote.
         with service.store.lock, service.store.conn() as c:
-            c.execute("""INSERT INTO context_tournament_observed_pool
+            c.executemany("""INSERT INTO context_tournament_observed_pool
                 (agent_id,entity_id,pool_version,opportunities,available_count,unknown_count,
                  unavailable_count,change_count,own_action_leak_hits,first_seen_ts,last_seen_ts,
                  last_change_ts,last_value,history_json,samples_json,screening_json,updated_ts)
@@ -378,9 +389,7 @@ def install_policy_candidates(service):
                  last_seen_ts=excluded.last_seen_ts,last_change_ts=excluded.last_change_ts,
                  last_value=excluded.last_value,history_json=excluded.history_json,
                  samples_json=excluded.samples_json,screening_json=excluded.screening_json,
-                 updated_ts=excluded.updated_ts""", args)
-        with lock:
-            pool_cache[key] = row
+                  updated_ts=excluded.updated_ts""", rows)
 
     def pool_stats(agent_id, entity_id):
         row = load_pool(agent_id, entity_id)
@@ -488,6 +497,7 @@ def install_policy_candidates(service):
                 interaction_values[eid] = value
 
         own_ts = last_own_action.get(aid)
+        writes = []
         for entity_id in members:
             row = load_pool(aid, entity_id)
             row["opportunities"] = int(row.get("opportunities") or 0) + 1
@@ -516,7 +526,8 @@ def install_policy_candidates(service):
             else:
                 row["unavailable_count"] = int(row.get("unavailable_count") or 0) + 1
 
-            if independent and label is not None and value is not None:
+            samples_changed = independent and label is not None and value is not None
+            if samples_changed:
                 history = list(row.get("history") or [])
                 last_edge = _finite(row.get("last_change_ts"))
                 sample = {
@@ -530,7 +541,10 @@ def install_policy_candidates(service):
                 }
                 sample["trend"] = None if sample["lag_10"] is None else value - float(sample["lag_10"])
                 row["samples"] = (list(row.get("samples") or []) + [sample])[-MAX_SCREENING_SAMPLES:]
-            save_pool(aid, entity_id, row, now)
+            writes.append(pool_write_args(
+                aid, entity_id, row, now, samples_changed=samples_changed
+            ))
+        persist_pool_batch(writes)
         if current is not None:
             last_target[aid] = float(current)
         return independent
@@ -835,7 +849,17 @@ def install_policy_candidates(service):
         aid = str(agent["id"])
         states = dict(state_map or getattr(service.engine, "state_map", {}) or {})
         now = time.time()
-        if update_pool(agent, states, set(changed_entities or ()), now):
+        pool_started = time.perf_counter()
+        pool_trace = (RUNTIME_DEBUG.begin(
+            "context_observed_pool", agent_id=aid,
+            member_count=len(pool_members.get(aid) or ()),
+        ) if RUNTIME_DEBUG.enabled else None)
+        try:
+            independent = update_pool(agent, states, set(changed_entities or ()), now)
+        finally:
+            TELEMETRY.observe("context_observed_pool", (time.perf_counter() - pool_started) * 1000)
+            RUNTIME_DEBUG.end(pool_trace)
+        if independent:
             policy = (getattr(service.engine, "models", {}) or {}).get(aid)
             if policy is not None:
                 base = getattr(service.engine, "context_relevance", {}).get(aid) or {}

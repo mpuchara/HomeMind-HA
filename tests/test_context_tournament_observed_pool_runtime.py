@@ -1,11 +1,14 @@
 import tempfile
 import threading
 import unittest
+from contextlib import contextmanager
+from unittest.mock import patch
 from pathlib import Path
 from types import SimpleNamespace
 
 from support import *
 import context_tournament_promotion as promotion
+import context_tournament_policy_candidate as pool_module
 from context_tournament_policy_candidate import install_policy_candidates
 from policy import MultiHorizonPolicy
 from storage import Store
@@ -100,6 +103,78 @@ class ObservedPoolRuntimeTests(unittest.TestCase):
             promotion._choose_schema_after_promotion = old_chooser
             promotion._migrate_schema = old_migrate
             temp.cleanup()
+
+    def test_full_pool_is_one_durable_vote_batch_and_only_new_labels_are_rescored(self):
+        old_chooser = promotion._choose_schema_after_promotion
+        old_migrate = promotion._migrate_schema
+        try:
+            with tempfile.TemporaryDirectory(prefix='pool-batch-') as directory:
+                store = Store(Path(directory) / 'pool.db')
+                a = store.create_agent(agent(name='full observed pool'))
+                entities = {f'sensor.context_{i:03d}' for i in range(96)}
+                states = {eid: state(eid, i) for i, eid in enumerate(sorted(entities))}
+                states[a['target_entity']] = state(a['target_entity'], 'off')
+                policy = MultiHorizonPolicy(a, states, {}, set())
+                engine = SimpleNamespace(
+                    models={a['id']: policy}, state_map=states, entity_registry={},
+                    context_relevance={}, context=None, temporal_history=None,
+                    state_revision=1, runtime={a['id']: {}}, lock=threading.RLock(),
+                )
+                tournament = dict(agent_id=a['id'], active_features=[],
+                                  challenger_features=[], feature_scores={},
+                                  schema_revision=1, previous_schema=[])
+                service = self.FakeService(store, engine, tournament)
+                service._eligible_entities = lambda *args: entities
+                install_policy_candidates(service)
+                service.sync_agent(a, policy=policy)
+                statements = []
+                original_conn = store.conn
+
+                @contextmanager
+                def traced_connection():
+                    with original_conn() as connection:
+                        connection.set_trace_callback(statements.append)
+                        yield connection
+
+                with patch.object(store, 'conn', traced_connection), patch.object(
+                    pool_module, 'semantic_predictive_score',
+                    wraps=pool_module.semantic_predictive_score,
+                ) as score:
+                    service.observe_shadow(a, states, entities)
+                    self.assertEqual(sum(s == 'COMMIT' for s in statements), 1)
+                    self.assertEqual(score.call_count, 96)
+                    statements.clear()
+                    score.reset_mock()
+                    # Availability observations remain votes, but are not labels.
+                    service.observe_shadow(a, states, entities)
+                    self.assertEqual(sum(s == 'COMMIT' for s in statements), 1)
+                    self.assertEqual(score.call_count, 0)
+                    statements.clear()
+                    states[a['target_entity']] = state(a['target_entity'], 'on')
+                    service.observe_shadow(a, states, {a['target_entity']})
+                    self.assertEqual(score.call_count, 96)
+
+                # Inspect durable data from a fresh connection: all sensors retained
+                # three availability votes and exactly one independent target label.
+                with original_conn() as connection:
+                    rows = connection.execute(
+                        'SELECT opportunities,available_count,samples_json,screening_json '
+                        'FROM context_tournament_observed_pool WHERE agent_id=?',
+                        (a['id'],),
+                    ).fetchall()
+                import json
+                self.assertEqual(len(rows), 96)
+                for row in rows:
+                    self.assertEqual(row['opportunities'], 3)
+                    self.assertEqual(row['available_count'], 3)
+                    samples = json.loads(row['samples_json'])
+                    self.assertEqual(len(samples), 1)
+                    self.assertEqual(samples[0]['label'], 1.0)
+                    self.assertEqual(json.loads(row['screening_json']),
+                                     pool_module.semantic_predictive_score(samples))
+        finally:
+            promotion._choose_schema_after_promotion = old_chooser
+            promotion._migrate_schema = old_migrate
 
 
 if __name__ == '__main__':

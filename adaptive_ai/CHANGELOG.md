@@ -1,3 +1,9 @@
+## 0.14.147
+- Sensor Tournament zapisuje pełną pulę obserwacji jedną atomową transakcją zamiast osobnego zapisu dla każdej encji.
+- Ocena powtarzalności przeliczana jest po nowym niezależnym przykładzie, a nie po każdym zdarzeniu radaru.
+- Diagnostyka mierzy pełną obsługę agenta, obserwację Shadow kontekstu i zapis puli, również po przygotowaniu ActionIntent.
+- Liczba głosów, przyczynowość uczenia i reguły sterowania są zachowane. Aktualizacja nie wymaga Rebuild.
+
 ## 0.14.146
 
 - Route learned predecessor/competing-branch presence events to the target agent, invalidate routing on new paths, and refresh active 1/3/5 s forecasts after one second.

@@ -1,6 +1,6 @@
-# HomeMind-HA / Adaptive AI 0.14.146
+# HomeMind-HA / Adaptive AI 0.14.147
 
-0.14.146: wyuczone trajektorie uruchamiają decyzję agenta, a trening odtwarza je przyczynowo bez ręcznego backfillu. Brakujący obszar jednoznacznego radaru automatyzacji ma audytowalne uzupełnienie. [Opis wydania](docs/RELEASE_0_14_146_PL.md).
+0.14.147: szybsza ocena sensorów po decyzji — jeden zapis zbiorczy zamiast 96 transakcji i brak przeliczania niezmienionych przykładów. Nowe pomiary pokazują pełny czas obsługi decyzji. Rebuild nie jest wymagany. [Opis wydania](docs/RELEASE_0_14_147_PL.md).
 
 
 Karta agenta ma cztery akcje: **Shadow/Control**, **Wrong decision**, **Settings** i **Teach**. Wrong decision uczy poprawnego Desired. Teach otwiera powiększalny wykres historii z wyborem dokładnej chwili i zapisem poprawnego Desired. Cofanie ostatniej korekty jest dostępne w Teach oraz Settings; pozostałe operacje i diagnostyka są w Settings.

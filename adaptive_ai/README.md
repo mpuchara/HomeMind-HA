@@ -1,6 +1,6 @@
-# HomeMind-HA / Adaptive AI 0.14.146
+# HomeMind-HA / Adaptive AI 0.14.147
 
-0.14.146: nauka historyczna uwzględnia wiarygodność źródła, powtarzalność kontekstu i potwierdzone skutki światła. Nowe zasady wymagają ręcznego Train/Rebuild; brak ruchu nie jest dowodem nieobecności.
+0.14.147: zbiorczy zapis obserwacji Sensor Tournament, przeliczanie ocen tylko dla nowych przykładów oraz pomiary całej obsługi decyzji. Aktualizacja nie wymaga Rebuild.
 
 
 Cztery akcje każdego agenta: Shadow/Control, Wrong decision, Settings, Teach.
