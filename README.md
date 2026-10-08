@@ -1,6 +1,6 @@
-# HomeMind-HA / Adaptive AI 0.14.148
+# HomeMind-HA / Adaptive AI 0.14.149
 
-0.14.148: szybsza obserwacja kontekstu — współdzielone połączenie SQLite, zbiorcza jakość sensorów i zapis historii tylko po zmianie danych. Rebuild nie jest wymagany. [Opis wydania](docs/RELEASE_0_14_148_PL.md).
+0.14.149: snapshot rollbacku powstaje dopiero przed promocją schematu; kandydat ma jedno pełne sprawdzenie checksumy na ocenę. Bez Rebuild. [Opis wydania](docs/RELEASE_0_14_149_PL.md).
 
 
 Karta agenta ma cztery akcje: **Shadow/Control**, **Wrong decision**, **Settings** i **Teach**. Wrong decision uczy poprawnego Desired. Teach otwiera powiększalny wykres historii z wyborem dokładnej chwili i zapisem poprawnego Desired. Cofanie ostatniej korekty jest dostępne w Teach oraz Settings; pozostałe operacje i diagnostyka są w Settings.

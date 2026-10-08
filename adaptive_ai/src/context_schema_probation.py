@@ -20,6 +20,7 @@ Shadow, marks the schema-history row ``rolled_back`` and emits
 """
 import json
 import math
+import threading
 import time
 
 from context import action_values, target_value
@@ -27,6 +28,7 @@ from context_tournament_metrics import metric_row
 from policy import MultiHorizonPolicy
 from settings import OPTIONS
 import context_tournament_promotion as promotion
+from telemetry import RUNTIME_DEBUG, TELEMETRY
 
 
 MIN_ROLLBACK_SAMPLES = 30
@@ -135,6 +137,7 @@ def install_schema_probation(service):
         return service
     if not hasattr(service, "schema_history") or not hasattr(service, "set_schema_history_status"):
         raise RuntimeError("Schema history must be installed before schema probation")
+    capture_context = threading.local()
 
     with service.store.lock, service.store.conn() as c:
         c.executescript(
@@ -244,11 +247,37 @@ def install_schema_probation(service):
         chosen, _, _, _, _, _ = policy.predict(features)
         return float(chosen["value"])
 
-    def current_model_snapshot(agent_id):
-        model = (getattr(service.engine, "models", {}) or {}).get(str(agent_id))
-        if model is not None and hasattr(model, "serialize"):
-            return model.serialize()
-        return service.store.get_model(str(agent_id))
+    def current_model_snapshot(agent_id, model=None):
+        aid = str(agent_id)
+        if model is None:
+            model = (getattr(service.engine, "models", {}) or {}).get(aid)
+        started = time.perf_counter()
+        trace = RUNTIME_DEBUG.begin("context_probation_snapshot", agent_id=aid) if RUNTIME_DEBUG.enabled else None
+        status = "error"
+        try:
+            snapshot = model.serialize() if model is not None and hasattr(model, "serialize") else service.store.get_model(aid)
+            status = "ok"
+            return snapshot
+        finally:
+            TELEMETRY.observe("context_probation_snapshot", (time.perf_counter() - started) * 1000)
+            RUNTIME_DEBUG.end(trace, status=status)
+
+    def prepare_schema_promotion(agent, policy, new_entities):
+        """Freeze rollback state only when an eligible promotion is about to migrate."""
+        aid = str(agent["id"])
+        observation = getattr(capture_context, "observation", None)
+        if observation is None or observation["agent_id"] != aid:
+            raise RuntimeError("Schema promotion requires a probation observation")
+        old_schema = list(getattr(getattr(policy, "schema", None), "entities", []) or [])
+        if list(new_entities) == old_schema:
+            return
+        snapshot = current_model_snapshot(aid, model=policy)
+        if not snapshot or _schema_from_model(snapshot) != old_schema:
+            raise RuntimeError("Rollback snapshot does not match the pre-promotion schema")
+        # A pass may attempt several migrations. Match the latest history row
+        # by its exact old schema; a later failed attempt must not overwrite
+        # the snapshot for an earlier successful migration of a different schema.
+        observation["snapshots"][tuple(old_schema)] = snapshot
 
     def set_pending(row, agent, states, now):
         current_model = current_model_snapshot(agent["id"])
@@ -406,7 +435,6 @@ def install_schema_probation(service):
         aid = str(agent["id"])
         states = dict(state_map or getattr(service.engine, "state_map", {}) or {})
         now = time.time()
-        old_policy_snapshot = current_model_snapshot(aid)
         before_history = service.schema_history(aid, limit=1)
         before_history_id = int(before_history[0]["id"]) if before_history else 0
 
@@ -414,7 +442,16 @@ def install_schema_probation(service):
         # learn from or react to this outcome.
         active = score_existing_probation(agent, states, now)
 
-        result = original_observe(agent, states, changed_entities)
+        observation = {"agent_id": aid, "snapshots": {}}
+        previous = getattr(capture_context, "observation", None)
+        capture_context.observation = observation
+        try:
+            result = original_observe(agent, states, changed_entities)
+        finally:
+            if previous is None:
+                del capture_context.observation
+            else:
+                capture_context.observation = previous
 
         latest_rows = service.schema_history(aid, limit=1)
         latest = dict(latest_rows[0]) if latest_rows else None
@@ -425,7 +462,8 @@ def install_schema_probation(service):
             and list(latest.get("old_schema") or []) != list(latest.get("new_schema") or [])
         ):
             try:
-                active = start_probation(latest, old_policy_snapshot)
+                old_schema = tuple(latest.get("old_schema") or [])
+                active = start_probation(latest, observation["snapshots"].get(old_schema))
                 service.store.event(
                     aid, "info", "context_schema_probation_started",
                     "Promoted schema entered Shadow probation against the previous champion",
@@ -482,6 +520,7 @@ def install_schema_probation(service):
         return payload
 
     service.observe_shadow = observe_with_probation
+    service.prepare_schema_promotion = prepare_schema_promotion
     service.shadow_status = status_with_probation
     service.schema_probation = lambda agent_id: probation_for_agent(agent_id, active_only=False)
     service.schema_probation_active = probation_active

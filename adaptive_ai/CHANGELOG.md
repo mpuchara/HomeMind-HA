@@ -1,3 +1,10 @@
+## 0.14.149
+- Zwykła obserwacja kontekstu bez aktywnego probation nie eksportuje całego modelu na potrzeby ewentualnego rollbacku.
+- Snapshot poprzedniego modelu powstaje po kwalifikacji promocji, bezpośrednio przed migracją; błąd snapshotu zatrzymuje zmianę.
+- Kandydat ma jedno pełne sprawdzenie checksumy na ocenę. Cache nie pomija weryfikacji integralności.
+- Runtime Debug mierzy koszt wymaganych snapshotów przez context_probation_snapshot.
+- Zachowane reguły promocji, prequential scoring i rollback. Aktualizacja nie wymaga Rebuild.
+
 ## 0.14.148
 - Obserwacja kontekstu używa jednego połączenia SQLite na przebieg, zachowując osobne zatwierdzanie i wycofywanie operacji.
 - Jakość wszystkich sensorów zapisywana jest zbiorczo przed oceną promocji schematu.
