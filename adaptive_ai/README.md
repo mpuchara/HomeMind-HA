@@ -1,6 +1,6 @@
-# HomeMind-HA / Adaptive AI 0.14.165
+# HomeMind-HA / Adaptive AI 0.14.166
 
-0.14.165: jedno połączenie SQLite na sesję WebSocket HA, ze świeżymi zapytaniami dla każdego zdarzenia. Aktualizacja i restart; bez Rebuild.
+0.14.166: krótkie transakcje importu Recorder, współdzielone połączenie i przerwy dopiero po commit. Aktualizacja i restart; bez Rebuild.
 
 
 Cztery akcje każdego agenta: Shadow/Control, Wrong decision, Settings, Teach.

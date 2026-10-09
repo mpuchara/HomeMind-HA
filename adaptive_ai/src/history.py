@@ -12,7 +12,7 @@ from settings import (OPTIONS, TRAINING_REVISION, clamp, iso_from_ts, now_ts, pa
 from storage import STORE
 from ha import HA, AUTOMATION_KNOWLEDGE
 from context import (archived_state, balanced_presence_driver_score, controllable_context_exclusions, default_action_interval, electrical_context_exclusions, entity_capability_tags, historical_reward, is_context_candidate_entity, is_esphome_sensor_entity, is_fast_reactive_agent, numeric_activity_driver_score, occupancy_state_bool, target_options_for_state, target_value, transition_edges)
-from telemetry import HEAVY_JOBS, rss_mb
+from telemetry import HEAVY_JOBS, RUNTIME_DEBUG, rss_mb
 from replay import (
     SQLiteTemporalTracker, DeferredUpdates, BoundedUsage, ReplayQueryCache,
     HistoricalContextCache, HistoricalFeatureSnapshot,
@@ -33,6 +33,10 @@ from long_memory import (
     collect_sparse_dwells, count_completed_dwells, filter_unseen_candidates,
     selected_history_provenance,
 )
+
+# Recorder responses can contain many thousands of rows. Bound writer ownership,
+# independently of the archive reader's fetch size or the response's entity count.
+HISTORY_IMPORT_BATCH_ROWS = 128
 
 def _apply_stateful_continuation_seed_row(row, target_map, values, seeds):
     """Fold one target row into the exact legacy open-dwell continuation state."""
@@ -1680,44 +1684,90 @@ class HistoryManager(threading.Thread):
 
     def _archive_history_payload(self, data, source):
         rows = []
+        written = 0
+        batches = 0
+        max_batch_rows = 0
         numeric_min_interval = max(5.0, float(OPTIONS.get("history_context_import_interval_seconds", 60)))
-        for group in data or []:
-            if not group:
-                continue
-            group_entity = group[0].get("entity_id")
-            last_kept_ts = None
-            last_item = None
-            for idx, item in enumerate(group):
-                eid = item.get("entity_id") or group_entity
-                ts = parse_ts(item.get("last_changed") or item.get("last_updated"))
-                if not eid or not ts:
+
+        def check_cancelled():
+            if self.stop_event.is_set() or (self.job_cancel_event and self.job_cancel_event.is_set()):
+                raise InterruptedError("History import cancelled")
+
+        def flush():
+            nonlocal written, batches, max_batch_rows
+            if not rows:
+                return
+            check_cancelled()
+            count = len(rows)
+            written += STORE.archive_batch(rows)
+            batches += 1
+            max_batch_rows = max(max_batch_rows, count)
+            rows.clear()
+            # archive_batch has committed and released Store.lock. Never throttle
+            # while holding the SQLite writer; other writers can use this pause.
+            TRAINING_BUDGET.checkpoint("history_import_committed_batch", force=True)
+
+        def append(row):
+            rows.append(row)
+            if len(rows) >= HISTORY_IMPORT_BATCH_ROWS:
+                flush()
+
+        def import_groups():
+            for group in data or []:
+                check_cancelled()
+                if not group:
                     continue
-                keep = True
-                # Whole-home context can contain very chatty numeric sensors. For the initial
-                # historical archive we keep categorical transitions at full resolution, while
-                # numeric context is sampled at a bounded interval. All live entities are still
-                # available to the policy immediately, and future changes continue to be archived.
-                if source == "ha_history_minimal":
-                    raw_state = item.get("state")
-                    try:
-                        float(raw_state)
-                        is_numeric = True
-                    except (TypeError, ValueError):
-                        is_numeric = False
-                    if is_numeric and last_kept_ts is not None and ts - last_kept_ts < numeric_min_interval:
-                        keep = False
-                if keep:
-                    rows.append((eid, ts, item.get("state"), item.get("attributes") or {},
-                                 (item.get("context") or {}).get("user_id"), source))
-                    last_kept_ts = ts
-                last_item = (eid, ts, item)
-            # Preserve the final numeric state of a group even when it fell inside the sampling window.
-            if source == "ha_history_minimal" and last_item:
-                eid, ts, item = last_item
-                if last_kept_ts != ts:
-                    rows.append((eid, ts, item.get("state"), item.get("attributes") or {},
-                                 (item.get("context") or {}).get("user_id"), source))
-        return STORE.archive_batch(rows)
+                group_entity = group[0].get("entity_id")
+                last_kept_ts = None
+                last_item = None
+                for item in group:
+                    check_cancelled()
+                    TRAINING_BUDGET.checkpoint("history_import_parse_row")
+                    eid = item.get("entity_id") or group_entity
+                    ts = parse_ts(item.get("last_changed") or item.get("last_updated"))
+                    if not eid or not ts:
+                        continue
+                    keep = True
+                    # Preserve existing numeric sampling and every categorical row.
+                    if source == "ha_history_minimal":
+                        raw_state = item.get("state")
+                        try:
+                            float(raw_state)
+                            is_numeric = True
+                        except (TypeError, ValueError):
+                            is_numeric = False
+                        if is_numeric and last_kept_ts is not None and ts - last_kept_ts < numeric_min_interval:
+                            keep = False
+                    if keep:
+                        append((eid, ts, item.get("state"), item.get("attributes") or {},
+                                (item.get("context") or {}).get("user_id"), source))
+                        last_kept_ts = ts
+                    last_item = (eid, ts, item)
+                # Retain the final numeric state even across a commit boundary.
+                if source == "ha_history_minimal" and last_item:
+                    eid, ts, item = last_item
+                    if last_kept_ts != ts:
+                        append((eid, ts, item.get("state"), item.get("attributes") or {},
+                                (item.get("context") or {}).get("user_id"), source))
+            flush()
+
+        trace = RUNTIME_DEBUG.begin("history_archive_import", source=source,
+                                    batch_rows=HISTORY_IMPORT_BATCH_ROWS)
+        status = "ok"
+        error_type = None
+        try:
+            # Reuse connection setup across these short, independent transactions.
+            # This session owns no writer lock or transaction between flushes.
+            with STORE.connection_session():
+                import_groups()
+            return written
+        except BaseException as exc:
+            status = "error"
+            error_type = type(exc).__name__
+            raise
+        finally:
+            RUNTIME_DEBUG.end(trace, status=status, rows=written, batches=batches,
+                              max_batch_rows=max_batch_rows, error_type=error_type)
 
     def _fetch_history_resilient(self, entity_ids, start_ts, end_ts, *, minimal, no_attributes, source, depth=0):
         """Fetch Recorder history without allowing one large query to kill bootstrap.
