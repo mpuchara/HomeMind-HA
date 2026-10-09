@@ -13,7 +13,10 @@ class Release037PiRuntimeRegressionTests(unittest.TestCase):
         source = (ROOT / "adaptive_ai" / "src" / "static" / "candidate_ui.js").read_text(encoding="utf-8")
         self.assertNotIn(r"cadence\n  //", source)
         self.assertRegex(source, r"(?m)^\s*async function loop\(\)\{await refresh\(\);setTimeout\(loop,4000\);\}\s*$")
-        self.assertRegex(source, r"(?m)^\s*loop\(\);\s*$")
+        # 0.14.159 registers the executable loop after UI composition. Runtime coverage
+        # in test_release_159_ui_startup verifies that readiness really starts polling.
+        self.assertRegex(source, r"(?m)^\s*if\(window.whenAdaptiveUiReady\)window.whenAdaptiveUiReady\(loop\);\s*$")
+        self.assertRegex(source, r"(?m)^\s*else loop\(\);\s*$")
 
     def test_agent_and_event_ui_reads_fail_independently(self):
         source = (ROOT / "adaptive_ai" / "src" / "static" / "app.js").read_text(encoding="utf-8")
