@@ -164,6 +164,11 @@ class RuntimeDebugLogService:
                 "context_shadow_json_metric": True,
                 "context_candidate_validation_metric": True,
                 "context_candidate_load_metric": True,
+                "context_training_phase_metrics": [
+                    "binary_classifier_fit", "context_candidate_training",
+                    "context_candidate_serialization", "context_candidate_score",
+                    "context_pool_selection",
+                ],
                 "context_candidate_cache_trace": True,
                 "context_shadow_persistence": "immutable_ram_snapshot_to_canonical_json_writer",
                 "observed_pool_atomic_batch": True,
@@ -173,7 +178,7 @@ class RuntimeDebugLogService:
                 "resubmit_preserves_trigger_entities": True,
                 "shadow_validation": "observation_only_optimistic_revision_read_no_engine_writer_lock",
                 "trace_storage": "bounded_ram_only",
-                "normal_runtime_overhead_when_disabled": "boolean instrumentation checks only",
+                "normal_runtime_overhead_when_disabled": "RAM timing counters; detailed spans require debug enabled",
                 "inference_stage_trace": [
                     "pre_inference",
                     "policy_context",

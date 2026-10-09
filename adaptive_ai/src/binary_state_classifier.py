@@ -8,6 +8,7 @@ No physical action or unobserved reward is produced here.
 from collections import deque
 import hashlib
 import math
+from training_phase_metrics import measure_training_phase
 
 
 class BinaryStateClassifier:
@@ -116,6 +117,10 @@ class BinaryStateClassifier:
     def fit(self):
         if min(map(len, self.rows)) < 4:
             return
+        with measure_training_phase('binary_classifier_fit', dims=self.dims) as diagnostics:
+            self._fit(diagnostics)
+
+    def _fit(self, diagnostics):
         import numpy as np
         records = []
         for action in (0, 1):
@@ -135,20 +140,28 @@ class BinaryStateClassifier:
         variance = ((matrix - center) ** 2 * masses[:, None]).sum(axis=0)
         scale = np.maximum(np.sqrt(variance), .05)
         varying = variance > 1e-10
-        z = np.clip((matrix - center) / scale, -6, 6) * varying
+        # Constant columns were already zeroed by the original varying mask.
+        # Remove only those exact zero columns from both matrix products, retaining
+        # all varying feature identities and the original normalization/objective.
+        z = np.clip((matrix[:, varying] - center[varying]) / scale[varying], -6, 6)
         # Data-relative bounded hinges allow several ON signal levels to share a
         # plateau despite noisy labels. A single linear boundary can incorrectly
         # push the weaker stationary level into OFF when entry pulses are stronger.
-        design = np.concatenate([z] + [np.clip(z - knot, 0, 1) * varying for knot in (-1, 0, 1)], axis=1)
-        weights = np.zeros(4 * self.dims, dtype=np.float64)
+        design = np.concatenate([z] + [np.clip(z - knot, 0, 1) for knot in (-1, 0, 1)], axis=1)
+        active_dims = int(varying.sum())
+        diagnostics.update(rows=len(records), varying_features=active_dims,
+                           design_columns=4 * active_dims)
+        weights = np.zeros(4 * active_dims, dtype=np.float64)
         bias = 0.0
         for _ in range(160):
             logits = np.clip(design @ weights + bias, -30, 30)
             error = (1 / (1 + np.exp(-logits)) - labels) * masses
             weights -= .25 * (design.T @ error + .002 * weights)
             bias -= .35 * float(error.sum())
-        self.center, self.scale, self.weights = center.tolist(), scale.tolist(), weights[:self.dims].tolist()
-        self.hinge_weights = [weights[i*self.dims:(i+1)*self.dims].tolist() for i in (1, 2, 3)]
+        expanded = np.zeros((4, self.dims), dtype=np.float64)
+        expanded[:, varying] = weights.reshape(4, active_dims)
+        self.center, self.scale, self.weights = center.tolist(), scale.tolist(), expanded[0].tolist()
+        self.hinge_weights = expanded[1:].tolist()
         self._refresh_active()
         self.bias = float(bias)
         self.ready = True

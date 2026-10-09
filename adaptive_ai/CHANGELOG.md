@@ -1,3 +1,9 @@
+## 0.14.158
+- Klasyfikator desired-state nie przelicza już kolumn, które dotychczasowy próg wariancji zerował. Wszystkie zmienne cechy i ich oryginalne identyfikatory pozostają; zapis ma nadal pełne wymiary modelu.
+- Normalizacja, wagi ON/OFF/przykładów, funkcja celu, 160 kroków, ridge/hinge i częstotliwość fit pozostają. Różnić się może zaokrąglenie redukcji float; testy porównują pełną starą matematykę i decyzje.
+- RAM timings rozdzielają dopasowanie klasyfikatora, aktualizację, serializację, całość oceny kandydata i wybór puli. Debug pokazuje liczbę wierszy i rzeczywisty rozmiar macierzy fit. Zachowano predict → score → learn oraz kontrole SHA/epoki.
+- 20 nowych regresji, 1887 testów. Benchmark porównuje z pełną ścieżką 0.14.157 bez arbitralnego progu szybkości. Aktualizacja i restart, bez Rebuild. Słabo zmienne macierze korzystają najbardziej; uczenie Shadow nadal wymaga pomiaru na HA.
+
 ## 0.14.157
 - Zapis partii Shadow do JSON używa kodowania niezmienionej treści candidate_policy z istniejącego cache kontroli modeli. Trafienie nadal wymaga świeżego pełnego snapshotu i dokładnego porównania bajtów; wszystkie bieżące liczniki, checksum i bookkeeping są zachowane.
 - Wspólny limit 16 MiB/16 wpisów bez drugiego cache dużych modeli. Format danych JSON i canonical SHA pozostają zgodne; kolejność pól wewnątrz candidate_policy może się zmienić. Legacy payloady zachowują dotychczasową obsługę.
