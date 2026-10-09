@@ -28,6 +28,7 @@ from policy import MultiHorizonPolicy
 from policy_backend import verify_model_checksum
 from settings import OPTIONS
 from telemetry import RUNTIME_DEBUG, TELEMETRY
+from training_phase_metrics import measure_training_phase
 
 
 CONTRACT_VERSION = 2
@@ -790,7 +791,7 @@ def install_policy_candidates(service):
 
     service._shadow_predict_index = predict_exact
 
-    def score_and_train(agent_id, challenger, pending, actual_idx, action_count, now):
+    def score_and_train_phases(agent_id, challenger, pending, actual_idx, action_count, now):
         result = original_score(agent_id, challenger, pending, actual_idx, action_count, now)
         key = (str(agent_id), str(challenger))
         train = pending_training.get(key); context = current_context.get(str(agent_id))
@@ -826,9 +827,13 @@ def install_policy_candidates(service):
             horizon, features = int(train.get("horizon") or min(candidate.horizons)), dict(train.get("features") or {})
             if horizon not in candidate.heads or not features:
                 return result
-            candidate.heads[horizon].validate(int(actual_idx), features, 1.0, sample_ts=train.get("ts"))
-            candidate.update(horizon, int(actual_idx), features, 1.0, sample_ts=train.get("ts"))
-            model["candidate_policy"] = candidate.serialize()
+            with measure_training_phase('context_candidate_training', agent_id=str(agent_id),
+                                        challenger=str(challenger)):
+                candidate.heads[horizon].validate(int(actual_idx), features, 1.0, sample_ts=train.get("ts"))
+                candidate.update(horizon, int(actual_idx), features, 1.0, sample_ts=train.get("ts"))
+            with measure_training_phase('context_candidate_serialization', agent_id=str(agent_id),
+                                        challenger=str(challenger)):
+                model["candidate_policy"] = candidate.serialize()
             model["candidate_model_revision"] = candidate.model_revision
             model["candidate_training_samples"] = int(model.get("candidate_training_samples") or 0) + 1
             model["candidate_last_training_ts"] = float(now)
@@ -838,6 +843,11 @@ def install_policy_candidates(service):
             return result
         finally:
             pending_training.pop(key, None)
+
+    def score_and_train(agent_id, challenger, pending, actual_idx, action_count, now):
+        with measure_training_phase('context_candidate_score', agent_id=str(agent_id),
+                                    challenger=str(challenger)):
+            return score_and_train_phases(agent_id, challenger, pending, actual_idx, action_count, now)
 
     service._score_shadow_sample = score_and_train
 
@@ -978,9 +988,10 @@ def install_policy_candidates(service):
         if independent:
             policy = (getattr(service.engine, "models", {}) or {}).get(aid)
             if policy is not None:
-                base = getattr(service.engine, "context_relevance", {}).get(aid) or {}
-                original_sync(agent, policy=policy, feature_scores=combined_scores(agent, base), evaluated_at=now)
-                choose_members(agent, original_state(aid), states)
+                with measure_training_phase('context_pool_selection', agent_id=aid):
+                    base = getattr(service.engine, "context_relevance", {}).get(aid) or {}
+                    original_sync(agent, policy=policy, feature_scores=combined_scores(agent, base), evaluated_at=now)
+                    choose_members(agent, original_state(aid), states)
         before = service.promotion_status(agent) if hasattr(service, "promotion_status") else {}
         before_ts = before.get("last_promotion_ts")
         with lock:

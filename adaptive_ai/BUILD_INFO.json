@@ -1,10 +1,10 @@
 {
-  "version": "0.14.157",
+  "version": "0.14.158",
   "release_date": "2026-10-09",
-  "base_version": "0.14.156",
-  "base_commit": "f6d9230a2111ac3c9dbb69be314d7ebaae1f0531",
-  "release_status": "shared-bounded-model-body-encoding-for-shadow-json-persistence",
-  "release_validation_tests_passed": 1867,
+  "base_version": "0.14.157",
+  "base_commit": "4179248c96928c38441810ed40f684685249eb02",
+  "release_status": "compact-zero-column-classifier-fitting-and-shadow-training-phase-timings",
+  "release_validation_tests_passed": 1887,
   "release_014140": {
     "scope": "inventory_and_remove_remaining_shipped_feature_Handler_fallbacks_for_Candidate_Live_and_manual_feedback_transport",
     "explicit_routes": "manual_feedback.js, candidate_ui.js, candidate_preference_ui.js, /api/candidates, Candidate Teach-RL status/train, generation history/comparison, /api/candidate-live, /api/live and Candidate discard",
@@ -2012,5 +2012,75 @@
       "data_and_checksum_parity": true
     },
     "limits": "Synthetic Windows component benchmark is not an HA latency forecast. Cold/changed/oversized/evicted/differently aliased or ordered content can miss; payload limits exclude temporary object/structure overhead. Shadow feature/scoring/observed-pool work and SQL/disk I/O remain."
+  },
+  "release_014158": {
+    "scope": "omit already-zero constant feature columns from the binary classifier optimizer, restore coefficients to original feature IDs/dimensions; time synchronous Shadow scoring/training/serialization/pool selection",
+    "evidence": "161114 log: Shadow JSON cache hits 260/260, DB/queue errors 0, pending queues 0, checkpoint runs 93/errors 0/busy 0/remaining frames 0; synchronous Shadow observations 4.328 and 4.050 seconds, wrapped runs 4.538 and 4.135 seconds. Recent event-to-decision p95 558.463 ms, wrapped p95 1260.965 ms.",
+    "math": "original variance > 1e-10 mask, normalization, class/example masses, clipping/hinges, 160 steps, learning rates and L2 retained; only zero columns removed, expanded back to original full dimensions; floating-point reduction rounding can differ",
+    "compatibility": "existing classifier contract 1 and policy/schema versions retained; old full-size coefficients remain readable; fresh serialization recomputes canonical SHA; reservoirs/recent tail/fit cadence and prequential score-before-learn retained",
+    "diagnostics": [
+      "binary_classifier_fit",
+      "context_candidate_training",
+      "context_candidate_serialization",
+      "context_candidate_score",
+      "context_pool_selection"
+    ],
+    "new_regressions": 20,
+    "validation_tests_expected": 1887,
+    "rebuild_required": false,
+    "training_revision": "shared-home-intents-v26",
+    "training_objective_changed": false,
+    "control_semantics_changed": false,
+    "development_benchmark": {
+      "synthetic": true,
+      "passes": 8,
+      "cases": [
+        {
+          "dims": 512,
+          "varying_features": 12,
+          "rows": 256,
+          "old_design_columns": 2048,
+          "new_design_columns": 48,
+          "legacy_median_ms": 34.098999996786006,
+          "compact_median_ms": 4.295049999200273,
+          "score_max_abs_error": 9.992007221626409e-16,
+          "coefficients_and_decisions_parity": true
+        },
+        {
+          "dims": 512,
+          "varying_features": 48,
+          "rows": 256,
+          "old_design_columns": 2048,
+          "new_design_columns": 192,
+          "legacy_median_ms": 35.59750000567874,
+          "compact_median_ms": 7.122000002709683,
+          "score_max_abs_error": 2.192690473634684e-15,
+          "coefficients_and_decisions_parity": true
+        },
+        {
+          "dims": 512,
+          "varying_features": 128,
+          "rows": 256,
+          "old_design_columns": 2048,
+          "new_design_columns": 512,
+          "legacy_median_ms": 35.49530000600498,
+          "compact_median_ms": 11.663649995171,
+          "score_max_abs_error": 3.2751579226442118e-15,
+          "coefficients_and_decisions_parity": true
+        },
+        {
+          "dims": 512,
+          "varying_features": 511,
+          "rows": 256,
+          "old_design_columns": 2048,
+          "new_design_columns": 2044,
+          "legacy_median_ms": 43.89825000544079,
+          "compact_median_ms": 40.34155000408646,
+          "score_max_abs_error": 4.6074255521944e-15,
+          "coefficients_and_decisions_parity": true
+        }
+      ]
+    },
+    "limits": "The old trace does not separately time fit vs serialize vs pool selection; their contribution to 4-second outliers cannot be assigned precisely. Synthetic single-BLAS-thread Windows component results are not HA latency forecasts. Dense varying inputs benefit little; learning still runs synchronously and remaining work/I/O can delay later events."
   }
 }

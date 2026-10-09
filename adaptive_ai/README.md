@@ -1,6 +1,6 @@
-# HomeMind-HA / Adaptive AI 0.14.157
+# HomeMind-HA / Adaptive AI 0.14.158
 
-0.14.157: szybsze kodowanie partii modeli Shadow do JSON, ze wspólnym ograniczonym cache i zachowaniem wszystkich bieżących danych. Aktualizacja i restart; bez Rebuild.
+0.14.158: szybsze dopasowanie klasyfikatora dzięki pominięciu kolumn już zerowanych jako stałe oraz pomiar etapów uczenia Shadow. Aktualizacja i restart; bez Rebuild.
 
 
 Cztery akcje każdego agenta: Shadow/Control, Wrong decision, Settings, Teach.

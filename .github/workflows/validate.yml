@@ -32,6 +32,9 @@ jobs:
       - name: 0.14.157 Shadow JSON data and checksum parity benchmark
         if: matrix.python == '3.11'
         run: python tools/benchmark_shadow_json.py
+      - name: 0.14.158 compact classifier fit reference parity benchmark
+        if: matrix.python == '3.11'
+        run: python tools/benchmark_classifier_fit.py --passes 3
       - name: 0.14.113 feature snapshot full replay benchmark
         if: matrix.python == '3.11'
         run: python tools/benchmark_feature_snapshot_reuse.py --compact
