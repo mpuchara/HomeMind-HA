@@ -1,3 +1,10 @@
+## 0.14.165
+- Wątek HA używa istniejącego Store.connection_session przez czas trwania WebSocket, zamiast otwierać i konfigurować SQLite osobno dla każdego odczytu.
+- Każde zdarzenie nadal wykonuje świeże SQL. Transakcje zatwierdzają się i wycofują niezależnie; oczekiwanie na WebSocket nie utrzymuje transakcji ani Store.lock. Połączenie zamyka się przy rozłączeniu, błędzie lub zatrzymaniu.
+- 11 nowych regresji na rzeczywistym wątku HA, w tym odczyt zmian z drugiego procesu, brak przypięcia WAL, wcześniejszy commit przy późniejszym rollbacku, izolacja wątków, Candidate i timeoutów. Pełny zestaw 1965 testów.
+- Benchmark 32 świeżych zapytań z 9 agentami: dopasowana encja około 47,3 → 22,6 ms, niezwiązana około 20,9 → 0,86 ms, wraz z otwarciem/zamknięciem sesji. Sprawdza pełną zgodność danych i liczbę połączeń 32→1; pomiar komponentu.
+- Aktualizacja i restart, bez Rebuild. Trening v26, wagi i kwalifikacja sterowania pozostają zgodne.
+
 ## 0.14.164
 - CI: gdy pobranie bazowego python:3.13-alpine z Docker Hub się nie powiedzie, runner pobiera tę samą linię obrazu z public.ecr.aws/docker/library/python. Pełne budowanie i testy obrazu nadal są wymagane; domyślny Dockerfile pozostaje bez zmiany źródła.
 - Most ręcznych korekt pobiera świeże konfiguracje tylko dla zmienionej encji zamiast wszystkich agentów. Nowy indeks target_entity/created_at; nie dekoduje benchmarków niezwiązanych urządzeń.

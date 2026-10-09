@@ -50,7 +50,10 @@ class HAEventStream(threading.Thread):
                     close_timeout=5,
                     ping_interval=20,
                     ping_timeout=20,
-                ) as ws:
+                ) as ws, STORE.connection_session():
+                    # Own one SQLite connection per socket, not per sensor event.
+                    # Each Store.conn() still reads fresh data and commits/rolls back
+                    # independently; no transaction or Store lock spans ws.recv().
                     hello = json.loads(ws.recv())
                     if hello.get("type") == "auth_required":
                         ws.send(json.dumps({"type": "auth", "access_token": HA_TOKEN}))

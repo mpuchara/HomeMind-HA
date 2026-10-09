@@ -44,6 +44,9 @@ jobs:
       - name: 0.14.164 fresh indexed target-config retrieval parity
         if: matrix.python == '3.11'
         run: python tools/benchmark_target_configs.py --passes 20 --compact
+      - name: 0.14.165 HA session fresh-query and connection-count parity
+        if: matrix.python == '3.11'
+        run: python tools/benchmark_target_configs.py --passes 32 --session --compact
       - name: 0.14.158 compact classifier fit reference parity benchmark
         if: matrix.python == '3.11'
         run: python tools/benchmark_classifier_fit.py --passes 3

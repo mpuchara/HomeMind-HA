@@ -1,10 +1,12 @@
 """Paired full-config scan vs fresh indexed target query, including connection setup."""
 from pathlib import Path
+from contextlib import nullcontext
 import argparse
 import hashlib
 import json
 import os
 import statistics
+import sqlite3
 import sys
 import tempfile
 import time
@@ -17,7 +19,7 @@ from storage import Store
 from agent_candidates import install_store_overlay
 
 
-def run(passes=40):
+def run(passes=40, session=False):
     output = []
     for count in (9, 64):
         with tempfile.TemporaryDirectory(prefix="target-config-bench-") as directory:
@@ -48,18 +50,25 @@ def run(passes=40):
                     previous = lambda: [a for a in store.list_agent_configs() if a["target_entity"] == target]
                     current = lambda: store.list_agent_configs_for_target(target)
                     repeats = []
+                    variants = [("previous", previous), ("current", current)]
+                    if session:
+                        variants.append(("shared_connection", current))
                     for repeat in range(3):
                         metrics = {}
-                        for name, operation in ([("previous", previous), ("current", current)] if repeat % 2 == 0
-                                                else [("current", current), ("previous", previous)]):
+                        for name, operation in (variants if repeat % 2 == 0 else list(reversed(variants))):
                             samples = []
-                            for _ in range(passes):
-                                started = time.perf_counter()
-                                actual = operation()
-                                samples.append((time.perf_counter() - started) * 1000.)
-                                assert actual == expected
-                            metrics[name] = dict(median_ms=statistics.median(samples), total_ms=sum(samples))
+                            batch_started = time.perf_counter()
+                            with store.connection_session() if name == "shared_connection" else nullcontext():
+                                for _ in range(passes):
+                                    started = time.perf_counter()
+                                    actual = operation()
+                                    samples.append((time.perf_counter() - started) * 1000.)
+                                    assert actual == expected
+                            metrics[name] = dict(median_ms=statistics.median(samples), total_ms=sum(samples),
+                                                 batch_ms=(time.perf_counter() - batch_started) * 1000.)
                         metrics["speedup"] = metrics["previous"]["median_ms"] / metrics["current"]["median_ms"]
+                        if session:
+                            metrics["session_batch_speedup"] = metrics["current"]["batch_ms"] / metrics["shared_connection"]["batch_ms"]
                         repeats.append(metrics)
                     decoded = {}
                     for name, operation in (("previous", previous), ("current", current)):
@@ -67,8 +76,19 @@ def run(passes=40):
                             assert operation() == expected
                             decoded[name] = decoder.call_count
                     assert decoded == {"previous": count, "current": len(expected)}
+                    connections = {}
+                    if session:
+                        real_connect = sqlite3.connect
+                        for name in ("current", "shared_connection"):
+                            with patch("storage.sqlite3.connect", side_effect=real_connect) as opens:
+                                with store.connection_session() if name == "shared_connection" else nullcontext():
+                                    for _ in range(passes):
+                                        assert current() == expected
+                                connections[name] = opens.call_count
+                        assert connections == {"current": passes, "shared_connection": 1}
                     output.append(dict(agents=count, target=target, returned=len(expected), passes=passes,
                                        decoded_rows=decoded, every_config_parity=True,
+                                       connections_per_batch=connections,
                                        canonical_digest=hashlib.sha256(json.dumps(expected, sort_keys=True).encode()).hexdigest(),
                                        repeats=repeats))
             finally:
@@ -81,7 +101,8 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--passes", type=int, default=40)
     parser.add_argument("--compact", action="store_true")
+    parser.add_argument("--session", action="store_true", help="Also compare socket-owned connection reuse with complete batch startup/close")
     args = parser.parse_args()
     if args.passes < 1:
         parser.error("--passes must be positive")
-    print(json.dumps(run(args.passes), indent=None if args.compact else 2))
+    print(json.dumps(run(args.passes, session=args.session), indent=None if args.compact else 2))
