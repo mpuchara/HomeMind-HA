@@ -26,6 +26,10 @@ Windows, syntetyczne 9 agentów z raportami benchmarku: mediana powtórzeń dla 
 
 Log nie zawiera próbek treningu/fit, więc nie zmieniamy wag ani zasad uczenia na podstawie tego pomiaru.
 
+## Budowanie w CI
+
+Docker Hub wielokrotnie zwrócił HTTP 429 podczas pobierania bazowego python:3.13-alpine. Runner próbuje najpierw Docker Hub, a po niepowodzeniu pobiera tę linię obrazu z public.ecr.aws/docker/library/python i oznacza ją lokalnie nazwą oczekiwaną przez Dockerfile. Budowanie, smoke test i test pakowanego trenera pozostają obowiązkowe. Domyślne źródło w Dockerfile nie zmienia się.
+
 ## Instalacja
 
 HomeMind-Adaptive-AI-0.14.164-addon-root.zip lub repository.zip, z SHA256. Aktualizacja i restart, bez Rebuild.

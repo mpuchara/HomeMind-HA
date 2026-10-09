@@ -2187,6 +2187,7 @@
       "unrelated_previous_median_ms": 3.51505,
       "unrelated_current_median_ms": 0.5579
     },
-    "limits": "Synthetic component timings only, not HA CPU or whole-decision speedup. Different observed windows cannot attribute all CPU changes to releases. This trace contains no classifier fit/training samples."
+    "limits": "Synthetic component timings only, not HA CPU or whole-decision speedup. Different observed windows cannot attribute all CPU changes to releases. This trace contains no classifier fit/training samples.",
+    "ci_base_image_resolution": "Docker Hub python:3.13-alpine first; on pull failure use public.ecr.aws/docker/library/python:3.13-alpine and locally tag to the unchanged Dockerfile FROM; build/smoke/vectorized trainer checks still mandatory"
   }
 }

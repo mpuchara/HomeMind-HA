@@ -159,6 +159,13 @@ jobs:
           VERSION=$(sed -n 's/^version: "\(.*\)"/\1/p' adaptive_ai/config.yaml | head -n1)
           test -n "$VERSION"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+      - name: Resolve Python base image with public mirror fallback
+        shell: bash
+        run: |
+          if ! docker pull python:3.13-alpine; then
+            docker pull public.ecr.aws/docker/library/python:3.13-alpine
+            docker tag public.ecr.aws/docker/library/python:3.13-alpine python:3.13-alpine
+          fi
       - run: docker build --build-arg BUILD_VERSION=${{ steps.version.outputs.version }} -t homemind:${{ steps.version.outputs.version }} adaptive_ai
       - run: python tools/smoke_image.py homemind:${{ steps.version.outputs.version }}
       - name: Verify packaged vectorized Tiny MLP trainer

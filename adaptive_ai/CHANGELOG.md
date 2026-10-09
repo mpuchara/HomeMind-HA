@@ -1,4 +1,5 @@
 ## 0.14.164
+- CI: gdy pobranie bazowego python:3.13-alpine z Docker Hub się nie powiedzie, runner pobiera tę samą linię obrazu z public.ecr.aws/docker/library/python. Pełne budowanie i testy obrazu nadal są wymagane; domyślny Dockerfile pozostaje bez zmiany źródła.
 - Most ręcznych korekt pobiera świeże konfiguracje tylko dla zmienionej encji zamiast wszystkich agentów. Nowy indeks target_entity/created_at; nie dekoduje benchmarków niezwiązanych urządzeń.
 - Ten sam filtr ukrytych Candidate i zakres procesu treningowego; wszystkie właściwości urządzenia pozostają obsługiwane. Warunki pochodzenia korekty, kwalifikacji, echa własnej komendy i uczenia wyłącznie Candidate pozostają zgodne.
 - Metryka manual_lifecycle_lookup i ślad z encją/liczbą dopasowanych agentów. Odczyt nie korzysta z cache konfiguracji; widzi zmiany zapisane przez inny proces.
