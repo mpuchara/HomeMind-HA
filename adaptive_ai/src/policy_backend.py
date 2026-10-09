@@ -7,6 +7,7 @@ identified safely before any backend-specific constructor is called.
 from abc import ABC, abstractmethod
 import hashlib
 import json
+from model_encoding_cache import MODEL_ENCODING_CACHE
 
 
 MODEL_FORMAT = "homemind-policy-model"
@@ -55,7 +56,7 @@ def model_checksum(raw):
         key: value for key, value in dict(raw or {}).items()
         if key != "model_checksum" and not str(key).startswith("_")
     }
-    return hashlib.sha256(_canonical(clean).encode("utf-8")).hexdigest()
+    return hashlib.sha256(MODEL_ENCODING_CACHE.encode(clean, _canonical)).hexdigest()
 
 
 def verify_model_checksum(raw):

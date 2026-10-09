@@ -1,3 +1,10 @@
+## 0.14.156
+- Cache kodowania canonical JSON redukuje koszt powtarzanej kontroli dużych niezmienionych modeli. Każde wywołanie nadal porównuje świeży snapshot całej treści i oblicza SHA256 canonical JSON; nie cache'ujemy wyniku weryfikacji.
+- Trafienie wymaga dokładnej zgodności pełnych bajtów snapshotu, a nie revision/identity/checksum z nagłówka. Mutacja wag, schematu, próbek czy signed zero zmienia kontrolowaną treść.
+- Limit 16 MiB bajtów snapshot+JSON i 16 wpisów; małe payloady/custom typy używają zwykłego kodowania. JSON/checksum/format modeli pozostają zgodne; używane są wyłącznie własne prywatne snapshoty RAM.
+- Runtime Debug pokazuje hits/misses/bypasses, bytes/entries i limity cache bez SQL. Benchmark narzędziowy porównuje zimne/ciepłe kontrole i pełną zgodność SHA.
+- 19 nowych regresji, 1848 testów. Aktualizacja i restart, bez Rebuild. Zimne lub często zmieniane payloady mogą mieć większy koszt; pozostała praca Shadow nadal wymaga pomiaru na urządzeniu.
+
 ## 0.14.155
 - Checkpoint WAL działa w osobnym wątku PASSIVE bez Store.lock: zapisujący commit nie wykonuje automatycznego checkpointu, gdy worker jest aktywny.
 - Poll co 5 s, próg 1000 stron lub 30 s dla małego WAL; bez oczekiwania na czytelników/writerów. Niedokończony checkpoint jest ponawiany; fizyczny I/O nadal może trwać długo.

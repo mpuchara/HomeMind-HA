@@ -1,10 +1,10 @@
 {
-  "version": "0.14.155",
+  "version": "0.14.156",
   "release_date": "2026-10-09",
-  "base_version": "0.14.154",
-  "base_commit": "f3e93d2dac17b9883b3c7919e017ca5ad475381f",
-  "release_status": "background-passive-wal-checkpoint-with-fallback-and-io-diagnostics",
-  "release_validation_tests_passed": 1829,
+  "base_version": "0.14.155",
+  "base_commit": "c2a251f9651f1c1d4f13895e2867fbfe1356e3a7",
+  "release_status": "bounded-canonical-model-encoding-cache-with-full-content-and-sha-validation",
+  "release_validation_tests_passed": 1848,
   "release_014140": {
     "scope": "inventory_and_remove_remaining_shipped_feature_Handler_fallbacks_for_Candidate_Live_and_manual_feedback_transport",
     "explicit_routes": "manual_feedback.js, candidate_ui.js, candidate_preference_ui.js, /api/candidates, Candidate Teach-RL status/train, generation history/comparison, /api/candidate-live, /api/live and Candidate discard",
@@ -1862,5 +1862,79 @@
     "training_semantics_changed": false,
     "control_semantics_changed": false,
     "limits": "Does not eliminate slow physical I/O, all Store SQL costs, cross-process writer contention or reader-pinned WAL growth. WAL bytes include allocated/reused frames; remaining_frames is sampled at checkpoints. Training workers retain ordinary checkpoint policy."
+  },
+  "release_014156": {
+    "scope": "reuse canonical JSON encoding after a fresh whole-content witness match, while recomputing the original SHA256 checksum every call",
+    "evidence": "141740 log: no exposed DB/queue errors, 243 PASSIVE checkpoints, remaining frames 0; retained maximum commit 20.097 ms. Candidate verification averages 49.609 ms each; 56 retained runtime cache hits still perform expensive JSON verification.",
+    "cache": "builtin JSON trees only; fresh protocol-5 private RAM snapshot of full clean payload, SHA256 lookup plus exact snapshot byte equality; canonical bytes encoded from own detached snapshot on miss; SHA256 of canonical JSON on every checksum call",
+    "bounds": "16 MiB combined witness+canonical byte payloads, at most 16 entries; small witnesses below 16 KiB and unsupported/custom types bypass reuse; no external/persisted pickle input",
+    "compatibility": "original canonical JSON, SHA256 values and model format unchanged; top-level bookkeeping exclusions unchanged; nested weights, rows, metadata, signed zero and type changes are checked; no revision/identity-only hit",
+    "diagnostics": "RAM model_encoding_cache hit/miss/bypass/entry/byte bounds in Runtime Debug",
+    "new_regressions": 19,
+    "validation_tests_expected": 1848,
+    "rebuild_required": false,
+    "training_revision": "shared-home-intents-v26",
+    "training_semantics_changed": false,
+    "control_semantics_changed": false,
+    "development_benchmark": {
+      "synthetic": true,
+      "numeric_values": 73728,
+      "models": 4,
+      "cold": {
+        "median_ms": 43.251900002360344,
+        "p95_ms": 44.28659999393858,
+        "calls": 4
+      },
+      "series": [
+        {
+          "legacy": {
+            "median_ms": 27.99655000126222,
+            "p95_ms": 31.448099995031953,
+            "calls": 32
+          },
+          "cached": {
+            "median_ms": 10.132949995750096,
+            "p95_ms": 11.424099997384474,
+            "calls": 32
+          }
+        },
+        {
+          "legacy": {
+            "median_ms": 27.365299996745307,
+            "p95_ms": 29.650199998286553,
+            "calls": 32
+          },
+          "cached": {
+            "median_ms": 10.068450006656349,
+            "p95_ms": 11.080500000389293,
+            "calls": 32
+          }
+        },
+        {
+          "legacy": {
+            "median_ms": 27.836699999170378,
+            "p95_ms": 32.93199998734053,
+            "calls": 32
+          },
+          "cached": {
+            "median_ms": 9.95524999598274,
+            "p95_ms": 10.890300007304177,
+            "calls": 32
+          }
+        }
+      ],
+      "cache": {
+        "hits": 96,
+        "misses": 4,
+        "bypasses": 0,
+        "entries": 4,
+        "bytes": 9187936,
+        "max_bytes": 16777216,
+        "max_entries": 16,
+        "min_bytes": 16384
+      },
+      "checksum_parity": true
+    },
+    "limits": "First/changed/evicted/oversized payload encoding adds witness overhead. Extra bounded RAM is traded for fewer JSON conversions. Shadow feature computation/scoring/JSON persistence and disk I/O remain. Synthetic Windows benchmark is not an HA latency forecast."
   }
 }
