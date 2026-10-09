@@ -84,7 +84,6 @@
 
   const driver = a => { const c=a.runtime?.context_meta||{}, xs=c.primary_behavioural_drivers||[]; return c.primary_occupancy_sensor||xs[0]||c.primary_local_sensor||null; };
   const latency = a => { const r=a.runtime||{}; if(r.event_to_ack_ms!=null)return `event → device ${ms(r.event_to_ack_ms)}`; if(r.event_to_service_ms!=null)return `event → command ${ms(r.event_to_service_ms)}`; if(r.last_service_latency_ms!=null)return `HA call ${ms(r.last_service_latency_ms)}`; return r.realtime_connected?'⚡ realtime':'REST fallback'; };
-  const controlReady = a => Boolean((a.runtime?.training_state||a.training_state)==='qualified' && (a.control_qualification?.passed ?? true) && (a.control_review?.ready ?? true));
   const controlBlockReason = a => {
     if ((a.runtime?.training_state||a.training_state)!=='qualified') return 'Complete training and the historical benchmark first.';
     if (a.control_review && !a.control_review.ready) return a.control_review.approval_required && !a.control_review.approved ? 'Review this generic target in Settings before Control.' : 'Device capabilities changed; review the target again.';
@@ -165,11 +164,7 @@
 
   const create = a => {
     const el=document.createElement('article'); el.className='agent card'; el.dataset.agentId=a.id;
-    el.innerHTML=`<div class="agent-head"><div class="agent-title"><h3><span data-p0="name"></span> <span data-p0="badge"></span></h3><div class="target" data-p0="target"></div></div><span class="mode" data-p0="mode"></span></div><div class="agent-primary"><div class="state-metric current"><span>Current</span><b data-p0="current"></b></div><div class="state-metric desired"><span>Desired</span><b data-p0="desired"></b></div><div><span>Decision strength</span><b data-p0="confidence"></b></div></div><div class="decision" data-p0="decision"><b data-p0="state"></b><span data-p0="detail"></span></div><div class="agent-status"><span data-p0="driver"></span><span data-p0="latency"></span><span data-p0="training"></span></div><div class="actions"><button class="ghost" data-a="mode" role="switch">Shadow / Control</button><button class="ghost wrong-decision" data-a="wrong">Wrong decision</button><button class="ghost" data-a="settings">Settings</button><button class="primary" data-a="teach">Teach</button></div>`;
-    el.querySelector('[data-a=mode]').onclick=()=>{const cur=lastAgents.find(x=>String(x.id)===String(a.id));if(cur)setMode(a.id,cur.mode==='shadow'?'control':'shadow');};
-    el.querySelector('[data-a=wrong]').onclick=event=>wrongDecision(a.id,event.currentTarget);
-    el.querySelector('[data-a=settings]').onclick=()=>editAgent(a.id);
-    el.querySelector('[data-a=teach]').onclick=()=>openTeach(a.id);
+    el.innerHTML=`<div class="agent-head"><div class="agent-title"><h3><span data-p0="name"></span> <span data-p0="badge"></span></h3><div class="target" data-p0="target"></div></div><span class="mode" data-p0="mode"></span></div><div class="agent-primary"><div class="state-metric current"><span>Current</span><b data-p0="current"></b></div><div class="state-metric desired"><span>Desired</span><b data-p0="desired"></b></div><div><span>Decision strength</span><b data-p0="confidence"></b></div></div><div class="decision" data-p0="decision"><b data-p0="state"></b><span data-p0="detail"></span></div><div class="agent-status"><span data-p0="driver"></span><span data-p0="latency"></span><span data-p0="training"></span></div><div class="actions"></div>`;
     return el;
   };
 
@@ -179,15 +174,6 @@
     const modeNode=el.querySelector('[data-p0=mode]');if(modeNode)modeNode.className=`mode ${a.mode}`;
     const [tone,title,detail]=r.experiments?.active?.kind==='probe' ? ['acted','Eksperyment w toku','Pewność dotyczy zwykłej predykcji. Trwa obserwacja niewielkiej zmiany nastawy.'] : human(a), box=el.querySelector('[data-p0=decision]'); if(box)box.className=`decision ${tone}`; text(el,'state',title); text(el,'detail',detail);
     el.classList.toggle('paused-agent',['paused','waiting','needs_retrain'].includes(training)); el.classList.toggle('training-agent',training==='training');
-    const toggle=el.querySelector('[data-a=mode]');
-    // Later UI layers (generation workflow) intentionally own/replace the action row.
-    // Never assume the original P0 mode button still exists on a retained card.
-    if(toggle){
-      toggle.textContent=a.mode==='control'?'Control → Shadow':a.mode==='shadow'?'Shadow → Control':'Paused → Shadow';
-      toggle.setAttribute('aria-checked',String(a.mode==='control'));
-      toggle.disabled=a.mode==='shadow'&&!controlReady(a);
-      toggle.title=a.mode!=='shadow'?'Przełącz na Shadow':controlBlockReason(a);
-    }
     if(r.teaching_id){text(el,'state','Decyzja z nauki użytkownika');text(el,'detail',`Korekta #${r.teaching_id} pasuje do kontekstu. Pewność dotyczy modelu bazowego.`);}
 
   };

@@ -57,7 +57,8 @@ class ContextUIDiagnosticsTests(unittest.TestCase):
         self.assertNotIn('data-a="context"', source)
         self.assertNotIn('data-a="challenger"', source)
         self.assertNotIn('data-a="tournament"', source)
-        self.assertIn('data-a="settings"', source)
+        workflow = (ROOT / 'adaptive_ai/src/static/agent_workflow_ui.js').read_text(encoding='utf-8')
+        self.assertIn('data-wf="settings"', workflow)
 
     def test_ui_diagnostics_stay_out_of_control_boundary(self):
         for rel in (

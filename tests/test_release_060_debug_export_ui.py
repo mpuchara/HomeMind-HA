@@ -14,8 +14,8 @@ class Release060DebugExportUiTests(unittest.TestCase):
     def test_live_agent_card_has_export_debug_button(self):
         app = (STATIC / "app.js").read_text(encoding="utf-8")
         workflow = (STATIC / "agent_workflow_ui.js").read_text(encoding="utf-8")
-        self.assertIn(r"exportCorrectLearningDebug('${a.id}',this)", app)
-        self.assertIn(">Export debug</button>", app)
+        self.assertIn('<div class="actions"></div>', app)
+        self.assertNotIn(r"exportCorrectLearningDebug('${a.id}',this)", app)
         self.assertIn('data-wf="debug">Export debug</button>', workflow)
         self.assertIn(
             "window.exportCorrectLearningDebug?.(a.id,e.currentTarget)", workflow

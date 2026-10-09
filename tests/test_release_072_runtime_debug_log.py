@@ -102,8 +102,9 @@ class RuntimeDebugLogTests(unittest.TestCase):
     def test_runtime_debug_ui_asset_is_served_by_base_http_handler(self):
         main = (SRC / "main.py").read_text(encoding="utf-8")
         index = (SRC / "static" / "index.html").read_text(encoding="utf-8")
-        self.assertIn('if path == "/runtime_debug_ui.js":', main)
-        self.assertIn('self.static("runtime_debug_ui.js"', main)
+        self.assertIn('"runtime_debug_ui.js"', main)
+        self.assertIn('path[1:] in UI_SCRIPT_ASSETS', main)
+        self.assertIn('self.static(path[1:]', main)
         self.assertIn('src="runtime_debug_ui.js?v=', index)
 
     def test_hot_status_payload_keeps_runtime_debug_state_visible(self):
