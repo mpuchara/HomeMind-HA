@@ -1091,11 +1091,6 @@ def install_policy_candidates(service):
         # Hot observers need a count, not health/screening summaries for every
         # sensor. Keep the same bounded-count contract as all_pool_rows().
         limit = max(32, int(OPTIONS.get("context_observed_pool_limit", DEFAULT_POOL_LIMIT)) * 2)
-        with service.store.conn() as connection:
-            state["observed_pool_count"] = int(connection.execute(
-                "SELECT COUNT(*) FROM (SELECT 1 FROM context_tournament_observed_pool "
-                "WHERE agent_id=? LIMIT ?)", (str(agent_id), limit),
-            ).fetchone()[0])
         if pool_buffer is not None and service.background_persistence_available():
             # Include pending keys without summing duplicate durable/RAM rows.
             with service.store.conn() as connection:
@@ -1105,6 +1100,12 @@ def install_policy_candidates(service):
             with lock:
                 ids.update(eid for owner, eid in observed_pool_keys if owner == str(agent_id))
             state["observed_pool_count"] = min(limit, len(ids))
+        else:
+            with service.store.conn() as connection:
+                state["observed_pool_count"] = int(connection.execute(
+                    "SELECT COUNT(*) FROM (SELECT 1 FROM context_tournament_observed_pool "
+                    "WHERE agent_id=? LIMIT ?)", (str(agent_id), limit),
+                ).fetchone()[0])
         state["active_feature_count"] = len(state.get("active_features") or [])
         return state
 

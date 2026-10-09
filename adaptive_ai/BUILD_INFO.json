@@ -1,10 +1,10 @@
 {
-  "version": "0.14.161",
+  "version": "0.14.162",
   "release_date": "2026-10-09",
-  "base_version": "0.14.160",
-  "base_commit": "4a5f2862b559cfd06860e553e8569ef1a4a1b0d7",
-  "release_status": "reuse-unchanged-observed-examples-and-event-driven-idle-correct-queue",
-  "release_validation_tests_passed": 1911,
+  "base_version": "0.14.161",
+  "base_commit": "df1881d004a641fc0ed65128478f2301cd3b397e",
+  "release_status": "indexed-feature-journal-pruning-and-single-observed-pool-count-read",
+  "release_validation_tests_passed": 1921,
   "release_014140": {
     "scope": "inventory_and_remove_remaining_shipped_feature_Handler_fallbacks_for_Candidate_Live_and_manual_feedback_transport",
     "explicit_routes": "manual_feedback.js, candidate_ui.js, candidate_preference_ui.js, /api/candidates, Candidate Teach-RL status/train, generation history/comparison, /api/candidate-live, /api/live and Candidate discard",
@@ -2121,5 +2121,19 @@
     "invariants": "availability/history/leak votes retained, short visits remain labels, paired score-before-learn retained, full model checksum validation untouched, cumulative deferred snapshots and durability drains unchanged",
     "queue": "enqueue wakes after durable commit; startup claims recovered backlog immediately; clear-before-claim prevents admission wake races; stop skips long wait. Unsignalled out-of-process inserts discovered within 30 seconds.",
     "limits": "Real CPU/latency impact needs a new HA log under comparable load; observed-pool and candidate inference have other costs."
+  },
+  "release_014162": {
+    "scope": "covering received-time/protection/key index and expiry-window index; two bounded ordered partitions replace global CASE sort; preserve unprotected-first priority, insertion-order timestamp ties and one atomic prune transaction; background pool state uses only its final durable-ID read",
+    "evidence": "204915 log, 0.14.161: recent CPU 62.389 percent, RSS 128.035 MiB, event-to-decision recent p95 229.806 ms; observed pool recent p95 24.882 ms versus 268.003 ms in previous log; idle workflow claims 1 in retained 24-second trace. Prune transaction 1667.856 ms (body 1633.462 ms), overlapping a 2881.248 ms target span; overlap is not proof of sole causation. DB/queue/worker errors 0.",
+    "benchmark": "paired Windows, 50128 rows/128 removed, keeper active: pruning 43.9-45.6 -> 7.35-8.32 ms (5.5-6.0x); append-128 plus prune 59.4-61.0 -> 22.6-30.5 ms (1.95-2.70x), including new-index maintenance; all retained keys equal to frozen 161 reference.",
+    "new_regressions": 10,
+    "validation_tests_expected": 1921,
+    "rebuild_required": false,
+    "training_revision": "shared-home-intents-v26",
+    "training_objective_changed": false,
+    "control_semantics_changed": false,
+    "invariants": "same expired-window/event predicates, per-entity limits, protected-first preservation under hard global limit, transaction rollback, model bytes and every retained event/window row; paired learning and full SHA unchanged",
+    "migration": "two idempotent CREATE INDEX IF NOT EXISTS statements; no model/data rewrite or schema-version bump. Index construction occurs on startup; extra index storage/write cost included in append benchmark.",
+    "limits": "Synthetic component timings, not a HA CPU/latency forecast. Shadow scoring/training and checkpoint costs still present. Windows legacy pre-1970 feature tests require Linux validation; not altered."
   }
 }

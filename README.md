@@ -1,6 +1,6 @@
-# HomeMind-HA / Adaptive AI 0.14.161
+# HomeMind-HA / Adaptive AI 0.14.162
 
-0.14.161: mniejszy koszt kodowania obserwacji sensorów i odczytów pustej kolejki Correct. Aktualizacja i restart; bez Rebuild. [Opis wydania](docs/RELEASE_0_14_161_PL.md).
+0.14.162: indeksowane czyszczenie dziennika obserwacji i mniej odczytów liczebności puli kontekstu. Aktualizacja i restart; bez Rebuild. [Opis wydania](docs/RELEASE_0_14_162_PL.md).
 
 
 Karta agenta ma cztery akcje: **Shadow/Control**, **Wrong decision**, **Settings** i **Teach**. Wrong decision uczy poprawnego Desired. Teach otwiera powiększalny wykres historii z wyborem dokładnej chwili i zapisem poprawnego Desired. Cofanie ostatniej korekty jest dostępne w Teach oraz Settings; pozostałe operacje i diagnostyka są w Settings.

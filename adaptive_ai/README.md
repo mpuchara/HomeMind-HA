@@ -1,6 +1,6 @@
-# HomeMind-HA / Adaptive AI 0.14.161
+# HomeMind-HA / Adaptive AI 0.14.162
 
-0.14.161: mniejszy koszt kodowania obserwacji sensorów i odczytów pustej kolejki Correct. Aktualizacja i restart; bez Rebuild.
+0.14.162: indeksowane czyszczenie dziennika obserwacji i mniej odczytów liczebności puli kontekstu. Aktualizacja i restart; bez Rebuild.
 
 
 Cztery akcje każdego agenta: Shadow/Control, Wrong decision, Settings, Teach.

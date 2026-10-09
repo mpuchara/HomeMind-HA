@@ -1,3 +1,10 @@
+## 0.14.162
+- Globalne czyszczenie FeatureJournal wybiera najstarsze niechronione zdarzenia przez indeks; dopiero brakujące miejsca wybiera z chronionych. Bez sortowania całej tabeli z CASE. Jawne rowid zachowuje dotychczasową kolejność remisów received_time.
+- Indeks pokrywający received_time/protected_until/event_key oraz indeks wygasania feature_windows. Retencja, limity, kompletne rekordy, okna dowodowe i atomowość transakcji pozostają zgodne.
+- Background state puli pomija COUNT, który wcześniej był zaraz zastępowany odczytem ID. Wynik obejmuje unikalne rekordy trwałe i RAM, zachowując świeży odczyt bazy i limit.
+- 10 nowych regresji, pełny zestaw: 1921 testów. Benchmark porównuje każdą zachowaną encję zdarzenia z zamrożonym 0.14.161: prune około 5,5–6× szybciej, cały zapis 128 zdarzeń z prune około 2–2,7× szybciej, także z kosztem nowych indeksów.
+- Aktualizacja i restart, bez Rebuild. Trening v26, modele, checksum i decyzje pozostają zgodne. Pomiary dotyczą komponentów, nie prognozy całego HA.
+
 ## 0.14.161
 - Zmiana wartości sensora koduje świeżą historię, lecz wykorzystuje niezmienione JSON przykładów i screeningu. Nowa niezależna etykieta zawsze przelicza oba pola; snapshoty pozostają kompletne i niezmienne.
 - Pusta kolejka Correct czeka na sygnał po trwałym zapisie zgłoszenia. Fallback 30 s zastępuje odczyty co 250 ms; wybudzenie i recovery pozostają natychmiastowe. Stop nie czeka na fallback.
