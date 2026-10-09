@@ -120,6 +120,7 @@ def initialize_runtime():
         from storage import STORE as runtime_store
         STORE = runtime_store
         STORE.start_wal_keeper()
+        STORE.start_wal_checkpoint()
         prepare_runtime_extensions()
         from ha import AUTOMATION_KNOWLEDGE as automation_knowledge
         from context import target_options_for_state as target_options
@@ -814,6 +815,12 @@ def shutdown_runtime():
     except Exception:
         traceback.print_exc()
     finally:
+        stop_checkpoint = getattr(STORE, "stop_wal_checkpoint", None)
+        if callable(stop_checkpoint):
+            try:
+                stop_checkpoint()
+            except Exception:
+                traceback.print_exc()
         stop_keeper = getattr(STORE, "stop_wal_keeper", None)
         if callable(stop_keeper):
             try:

@@ -1,3 +1,11 @@
+## 0.14.155
+- Checkpoint WAL działa w osobnym wątku PASSIVE bez Store.lock: zapisujący commit nie wykonuje automatycznego checkpointu, gdy worker jest aktywny.
+- Poll co 5 s, próg 1000 stron lub 30 s dla małego WAL; bez oczekiwania na czytelników/writerów. Niedokończony checkpoint jest ponawiany; fizyczny I/O nadal może trwać długo.
+- Awaria setup/thread/checkpoint lub zatrzymanie przywraca auto-checkpoint 1000 stron na nowych i ponownie używanych połączeniach. Końcowy checkpoint poprzedza zamknięcie keepera, po final flush.
+- Diagnostyka RAM pokazuje stan workera, próby/błędy, rozmiar WAL, skopiowane/pozostałe ramki i czas. Ślad rozdziela checkpoint od transakcji i podaje politykę auto-checkpoint.
+- synchronous=NORMAL zachowane; nagła utrata zasilania może cofnąć transakcje od ostatniego checkpointu, a okno zależy teraz od jego harmonogramu/opóźnień I/O.
+- 23 nowe regresje, 1829 testów; aktualizacja i restart, bez Rebuild.
+
 ## 0.14.154
 - Runtime utrzymuje jedno prywatne bezczynne połączenie WAL, aby zwykłe krótkie transakcje nie powodowały ciągłego zamykania ostatniego połączenia i sprzątania WAL.
 - Keeper działa query-only/autocommit, nie trzyma snapshotu odczytu i nie jest współdzielonym połączeniem dla zapytań aplikacji. Automatyczny checkpoint pozostaje włączony; końcowe flush poprzedzają jego zamknięcie.

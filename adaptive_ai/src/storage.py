@@ -22,6 +22,7 @@ class Store:
         self._wal_keeper = None
         self._wal_keeper_starts = 0
         self._wal_keeper_stops = 0
+        self._wal_checkpoint_worker = None
         # Diagnostic events are operational telemetry, not Store transaction state.
         # Keep their tiny RAM ring independently accessible while a large microSD write
         # owns self.lock. This prevents /api/events and diagnostic producers from being
@@ -114,7 +115,23 @@ class Store:
             return dict(version=sqlite3.sqlite_version,
                         wal_keeper_active=self._wal_keeper is not None,
                         wal_keeper_starts=self._wal_keeper_starts,
-                        wal_keeper_stops=self._wal_keeper_stops)
+                        wal_keeper_stops=self._wal_keeper_stops,
+                        wal_checkpoint=(self._wal_checkpoint_worker.snapshot()
+                                        if self._wal_checkpoint_worker is not None else None))
+
+    def start_wal_checkpoint(self):
+        if self.training_worker_process:
+            return False
+        from wal_checkpoint import WALCheckpointWorker
+        with self._wal_keeper_lock:
+            if self._wal_checkpoint_worker is None:
+                self._wal_checkpoint_worker = WALCheckpointWorker(self)
+            worker = self._wal_checkpoint_worker
+        return worker.start()
+
+    def stop_wal_checkpoint(self):
+        if self._wal_checkpoint_worker is not None:
+            self._wal_checkpoint_worker.stop()
 
     @contextmanager
     def background_sqlite(self):
@@ -153,6 +170,7 @@ class Store:
         status, error_fields = "ok", {}
         phase = "connect"
         timings = {}
+        checkpoint_pages = None
         started = time.perf_counter() if trace else 0.0
         body_started = commit_started = started
         try:
@@ -162,6 +180,14 @@ class Store:
                 c = sqlite3.connect(self.path, timeout=busy_timeout_ms / 1000.0)
                 c.row_factory = sqlite3.Row
             phase = "configure"
+            checkpoint_worker = self._wal_checkpoint_worker
+            checkpoint_pages = (0 if checkpoint_worker is not None and checkpoint_worker.active else 1000)
+            if not reuse and checkpoint_pages == 0:
+                c.execute("PRAGMA wal_autocheckpoint=0")
+            elif reuse and checkpoint_worker is not None:
+                if getattr(self._connection_session, "checkpoint_pages", None) != checkpoint_pages:
+                    c.execute(f"PRAGMA wal_autocheckpoint={checkpoint_pages}")
+                    self._connection_session.checkpoint_pages = checkpoint_pages
             if not reuse or previous_timeout is not None:
                 c.execute(f"PRAGMA busy_timeout={busy_timeout_ms}")
             if not reuse:
@@ -213,7 +239,8 @@ class Store:
             finally:
                 if trace:
                     timings["close_ms"] = round((time.perf_counter() - close_started) * 1000, 3)
-                RUNTIME_DEBUG.end(trace, status=status, **error_fields, **timings)
+                RUNTIME_DEBUG.end(trace, status=status, autocheckpoint_pages=checkpoint_pages,
+                                  **error_fields, **timings)
 
     @contextmanager
     def connection_session(self):
@@ -247,11 +274,13 @@ class Store:
                 trace = None
                 self._connection_session.connection = connection
                 self._connection_session.connection_busy_timeout_ms = int(connection.execute("PRAGMA busy_timeout").fetchone()[0])
+                self._connection_session.checkpoint_pages = int(connection.execute("PRAGMA wal_autocheckpoint").fetchone()[0])
                 try:
                     yield connection
                 finally:
                     del self._connection_session.connection
                     del self._connection_session.connection_busy_timeout_ms
+                    del self._connection_session.checkpoint_pages
         except BaseException as exc:
             RUNTIME_DEBUG.end(trace, status="error", error_type=type(exc).__name__,
                               phase="session_open",
