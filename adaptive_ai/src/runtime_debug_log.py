@@ -78,6 +78,7 @@ class RuntimeDebugLogService:
         return self.status()
 
     def export_payload(self):
+        from model_encoding_cache import MODEL_ENCODING_CACHE
         engine = getattr(self.core, "ENGINE", None)
         scheduler = None
         engine_error = None
@@ -146,6 +147,7 @@ class RuntimeDebugLogService:
                 "deferred_persistence": deferred_persistence,
             },
             "sqlite": sqlite_status,
+            "model_encoding_cache": MODEL_ENCODING_CACHE.snapshot(),
             "threads": _thread_snapshot(),
             "notes": {
                 "event_to_decision_recent_p95_window_seconds": 60,

@@ -1,6 +1,6 @@
-# HomeMind-HA / Adaptive AI 0.14.155
+# HomeMind-HA / Adaptive AI 0.14.156
 
-0.14.155: checkpoint WAL w osobnym wątku, poza commit i blokadą Store, z diagnostyką i fallback. Aktualizacja i restart; bez Rebuild. [Opis wydania](docs/RELEASE_0_14_155_PL.md).
+0.14.156: mniej ponownego kodowania JSON modeli, z pełną kontrolą treści i SHA256 na każdym sprawdzeniu. Aktualizacja i restart; bez Rebuild. [Opis wydania](docs/RELEASE_0_14_156_PL.md).
 
 
 Karta agenta ma cztery akcje: **Shadow/Control**, **Wrong decision**, **Settings** i **Teach**. Wrong decision uczy poprawnego Desired. Teach otwiera powiększalny wykres historii z wyborem dokładnej chwili i zapisem poprawnego Desired. Cofanie ostatniej korekty jest dostępne w Teach oraz Settings; pozostałe operacje i diagnostyka są w Settings.
