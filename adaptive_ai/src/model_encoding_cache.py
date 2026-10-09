@@ -5,6 +5,7 @@ Only reuse encoding after matching newly captured bytes of the entire JSON tree.
 No external pickle is decoded; unsupported/custom objects always use the encoder.
 """
 import hashlib
+import io
 import pickle
 import threading
 from collections import OrderedDict
@@ -12,34 +13,55 @@ from collections import OrderedDict
 
 _SCALARS = (str, int, float, bool, type(None))
 _CONTAINERS = (dict, list, tuple)
+_BUILTIN_TYPE_IDS = frozenset(map(id, _SCALARS + _CONTAINERS))
+_SCALAR_TYPE_IDS = frozenset(map(id, _SCALARS))
 
 
-def builtin_tree(value):
-    pending, visited = [value], set()
-    while pending:
-        current = pending.pop()
-        kind = type(current)
-        if kind in _SCALARS:
-            continue
-        if kind not in _CONTAINERS:
-            return False
-        if id(current) in visited:
-            continue
-        visited.add(id(current))
-        if kind is dict:
-            if any(type(key) not in _SCALARS for key in current):
-                return False
-            items = current.values()
-        else:
-            items = current
-        for item in items:
-            item_type = type(item)
-            if item_type in _SCALARS:
-                continue
-            if item_type not in _CONTAINERS:
-                return False
-            pending.append(item)
-    return True
+class _UnsupportedBuiltin(Exception):
+    pass
+
+
+class _BuiltinPickler(pickle.Pickler):
+    def reducer_override(self, value):
+        # Never run a custom object's reduction, including builtin subclasses.
+        # Exact builtins use the native dispatch and do not need this hook.
+        raise _UnsupportedBuiltin
+
+
+def _reject_buffer(value):
+    # PickleBuffer has a native dispatch too; it is not a JSON model value.
+    raise _UnsupportedBuiltin
+
+
+def builtin_witness(value):
+    """Freeze only builtin trees, without a Python visit to every numeric leaf.
+
+    Native dispatch handles exact scalars and containers; reducer_override blocks
+    custom reductions. Native non-JSON types (bytes/sets/bytearray) are memoized
+    and rejected before any bytes can be decoded or published in the cache.
+    Only this function's private in-memory bytes are ever decoded.
+    """
+    stream = io.BytesIO()
+    pickler = _BuiltinPickler(stream, protocol=5, buffer_callback=_reject_buffer)
+    try:
+        pickler.dump(value)
+    except _UnsupportedBuiltin:
+        return None
+    objects = [obj for _, obj in pickler.memo.copy().values()]
+    if any(id(type(obj)) not in _BUILTIN_TYPE_IDS for obj in objects):
+        return None
+    has_tuple = any(type(obj) is tuple for obj in objects)
+    for obj in objects:
+        if type(obj) is dict:
+            # Containers cannot be keys except tuples. Nonempty tuples appear in
+            # the memo; empty tuples do not. Avoid rescanning every string key in
+            # normal JSON-loaded models, while retaining scalar-only dict keys.
+            if has_tuple:
+                if any(id(type(key)) not in _SCALAR_TYPE_IDS for key in obj):
+                    return None
+            elif () in obj:
+                return None
+    return stream.getvalue()
 
 
 class ModelEncodingCache:
@@ -52,13 +74,13 @@ class ModelEncodingCache:
         self.hits = self.misses = self.bypasses = 0
 
     def encode(self, value, encoder):
-        if not builtin_tree(value):
+        witness = builtin_witness(value)
+        if witness is None:
             with self.lock:
                 self.bypasses += 1
             return encoder(value).encode('utf-8')
         # Fresh full content, including nested numeric matrices and signed zero.
         # Identity, revision or a previous expected checksum cannot establish a hit.
-        witness = pickle.dumps(value, protocol=5)
         if len(witness) < self.min_bytes:
             with self.lock:
                 self.bypasses += 1

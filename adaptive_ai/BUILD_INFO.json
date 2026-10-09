@@ -1,10 +1,10 @@
 {
-  "version": "0.14.162",
+  "version": "0.14.163",
   "release_date": "2026-10-09",
-  "base_version": "0.14.161",
-  "base_commit": "df1881d004a641fc0ed65128478f2301cd3b397e",
-  "release_status": "indexed-feature-journal-pruning-and-single-observed-pool-count-read",
-  "release_validation_tests_passed": 1921,
+  "base_version": "0.14.162",
+  "base_commit": "e32ba64428e47e2efcad1a9086d41d52b36daf07",
+  "release_status": "native-full-builtin-content-witness-and-shadow-prediction-phase-timing",
+  "release_validation_tests_passed": 1941,
   "release_014140": {
     "scope": "inventory_and_remove_remaining_shipped_feature_Handler_fallbacks_for_Candidate_Live_and_manual_feedback_transport",
     "explicit_routes": "manual_feedback.js, candidate_ui.js, candidate_preference_ui.js, /api/candidates, Candidate Teach-RL status/train, generation history/comparison, /api/candidate-live, /api/live and Candidate discard",
@@ -2135,5 +2135,23 @@
     "invariants": "same expired-window/event predicates, per-entity limits, protected-first preservation under hard global limit, transaction rollback, model bytes and every retained event/window row; paired learning and full SHA unchanged",
     "migration": "two idempotent CREATE INDEX IF NOT EXISTS statements; no model/data rewrite or schema-version bump. Index construction occurs on startup; extra index storage/write cost included in append benchmark.",
     "limits": "Synthetic component timings, not a HA CPU/latency forecast. Shadow scoring/training and checkpoint costs still present. Windows legacy pre-1970 feature tests require Linux validation; not altered."
+  },
+  "release_014163": {
+    "scope": "native exact-builtin protocol-5 witness capture, custom reducer/buffer rejection and memo/key validation replace separate Python numeric-leaf walk; same complete content bytes and fresh canonical SHA; separate Shadow feature/predict timings",
+    "evidence": "220924 log, 0.14.162: recent CPU 83.403 percent, since-start CPU 42.433 percent, RSS 102.066 MiB, event-to-decision recent p95 197.474 ms (17 samples); Shadow observation recent p95 450.998 ms; 940 loads and mandatory validations, four per observation, validation average 23.634 ms. Cache 1360 hits/6 misses/6 entries/1622446 bytes; no thrashing, DB/queue/worker errors 0. Retained trace has no prune samples or critical spans.",
+    "benchmark": "paired Windows warm four-model batches, independent equal caches for checksum and Shadow JSON; three alternating repeats. Median-of-repeat checksum batches: small 6.539 -> 2.977 ms; large 27.584 -> 12.633 ms. Shadow snapshot decode/JSON batches: small 9.404 -> 5.193 ms; large 77.827 -> 46.718 ms. Every canonical SHA and JSON data equal. Individual repeat ratios vary; component only.",
+    "new_regressions": 20,
+    "validation_tests_expected": 1941,
+    "rebuild_required": false,
+    "training_revision": "shared-home-intents-v26",
+    "training_objective_changed": false,
+    "control_semantics_changed": false,
+    "invariants": "fresh complete witness each call, exact witness equality after hashed lookup, fresh SHA over full canonical bytes on every verification, bounded 16MiB cache, detached encoder input, no verification verdict cache; custom types/unsupported builtins fall back to existing encoder without custom reduction or decoding",
+    "runtime": "CPython native Pickler dispatch and memo tested on supported Python 3.11/3.13; exact bytes match former protocol-5 capture. Nonempty tuple keys detected via memo and key checks, empty tuple keys separately rejected; native bytes/bytearray/set/frozenset rejected; PickleBuffer callback rejects buffers.",
+    "metrics": [
+      "context_candidate_features",
+      "context_candidate_predict"
+    ],
+    "limits": "No claim that 162 pruning accelerated this retained HA trace: prune absent. No classifier training/fit samples. Different event rates/windows prevent attribution of CPU changes to release alone. Full inference, feature construction, background checkpoint and persistence work remain."
   }
 }
