@@ -1,6 +1,6 @@
-# HomeMind-HA / Adaptive AI 0.14.160
+# HomeMind-HA / Adaptive AI 0.14.161
 
-0.14.160: usunięte starsze przyciski kart; komplet skryptów UI dostępny od startu HTTP, przed inicjalizacją backendu. Aktualizacja i restart; bez Rebuild.
+0.14.161: mniejszy koszt kodowania obserwacji sensorów i odczytów pustej kolejki Correct. Aktualizacja i restart; bez Rebuild.
 
 
 Cztery akcje każdego agenta: Shadow/Control, Wrong decision, Settings, Teach.

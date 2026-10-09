@@ -91,6 +91,25 @@ def _decode(raw, fallback):
         return fallback
 
 
+def _pool_json_payload(row, previous=None, *, samples_changed):
+    """Encode fresh history; reuse examples only until the next independent label.
+
+    previous contains immutable strings owned by this observer, not a verdict
+    about a model. Availability votes and sensor edges do not modify examples.
+    A new label always regenerates both examples and their screening result.
+    """
+    screening_changed = samples_changed or not row.get("screening")
+    if screening_changed:
+        row["screening"] = semantic_predictive_score(row.get("samples") or [])
+    return (
+        json.dumps(row.get("history") or [], separators=(",", ":"), sort_keys=True),
+        previous[1] if previous is not None and not samples_changed else
+            json.dumps(row.get("samples") or [], separators=(",", ":"), sort_keys=True),
+        previous[2] if previous is not None and not screening_changed else
+            json.dumps(row.get("screening") or {}, separators=(",", ":"), sort_keys=True),
+    )
+
+
 def _corr(xs, ys):
     pairs = [(float(x), float(y)) for x, y in zip(xs, ys)
              if _finite(x) is not None and _finite(y) is not None]
@@ -401,16 +420,13 @@ def install_policy_candidates(service):
     def pool_write_args(agent_id, entity_id, row, now, *, samples_changed):
         row["history"] = list(row.get("history") or [])[-MAX_HISTORY:]
         row["samples"] = list(row.get("samples") or [])[-MAX_SCREENING_SAMPLES:]
-        # Screening depends only on accepted examples, not availability counters.
-        # A radar update must not rescore 96 unchanged example sets.
-        if samples_changed or not row.get("screening"):
-            row["screening"] = semantic_predictive_score(row["samples"])
-        args = pool_counter_args(agent_id, entity_id, row) + (
-            json.dumps(row.get("history") or [], separators=(",", ":"), sort_keys=True),
-            json.dumps(row.get("samples") or [], separators=(",", ":"), sort_keys=True),
-            json.dumps(row.get("screening") or {}, separators=(",", ":"), sort_keys=True), float(now),
-        )
-        return args
+        key = (str(agent_id), str(entity_id))
+        with lock:
+            previous = pool_payloads.get(key)
+        payload = _pool_json_payload(row, previous, samples_changed=samples_changed)
+        with lock:
+            pool_payloads[key] = payload
+        return pool_counter_args(agent_id, entity_id, row) + payload + (float(now),)
 
     pool_upsert = """INSERT INTO context_tournament_observed_pool
         (agent_id,entity_id,pool_version,opportunities,available_count,unknown_count,
