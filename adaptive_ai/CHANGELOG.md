@@ -1,3 +1,11 @@
+## 0.14.152
+- Checkpoint modelu domu nie trzyma blokady sensorów podczas zapisu SQLite; nowe obserwacje pozostają w bieżącym modelu.
+- Pula sensorów i statystyki jakości zapisują pełne, skumulowane snapshoty w tle. Liczniki nie usuwają historycznych próbek, także krótkich wizyt.
+- Wynik nauki kandydatów budzi writer zamiast wymuszać zapis w wątku kolejnej decyzji. Format modeli i bramki kwalifikacji pozostają zgodne.
+- Historia Current/Desired przyjmuje nowe rekordy podczas wolnego zapisu, zachowuje kolejność przy retry i jawnie liczy przepełnienie.
+- Shutdown zapisuje oczekujące snapshoty. Runtime Debug pokazuje stan buforów i czas zapisu wraz z oczekiwaniem na Store.
+- Nominalne okresowe flush co 5 s; przy nagłej utracie zasilania ostatnie niezapisane obserwacje Shadow mogą nie przetrwać. Aktualizacja nie wymaga Rebuild.
+
 ## 0.14.151
 - Walidacja kandydatów używa tej samej stałej tożsamości championa co metryki Context Tournament; zwykłe starzenie wag i aktualizacja online nie wymuszają odbudowy kandydata.
 - Cache jest związany z rewizją i checksumą sprawdzonego źródła. Starzenie runtime zachowuje instancję; inny poprawny payload wymusza odtworzenie, także przy tej samej rewizji.

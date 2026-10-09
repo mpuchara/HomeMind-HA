@@ -340,7 +340,8 @@ def install_policy_candidates(service):
 
     lock = threading.RLock()
     pool_cache, pool_members = {}, {}
-    persisted_pool_keys = set()
+    observed_pool_keys = set()
+    pool_payloads = {}
     current_context, candidate_cache, pending_training = {}, {}, {}
     last_target, last_own_action = {}, {}
     tls = threading.local()
@@ -384,7 +385,7 @@ def install_policy_candidates(service):
         with lock:
             pool_cache[key] = value
             if row:
-                persisted_pool_keys.add(key)
+                observed_pool_keys.add(key)
         return value
 
     def pool_counter_args(agent_id, entity_id, row):
@@ -410,29 +411,48 @@ def install_policy_candidates(service):
         )
         return args
 
+    pool_upsert = """INSERT INTO context_tournament_observed_pool
+        (agent_id,entity_id,pool_version,opportunities,available_count,unknown_count,
+         unavailable_count,change_count,own_action_leak_hits,first_seen_ts,last_seen_ts,
+         last_change_ts,last_value,history_json,samples_json,screening_json,updated_ts)
+        VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+        ON CONFLICT(agent_id,entity_id) DO UPDATE SET
+         pool_version=excluded.pool_version,opportunities=excluded.opportunities,
+         available_count=excluded.available_count,unknown_count=excluded.unknown_count,
+         unavailable_count=excluded.unavailable_count,change_count=excluded.change_count,
+         own_action_leak_hits=excluded.own_action_leak_hits,first_seen_ts=excluded.first_seen_ts,
+         last_seen_ts=excluded.last_seen_ts,last_change_ts=excluded.last_change_ts,
+         last_value=excluded.last_value,history_json=excluded.history_json,
+         samples_json=excluded.samples_json,screening_json=excluded.screening_json,
+          updated_ts=excluded.updated_ts"""
+    pool_buffer = (service.register_context_rows('observed_pool', pool_upsert)
+                   if callable(getattr(service, 'register_context_rows', None)) else None)
+
     def persist_pool_batch(agent_id, rows, counters, now):
         if not rows and not counters:
             return
         aid = str(agent_id)
+        if pool_buffer is not None:
+            prepared = list(rows)
+            with lock:
+                for row in rows:
+                    pool_payloads[(str(row[0]), str(row[1]))] = tuple(row[13:16])
+                for eid, row in counters:
+                    payload = pool_payloads.get((aid, str(eid)))
+                    if payload is None:
+                        packed = pool_write_args(aid, eid, row, now, samples_changed=False)
+                        payload = pool_payloads[(aid, str(eid))] = tuple(packed[13:16])
+                    prepared.append(pool_counter_args(aid, eid, row) + payload + (float(now),))
+                observed_pool_keys.update((str(row[0]), str(row[1])) for row in prepared)
+            pool_buffer.submit(prepared)
+            if not service.background_persistence_available():
+                pool_buffer.flush()
+            return
         # One atomic durable snapshot per observation, instead of one connection
         # and commit per sensor. Retain every availability and causal sample vote.
         with service.store.lock, service.store.conn() as c:
-            upsert = """INSERT INTO context_tournament_observed_pool
-                (agent_id,entity_id,pool_version,opportunities,available_count,unknown_count,
-                 unavailable_count,change_count,own_action_leak_hits,first_seen_ts,last_seen_ts,
-                 last_change_ts,last_value,history_json,samples_json,screening_json,updated_ts)
-                VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-                ON CONFLICT(agent_id,entity_id) DO UPDATE SET
-                 pool_version=excluded.pool_version,opportunities=excluded.opportunities,
-                 available_count=excluded.available_count,unknown_count=excluded.unknown_count,
-                 unavailable_count=excluded.unavailable_count,change_count=excluded.change_count,
-                 own_action_leak_hits=excluded.own_action_leak_hits,first_seen_ts=excluded.first_seen_ts,
-                 last_seen_ts=excluded.last_seen_ts,last_change_ts=excluded.last_change_ts,
-                 last_value=excluded.last_value,history_json=excluded.history_json,
-                 samples_json=excluded.samples_json,screening_json=excluded.screening_json,
-                  updated_ts=excluded.updated_ts"""
             if rows:
-                c.executemany(upsert, rows)
+                c.executemany(pool_upsert, rows)
             if counters:
                 # Availability is not a new historical example. Leave unchanged
                 # history/sample JSON on disk instead of serializing and binding
@@ -451,11 +471,11 @@ def install_policy_candidates(service):
                 if updated.rowcount != len(updates):
                     # A reset/delete may remove a cached row. Recover complete
                     # snapshots atomically, including every retained example.
-                    c.executemany(upsert, [pool_write_args(
+                    c.executemany(pool_upsert, [pool_write_args(
                         aid, eid, row, now, samples_changed=False
                     ) for eid, row in counters])
         with lock:
-            persisted_pool_keys.update((str(row[0]), str(row[1])) for row in rows)
+            observed_pool_keys.update((str(row[0]), str(row[1])) for row in rows)
 
     def pool_stats(agent_id, entity_id):
         row = load_pool(agent_id, entity_id)
@@ -473,6 +493,11 @@ def install_policy_candidates(service):
             ids = [str(row[0]) for row in c.execute(
                 "SELECT entity_id FROM context_tournament_observed_pool WHERE agent_id=? ORDER BY updated_ts DESC LIMIT ?",
                 (aid, limit)).fetchall()]
+        # Newly observed cumulative rows are visible before their background commit.
+        with lock:
+            known = {eid for owner, eid in observed_pool_keys if owner == aid}
+            pending_members = [eid for eid in pool_members.get(aid, ()) if eid in known]
+            ids = list(dict.fromkeys(pending_members + ids + sorted(known)))[:limit]
         out = []
         for entity_id in ids:
             stats = pool_stats(aid, entity_id)
@@ -612,7 +637,7 @@ def install_policy_candidates(service):
                 sample["trend"] = None if sample["lag_10"] is None else value - float(sample["lag_10"])
                 row["samples"] = (list(row.get("samples") or []) + [sample])[-MAX_SCREENING_SAMPLES:]
             if (history_changed or samples_changed or not row.get("screening")
-                    or (aid, entity_id) not in persisted_pool_keys):
+                    or (aid, entity_id) not in observed_pool_keys):
                 writes.append(pool_write_args(
                     aid, entity_id, row, now, samples_changed=samples_changed
                 ))
@@ -1044,6 +1069,15 @@ def install_policy_candidates(service):
                 "SELECT COUNT(*) FROM (SELECT 1 FROM context_tournament_observed_pool "
                 "WHERE agent_id=? LIMIT ?)", (str(agent_id), limit),
             ).fetchone()[0])
+        if pool_buffer is not None and service.background_persistence_available():
+            # Include pending keys without summing duplicate durable/RAM rows.
+            with service.store.conn() as connection:
+                ids = {str(row[0]) for row in connection.execute(
+                    "SELECT entity_id FROM context_tournament_observed_pool WHERE agent_id=? LIMIT ?",
+                    (str(agent_id), limit))}
+            with lock:
+                ids.update(eid for owner, eid in observed_pool_keys if owner == str(agent_id))
+            state["observed_pool_count"] = min(limit, len(ids))
         state["active_feature_count"] = len(state.get("active_features") or [])
         return state
 

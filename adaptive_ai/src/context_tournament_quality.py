@@ -235,6 +235,25 @@ def install_sensor_quality(service):
             cache[key] = dict(value)
         return value
 
+    quality_upsert = """INSERT INTO context_tournament_sensor_quality
+                   (agent_id,entity_id,opportunities,available_count,unknown_count,
+                    unavailable_count,event_count,first_observed_ts,last_observed_ts,
+                    last_event_ts,failure_timestamps_json,updated_ts)
+                   VALUES(?,?,?,?,?,?,?,?,?,?,?,?)
+                   ON CONFLICT(agent_id,entity_id) DO UPDATE SET
+                     opportunities=excluded.opportunities,
+                     available_count=excluded.available_count,
+                     unknown_count=excluded.unknown_count,
+                     unavailable_count=excluded.unavailable_count,
+                     event_count=excluded.event_count,
+                     first_observed_ts=excluded.first_observed_ts,
+                     last_observed_ts=excluded.last_observed_ts,
+                     last_event_ts=excluded.last_event_ts,
+                     failure_timestamps_json=excluded.failure_timestamps_json,
+                     updated_ts=excluded.updated_ts"""
+    quality_buffer = (service.register_context_rows('sensor_quality', quality_upsert)
+                      if callable(getattr(service, 'register_context_rows', None)) else None)
+
     def save_rows(agent_id, values, now):
         if not values:
             return
@@ -253,26 +272,13 @@ def install_sensor_quality(service):
                 value.get("first_observed_ts"), value.get("last_observed_ts"),
                 value.get("last_event_ts"), json.dumps(failures, separators=(",", ":")), float(now),
             ))
-        with service.store.lock, service.store.conn() as c:
-            c.executemany(
-                """INSERT INTO context_tournament_sensor_quality
-                   (agent_id,entity_id,opportunities,available_count,unknown_count,
-                    unavailable_count,event_count,first_observed_ts,last_observed_ts,
-                    last_event_ts,failure_timestamps_json,updated_ts)
-                   VALUES(?,?,?,?,?,?,?,?,?,?,?,?)
-                   ON CONFLICT(agent_id,entity_id) DO UPDATE SET
-                     opportunities=excluded.opportunities,
-                     available_count=excluded.available_count,
-                     unknown_count=excluded.unknown_count,
-                     unavailable_count=excluded.unavailable_count,
-                     event_count=excluded.event_count,
-                     first_observed_ts=excluded.first_observed_ts,
-                     last_observed_ts=excluded.last_observed_ts,
-                     last_event_ts=excluded.last_event_ts,
-                     failure_timestamps_json=excluded.failure_timestamps_json,
-                     updated_ts=excluded.updated_ts""",
-                prepared,
-            )
+        if quality_buffer is not None:
+            quality_buffer.submit(prepared)
+            if not service.background_persistence_available():
+                quality_buffer.flush()
+        else:
+            with service.store.lock, service.store.conn() as c:
+                c.executemany(quality_upsert, prepared)
         with lock:
             for entity_id, value in values:
                 cache[(str(agent_id), str(entity_id))] = dict(value)

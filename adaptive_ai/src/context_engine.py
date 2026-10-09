@@ -24,6 +24,7 @@ class ContextEngine:
     def __init__(self, options, store=None):
         self.options, self.store = options, store
         self.lock = threading.RLock()
+        self._save_lock = threading.Lock()
         self.entities, self.devices, self.areas = {}, {}, {}
         self.mapping, self.admitted = {}, set()
         self.excluded = set()
@@ -475,24 +476,22 @@ class ContextEngine:
             )
 
     def save(self, force=False):
-        with self.lock:
-            now = time.time()
-            if not self.store or (not force and now - self.last_save < 60):
-                return False
-
-            room_raw = json.dumps(
-                self.home.export(), separators=(',', ':'), sort_keys=True
-            )
-            room_changed = room_raw != self._last_saved_room_model_raw
+        # Serialize saves, but never hold the live belief lock across Store/WAL I/O.
+        # Sensor ingestion and forecasts must remain available during slow commits.
+        with self._save_lock:
+            with self.lock:
+                now = time.time()
+                if not self.store or (not force and now - self.last_save < 60):
+                    return False
+                room_raw = json.dumps(self.home.export(), separators=(',', ':'), sort_keys=True)
+                adaptive_raw = json.dumps(self.adaptive_presence.export(), separators=(',', ':'), sort_keys=True)
+                room_changed = room_raw != self._last_saved_room_model_raw
+                adaptive_changed = adaptive_raw != self._last_saved_adaptive_model_raw
             if room_changed:
                 self.store.meta_set(self.ROOM_MODEL_KEY, room_raw)
-                self._last_saved_room_model_raw = room_raw
-                self.room_checkpoint_source = self.ROOM_MODEL_KEY
-
-            adaptive_raw = json.dumps(
-                self.adaptive_presence.export(), separators=(',', ':'), sort_keys=True
-            )
-            adaptive_changed = adaptive_raw != self._last_saved_adaptive_model_raw
+                with self.lock:
+                    self._last_saved_room_model_raw = room_raw
+                    self.room_checkpoint_source = self.ROOM_MODEL_KEY
             if adaptive_changed:
                 self.store.meta_set(self.ADAPTIVE_MODEL_KEY, adaptive_raw)
                 with self.store.lock, self.store.conn() as c:
@@ -505,9 +504,10 @@ class ContextEngine:
                         "DELETE FROM adaptive_presence_checkpoints WHERE ts<?",
                         (float(now) - self.ADAPTIVE_CHECKPOINT_RETENTION_SECONDS,),
                     )
-                self._last_saved_adaptive_model_raw = adaptive_raw
-
-            self.last_save = now
+                with self.lock:
+                    self._last_saved_adaptive_model_raw = adaptive_raw
+            with self.lock:
+                self.last_save = now
             return bool(room_changed or adaptive_changed)
 
     def diagnostics(self):

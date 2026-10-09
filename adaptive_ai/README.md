@@ -1,6 +1,6 @@
-# HomeMind-HA / Adaptive AI 0.14.151
+# HomeMind-HA / Adaptive AI 0.14.152
 
-0.14.151: usunięte ciągłe odbudowy kandydatów po starzeniu wag; zachowana nauka z kolejnego niezależnego wyniku i pełna weryfikacja integralności. Bez Rebuild.
+0.14.152: zapis modelu domu nie blokuje sensorów; obserwacje puli i jakości kontekstu oraz nauka kandydatów korzystają z zapisu w tle. Bez Rebuild. Przy restarcie oczekujące dane są zapisywane.
 
 
 Cztery akcje każdego agenta: Shadow/Control, Wrong decision, Settings, Teach.

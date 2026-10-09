@@ -1,6 +1,6 @@
-# HomeMind-HA / Adaptive AI 0.14.151
+# HomeMind-HA / Adaptive AI 0.14.152
 
-0.14.151: Context Tournament zachowuje kandydatów i ich naukę po starzeniu wag oraz zwykłych aktualizacjach championa. Naprawiona zgodność epoki i cache związany z checksumą źródła. Bez Rebuild. [Opis wydania](docs/RELEASE_0_14_151_PL.md).
+0.14.152: zapis modelu domu nie blokuje sensorów; obserwacje puli i jakości kontekstu oraz nauka kandydatów korzystają z zapisu w tle. Bez Rebuild. [Opis wydania](docs/RELEASE_0_14_152_PL.md).
 
 
 Karta agenta ma cztery akcje: **Shadow/Control**, **Wrong decision**, **Settings** i **Teach**. Wrong decision uczy poprawnego Desired. Teach otwiera powiększalny wykres historii z wyborem dokładnej chwili i zapisem poprawnego Desired. Cofanie ostatniej korekty jest dostępne w Teach oraz Settings; pozostałe operacje i diagnostyka są w Settings.

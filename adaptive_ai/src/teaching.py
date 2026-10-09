@@ -167,6 +167,7 @@ class Teaching:
     def __init__(self, store):
         self.store = store
         self.lock = threading.RLock()
+        self._flush_lock = threading.Lock()
         self.cache = {}
         self.revisions = {}
         self.buffer = deque(maxlen=8192)
@@ -536,26 +537,38 @@ class Teaching:
         now = time.monotonic()
         if not force and len(self.buffer) < 256 and now - self.last_flush < 5.0:
             return 0
-        if not self.lock.acquire(blocking=False):
+        if not self._flush_lock.acquire(blocking=bool(force)):
             return 0
+        batch = []
         try:
-            if not self.buffer:
-                self.last_flush = now
-                return 0
-            if not self.store.lock.acquire(blocking=False):
+            if not self.store.lock.acquire(blocking=bool(force)):
                 return 0
             try:
-                batch = list(self.buffer)
+                with self.lock:
+                    if not self.buffer:
+                        self.last_flush = now
+                        return 0
+                    batch = list(self.buffer)
+                    self.buffer.clear()
+                prune_ts = time.time()
+                prune = prune_ts - self.last_prune > 3600
                 with self.store.conn() as c:
                     c.executemany("INSERT OR REPLACE INTO decision_history VALUES(?,?,?,?)", batch)
-                    if time.time() - self.last_prune > 3600:
-                        c.execute("DELETE FROM decision_history WHERE ts<?", (time.time() - 31 * 86400,))
-                        self.last_prune = time.time()
-                for _ in range(min(len(batch), len(self.buffer))):
-                    self.buffer.popleft()
+                    if prune:
+                        c.execute("DELETE FROM decision_history WHERE ts<?", (prune_ts - 31 * 86400,))
+                if prune:
+                    self.last_prune = prune_ts
                 self.last_flush = time.monotonic()
                 return len(batch)
+            except Exception:
+                with self.lock:
+                    merged = batch + list(self.buffer)
+                    excess = max(0, len(merged) - self.buffer.maxlen)
+                    self.dropped_records += excess
+                    self.buffer.clear()
+                    self.buffer.extend(merged[excess:])
+                raise
             finally:
                 self.store.lock.release()
         finally:
-            self.lock.release()
+            self._flush_lock.release()
