@@ -41,6 +41,9 @@ jobs:
       - name: 0.14.163 native witness full SHA and Shadow JSON parity
         if: matrix.python == '3.11'
         run: python tools/benchmark_native_witness.py --passes 4 --compact
+      - name: 0.14.164 fresh indexed target-config retrieval parity
+        if: matrix.python == '3.11'
+        run: python tools/benchmark_target_configs.py --passes 20 --compact
       - name: 0.14.158 compact classifier fit reference parity benchmark
         if: matrix.python == '3.11'
         run: python tools/benchmark_classifier_fit.py --passes 3

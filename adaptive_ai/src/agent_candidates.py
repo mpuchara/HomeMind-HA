@@ -127,6 +127,7 @@ def install_store_overlay(store):
     cls = type(store)
     cls._candidate_base_list_agents = cls.list_agents
     cls._candidate_base_list_agent_configs = cls.list_agent_configs
+    cls._candidate_base_list_agent_configs_for_target = cls.list_agent_configs_for_target
     cls._candidate_base_training_agent_ids = cls.training_agent_ids
 
     def list_agents(self):
@@ -150,6 +151,13 @@ def install_store_overlay(store):
         hidden = _candidate_ids(self)
         return [aid for aid in ids if str(aid) not in hidden]
 
+    def list_agent_configs_for_target(self, target_entity):
+        rows = cls._candidate_base_list_agent_configs_for_target(self, target_entity)
+        if getattr(_TLS, "include_candidates", False):
+            return rows
+        hidden = _candidate_ids(self)
+        return [a for a in rows if str(a.get("id")) not in hidden]
+
     def find_agent_by_target(self, entity_id, property_name):
         hidden = _candidate_ids(self)
         for agent in self.list_agent_configs():
@@ -161,6 +169,7 @@ def install_store_overlay(store):
 
     cls.list_agents = list_agents
     cls.list_agent_configs = list_agent_configs
+    cls.list_agent_configs_for_target = list_agent_configs_for_target
     cls.training_agent_ids = training_agent_ids
     cls.find_agent_by_target = find_agent_by_target
     _STORE_PATCHED = True

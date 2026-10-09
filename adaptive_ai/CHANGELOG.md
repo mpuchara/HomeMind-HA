@@ -1,3 +1,10 @@
+## 0.14.164
+- Most ręcznych korekt pobiera świeże konfiguracje tylko dla zmienionej encji zamiast wszystkich agentów. Nowy indeks target_entity/created_at; nie dekoduje benchmarków niezwiązanych urządzeń.
+- Ten sam filtr ukrytych Candidate i zakres procesu treningowego; wszystkie właściwości urządzenia pozostają obsługiwane. Warunki pochodzenia korekty, kwalifikacji, echa własnej komendy i uczenia wyłącznie Candidate pozostają zgodne.
+- Metryka manual_lifecycle_lookup i ślad z encją/liczbą dopasowanych agentów. Odczyt nie korzysta z cache konfiguracji; widzi zmiany zapisane przez inny proces.
+- 13 nowych regresji; pełny zestaw 1954 testów. Benchmark porównuje zwracane konfiguracje i liczbę dekodowanych wierszy, z otwarciem połączenia i aktywnym WAL keeperem. Dla syntetycznych 9 agentów: dopasowana encja około 3,5 → 1,3 ms, niezwiązana 3,5 → 0,56 ms; wynik komponentu.
+- Aktualizacja i restart, bez Rebuild. Trening v26, wagi, decyzje i kwalifikacja sterowania pozostają zgodne.
+
 ## 0.14.163
 - Pełny świeży obraz zawartości modelu powstaje przez natywny Pickler z odrzucaniem redukcji niestandardowych, buforów i typów spoza obsługiwanych builtins. Nie ma osobnej pętli Pythona po każdej wadze liczbowej. Bajty obrazu pozostają zgodne z 0.14.162.
 - Każda weryfikacja nadal oblicza SHA256 wszystkich kanonicznych bajtów. Pełne porównanie zawartości cache, odłączony snapshot i limit RAM pozostają zgodne; bez cache wyników weryfikacji.
