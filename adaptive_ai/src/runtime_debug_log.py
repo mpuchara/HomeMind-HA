@@ -83,6 +83,10 @@ class RuntimeDebugLogService:
         engine_error = None
         realtime = None
         context_persistence = None
+        deferred_persistence = {}
+        store = getattr(self.core, "STORE", None)
+        sqlite_snapshot = getattr(store, "sqlite_snapshot", None)
+        sqlite_status = sqlite_snapshot() if callable(sqlite_snapshot) else None
         if engine is not None:
             lock = getattr(engine, "lock", None)
             if lock is not None:
@@ -113,6 +117,17 @@ class RuntimeDebugLogService:
             tournament = getattr(engine, 'context_tournament', None)
             if tournament is not None:
                 context_persistence = tournament.shadow_persistence_snapshot()
+            for name, owner, method in (
+                ("provenance", engine, "provenance_deferred_snapshot"),
+                ("feature_journal", engine, "feature_observation_deferred_snapshot"),
+                ("fast_light", tournament, "fast_light_persistence_snapshot"),
+            ):
+                getter = getattr(owner, method, None)
+                if callable(getter):
+                    try:
+                        deferred_persistence[name] = getter()
+                    except Exception as exc:
+                        deferred_persistence[name] = {"error": f"{type(exc).__name__}: {exc}"}
 
         return {
             "contract_version": CONTRACT_VERSION,
@@ -128,7 +143,9 @@ class RuntimeDebugLogService:
                 "realtime": realtime,
                 "inference_scheduler": scheduler,
                 "context_persistence": context_persistence,
+                "deferred_persistence": deferred_persistence,
             },
+            "sqlite": sqlite_status,
             "threads": _thread_snapshot(),
             "notes": {
                 "event_to_decision_recent_p95_window_seconds": 60,

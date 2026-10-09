@@ -119,6 +119,7 @@ def initialize_runtime():
         set_startup("loading_runtime", 1, "Loading local database and runtime modules")
         from storage import STORE as runtime_store
         STORE = runtime_store
+        STORE.start_wal_keeper()
         prepare_runtime_extensions()
         from ha import AUTOMATION_KNOWLEDGE as automation_knowledge
         from context import target_options_for_state as target_options
@@ -812,6 +813,13 @@ def shutdown_runtime():
             shutdown_step("runtime_events", STORE.flush_events)
     except Exception:
         traceback.print_exc()
+    finally:
+        stop_keeper = getattr(STORE, "stop_wal_keeper", None)
+        if callable(stop_keeper):
+            try:
+                stop_keeper()
+            except Exception:
+                traceback.print_exc()
 
 
 def run_initialize_runtime():
