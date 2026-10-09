@@ -1,10 +1,10 @@
 {
-  "version": "0.14.165",
+  "version": "0.14.166",
   "release_date": "2026-10-09",
-  "base_version": "0.14.164",
-  "base_commit": "a65c98bcb69fed0de384f2bc1d031ddc30dfc07e",
-  "release_status": "socket-owned-sqlite-connection-with-independent-fresh-event-queries",
-  "release_validation_tests_passed": 1965,
+  "base_version": "0.14.165",
+  "base_commit": "b741891fe5fb4409881f92aeb6b87f644146ef5f",
+  "release_status": "bounded-recorder-import-writes-with-resumable-durability",
+  "release_validation_tests_passed": 1976,
   "release_014140": {
     "scope": "inventory_and_remove_remaining_shipped_feature_Handler_fallbacks_for_Candidate_Live_and_manual_feedback_transport",
     "explicit_routes": "manual_feedback.js, candidate_ui.js, candidate_preference_ui.js, /api/candidates, Candidate Teach-RL status/train, generation history/comparison, /api/candidate-live, /api/live and Candidate discard",
@@ -2224,5 +2224,44 @@
       "unrelated_shared_batch_ms": 0.863
     },
     "limits": "Synthetic lookup batches only, not whole-agent speedup. Recent HA CPU/latency window is quieter and differently sampled; cannot attribute all differences to releases. One bounded existing 16 MiB SQLite page cache may now remain attached until socket disconnect."
+  },
+  "release_014166": {
+    "scope": "Recorder payload writes are bounded to 128 rows; Store archive_batch remains atomic for all existing callers",
+    "source_log": "adaptive-ai-runtime-debug-20261010-014039.json",
+    "source_version": "0.14.165",
+    "source_metrics": {
+      "cpu_recent_percent": 99.975898,
+      "rss_mib": 197.976563,
+      "event_to_decision_recent_p95_ms": 210.757269,
+      "recent_samples": 21,
+      "heavy_job": "agent_pool",
+      "checkpoint_remaining_frames": 0,
+      "sqlite_errors": 0
+    },
+    "source_trace": {
+      "ha_lookup_count": 233,
+      "ha_lookup_average_ms": 2.924,
+      "ha_query_prepare_average_ms": 0.012,
+      "archive_max_transaction_ms": 12534.859,
+      "archive_max_body_ms": 12375.13,
+      "sensor_quality_max_wait_ms": 9318.929
+    },
+    "mechanism": "Parser buffers at most 128 retained rows, commits each batch, then checks the cooperative budget. One thread-owned connection session amortizes setup; no transaction or Store lock survives a checkpoint.",
+    "durability": "Completed batches survive cancellation or a later failure. The failed batch rolls back; existing unique-key upserts allow the whole response to be retried. Successful import returns the unchanged retained-row count.",
+    "semantics": "Same parser order, numeric interval and final group row, missing entity fallback, state/attributes/user/source/received_ts merge rules. Per-batch mutation revisions remain durable; training weights, v26 and Control gates unchanged.",
+    "telemetry": "history_archive_import reports successfully committed rows, batches and max_batch_rows including partial failure",
+    "regression_tests": 11,
+    "validation_tests_expected": 1976,
+    "benchmark": "tools/benchmark_history_import.py --rows-per-entity 2400: 3 alternating repeats, full/minimal payloads, every archive content field and normal-import row ID parity; cooperative sleeps disabled",
+    "windows_full_import": {
+      "rows": 9600,
+      "previous_max_batch_rows": 9600,
+      "bounded_max_batch_rows": 128,
+      "previous_median_peak_archive_call_ms": 97.432,
+      "bounded_median_peak_archive_call_ms": 7.757,
+      "previous_median_total_ms": 106.966,
+      "bounded_median_total_ms": 117.671
+    },
+    "limits": "Rows, not wall-clock duration, are bounded. More commits and cooperative sleeps can increase total import time. This improves writer availability; no whole-HA CPU or latency speedup claim. The fetched Recorder JSON remains materialized by existing transport."
   }
 }

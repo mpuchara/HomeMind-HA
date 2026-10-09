@@ -1,3 +1,11 @@
+## 0.14.166
+- Import odpowiedzi Recorder zapisuje najwyżej 128 wierszy w jednej transakcji. Każda partia zwalnia SQLite i Store.lock przed przerwą budżetu treningu.
+- Jedno połączenie na import zachowuje osobne commit/rollback. Zapisany fragment przetrwa anulowanie lub późniejszy błąd; ponowienie uzupełnia dane istniejącym UPSERT.
+- Zachowane próbkowanie sensorów, końcowy stan grupy, kolejność i pochodzenie danych. Store.archive_batch pozostaje atomowe dla pozostałych użytkowników.
+- Nowy ślad history_archive_import podaje liczbę zatwierdzonych wierszy i partii. 11 regresji; pełny zestaw 1976 testów.
+- W benchmarku 9600 wierszy: szczyt pojedynczego wywołania archive_batch około 97,4 → 7,8 ms, przy czasie całego importu 107 → 118 ms. Ograniczenie długich blokad, nie gwarancja szybszego ukończenia treningu.
+- Aktualizacja i restart, bez Rebuild. Modele, wagi i kontrakt v26 pozostają zgodne.
+
 ## 0.14.165
 - Wątek HA używa istniejącego Store.connection_session przez czas trwania WebSocket, zamiast otwierać i konfigurować SQLite osobno dla każdego odczytu.
 - Każde zdarzenie nadal wykonuje świeże SQL. Transakcje zatwierdzają się i wycofują niezależnie; oczekiwanie na WebSocket nie utrzymuje transakcji ani Store.lock. Połączenie zamyka się przy rozłączeniu, błędzie lub zatrzymaniu.
