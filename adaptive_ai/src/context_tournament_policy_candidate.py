@@ -46,6 +46,21 @@ FEATURE_COST_GAIN_SCALE = 0.020
 FLOAT_EPSILON = 1e-12
 
 
+def _champion_epoch(policy):
+    """Match Metrics' stable champion identity across decay and online updates."""
+    revision = getattr(policy, "tournament_revision", None)
+    if revision is None:
+        revision = getattr(policy, "model_revision", "")
+    return str(revision or "")
+
+
+def _candidate_payload_version(raw):
+    # The cached runtime policy may decay/learn after this payload was loaded.
+    # Bind the cache to the verified source, not that changing runtime revision.
+    checksum = (raw or {}).get("model_checksum")
+    return (str((raw or {}).get("model_revision") or ""), str(checksum)) if checksum else None
+
+
 def _verify_candidate_checksum(raw):
     """Measure the mandatory integrity check, including warm cached payloads."""
     started = time.perf_counter()
@@ -239,7 +254,7 @@ def exact_candidate_version_matches(model, raw, target_schema, policy, tournamen
 
 def _candidate_epoch_matches(model, raw, target_schema, policy, tournament):
     """Epoch metadata check for a payload whose checksum was verified by the caller."""
-    current_revision = str(getattr(policy, "model_revision", "") or "")
+    current_revision = _champion_epoch(policy)
     expected_revision = str((model or {}).get("evaluation_champion_revision") or current_revision)
     policy_version = int(getattr(policy, "VERSION", 0) or 0)
     schema_version = int(getattr(getattr(policy, "schema", None), "VERSION", 0) or 0)
@@ -612,7 +627,7 @@ def install_policy_candidates(service):
         return plan_target_schema(agent, policy, challenger, tournament,
                                   health_lookup=lambda eid: pool_stats(agent["id"], eid))
 
-    def candidate_from_model(agent, challenger, model, policy=None, tournament=None):
+    def load_candidate(agent, challenger, model, policy=None, tournament=None):
         aid = str(agent["id"])
         policy = policy or (getattr(service.engine, "models", {}) or {}).get(aid)
         if policy is None:
@@ -629,7 +644,7 @@ def install_policy_candidates(service):
         if not target_schema or str(challenger) not in set(target_schema):
             model["candidate_blocked_reason"] = "no_target_schema"
             return None
-        current_revision = str(getattr(policy, "model_revision", "") or "")
+        current_revision = _champion_epoch(policy)
         expected_revision = str(model.get("evaluation_champion_revision") or current_revision)
         raw = model.get("candidate_policy") if isinstance(model.get("candidate_policy"), dict) else None
         checksum_valid = bool(raw and _verify_candidate_checksum(raw))
@@ -651,14 +666,18 @@ def install_policy_candidates(service):
             registry = dict(getattr(service.engine, "entity_registry", {}) or {})
         if valid:
             cached = candidate_cache.get(key)
-            if cached is not None and str(cached.model_revision) == str(raw.get("model_revision") or ""):
-                return cached
+            source_version = _candidate_payload_version(raw)
+            if cached is not None and source_version is not None and cached[1] == source_version:
+                RUNTIME_DEBUG.instant("context_candidate_cache", agent_id=aid, challenger=str(challenger), outcome="hit")
+                return cached[0]
+            RUNTIME_DEBUG.instant("context_candidate_cache", agent_id=aid, challenger=str(challenger), outcome="restore")
             candidate = MultiHorizonPolicy(
                 agent, states, registry, set(), model=copy.deepcopy(raw),
                 relevance_scores=None, context_engine=getattr(service.engine, "context", None)
             )
-            candidate_cache[key] = candidate
+            candidate_cache[key] = (candidate, source_version)
             return candidate
+        RUNTIME_DEBUG.instant("context_candidate_cache", agent_id=aid, challenger=str(challenger), outcome="rebuild")
         candidate = MultiHorizonPolicy(agent, states, registry, set(), model=policy.serialize(),
                                        relevance_scores=None, context_engine=getattr(service.engine, "context", None))
         meta = promotion._selection_meta_for_promotion(candidate, str(challenger), plan.get("replaced"))
@@ -685,9 +704,22 @@ def install_policy_candidates(service):
         for key_name in ("candidate_requested_schema", "candidate_requested_replaced",
                          "candidate_requested_primary", "candidate_requested_primary_broken"):
             model.pop(key_name, None)
-        candidate_cache[key] = candidate
+        candidate_cache[key] = (candidate, _candidate_payload_version(model["candidate_policy"]))
         service._save_shadow_model(aid, challenger, model)
         return candidate
+
+    def candidate_from_model(agent, challenger, model, policy=None, tournament=None):
+        started = time.perf_counter()
+        trace = (RUNTIME_DEBUG.begin("context_candidate_load", agent_id=str(agent["id"]),
+                                    challenger=str(challenger)) if RUNTIME_DEBUG.enabled else None)
+        status = "error"
+        try:
+            result = load_candidate(agent, challenger, model, policy, tournament)
+            status = "ok"
+            return result
+        finally:
+            TELEMETRY.observe("context_candidate_load", (time.perf_counter() - started) * 1000)
+            RUNTIME_DEBUG.end(trace, status=status)
 
     def load_with_key(agent_id, challenger, action_count):
         model = original_load(agent_id, challenger, action_count)
@@ -744,7 +776,7 @@ def install_policy_candidates(service):
         candidate = candidate_from_model(agent, challenger, model, tournament=original_state(agent_id))
         try:
             live_policy = (getattr(service.engine, "models", {}) or {}).get(str(agent_id))
-            live_revision = str(getattr(live_policy, "model_revision", "") or "")
+            live_revision = _champion_epoch(live_policy)
             model_version = dict(model.get("candidate_data_version") or {})
             train_version = dict(train.get("candidate_data_version") or {})
             version_match = bool(
@@ -777,7 +809,7 @@ def install_policy_candidates(service):
             model["candidate_last_training_ts"] = float(now)
             model["candidate_last_episode_state_revision"] = int(train.get("state_revision") or 0)
             service._save_shadow_model(agent_id, challenger, model)
-            candidate_cache[key] = candidate
+            candidate_cache[key] = (candidate, _candidate_payload_version(model["candidate_policy"]))
             return result
         finally:
             pending_training.pop(key, None)
@@ -824,7 +856,7 @@ def install_policy_candidates(service):
         fresh.update({
             "prequential_epoch_version": PREQUENTIAL_EPOCH_VERSION,
             "evaluation_schema_revision": int(tournament.get("schema_revision") or 0),
-            "evaluation_champion_revision": str(getattr(policy, "model_revision", "") or ""),
+            "evaluation_champion_revision": _champion_epoch(policy),
             "evaluation_started_ts": time.time(), "evaluation_reason": "exact_candidate_schema_changed",
             "candidate_requested_schema": list(proposed or []), "candidate_requested_replaced": replaced,
             "candidate_requested_primary": bool(replaced and replaced in primary_feature_ids(policy)),

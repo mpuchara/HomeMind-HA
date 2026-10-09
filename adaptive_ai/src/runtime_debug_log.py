@@ -136,6 +136,8 @@ class RuntimeDebugLogService:
                 "context_shadow_snapshot_metric": True,
                 "context_shadow_json_metric": True,
                 "context_candidate_validation_metric": True,
+                "context_candidate_load_metric": True,
+                "context_candidate_cache_trace": True,
                 "context_shadow_persistence": "immutable_ram_snapshot_to_canonical_json_writer",
                 "observed_pool_atomic_batch": True,
                 "resubmit_preserves_trigger_entities": True,
