@@ -1,10 +1,10 @@
 {
-  "version": "0.14.153",
+  "version": "0.14.154",
   "release_date": "2026-10-09",
-  "base_version": "0.14.152",
-  "base_commit": "964d3b8d65e75a105b2fd0953bde234ad25bd966",
-  "release_status": "bounded-background-sqlite-contention-and-protected-debug-evidence",
-  "release_validation_tests_passed": 1790,
+  "base_version": "0.14.153",
+  "base_commit": "6f92f392d8ca74cd5ae10843033addb1d7c828d9",
+  "release_status": "runtime-wal-lifetime-and-complete-sqlite-queue-diagnostics",
+  "release_validation_tests_passed": 1806,
   "release_014140": {
     "scope": "inventory_and_remove_remaining_shipped_feature_Handler_fallbacks_for_Candidate_Live_and_manual_feedback_transport",
     "explicit_routes": "manual_feedback.js, candidate_ui.js, candidate_preference_ui.js, /api/candidates, Candidate Teach-RL status/train, generation history/comparison, /api/candidate-live, /api/live and Candidate discard",
@@ -1765,5 +1765,87 @@
     "training_semantics_changed": false,
     "control_semantics_changed": false,
     "diagnostic_events": "automatic diagnostic flush uses 250ms busy timeout too, including error reporting; RAM feed and failed batch retained; explicit final flush unchanged"
+  },
+  "release_014154": {
+    "scope": "avoid last-connection WAL checkpoint/cleanup churn during runtime; reveal preparation/recovery failures and deferred audit queues",
+    "wal_keeper": "one private query-only autocommit connection; fully exhausted cursor attaches WAL; never borrowed for application SQL; no retained read transaction; explicit start before runtime extensions and close after final drains",
+    "training_worker": "no parent keeper created in training worker",
+    "transactions": "all existing short-lived connections and session boundaries remain independent; default auto-checkpoint and background timeout/retry retained",
+    "diagnostics": "RAM-only keeper status and provenance/feature-journal/fast-light queue snapshots; failed session-open span with SQLite error code; transaction prepare/body/commit/close timings when tracing",
+    "new_regressions": 16,
+    "validation_tests_expected": 1806,
+    "rebuild_required": false,
+    "training_revision": "shared-home-intents-v26",
+    "training_semantics_changed": false,
+    "control_semantics_changed": false,
+    "limits": "WAL churn mechanism removed; exact cause of every user busy error is not established. Real writer contention and slow disk I/O remain possible. Idle keeper must not pin snapshots; checkpoint regression verifies it.",
+    "development_benchmark": [
+      {
+        "keeper": false,
+        "transactions": 120,
+        "rows": 3840,
+        "mean_ms": 5.6676083335332805,
+        "p95_ms": 7.498999999370426,
+        "wall_ms": 680.4570999956923,
+        "cpu_ms": 281.25,
+        "keeper_close_ms": 0.004899993655271828,
+        "wall_including_keeper_close_ms": 680.4619999893475
+      },
+      {
+        "keeper": true,
+        "transactions": 120,
+        "rows": 3840,
+        "mean_ms": 7.42863249979564,
+        "p95_ms": 10.333800004445948,
+        "wall_ms": 891.6852000111248,
+        "cpu_ms": 156.25,
+        "keeper_close_ms": 5.296599993016571,
+        "wall_including_keeper_close_ms": 896.9818000041414
+      },
+      {
+        "keeper": false,
+        "transactions": 120,
+        "rows": 3840,
+        "mean_ms": 5.19095000042095,
+        "p95_ms": 6.370300005073659,
+        "wall_ms": 623.1392000045162,
+        "cpu_ms": 328.125,
+        "keeper_close_ms": 0.0033999967854470015,
+        "wall_including_keeper_close_ms": 623.1426000013016
+      },
+      {
+        "keeper": true,
+        "transactions": 120,
+        "rows": 3840,
+        "mean_ms": 6.977330833494004,
+        "p95_ms": 8.789999992586672,
+        "wall_ms": 837.4981999950251,
+        "cpu_ms": 140.625,
+        "keeper_close_ms": 6.2910000124247745,
+        "wall_including_keeper_close_ms": 843.7892000074498
+      },
+      {
+        "keeper": false,
+        "transactions": 120,
+        "rows": 3840,
+        "mean_ms": 7.691677499436385,
+        "p95_ms": 9.38220000534784,
+        "wall_ms": 923.2817000010982,
+        "cpu_ms": 515.625,
+        "keeper_close_ms": 0.0044000043999403715,
+        "wall_including_keeper_close_ms": 923.2861000054982
+      },
+      {
+        "keeper": true,
+        "transactions": 120,
+        "rows": 3840,
+        "mean_ms": 6.690495833512007,
+        "p95_ms": 9.75569999718573,
+        "wall_ms": 803.1156000070041,
+        "cpu_ms": 140.625,
+        "keeper_close_ms": 5.901500000618398,
+        "wall_including_keeper_close_ms": 809.0171000076225
+      }
+    ]
   }
 }

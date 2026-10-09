@@ -18,6 +18,10 @@ class Store:
         self.lock = threading.RLock()
         self._meta_lock = threading.RLock()
         self._connection_session = threading.local()
+        self._wal_keeper_lock = threading.RLock()
+        self._wal_keeper = None
+        self._wal_keeper_starts = 0
+        self._wal_keeper_stops = 0
         # Diagnostic events are operational telemetry, not Store transaction state.
         # Keep their tiny RAM ring independently accessible while a large microSD write
         # owns self.lock. This prevents /api/events and diagnostic producers from being
@@ -62,6 +66,56 @@ class Store:
             self._agent_index_revision = int(self._agent_index_revision) + 1
             return self._agent_index_revision
 
+    def start_wal_keeper(self):
+        """Keep WAL attached during runtime without a transaction or shared SQL use.
+
+        Ordinary short-lived connections still own their independent transactions.
+        The idle, query-only connection prevents last-close checkpoint/cleanup churn.
+        Start explicitly at runtime composition, not in every component/test Store.
+        """
+        if self.training_worker_process:
+            return False
+        with self._wal_keeper_lock:
+            if self._wal_keeper is not None:
+                return False
+            connection = sqlite3.connect(self.path, timeout=30, isolation_level=None,
+                                         check_same_thread=False)
+            try:
+                connection.execute("PRAGMA query_only=ON")
+                mode = connection.execute("PRAGMA journal_mode").fetchone()[0]
+                if str(mode).lower() != "wal":
+                    raise RuntimeError("WAL keeper requires an initialized WAL database")
+                # sqlite3.connect alone is lazy. Read and exhaust a database cursor to
+                # attach the WAL index, leaving no reader snapshot to starve checkpoints.
+                cursor = connection.execute("SELECT count(*) FROM sqlite_master")
+                cursor.fetchall()
+                cursor.close()
+            except BaseException:
+                connection.close()
+                raise
+            self._wal_keeper = connection
+            self._wal_keeper_starts += 1
+            return True
+
+    def stop_wal_keeper(self):
+        """Release after final durability drains; idempotent across shutdown paths."""
+        with self._wal_keeper_lock:
+            connection = self._wal_keeper
+            if connection is None:
+                return False
+            connection.close()
+            self._wal_keeper = None
+            self._wal_keeper_stops += 1
+            return True
+
+    def sqlite_snapshot(self):
+        """RAM-only diagnostics, never run SQL from the debug export."""
+        with self._wal_keeper_lock:
+            return dict(version=sqlite3.sqlite_version,
+                        wal_keeper_active=self._wal_keeper is not None,
+                        wal_keeper_starts=self._wal_keeper_starts,
+                        wal_keeper_stops=self._wal_keeper_stops)
+
     @contextmanager
     def background_sqlite(self):
         """Bound busy waits for retryable background batches, per thread only.
@@ -97,12 +151,17 @@ class Store:
         c = borrowed if reuse else None
         previous_timeout = None
         status, error_fields = "ok", {}
+        phase = "connect"
+        timings = {}
+        started = time.perf_counter() if trace else 0.0
+        body_started = commit_started = started
         try:
             if reuse and busy_timeout_ms != getattr(self._connection_session, "connection_busy_timeout_ms", None):
                 previous_timeout = int(c.execute("PRAGMA busy_timeout").fetchone()[0])
             elif not reuse:
                 c = sqlite3.connect(self.path, timeout=busy_timeout_ms / 1000.0)
                 c.row_factory = sqlite3.Row
+            phase = "configure"
             if not reuse or previous_timeout is not None:
                 c.execute(f"PRAGMA busy_timeout={busy_timeout_ms}")
             if not reuse:
@@ -114,21 +173,47 @@ class Store:
                 except sqlite3.DatabaseError:
                     pass
             with c:
+                if trace:
+                    body_started = time.perf_counter()
+                    timings["prepare_ms"] = round((body_started - started) * 1000, 3)
+                phase = "body"
                 yield c
+                if trace:
+                    commit_started = time.perf_counter()
+                    timings["body_ms"] = round((commit_started - body_started) * 1000, 3)
+                phase = "commit"
+            if trace:
+                timings["commit_ms"] = round((time.perf_counter() - commit_started) * 1000, 3)
         except BaseException as exc:
             status = "error"
-            error_fields = dict(error_type=type(exc).__name__,
+            if trace:
+                metric, phase_start = (
+                    ("body_ms", body_started) if phase == "body" else
+                    ("commit_ms", commit_started) if phase == "commit" else
+                    ("prepare_ms", started)
+                )
+                timings[metric] = round((time.perf_counter() - phase_start) * 1000, 3)
+            error_fields = dict(error_type=type(exc).__name__, phase=phase,
                                 sqlite_errorcode=getattr(exc, "sqlite_errorcode", None),
                                 sqlite_errorname=getattr(exc, "sqlite_errorname", None))
             raise
         finally:
+            close_started = time.perf_counter() if trace else 0.0
             try:
                 if reuse and previous_timeout is not None:
                     c.execute(f"PRAGMA busy_timeout={previous_timeout}")
                 elif c is not None and not reuse:
                     c.close()
+            except BaseException as exc:
+                status = "error"
+                error_fields = dict(error_type=type(exc).__name__, phase="close",
+                                    sqlite_errorcode=getattr(exc, "sqlite_errorcode", None),
+                                    sqlite_errorname=getattr(exc, "sqlite_errorname", None))
+                raise
             finally:
-                RUNTIME_DEBUG.end(trace, status=status, **error_fields)
+                if trace:
+                    timings["close_ms"] = round((time.perf_counter() - close_started) * 1000, 3)
+                RUNTIME_DEBUG.end(trace, status=status, **error_fields, **timings)
 
     @contextmanager
     def connection_session(self):
@@ -143,10 +228,23 @@ class Store:
         if existing is not None:
             yield existing
             return
+        trace = None
+        if RUNTIME_DEBUG.enabled:
+            frame = sys._getframe(2)
+            busy_timeout_ms = getattr(self._connection_session, "busy_timeout_ms", None)
+            if busy_timeout_ms is None:
+                busy_timeout_ms = 60000 if self.training_worker_process else 30000
+            trace = RUNTIME_DEBUG.begin(
+                "sqlite_session_open",
+                caller=f"{frame.f_globals.get('__name__')}.{frame.f_code.co_name}:{frame.f_lineno}",
+                busy_timeout_ms=busy_timeout_ms, sqlite_version=sqlite3.sqlite_version,
+            )
         self._connection_session.opening_session = True
         try:
             with self.conn() as connection:
                 self._connection_session.opening_session = False
+                RUNTIME_DEBUG.end(trace)
+                trace = None
                 self._connection_session.connection = connection
                 self._connection_session.connection_busy_timeout_ms = int(connection.execute("PRAGMA busy_timeout").fetchone()[0])
                 try:
@@ -154,6 +252,12 @@ class Store:
                 finally:
                     del self._connection_session.connection
                     del self._connection_session.connection_busy_timeout_ms
+        except BaseException as exc:
+            RUNTIME_DEBUG.end(trace, status="error", error_type=type(exc).__name__,
+                              phase="session_open",
+                              sqlite_errorcode=getattr(exc, "sqlite_errorcode", None),
+                              sqlite_errorname=getattr(exc, "sqlite_errorname", None))
+            raise
         finally:
             self._connection_session.opening_session = False
 

@@ -139,7 +139,8 @@ class SQLiteContention153Tests(unittest.TestCase):
                     self.assertEqual(len(own_active()), 1)
                     c.execute('SELECT 1')
             self.assertEqual(len([r for r in RUNTIME_DEBUG.export()['entries']
-                                  if r['kind']=='end' and r['thread']==threading.current_thread().name]), 1)
+                                  if r['kind']=='end' and r['operation']=='sqlite_transaction'
+                                  and r['thread']==threading.current_thread().name]), 1)
         finally:
             RUNTIME_DEBUG.set_enabled(False, clear=True)
 

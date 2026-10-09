@@ -1,3 +1,10 @@
+## 0.14.154
+- Runtime utrzymuje jedno prywatne bezczynne połączenie WAL, aby zwykłe krótkie transakcje nie powodowały ciągłego zamykania ostatniego połączenia i sprzątania WAL.
+- Keeper działa query-only/autocommit, nie trzyma snapshotu odczytu i nie jest współdzielonym połączeniem dla zapytań aplikacji. Automatyczny checkpoint pozostaje włączony; końcowe flush poprzedzają jego zamknięcie.
+- Runtime Debug pokazuje stan keepera oraz zaległości/błędy istniejących kolejek provenance, journal cech i fast-light bez SQL podczas eksportu.
+- Nowy ślad otwierania sesji zachowuje również błędy przygotowania połączenia, wcześniej widoczne tylko jako pominięta ocena Shadow. Transakcje rozdzielają przygotowanie, SQL, commit i close.
+- 16 nowych regresji, 1806 testów; aktualizacja i restart, bez Rebuild.
+
 ## 0.14.153
 - Okresowe zapisy kontekstu, historii, provenance, cech i fast-light oraz sprzątanie kopii kandydatów używają 250 ms busy timeout SQLite. Retry zachowuje oczekujące partie; końcowe i jawne bariery trwałości zachowują dotychczasowe oczekiwanie.
 - Opcjonalna ocena Shadow używa tej samej krótkiej polityki; błąd pomija ocenę, jest oznaczony w śladzie i nie zmienia wykonanej decyzji championa.

@@ -1,6 +1,6 @@
-# HomeMind-HA / Adaptive AI 0.14.153
+# HomeMind-HA / Adaptive AI 0.14.154
 
-0.14.153: krótsze oczekiwanie SQLite w tle, niezależny od dysku odczyt metadanych oraz zachowanie długich operacji i błędów w Runtime Debug. Aktualizacja i restart; bez Rebuild.
+0.14.154: podtrzymanie WAL przez czas działania dodatku, diagnostyka etapów SQLite i zaległych kolejek zapisu. Aktualizacja i restart; bez Rebuild.
 
 
 Cztery akcje każdego agenta: Shadow/Control, Wrong decision, Settings, Teach.
