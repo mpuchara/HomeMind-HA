@@ -1,6 +1,6 @@
-# HomeMind-HA / Adaptive AI 0.14.164
+# HomeMind-HA / Adaptive AI 0.14.165
 
-0.14.164: świeży odczyt tylko agentów zmienionej encji zamiast dekodowania całego domu na zdarzeniach użytkownika. Aktualizacja i restart; bez Rebuild. [Opis wydania](docs/RELEASE_0_14_164_PL.md).
+0.14.165: jedno połączenie SQLite na sesję WebSocket HA, ze świeżymi zapytaniami dla każdego zdarzenia. Aktualizacja i restart; bez Rebuild. [Opis wydania](docs/RELEASE_0_14_165_PL.md).
 
 
 Karta agenta ma cztery akcje: **Shadow/Control**, **Wrong decision**, **Settings** i **Teach**. Wrong decision uczy poprawnego Desired. Teach otwiera powiększalny wykres historii z wyborem dokładnej chwili i zapisem poprawnego Desired. Cofanie ostatniej korekty jest dostępne w Teach oraz Settings; pozostałe operacje i diagnostyka są w Settings.

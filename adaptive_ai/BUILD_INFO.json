@@ -1,10 +1,10 @@
 {
-  "version": "0.14.164",
+  "version": "0.14.165",
   "release_date": "2026-10-09",
-  "base_version": "0.14.163",
-  "base_commit": "70408f56731eabf6b43fd29cc6ed4fa65157171d",
-  "release_status": "fresh-indexed-target-configs-for-manual-user-events",
-  "release_validation_tests_passed": 1954,
+  "base_version": "0.14.164",
+  "base_commit": "a65c98bcb69fed0de384f2bc1d031ddc30dfc07e",
+  "release_status": "socket-owned-sqlite-connection-with-independent-fresh-event-queries",
+  "release_validation_tests_passed": 1965,
   "release_014140": {
     "scope": "inventory_and_remove_remaining_shipped_feature_Handler_fallbacks_for_Candidate_Live_and_manual_feedback_transport",
     "explicit_routes": "manual_feedback.js, candidate_ui.js, candidate_preference_ui.js, /api/candidates, Candidate Teach-RL status/train, generation history/comparison, /api/candidate-live, /api/live and Candidate discard",
@@ -2189,5 +2189,40 @@
     },
     "limits": "Synthetic component timings only, not HA CPU or whole-decision speedup. Different observed windows cannot attribute all CPU changes to releases. This trace contains no classifier fit/training samples.",
     "ci_base_image_resolution": "Docker Hub python:3.13-alpine first; on pull failure use public.ecr.aws/docker/library/python:3.13-alpine and locally tag to the unchanged Dockerfile FROM; build/smoke/vectorized trainer checks still mandatory"
+  },
+  "release_014165": {
+    "scope": "Reuse existing Store.connection_session across the HA websocket lifetime, closing before reconnect/backoff or shutdown",
+    "source_log": "adaptive-ai-runtime-debug-20261009-235835.json",
+    "source_version": "0.14.164",
+    "source_metrics": {
+      "cpu_recent_percent": 13.170639,
+      "cpu_since_start_percent": 36.535417,
+      "event_to_decision_recent_p95_ms": 175.135006,
+      "recent_samples": 11,
+      "manual_lifecycle_lookup_avg_ms": 15.643135
+    },
+    "source_trace": {
+      "retained_seconds": 64.941,
+      "lookup_count": 279,
+      "all_lookup_results_empty": true,
+      "avg_lookup_ms": 13.835,
+      "avg_prepare_ms": 10.714,
+      "avg_body_ms": 0.798,
+      "avg_close_ms": 1.565
+    },
+    "mechanism": "Socket owns connection lifetime only. Every Store.conn block still executes fresh SQL and independently commits or rolls back. No config TTL/cache, transaction or Store lock around ws.recv.",
+    "isolation": "Thread-local connection; other threads retain their own connections, nested active writes retain the existing separate-connection guard, background timeouts restore to foreground settings",
+    "lifecycle": "Failed websocket open allocates no DB connection; auth failure, callback exception, normal stop and reconnect close the session",
+    "semantics": "Manual origin/label guards, Candidate isolation, model validation, v26 feature contract, learning weights and Control qualification unchanged",
+    "regression_tests": 11,
+    "validation_tests_expected": 1965,
+    "benchmark": "tools/benchmark_target_configs.py --passes 32 --session: 3 alternating repetitions, 9/64 agents and matching/unrelated targets, every result parity, measured 32 vs 1 connections; batch totals include session open and close",
+    "windows_9_agents": {
+      "matching_32_queries_previous_batch_ms": 47.293,
+      "matching_shared_batch_ms": 22.55,
+      "unrelated_previous_batch_ms": 20.939,
+      "unrelated_shared_batch_ms": 0.863
+    },
+    "limits": "Synthetic lookup batches only, not whole-agent speedup. Recent HA CPU/latency window is quieter and differently sampled; cannot attribute all differences to releases. One bounded existing 16 MiB SQLite page cache may now remain attached until socket disconnect."
   }
 }
