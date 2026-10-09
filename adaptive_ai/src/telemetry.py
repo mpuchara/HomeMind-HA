@@ -31,11 +31,14 @@ class RuntimeDebugTrace:
     """
 
     MAX_ENTRIES = 4096
+    MAX_CRITICAL_SPANS = 64
+    SLOW_SPAN_MS = 2000.0
 
     def __init__(self):
         self.lock = threading.RLock()
         self.enabled = False
         self.entries = deque(maxlen=self.MAX_ENTRIES)
+        self.critical_spans = deque(maxlen=self.MAX_CRITICAL_SPANS)
         self.active = {}
         self.sequence = 0
         self.total_entries = 0
@@ -64,6 +67,7 @@ class RuntimeDebugTrace:
     def clear(self):
         with self.lock:
             self.entries.clear()
+            self.critical_spans.clear()
             self.active.clear()
             self.total_entries = 0
             self.sequence = 0
@@ -74,6 +78,7 @@ class RuntimeDebugTrace:
         with self.lock:
             if clear:
                 self.entries.clear()
+                self.critical_spans.clear()
                 self.active.clear()
                 self.total_entries = 0
                 self.sequence = 0
@@ -83,6 +88,17 @@ class RuntimeDebugTrace:
                 self.session_started_at = self._wall_ts()
                 self._append_locked("state", "runtime_debug_enabled")
             elif not enabled and changed:
+                now = time.monotonic()
+                for item in self.active.values():
+                    duration_ms = max(0.0, now - item["started_mono"]) * 1000.0
+                    if duration_ms >= self.SLOW_SPAN_MS:
+                        self.critical_spans.append({
+                            "kind": "unfinished", "operation": item["operation"],
+                            "thread": item["thread"], "token": item["token"],
+                            "started_at": item["started_at"], "ts": self._wall_ts(),
+                            "duration_ms": round(duration_ms, 3),
+                            "status": "tracing_stopped", "fields": dict(item["fields"]),
+                        })
                 self.active.clear()
         return self.enabled
 
@@ -126,14 +142,17 @@ class RuntimeDebugTrace:
             duration_ms = max(0.0, (time.monotonic() - float(active["started_mono"])) * 1000.0)
             if not self.enabled:
                 return duration_ms
-            self._append_locked(
+            row = self._append_locked(
                 "end",
                 active["operation"],
                 fields={**active.get("fields", {}), **fields},
                 token=str(token),
                 status=str(status),
                 duration_ms=round(duration_ms, 3),
+                started_at=active["started_at"],
             )
+            if status != "ok" or duration_ms >= self.SLOW_SPAN_MS:
+                self.critical_spans.append(row)
             return duration_ms
 
     def instant(self, operation, **fields):
@@ -159,6 +178,7 @@ class RuntimeDebugTrace:
             ]
             active.sort(key=lambda item: -float(item["age_ms"]))
             entries_count = len(self.entries)
+            critical_count = len(self.critical_spans)
             dropped = max(0, self.total_entries - entries_count)
             enabled = bool(self.enabled)
             started = self.session_started_at
@@ -177,6 +197,8 @@ class RuntimeDebugTrace:
             "entries": entries_count,
             "dropped_entries": dropped,
             "capacity": self.MAX_ENTRIES,
+            "critical_spans": critical_count,
+            "critical_capacity": self.MAX_CRITICAL_SPANS,
             "active": active[:12],
             "active_count": len(active),
             "event_to_decision": dict(event_summary),
@@ -202,6 +224,9 @@ class RuntimeDebugTrace:
                 "dropped_entries": max(0, self.total_entries - len(self.entries)),
                 "active": active,
                 "entries": list(self.entries),
+                "critical_spans": list(self.critical_spans),
+                "critical_capacity": self.MAX_CRITICAL_SPANS,
+                "slow_span_ms": self.SLOW_SPAN_MS,
             }
 
 

@@ -128,7 +128,7 @@ class HomeBootstrap:
                             "ON CONFLICT(key) DO UPDATE SET value=excluded.value",
                             (ContextEngine.ROOM_MODEL_KEY, raw),
                         )
-                    with self.store.lock:
+                    with getattr(self.store, "_meta_lock", self.store.lock):
                         if hasattr(self.store, "_meta_cache"):
                             self.store._meta_cache[ContextEngine.ROOM_MODEL_KEY] = raw
                     current = self.context.home

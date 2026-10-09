@@ -1,6 +1,6 @@
-# HomeMind-HA / Adaptive AI 0.14.152
+# HomeMind-HA / Adaptive AI 0.14.153
 
-0.14.152: zapis modelu domu nie blokuje sensorów; obserwacje puli i jakości kontekstu oraz nauka kandydatów korzystają z zapisu w tle. Bez Rebuild. [Opis wydania](docs/RELEASE_0_14_152_PL.md).
+0.14.153: krótsze oczekiwanie SQLite w tle, niezależny od dysku odczyt metadanych oraz zachowanie długich operacji i błędów w Runtime Debug. Aktualizacja i restart; bez Rebuild. [Opis wydania](docs/RELEASE_0_14_153_PL.md).
 
 
 Karta agenta ma cztery akcje: **Shadow/Control**, **Wrong decision**, **Settings** i **Teach**. Wrong decision uczy poprawnego Desired. Teach otwiera powiększalny wykres historii z wyborem dokładnej chwili i zapisem poprawnego Desired. Cofanie ostatniej korekty jest dostępne w Teach oraz Settings; pozostałe operacje i diagnostyka są w Settings.

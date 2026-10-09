@@ -17,6 +17,7 @@ Weight-only Shadow timing updates intentionally keep ``model_revision`` unchange
 revision is structural identity for Tournament epochs; changing it for every online
 weight update would continuously reset future-only challenger evidence.
 """
+from sqlite_background import background_sqlite
 import json
 import math
 import threading
@@ -460,7 +461,8 @@ def install(service):
             persistence_event.wait(5.0)
             persistence_event.clear()
             try:
-                flush_persistence()
+                with background_sqlite(store):
+                    flush_persistence()
             except Exception as exc:
                 try:
                     store.event(None, "warning", "fast_light_persistence_failed",

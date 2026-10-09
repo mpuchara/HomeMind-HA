@@ -10,6 +10,7 @@ most one candidate exists per live agent; repeated feedback is coalesced.  If ne
 arrives during a long build, that build may finish but is never promotable: the same
 candidate is queued for another rebuild from the newer revision.
 """
+from sqlite_background import background_sqlite
 from contextlib import contextmanager
 import inspect
 import json
@@ -447,7 +448,7 @@ class AgentCandidateManager(threading.Thread):
 
     def _recover(self):
         now = time.time()
-        with self.store.lock, self.store.conn() as c:
+        with background_sqlite(self.store), self.store.lock, self.store.conn() as c:
             c.execute("DELETE FROM agent_generation_backups WHERE expires_ts<?", (now,))
             # TrainingQueue is intentionally in-memory.  An interrupted build is safely
             # restarted from raw history; the live model was never touched.

@@ -1,3 +1,4 @@
+from sqlite_background import background_sqlite
 from concurrent.futures import ThreadPoolExecutor
 import json
 import math
@@ -920,9 +921,10 @@ class Engine(threading.Thread):
         archive_rows = decision_rows = 0
         context_saved = False
         try:
-            archive_rows = int(self.flush_archive(force=False) or 0)
-            decision_rows = int(self.teaching.flush(force=False) or 0)
-            context_saved = bool(self.context.save())
+            with background_sqlite(STORE):
+                archive_rows = int(self.flush_archive(force=False) or 0)
+                decision_rows = int(self.teaching.flush(force=False) or 0)
+                context_saved = bool(self.context.save())
         except Exception as exc:
             STORE.event(
                 None, "warning", "runtime_housekeeping_error",

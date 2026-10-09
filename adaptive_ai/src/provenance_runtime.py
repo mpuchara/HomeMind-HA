@@ -5,6 +5,7 @@ History workers consume events. It decorates the established contracts rather th
 adding a second dispatcher: Executor remains the only HA command boundary.
 """
 from __future__ import annotations
+from sqlite_background import background_sqlite
 
 from contextlib import contextmanager
 import threading
@@ -342,7 +343,8 @@ def install(core):
             deferred_event.wait(2.0)
             deferred_event.clear()
             try:
-                flush_all_provenance(max_event_batches=4)
+                with background_sqlite(store):
+                    flush_all_provenance(max_event_batches=4)
             except Exception as exc:
                 event_stats["errors"] += 1
                 try:
