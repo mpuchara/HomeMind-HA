@@ -1,3 +1,9 @@
+## 0.14.157
+- Zapis partii Shadow do JSON używa kodowania niezmienionej treści candidate_policy z istniejącego cache kontroli modeli. Trafienie nadal wymaga świeżego pełnego snapshotu i dokładnego porównania bajtów; wszystkie bieżące liczniki, checksum i bookkeeping są zachowane.
+- Wspólny limit 16 MiB/16 wpisów bez drugiego cache dużych modeli. Format danych JSON i canonical SHA pozostają zgodne; kolejność pól wewnątrz candidate_policy może się zmienić. Legacy payloady zachowują dotychczasową obsługę.
+- Diagnostyka RAM shadow_json_encoding_cache rozdziela wykorzystanie kodowania przy zapisie od łącznych statystyk model_encoding_cache. Kolejki, ponawianie po błędzie i bariery commit/restart zachowane.
+- 19 nowych regresji, 1867 testów. Syntetyczny benchmark czterech modeli mierzy wyłącznie kodowanie partii; pozostała praca Shadow/I/O nadal wymaga pomiaru na HA. Aktualizacja i restart, bez Rebuild.
+
 ## 0.14.156
 - Cache kodowania canonical JSON redukuje koszt powtarzanej kontroli dużych niezmienionych modeli. Każde wywołanie nadal porównuje świeży snapshot całej treści i oblicza SHA256 canonical JSON; nie cache'ujemy wyniku weryfikacji.
 - Trafienie wymaga dokładnej zgodności pełnych bajtów snapshotu, a nie revision/identity/checksum z nagłówka. Mutacja wag, schematu, próbek czy signed zero zmienia kontrolowaną treść.

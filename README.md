@@ -1,6 +1,6 @@
-# HomeMind-HA / Adaptive AI 0.14.156
+# HomeMind-HA / Adaptive AI 0.14.157
 
-0.14.156: mniej ponownego kodowania JSON modeli, z pełną kontrolą treści i SHA256 na każdym sprawdzeniu. Aktualizacja i restart; bez Rebuild. [Opis wydania](docs/RELEASE_0_14_156_PL.md).
+0.14.157: szybsze kodowanie partii modeli Shadow do JSON, ze wspólnym ograniczonym cache i zachowaniem wszystkich bieżących danych. Aktualizacja i restart; bez Rebuild. [Opis wydania](docs/RELEASE_0_14_157_PL.md).
 
 
 Karta agenta ma cztery akcje: **Shadow/Control**, **Wrong decision**, **Settings** i **Teach**. Wrong decision uczy poprawnego Desired. Teach otwiera powiększalny wykres historii z wyborem dokładnej chwili i zapisem poprawnego Desired. Cofanie ostatniej korekty jest dostępne w Teach oraz Settings; pozostałe operacje i diagnostyka są w Settings.

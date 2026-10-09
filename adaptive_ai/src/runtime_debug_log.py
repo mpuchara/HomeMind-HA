@@ -79,6 +79,7 @@ class RuntimeDebugLogService:
 
     def export_payload(self):
         from model_encoding_cache import MODEL_ENCODING_CACHE
+        from shadow_model_json import snapshot as shadow_json_snapshot
         engine = getattr(self.core, "ENGINE", None)
         scheduler = None
         engine_error = None
@@ -148,6 +149,7 @@ class RuntimeDebugLogService:
             },
             "sqlite": sqlite_status,
             "model_encoding_cache": MODEL_ENCODING_CACHE.snapshot(),
+            "shadow_json_encoding_cache": shadow_json_snapshot(),
             "threads": _thread_snapshot(),
             "notes": {
                 "event_to_decision_recent_p95_window_seconds": 60,
