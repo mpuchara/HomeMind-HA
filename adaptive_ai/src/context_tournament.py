@@ -31,6 +31,7 @@ from settings import OPTIONS
 from process_agent_pipeline import install_process_agent_wrapper
 from telemetry import RUNTIME_DEBUG, TELEMETRY
 from context_row_buffer import ContextRowBuffer
+from shadow_model_json import shadow_model_json
 
 
 SHADOW_MODEL_VERSION = 1
@@ -375,8 +376,8 @@ class ContextTournament:
             status = "error"
             try:
                 packed = [
-                    (key[0], key[1], raw if isinstance(raw, str) else json.dumps(
-                        pickle.loads(raw), separators=(",", ":"), sort_keys=True), now)
+                    (key[0], key[1], raw if isinstance(raw, str) else shadow_model_json(
+                        pickle.loads(raw)), now)
                     for key, raw in batch.items()
                 ]
                 status = "ok"
@@ -453,7 +454,7 @@ class ContextTournament:
         try:
             # Private RAM bytes freeze the exact observation before callers mutate
             # the cached model again. Only our own snapshot is decoded; SQLite,
-            # exports and restarts continue to use canonical JSON exclusively.
+            # exports and restarts continue to use JSON exclusively.
             # Pickle preserves JSON-compatible scalar subclasses without turning
             # numpy floats into buffer bytes. Never load external/persisted bytes.
             raw = pickle.dumps(model, protocol=5)
