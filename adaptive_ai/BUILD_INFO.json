@@ -1,10 +1,10 @@
 {
-  "version": "0.14.163",
+  "version": "0.14.164",
   "release_date": "2026-10-09",
-  "base_version": "0.14.162",
-  "base_commit": "e32ba64428e47e2efcad1a9086d41d52b36daf07",
-  "release_status": "native-full-builtin-content-witness-and-shadow-prediction-phase-timing",
-  "release_validation_tests_passed": 1941,
+  "base_version": "0.14.163",
+  "base_commit": "70408f56731eabf6b43fd29cc6ed4fa65157171d",
+  "release_status": "fresh-indexed-target-configs-for-manual-user-events",
+  "release_validation_tests_passed": 1954,
   "release_014140": {
     "scope": "inventory_and_remove_remaining_shipped_feature_Handler_fallbacks_for_Candidate_Live_and_manual_feedback_transport",
     "explicit_routes": "manual_feedback.js, candidate_ui.js, candidate_preference_ui.js, /api/candidates, Candidate Teach-RL status/train, generation history/comparison, /api/candidate-live, /api/live and Candidate discard",
@@ -2153,5 +2153,41 @@
       "context_candidate_predict"
     ],
     "limits": "No claim that 162 pruning accelerated this retained HA trace: prune absent. No classifier training/fit samples. Different event rates/windows prevent attribution of CPU changes to release alone. Full inference, feature construction, background checkpoint and persistence work remain."
+  },
+  "release_014164": {
+    "scope": "Indexed fresh per-target agent-config lookup in manual feedback lifecycle; no all-agent JSON decoding for unrelated user-context HA events",
+    "source_log": "adaptive-ai-runtime-debug-20261009-225528.json",
+    "source_version": "0.14.163",
+    "source_metrics": {
+      "cpu_recent_percent": 45.071432,
+      "event_to_decision_recent_p95_ms": 196.090362,
+      "context_candidate_validation_avg_ms": 13.26889,
+      "context_shadow_json_avg_ms": 107.831044
+    },
+    "source_trace": {
+      "retained_seconds": 56.339,
+      "full_config_reads": 266,
+      "thread": "adaptive-ai-ha-events",
+      "avg_prepare_ms": 11.82,
+      "avg_body_ms": 10.468,
+      "avg_close_ms": 1.99
+    },
+    "storage": "idx_agents_target_created(target_entity,created_at), parameterized fresh SELECT of all matching properties, decode after connection scope closes; no config cache or TTL",
+    "candidate_isolation": "Same hidden ID filter and explicit thread-local training scope as full enumeration",
+    "semantics": "Manual origin, enabled/training/qualified guards, finite/different target values, own-command exclusion, context/Candidate-only learning and manual hold unchanged",
+    "metrics": [
+      "manual_lifecycle_lookup"
+    ],
+    "regression_tests": 13,
+    "validation_tests_expected": 1954,
+    "benchmark": "tools/benchmark_target_configs.py: 3 alternating paired repetitions, 9/64 agents, matching and unrelated targets; complete connection setup, WAL keeper, exact config parity and decode counts",
+    "windows_9_agents": {
+      "matching_previous_median_ms": 3.47735,
+      "matching_current_median_ms": 1.2863,
+      "unrelated_previous_median_ms": 3.51505,
+      "unrelated_current_median_ms": 0.5579
+    },
+    "limits": "Synthetic component timings only, not HA CPU or whole-decision speedup. Different observed windows cannot attribute all CPU changes to releases. This trace contains no classifier fit/training samples.",
+    "ci_base_image_resolution": "Docker Hub python:3.13-alpine first; on pull failure use public.ecr.aws/docker/library/python:3.13-alpine and locally tag to the unchanged Dockerfile FROM; build/smoke/vectorized trainer checks still mandatory"
   }
 }

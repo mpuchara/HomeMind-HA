@@ -13,6 +13,7 @@ import time
 
 from manual_feedback_unified import observe_linked_context
 from state_event_pipeline import install_state_event_wrapper
+from telemetry import RUNTIME_DEBUG, TELEMETRY
 
 
 def _trainable_now(agent):
@@ -79,7 +80,18 @@ def install_runtime(core):
         origin, user_id = _manual_origin(new_state)
         if not origin:
             return
-        for agent in core.STORE.list_agent_configs():
+        started = time.perf_counter()
+        trace = RUNTIME_DEBUG.begin("manual_lifecycle_lookup", target_entity=entity_id) if RUNTIME_DEBUG.enabled else None
+        try:
+            agents = core.STORE.list_agent_configs_for_target(entity_id)
+        except BaseException as exc:
+            RUNTIME_DEBUG.end(trace, status="error", error_type=type(exc).__name__)
+            raise
+        else:
+            RUNTIME_DEBUG.end(trace, agent_count=len(agents))
+        finally:
+            TELEMETRY.observe("manual_lifecycle_lookup", (time.perf_counter() - started) * 1000.0)
+        for agent in agents:
             if not agent.get("enabled") or agent.get("target_entity") != entity_id or not _trainable_now(agent):
                 continue
             # Qualified agents are handled exactly once by process_agent, where pending

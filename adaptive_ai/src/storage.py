@@ -310,6 +310,7 @@ class Store:
                     enabled INTEGER NOT NULL DEFAULT 1,
                     created_at TEXT NOT NULL
                 );
+                CREATE INDEX IF NOT EXISTS idx_agents_target_created ON agents(target_entity, created_at);
                 CREATE TABLE IF NOT EXISTS rl_models (
                     agent_id TEXT PRIMARY KEY,
                     model_json TEXT NOT NULL,
@@ -515,6 +516,15 @@ class Store:
         """Hot path: no COUNT/AVG scans over history on every motion event."""
         with self.conn() as c:
             return [self._agent_dict(r) for r in c.execute('SELECT * FROM agents ORDER BY created_at')]
+
+    def list_agent_configs_for_target(self, target_entity):
+        """Fresh configs for every property of one entity, without decoding other agents."""
+        with self.conn() as c:
+            rows = c.execute(
+                'SELECT * FROM agents WHERE target_entity=? ORDER BY created_at',
+                (target_entity,),
+            ).fetchall()
+        return [self._agent_dict(row) for row in rows]
 
     def get_agent_config(self, agent_id):
         with self.conn() as c:
