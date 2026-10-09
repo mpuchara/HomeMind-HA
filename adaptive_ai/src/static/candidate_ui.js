@@ -174,7 +174,7 @@
   }
 
   async function refresh({force=false}={}){
-    if(busy)return;
+    if(window.__adaptiveAiUiReady===false||busy)return;
     // Home Assistant Ingress can mark the iframe hidden during the first navigation frame.
     // Never let that suppress the first Candidate hydration; after the first attempt,
     // background tabs can still skip the heavy lifecycle read until they become visible.
@@ -263,5 +263,6 @@
   // Candidate lifecycle is not a realtime control signal. Match the main 4 s UI cadence
   // instead of running a second 1.5 s DB/status poller on Raspberry Pi.
   async function loop(){await refresh();setTimeout(loop,4000);}
-  loop();
+  if(window.whenAdaptiveUiReady)window.whenAdaptiveUiReady(loop);
+  else loop();
 })();

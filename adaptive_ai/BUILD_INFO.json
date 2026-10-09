@@ -1,10 +1,10 @@
 {
-  "version": "0.14.158",
+  "version": "0.14.159",
   "release_date": "2026-10-09",
-  "base_version": "0.14.157",
-  "base_commit": "4179248c96928c38441810ed40f684685249eb02",
-  "release_status": "compact-zero-column-classifier-fitting-and-shadow-training-phase-timings",
-  "release_validation_tests_passed": 1887,
+  "base_version": "0.14.158",
+  "base_commit": "285ef8db106793c42e8cb4523cb719f675f6258b",
+  "release_status": "complete-ui-composition-before-first-agent-card-poll",
+  "release_validation_tests_passed": 1895,
   "release_014140": {
     "scope": "inventory_and_remove_remaining_shipped_feature_Handler_fallbacks_for_Candidate_Live_and_manual_feedback_transport",
     "explicit_routes": "manual_feedback.js, candidate_ui.js, candidate_preference_ui.js, /api/candidates, Candidate Teach-RL status/train, generation history/comparison, /api/candidate-live, /api/live and Candidate discard",
@@ -2082,5 +2082,17 @@
       ]
     },
     "limits": "The old trace does not separately time fit vs serialize vs pool selection; their contribution to 4-second outliers cannot be assigned precisely. Synthetic single-BLAS-thread Windows component results are not HA latency forecasts. Dense varying inputs benefit little; learning still runs synchronously and remaining work/I/O can delay later events."
+  },
+  "release_014159": {
+    "scope": "defer initial status, live and candidate poll loops until DOMContentLoaded installs the full classic script bundle; guard premature refresh events; use Decision strength at the live-card source",
+    "evidence": "165708 log: no critical or active spans, DB/checkpoint/queue errors 0; recent event-to-decision p95 185.770 ms, wrapped p95 1232.922 ms, CPU recent 60.398 percent. No classifier fit or training-phase samples: cannot evaluate 158 fit acceleration.",
+    "startup": "one-shot frontend-ready barrier independent of backend readiness; live bootstrap can still create cards while status is slow; hidden Ingress first candidate hydration preserved; polling cadences unchanged",
+    "new_regressions": 8,
+    "validation_tests_expected": 1895,
+    "rebuild_required": false,
+    "training_revision": "shared-home-intents-v26",
+    "training_objective_changed": false,
+    "control_semantics_changed": false,
+    "limits": "Initial cards wait for UI script downloads. This removes legacy UI startup flashes, not model decision latency or high CPU load. No backend or model changes."
   }
 }

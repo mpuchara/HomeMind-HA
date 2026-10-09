@@ -1,6 +1,6 @@
-# HomeMind-HA / Adaptive AI 0.14.158
+# HomeMind-HA / Adaptive AI 0.14.159
 
-0.14.158: szybsze dopasowanie klasyfikatora dzięki pominięciu kolumn już zerowanych jako stałe oraz pomiar etapów uczenia Shadow. Aktualizacja i restart; bez Rebuild. [Opis wydania](docs/RELEASE_0_14_158_PL.md).
+0.14.159: pierwsze karty agentów korzystają od razu z aktualnych nazw i przycisków; odczyty startują po instalacji wszystkich warstw UI. Aktualizacja i restart; bez Rebuild. [Opis wydania](docs/RELEASE_0_14_159_PL.md).
 
 
 Karta agenta ma cztery akcje: **Shadow/Control**, **Wrong decision**, **Settings** i **Teach**. Wrong decision uczy poprawnego Desired. Teach otwiera powiększalny wykres historii z wyborem dokładnej chwili i zapisem poprawnego Desired. Cofanie ostatniej korekty jest dostępne w Teach oraz Settings; pozostałe operacje i diagnostyka są w Settings.

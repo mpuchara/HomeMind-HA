@@ -40,11 +40,11 @@ function renderOverview(status){
   $('#overview').innerHTML=`
     <div class="metric"><b>${status.state_count||0}</b><span>HA entities in context</span></div>
     <div class="metric"><b>${status.agent_count||0}</b><span>agents · ${targetText}</span></div>
-    <div class="metric"><b>${pct(status.average_confidence)}</b><span>average policy confidence</span></div>
+    <div class="metric"><b>${pct(status.average_confidence)}</b><span>average decision strength</span></div>
     <div class="metric"><b>${experienceText}</b><span>predictive RL experiences</span></div>`;
 }
 async function load(){
-  if(loadInFlight)return;
+  if(window.__adaptiveAiUiReady===false||loadInFlight)return;
   loadInFlight=true;
   try{
   const wasReady=window.__adaptiveAiRuntimeReady===true;
@@ -299,4 +299,6 @@ $('#newAgentBtn').onclick=openDialog;$('#refreshBtn').onclick=load;$('#rescanBtn
 // Resolve the active renderer at event time, including P0 and learning hooks.
 $('#agentSearch').oninput=()=>renderAgents();const savedSort=localStorage.getItem('adaptiveAiAgentSort');if(savedSort)$('#agentSort').value=savedSort;$('#agentSort').onchange=()=>{localStorage.setItem('adaptiveAiAgentSort',$('#agentSort').value);renderAgents();};
 $('#agentForm').onsubmit=async e=>{e.preventDefault();const f=e.target;const body={name:f.name.value,target_entity:f.target_entity.value,target_property:f.target_property.value,min_value:Number(f.min_value.value),max_value:Number(f.max_value.value),exploration_step:Number(f.exploration_step.value),confidence_threshold:Number(f.confidence_threshold.value),deadband:Number(f.deadband.value),action_interval:Number(f.action_interval.value),mode:'paused',micro_exploration:false};try{await api('api/agents',{method:'POST',body:JSON.stringify(body)});f.reset();$('#agentDialog').close();load();}catch(err){alert(err.message)}};
-load();setInterval(load,4000);
+const startAgentPolling=()=>{load();setInterval(load,4000);};
+if(window.whenAdaptiveUiReady)window.whenAdaptiveUiReady(startAgentPolling);
+else startAgentPolling(); // Standalone entry script without the composed UI bundle.
