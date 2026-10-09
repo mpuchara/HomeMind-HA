@@ -164,6 +164,9 @@ class RuntimeDebugLogService:
                 "context_shadow_json_metric": True,
                 "context_candidate_validation_metric": True,
                 "context_candidate_load_metric": True,
+                "context_candidate_prediction_metrics": [
+                    "context_candidate_features", "context_candidate_predict",
+                ],
                 "context_training_phase_metrics": [
                     "binary_classifier_fit", "context_candidate_training",
                     "context_candidate_serialization", "context_candidate_score",

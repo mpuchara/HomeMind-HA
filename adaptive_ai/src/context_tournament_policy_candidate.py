@@ -787,8 +787,10 @@ def install_policy_candidates(service):
         if candidate is None or temporal is None:
             return int(active_idx)
         try:
-            features, _, _ = candidate.features(context["states"], temporal, at_ts=context["now"])
-            chosen, confidence, _, horizon, support, novelty = candidate.predict(features)
+            with measure_training_phase('context_candidate_features', agent_id=aid, challenger=challenger):
+                features, _, _ = candidate.features(context["states"], temporal, at_ts=context["now"])
+            with measure_training_phase('context_candidate_predict', agent_id=aid, challenger=challenger):
+                chosen, confidence, _, horizon, support, novelty = candidate.predict(features)
             actions = [float(x) for x in action_values(agent)]
             idx = min(range(len(actions)), key=lambda i: abs(actions[i] - float(chosen["value"])))
             pending_training[key] = {

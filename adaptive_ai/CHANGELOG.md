@@ -1,3 +1,10 @@
+## 0.14.163
+- Pełny świeży obraz zawartości modelu powstaje przez natywny Pickler z odrzucaniem redukcji niestandardowych, buforów i typów spoza obsługiwanych builtins. Nie ma osobnej pętli Pythona po każdej wadze liczbowej. Bajty obrazu pozostają zgodne z 0.14.162.
+- Każda weryfikacja nadal oblicza SHA256 wszystkich kanonicznych bajtów. Pełne porównanie zawartości cache, odłączony snapshot i limit RAM pozostają zgodne; bez cache wyników weryfikacji.
+- Osobne metryki context_candidate_features i context_candidate_predict, także przy błędzie fazy, ułatwiają rozdzielenie pozostałych kosztów Shadow.
+- 20 nowych regresji; pełny zestaw 1941 testów. Benchmark porównuje pełne SHA i JSON z zamrożonym 0.14.162. Mediany powtórzeń: checksum około 2,2×, zapis JSON Shadow około 1,7–1,8× szybciej; pomiar komponentów.
+- Aktualizacja i restart, bez Rebuild. Trening v26, wagi, decyzje i kwalifikacja sterowania pozostają zgodne.
+
 ## 0.14.162
 - Globalne czyszczenie FeatureJournal wybiera najstarsze niechronione zdarzenia przez indeks; dopiero brakujące miejsca wybiera z chronionych. Bez sortowania całej tabeli z CASE. Jawne rowid zachowuje dotychczasową kolejność remisów received_time.
 - Indeks pokrywający received_time/protected_until/event_key oraz indeks wygasania feature_windows. Retencja, limity, kompletne rekordy, okna dowodowe i atomowość transakcji pozostają zgodne.

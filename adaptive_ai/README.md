@@ -1,6 +1,6 @@
-# HomeMind-HA / Adaptive AI 0.14.162
+# HomeMind-HA / Adaptive AI 0.14.163
 
-0.14.162: indeksowane czyszczenie dziennika obserwacji i mniej odczytów liczebności puli kontekstu. Aktualizacja i restart; bez Rebuild.
+0.14.163: szybsze pełne sprawdzanie zawartości modeli i osobne pomiary cech/predykcji Shadow. Aktualizacja i restart; bez Rebuild.
 
 
 Cztery akcje każdego agenta: Shadow/Control, Wrong decision, Settings, Teach.
