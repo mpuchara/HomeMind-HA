@@ -1,3 +1,10 @@
+## 0.14.151
+- Walidacja kandydatów używa tej samej stałej tożsamości championa co metryki Context Tournament; zwykłe starzenie wag i aktualizacja online nie wymuszają odbudowy kandydata.
+- Cache jest związany z rewizją i checksumą sprawdzonego źródła. Starzenie runtime zachowuje instancję; inny poprawny payload wymusza odtworzenie, także przy tej samej rewizji.
+- Przywrócona nauka z kolejnego niezależnego wyniku po starzeniu championa lub kandydata. Dane z innego championa nadal są odrzucane.
+- Nowy pomiar context_candidate_load i ślady context_candidate_cache pokazują hit, restore i rebuild.
+- Zachowane checksumy, reset po zmianie schematu/epoki, bramki promocji i format modeli. Bez Rebuild.
+
 ## 0.14.150
 - Obserwacja challengera tworzy szybki, odłączony snapshot w RAM; kanoniczny JSON powstaje dopiero podczas zapisu w istniejącym writerze.
 - Kolejne aktualizacje tego samego challengera łączą się w ostatni pełny snapshot z kompletem głosów i przykładów.
