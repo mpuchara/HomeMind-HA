@@ -1,3 +1,9 @@
+## 0.14.160
+- P0 nie tworzy starszych przycisków Shadow → Control, Wrong decision i Teach, nie podpina handlerów ani nie aktualizuje starego przełącznika. Podstawowy renderer app także oddaje pusty slot akcji. Przyciski należą wyłącznie do aktualnego workflow.
+- Wszystkie 21 skryptów z indeksu jest dostępne od uruchomienia HTTP, przed inicjalizacją backendu. W 0.14.159 pobieranie skryptu workflow podczas startu mogło nie udać się przed rejestracją tras, mimo ukończenia DOMContentLoaded.
+- Jawna lista nazw JS, istniejąca kontrola trusted client i bramki API pozostają; nie udostępniamy dowolnych plików. Zachowana bariera UI oraz niezależne odczyty Live/status.
+- 5 nowych regresji transportu, w tym prawdziwy entrypoint z zatrzymaną inicjalizacją; test P0 zakazuje tworzenia i obsługi dawnych przycisków. Całość: 1901 testów. Aktualizacja i restart, bez Rebuild.
+
 ## 0.14.159
 - Odczyty statusu, Live i Candidate startują po instalacji kompletu warstw UI. Szybka odpowiedź API podczas pobierania późniejszych skryptów nie tworzy już kart ze starszymi przyciskami.
 - Pierwsza karta pokazuje od razu Decision strength i aktualne akcje generacji. Odczyt Live nadal może wyświetlić Current/Desired bez oczekiwania na pełny status serwera.

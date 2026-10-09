@@ -15,7 +15,8 @@ class Element {
     this.classList={contains:x=>this.className.split(' ').includes(x),toggle(){}};}
   appendChild(n){n.remove();this.children.push(n);n.parentNode=this;return n;}
   remove(){if(this.parentNode){const p=this.parentNode;p.children=p.children.filter(n=>n!==this);this.parentNode=null;}}
-  querySelector(s){if(s==='.p0-empty')return this.children.find(n=>n.classList.contains('p0-empty'))||null;
+  querySelector(s){assert.equal(s.includes('data-a='),false,'P0 must not process retired action buttons');
+    if(s==='.p0-empty')return this.children.find(n=>n.classList.contains('p0-empty'))||null;
     if(!this.parts.has(s))this.parts.set(s,new Element());return this.parts.get(s);}
   querySelectorAll(){return [];}
   addEventListener(){}
@@ -34,6 +35,8 @@ c.window=c;
 vm.runInNewContext(fs.readFileSync('adaptive_ai/src/static/p0.js','utf8'),c);
 c.renderAgents();const card=root.children[0];
 assert.equal(root.children.length,1);assert.equal(card.hidden,false);
+assert.ok(card.innerHTML.includes('<div class="actions"></div>'));
+assert.equal(card.innerHTML.includes('<button'),false);
 // Simulate a legacy render replacing the DOM, while P0 still owns the old nodes.
 card.remove();const legacy=new Element();legacy.className='agent card';root.appendChild(legacy);
 c.renderAgents();assert.equal(root.children.length,1);assert.equal(root.children[0],card);

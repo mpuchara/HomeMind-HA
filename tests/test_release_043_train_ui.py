@@ -8,15 +8,11 @@ class Release043TrainUiTests(unittest.TestCase):
     def source(self, name):
         return (ROOT / "adaptive_ai" / "src" / "static" / name).read_text(encoding="utf-8")
 
-    def test_p0_renderer_tolerates_generation_workflow_replacing_action_row(self):
+    def test_p0_renderer_leaves_actions_to_generation_workflow(self):
         source = self.source("p0.js")
-        block = source.split("const toggle=el.querySelector('[data-a=mode]');", 1)[1].split(
-            "if(r.teaching_id)", 1
-        )[0]
-        self.assertIn("if(toggle){", block)
-        self.assertIn("toggle.textContent=", block)
-        self.assertIn("toggle.setAttribute(", block)
-        self.assertNotIn("\n    toggle.textContent=", block)
+        self.assertIn('<div class="actions"></div>', source)
+        self.assertNotIn('data-a=', source)
+        self.assertNotIn('toggle.textContent=', source)
 
     def test_train_http_success_is_not_relabelled_as_failure_by_refresh_exception(self):
         source = self.source("app.js")

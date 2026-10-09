@@ -1,10 +1,10 @@
 {
-  "version": "0.14.159",
+  "version": "0.14.160",
   "release_date": "2026-10-09",
-  "base_version": "0.14.158",
-  "base_commit": "285ef8db106793c42e8cb4523cb719f675f6258b",
-  "release_status": "complete-ui-composition-before-first-agent-card-poll",
-  "release_validation_tests_passed": 1896,
+  "base_version": "0.14.159",
+  "base_commit": "bf7d8bf2d6f04f202f11c722825e3dc3886bdf1d",
+  "release_status": "retired-legacy-card-actions-and-early-complete-ui-asset-transport",
+  "release_validation_tests_passed": 1901,
   "release_014140": {
     "scope": "inventory_and_remove_remaining_shipped_feature_Handler_fallbacks_for_Candidate_Live_and_manual_feedback_transport",
     "explicit_routes": "manual_feedback.js, candidate_ui.js, candidate_preference_ui.js, /api/candidates, Candidate Teach-RL status/train, generation history/comparison, /api/candidate-live, /api/live and Candidate discard",
@@ -2094,5 +2094,18 @@
     "training_objective_changed": false,
     "control_semantics_changed": false,
     "limits": "Initial cards wait for UI script downloads. This removes legacy UI startup flashes, not model decision latency or high CPU load. No backend or model changes."
+  },
+  "release_014160": {
+    "scope": "remove legacy P0/app card action templates and P0 handlers/updates; serve exact catalog of all 21 index scripts before background runtime composition; generation workflow is the sole card-action owner",
+    "evidence": "175331 log, 0.14.159: DB/queue/worker errors 0, critical spans empty, recent CPU 20.337 percent, RSS 101.430 MiB, event-to-decision p95 111.393 ms, wrapped inference p95 569.391 ms. No classifier-fit samples.",
+    "startup": "159 waited for script loading to finish but feature assets were unavailable until backend composition registered routes; failed script requests also finish DOMContentLoaded. Early exact-name transport fixes availability; no old action fallback is constructed.",
+    "new_regressions": 5,
+    "validation_tests_expected": 1901,
+    "rebuild_required": false,
+    "training_revision": "shared-home-intents-v26",
+    "training_objective_changed": false,
+    "control_semantics_changed": false,
+    "transport": "trusted-client check retained; only named JS assets accessible, no arbitrary path/extension fallback; protected API/runtime readiness unchanged",
+    "limits": "UI startup fix, not a classifier or backend computation optimization. Runtime log windows have different loads, so latency/CPU changes cannot be attributed solely to a release."
   }
 }

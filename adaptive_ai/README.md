@@ -1,6 +1,6 @@
-# HomeMind-HA / Adaptive AI 0.14.159
+# HomeMind-HA / Adaptive AI 0.14.160
 
-0.14.159: pierwsze karty agentów korzystają od razu z aktualnych nazw i przycisków; odczyty startują po instalacji wszystkich warstw UI. Aktualizacja i restart; bez Rebuild.
+0.14.160: usunięte starsze przyciski kart; komplet skryptów UI dostępny od startu HTTP, przed inicjalizacją backendu. Aktualizacja i restart; bez Rebuild.
 
 
 Cztery akcje każdego agenta: Shadow/Control, Wrong decision, Settings, Teach.

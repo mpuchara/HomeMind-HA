@@ -12,6 +12,17 @@ from urllib.parse import parse_qs
 from settings import (APP_VERSION, OPTIONS, STATIC_DIR, SUPPORTED_TARGETS, clamp, now_ts)
 from training_request_semantics import train_request_decision
 
+# UI scripts must be available before background runtime composition registers feature routes.
+# Exact names only: never expose arbitrary files or paths from the application directory.
+UI_SCRIPT_ASSETS = frozenset({
+    "ui_bootstrap.js", "home.js", "polling_guard.js", "app.js", "debug_export_ui.js",
+    "runtime_debug_ui.js", "settings.js", "p0.js", "automation_baseline_ui.js", "queue.js",
+    "experiments.js", "manual_feedback.js", "teach_observed_ui.js", "candidate_ui.js",
+    "candidate_preference_ui.js", "agent_workflow_ui.js", "explore_ui.js",
+    "promotion_lifecycle_ui.js", "confidence_contract_ui.js", "simple_agent_names.js",
+    "runtime_activity_ui.js",
+})
+
 # Runtime-heavy modules are imported only after the Ingress HTTP server is listening.
 ENGINE = None
 HISTORY = None
@@ -330,24 +341,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self.static("index.html", "text/html; charset=utf-8")
             if path == "/style.css":
                 return self.static("style.css", "text/css; charset=utf-8")
-            if path == "/app.js":
-                return self.static("app.js", "application/javascript; charset=utf-8")
-            if path == "/ui_bootstrap.js":
-                return self.static("ui_bootstrap.js", "application/javascript; charset=utf-8")
-            if path == "/debug_export_ui.js":
-                return self.static("debug_export_ui.js", "application/javascript; charset=utf-8")
-            if path == "/runtime_debug_ui.js":
-                return self.static("runtime_debug_ui.js", "application/javascript; charset=utf-8")
-            if path == "/manual_feedback.js":
-                return self.static("manual_feedback.js", "application/javascript; charset=utf-8")
-            if path == "/p0.js":
-                return self.static("p0.js", "application/javascript; charset=utf-8")
-            if path == "/experiments.js":
-                return self.static("experiments.js", "application/javascript; charset=utf-8")
-            if path == "/settings.js":
-                return self.static("settings.js", "application/javascript; charset=utf-8")
-            if path == "/home.js":
-                return self.static("home.js", "application/javascript; charset=utf-8")
+            if path.startswith("/") and path[1:] in UI_SCRIPT_ASSETS:
+                return self.static(path[1:], "application/javascript; charset=utf-8")
             if path == "/api/status":
                 return self.send_json(200, self.status_payload())
             if path == "/health":
