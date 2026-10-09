@@ -787,6 +787,8 @@ class FeatureJournal:
                     ON feature_observation_events(entity_id,event_time,received_time);
                 CREATE INDEX IF NOT EXISTS idx_feature_obs_received
                     ON feature_observation_events(received_time);
+                CREATE INDEX IF NOT EXISTS idx_feature_obs_prune_cover
+                    ON feature_observation_events(received_time,protected_until,event_key);
                 CREATE INDEX IF NOT EXISTS idx_feature_obs_entity_received_time
                     ON feature_observation_events(entity_id,received_time,event_time);
                 CREATE TABLE IF NOT EXISTS feature_windows (
@@ -796,6 +798,8 @@ class FeatureJournal:
                     protected_until REAL NOT NULL);
                 CREATE INDEX IF NOT EXISTS idx_feature_windows_agent
                     ON feature_windows(agent_id,anchor_time);
+                CREATE INDEX IF NOT EXISTS idx_feature_windows_expiry
+                    ON feature_windows(protected_until);
                 CREATE TABLE IF NOT EXISTS feature_window_entities (
                     window_id TEXT NOT NULL, entity_id TEXT NOT NULL,
                     PRIMARY KEY(window_id,entity_id));
@@ -1004,9 +1008,18 @@ class FeatureJournal:
             total = int(c.execute("SELECT COUNT(*) FROM feature_observation_events").fetchone()[0] or 0)
             if total > self.global_event_limit:
                 excess = total - self.global_event_limit
+                # Preserve the same priority: oldest unprotected rows first, then
+                # protected rows only when required by the hard global cap. The
+                # covering time index avoids reading/sorting every event payload.
+                # rowid preserves insertion-order ties of the previous table scan.
                 doomed = c.execute("""SELECT event_key FROM feature_observation_events
-                    ORDER BY CASE WHEN protected_until>? THEN 1 ELSE 0 END, received_time ASC LIMIT ?""",
-                    (now, excess)).fetchall()
+                    INDEXED BY idx_feature_obs_prune_cover WHERE protected_until<=?
+                    ORDER BY received_time ASC,rowid ASC LIMIT ?""", (now, excess)).fetchall()
+                remaining = excess - len(doomed)
+                if remaining:
+                    doomed += c.execute("""SELECT event_key FROM feature_observation_events
+                        INDEXED BY idx_feature_obs_prune_cover WHERE protected_until>?
+                        ORDER BY received_time ASC,rowid ASC LIMIT ?""", (now, remaining)).fetchall()
                 c.executemany("DELETE FROM feature_observation_events WHERE event_key=?", [(r[0],) for r in doomed])
         return True
 

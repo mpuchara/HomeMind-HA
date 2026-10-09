@@ -35,6 +35,9 @@ jobs:
       - name: 0.14.161 observed-pool JSON snapshot parity benchmark
         if: matrix.python == '3.11'
         run: python tools/benchmark_observed_pool_json.py --compact
+      - name: 0.14.162 indexed feature-journal pruning reference parity
+        if: matrix.python == '3.11'
+        run: python tools/benchmark_feature_prune.py --events 20000 --passes 2 --compact
       - name: 0.14.158 compact classifier fit reference parity benchmark
         if: matrix.python == '3.11'
         run: python tools/benchmark_classifier_fit.py --passes 3
