@@ -2252,16 +2252,27 @@
     "telemetry": "history_archive_import reports successfully committed rows, batches and max_batch_rows including partial failure",
     "regression_tests": 11,
     "validation_tests_expected": 1976,
-    "benchmark": "tools/benchmark_history_import.py --rows-per-entity 2400: 3 alternating repeats, full/minimal payloads, every archive content field and normal-import row ID parity; cooperative sleeps disabled",
+    "benchmark": "tools/benchmark_history_import.py --rows-per-entity 2400: 3 alternating repeats, full/minimal payloads, every archive content field and normal-import row ID parity; cooperative sleeps disabled; actual WAL keeper and background checkpoint enabled in both variants",
     "windows_full_import": {
       "rows": 9600,
       "previous_max_batch_rows": 9600,
       "bounded_max_batch_rows": 128,
-      "previous_median_peak_archive_call_ms": 97.432,
-      "bounded_median_peak_archive_call_ms": 7.757,
-      "previous_median_total_ms": 106.966,
-      "bounded_median_total_ms": 117.671
+      "previous_median_peak_archive_call_ms": 112.137,
+      "bounded_median_peak_archive_call_ms": 15.907,
+      "previous_median_total_ms": 120.208,
+      "bounded_median_total_ms": 123.891
     },
-    "limits": "Rows, not wall-clock duration, are bounded. More commits and cooperative sleeps can increase total import time. This improves writer availability; no whole-HA CPU or latency speedup claim. The fetched Recorder JSON remains materialized by existing transport."
+    "limits": "Rows, not wall-clock duration, are bounded. More commits and cooperative sleeps can increase total import time. This improves writer availability; no whole-HA CPU or latency speedup claim. The fetched Recorder JSON remains materialized by existing transport.",
+    "linux_full_import": {
+      "rows": 9600,
+      "bounded_peak_archive_call_ms": [
+        9.012,
+        204.116,
+        3.422
+      ],
+      "previous_median_total_ms": 88.962,
+      "bounded_median_total_ms": 100.478,
+      "limit": "128 rows does not bound physical I/O duration; checkpoint/I/O outlier retained, not discarded"
+    }
   }
 }

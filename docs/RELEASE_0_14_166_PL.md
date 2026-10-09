@@ -22,7 +22,9 @@ Anulowanie lub błąd po commit pozostawia poprawny fragment w bazie. Nieudana p
 
 11 regresji: pełna zgodność dużej odpowiedzi, numeric sampling/final row, mieszane i błędne rekordy, UPSERT z live, możliwość zapisu i pełnego PASSIVE checkpointu w przerwie, anulowanie/ponowienie, rollback późniejszej partii, rewizje, stop/empty, diagnostyka częściowego zapisu oraz jedno połączenie zamykane także przy błędzie. Pełny zestaw 1976 testów.
 
-Benchmark porównuje zamrożony parser 0.14.165 z nowym importem dla pełnej i minimalnej historii; każde pole archiwum i ID normalnego importu musi być zgodne. Trzy naprzemienne powtórzenia, Windows, 9600 pełnych wierszy: mediana szczytu archive_batch 97,432 → 7,757 ms; mediana czasu całości 106,966 → 117,671 ms. Pomiar wywołania obejmuje też przygotowanie danych i commit, nie tylko czas blokady. Przerwy budżetu są wyłączone w benchmarku. Benchmark zgodności działa także w CI.
+Benchmark porównuje zamrożony parser 0.14.165 z nowym importem dla pełnej i minimalnej historii; każde pole archiwum i ID normalnego importu musi być zgodne. Oba warianty używają rzeczywistego keep-alive WAL i checkpointu w tle, jak runtime. Trzy naprzemienne powtórzenia, Windows, 9600 pełnych wierszy: mediana szczytu archive_batch 112,137 → 15,907 ms; mediana czasu całości 120,208 → 123,891 ms. Pomiar wywołania obejmuje też przygotowanie danych i commit, nie tylko czas blokady. Przerwy budżetu są wyłączone w benchmarku. Benchmark zgodności działa także w CI.
+
+Linux: przy 9600 wierszach szczyty nowego archive_batch wyniosły 3,422, 9,012 oraz 204,116 ms, mimo identycznego limitu 128 wierszy. Mediana czasu całości 88,962 → 100,478 ms. Ta wolna próbka pokazuje, że koszt fizycznego I/O i konkurujących checkpointów może nadal wydłużyć krótką transakcję. Nie traktujemy wyniku Windows jako gwarancji czasu na HA.
 
 Więcej commit i przerwy mogą wydłużyć ukończenie importu. Limit dotyczy liczby wierszy, nie bezwzględnego czasu na wolnej karcie SD. Celem jest dostępność bazy dla decyzji i innych zapisów. Obecny transport nadal materializuje JSON odpowiedzi HA. Nie zmieniamy modeli, wag, kwalifikacji Control ani treningu v26.
 

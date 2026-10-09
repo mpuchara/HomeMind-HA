@@ -94,6 +94,7 @@ def run(size=2400):
                 with tempfile.TemporaryDirectory(prefix="hm-import-case-") as root:
                     store = Store(Path(root) / "archive.db")
                     store.start_wal_keeper()
+                    store.start_wal_checkpoint()
                     samples = []
                     batch_sizes = []
                     original = store.archive_batch
@@ -121,10 +122,11 @@ def run(size=2400):
                             total_ms=round(wall_ms, 3), max_archive_call_ms=round(max(samples), 3),
                             median_archive_call_ms=round(statistics.median(samples), 3))
                     finally:
+                        store.stop_wal_checkpoint()
                         store.stop_wal_keeper()
             repeats.append(metrics)
         cases.append(dict(source=source, every_archive_row_parity=True, repeats=repeats))
-    return dict(cases=cases, batch_rows=history.HISTORY_IMPORT_BATCH_ROWS,
+    return dict(cases=cases, batch_rows=history.HISTORY_IMPORT_BATCH_ROWS, background_checkpoint=True,
                 limits="Synthetic import only. More commits may increase total time; max_archive_call_ms includes packing/open/commit/close. Cooperative sleeps disabled; no HA CPU or latency guarantee.")
 
 
