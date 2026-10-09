@@ -3,6 +3,7 @@ from pathlib import Path
 import argparse
 import hashlib
 import json
+import os
 import statistics
 import sys
 import tempfile
@@ -10,6 +11,8 @@ import time
 from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "adaptive_ai/src"))
+_scratch = tempfile.TemporaryDirectory(prefix="homemind-target-configs-")
+os.environ["ADAPTIVE_AI_DATA"] = _scratch.name
 from storage import Store
 from agent_candidates import install_store_overlay
 
