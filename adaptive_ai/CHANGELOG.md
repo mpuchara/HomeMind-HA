@@ -1,3 +1,9 @@
+## 0.14.161
+- Zmiana wartości sensora koduje świeżą historię, lecz wykorzystuje niezmienione JSON przykładów i screeningu. Nowa niezależna etykieta zawsze przelicza oba pola; snapshoty pozostają kompletne i niezmienne.
+- Pusta kolejka Correct czeka na sygnał po trwałym zapisie zgłoszenia. Fallback 30 s zastępuje odczyty co 250 ms; wybudzenie i recovery pozostają natychmiastowe. Stop nie czeka na fallback.
+- 10 nowych regresji: identyczne trwałe wiersze względem poprzedniej implementacji w trybie synchronicznym i batch, krótkie wizyty, own-command leakage, restart, wybudzenie i stop. Całość: 1911 testów. Benchmark zachowuje identyczne bajty snapshotów; kodowanie całej sekwencji około 5,1–6,2× szybsze.
+- Aktualizacja i restart, bez Rebuild. Trening v26, pełna weryfikacja checksum, zasady decyzji i kwalifikacji pozostają zgodne. Wynik komponentu nie oznacza takiego samego przyspieszenia całego runtime.
+
 ## 0.14.160
 - P0 nie tworzy starszych przycisków Shadow → Control, Wrong decision i Teach, nie podpina handlerów ani nie aktualizuje starego przełącznika. Podstawowy renderer app także oddaje pusty slot akcji. Przyciski należą wyłącznie do aktualnego workflow.
 - Wszystkie 21 skryptów z indeksu jest dostępne od uruchomienia HTTP, przed inicjalizacją backendu. W 0.14.159 pobieranie skryptu workflow podczas startu mogło nie udać się przed rejestracją tras, mimo ukończenia DOMContentLoaded.

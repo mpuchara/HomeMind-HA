@@ -1,10 +1,10 @@
 {
-  "version": "0.14.160",
+  "version": "0.14.161",
   "release_date": "2026-10-09",
-  "base_version": "0.14.159",
-  "base_commit": "bf7d8bf2d6f04f202f11c722825e3dc3886bdf1d",
-  "release_status": "retired-legacy-card-actions-and-early-complete-ui-asset-transport",
-  "release_validation_tests_passed": 1901,
+  "base_version": "0.14.160",
+  "base_commit": "4a5f2862b559cfd06860e553e8569ef1a4a1b0d7",
+  "release_status": "reuse-unchanged-observed-examples-and-event-driven-idle-correct-queue",
+  "release_validation_tests_passed": 1911,
   "release_014140": {
     "scope": "inventory_and_remove_remaining_shipped_feature_Handler_fallbacks_for_Candidate_Live_and_manual_feedback_transport",
     "explicit_routes": "manual_feedback.js, candidate_ui.js, candidate_preference_ui.js, /api/candidates, Candidate Teach-RL status/train, generation history/comparison, /api/candidate-live, /api/live and Candidate discard",
@@ -2107,5 +2107,19 @@
     "control_semantics_changed": false,
     "transport": "trusted-client check retained; only named JS assets accessible, no arbitrary path/extension fallback; protected API/runtime readiness unchanged",
     "limits": "UI startup fix, not a classifier or backend computation optimization. Runtime log windows have different loads, so latency/CPU changes cannot be attributed solely to a release."
+  },
+  "release_014161": {
+    "scope": "observed-pool history changes reuse immutable unchanged sample/screening JSON; each independent target label regenerates both; idle Correct queue uses admission wake and 30-second recovery fallback",
+    "evidence": "195244 log, 0.14.160: recent CPU 57.659 percent, RSS 124.047 MiB, event-to-decision recent p95 253.383 ms, wrapped recent p95 778.286 ms, shadow observation average 329.051 ms; no DB/queue/worker errors. Retained 40-second trace has 139 idle workflow claims.",
+    "benchmark": "same-process paired 160/current encoder: 96 retained examples, 96 edges including 6 independent labels; sequence 51.5-55.6 -> 8.9-10.3 ms, 5.1-6.2x; every snapshot byte-identical. Component only, not a prediction of HA latency or CPU.",
+    "new_regressions": 10,
+    "validation_tests_expected": 1911,
+    "rebuild_required": false,
+    "training_revision": "shared-home-intents-v26",
+    "training_objective_changed": false,
+    "control_semantics_changed": false,
+    "invariants": "availability/history/leak votes retained, short visits remain labels, paired score-before-learn retained, full model checksum validation untouched, cumulative deferred snapshots and durability drains unchanged",
+    "queue": "enqueue wakes after durable commit; startup claims recovered backlog immediately; clear-before-claim prevents admission wake races; stop skips long wait. Unsignalled out-of-process inserts discovered within 30 seconds.",
+    "limits": "Real CPU/latency impact needs a new HA log under comparable load; observed-pool and candidate inference have other costs."
   }
 }

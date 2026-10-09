@@ -69,7 +69,7 @@ def _request_id(value=None):
 class WorkflowRequestQueue(threading.Thread):
     daemon = True
 
-    def __init__(self, manager, *, poll_seconds=0.25, start_worker=True):
+    def __init__(self, manager, *, poll_seconds=30.0, start_worker=True):
         super().__init__(name="adaptive-ai-workflow-requests")
         self.manager = manager
         self.store = manager.store
@@ -233,11 +233,18 @@ class WorkflowRequestQueue(threading.Thread):
 
     def run(self):
         while not self.stop_event.is_set():
+            # Clear before claiming: an admission committed before this clear is
+            # found by SELECT; an admission after an empty SELECT sets the event
+            # and wakes the wait. Clearing after wait could lose that notification.
+            self.wake_event.clear()
             progressed = self.process_once()
             if progressed:
                 continue
+            if self.stop_event.is_set():
+                break
+            # Admission/stop wake immediately. This is only a recovery fallback
+            # for writes from another process, not interactive request latency.
             self.wake_event.wait(self.poll_seconds)
-            self.wake_event.clear()
 
     def stop(self):
         self.stop_event.set()
