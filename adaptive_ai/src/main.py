@@ -784,6 +784,10 @@ def shutdown_runtime():
                     return None
 
             shutdown_step("context", lambda: ENGINE.context.save(force=True))
+            tournament = getattr(ENGINE, "context_tournament", None)
+            if tournament is not None:
+                tournament._shadow_flush_event.set()
+                shutdown_step("context_tournament", tournament._flush_background_context)
             shutdown_step("teaching", lambda: ENGINE.teaching.flush(force=True))
             shutdown_step("archive", lambda: ENGINE.flush_archive(force=True))
 

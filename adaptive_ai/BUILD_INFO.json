@@ -1,10 +1,10 @@
 {
-  "version": "0.14.151",
+  "version": "0.14.152",
   "release_date": "2026-10-09",
-  "base_version": "0.14.150",
-  "base_commit": "ec0ebaf297927418960ca4ac9f7164753a5ac09a",
-  "release_status": "stable-candidate-epochs-and-verified-source-cache",
-  "release_validation_tests_passed": 1757,
+  "base_version": "0.14.151",
+  "base_commit": "d278c9af677dcccfd65e704c61a50dfdd593c9b1",
+  "release_status": "background-context-observations-and-short-live-state-locks",
+  "release_validation_tests_passed": 1773,
   "release_014140": {
     "scope": "inventory_and_remove_remaining_shipped_feature_Handler_fallbacks_for_Candidate_Live_and_manual_feedback_transport",
     "explicit_routes": "manual_feedback.js, candidate_ui.js, candidate_preference_ui.js, /api/candidates, Candidate Teach-RL status/train, generation history/comparison, /api/candidate-live, /api/live and Candidate discard",
@@ -1610,6 +1610,140 @@
           "p95_ms": 60.54540000332054,
           "physical_connections_per_observation": 1.0,
           "commits_per_observation": 2.05
+        }
+      ]
+    }
+  },
+  "release_014152": {
+    "scope": "remove durable context observation writes and live state locks over SQLite commits from ordinary decision cycles",
+    "home_checkpoint": "capture both models under belief lock; serialize saves separately; persist outside belief lock; retain observations received during commit",
+    "context_rows": "complete immutable cumulative pool/quality rows coalesced per agent/entity; counters preserve cached historical JSON; background writer serialized through commit; failed batches restore with newest snapshot winning",
+    "shadow_labels": "future paired scoring remains synchronous in RAM; target labels wake existing writer; ordinary decisions do not force a durable flush; checksum, own-command exclusion and promotion gates retained",
+    "teaching": "drain under short buffer lock; persist outside lock; new decision records continue; failure restores chronological bounded queue and counts dropped oldest rows",
+    "shutdown": "explicit context row and shadow model durability barrier after producers stop; one failing table does not suppress other tables",
+    "diagnostics": "context_rows_persist/context_shadow_persist include Store lock wait and commit; runtime debug exports pending/flushed/error counts without DB reads",
+    "durability": "nominal periodic 5 second background flush, prompt wakeup on outcome, explicit shutdown flush; busy/unavailable database can extend lag; abrupt power loss can lose uncommitted shadow observations",
+    "new_regressions": 16,
+    "validation_tests_expected": 1773,
+    "training_revision": "shared-home-intents-v26",
+    "rebuild_required": false,
+    "historical_training_changed": false,
+    "training_semantics_changed": false,
+    "control_semantics_changed": false,
+    "development_benchmark": {
+      "scope": "desktop full context extension chain; warm real feature contract and TemporalHistory; 96 sensors, 96 history examples each, 256 classifier examples; 20 observations; injected unrelated Store lock held 200ms per cycle in contention variant; CPU includes final row/model drains",
+      "results": [
+        {
+          "variant": "baseline151",
+          "candidate_constructions": 0,
+          "observations": 20,
+          "pool_size": 96,
+          "samples_per_sensor": 96,
+          "classifier_rows": 256,
+          "cpu_ms_including_final_drain": 1000.0,
+          "final_drain_ms": 66.00959999195766,
+          "persistence": {
+            "queued": 96,
+            "flushed": 4,
+            "flushes": 1,
+            "errors": 0,
+            "pending": 0
+          },
+          "contention_ms": 0,
+          "avg_ms": 55.41777500038734,
+          "p95_ms": 60.04959999700077,
+          "physical_connections_per_observation": 1.0,
+          "commits_per_observation": 2.05
+        },
+        {
+          "variant": "new152",
+          "candidate_constructions": 0,
+          "observations": 20,
+          "pool_size": 96,
+          "samples_per_sensor": 96,
+          "classifier_rows": 256,
+          "cpu_ms_including_final_drain": 906.25,
+          "final_drain_ms": 79.02180000382941,
+          "persistence": {
+            "queued": 96,
+            "flushed": 4,
+            "flushes": 1,
+            "errors": 0,
+            "pending": 0,
+            "context_rows": {
+              "sensor_quality": {
+                "pending": 0,
+                "flushed": 8,
+                "errors": 0
+              },
+              "observed_pool": {
+                "pending": 0,
+                "flushed": 96,
+                "errors": 0
+              }
+            }
+          },
+          "contention_ms": 0,
+          "avg_ms": 43.2442750010523,
+          "p95_ms": 46.05250000895467,
+          "physical_connections_per_observation": 1.0,
+          "commits_per_observation": 0.15
+        },
+        {
+          "variant": "baseline151",
+          "candidate_constructions": 0,
+          "observations": 20,
+          "pool_size": 96,
+          "samples_per_sensor": 96,
+          "classifier_rows": 256,
+          "cpu_ms_including_final_drain": 1328.125,
+          "final_drain_ms": 56.00720000802539,
+          "persistence": {
+            "queued": 96,
+            "flushed": 8,
+            "flushes": 2,
+            "errors": 0,
+            "pending": 0
+          },
+          "contention_ms": 200,
+          "avg_ms": 276.07417500039446,
+          "p95_ms": 309.26500000350643,
+          "physical_connections_per_observation": 1.0,
+          "commits_per_observation": 2.05
+        },
+        {
+          "variant": "new152",
+          "candidate_constructions": 0,
+          "observations": 20,
+          "pool_size": 96,
+          "samples_per_sensor": 96,
+          "classifier_rows": 256,
+          "cpu_ms_including_final_drain": 921.875,
+          "final_drain_ms": 84.63500000652857,
+          "persistence": {
+            "queued": 96,
+            "flushed": 4,
+            "flushes": 1,
+            "errors": 0,
+            "pending": 0,
+            "context_rows": {
+              "sensor_quality": {
+                "pending": 0,
+                "flushed": 8,
+                "errors": 0
+              },
+              "observed_pool": {
+                "pending": 0,
+                "flushed": 96,
+                "errors": 0
+              }
+            }
+          },
+          "contention_ms": 200,
+          "avg_ms": 44.40901500056498,
+          "p95_ms": 48.647599993273616,
+          "physical_connections_per_observation": 1.0,
+          "commits_per_observation": 0.15
         }
       ]
     }

@@ -82,6 +82,7 @@ class RuntimeDebugLogService:
         scheduler = None
         engine_error = None
         realtime = None
+        context_persistence = None
         if engine is not None:
             lock = getattr(engine, "lock", None)
             if lock is not None:
@@ -109,6 +110,10 @@ class RuntimeDebugLogService:
                 scheduler = dict(getattr(engine, "inference_scheduler", {}) or {})
                 engine_error = getattr(engine, "error", None)
 
+            tournament = getattr(engine, 'context_tournament', None)
+            if tournament is not None:
+                context_persistence = tournament.shadow_persistence_snapshot()
+
         return {
             "contract_version": CONTRACT_VERSION,
             "generated_at": _now_iso(),
@@ -122,6 +127,7 @@ class RuntimeDebugLogService:
                 "error": engine_error,
                 "realtime": realtime,
                 "inference_scheduler": scheduler,
+                "context_persistence": context_persistence,
             },
             "threads": _thread_snapshot(),
             "notes": {
@@ -140,6 +146,9 @@ class RuntimeDebugLogService:
                 "context_candidate_cache_trace": True,
                 "context_shadow_persistence": "immutable_ram_snapshot_to_canonical_json_writer",
                 "observed_pool_atomic_batch": True,
+                "context_rows_persistence": "coalesced_complete_cumulative_snapshots_background_writer",
+                "context_persistence_metrics": ["context_rows_persist", "context_shadow_persist"],
+                "context_persistence_durability": "prompt_wakeup_on_target_label_periodic_5s_and_explicit_shutdown_barrier; slow_database_may_delay_commit",
                 "resubmit_preserves_trigger_entities": True,
                 "shadow_validation": "observation_only_optimistic_revision_read_no_engine_writer_lock",
                 "trace_storage": "bounded_ram_only",

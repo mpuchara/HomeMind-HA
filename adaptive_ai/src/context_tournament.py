@@ -29,6 +29,7 @@ from context import (
 from settings import OPTIONS
 from process_agent_pipeline import install_process_agent_wrapper
 from telemetry import RUNTIME_DEBUG, TELEMETRY
+from context_row_buffer import ContextRowBuffer
 
 
 SHADOW_MODEL_VERSION = 1
@@ -49,6 +50,7 @@ class ContextTournament:
         self._shadow_dirty = {}
         self._shadow_flush_lock = threading.Lock()
         self._shadow_flush_event = threading.Event()
+        self._context_row_buffers = {}
         self._shadow_persistence_stats = {"queued": 0, "flushed": 0, "flushes": 0, "errors": 0}
         self._last_error_ts = 0.0
         with self.store.lock, self.store.conn() as c:
@@ -73,11 +75,36 @@ class ContextTournament:
                 );
                 """
             )
-        threading.Thread(
+        self._shadow_writer_thread = threading.Thread(
             target=self._shadow_writer,
             name="adaptive-ai-context-shadow-writer",
             daemon=True,
-        ).start()
+        )
+        self._shadow_writer_thread.start()
+
+    def background_persistence_available(self):
+        stop = getattr(self.engine, 'stop_event', None)
+        return bool(stop is not None and not stop.is_set() and self._shadow_writer_thread.is_alive())
+
+    def register_context_rows(self, name, statement):
+        with self.lock:
+            buffer = self._context_row_buffers.get(name)
+            if buffer is None:
+                buffer = ContextRowBuffer(self.store, name, statement)
+                self._context_row_buffers[name] = buffer
+            return buffer
+
+    def _flush_background_context(self):
+        with self.lock:
+            writers = [buffer.flush for buffer in self._context_row_buffers.values()]
+        error = None
+        for write in writers + [self._flush_shadow_models]:
+            try:
+                write()
+            except Exception as exc:
+                error = error or exc
+        if error is not None:
+            raise error
 
     @staticmethod
     def _json_list(raw):
@@ -355,14 +382,22 @@ class ContextTournament:
             finally:
                 TELEMETRY.observe("context_shadow_json", (time.perf_counter() - started) * 1000)
                 RUNTIME_DEBUG.end(trace, status=status)
-            with self.store.lock, self.store.conn() as c:
-                c.executemany(
-                    """INSERT INTO context_tournament_shadow(agent_id,challenger_entity,model_json,updated_ts)
-                       VALUES(?,?,?,?)
-                       ON CONFLICT(agent_id,challenger_entity) DO UPDATE SET
-                         model_json=excluded.model_json,updated_ts=excluded.updated_ts""",
-                    packed,
-                )
+            persisted = time.perf_counter()
+            persist_trace = RUNTIME_DEBUG.begin('context_shadow_persist', models=len(packed)) if RUNTIME_DEBUG.enabled else None
+            status = 'error'
+            try:
+                with self.store.lock, self.store.conn() as c:
+                    c.executemany(
+                        """INSERT INTO context_tournament_shadow(agent_id,challenger_entity,model_json,updated_ts)
+                           VALUES(?,?,?,?)
+                           ON CONFLICT(agent_id,challenger_entity) DO UPDATE SET
+                             model_json=excluded.model_json,updated_ts=excluded.updated_ts""",
+                        packed,
+                    )
+                status = 'ok'
+            finally:
+                TELEMETRY.observe('context_shadow_persist', (time.perf_counter() - persisted) * 1000)
+                RUNTIME_DEBUG.end(persist_trace, status=status)
             with self.lock:
                 self._shadow_persistence_stats["flushed"] += len(packed)
                 self._shadow_persistence_stats["flushes"] += 1
@@ -391,12 +426,12 @@ class ContextTournament:
                 if quiet_for < 0.75 and not stop_event.is_set():
                     stop_event.wait(max(0.0, 0.75 - quiet_for))
             try:
-                self._flush_shadow_models()
+                self._flush_background_context()
             except Exception as exc:
                 self.report_runtime_error(exc)
                 time.sleep(0.1)
         try:
-            self._flush_shadow_models()
+            self._flush_background_context()
         except Exception:
             pass
 
@@ -405,6 +440,7 @@ class ContextTournament:
             return {
                 **self._shadow_persistence_stats,
                 "pending": len(self._shadow_dirty),
+                "context_rows": {name: buffer.snapshot() for name, buffer in self._context_row_buffers.items()},
             }
 
     def _save_shadow_model(self, agent_id, challenger, model):
@@ -538,11 +574,14 @@ class ContextTournament:
                         aid, challenger, sample, actual_idx, action_count, now
                     )
                     scored += 1
-            # Residual learning is durable model state, not disposable telemetry. Preserve
-            # the restart contract while collapsing N challenger writes into one SQLite
-            # transaction per observed target transition.
+            # Complete cumulative snapshots remain in RAM until the writer commits.
+            # Wake it promptly after a label, but do not stall the next decision behind
+            # a slow WAL writer. Explicit flushes and shutdown still wait for durability.
             if scored:
-                self._flush_shadow_models()
+                if self.background_persistence_available():
+                    self._shadow_flush_event.set()
+                else:
+                    self._flush_shadow_models()
 
         predictions = {}
         for challenger in challengers:
