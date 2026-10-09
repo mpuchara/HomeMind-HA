@@ -8,6 +8,20 @@ from support import ROOT
 
 
 class UiStartup159Tests(unittest.TestCase):
+    def test_bootstrap_asset_is_served_before_backend_readiness(self):
+        import main
+        handler = main.Handler.__new__(main.Handler)
+        handler.path = '/ui_bootstrap.js?v=0.14.159'
+        handler.require_trusted_client = lambda: True
+        handler.require_runtime = lambda: self.fail('UI bootstrap must load before backend readiness')
+        responses = []
+        handler.send_bytes = lambda code, body, mime: responses.append((code, body, mime))
+        handler.send_json = lambda code, body: self.fail(f'Unexpected JSON: {code} {body}')
+        main.Handler.do_GET(handler)
+        self.assertEqual(responses, [(200,
+            (ROOT / 'adaptive_ai/src/static/ui_bootstrap.js').read_bytes(),
+            'application/javascript; charset=utf-8')])
+
     def run_node(self, scenario):
         if not shutil.which('node'):
             self.skipTest('Node required')

@@ -16,6 +16,6 @@ Recent event → decision p95 wynosi 185,770 ms, wrapped inference p95 1232,922 
 
 ## Walidacja i instalacja
 
-8 nowych regresji wykonuje rzeczywiste skrypty pollingu i workflow: opóźnioną instalację przycisków, szybkie i wolne API statusu, Live bez czekania na status, ukryty Ingress, stany loading/interactive/complete, fallback load, późną rejestrację i brak podwójnych timerów. Test indeksu pilnuje kolejności klasycznych skryptów. Cały zestaw: 1895 testów. Pełna strona dodatkowo sprawdzona w przeglądarce z celowo wstrzymanym skryptem workflow oraz szybkim i wolnym statusem.
+9 nowych regresji wykonuje rzeczywiste skrypty pollingu i workflow: opóźnioną instalację przycisków, szybkie i wolne API statusu, Live bez czekania na status, ukryty Ingress, stany loading/interactive/complete, fallback load, późną rejestrację i brak podwójnych timerów. Test serwera potwierdza pobranie ui_bootstrap.js przed gotowością backendu. Test indeksu pilnuje kolejności klasycznych skryptów. Cały zestaw: 1896 testów. Pełna strona dodatkowo sprawdzona w przeglądarce z celowo wstrzymanym skryptem workflow oraz szybkim i wolnym statusem.
 
 Paczki HomeMind-Adaptive-AI-0.14.159-addon-root.zip oraz repository.zip z SHA256 są w wydaniu GitHub. Aktualizacja i restart, bez Rebuild. Trening, format modeli, v26, bramki kwalifikacji i sterowanie pozostają bez zmian.
