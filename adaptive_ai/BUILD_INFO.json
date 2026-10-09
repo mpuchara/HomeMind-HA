@@ -1,10 +1,10 @@
 {
-  "version": "0.14.154",
+  "version": "0.14.155",
   "release_date": "2026-10-09",
-  "base_version": "0.14.153",
-  "base_commit": "6f92f392d8ca74cd5ae10843033addb1d7c828d9",
-  "release_status": "runtime-wal-lifetime-and-complete-sqlite-queue-diagnostics",
-  "release_validation_tests_passed": 1806,
+  "base_version": "0.14.154",
+  "base_commit": "f3e93d2dac17b9883b3c7919e017ca5ad475381f",
+  "release_status": "background-passive-wal-checkpoint-with-fallback-and-io-diagnostics",
+  "release_validation_tests_passed": 1829,
   "release_014140": {
     "scope": "inventory_and_remove_remaining_shipped_feature_Handler_fallbacks_for_Candidate_Live_and_manual_feedback_transport",
     "explicit_routes": "manual_feedback.js, candidate_ui.js, candidate_preference_ui.js, /api/candidates, Candidate Teach-RL status/train, generation history/comparison, /api/candidate-live, /api/live and Candidate discard",
@@ -1847,5 +1847,20 @@
         "wall_including_keeper_close_ms": 809.0171000076225
       }
     ]
+  },
+  "release_014155": {
+    "scope": "separate automatic WAL checkpoint disk work from foreground commit and Store.lock; expose checkpoint duration and remaining frames",
+    "evidence": "130235 log: no exposed SQLITE_BUSY/queue errors; 32.087 s inside provenance commit; deferred context rows wait 35.925 s; automatic checkpoint is a supported mechanism, not a proven attribution for every I/O stall",
+    "checkpoint": "thread-owned autocommit connection; PASSIVE; busy_timeout=0; no Store.lock; poll 5 s, 1000-page allocation threshold, max idle attempt 30 s; final attempt before keeper close",
+    "fallback": "foreground connections disable auto-checkpoint only while worker active; setup/thread/checkpoint failure or stop restores 1000 pages on new and subsequently borrowed connections; bounded retry",
+    "diagnostics": "RAM sqlite.wal_checkpoint active/alive/runs/errors/busy results/WAL bytes/frames/timings; sqlite_wal_checkpoint span; autocheckpoint_pages in transaction trace",
+    "durability": "synchronous=NORMAL retained; transaction commit/rollback/visibility retained; power-loss rollback window now follows background checkpoint cadence and any disk stalls, rather than foreground auto-checkpoint threshold",
+    "new_regressions": 23,
+    "validation_tests_expected": 1829,
+    "rebuild_required": false,
+    "training_revision": "shared-home-intents-v26",
+    "training_semantics_changed": false,
+    "control_semantics_changed": false,
+    "limits": "Does not eliminate slow physical I/O, all Store SQL costs, cross-process writer contention or reader-pinned WAL growth. WAL bytes include allocated/reused frames; remaining_frames is sampled at checkpoints. Training workers retain ordinary checkpoint policy."
   }
 }

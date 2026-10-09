@@ -40,6 +40,7 @@ import threading
 from unittest.mock import Mock, patch
 
 order = []
+original_thread_start = threading.Thread.start
 server = Mock()
 server.serve_forever.side_effect = KeyboardInterrupt
 
@@ -55,6 +56,12 @@ def start(thread):
         assert order == ['http']
         order.append('database_and_extensions')
         thread._target()
+    elif thread.name == 'adaptive-ai-sqlite-checkpoint':
+        # Database maintenance starts before the engine's extensions; exercise its
+        # real lifecycle instead of pretending this is an HA/engine worker.
+        assert main.STORE is not None and main.ENGINE is None
+        order.append(thread.name)
+        original_thread_start(thread)
     else:
         engine = main.ENGINE
         assert engine._manual_feedback_equivalence_installed

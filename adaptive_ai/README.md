@@ -1,6 +1,6 @@
-# HomeMind-HA / Adaptive AI 0.14.154
+# HomeMind-HA / Adaptive AI 0.14.155
 
-0.14.154: podtrzymanie WAL przez czas działania dodatku, diagnostyka etapów SQLite i zaległych kolejek zapisu. Aktualizacja i restart; bez Rebuild.
+0.14.155: checkpoint WAL w osobnym wątku, poza commit i blokadą Store, z diagnostyką i fallback. Aktualizacja i restart; bez Rebuild.
 
 
 Cztery akcje każdego agenta: Shadow/Control, Wrong decision, Settings, Teach.
