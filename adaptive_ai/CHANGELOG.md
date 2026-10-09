@@ -1,3 +1,12 @@
+## 0.14.153
+- Okresowe zapisy kontekstu, historii, provenance, cech i fast-light oraz sprzątanie kopii kandydatów używają 250 ms busy timeout SQLite. Retry zachowuje oczekujące partie; końcowe i jawne bariery trwałości zachowują dotychczasowe oczekiwanie.
+- Opcjonalna ocena Shadow używa tej samej krótkiej polityki; błąd pomija ocenę, jest oznaczony w śladzie i nie zmienia wykonanej decyzji championa.
+- Automatyczny flush diagnostyki także ma krótki timeout: raportowanie błędu SQLite nie czeka kolejnych 30 s, zachowuje komunikat w RAM i partię do retry.
+- Odczyt metadanych z RAM nie czeka na blokadę trwałego Store. Nowa wartość trafia do cache dopiero po udanym commit.
+- Runtime Debug zachowuje osobno ostatnie 64 błędne lub długie operacje, także aktywne przy zatrzymaniu logowania. Transakcje pokazują miejsce wywołania, wersję SQLite, timeout i kod błędu bez treści SQL/danych.
+- Połączenie jest zamykane także po błędzie przygotowania PRAGMA. Reużycie połączeń zachowuje niezależne transakcje; nie mierzy czasu bezczynnej sesji jako zapisu.
+- 17 nowych regresji; aktualizacja i restart wystarczą, bez Rebuild.
+
 ## 0.14.152
 - Checkpoint modelu domu nie trzyma blokady sensorów podczas zapisu SQLite; nowe obserwacje pozostają w bieżącym modelu.
 - Pula sensorów i statystyki jakości zapisują pełne, skumulowane snapshoty w tle. Liczniki nie usuwają historycznych próbek, także krótkich wizyt.

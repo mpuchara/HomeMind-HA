@@ -4,6 +4,8 @@ from collections import deque
 import json
 import os
 import sqlite3
+import sys
+from telemetry import RUNTIME_DEBUG
 import threading
 import time
 import uuid
@@ -14,6 +16,7 @@ class Store:
         DATA_DIR.mkdir(parents=True, exist_ok=True)
         self.path = str(path)
         self.lock = threading.RLock()
+        self._meta_lock = threading.RLock()
         self._connection_session = threading.local()
         # Diagnostic events are operational telemetry, not Store transaction state.
         # Keep their tiny RAM ring independently accessible while a large microSD write
@@ -60,35 +63,72 @@ class Store:
             return self._agent_index_revision
 
     @contextmanager
+    def background_sqlite(self):
+        """Bound busy waits for retryable background batches, per thread only.
+
+        This does not alter explicit durability barriers or training worker writes.
+        It limits SQLite contention, not Store lock wait or slow physical I/O.
+        """
+        previous = getattr(self._connection_session, "busy_timeout_ms", None)
+        self._connection_session.busy_timeout_ms = 250
+        try:
+            yield
+        finally:
+            if previous is None:
+                del self._connection_session.busy_timeout_ms
+            else:
+                self._connection_session.busy_timeout_ms = previous
+
+    @contextmanager
     def conn(self):
         borrowed = getattr(self._connection_session, "connection", None)
-        if borrowed is not None and not borrowed.in_transaction:
-            # Reuse setup/page caches, but preserve each caller's transaction boundary.
-            # In particular mode/qualification writes must commit before HA handoff.
-            with borrowed:
-                yield borrowed
-            return
-        # Child training is deliberately lower priority than realtime, so let it wait
-        # longer for the single WAL writer instead of aborting a multi-minute replay on
-        # a transient parent commit. Parent/UI semantics keep the historical 30 s bound.
-        busy_timeout_ms = 60000 if self.training_worker_process else 30000
-        c = sqlite3.connect(self.path, timeout=busy_timeout_ms / 1000.0)
-        c.row_factory = sqlite3.Row
-        c.execute(f"PRAGMA busy_timeout={busy_timeout_ms}")
-        c.execute("PRAGMA synchronous=NORMAL")
-        # Raspberry Pi deployments commonly run from microSD. Keep SQLite temp work and
-        # a useful page working set in RAM instead of generating avoidable card traffic.
-        c.execute("PRAGMA temp_store=MEMORY")
-        c.execute("PRAGMA cache_size=-16384")
+        reuse = borrowed is not None and not borrowed.in_transaction
+        busy_timeout_ms = getattr(self._connection_session, "busy_timeout_ms", None)
+        if busy_timeout_ms is None:
+            busy_timeout_ms = 60000 if self.training_worker_process else 30000
+        trace = None
+        if RUNTIME_DEBUG.enabled and not getattr(self._connection_session, "opening_session", False):
+            frame = sys._getframe(2)
+            trace = RUNTIME_DEBUG.begin(
+                "sqlite_transaction", caller=f"{frame.f_globals.get('__name__')}.{frame.f_code.co_name}:{frame.f_lineno}",
+                busy_timeout_ms=busy_timeout_ms, borrowed=reuse,
+                sqlite_version=sqlite3.sqlite_version,
+            )
+        c = borrowed if reuse else None
+        previous_timeout = None
+        status, error_fields = "ok", {}
         try:
-            c.execute("PRAGMA mmap_size=67108864")
-        except sqlite3.DatabaseError:
-            pass
-        try:
+            if reuse and busy_timeout_ms != getattr(self._connection_session, "connection_busy_timeout_ms", None):
+                previous_timeout = int(c.execute("PRAGMA busy_timeout").fetchone()[0])
+            elif not reuse:
+                c = sqlite3.connect(self.path, timeout=busy_timeout_ms / 1000.0)
+                c.row_factory = sqlite3.Row
+            if not reuse or previous_timeout is not None:
+                c.execute(f"PRAGMA busy_timeout={busy_timeout_ms}")
+            if not reuse:
+                c.execute("PRAGMA synchronous=NORMAL")
+                c.execute("PRAGMA temp_store=MEMORY")
+                c.execute("PRAGMA cache_size=-16384")
+                try:
+                    c.execute("PRAGMA mmap_size=67108864")
+                except sqlite3.DatabaseError:
+                    pass
             with c:
                 yield c
+        except BaseException as exc:
+            status = "error"
+            error_fields = dict(error_type=type(exc).__name__,
+                                sqlite_errorcode=getattr(exc, "sqlite_errorcode", None),
+                                sqlite_errorname=getattr(exc, "sqlite_errorname", None))
+            raise
         finally:
-            c.close()
+            try:
+                if reuse and previous_timeout is not None:
+                    c.execute(f"PRAGMA busy_timeout={previous_timeout}")
+                elif c is not None and not reuse:
+                    c.close()
+            finally:
+                RUNTIME_DEBUG.end(trace, status=status, **error_fields)
 
     @contextmanager
     def connection_session(self):
@@ -103,12 +143,19 @@ class Store:
         if existing is not None:
             yield existing
             return
-        with self.conn() as connection:
-            self._connection_session.connection = connection
-            try:
-                yield connection
-            finally:
-                del self._connection_session.connection
+        self._connection_session.opening_session = True
+        try:
+            with self.conn() as connection:
+                self._connection_session.opening_session = False
+                self._connection_session.connection = connection
+                self._connection_session.connection_busy_timeout_ms = int(connection.execute("PRAGMA busy_timeout").fetchone()[0])
+                try:
+                    yield connection
+                finally:
+                    del self._connection_session.connection
+                    del self._connection_session.connection_busy_timeout_ms
+        finally:
+            self._connection_session.opening_session = False
 
     def _init(self):
         with self.lock, self.conn() as c:
@@ -274,7 +321,7 @@ class Store:
     def _load_meta_cache(self):
         with self.conn() as c:
             rows = c.execute("SELECT key,value FROM app_meta").fetchall()
-        with self.lock:
+        with self._meta_lock:
             self._meta_cache = {str(row[0]): str(row[1]) for row in rows}
 
     def _load_recent_events(self):
@@ -769,7 +816,10 @@ class Store:
             if str(level).lower() == "error" or pending >= 64 or age >= 5.0:
                 # Diagnostic durability may lag briefly, but realtime inference must
                 # never wait behind an unrelated Store transaction.
-                self.flush_events(nonblocking=True)
+                # Also bound an external SQLite writer: acquiring the in-process
+                # Store lock without waiting alone does not make disk access fast.
+                with self.background_sqlite():
+                    self.flush_events(nonblocking=True)
         except Exception as exc:
             print(f"[event] {exc}", flush=True)
 
@@ -1154,7 +1204,7 @@ class Store:
 
     def meta_get(self, key, default=None):
         key = str(key)
-        with self.lock:
+        with self._meta_lock:
             return self._meta_cache.get(key, default)
 
     def migrate_models(self):
@@ -1186,11 +1236,13 @@ class Store:
     def meta_set(self, key, value):
         key, value = str(key), str(value)
         with self.lock:
-            if self._meta_cache.get(key) == value:
-                return False
+            with self._meta_lock:
+                if self._meta_cache.get(key) == value:
+                    return False
             with self.conn() as c:
                 c.execute("INSERT INTO app_meta(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", (key, value))
-            self._meta_cache[key] = value
+            with self._meta_lock:
+                self._meta_cache[key] = value
         return True
 
 

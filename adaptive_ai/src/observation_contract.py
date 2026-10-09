@@ -6,6 +6,7 @@ extractor + historical view) rather than adding per-agent wrappers.  Executor ow
 untouched.
 """
 from __future__ import annotations
+from sqlite_background import background_sqlite
 
 from bisect import bisect_right
 from collections import deque
@@ -2108,7 +2109,8 @@ def install(core):
             journal_event.wait(2.0)
             journal_event.clear()
             try:
-                flush_feature_journal()
+                with background_sqlite(store):
+                    flush_feature_journal()
             except Exception as exc:
                 try:
                     store.event(

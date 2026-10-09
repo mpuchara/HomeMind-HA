@@ -11,6 +11,7 @@ prediction and a bounded sensor-value bucket. It learns only from later observed
 transitions. This makes shadow comparison cheap enough to run alongside normal inference
 while leaving the production control path untouched.
 """
+from sqlite_background import background_sqlite
 import json
 import pickle
 import math
@@ -426,7 +427,8 @@ class ContextTournament:
                 if quiet_for < 0.75 and not stop_event.is_set():
                     stop_event.wait(max(0.0, 0.75 - quiet_for))
             try:
-                self._flush_background_context()
+                with background_sqlite(self.store):
+                    self._flush_background_context()
             except Exception as exc:
                 self.report_runtime_error(exc)
                 time.sleep(0.1)
@@ -705,15 +707,17 @@ def install(store, engine):
         trace = (RUNTIME_DEBUG.begin(
             "context_shadow_observation", agent_id=str(agent["id"])
         ) if RUNTIME_DEBUG.enabled else None)
+        status = "ok"
         try:
             session = getattr(store, "connection_session", None)
-            with session() if callable(session) else nullcontext():
+            with background_sqlite(store), session() if callable(session) else nullcontext():
                 service.observe_shadow(agent, state_map, changed_entities)
         except Exception as exc:
+            status = "error"
             service.report_runtime_error(exc)
         finally:
             TELEMETRY.observe("context_shadow_observation", (time.perf_counter() - started) * 1000)
-            RUNTIME_DEBUG.end(trace)
+            RUNTIME_DEBUG.end(trace, status=status)
         return result
 
     engine.policy = policy_with_tournament

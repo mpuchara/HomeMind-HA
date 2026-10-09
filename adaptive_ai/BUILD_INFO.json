@@ -1,10 +1,10 @@
 {
-  "version": "0.14.152",
+  "version": "0.14.153",
   "release_date": "2026-10-09",
-  "base_version": "0.14.151",
-  "base_commit": "d278c9af677dcccfd65e704c61a50dfdd593c9b1",
-  "release_status": "background-context-observations-and-short-live-state-locks",
-  "release_validation_tests_passed": 1773,
+  "base_version": "0.14.152",
+  "base_commit": "964d3b8d65e75a105b2fd0953bde234ad25bd966",
+  "release_status": "bounded-background-sqlite-contention-and-protected-debug-evidence",
+  "release_validation_tests_passed": 1790,
   "release_014140": {
     "scope": "inventory_and_remove_remaining_shipped_feature_Handler_fallbacks_for_Candidate_Live_and_manual_feedback_transport",
     "explicit_routes": "manual_feedback.js, candidate_ui.js, candidate_preference_ui.js, /api/candidates, Candidate Teach-RL status/train, generation history/comparison, /api/candidate-live, /api/live and Candidate discard",
@@ -1747,5 +1747,23 @@
         }
       ]
     }
+  },
+  "release_014153": {
+    "scope": "SQLite busy wait policy for retryable periodic persistence and optional shadow observation; independent committed metadata cache reads; protected bounded debug evidence",
+    "background_busy_timeout_ms": 250,
+    "default_busy_timeout_ms": 30000,
+    "training_worker_busy_timeout_ms": 60000,
+    "explicit_barriers": "final writer flush and explicit durability calls retain default waiting/transaction boundaries",
+    "retry": "existing bounded batch restoration retained, newest cumulative context snapshot wins",
+    "metadata": "separate cache lock; publish after commit only",
+    "trace": "last 64 failed or >=2000ms completed spans, plus unfinished slow spans when stopped; separate from ordinary 4096-entry ring; SQLite transaction caller/version/code without SQL or bindings",
+    "limits": "busy timeout is not a wall clock deadline; Store lock wait, slow physical I/O and authoritative durable writes may still be slow; optional shadow evaluation can skip a contended iteration; no exact owner of overwritten 35s stall established",
+    "new_regressions": 17,
+    "validation_tests_expected": 1790,
+    "rebuild_required": false,
+    "training_revision": "shared-home-intents-v26",
+    "training_semantics_changed": false,
+    "control_semantics_changed": false,
+    "diagnostic_events": "automatic diagnostic flush uses 250ms busy timeout too, including error reporting; RAM feed and failed batch retained; explicit final flush unchanged"
   }
 }

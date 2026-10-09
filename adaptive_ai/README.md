@@ -1,6 +1,6 @@
-# HomeMind-HA / Adaptive AI 0.14.152
+# HomeMind-HA / Adaptive AI 0.14.153
 
-0.14.152: zapis modelu domu nie blokuje sensorów; obserwacje puli i jakości kontekstu oraz nauka kandydatów korzystają z zapisu w tle. Bez Rebuild. Przy restarcie oczekujące dane są zapisywane.
+0.14.153: krótsze oczekiwanie SQLite w tle, niezależny od dysku odczyt metadanych oraz zachowanie długich operacji i błędów w Runtime Debug. Aktualizacja i restart; bez Rebuild.
 
 
 Cztery akcje każdego agenta: Shadow/Control, Wrong decision, Settings, Teach.
