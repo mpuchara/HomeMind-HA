@@ -1,6 +1,6 @@
-# HomeMind-HA / Adaptive AI 0.14.158
+# HomeMind-HA / Adaptive AI 0.14.159
 
-0.14.158: szybsze dopasowanie klasyfikatora dzięki pominięciu kolumn już zerowanych jako stałe oraz pomiar etapów uczenia Shadow. Aktualizacja i restart; bez Rebuild.
+0.14.159: pierwsze karty agentów korzystają od razu z aktualnych nazw i przycisków; odczyty startują po instalacji wszystkich warstw UI. Aktualizacja i restart; bez Rebuild.
 
 
 Cztery akcje każdego agenta: Shadow/Control, Wrong decision, Settings, Teach.

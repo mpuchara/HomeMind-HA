@@ -1,3 +1,9 @@
+## 0.14.159
+- Odczyty statusu, Live i Candidate startują po instalacji kompletu warstw UI. Szybka odpowiedź API podczas pobierania późniejszych skryptów nie tworzy już kart ze starszymi przyciskami.
+- Pierwsza karta pokazuje od razu Decision strength i aktualne akcje generacji. Odczyt Live nadal może wyświetlić Current/Desired bez oczekiwania na pełny status serwera.
+- Zachowane interwały i pierwsza hydratacja Candidate w ukrytym iframe Ingress. Jednorazowy start blokuje także przedwczesne zdarzenia odświeżania i nie powiela timerów.
+- 8 nowych regresji, 1895 testów; zmiana wyłącznie frontendowa. Aktualizacja i restart, bez Rebuild.
+
 ## 0.14.158
 - Klasyfikator desired-state nie przelicza już kolumn, które dotychczasowy próg wariancji zerował. Wszystkie zmienne cechy i ich oryginalne identyfikatory pozostają; zapis ma nadal pełne wymiary modelu.
 - Normalizacja, wagi ON/OFF/przykładów, funkcja celu, 160 kroków, ridge/hinge i częstotliwość fit pozostają. Różnić się może zaokrąglenie redukcji float; testy porównują pełną starą matematykę i decyzje.

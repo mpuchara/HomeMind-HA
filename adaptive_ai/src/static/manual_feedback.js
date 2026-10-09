@@ -20,7 +20,7 @@
 
   window.applyLiveValues=()=>{for(const a of lastAgents){const live=liveValues.get(String(a.id));if(live)a.runtime={...a.runtime,...live};}};
   async function refreshLive(){
-    if(liveBusy||document.hidden||window.__adaptiveAiRuntimeReady===false)return;
+    if(window.__adaptiveAiUiReady===false||liveBusy||document.hidden||window.__adaptiveAiRuntimeReady===false)return;
     liveBusy=true;const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),2500);
     try{
       const data=await api('api/live'+(!lastAgents.length?'?bootstrap=1':''),{signal:controller.signal});
@@ -50,7 +50,8 @@
   }
   async function liveLoop(){const started=performance.now();await refreshLive();setTimeout(liveLoop,Math.max(100,500-(performance.now()-started)));}
   document.addEventListener('visibilitychange',()=>{if(!document.hidden)refreshLive();});
-  liveLoop();
+  if(window.whenAdaptiveUiReady)window.whenAdaptiveUiReady(liveLoop);
+  else liveLoop();
 
   // Existing Wrong decision contract. Keep this path independent from historical Teach RL.
   async function submit(id,body,button){
