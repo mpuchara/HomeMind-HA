@@ -42,6 +42,8 @@ TARGETED_MODE = "targeted_sensor"
 FREE_REASON = "explore_free"
 FREE_TRAIN_REASON = "explore_free_training"
 TARGETED_REASON = "explore_targeted_sensor"
+SIGNAL_MODE = "additional_signal"
+SIGNAL_REASON = "explore_additional_signal"
 TARGETED_ACTIVE_STATES = {"evaluating"}
 
 
@@ -472,6 +474,33 @@ def _start_free_training(manager, row):
         return True
 
 
+def _start_signal_training(manager, row):
+    queue = manager._queue()
+    session = _session_for_child_agent(manager.store, row["candidate_id"], mode=SIGNAL_MODE)
+    if session is None or queue is None or queue.status_for(row["candidate_id"]):
+        return False
+    from additional_signal import child_config_matches
+    parent = manager.store.get_agent_config(row["parent_agent_id"])
+    candidate = manager.store.get_agent_config(row["candidate_id"])
+    if not child_config_matches(manager.store, parent, candidate):
+        manager._fail(row, "Additional signal parent/configuration changed; create a fresh child")
+        return True
+    # The ordinary Teach context refresh is inappropriate here: it would replace
+    # a user's new signal with the schema selected for the old objective.
+    queued, claim = manager._claim_candidate_training_job(candidate["id"], rebuild=True, reason=SIGNAL_REASON)
+    if queued is None:
+        return False
+    now = time.time()
+    with manager.store.lock, manager.store.conn() as c:
+        c.execute("""UPDATE agent_candidates SET state='building',build_revision=feedback_revision,
+            dirty=0,build_started_ts=?,build_finished_ts=NULL,comparison_started_ts=NULL,
+            comparison_json='{}',offline_gate_json='{}',last_error=NULL,updated_ts=?
+            WHERE parent_agent_id=? AND candidate_id=?""", (now, now, parent["id"], candidate["id"]))
+    _merge_result(manager.store, session["session_id"], status="training",
+                  patch={"message": "Training additional context; Live parent remains unchanged"})
+    return True
+
+
 def _finish_free_training(manager, row):
     fresh = manager._candidate_row(row["parent_agent_id"]) or row
     if str(fresh.get("state") or "") not in ("comparing", "ready"):
@@ -735,6 +764,8 @@ def install(manager, *, legacy_get=True, legacy_post=True):
 
     def start_build(row):
         reason = str(row.get("reason") or "")
+        if reason == SIGNAL_REASON:
+            return _start_signal_training(manager, row)
         if reason in (FREE_REASON, TARGETED_REASON):
             generation = lineage_row(manager.store, agent_id=row.get("candidate_id"))
             if generation:
@@ -747,6 +778,17 @@ def install(manager, *, legacy_get=True, legacy_post=True):
 
     def finish_build(row):
         result = original_finish_build(row)
+        if result and str(row.get("reason") or "") == SIGNAL_REASON:
+            fresh = manager._candidate_row(row["parent_agent_id"]) or row
+            if str(fresh.get("state")) in ("comparing", "ready"):
+                parent = manager.store.get_agent_config(row["parent_agent_id"])
+                candidate = manager.store.get_agent_config(row["candidate_id"])
+                gate = _offline_gate(parent, _benchmark_stats(parent), _benchmark_stats(candidate), {})
+                _persist_gate(manager, fresh, gate)
+                session = _session_for_child_agent(manager.store, candidate["id"], mode=SIGNAL_MODE)
+                _merge_result(manager.store, session["session_id"], status="comparing" if gate.get("passed") else "blocked",
+                    patch={"message": "Checking future daylight preference and dark-room safety" if gate.get("passed")
+                           else "Historical safety gate needs more evidence", "offline_gate": gate})
         if result and str(row.get("reason") or "") == FREE_TRAIN_REASON:
             _finish_free_training(manager, row)
         return result
@@ -773,6 +815,40 @@ def install(manager, *, legacy_get=True, legacy_post=True):
         _preflight_child(manager, generation, allow_coalesce=False)
         body = dict(payload or {})
         mode = str(body.get("mode") or "").strip()
+
+        if mode == SIGNAL_MODE:
+            from additional_signal import normalize
+            from agent_candidate_config_guard import config_signature
+            from lighting_conditions import illumination_sensor
+            from context import is_fast_reactive_agent, is_electrical_measurement_entity
+            config = normalize(body.get("additional_signal"))
+            if config is None or not is_fast_reactive_agent(agent) or agent.get("target_property") != "power":
+                raise ValueError("Additional illumination context supports light/relay power agents")
+            with manager.engine.lock:
+                state = dict(manager.engine.state_map).get(config["entity_id"])
+            if not state or state.get("state") in ("unknown", "unavailable") or not illumination_sensor(config["entity_id"], state):
+                raise ValueError("Choose an available illumination sensor (lux or raw LD2410 light)")
+            if is_electrical_measurement_entity(config["entity_id"], state):
+                raise ValueError("An electrical measurement cannot be the illumination reference")
+            unit = str((state.get("attributes") or {}).get("unit_of_measurement") or "raw").lower()
+            config = normalize({**config, "unit": unit})
+            if config == agent.get("additional_signal"):
+                raise ValueError("This additional signal configuration is already active")
+            # Session/config publication shares the worker's manager lock. A worker
+            # cannot start a half-configured child between enqueue and the snapshot.
+            with manager.lock:
+                created = _create_or_coalesce_child(manager, generation, SIGNAL_REASON, "explore", allow_coalesce=False)
+                child = lineage_row(manager.store, generation_id=created["child_generation_id"])
+                session = _insert_session(manager, generation, child["generation_id"], mode=SIGNAL_MODE,
+                    sensor=config["entity_id"], status="queued", requested={"additional_signal": config,
+                    "parent_signature": config_signature(agent)}, previous={"additional_signal": agent.get("additional_signal")})
+                manager.store.update_agent(child["agent_id"], {"additional_signal": config})
+                manager.engine.models.pop(child["agent_id"], None)
+                _refresh_generation_metadata(manager.store, child["agent_id"])
+                _mark_edge(manager, child["generation_id"], "queued", reason=SIGNAL_REASON,
+                           lineage_state="queued", dirty=True)
+            manager.wake_event.set()
+            return {**created, "mode": SIGNAL_MODE, "session": _session_payload(manager, session)}
 
         if mode == FREE_MODE:
             root = manager.store.get_agent_config(str(generation["root_agent_id"]))
@@ -844,10 +920,10 @@ def install(manager, *, legacy_get=True, legacy_post=True):
                     "child_generation_id": created["child_generation_id"],
                     "session": _session_payload(manager, session)}
 
-        raise ValueError("Explore mode must be 'free' or 'targeted_sensor'")
+        raise ValueError("Explore mode must be free, targeted_sensor or additional_signal")
 
     def workflow_explore_status(ref):
-        generation, _ = _resolve_generation(manager, ref)
+        generation, selected_agent = _resolve_generation(manager, ref)
         session = _latest_for_parent(manager.store, generation["generation_id"])
         if session and session.get("mode") == TARGETED_MODE and session.get("status") in TARGETED_ACTIVE_STATES:
             child = lineage_row(manager.store, generation_id=session["child_generation_id"])
@@ -867,6 +943,7 @@ def install(manager, *, legacy_get=True, legacy_post=True):
             "active_probe_contract": "existing_live_policy_to_action_intent_to_executor_only",
             "targeted_contract": "forced_priority_not_evidence_override_prequential_future_only",
             "session": _session_payload(manager, session),
+            "additional_signal": selected_agent.get("additional_signal"),
         }
 
     def decorate_status(result):

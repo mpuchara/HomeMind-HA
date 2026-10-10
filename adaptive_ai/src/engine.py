@@ -1362,6 +1362,8 @@ class Engine(threading.Thread):
         """
         deps = {str(agent.get("target_entity") or "")}
         configured_inputs = agent.get("input_entities") or ()
+        from additional_signal import entities as additional_entities
+        deps.update(additional_entities(agent))
         deps.update(
             str(eid) for eid in configured_inputs
             if isinstance(eid, str) and eid and eid != "*"
@@ -1949,7 +1951,7 @@ class Engine(threading.Thread):
         raw_prediction = float(chosen["value"])
         forecast = context_meta.get('home_forecast', {})
         from lighting_conditions import lighting_context
-        lighting = lighting_context(policy.selection_meta, state_map)
+        lighting = lighting_context(policy.selection_meta, state_map, now_ts(), self.temporal_history)
         rt["lighting_context"] = lighting
         context_meta["lighting_context"] = lighting
         assist_idx = fast_light_on_assist_action(
@@ -1980,6 +1982,26 @@ class Engine(threading.Thread):
                     index=int(assist_idx),
                 )
 
+        from additional_signal import evaluate as evaluate_signal, apply as apply_signal, stabilize as stabilize_signal
+        signal_evidence = stabilize_signal(evaluate_signal(agent, state_map, now_ts(), self.temporal_history),
+                                           rt.get("additional_signal"))
+        signal_current = rt.get("additional_signal_virtual_power", current) if agent.get("mode") == "shadow" else current
+        if teaching or (preference or {}).get("applied"):
+            signal_current = current
+        signal_value, signal_applied = apply_signal(
+            agent, signal_current, chosen["value"], signal_evidence,
+            "user_instruction" if teaching or (preference or {}).get("applied") or trial else decision_source)
+        rt["additional_signal"] = {**signal_evidence, "applied": signal_applied}
+        context_meta["additional_signal"] = rt["additional_signal"]
+        if signal_applied:
+            signal_idx = min(range(len(policy.actions)), key=lambda i: abs(policy.actions[i]-signal_value))
+            selected_arm = next((arm for arm in arms if int(arm["index"]) == signal_idx), None)
+            if selected_arm:
+                chosen = {**chosen, **selected_arm, "value": signal_value, "index": signal_idx}
+                confidence = min(confidence, policy.heads[int(horizon)].structural_confidence(arms, signal_idx))
+                support, novelty = selected_arm.get("support", support), selected_arm.get("novelty", novelty)
+                decision_source = "additional_signal_preference"
+
         stabilized_value, off_confirmation = stabilize_fast_light_power_decision(
             agent, rt, current, float(chosen["value"]), decision_source, now_ts()
         )
@@ -1997,6 +2019,7 @@ class Engine(threading.Thread):
             chosen = dict(chosen, value=float(stabilized_value), index=int(current_idx))
 
         rt['teaching_id'] = teaching['id'] if teaching else None
+        rt["additional_signal_virtual_power"] = float(chosen["value"])
         rt['decision_source'] = decision_source
         rt['preference_model'] = preference
         rt['instruction_scope'] = (instruction or {}).get('scope') if instruction else None
@@ -2204,6 +2227,7 @@ class Engine(threading.Thread):
             "last_reward": rt.get("last_reward"),
             "last_reward_reason": rt.get("last_reward_reason"),
             "context_meta": rt.get("context_meta") or (dict(policy.selection_meta) if policy else {}),
+            "additional_signal": rt.get("additional_signal"),
             "top_context": rt.get("top_context") or [],
             "sensor_recommendations": recs,
             "present_capabilities": present,

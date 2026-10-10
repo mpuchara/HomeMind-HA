@@ -94,7 +94,8 @@ def _promotion_gate_report(manager, row, parent, candidate, summary):
     model = manager.store.get_model(candidate["id"]) if candidate and candidate.get("id") else None
     row_state = str(row.get("state") or "comparing")
     fresh = bool(summary.get("fresh_feedback_revision"))
-    config_matches = bool(parent and candidate and config_signature(parent) == config_signature(candidate))
+    from additional_signal import child_config_matches
+    config_matches = bool(parent and candidate and child_config_matches(manager.store, parent, candidate))
     model_version = model.get("version") if isinstance(model, dict) else None
     version_config_ok = bool(config_matches and model_version is not None)
     execution_ok = bool(
@@ -117,6 +118,7 @@ def _promotion_gate_report(manager, row, parent, candidate, summary):
         summary.get("preference_confidence_threshold") or DEFAULT_MIN_PREFERENCE_CONFIDENCE
     )
     offline_ok = bool(summary.get("offline_gate_passed"))
+    signal_goal = (candidate or {}).get("additional_signal") or {}
 
     gates = {
         "data_freshness": _gate(
@@ -197,6 +199,15 @@ def _promotion_gate_report(manager, row, parent, candidate, summary):
              "model_present": bool(model)},
         ),
     }
+    if signal_goal.get("purpose") == "avoid_bright_on":
+        coverage = summary.get("additional_signal_evidence") or {}
+        bright, dark = int(coverage.get("bright") or 0), int(coverage.get("dark") or 0)
+        p_dark, c_dark = coverage.get("parent_dark_accuracy"), coverage.get("candidate_dark_accuracy")
+        dark_ok = dark >= 4 and c_dark is not None and p_dark is not None and c_dark + .03 >= p_dark
+        gates["additional_signal_objective"] = _gate(bright >= 4 and dark_ok,
+            "Daylight objective and dark-entry safety proved" if bright >= 4 and dark_ok
+            else "Need at least four daylight and four dark entries without dark-entry regression",
+            CUSTOM_OVERRIDE_NEVER, coverage)
     vetoes = [
         {"gate": name, "reason": gate["reason"], "custom_override": gate["custom_override"]}
         for name, gate in gates.items() if not gate["passed"]
@@ -363,6 +374,7 @@ def _fast_metrics(manager, row, parent, candidate, base_summary, candidate_statu
     per_action = {"0.0": 0, "1.0": 0}
     on_leads = []
     off_leads = []
+    signal_counts = {"bright": 0, "dark": 0, "parent_dark_correct": 0, "candidate_dark_correct": 0}
 
     for index, pair in enumerate(pairs):
         outcome = _binary(pair.get("outcome"))
@@ -370,6 +382,22 @@ def _fast_metrics(manager, row, parent, candidate, base_summary, candidate_statu
         per_action[key] = int(per_action.get(key, 0)) + 1
         p_ok = bool(pair.get("parent_correct"))
         c_ok = bool(pair.get("child_correct"))
+        objective = pair.get("objective_outcome")
+        objective_source = pair.get("objective_source")
+        if objective is not None:
+            outcome = _binary(objective)
+            p_ok = _binary(pair.get("parent_prediction")) == outcome
+            c_ok = _binary(pair.get("child_prediction")) == outcome
+            # Move only this opportunity between the objective's action buckets.
+            per_action[key] -= 1
+            key = str(outcome)
+            per_action[key] = int(per_action.get(key, 0)) + 1
+        if objective_source == "configured_daylight_preference":
+            signal_counts["bright"] += 1
+        elif objective_source == "dark_observed_action":
+            signal_counts["dark"] += 1
+            signal_counts["parent_dark_correct"] += int(p_ok)
+            signal_counts["candidate_dark_correct"] += int(c_ok)
         parent_correct += int(p_ok)
         child_correct += int(c_ok)
         window = _window_for(outcome)
@@ -381,13 +409,14 @@ def _fast_metrics(manager, row, parent, candidate, base_summary, candidate_statu
             c_lead = pair.get("child_lead_seconds")
         p_lead = max(0.0, _finite(p_lead))
         c_lead = max(0.0, _finite(c_lead))
-        parent_utility_sum += _timing_utility(p_ok, p_lead, window)
-        child_utility_sum += _timing_utility(c_ok, c_lead, window)
+        parent_utility_sum += (1.0 if p_ok else -1.0) if objective_source == "configured_daylight_preference" else _timing_utility(p_ok, p_lead, window)
+        child_utility_sum += (1.0 if c_ok else -1.0) if objective_source == "configured_daylight_preference" else _timing_utility(c_ok, c_lead, window)
         if c_ok:
             success_weight += _opportunity_weight(index, len(pairs), half_life)
         else:
             failure_weight += _opportunity_weight(index, len(pairs), half_life)
-        (on_leads if outcome >= 0.5 else off_leads).append((p_lead, c_lead))
+        if objective_source != "configured_daylight_preference":
+            (on_leads if outcome >= 0.5 else off_leads).append((p_lead, c_lead))
 
     created_ts = float(generation.get("created_ts") or row.get("queued_ts") or 0.0)
     corrections = _manual_corrections(manager.store, generation, created_ts)
@@ -400,6 +429,8 @@ def _fast_metrics(manager, row, parent, candidate, base_summary, candidate_statu
     failure_weight += correction_weight
 
     count = len(pairs)
+    signal_counts["parent_dark_accuracy"] = signal_counts["parent_dark_correct"] / signal_counts["dark"] if signal_counts["dark"] else None
+    signal_counts["candidate_dark_accuracy"] = signal_counts["candidate_dark_correct"] / signal_counts["dark"] if signal_counts["dark"] else None
     parent_accuracy = float(parent_correct) / count if count else None
     child_accuracy = float(child_correct) / count if count else None
     parent_utility = parent_utility_sum / count if count else None
@@ -435,6 +466,7 @@ def _fast_metrics(manager, row, parent, candidate, base_summary, candidate_statu
         "required_future_samples_per_action": min_per_action,
         "per_action_ready": per_action_ready,
         "fast_per_action_samples": per_action,
+        "additional_signal_evidence": signal_counts,
         "parent_transition_accuracy": parent_accuracy,
         "candidate_transition_accuracy": child_accuracy,
         "timing_parent_utility": parent_utility,

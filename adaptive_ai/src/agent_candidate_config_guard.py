@@ -21,6 +21,7 @@ _POLICY_FIELDS = (
     "exploration_step",
     "exploration_interval",
     "input_entities",
+    "additional_signal",
 )
 _TARGET_FIELDS = ("target_entity", "target_property")
 
@@ -33,6 +34,9 @@ def _normalized(agent):
         value = agent.get(key)
         if key == "input_entities":
             value = tuple(str(x) for x in (value or ["*"]))
+        elif key == "additional_signal":
+            from additional_signal import normalize
+            value = normalize(value)
         elif key not in _TARGET_FIELDS and value is not None:
             value = float(value)
         elif value is not None:
@@ -107,6 +111,9 @@ def install(manager):
                 manager._fail(row, "Live target changed; discard this Candidate and create a fresh generation")
                 return True
             payload = _sync_payload(parent, candidate)
+            from additional_signal import child_config_matches
+            if child_config_matches(store, parent, candidate):
+                payload.pop("additional_signal", None)
             if payload:
                 original_update(candidate["id"], payload)
                 manager.engine.models.pop(candidate["id"], None)
@@ -122,7 +129,8 @@ def install(manager):
             return result
         parent = store.get_agent_config(result["parent_agent_id"])
         candidate = store.get_agent_config(result["candidate_id"])
-        matches = config_signature(parent) == config_signature(candidate)
+        from additional_signal import child_config_matches
+        matches = child_config_matches(store, parent, candidate)
         result["candidate_config_matches_live"] = bool(matches)
         result["config_stale"] = not bool(matches)
         if not matches:
@@ -140,7 +148,8 @@ def install(manager):
                 return original_promote(parent_id)
             parent = store.get_agent_config(row["parent_agent_id"])
             candidate = store.get_agent_config(row["candidate_id"])
-            if config_signature(parent) != config_signature(candidate):
+            from additional_signal import child_config_matches
+            if not child_config_matches(store, parent, candidate):
                 raise ValueError("Live agent configuration changed; rebuild Candidate before Promote")
             return original_promote(parent_id)
 

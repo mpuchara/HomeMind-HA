@@ -498,6 +498,7 @@ class AgentCandidateManager(threading.Thread):
             "micro_exploration": False,
             "auto_created": False,
             "input_entities": list(parent.get("input_entities") or ["*"]),
+            "additional_signal": parent.get("additional_signal"),
         }
         candidate = self.store.create_agent(payload)
         live_model = self.store.get_model(parent["id"])
@@ -1010,6 +1011,10 @@ class AgentCandidateManager(threading.Thread):
                      json.dumps(comparison, separators=(",", ":"))),
                 )
             self.store.save_model(parent_id, model)
+            with self.store.lock, self.store.conn() as c:
+                c.execute("UPDATE agents SET additional_signal=? WHERE id=?",
+                          (json.dumps(candidate.get("additional_signal")), parent_id))
+            self.store.touch_agent_index()
             self.store.set_training_state(
                 parent_id, "qualified",
                 score=candidate.get("benchmark_score"),

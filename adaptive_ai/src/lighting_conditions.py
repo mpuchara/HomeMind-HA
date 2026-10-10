@@ -112,7 +112,7 @@ def _evaluate(tree, states):
     return True, truth, ids
 
 
-def lighting_context(selection_meta, states):
+def _automation_lighting_context(selection_meta, states):
     """ON illumination eligibility, independent of occupancy and agent predictions."""
     meta = selection_meta or {}
     infos = list(meta.get("automation_baseline_automations") or [])
@@ -144,6 +144,18 @@ def lighting_context(selection_meta, states):
     need = True if True in rows else None if None in rows else False
     return {"configured": True, "need": need, "sensors": sorted(ids),
             "reason": "illumination_allowed" if need is True else "bright_enough" if need is False else "illumination_unknown"}
+
+
+def lighting_context(selection_meta, states, at_ts=None, temporal=None):
+    out = _automation_lighting_context(selection_meta, states)
+    from additional_signal import evaluate
+    evidence = evaluate(selection_meta, states, at_ts, temporal)
+    if evidence.get("purpose") == "avoid_bright_on":
+        out = {**out, "configured": True, "additional_signal": evidence,
+               "sensors": sorted(set(out["sensors"]) | {evidence["entity_id"]})}
+        if evidence.get("need") is not True:
+            out.update(need=evidence["need"], reason=evidence["reason"])
+    return out
 
 
 def direct_on_conditions(actions):

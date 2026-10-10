@@ -242,6 +242,8 @@ def plan_target_schema(agent, policy, challenger, tournament, health_lookup=None
         return {"schema": active + [challenger], "replaced": None,
                 "replacement_is_primary": False, "primary_broken": False, "reason": "append"}
     explicit = {str(x) for x in (agent.get("input_entities") or [])}
+    from additional_signal import entities as additional_entities
+    explicit.update(additional_entities(agent))
     primary = primary_feature_ids(policy)
     scores = dict((tournament or {}).get("feature_scores") or {})
     removable = []

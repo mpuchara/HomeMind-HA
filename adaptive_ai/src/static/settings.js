@@ -30,6 +30,7 @@ window.editAgent = function(id) {
     ${fields.map(([key,label,step,min,max]) => `<label>${label}<input name="${key}" type="number" step="${step}" ${min===null?'':`min="${min}"`} ${max===null?'':`max="${max}"`} value="${esc(a[key]??0)}" required></label>`).join('')}
     <label>Encje kontekstu: * = automatyczny dobór ze wszystkich<input name="input_entities" value="${esc((a.input_entities||['*']).join(', '))}" required></label>
     ${reviewBlock}
+    ${a.additional_signal?`<p>Dodatkowa jasność: ${esc(a.additional_signal.entity_id)} · ${a.additional_signal.purpose==='avoid_bright_on'?`pomijanie włączeń od progu ${esc(a.additional_signal.threshold)} z marginesem ${esc(a.additional_signal.hysteresis)}`:'kontekst treningu'}. Zmień przez Explore → Dodatkowa jasność.</p>`:''}
     <p>Możesz wpisać identyfikatory czujników oddzielone przecinkami. Zmiana kontekstu lub zakresu przebuduje model. Czas stabilizacji nie jest automatycznie wyliczany z fizycznego efektu.</p>
     <details><summary>Diagnostyka i szczegóły agenta</summary>${window.agentDiagnostics?.(a)||''}</details>
     <div class="settings-tools"><b>Pozostałe operacje</b><div class="actions">

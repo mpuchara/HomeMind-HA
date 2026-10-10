@@ -623,6 +623,8 @@ def select_context_entities(agent, state_map, registry, hint_entities, max_entit
     need_caps = {x[0] for x in SENSOR_NEEDS.get(domain, [])}
     hints = set(hint_entities or ())
     requested = set(agent.get("input_entities") or ["*"])
+    from additional_signal import entities as additional_entities
+    requested.update(additional_entities(agent))
     excluded_control_entities, exclusion_meta = controllable_context_exclusions(state_map, registry)
     excluded_electrical_entities, electrical_meta = electrical_context_exclusions(state_map, registry)
     excluded_context_entities = excluded_control_entities | excluded_electrical_entities
