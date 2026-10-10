@@ -2360,12 +2360,13 @@
       "previous_written_rows": 52,
       "current_written_rows": 36,
       "speedup_range": [
-        1.66,
-        2.47
+        1.326,
+        1.356
       ],
       "every_live_result_and_model_parity": true,
       "final_durable_json_parity": true,
-      "limit": "Component benchmark, not an HA latency forecast"
+      "limit": "Component benchmark, not an HA latency forecast",
+      "independent_caches_and_fresh_policy_content": true
     },
     "remaining_costs": [
       "full_candidate_validation",

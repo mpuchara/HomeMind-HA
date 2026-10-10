@@ -14,7 +14,7 @@ Statystyki dostępności pozostają aktualne w RAM i korzystają z istniejącego
 
 W dołączonym logu 0.14.169 nie było błędów blokady bazy. Shadow observation zajmowała średnio około 225 ms, CPU ostatnio około 60%, a checkpointy WAL średnio około 1,1 s. To koszty różnych wątków, których nie należy sumować jako opóźnienia jednej decyzji.
 
-Paired benchmark czterech dużych modeli, 64 obserwacji i ośmiu niezależnych próbek zachował stan każdego modelu i wynik każdej obserwacji oraz identyczny końcowy JSON na dysku. Liczba snapshotów spadła z 264 do 44, zapisanych wierszy z 52 do 36. Cały mierzony fragment snapshot/JSON/SQLite był 1,66–2,47 razy szybszy w trzech powtórzeniach na Linuxie. To syntetyczny benchmark komponentu; poprawę opóźnienia decyzji w rzeczywistym domu trzeba sprawdzić następnym logiem.
+Paired benchmark czterech dużych modeli, 64 obserwacji i ośmiu niezależnych próbek zachował stan każdego modelu i wynik każdej obserwacji oraz identyczny końcowy JSON na dysku. Liczba snapshotów spadła z 264 do 44, zapisanych wierszy z 52 do 36. Cały mierzony fragment snapshot/JSON/SQLite był 1,33–1,36 razy szybszy w trzech powtórzeniach na Linuxie, z osobnymi cache i aktualizacją zawartości modeli po każdej nowej próbce. [Pełny raport](benchmarks/PROMOTION_SNAPSHOTS_0_14_170.json). To syntetyczny benchmark komponentu; poprawę opóźnienia decyzji w rzeczywistym domu trzeba sprawdzić następnym logiem.
 
 Pozostają koszty pełnej walidacji Candidate, obliczania cech i I/O checkpointów. Nowy log zawiera liczniki `context_promotion_snapshot_changed` i `context_promotion_snapshot_skipped`, aby sprawdzić, czy zbędne kopie faktycznie zniknęły.
 

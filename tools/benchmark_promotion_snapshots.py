@@ -75,6 +75,9 @@ def run_mode(mode, payloads, passes, label_every):
                     model['active_correct_by_class'][idx] += int(model['samples'] % 3 != 0)
                     model['shadow_correct_by_class'][idx] += 1
                     model['last_scored_ts'] = 1000. + step
+                    # A labelled episode changes trained policy content too;
+                    # the writer must encode that fresh body, not an old cache hit.
+                    model['candidate_policy']['rows'][0]['weight'] = model['samples'] / 100.
                 if step % 60 == 0:
                     service._save_shadow_model(agent['id'], key, model)
             return dict(scored=int(step % label_every == label_every - 1))
@@ -113,10 +116,11 @@ def run(passes=64, label_every=8, width=512, rows=512):
     series = []
     for repeat in range(3):
         results = {}
-        with patch.dict(promotion.OPTIONS, {'context_tournament_enabled': False}), patch.object(
-                shadow_model_json, 'MODEL_ENCODING_CACHE', ModelEncodingCache()):
+        with patch.dict(promotion.OPTIONS, {'context_tournament_enabled': False}):
             for mode in (('previous', 'current') if repeat % 2 == 0 else ('current', 'previous')):
-                results[mode] = run_mode(mode, payloads, passes, label_every)
+                # Independent caches prevent the first run from warming the second.
+                with patch.object(shadow_model_json, 'MODEL_ENCODING_CACHE', ModelEncodingCache()):
+                    results[mode] = run_mode(mode, payloads, passes, label_every)
         assert results['previous'][1:] == results['current'][1:], 'all live states and final durable models must match'
         old, new = results['previous'][0], results['current'][0]
         series.append(dict(previous=old, current=new, total_speedup=old['total_ms']/new['total_ms']))
