@@ -128,5 +128,6 @@ def fill_missing_threshold(config, defaults):
         raise ValueError("No brightness threshold reference for this sensor; enter an explicit threshold")
     inherited = reference["config"]
     return {**config, "threshold": inherited["threshold"],
+            "unit": config.get("unit", inherited["unit"]),
             "hysteresis": config.get("hysteresis", inherited["hysteresis"]),
             "max_age_seconds": config.get("max_age_seconds", inherited["max_age_seconds"])}, reference["source"]

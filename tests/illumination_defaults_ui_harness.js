@@ -66,6 +66,7 @@ vm.runInNewContext(fs.readFileSync('adaptive_ai/src/static/experiments.js','utf8
   assert.equal(f.signal_threshold.value,'31');assert.equal(f.signal_hysteresis.value,'2');assert.equal(f.signal_age.value,'120');
   await dialog.form.onsubmit({preventDefault(){}});
   assert.equal(submitted.additional_signal.threshold,31);assert.equal(submitted.additional_signal.hysteresis,2);
+  assert.equal(submitted.additional_signal.unit,'raw');
   f.signal_reference.value='1';f.signal_reference.onchange();
   assert.equal(Number(f.signal_threshold.value),50);assert.equal(Number(f.signal_hysteresis.value),3);assert.equal(Number(f.signal_age.value),60);
 

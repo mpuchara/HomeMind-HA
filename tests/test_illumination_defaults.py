@@ -98,6 +98,8 @@ class ThresholdReferenceTests(unittest.TestCase):
         for value,need in [(39,True),(40,False)]:
             current=states();current[LIGHT]['state']=str(value)
             self.assertIs(evaluate({'additional_signal':config},current,100)['need'],need)
+        inherited,_=fill_missing_threshold({'entity_id':LIGHT,'purpose':'avoid_bright_on'}, {LIGHT:{'config':config,'source':{}}})
+        self.assertEqual(inherited['unit'],'raw')
 
 
 class ThresholdWorkflowTests(unittest.TestCase):
@@ -121,6 +123,13 @@ class ThresholdWorkflowTests(unittest.TestCase):
         self.assertEqual(self.store.get_agent_config(self.root['id']),before)
 
     def test_missing_threshold_resolves_and_persists_child_and_reference_only(self):
+        reference=suggestions(SELECTED,[],[automation()],states())
+        self.engine.state_map.update(states('lx'))
+        with patch('illumination_defaults.for_manager',return_value=reference):
+            with self.assertRaisesRegex(ValueError,'unit changed'):
+                self.manager.workflow_explore(self.root['id'],{'mode':'additional_signal','additional_signal':{
+                    'entity_id':LIGHT,'purpose':'avoid_bright_on'}})
+        self.assertIsNone(self.manager._candidate_row(self.root['id']))
         with self.knowledge():
             result=self.manager.workflow_explore(self.root['id'],{'mode':'additional_signal','additional_signal':{
                 'entity_id':LIGHT,'purpose':'avoid_bright_on'}})

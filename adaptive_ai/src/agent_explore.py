@@ -836,6 +836,8 @@ def install(manager, *, legacy_get=True, legacy_post=True):
             if is_electrical_measurement_entity(config["entity_id"], state):
                 raise ValueError("An electrical measurement cannot be the illumination reference")
             unit = str((state.get("attributes") or {}).get("unit_of_measurement") or "raw").lower()
+            if "unit" in requested_signal and config["unit"] != ("lx" if unit == "lux" else unit):
+                raise ValueError("Illumination sensor unit changed; reopen Explore and review the threshold")
             config = normalize({**config, "unit": unit})
             if config == agent.get("additional_signal"):
                 raise ValueError("This additional signal configuration is already active")

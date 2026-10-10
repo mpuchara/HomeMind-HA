@@ -152,6 +152,7 @@
           config:{focus:f.focus.value,intensity:Number(f.intensity.value)/100,max_step:Number(f.max_step.value),interval:Number(f.interval.value)*60,daily_budget:Number(f.daily_budget.value),observation_seconds:Number(f.observation_seconds.value)}
         }:mode==='targeted_sensor'?{mode:'targeted_sensor',sensor_entity:f.sensor_entity.value}:{
           mode:'additional_signal',additional_signal:{version:1,entity_id:f.signal_entity.value,purpose:f.signal_purpose.value,
+          ...(defaults[f.signal_entity.value]?.config.unit?{unit:defaults[f.signal_entity.value].config.unit}:{}),
           max_age_seconds:Number(f.signal_age.value),hysteresis:f.signal_purpose.value==='context'?0:Number(f.signal_hysteresis.value),
           ...(f.signal_purpose.value==='avoid_bright_on'?{threshold:Number(f.signal_threshold.value)}:{})}};
         const button=dialog.querySelector('[data-start]');button.disabled=true;

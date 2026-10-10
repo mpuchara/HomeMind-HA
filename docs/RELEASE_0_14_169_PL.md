@@ -21,4 +21,6 @@ Nie są przenoszone wartości z innej encji pomiarowej ani zapisanej preferencji
 
 To podpowiedź z już używanej konfiguracji, a nie automatyczne uczenie optymalnego progu. Czujnik kuchenny nadal musi reprezentować jasność na schodach, a przyszłe wyniki w Shadow sprawdzają nową preferencję. Preferencja nie wymusza wcześniejszego OFF podczas pobytu; świeżość, ręczne polecenia i warunki Control pozostają bez zmian.
 
+Podpowiedź zachowuje również jednostkę czujnika. Jeżeli jednostka zmieni się przed zapisem, tworzenie Candidate zostanie zatrzymane; otwórz formularz ponownie i sprawdź nową wartość.
+
 Dodano 13 regresji obejmujących źródła, priorytety, jednostki, granice i strukturę warunków, zapis Candidate oraz rzeczywisty kod formularza JavaScript. Test formularza sprawdza podpowiedź, ręczną edycję, wybór alternatywy, powrót do wcześniej edytowanego czujnika i wysłaną konfigurację. Pełny zestaw obejmuje 2022 testy. Wyszukiwanie źródeł działa przy otwieraniu lub wysyłaniu Explore i nie dodaje skanowania do ścieżki decyzji agenta.
