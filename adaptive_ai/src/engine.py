@@ -1,5 +1,6 @@
 from sqlite_background import background_sqlite
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import nullcontext
 import json
 import math
 import os
@@ -1512,7 +1513,12 @@ class Engine(threading.Thread):
                     # Agent snapshots come from the routing cache. Control safety is still
                     # revalidated from durable config inside Executor before any HA call.
                     wrapped_started = time.perf_counter()
-                    self.process_agent(agent, states, changed_entities if changed_entities else None)
+                    # One connection for the complete registered pipeline. Individual
+                    # Store.conn() blocks still read fresh data and commit independently;
+                    # the nested Shadow session retains its bounded background timeout.
+                    session = getattr(STORE, "connection_session", None)
+                    with session() if callable(session) else nullcontext():
+                        self.process_agent(agent, states, changed_entities if changed_entities else None)
                     TELEMETRY.observe("wrapped_inference", (time.perf_counter() - wrapped_started) * 1000)
                     RUNTIME_DEBUG.end(agent_trace, status="ok")
                 except Exception as exc:

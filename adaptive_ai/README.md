@@ -1,6 +1,6 @@
-# HomeMind-HA / Adaptive AI 0.14.170
+# HomeMind-HA / Adaptive AI 0.14.171
 
-0.14.170: usunięte nadmiarowe kopie modeli Sensor Tournament; pełne próbki i okna oceny zachowane, mniej pracy CPU i zapisów SQLite.
+0.14.171: jedno połączenie SQLite na przebieg decyzji agenta; świeże odczyty i osobne transakcje, zachowany limit Shadow 250 ms.
 
 
 Cztery akcje każdego agenta: Shadow/Control, Wrong decision, Settings, Teach.

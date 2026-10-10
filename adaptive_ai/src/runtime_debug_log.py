@@ -165,6 +165,8 @@ class RuntimeDebugLogService:
                     "context_promotion_snapshot_changed", "context_promotion_snapshot_skipped",
                 ],
                 "promotion_snapshot_contract": "new_proof_or_window_change; availability_uses_existing_60s_metrics_interval",
+                "inference_sql_session": "per_agent_pipeline_fresh_queries_independent_transactions",
+                "nested_shadow_sql_timeout_ms": 250,
                 "context_shadow_json_metric": True,
                 "context_candidate_validation_metric": True,
                 "context_candidate_load_metric": True,

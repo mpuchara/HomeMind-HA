@@ -190,6 +190,8 @@ class Store:
                     self._connection_session.checkpoint_pages = checkpoint_pages
             if not reuse or previous_timeout is not None:
                 c.execute(f"PRAGMA busy_timeout={busy_timeout_ms}")
+                if reuse:
+                    self._connection_session.connection_busy_timeout_ms = busy_timeout_ms
             if not reuse:
                 c.execute("PRAGMA synchronous=NORMAL")
                 c.execute("PRAGMA temp_store=MEMORY")
@@ -228,6 +230,7 @@ class Store:
             try:
                 if reuse and previous_timeout is not None:
                     c.execute(f"PRAGMA busy_timeout={previous_timeout}")
+                    self._connection_session.connection_busy_timeout_ms = previous_timeout
                 elif c is not None and not reuse:
                     c.close()
             except BaseException as exc:
@@ -253,7 +256,25 @@ class Store:
         """
         existing = getattr(self._connection_session, "connection", None)
         if existing is not None:
-            yield existing
+            # A nested background session borrows the inference connection. Apply
+            # its timeout once for the scope instead of three PRAGMAs per query.
+            # Active write transactions keep their owner's configuration unchanged.
+            previous_timeout = self._connection_session.connection_busy_timeout_ms
+            requested_timeout = getattr(self._connection_session, "busy_timeout_ms", None)
+            if requested_timeout is None:
+                requested_timeout = 60000 if self.training_worker_process else 30000
+            change_timeout = requested_timeout != previous_timeout and not existing.in_transaction
+            if change_timeout:
+                existing.execute(f"PRAGMA busy_timeout={requested_timeout}")
+                self._connection_session.connection_busy_timeout_ms = requested_timeout
+            try:
+                yield existing
+            finally:
+                if change_timeout:
+                    try:
+                        existing.execute(f"PRAGMA busy_timeout={previous_timeout}")
+                    finally:
+                        self._connection_session.connection_busy_timeout_ms = previous_timeout
             return
         trace = None
         if RUNTIME_DEBUG.enabled:
