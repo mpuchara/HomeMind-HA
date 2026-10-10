@@ -4,6 +4,9 @@ from functools import lru_cache
 
 
 def radar_role(entity_id, state=None):
+    from lighting_conditions import illumination_sensor
+    if illumination_sensor(entity_id, state):
+        return "illumination"
     attrs = (state or {}).get("attributes") or {}
     return _radar_role(str(entity_id), str(attrs.get("friendly_name") or ""))
 
@@ -13,7 +16,7 @@ def radar_family(entity_id):
     name = str(entity_id).split(".", 1)[-1]
     match = re.fullmatch(
         r"(.+)_(?:(?:stationary|still|static|moving|move|motion)_"
-        r"(?:energy|target_distance|distance|target)|has_target)", name
+        r"(?:energy|target_distance|distance|target)|has_target|light|light_level|ambient_light|illuminance|lux)", name
     )
     return match.group(1) if match else None
 
@@ -67,7 +70,7 @@ def radar_context_entities(agent, baseline, states, registry, limit=8):
         area = (registry.get(agent.get("target_entity")) or {}).get("area_id")
         if area:
             areas.add(area)
-    order = {"presence": 0, "still": 1, "moving": 2, "energy": 3, "distance": 4, "gate_energy": 5}
+    order = {"presence": 0, "still": 1, "moving": 2, "illumination": 3, "energy": 4, "distance": 5, "gate_energy": 6}
     candidates = []
     for eid, state in states.items():
         role = radar_role(eid, state)

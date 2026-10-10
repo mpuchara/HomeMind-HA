@@ -300,8 +300,10 @@ def entity_capability_tags(entity_id, state):
     role = radar_role(entity_id, state)
     if role in ("presence", "still", "moving"):
         caps.add("occupancy")
-    if role:
+    if role and role != "illumination":
         caps.add("activity")
+    if role == "illumination":
+        caps.add("illuminance")
     if (domain in ("person", "device_tracker") or dc in ("occupancy", "motion", "presence")
             or any(x in text for x in ("occupancy", "presence", "motion", "obecno"))):
         # Numeric radar energy and target distance are not boolean occupancy.
@@ -719,7 +721,7 @@ def select_context_entities(agent, state_map, registry, hint_entities, max_entit
     # upstream/global features. Causal history wins if HA area metadata is wrong/missing.
     if fast:
         from radar_context import radar_role
-        role_order = {"presence": 0, "still": 1, "moving": 2, "energy": 3, "distance": 4, "gate_energy": 5}
+        role_order = {"presence": 0, "still": 1, "moving": 2, "illumination": 3, "energy": 4, "distance": 5, "gate_energy": 6}
         radar_ranked = [x for x in ranked if x[3]["local"] and radar_role(x[1], state_map.get(x[1]))]
         radar_ranked.sort(key=lambda x: (role_order[radar_role(x[1], state_map.get(x[1]))], -x[0], x[1]))
         # A bounded bundle preserves stationary evidence before generic room context.

@@ -56,7 +56,7 @@ def fast_light_presence_evidence(forecast):
     return [positive[eid] for eid in sorted(positive)]
 
 
-def fast_light_on_assist_action(agent, current, desired, decision_source, arms, forecast):
+def fast_light_on_assist_action(agent, current, desired, decision_source, arms, forecast, lighting=None):
     """Select ON only when independent presence evidence agrees and ON remains plausible.
 
     This is not a fallback rule that ignores the learned model. It merely lets strong,
@@ -69,6 +69,8 @@ def fast_light_on_assist_action(agent, current, desired, decision_source, arms, 
     if target.split(".", 1)[0] != "light" or prop != "power":
         return None
     if str(decision_source or "") != "historical_policy_bootstrap":
+        return None
+    if lighting is not None and lighting.get("need") is not True:
         return None
     try:
         if float(current) >= 0.5 or float(desired) >= 0.5:

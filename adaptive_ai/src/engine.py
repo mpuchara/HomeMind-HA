@@ -1948,8 +1948,12 @@ class Engine(threading.Thread):
 
         raw_prediction = float(chosen["value"])
         forecast = context_meta.get('home_forecast', {})
+        from lighting_conditions import lighting_context
+        lighting = lighting_context(policy.selection_meta, state_map)
+        rt["lighting_context"] = lighting
+        context_meta["lighting_context"] = lighting
         assist_idx = fast_light_on_assist_action(
-            agent, current, raw_prediction, decision_source, arms, forecast
+            agent, current, raw_prediction, decision_source, arms, forecast, lighting=lighting
         )
         rt["raw_policy_prediction"] = raw_prediction
         rt["fast_on_assist_active"] = assist_idx is not None
