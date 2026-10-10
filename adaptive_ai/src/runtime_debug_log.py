@@ -185,6 +185,8 @@ class RuntimeDebugLogService:
                 "context_persistence_metrics": ["context_rows_persist", "context_shadow_persist"],
                 "context_persistence_durability": "prompt_wakeup_on_target_label_periodic_5s_and_explicit_shutdown_barrier; slow_database_may_delay_commit",
                 "resubmit_preserves_trigger_entities": True,
+                "resubmit_scope": "only_busy_target_no_global_event_replay",
+                "rest_resync_clears_superseded_ws_latency_timestamp": True,
                 "shadow_validation": "observation_only_optimistic_revision_read_no_engine_writer_lock",
                 "trace_storage": "bounded_ram_only",
                 "normal_runtime_overhead_when_disabled": "RAM timing counters; detailed spans require debug enabled",

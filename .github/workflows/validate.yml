@@ -50,6 +50,9 @@ jobs:
       - name: 0.14.171 inference SQL session fresh-query and connection-count parity
         if: matrix.python == '3.11'
         run: python tools/benchmark_inference_sql_session.py --passes 24 --compact
+      - name: 0.14.172 targeted retries terminate without peer replay
+        if: matrix.python == '3.11'
+        run: python tools/benchmark_target_retries.py --targets 4 --completions 32 --compact
       - name: 0.14.166 bounded Recorder import row parity and transaction size
         if: matrix.python == '3.11'
         run: python tools/benchmark_history_import.py --rows-per-entity 1200 --compact

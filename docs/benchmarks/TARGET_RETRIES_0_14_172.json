@@ -1,0 +1,195 @@
+{
+  "component": "target_owned_busy_worker_retries",
+  "cases": [
+    {
+      "synthetic": true,
+      "genuine_events": 2,
+      "targets": 2,
+      "completion_limit": 64,
+      "same_final_desired": true,
+      "every_real_event_delivered_current": true,
+      "series": [
+        {
+          "previous": {
+            "total_ms": 18.6826300000007,
+            "decisions": 64,
+            "queued": 66,
+            "unresolved": 2,
+            "final_desired": {
+              "0": "on",
+              "1": "on"
+            },
+            "durable_decisions": 64,
+            "every_real_event_delivered": true
+          },
+          "current": {
+            "total_ms": 3.38534900004106,
+            "decisions": 4,
+            "queued": 4,
+            "unresolved": 0,
+            "final_desired": {
+              "0": "on",
+              "1": "on"
+            },
+            "durable_decisions": 4,
+            "every_real_event_delivered": true
+          }
+        },
+        {
+          "current": {
+            "total_ms": 5.587096999988717,
+            "decisions": 4,
+            "queued": 4,
+            "unresolved": 0,
+            "final_desired": {
+              "0": "on",
+              "1": "on"
+            },
+            "durable_decisions": 4,
+            "every_real_event_delivered": true
+          },
+          "previous": {
+            "total_ms": 17.65874799997391,
+            "decisions": 64,
+            "queued": 66,
+            "unresolved": 2,
+            "final_desired": {
+              "0": "on",
+              "1": "on"
+            },
+            "durable_decisions": 64,
+            "every_real_event_delivered": true
+          }
+        },
+        {
+          "previous": {
+            "total_ms": 17.49768400003404,
+            "decisions": 64,
+            "queued": 66,
+            "unresolved": 2,
+            "final_desired": {
+              "0": "on",
+              "1": "on"
+            },
+            "durable_decisions": 64,
+            "every_real_event_delivered": true
+          },
+          "current": {
+            "total_ms": 2.478440999993836,
+            "decisions": 4,
+            "queued": 4,
+            "unresolved": 0,
+            "final_desired": {
+              "0": "on",
+              "1": "on"
+            },
+            "durable_decisions": 4,
+            "every_real_event_delivered": true
+          }
+        }
+      ],
+      "limit": "Deterministic overlapping workers; actual Engine dispatcher, process_target and SQLite writes. Excludes policy CPU, HA and timers (none due during this short scenario). Not an HA latency forecast."
+    },
+    {
+      "synthetic": true,
+      "genuine_events": 2,
+      "targets": 4,
+      "completion_limit": 64,
+      "same_final_desired": true,
+      "every_real_event_delivered_current": true,
+      "series": [
+        {
+          "previous": {
+            "total_ms": 20.526698999958626,
+            "decisions": 64,
+            "queued": 68,
+            "unresolved": 4,
+            "final_desired": {
+              "0": "on",
+              "1": "on",
+              "2": "on",
+              "3": "on"
+            },
+            "durable_decisions": 64,
+            "every_real_event_delivered": true
+          },
+          "current": {
+            "total_ms": 6.2730249999845,
+            "decisions": 8,
+            "queued": 8,
+            "unresolved": 0,
+            "final_desired": {
+              "0": "on",
+              "1": "on",
+              "2": "on",
+              "3": "on"
+            },
+            "durable_decisions": 8,
+            "every_real_event_delivered": true
+          }
+        },
+        {
+          "current": {
+            "total_ms": 7.509694000020772,
+            "decisions": 8,
+            "queued": 8,
+            "unresolved": 0,
+            "final_desired": {
+              "0": "on",
+              "1": "on",
+              "2": "on",
+              "3": "on"
+            },
+            "durable_decisions": 8,
+            "every_real_event_delivered": true
+          },
+          "previous": {
+            "total_ms": 26.80893299998388,
+            "decisions": 64,
+            "queued": 68,
+            "unresolved": 4,
+            "final_desired": {
+              "0": "on",
+              "1": "on",
+              "2": "on",
+              "3": "on"
+            },
+            "durable_decisions": 64,
+            "every_real_event_delivered": true
+          }
+        },
+        {
+          "previous": {
+            "total_ms": 22.084461000019928,
+            "decisions": 64,
+            "queued": 68,
+            "unresolved": 4,
+            "final_desired": {
+              "0": "on",
+              "1": "on",
+              "2": "on",
+              "3": "on"
+            },
+            "durable_decisions": 64,
+            "every_real_event_delivered": true
+          },
+          "current": {
+            "total_ms": 4.5754399999964335,
+            "decisions": 8,
+            "queued": 8,
+            "unresolved": 0,
+            "final_desired": {
+              "0": "on",
+              "1": "on",
+              "2": "on",
+              "3": "on"
+            },
+            "durable_decisions": 8,
+            "every_real_event_delivered": true
+          }
+        }
+      ],
+      "limit": "Deterministic overlapping workers; actual Engine dispatcher, process_target and SQLite writes. Excludes policy CPU, HA and timers (none due during this short scenario). Not an HA latency forecast."
+    }
+  ]
+}

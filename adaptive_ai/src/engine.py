@@ -360,6 +360,9 @@ class Engine(threading.Thread):
         # an arbitrarily old target timestamp. The bounded per-target set is RAM-only and
         # is drained when the current worker completes.
         self.pending_target_changes = {}
+        # A completed worker's retry belongs only to that target. Returning its
+        # old trigger to dirty_entities makes peers replay it and retry each other.
+        self.ready_target_changes = {}
         self.poll_future = None
         self.last_full_poll = 0.0
         self.next_resync_retry_monotonic = 0.0
@@ -744,6 +747,9 @@ class Engine(threading.Thread):
                 # startup grace covers the same current state.
                 if not initial:
                     self.dirty_entities.add(eid)
+                    # A REST reconciliation supersedes this entity's old WS receipt.
+                    # It is fresh work, but is not a new websocket latency sample.
+                    self.entity_event_received_perf.pop(eid, None)
 
             self.state_map = state_map
             if initial:
@@ -1154,6 +1160,7 @@ class Engine(threading.Thread):
                 with self.lock:
                     state_map = dict(self.state_map)
                     changed_entities = set(self.dirty_entities) if event_wakeup else set()
+                    retry_ready = bool(self.ready_target_changes)
                     if event_wakeup:
                         self.dirty_entities.clear()
                 if state_map:
@@ -1171,7 +1178,7 @@ class Engine(threading.Thread):
                                 self.dirty_entities.update(changed_entities)
                     else:
                         handled_realtime = False
-                        if event_wakeup and changed_entities:
+                        if (event_wakeup and changed_entities) or retry_ready:
                             handled_realtime = True
                             with self.lock:
                                 self.inference_scheduler["event_passes"] += 1
@@ -1393,13 +1400,38 @@ class Engine(threading.Thread):
 
     def process(self, state_map, changed_entities=None, *, event_driven=True):
         changed = set(changed_entities or ())
-        if changed and event_driven:
+        with self.lock:
+            retries = ({target: set(entities) for target, entities in self.ready_target_changes.items()}
+                       if event_driven else {})
+            if event_driven:
+                self.ready_target_changes.clear()
+        if (changed or retries) and event_driven:
             TRAINING_BUDGET.request_interactive_window(
                 float(OPTIONS.get("training_realtime_inference_priority_seconds", 0.40)),
                 reason="realtime_inference",
             )
 
-        agents = self._active_agents_for_changes(changed)
+        # Preserve full/timer passes, but a retry-only pass must not select all
+        # agents. Revalidate owners from the current routing index before dispatch.
+        try:
+            agents = self._active_agents_for_changes(changed) if changed or not retries else []
+            if retries:
+                self._refresh_agent_index()
+                with self.lock:
+                    selected_ids = {str(agent.get("id") or "") for agent in agents}
+                    for target in retries:
+                        for aid in self.active_agents_by_target.get(target, ()):
+                            if aid not in selected_ids and aid in self.agent_configs:
+                                agents.append(self.agent_configs[aid])
+                                selected_ids.add(aid)
+        except Exception:
+            # A transient config/index read failure must not consume a real retry.
+            with self.lock:
+                for target, entities in retries.items():
+                    self.ready_target_changes.setdefault(target, set()).update(entities)
+            if retries:
+                self.wake_event.set()
+            raise
         groups = {}
         for agent in agents:
             groups.setdefault(agent["target_entity"], []).append(agent)
@@ -1416,21 +1448,25 @@ class Engine(threading.Thread):
                 str(eid): set(agent_ids)
                 for eid, agent_ids in self.dependency_agents.items()
             }
+            event_entities = changed | {eid for entities in retries.values() for eid in entities}
             event_received_all = ({
                 eid: self.entity_event_received_perf.get(eid)
-                for eid in changed
+                for eid in event_entities
                 if self.entity_event_received_perf.get(eid) is not None
             } if event_driven else {})
         snapshot = (pass_states, pass_revision, revision_snapshot, context_revision)
 
         for target, target_agents in groups.items():
+            target_retry = retries.pop(target, set())
             # Keep only the concrete entities that can affect this target. A burst may
             # contain unrelated HA changes; those must not inflate this target's latency.
             target_agent_ids = {str(agent.get("id") or "") for agent in target_agents}
             target_changed = {
-                str(eid) for eid in changed
+                str(eid) for eid in changed | target_retry
                 if target_agent_ids.intersection(dependency_snapshot.get(str(eid), ()))
             }
+            if event_driven and (changed or target_retry or retries) and not target_changed:
+                continue  # A retry can outlive its owner's schema or eligibility.
             # Synthetic timer scheduling uses the target id solely to select the group.
             # Preserve that hint for process_agent semantics but carry no event timestamp.
             if not target_changed and changed and not event_driven:
@@ -1458,18 +1494,30 @@ class Engine(threading.Thread):
                                     self.pending_target_changes.pop(entity, set())
                                 )
                                 self.resubmit_targets.discard(entity)
-                                self.dirty_entities.update(pending_changes)
+                                if pending_changes:
+                                    self.ready_target_changes.setdefault(entity, set()).update(pending_changes)
                             if pending_changes:
                                 self.wake_event.set()
                         active.add_done_callback(retry_completed)
                 continue
-            self.in_flight[target] = self.control_workers.submit(
-                self.process_target,
-                target_agents,
-                target_changed,
-                snapshot,
-                target_event_received,
-            )
+            try:
+                self.in_flight[target] = self.control_workers.submit(
+                    self.process_target,
+                    target_agents,
+                    target_changed,
+                    snapshot,
+                    target_event_received,
+                )
+            except Exception:
+                # Keep retries whose workers were not submitted. Already dispatched
+                # owners must not replay merely because another submission failed.
+                with self.lock:
+                    for owner, entities in {target: target_retry, **retries}.items():
+                        if entities:
+                            self.ready_target_changes.setdefault(owner, set()).update(entities)
+                if target_retry or retries:
+                    self.wake_event.set()
+                raise
         for target in list(self.in_flight):
             if target not in groups and self.in_flight[target].done():
                 del self.in_flight[target]

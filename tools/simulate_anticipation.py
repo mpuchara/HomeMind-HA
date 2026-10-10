@@ -82,6 +82,13 @@ def fixture():
 
 
 def run():
+    # Calendar features are part of the learned policy. Keep this offline scenario
+    # reproducible across clock hours and day rollover, including the CLI in CI.
+    with patch('time.time', return_value=1791637200.):
+        return _run()
+
+
+def _run():
     a,states,context,policy,example=fixture()
     now=time.time()
     example('arriving',now-3)
