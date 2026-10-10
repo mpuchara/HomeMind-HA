@@ -1,6 +1,6 @@
-# HomeMind-HA / Adaptive AI 0.14.169
+# HomeMind-HA / Adaptive AI 0.14.170
 
-0.14.169: edytowalny próg jasności z automatyzacji lub innego agenta używającego tego samego czujnika; wybór źródła i zachowanie ręcznych zmian.
+0.14.170: usunięte nadmiarowe kopie modeli Sensor Tournament; pełne próbki i okna oceny zachowane, mniej pracy CPU i zapisów SQLite.
 
 
 Cztery akcje każdego agenta: Shadow/Control, Wrong decision, Settings, Teach.

@@ -161,6 +161,10 @@ class RuntimeDebugLogService:
                 "context_observed_pool_metric": True,
                 "context_probation_snapshot_metric": True,
                 "context_shadow_snapshot_metric": True,
+                "context_promotion_snapshot_counts": [
+                    "context_promotion_snapshot_changed", "context_promotion_snapshot_skipped",
+                ],
+                "promotion_snapshot_contract": "new_proof_or_window_change; availability_uses_existing_60s_metrics_interval",
                 "context_shadow_json_metric": True,
                 "context_candidate_validation_metric": True,
                 "context_candidate_load_metric": True,

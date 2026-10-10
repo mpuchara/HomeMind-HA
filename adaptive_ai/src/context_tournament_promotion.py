@@ -24,6 +24,7 @@ from context import action_values, is_fast_reactive_agent
 from context_tournament_metrics import availability_stats, metric_row
 from manual_context_learning import _migrate_schema
 from settings import OPTIONS
+from telemetry import TELEMETRY
 
 
 PROMOTION_EPOCH_VERSION = 1
@@ -461,9 +462,18 @@ def install_promotion(service):
         now = time.time()
         for challenger in list(tournament.get("challenger_features") or []):
             model = service._load_shadow_model(aid, challenger, len(actions))
-            ensure_promotion_epoch(model, len(actions), now, cfg)
-            absorb_new_scored_evidence(model, actions, now, cfg)
-            service._save_shadow_model(aid, challenger, model)
+            initialized = ensure_promotion_epoch(model, len(actions), now, cfg)
+            completed = int(model.get("promotion_completed_windows") or 0)
+            absorbed = absorb_new_scored_evidence(model, actions, now, cfg)
+            # Availability already has a periodic snapshot in the metrics layer.
+            # Do not override it by copying the entire trained policy on each
+            # sensor edge. New proof and elapsed windows still queue a complete
+            # snapshot immediately, including the final promotion bookkeeping.
+            if initialized or absorbed or int(model.get("promotion_completed_windows") or 0) != completed:
+                service._save_shadow_model(aid, challenger, model)
+                TELEMETRY.inc("context_promotion_snapshot_changed")
+            else:
+                TELEMETRY.inc("context_promotion_snapshot_skipped")
             if cfg["enabled"]:
                 attempt_promotion(agent, challenger, model, actions, now)
         return result

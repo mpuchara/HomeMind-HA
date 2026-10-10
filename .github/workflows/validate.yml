@@ -149,6 +149,9 @@ jobs:
       - name: Stage 18 actual source entrypoint smoke
         if: matrix.python == '3.11'
         run: python tools/smoke_entrypoint.py
+      - name: 0.14.170 promotion snapshot state and durable JSON parity
+        if: matrix.python == '3.11'
+        run: python tools/benchmark_promotion_snapshots.py --passes 16 --label-every 8 --width 128 --rows 128
       - run: python tools/simulate_anticipation.py
       - run: python tools/simulate_context_tournament.py
         env:
