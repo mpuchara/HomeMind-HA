@@ -1,6 +1,6 @@
-# HomeMind-HA / Adaptive AI 0.14.171
+# HomeMind-HA / Adaptive AI 0.14.172
 
-0.14.171: jedno połączenie SQLite na przebieg decyzji agenta; świeże odczyty i osobne transakcje, zachowany limit Shadow 250 ms. [Opis wydania](docs/RELEASE_0_14_171_PL.md).
+0.14.172: przerwana pętla ponowień między agentami; zajęty cel ponawiany osobno, prawidłowe timestampy reakcji po REST resync. [Opis wydania](docs/RELEASE_0_14_172_PL.md).
 
 
 Karta agenta ma cztery akcje: **Shadow/Control**, **Wrong decision**, **Settings** i **Teach**. Wrong decision uczy poprawnego Desired. Teach otwiera powiększalny wykres historii z wyborem dokładnej chwili i zapisem poprawnego Desired. Cofanie ostatniej korekty jest dostępne w Teach oraz Settings; pozostałe operacje i diagnostyka są w Settings.

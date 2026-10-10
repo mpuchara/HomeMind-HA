@@ -1,10 +1,10 @@
 {
-  "version": "0.14.171",
-  "release_date": "2026-10-10",
-  "base_version": "0.14.170",
-  "base_commit": "f73a97f30ed710fb3f877d219080ea28e50da34a",
-  "release_status": "per-agent-inference-sql-session-with-independent-transactions",
-  "release_validation_tests_passed": 2043,
+  "version": "0.14.172",
+  "release_date": "2026-10-11",
+  "base_version": "0.14.171",
+  "base_commit": "178ffd92b017ad870b1a03271073f9ef6af4e652",
+  "release_status": "target-owned-retries-without-peer-event-replay",
+  "release_validation_tests_passed": 2060,
   "release_014140": {
     "scope": "inventory_and_remove_remaining_shipped_feature_Handler_fallbacks_for_Candidate_Live_and_manual_feedback_transport",
     "explicit_routes": "manual_feedback.js, candidate_ui.js, candidate_preference_ui.js, /api/candidates, Candidate Teach-RL status/train, generation history/comparison, /api/candidate-live, /api/live and Candidate discard",
@@ -2407,5 +2407,42 @@
       "candidate_features",
       "concurrent_WAL_checkpoint_IO"
     ]
+  },
+  "release_014172": {
+    "scope": "busy_target_retry_ownership_and_REST_WS_latency_provenance",
+    "validation": "17_scheduler_fresh_snapshot_future_race_gate_rest_dispatch_failure_and_paired_regressions",
+    "real_dependency_entities_preserved": true,
+    "only_original_busy_target_retried": true,
+    "latest_atomic_state_and_revision_snapshot": true,
+    "routing_revalidated_before_retry": true,
+    "routing_read_failure_restores_retry": true,
+    "timer_and_startup_scheduling_preserved": true,
+    "newer_WS_event_preserved_during_REST_resync": true,
+    "superseded_WS_latency_timestamp_removed": true,
+    "training_history_ingest_and_control_guards_unchanged": true,
+    "synthetic_overlap_benchmark": {
+      "genuine_events": 2,
+      "targets": [
+        2,
+        4
+      ],
+      "old_decisions_at_completion_limit": 64,
+      "old_work_unresolved": true,
+      "current_decisions": [
+        4,
+        8
+      ],
+      "current_work_unresolved": false,
+      "same_final_desired": true,
+      "every_real_event_delivered": true,
+      "limit": "Deterministic overlapping workers with actual Engine dispatch and SQLite writes; not an HA latency forecast"
+    },
+    "WAL_diagnostics": {
+      "log_allocated_bytes": 3642240712,
+      "log_remaining_frames": 0,
+      "no_WAL_mode_change": true,
+      "no_file_truncation": true,
+      "next_runtime_export_needed": true
+    }
   }
 }

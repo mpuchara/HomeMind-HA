@@ -250,7 +250,8 @@ class ExecutorTests(unittest.TestCase):
         self.assertFalse(self.e.wake_event.is_set())
         future.set_result(None)
         self.assertTrue(self.e.wake_event.is_set())
-        self.assertIn('light.kitchen',self.e.dirty_entities)
+        self.assertEqual(self.e.ready_target_changes['light.kitchen'], {'light.kitchen'})
+        self.assertNotIn('light.kitchen',self.e.dirty_entities)
 
     def test_replaced_anticipation_still_gets_false_positive_feedback(self):
         ts=time.time()

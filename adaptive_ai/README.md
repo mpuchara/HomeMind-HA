@@ -1,6 +1,6 @@
-# HomeMind-HA / Adaptive AI 0.14.171
+# HomeMind-HA / Adaptive AI 0.14.172
 
-0.14.171: jedno połączenie SQLite na przebieg decyzji agenta; świeże odczyty i osobne transakcje, zachowany limit Shadow 250 ms.
+0.14.172: przerwana pętla ponowień między agentami; zajęty cel ponawiany osobno, prawidłowe timestampy reakcji po REST resync.
 
 
 Cztery akcje każdego agenta: Shadow/Control, Wrong decision, Settings, Teach.

@@ -73,7 +73,8 @@ class EventDecisionHotpath118Tests(unittest.TestCase):
         self.engine.wake_event.clear()
         self.engine.process(self.engine.state_map, {'binary_sensor.motion'})
         future.set_result(None)
-        self.assertIn('binary_sensor.motion', self.engine.dirty_entities)
+        self.assertEqual(self.engine.ready_target_changes[agent['target_entity']], {'binary_sensor.motion'})
+        self.assertNotIn('binary_sensor.motion', self.engine.dirty_entities)
         self.assertNotIn(agent['target_entity'], self.engine.dirty_entities)
         self.assertTrue(self.engine.wake_event.is_set())
 
