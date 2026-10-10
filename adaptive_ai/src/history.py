@@ -1795,6 +1795,10 @@ class HistoryManager(threading.Thread):
                 significant=(source != "ha_history_full"), timeout=20,
             ) or []
             return self._archive_history_payload(data, source)
+        except InterruptedError:
+            # Cancellation during a committed-batch pause is not a Recorder timeout.
+            # InterruptedError also inherits OSError; propagate it before that handler.
+            raise
         except HTTPError as exc:
             # Authentication / malformed-request errors will not improve by splitting.
             if getattr(exc, "code", 500) in (400, 401, 403, 404):

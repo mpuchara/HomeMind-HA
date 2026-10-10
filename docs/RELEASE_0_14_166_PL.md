@@ -16,11 +16,11 @@ Bufor parsera zawiera najwyżej 128 zachowanych wierszy. Każda partia zatwierdz
 
 Zachowujemy kolejność, wszystkie stany kategoryczne, dotychczasowy interwał próbkowania liczb i ostatni stan grupy, również na granicy partii. Reguły aktualizacji atrybutów, użytkownika, source i received_ts są identyczne. Każda partia ma trwałą mutation_revision; późna korekta nadal unieważnia odcinek cache historii.
 
-Anulowanie lub błąd po commit pozostawia poprawny fragment w bazie. Nieudana partia się wycofuje; ponowienie odpowiedzi działa przez istniejący klucz UNIQUE(entity_id,ts). Nie potwierdzamy ukończenia importu przed zapisaniem całości. W diagnostyce history_archive_import raportuje tylko zatwierdzone wiersze, partie i max_batch_rows.
+Anulowanie lub błąd po commit pozostawia poprawny fragment w bazie. Nieudana partia się wycofuje; ponowienie odpowiedzi działa przez istniejący klucz UNIQUE(entity_id,ts). Nie potwierdzamy ukończenia importu przed zapisaniem całości. InterruptedError z przerwanej partii jest propagowany przed obsługą OSError transportu; nie zostaje uznany za timeout ani pominięty odcinek Recorder. W diagnostyce history_archive_import raportuje tylko zatwierdzone wiersze, partie i max_batch_rows.
 
 ## Sprawdzenie i granice pomiaru
 
-11 regresji: pełna zgodność dużej odpowiedzi, numeric sampling/final row, mieszane i błędne rekordy, UPSERT z live, możliwość zapisu i pełnego PASSIVE checkpointu w przerwie, anulowanie/ponowienie, rollback późniejszej partii, rewizje, stop/empty, diagnostyka częściowego zapisu oraz jedno połączenie zamykane także przy błędzie. Pełny zestaw 1976 testów.
+12 regresji: pełna zgodność dużej odpowiedzi, numeric sampling/final row, mieszane i błędne rekordy, UPSERT z live, możliwość zapisu i pełnego PASSIVE checkpointu w przerwie, anulowanie/ponowienie, rollback późniejszej partii, rewizje, stop/empty, diagnostyka częściowego zapisu oraz jedno połączenie zamykane także przy błędzie. Pełny zestaw 1977 testów.
 
 Benchmark porównuje zamrożony parser 0.14.165 z nowym importem dla pełnej i minimalnej historii; każde pole archiwum i ID normalnego importu musi być zgodne. Oba warianty używają rzeczywistego keep-alive WAL i checkpointu w tle, jak runtime. Trzy naprzemienne powtórzenia, Windows, 9600 pełnych wierszy: mediana szczytu archive_batch 112,137 → 15,907 ms; mediana czasu całości 120,208 → 123,891 ms. Pomiar wywołania obejmuje też przygotowanie danych i commit, nie tylko czas blokady. Przerwy budżetu są wyłączone w benchmarku. Benchmark zgodności działa także w CI.
 

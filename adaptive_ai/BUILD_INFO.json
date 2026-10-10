@@ -4,7 +4,7 @@
   "base_version": "0.14.165",
   "base_commit": "b741891fe5fb4409881f92aeb6b87f644146ef5f",
   "release_status": "bounded-recorder-import-writes-with-resumable-durability",
-  "release_validation_tests_passed": 1976,
+  "release_validation_tests_passed": 1977,
   "release_014140": {
     "scope": "inventory_and_remove_remaining_shipped_feature_Handler_fallbacks_for_Candidate_Live_and_manual_feedback_transport",
     "explicit_routes": "manual_feedback.js, candidate_ui.js, candidate_preference_ui.js, /api/candidates, Candidate Teach-RL status/train, generation history/comparison, /api/candidate-live, /api/live and Candidate discard",
@@ -2247,11 +2247,11 @@
       "sensor_quality_max_wait_ms": 9318.929
     },
     "mechanism": "Parser buffers at most 128 retained rows, commits each batch, then checks the cooperative budget. One thread-owned connection session amortizes setup; no transaction or Store lock survives a checkpoint.",
-    "durability": "Completed batches survive cancellation or a later failure. The failed batch rolls back; existing unique-key upserts allow the whole response to be retried. Successful import returns the unchanged retained-row count.",
+    "durability": "Completed batches survive cancellation or a later failure. The failed batch rolls back; existing unique-key upserts allow the whole response to be retried. Successful import returns the unchanged retained-row count. Mid-import InterruptedError propagates before the transport OSError handler, never becoming a skipped Recorder timeout slice.",
     "semantics": "Same parser order, numeric interval and final group row, missing entity fallback, state/attributes/user/source/received_ts merge rules. Per-batch mutation revisions remain durable; training weights, v26 and Control gates unchanged.",
     "telemetry": "history_archive_import reports successfully committed rows, batches and max_batch_rows including partial failure",
-    "regression_tests": 11,
-    "validation_tests_expected": 1976,
+    "regression_tests": 12,
+    "validation_tests_expected": 1977,
     "benchmark": "tools/benchmark_history_import.py --rows-per-entity 2400: 3 alternating repeats, full/minimal payloads, every archive content field and normal-import row ID parity; cooperative sleeps disabled; actual WAL keeper and background checkpoint enabled in both variants",
     "windows_full_import": {
       "rows": 9600,

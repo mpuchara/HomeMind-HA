@@ -195,6 +195,7 @@ class HistoryImport166Tests(unittest.TestCase):
         self.assertEqual(len(opened), 1)
         with self.assertRaises(sqlite3.ProgrammingError):
             opened[0].execute("SELECT 1")
+
         opened.clear()
         def checkpoint(label, **kwargs):
             if label == "history_import_committed_batch":
@@ -206,6 +207,21 @@ class HistoryImport166Tests(unittest.TestCase):
         self.assertEqual(len(opened), 1)
         with self.assertRaises(sqlite3.ProgrammingError):
             opened[0].execute("SELECT 1")
+
+    def test_recorder_transport_propagates_mid_import_cancel_without_timeout_fallback(self):
+        def checkpoint(label, **kwargs):
+            if label == "history_import_committed_batch":
+                self.manager.job_cancel_event.set()
+        with patch.object(history.HA, "history", return_value=payload(100)) as fetch, \
+                patch.object(history, "rss_mb", return_value=50), \
+                patch.object(history.TRAINING_BUDGET, "checkpoint", side_effect=checkpoint), \
+                patch.object(self.store, "event") as event:
+            with self.assertRaises(InterruptedError):
+                self.manager._fetch_history_resilient(["sensor.room_0"], 1700000000, 1700000100,
+                    minimal=False, no_attributes=False, source="ha_history_full")
+        fetch.assert_called_once()
+        event.assert_not_called()
+        self.assertEqual(self.store.archive_count(), 128)
 
 
 if __name__ == "__main__":

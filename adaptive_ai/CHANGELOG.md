@@ -2,7 +2,7 @@
 - Import odpowiedzi Recorder zapisuje najwyżej 128 wierszy w jednej transakcji. Każda partia zwalnia SQLite i Store.lock przed przerwą budżetu treningu.
 - Jedno połączenie na import zachowuje osobne commit/rollback. Zapisany fragment przetrwa anulowanie lub późniejszy błąd; ponowienie uzupełnia dane istniejącym UPSERT.
 - Zachowane próbkowanie sensorów, końcowy stan grupy, kolejność i pochodzenie danych. Store.archive_batch pozostaje atomowe dla pozostałych użytkowników.
-- Nowy ślad history_archive_import podaje liczbę zatwierdzonych wierszy i partii. 11 regresji; pełny zestaw 1976 testów.
+- Nowy ślad history_archive_import podaje liczbę zatwierdzonych wierszy i partii. 12 regresji; pełny zestaw 1977 testów.
 - W benchmarku 9600 wierszy z checkpointem w tle: mediana szczytu archive_batch około 112 → 16 ms, przy czasie całego importu 120 → 124 ms na Windows. W Linuksie wystąpiła też próbka 204 ms mimo 128 wierszy; ograniczamy liczbę wierszy, bez gwarancji czasu I/O.
 - Aktualizacja i restart, bez Rebuild. Modele, wagi i kontrakt v26 pozostają zgodne.
 
