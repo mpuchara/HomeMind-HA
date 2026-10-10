@@ -1,10 +1,10 @@
 {
-  "version": "0.14.170",
+  "version": "0.14.171",
   "release_date": "2026-10-10",
-  "base_version": "0.14.169",
-  "base_commit": "255563fa71c6eea41899ad0c392fd558fba89439",
-  "release_status": "promotion-snapshots-only-on-changed-proof-or-window",
-  "release_validation_tests_passed": 2031,
+  "base_version": "0.14.170",
+  "base_commit": "f73a97f30ed710fb3f877d219080ea28e50da34a",
+  "release_status": "per-agent-inference-sql-session-with-independent-transactions",
+  "release_validation_tests_passed": 2043,
   "release_014140": {
     "scope": "inventory_and_remove_remaining_shipped_feature_Handler_fallbacks_for_Candidate_Live_and_manual_feedback_transport",
     "explicit_routes": "manual_feedback.js, candidate_ui.js, candidate_preference_ui.js, /api/candidates, Candidate Teach-RL status/train, generation history/comparison, /api/candidate-live, /api/live and Candidate discard",
@@ -2376,6 +2376,36 @@
     "telemetry_counts": [
       "context_promotion_snapshot_changed",
       "context_promotion_snapshot_skipped"
+    ]
+  },
+  "release_014171": {
+    "scope": "complete_registered_process_agent_pipeline_connection_lifetime",
+    "validation": "12_real_SQL_dispatch_timeout_freshness_durability_concurrency_and_benchmark_regressions",
+    "queries_and_control_guards_unchanged": true,
+    "full_model_SHA_validation_unchanged": true,
+    "independent_commit_and_rollback": true,
+    "no_persistent_read_transaction": true,
+    "connection_owner": "one_agent_one_thread_one_dispatch_closed_on_success_or_failure",
+    "nested_background_timeout_ms": 250,
+    "foreground_timeout_ms": 30000,
+    "training_worker_timeout_ms": 60000,
+    "synthetic_SQL_component": {
+      "passes": 128,
+      "shadow_queries": 32,
+      "previous_connections": 5,
+      "current_connections": 1,
+      "speedup_range": [
+        2.077869492657499,
+        2.5455945783205327
+      ],
+      "same_fresh_queries_and_every_result": true,
+      "includes_open_and_close": true,
+      "limit": "SQL component only, not a whole HA decision latency forecast"
+    },
+    "remaining_costs": [
+      "full_candidate_validation",
+      "candidate_features",
+      "concurrent_WAL_checkpoint_IO"
     ]
   }
 }

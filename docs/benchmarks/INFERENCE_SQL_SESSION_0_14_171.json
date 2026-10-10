@@ -1,0 +1,55 @@
+{
+  "synthetic": true,
+  "passes": 128,
+  "shadow_queries": 32,
+  "same_fresh_sql_and_every_result": true,
+  "includes_connection_setup_and_close": true,
+  "series": [
+    {
+      "previous": {
+        "median_ms": 1.584825000000123,
+        "total_ms": 209.26563600002623,
+        "connections_per_decision": 5,
+        "result_sha256": "ae82fedffd8098a7586c74df9c6103e638e5dbe834037e6c66954e7f6788f402"
+      },
+      "current": {
+        "median_ms": 0.7581750000014154,
+        "total_ms": 100.71163599999977,
+        "connections_per_decision": 1,
+        "result_sha256": "ae82fedffd8098a7586c74df9c6103e638e5dbe834037e6c66954e7f6788f402"
+      },
+      "total_speedup": 2.077869492657499
+    },
+    {
+      "current": {
+        "median_ms": 0.7422465000015421,
+        "total_ms": 100.17677700001215,
+        "connections_per_decision": 1,
+        "result_sha256": "ae82fedffd8098a7586c74df9c6103e638e5dbe834037e6c66954e7f6788f402"
+      },
+      "previous": {
+        "median_ms": 1.7271364999995598,
+        "total_ms": 231.59731200000166,
+        "connections_per_decision": 5,
+        "result_sha256": "ae82fedffd8098a7586c74df9c6103e638e5dbe834037e6c66954e7f6788f402"
+      },
+      "total_speedup": 2.3118862368667896
+    },
+    {
+      "previous": {
+        "median_ms": 1.9385334999988402,
+        "total_ms": 283.58869799999553,
+        "connections_per_decision": 5,
+        "result_sha256": "ae82fedffd8098a7586c74df9c6103e638e5dbe834037e6c66954e7f6788f402"
+      },
+      "current": {
+        "median_ms": 0.8185600000008009,
+        "total_ms": 111.40371700001594,
+        "connections_per_decision": 1,
+        "result_sha256": "ae82fedffd8098a7586c74df9c6103e638e5dbe834037e6c66954e7f6788f402"
+      },
+      "total_speedup": 2.5455945783205327
+    }
+  ],
+  "limit": "SQL component with actual Engine dispatcher and Candidate/Explore helpers; excludes model validation, features, HA, concurrent checkpoint I/O. Not an HA latency forecast."
+}
