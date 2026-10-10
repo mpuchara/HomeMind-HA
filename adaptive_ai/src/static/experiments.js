@@ -41,7 +41,8 @@
       ]);
       const cfg={focus:'presence',intensity:.2,interval:900,daily_budget:6,observation_seconds:30,max_step:subject.target_property==='power'?1:subject.target_property==='temperature'?.5:5,...(explore.free_config||{})};
       const previousSensor=explore.session?.targeted_sensor||'';
-      const signal=explore.additional_signal||{purpose:'context',threshold:40,hysteresis:5,max_age_seconds:900};
+      const defaults=explore.illumination_defaults||{};
+      const signal=explore.additional_signal||{purpose:'context',hysteresis:0,max_age_seconds:900};
       dialog.innerHTML=`<form method="dialog" class="experiment-form">
         <div class="teach-head"><div><div class="eyebrow">GENERATION EXPLORE</div><h2 id="exploreTitle">Explore · ${esc(subject.name)} · Gen ${esc(subject.generation_number)}</h2></div><button type="button" class="icon" data-close>×</button></div>
         <p>Explore never changes Gen ${esc(subject.generation_number)} in place. A direct child Candidate owns the result.</p>
@@ -70,8 +71,9 @@
         <section data-pane="additional_signal" hidden>
           <label>Czujnik jasności<select name="signal_entity"><option value="">Wybierz czujnik…</option>${entityOptions(entities.filter(e=>String(e.entity_id).startsWith('sensor.')),signal.entity_id)}</select></label>
           <label>Cel<select name="signal_purpose"><option value="context" ${signal.purpose==='context'?'selected':''}>Używaj jako dodatkowy kontekst treningu</option><option value="avoid_bright_on" ${signal.purpose==='avoid_bright_on'?'selected':''}>Pomijaj włączenie, gdy jest wystarczająco jasno</option></select></label>
-          <div data-signal-goal><label>Próg jasności<input name="signal_threshold" type="number" step="any" min="0" value="${esc(signal.threshold??40)}"></label>
-          <label>Margines wokół progu<input name="signal_hysteresis" type="number" step="any" min="0" value="${esc(signal.hysteresis??5)}"></label></div>
+          <div data-signal-goal><label>Wartość z istniejącej konfiguracji<select name="signal_reference"></select></label><p class="muted" data-signal-source></p>
+          <label>Próg jasności — możesz zmienić<input name="signal_threshold" type="number" step="any" min="0" value="${esc(signal.threshold??'')}"></label>
+          <label>Margines wokół progu<input name="signal_hysteresis" type="number" step="any" min="0" value="${esc(signal.hysteresis??0)}"></label></div>
           <label>Maksymalny wiek pomiaru (s)<input name="signal_age" type="number" min="1" max="86400" value="${esc(signal.max_age_seconds??900)}"></label>
           <p>Próg podaj w jednostkach czujnika: lx albo surowa skala LD2410 0–255. Wybierz odczyt reprezentujący oświetlenie tego miejsca; światło zapalone w kuchni może zmieniać jego wartość.</p>
           <p>Powstanie nowy Candidate. Preferencja pomija nowe włączenia; nie gasi światła podczas pobytu. Brak świeżego pomiaru pozostawia decyzję zwykłemu modelowi. Przyjęcie zmiany wymaga porównania w Shadow, także w ciemności.</p>
@@ -92,6 +94,50 @@
         form.elements.signal_age.required=mode==='additional_signal';
         dialog.querySelector('[data-signal-goal]').hidden=!goal;
       };
+      const drafts=new Map();
+      let previousSignal=form.elements.signal_entity.value;
+      const saveDraft=()=>drafts.set(previousSignal,{threshold:form.elements.signal_threshold.value,
+        hysteresis:form.elements.signal_hysteresis.value,age:form.elements.signal_age.value,reference:form.elements.signal_reference.value});
+      const sourceName=source=>`${source.name||source.id} · ${source.kind==='automation'?'automatyzacja':'agent'}${source.bound_entity?` · ${source.bound_entity}`:''}${source.config_status==='cached'?' · ostatnia odczytana konfiguracja':''}`;
+      const updateSource=()=>{
+        const reference=defaults[form.elements.signal_entity.value];
+        const index=form.elements.signal_reference.value;
+        const choice=index===''?null:reference?.alternatives?.[Number(index)];
+        dialog.querySelector('[data-signal-source]').textContent=choice?
+          `Źródło: ${sourceName(choice.source)}. Wartość jest kopiowana; późniejsze zmiany źródła jej nie zmienią.${reference.conflicting?' Znaleziono różne progi — dostępne są powyżej.':''}`:
+          reference?'Własna wartość. Możesz wybrać jeden z zapisanych progów.':'Nie znaleziono progu dla tego czujnika. Wpisz własną wartość.';
+      };
+      const applyReference=()=>{
+        const choice=defaults[form.elements.signal_entity.value]?.alternatives?.[Number(form.elements.signal_reference.value)];
+        if(form.elements.signal_reference.value!==''&&choice){
+          form.elements.signal_threshold.value=choice.config.threshold;
+          form.elements.signal_hysteresis.value=choice.config.hysteresis;
+          form.elements.signal_age.value=choice.config.max_age_seconds;
+        }
+        updateSource();
+      };
+      const selectSignal=initial=>{
+        const eid=form.elements.signal_entity.value;
+        const reference=defaults[eid];
+        form.elements.signal_reference.innerHTML='<option value="">Własna wartość</option>'+(reference?.alternatives||[]).map((r,i)=>
+          `<option value="${i}">${esc(r.config.threshold)} ${esc(r.config.unit==='raw'?'(skala czujnika)':r.config.unit)} · ${esc(sourceName(r.source))}</option>`).join('');
+        const draft=drafts.get(eid);
+        if(draft){
+          form.elements.signal_threshold.value=draft.threshold;form.elements.signal_hysteresis.value=draft.hysteresis;
+          form.elements.signal_age.value=draft.age;form.elements.signal_reference.value=draft.reference;
+        }else if(initial&&signal.entity_id===eid&&signal.threshold!=null&&reference?.source.kind==='selected_agent'){
+          form.elements.signal_reference.value='0';
+        }else{
+          form.elements.signal_reference.value=reference?'0':'';
+          form.elements.signal_threshold.value='';form.elements.signal_hysteresis.value=0;form.elements.signal_age.value=900;
+          applyReference();
+        }
+        previousSignal=eid;updateSource();
+      };
+      form.elements.signal_entity.onchange=()=>{saveDraft();selectSignal(false);};
+      form.elements.signal_reference.onchange=applyReference;
+      [form.elements.signal_threshold,form.elements.signal_hysteresis,form.elements.signal_age].forEach(e=>e.oninput=()=>{form.elements.signal_reference.value='';updateSource();});
+      selectSignal(true);
       form.elements.signal_purpose.onchange=()=>setMode(mode);
       setMode(mode);
       dialog.querySelectorAll('[data-mode]').forEach(b=>b.onclick=()=>setMode(b.dataset.mode));
@@ -106,6 +152,7 @@
           config:{focus:f.focus.value,intensity:Number(f.intensity.value)/100,max_step:Number(f.max_step.value),interval:Number(f.interval.value)*60,daily_budget:Number(f.daily_budget.value),observation_seconds:Number(f.observation_seconds.value)}
         }:mode==='targeted_sensor'?{mode:'targeted_sensor',sensor_entity:f.sensor_entity.value}:{
           mode:'additional_signal',additional_signal:{version:1,entity_id:f.signal_entity.value,purpose:f.signal_purpose.value,
+          ...(defaults[f.signal_entity.value]?.config.unit?{unit:defaults[f.signal_entity.value].config.unit}:{}),
           max_age_seconds:Number(f.signal_age.value),hysteresis:f.signal_purpose.value==='context'?0:Number(f.signal_hysteresis.value),
           ...(f.signal_purpose.value==='avoid_bright_on'?{threshold:Number(f.signal_threshold.value)}:{})}};
         const button=dialog.querySelector('[data-start]');button.disabled=true;

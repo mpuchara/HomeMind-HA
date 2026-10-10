@@ -1,6 +1,6 @@
-# HomeMind-HA / Adaptive AI 0.14.168
+# HomeMind-HA / Adaptive AI 0.14.169
 
-0.14.168: dodatkowy czujnik jasności i osobna preferencja nowych włączeń przez Explore → Candidate → Shadow. Próg podaje użytkownik; zmiana nie gasi już zapalonego światła.
+0.14.169: edytowalny próg jasności z automatyzacji lub innego agenta używającego tego samego czujnika; wybór źródła i zachowanie ręcznych zmian.
 
 
 Cztery akcje każdego agenta: Shadow/Control, Wrong decision, Settings, Teach.

@@ -821,7 +821,12 @@ def install(manager, *, legacy_get=True, legacy_post=True):
             from agent_candidate_config_guard import config_signature
             from lighting_conditions import illumination_sensor
             from context import is_fast_reactive_agent, is_electrical_measurement_entity
-            config = normalize(body.get("additional_signal"))
+            from illumination_defaults import fill_missing_threshold, for_manager
+            requested_signal = body.get("additional_signal")
+            defaults = (for_manager(manager, agent) if isinstance(requested_signal, dict)
+                        and requested_signal.get("purpose") == "avoid_bright_on" and "threshold" not in requested_signal else {})
+            requested_signal, threshold_source = fill_missing_threshold(requested_signal, defaults)
+            config = normalize(requested_signal)
             if config is None or not is_fast_reactive_agent(agent) or agent.get("target_property") != "power":
                 raise ValueError("Additional illumination context supports light/relay power agents")
             with manager.engine.lock:
@@ -831,6 +836,8 @@ def install(manager, *, legacy_get=True, legacy_post=True):
             if is_electrical_measurement_entity(config["entity_id"], state):
                 raise ValueError("An electrical measurement cannot be the illumination reference")
             unit = str((state.get("attributes") or {}).get("unit_of_measurement") or "raw").lower()
+            if "unit" in requested_signal and config["unit"] != ("lx" if unit == "lux" else unit):
+                raise ValueError("Illumination sensor unit changed; reopen Explore and review the threshold")
             config = normalize({**config, "unit": unit})
             if config == agent.get("additional_signal"):
                 raise ValueError("This additional signal configuration is already active")
@@ -841,7 +848,7 @@ def install(manager, *, legacy_get=True, legacy_post=True):
                 child = lineage_row(manager.store, generation_id=created["child_generation_id"])
                 session = _insert_session(manager, generation, child["generation_id"], mode=SIGNAL_MODE,
                     sensor=config["entity_id"], status="queued", requested={"additional_signal": config,
-                    "parent_signature": config_signature(agent)}, previous={"additional_signal": agent.get("additional_signal")})
+                    "parent_signature": config_signature(agent), "threshold_default_source": threshold_source}, previous={"additional_signal": agent.get("additional_signal")})
                 manager.store.update_agent(child["agent_id"], {"additional_signal": config})
                 manager.engine.models.pop(child["agent_id"], None)
                 _refresh_generation_metadata(manager.store, child["agent_id"])
@@ -933,6 +940,7 @@ def install(manager, *, legacy_get=True, legacy_post=True):
                 session = _row(manager.store, session["session_id"])
         root = manager.store.get_agent_config(str(generation["root_agent_id"]))
         exp = experiments.status(root["id"]) if root else {"config": {}}
+        from illumination_defaults import for_manager
         return {
             "root_agent_id": generation["root_agent_id"],
             "parent_generation_id": generation["generation_id"],
@@ -944,6 +952,7 @@ def install(manager, *, legacy_get=True, legacy_post=True):
             "targeted_contract": "forced_priority_not_evidence_override_prequential_future_only",
             "session": _session_payload(manager, session),
             "additional_signal": selected_agent.get("additional_signal"),
+            "illumination_defaults": for_manager(manager, selected_agent),
         }
 
     def decorate_status(result):

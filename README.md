@@ -1,6 +1,6 @@
-# HomeMind-HA / Adaptive AI 0.14.168
+# HomeMind-HA / Adaptive AI 0.14.169
 
-0.14.168: dodatkowy czujnik jasności i osobna preferencja nowych włączeń przez Explore → Candidate → Shadow. Próg podaje użytkownik; zmiana nie gasi już zapalonego światła. [Opis wydania](docs/RELEASE_0_14_168_PL.md).
+0.14.169: edytowalny próg jasności z automatyzacji lub innego agenta używającego tego samego czujnika; wybór źródła i zachowanie ręcznych zmian. [Opis wydania](docs/RELEASE_0_14_169_PL.md).
 
 
 Karta agenta ma cztery akcje: **Shadow/Control**, **Wrong decision**, **Settings** i **Teach**. Wrong decision uczy poprawnego Desired. Teach otwiera powiększalny wykres historii z wyborem dokładnej chwili i zapisem poprawnego Desired. Cofanie ostatniej korekty jest dostępne w Teach oraz Settings; pozostałe operacje i diagnostyka są w Settings.
