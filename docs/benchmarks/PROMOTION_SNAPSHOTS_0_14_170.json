@@ -1,0 +1,64 @@
+{
+  "synthetic": true,
+  "models": 4,
+  "passes": 64,
+  "independent_labels": 8,
+  "width": 512,
+  "rows": 512,
+  "every_live_result_and_model_parity": true,
+  "final_durable_json_parity": true,
+  "series": [
+    {
+      "previous": {
+        "median_observation_ms": 5.173837000000958,
+        "total_ms": 1653.3388619999982,
+        "snapshots": 264,
+        "written_rows": 52,
+        "checkpoint_batches": 12
+      },
+      "current": {
+        "median_observation_ms": 0.057444500001224696,
+        "total_ms": 1219.3011729999341,
+        "snapshots": 44,
+        "written_rows": 36,
+        "checkpoint_batches": 8
+      },
+      "total_speedup": 1.3559725017996744
+    },
+    {
+      "previous": {
+        "median_observation_ms": 4.999605000008955,
+        "total_ms": 1536.8470899998954,
+        "snapshots": 264,
+        "written_rows": 52,
+        "checkpoint_batches": 12
+      },
+      "current": {
+        "median_observation_ms": 0.0542450000153849,
+        "total_ms": 1158.9329520000433,
+        "snapshots": 44,
+        "written_rows": 36,
+        "checkpoint_batches": 8
+      },
+      "total_speedup": 1.3260880082386663
+    },
+    {
+      "previous": {
+        "median_observation_ms": 5.425912000006861,
+        "total_ms": 1544.2132619999995,
+        "snapshots": 264,
+        "written_rows": 52,
+        "checkpoint_batches": 12
+      },
+      "current": {
+        "median_observation_ms": 0.05606849998684993,
+        "total_ms": 1164.5610339999166,
+        "snapshots": 44,
+        "written_rows": 36,
+        "checkpoint_batches": 8
+      },
+      "total_speedup": 1.32600457761848
+    }
+  ],
+  "limit": "Promotion snapshot/JSON/SQLite component; no claim about HA latency or candidate validation cost."
+}

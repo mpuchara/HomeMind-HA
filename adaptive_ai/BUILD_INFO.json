@@ -1,10 +1,10 @@
 {
-  "version": "0.14.169",
+  "version": "0.14.170",
   "release_date": "2026-10-10",
-  "base_version": "0.14.168",
-  "base_commit": "072a646497fea765d9162c6b22f284d55dff3a49",
-  "release_status": "editable-same-sensor-illumination-threshold-references",
-  "release_validation_tests_passed": 2022,
+  "base_version": "0.14.169",
+  "base_commit": "255563fa71c6eea41899ad0c392fd558fba89439",
+  "release_status": "promotion-snapshots-only-on-changed-proof-or-window",
+  "release_validation_tests_passed": 2031,
   "release_014140": {
     "scope": "inventory_and_remove_remaining_shipped_feature_Handler_fallbacks_for_Candidate_Live_and_manual_feedback_transport",
     "explicit_routes": "manual_feedback.js, candidate_ui.js, candidate_preference_ui.js, /api/candidates, Candidate Teach-RL status/train, generation history/comparison, /api/candidate-live, /api/live and Candidate discard",
@@ -2343,5 +2343,39 @@
       "no_OR_NOT_attribute_or_template_translation"
     ],
     "candidate_shadow_and_control_guards_preserved": true
+  },
+  "release_014170": {
+    "scope": "Sensor_Tournament_promotion_snapshot_cadence",
+    "validation": "9_persistence_proof_cooldown_and_paired_benchmark_regressions",
+    "all_labels_and_window_changes_queue_complete_snapshot": true,
+    "per_observation_availability_retained_in_RAM": true,
+    "existing_availability_snapshot_interval_seconds": 60,
+    "attempts_still_run_on_every_observation": true,
+    "checksum_and_candidate_features_unchanged": true,
+    "synthetic_four_model_benchmark": {
+      "passes": 64,
+      "labels": 8,
+      "previous_snapshots": 264,
+      "current_snapshots": 44,
+      "previous_written_rows": 52,
+      "current_written_rows": 36,
+      "speedup_range": [
+        1.326,
+        1.356
+      ],
+      "every_live_result_and_model_parity": true,
+      "final_durable_json_parity": true,
+      "limit": "Component benchmark, not an HA latency forecast",
+      "independent_caches_and_fresh_policy_content": true
+    },
+    "remaining_costs": [
+      "full_candidate_validation",
+      "candidate_features",
+      "WAL_checkpoint_IO"
+    ],
+    "telemetry_counts": [
+      "context_promotion_snapshot_changed",
+      "context_promotion_snapshot_skipped"
+    ]
   }
 }

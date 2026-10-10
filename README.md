@@ -1,6 +1,6 @@
-# HomeMind-HA / Adaptive AI 0.14.169
+# HomeMind-HA / Adaptive AI 0.14.170
 
-0.14.169: edytowalny próg jasności z automatyzacji lub innego agenta używającego tego samego czujnika; wybór źródła i zachowanie ręcznych zmian. [Opis wydania](docs/RELEASE_0_14_169_PL.md).
+0.14.170: usunięte nadmiarowe kopie modeli Sensor Tournament; pełne próbki i okna oceny zachowane, mniej pracy CPU i zapisów SQLite. [Opis wydania](docs/RELEASE_0_14_170_PL.md).
 
 
 Karta agenta ma cztery akcje: **Shadow/Control**, **Wrong decision**, **Settings** i **Teach**. Wrong decision uczy poprawnego Desired. Teach otwiera powiększalny wykres historii z wyborem dokładnej chwili i zapisem poprawnego Desired. Cofanie ostatniej korekty jest dostępne w Teach oraz Settings; pozostałe operacje i diagnostyka są w Settings.

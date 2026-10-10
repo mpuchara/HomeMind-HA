@@ -243,6 +243,11 @@ class Telemetry:
         self.last_wall = self.started
         self.last_cpu = self.cpu_start
 
+    def inc(self, name):
+        """Count an occurrence without allocating latency samples."""
+        with self.lock:
+            self.counts[name] += 1
+
     def observe(self, name, milliseconds):
         debug = globals().get("RUNTIME_DEBUG")
         debug_enabled = bool(debug is not None and debug.enabled)
