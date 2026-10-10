@@ -106,6 +106,8 @@ def replacement_plan(agent, policy, challenger, tournament, baseline_score,
     # Explicit user-selected entities retain the stronger protection already present in
     # promotion.py: Sensor Tournament must never silently displace them.
     protected = {str(x) for x in (agent.get("input_entities") or [])}
+    from additional_signal import entities as additional_entities
+    protected.update(additional_entities(agent))
     removable = [(idx, eid) for idx, eid in enumerate(active) if eid not in protected]
     if not removable:
         return {

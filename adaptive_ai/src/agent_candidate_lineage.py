@@ -29,7 +29,7 @@ def _config_payload(agent):
     keys = (
         "target_entity", "target_property", "min_value", "max_value",
         "confidence_threshold", "deadband", "action_interval", "exploration_step",
-        "exploration_interval", "input_entities", "micro_exploration", "auto_created",
+        "exploration_interval", "input_entities", "additional_signal", "micro_exploration", "auto_created",
     )
     out = {}
     for key in keys:
@@ -844,6 +844,10 @@ def install(manager):
                     ),
                 )
             manager.store.save_model(root_id, model)
+            with manager.store.lock, manager.store.conn() as c:
+                c.execute("UPDATE agents SET additional_signal=? WHERE id=?",
+                          (json.dumps(candidate.get("additional_signal")), root_id))
+            manager.store.touch_agent_index()
             manager.store.set_training_state(
                 root_id, "qualified", score=candidate.get("benchmark_score"),
                 samples=candidate.get("benchmark_samples") or 0,

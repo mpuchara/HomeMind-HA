@@ -319,6 +319,8 @@ def _choose_schema_after_promotion(agent, policy, challenger, tournament):
 
     # Explicitly configured inputs are user intent and are never silently displaced.
     protected = {str(x) for x in (agent.get("input_entities") or [])}
+    from additional_signal import entities as additional_entities
+    protected.update(additional_entities(agent))
     removable = [(idx, eid) for idx, eid in enumerate(active) if eid not in protected]
     if not removable:
         return None, None

@@ -227,6 +227,14 @@ def validate_agent(p):
     allowed = {x["property"] for x in SUPPORTED_TARGETS.get(domain, [])}
     if p["target_property"] not in allowed:
         return f"unsupported target property for {domain}"
+    if p.get("additional_signal") is not None:
+        try:
+            from additional_signal import normalize
+            normalize(p["additional_signal"])
+            if domain not in ("light", "switch", "input_boolean") or p["target_property"] != "power":
+                return "Additional illumination context supports light/relay power agents"
+        except (ValueError, TypeError):
+            return "Invalid additional illumination settings"
     try:
         inputs = p.get("input_entities", ["*"])
         if not isinstance(inputs, list) or not inputs or any(not isinstance(x, str) or (x != "*" and not re.fullmatch(r"[a-z_]+\.[a-z0-9_]+", x)) for x in inputs):
@@ -625,7 +633,7 @@ class Handler(BaseHTTPRequestHandler):
                         if not bool(review_request) and existing.get("mode") == "control":
                             payload["mode"] = "shadow"
 
-                    model_change = any(k in payload for k in ("min_value", "max_value", "input_entities"))
+                    model_change = any(k in payload for k in ("min_value", "max_value", "input_entities", "additional_signal"))
                     disabling = "enabled" in payload and not bool(payload.get("enabled"))
                     leaving_control = existing.get("mode") == "control" and (
                         ("mode" in payload and payload.get("mode") != "control") or model_change or disabling

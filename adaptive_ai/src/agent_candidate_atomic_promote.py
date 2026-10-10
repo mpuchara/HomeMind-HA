@@ -281,8 +281,22 @@ def install(manager):
                     raise ValueError("Candidate model unavailable")
                 if candidate.get("training_state") != "qualified":
                     raise ValueError("Candidate is not qualified")
-                if config_signature(root) != config_signature(candidate):
+                from additional_signal import child_config_matches
+                direct_parent = manager.store.get_agent_config(row["parent_agent_id"])
+                # Root may own an unchanged ancestor of a configured child. All
+                # ordinary action/context limits still have to match the Root.
+                comparable = {**candidate, "additional_signal": root.get("additional_signal")}
+                if (config_signature(root) != config_signature(comparable)
+                        or not child_config_matches(manager.store, direct_parent, candidate)):
                     raise ValueError("Root Live configuration changed; rebuild Candidate before Promote")
+                if root.get("additional_signal") != candidate.get("additional_signal"):
+                    from additional_signal import root_signal_matches
+                    if not root_signal_matches(manager.store, root, child_gen):
+                        raise ValueError("Root additional signal changed after this Candidate lineage was created")
+                signal = candidate.get("additional_signal")
+                if signal and ((candidate_model.get("selection_meta") or {}).get("additional_signal") != signal
+                               or signal["entity_id"] not in (candidate_model.get("schema") or {}).get("entities", [])):
+                    raise ValueError("Candidate model does not contain its configured additional signal; rebuild it")
 
                 requested = str(target_mode or row.get("promotion_target_mode") or "").lower()
                 mode = requested if requested in VALID_TARGET_MODES else _preference(row, root.get("mode"))
@@ -360,14 +374,15 @@ def install(manager):
                             """UPDATE agents SET mode=?,training_state='qualified',benchmark_score=?,
                                benchmark_samples=?,benchmark_source=?,benchmark_detail_json=?,
                                benchmark_updated_at=?,training_cursor_ts=?,training_window_start_ts=?,
-                               training_window_end_ts=?,training_progress=1.0,training_updated_at=?
+                               training_window_end_ts=?,training_progress=1.0,training_updated_at=?,additional_signal=?
                                WHERE id=?""",
                             (
                                 mode, candidate.get("benchmark_score"),
                                 int(candidate.get("benchmark_samples") or 0),
                                 candidate.get("benchmark_source"), benchmark_detail_json, stamp,
                                 candidate.get("training_cursor_ts"), candidate.get("training_window_start_ts"),
-                                candidate.get("training_window_end_ts"), stamp, root_id,
+                                candidate.get("training_window_end_ts"), stamp,
+                                json.dumps(candidate.get("additional_signal")), root_id,
                             ),
                         )
                         if int(cur.rowcount or 0) != 1:

@@ -375,6 +375,7 @@ class Store:
                 );
                 """
             )
+            self._ensure_column(c, "agents", "additional_signal", "TEXT NOT NULL DEFAULT 'null'")
             self._ensure_column(c, "agents", "exploration_step", "REAL NOT NULL DEFAULT 5.0")
             self._ensure_column(c, "agents", "auto_created", "INTEGER NOT NULL DEFAULT 0")
             self._ensure_column(c, "agents", "micro_exploration", "INTEGER NOT NULL DEFAULT 0")
@@ -551,6 +552,8 @@ class Store:
     @staticmethod
     def _agent_dict(row):
         d = dict(row)
+        from additional_signal import normalize
+        d["additional_signal"] = normalize(json.loads(d.get("additional_signal") or "null"))
         try:
             d["input_entities"] = json.loads(d.get("input_entities") or '["*"]')
         except Exception:
@@ -573,6 +576,8 @@ class Store:
         return d
 
     def create_agent(self, payload):
+        from additional_signal import normalize
+        signal = normalize(payload.get("additional_signal"))
         agent_id = str(uuid.uuid4())[:8]
         with self.lock, self.conn() as c:
             c.execute(
@@ -604,6 +609,7 @@ class Store:
                 ),
             )
             c.execute("UPDATE agents SET training_state='waiting', mode='paused', training_progress=0, training_updated_at=? WHERE id=?", (iso_now(), agent_id))
+            c.execute("UPDATE agents SET additional_signal=? WHERE id=?", (json.dumps(signal), agent_id))
         timing = {k: payload[k] for k in ("ack_timeout", "settling_seconds", "manual_hold_seconds") if k in payload}
         if timing:
             self.update_agent(agent_id, timing)
@@ -612,6 +618,9 @@ class Store:
         return self.get_agent(agent_id)
 
     def update_agent(self, agent_id, payload):
+        if "additional_signal" in payload:
+            from additional_signal import normalize
+            payload = {**payload, "additional_signal": normalize(payload["additional_signal"])}
         allowed = {
             "name": str, "mode": str, "min_value": float, "max_value": float,
             "confidence_threshold": float, "deadband": float, "action_interval": float,
@@ -619,9 +628,10 @@ class Store:
             "ack_timeout": float, "settling_seconds": float, "manual_hold_seconds": float,
             "micro_exploration": int, "enabled": int,
             "input_entities": json.dumps,
+            "additional_signal": json.dumps,
         }
         updates, values = [], []
-        reset_model = any(k in payload for k in ("min_value", "max_value", "input_entities"))
+        reset_model = any(k in payload for k in ("min_value", "max_value", "input_entities", "additional_signal"))
         for key, caster in allowed.items():
             if key in payload:
                 val = payload[key]

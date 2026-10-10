@@ -332,7 +332,12 @@ class MultiHorizonPolicy(PolicyBackend):
         selection_meta = dict((model or {}).get("selection_meta") or {}) if valid_model else {}
         if self.schema is None:
             selected, selection_meta = select_context_entities(agent, state_map, registry, hint_entities, relevance_scores=relevance_scores)
+            from additional_signal import entities as additional_entities
+            extra = additional_entities(agent)
+            selected = list(dict.fromkeys(selected + extra))
             self.schema = ExplicitFeatureSchema(self.dims, selected)
+            if not set(extra) <= set(self.schema.entities):
+                raise ValueError("Additional sensor does not fit the feature schema; reduce context inputs")
         if not selection_meta or not selection_meta.get("selection_reasons"):
             _, fresh_meta = select_context_entities(agent, state_map, registry, hint_entities, max_entities=len(self.schema.entities), relevance_scores=relevance_scores)
             fresh_meta["selected_entities"] = len(self.schema.entities)
@@ -347,6 +352,7 @@ class MultiHorizonPolicy(PolicyBackend):
             fresh_meta["upstream_sensors"] = [x for x in fresh_meta.get("upstream_sensors", []) if x in set(self.schema.entities)]
             selection_meta = fresh_meta
         selection_meta.update(self.context_exclusion_meta)
+        selection_meta["additional_signal"] = agent.get("additional_signal")
         self.selection_meta = selection_meta
         # Stage 2 is not allowed to add work to the realtime inference path. The
         # feature-level observation mask is materialized lazily by diagnostics/UI (or a

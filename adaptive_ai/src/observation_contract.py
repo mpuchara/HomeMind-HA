@@ -1748,6 +1748,8 @@ def _watched_fast_entities(engine, store):
     for agent in agents:
         if not agent.get("enabled") or not is_fast_reactive_agent(agent):
             continue
+        from additional_signal import entities as additional_entities
+        entities.update(additional_entities(agent))
         policy = models.get(agent["id"])
         if policy is not None:
             entities.update(policy.schema.entities)

@@ -20,9 +20,9 @@
     if(!session)return '<p class="muted">No Explore session exists for this parent generation yet.</p>';
     const evidence=session.result?.evidence||{};
     return `<div class="context-all"><b>Current Explore child · Gen ${esc(session.child_generation_number??'—')}</b>
-      <span>${esc(session.mode==='free'?'Free exploration':'Targeted sensor')} · ${esc(session.status)}</span>
+      <span>${esc(session.mode==='free'?'Free exploration':session.mode==='additional_signal'?'Dodatkowa jasność':'Targeted sensor')} · ${esc(session.status)}</span>
       <span>${esc(session.result_message||'Collecting evidence')}</span>
-      ${session.targeted_sensor?`<span>Sensor: ${esc(session.targeted_sensor)} · samples ${esc(evidence.samples??0)} · gain ${esc(pct(evidence.gain))}${evidence.sensor_quality==null?'':` · quality ${(Number(evidence.sensor_quality)*100).toFixed(1)}%`}</span>`:''}
+      ${session.targeted_sensor?`<span>Sensor: ${esc(session.targeted_sensor)}${session.mode==='additional_signal'?'':` · samples ${esc(evidence.samples??0)} · gain ${esc(pct(evidence.gain))}`}${evidence.sensor_quality==null?'':` · quality ${(Number(evidence.sensor_quality)*100).toFixed(1)}%`}</span>`:''}
       <span>Candidate dispatch: forbidden · ${session.mode==='free'?'physical probes owned by Live/Executor':'passive Candidate Shadow'}</span></div>`;
   }
 
@@ -41,10 +41,11 @@
       ]);
       const cfg={focus:'presence',intensity:.2,interval:900,daily_budget:6,observation_seconds:30,max_step:subject.target_property==='power'?1:subject.target_property==='temperature'?.5:5,...(explore.free_config||{})};
       const previousSensor=explore.session?.targeted_sensor||'';
+      const signal=explore.additional_signal||{purpose:'context',threshold:40,hysteresis:5,max_age_seconds:900};
       dialog.innerHTML=`<form method="dialog" class="experiment-form">
         <div class="teach-head"><div><div class="eyebrow">GENERATION EXPLORE</div><h2 id="exploreTitle">Explore · ${esc(subject.name)} · Gen ${esc(subject.generation_number)}</h2></div><button type="button" class="icon" data-close>×</button></div>
         <p>Explore never changes Gen ${esc(subject.generation_number)} in place. A direct child Candidate owns the result.</p>
-        <div class="actions" data-explore-modes><button type="button" class="primary" data-mode="free">Free exploration</button><button type="button" class="ghost" data-mode="targeted_sensor">Targeted sensor</button></div>
+        <div class="actions" data-explore-modes><button type="button" class="primary" data-mode="free">Free exploration</button><button type="button" class="ghost" data-mode="targeted_sensor">Targeted sensor</button>${subject.target_property==='power'?'<button type="button" class="ghost" data-mode="additional_signal">Dodatkowa jasność</button>':''}</div>
 
         <section data-pane="free">
           <div class="context-all"><b>Free exploration</b><span>Uses the existing Experiments residual learner and all of its current safety guards.</span></div>
@@ -66,16 +67,33 @@
 
         ${sessionHtml(explore.session)}
         <p data-explore-error role="alert"></p>
+        <section data-pane="additional_signal" hidden>
+          <label>Czujnik jasności<select name="signal_entity"><option value="">Wybierz czujnik…</option>${entityOptions(entities.filter(e=>String(e.entity_id).startsWith('sensor.')),signal.entity_id)}</select></label>
+          <label>Cel<select name="signal_purpose"><option value="context" ${signal.purpose==='context'?'selected':''}>Używaj jako dodatkowy kontekst treningu</option><option value="avoid_bright_on" ${signal.purpose==='avoid_bright_on'?'selected':''}>Pomijaj włączenie, gdy jest wystarczająco jasno</option></select></label>
+          <div data-signal-goal><label>Próg jasności<input name="signal_threshold" type="number" step="any" min="0" value="${esc(signal.threshold??40)}"></label>
+          <label>Margines wokół progu<input name="signal_hysteresis" type="number" step="any" min="0" value="${esc(signal.hysteresis??5)}"></label></div>
+          <label>Maksymalny wiek pomiaru (s)<input name="signal_age" type="number" min="1" max="86400" value="${esc(signal.max_age_seconds??900)}"></label>
+          <p>Próg podaj w jednostkach czujnika: lx albo surowa skala LD2410 0–255. Wybierz odczyt reprezentujący oświetlenie tego miejsca; światło zapalone w kuchni może zmieniać jego wartość.</p>
+          <p>Powstanie nowy Candidate. Preferencja pomija nowe włączenia; nie gasi światła podczas pobytu. Brak świeżego pomiaru pozostawia decyzję zwykłemu modelowi. Przyjęcie zmiany wymaga porównania w Shadow, także w ciemności.</p>
+        </section>
         <div class="dialog-actions"><button type="button" class="ghost" data-cancel>Cancel</button><button type="submit" class="primary" data-start>Start Explore · create child Candidate</button></div>
       </form>`;
       const form=dialog.querySelector('form');
       let mode='free';
       const setMode=next=>{
         mode=next;
-        dialog.querySelectorAll('[data-pane]').forEach(p=>p.hidden=p.dataset.pane!==mode);
+        dialog.querySelectorAll('[data-pane]').forEach(p=>{p.hidden=p.dataset.pane!==mode;p.querySelectorAll('input,select').forEach(e=>e.disabled=p.hidden);});
         dialog.querySelectorAll('[data-mode]').forEach(b=>{b.className=b.dataset.mode===mode?'primary':'ghost';});
         form.elements.sensor_entity.required=mode==='targeted_sensor';
+        form.elements.signal_entity.required=mode==='additional_signal';
+        const goal=mode==='additional_signal'&&form.elements.signal_purpose.value==='avoid_bright_on';
+        form.elements.signal_threshold.required=goal;
+        form.elements.signal_hysteresis.required=goal;
+        form.elements.signal_age.required=mode==='additional_signal';
+        dialog.querySelector('[data-signal-goal]').hidden=!goal;
       };
+      form.elements.signal_purpose.onchange=()=>setMode(mode);
+      setMode(mode);
       dialog.querySelectorAll('[data-mode]').forEach(b=>b.onclick=()=>setMode(b.dataset.mode));
       dialog.querySelector('[data-close]').onclick=()=>dialog.close();
       dialog.querySelector('[data-cancel]').onclick=()=>dialog.close();
@@ -86,7 +104,10 @@
         const body=mode==='free'?{
           mode:'free',
           config:{focus:f.focus.value,intensity:Number(f.intensity.value)/100,max_step:Number(f.max_step.value),interval:Number(f.interval.value)*60,daily_budget:Number(f.daily_budget.value),observation_seconds:Number(f.observation_seconds.value)}
-        }:{mode:'targeted_sensor',sensor_entity:f.sensor_entity.value};
+        }:mode==='targeted_sensor'?{mode:'targeted_sensor',sensor_entity:f.sensor_entity.value}:{
+          mode:'additional_signal',additional_signal:{version:1,entity_id:f.signal_entity.value,purpose:f.signal_purpose.value,
+          max_age_seconds:Number(f.signal_age.value),hysteresis:f.signal_purpose.value==='context'?0:Number(f.signal_hysteresis.value),
+          ...(f.signal_purpose.value==='avoid_bright_on'?{threshold:Number(f.signal_threshold.value)}:{})}};
         const button=dialog.querySelector('[data-start]');button.disabled=true;
         dialog.querySelector('[data-explore-error]').textContent='';
         try{
@@ -97,7 +118,7 @@
         }catch(error){dialog.querySelector('[data-explore-error]').textContent=error.message;}
         finally{button.disabled=false;}
       };
-      setMode(explore.session?.mode==='targeted_sensor'?'targeted_sensor':'free');
+      setMode(['targeted_sensor','additional_signal'].includes(explore.session?.mode)?explore.session.mode:'free');
       if(!dialog.open)dialog.showModal();
     }catch(error){alert(`Explore failed: ${error.message}`);}
   };

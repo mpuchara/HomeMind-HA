@@ -31,7 +31,7 @@ RESULT_VERSION = 1
 RESOURCE_PROFILE_CONTRACT = "adaptive_ram_first_worker_profile_v1"
 
 AGENT_CONFIG_KEYS = (
-    "id", "enabled", "input_entities", "target_entity", "target_property",
+    "id", "enabled", "input_entities", "additional_signal", "target_entity", "target_property",
     "min_value", "max_value", "confidence_threshold", "deadband",
     "action_interval", "exploration_step", "exploration_interval",
     "micro_exploration", "ack_timeout", "settling_seconds",

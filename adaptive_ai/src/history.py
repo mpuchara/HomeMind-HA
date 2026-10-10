@@ -433,7 +433,9 @@ class HistoryManager(threading.Thread):
 
     @staticmethod
     def _training_input_fingerprint(agent):
-        return tuple(sorted(str(x) for x in (agent.get("input_entities") or ("*",))))
+        inputs = tuple(sorted(str(x) for x in (agent.get("input_entities") or ("*",))))
+        signal = agent.get("additional_signal")
+        return inputs + ((json.dumps(signal, sort_keys=True),) if signal else ())
 
     def _remember_training_schema(self, agent, raw_model=None):
         raw = raw_model
@@ -447,6 +449,8 @@ class HistoryManager(threading.Thread):
                 except Exception:
                     raw = None
         if not isinstance(raw, dict):
+            return None
+        if agent.get("additional_signal") != (raw.get("selection_meta") or {}).get("additional_signal"):
             return None
         if int(raw.get("version") or 0) != int(MultiHorizonPolicy.VERSION):
             return None
@@ -489,6 +493,8 @@ class HistoryManager(threading.Thread):
                 else:
                     entities = list(dict.fromkeys(entities + bundle))
                 seed["selection_meta"]["radar_context_entities"] = bundle
+            from additional_signal import entities as additional_entities
+            entities = list(dict.fromkeys(entities + additional_entities(agent)))
             seed["schema"] = FeatureSchemaV12(
                 seed["dims"], entities, feature_contract_version=FEATURE_CONTRACT_VERSION
             ).export()
@@ -3284,6 +3290,7 @@ class HistoryManager(threading.Thread):
                 _schema_entities,
                 str(_agent.get("target_entity") or ""),
                 str(_agent.get("target_property") or ""),
+                str(_agent.get("additional_signal")),
                 (
                     str(getattr(_mask, "schema_id", "") or ""),
                     str(getattr(_mask, "mask_id", "") or ""),
@@ -3743,11 +3750,28 @@ class HistoryManager(threading.Thread):
             if not is_fast_reactive_agent(agent):
                 return float(action_ts), None
             positive = float(action_value) >= 0.5
-            def eligible_anchor(edge):
+            def eligible_anchor(edge, sensor=None, numeric_threshold=None):
+                if edge is not None and sensor:
+                    tracker.advance(float(edge))
+                    state = tracker.state_map.get(sensor) or {}
+                    if numeric_threshold is not None:
+                        try:
+                            value = float(state.get("state"))
+                            visible = value > numeric_threshold if positive else value < numeric_threshold
+                        except (ValueError, TypeError):
+                            visible = False
+                    else:
+                        from context import occupancy_state_bool
+                        visible = occupancy_state_bool(state) is positive
+                    # An event-time edge can precede its received-time visibility.
+                    # Sampling that point would teach OFF from the prior occupant's
+                    # ON context (and falsely penalize a correct vacancy OFF).
+                    if not visible:
+                        return float(action_ts)
                 if positive and edge is not None:
                     from lighting_conditions import lighting_context
                     tracker.advance(float(edge))
-                    if lighting_context(policy.selection_meta, tracker.state_map).get("need") is not True:
+                    if lighting_context(policy.selection_meta, tracker.state_map, tracker.current_ts, tracker.history).get("need") is not True:
                         return float(action_ts)
                 return float(edge if edge is not None else action_ts)
             window = float(OPTIONS.get(
@@ -3766,7 +3790,8 @@ class HistoryManager(threading.Thread):
                     latest=True,
                 )
                 if edge is not None:
-                    return eligible_anchor(edge), None
+                    return eligible_anchor(edge, pair["sensor"],
+                        pair["on_threshold"] if positive else pair["off_threshold"]), None
             primary = _primary_occupancy_sensor(policy)
             local_ts = (
                 tracker.directional_transition_before(primary, action_ts, positive, window)
@@ -3784,13 +3809,13 @@ class HistoryManager(threading.Thread):
                     )
                     if ts is not None and (upstream_ts is None or ts > upstream_ts):
                         upstream_ts = ts
-            local_anchor = eligible_anchor(local_ts)
+            local_anchor = eligible_anchor(local_ts, primary)
             if local_anchor == float(action_ts) and local_ts is not None and local_anchor != float(local_ts):
                 upstream_ts = None
             if upstream_ts is not None:
                 from lighting_conditions import lighting_context
                 tracker.advance(float(upstream_ts))
-                if lighting_context(policy.selection_meta, tracker.state_map).get("need") is not True:
+                if lighting_context(policy.selection_meta, tracker.state_map, tracker.current_ts, tracker.history).get("need") is not True:
                     upstream_ts = None
             return local_anchor, upstream_ts
 
@@ -3800,7 +3825,7 @@ class HistoryManager(threading.Thread):
             return sensor_snapshot(
                 agent, policy.schema.entities, tracker.state_map, quality_registry,
                 local_radars=(pair["sensor"],) if pair else (),
-                lighting=lighting_context(policy.selection_meta, tracker.state_map),
+                lighting=lighting_context(policy.selection_meta, tracker.state_map, tracker.current_ts, tracker.history),
             )
 
         def _safe_presence_boundary(agent, policy, action_value, edge, end_ts, tracker):
@@ -3848,7 +3873,7 @@ class HistoryManager(threading.Thread):
                     if float(action_value) < .5:
                         from lighting_conditions import lighting_context
                         tracker.advance(float(edge))
-                        if lighting_context(policy.selection_meta, tracker.state_map).get("need") is not True:
+                        if lighting_context(policy.selection_meta, tracker.state_map, tracker.current_ts, tracker.history).get("need") is not True:
                             return float(end_ts)
                     return _safe_presence_boundary(agent, policy, action_value, edge, end_ts, tracker)
             primary = _primary_occupancy_sensor(policy)
@@ -3861,7 +3886,7 @@ class HistoryManager(threading.Thread):
             if edge is not None and float(action_value) < .5:
                 from lighting_conditions import lighting_context
                 tracker.advance(float(edge))
-                if lighting_context(policy.selection_meta, tracker.state_map).get("need") is not True:
+                if lighting_context(policy.selection_meta, tracker.state_map, tracker.current_ts, tracker.history).get("need") is not True:
                     return float(end_ts)
             return _safe_presence_boundary(agent, policy, action_value, edge, end_ts, tracker) if edge is not None else float(end_ts)
 
@@ -3972,6 +3997,19 @@ class HistoryManager(threading.Thread):
             frozen_correct = prediction_is_correct(
                 agent, policy.actions, frozen_predicted, actual
             )
+            # This is an explicit configured objective, never an observed OFF label.
+            # The behavioural benchmark above continues to score recorded actions.
+            if agent.get("additional_signal") and not old.get("user_id"):
+                from additional_signal import apply as apply_signal, goal_transition
+                signal = ((old.get("quality_sensors") or {}).get("lighting_context") or {}).get("additional_signal") or {}
+                if signal.get("purpose") == "avoid_bright_on" and signal.get("need") in (True, False):
+                    objective, source = goal_transition(signal, actual_value)
+                    proposed, _ = apply_signal(agent, 0 if actual_value >= .5 else 1,
+                                               policy.actions[frozen_predicted], signal)
+                    key = "daylight" if source == "configured_daylight_preference" else "ordinary"
+                    slot = stat.setdefault("additional_signal_objective", {}).setdefault(key, {"samples": 0, "correct": 0})
+                    slot["samples"] += 1
+                    slot["correct"] += int(abs(proposed-objective) < .5)
             record_holdout_result(
                 frozen_benchmark_stats[aid], actual, frozen_correct
             )
@@ -5268,6 +5306,7 @@ class HistoryManager(threading.Thread):
                     "per_action_accuracy": per_action_accuracy,
                     "automation_rules": automation_rules,
                     "origin_counts": origin_counts,
+                    "additional_signal_objective": stat.get("additional_signal_objective") or {},
                     "training_balance_audit": training_audit_summaries.get(str(agent["id"])) or {},
                     "counts": {"samples": samples, "correct": int(stat.get("correct") or 0),
                                "per_action": stat.get("per_action") or {},

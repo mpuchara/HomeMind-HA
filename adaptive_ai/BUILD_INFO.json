@@ -1,10 +1,10 @@
 {
-  "version": "0.14.167",
+  "version": "0.14.168",
   "release_date": "2026-10-10",
-  "base_version": "0.14.166",
-  "base_commit": "f044a29e9b4297bccf4ab60a40930fafa950ec76",
-  "release_status": "conditional-presence-and-ambient-light-history-training",
-  "release_validation_tests_passed": 1990,
+  "base_version": "0.14.167",
+  "base_commit": "d467aff9cc96a4b0abd72c44e04b110470f959ea",
+  "release_status": "additional-illumination-context-and-explicit-on-preference",
+  "release_validation_tests_passed": 2009,
   "release_014140": {
     "scope": "inventory_and_remove_remaining_shipped_feature_Handler_fallbacks_for_Candidate_Live_and_manual_feedback_transport",
     "explicit_routes": "manual_feedback.js, candidate_ui.js, candidate_preference_ui.js, /api/candidates, Candidate Teach-RL status/train, generation history/comparison, /api/candidate-live, /api/live and Candidate discard",
@@ -2295,5 +2295,33 @@
     "rebuild_required_for_kitchen": true,
     "explicit_user_priority_preserved": true,
     "no_automatic_Control_authorization": true
+  },
+  "release_014168": {
+    "scope": "persisted_additive_signal_and_separate_configured_daylight_objective",
+    "feature_contract": 4,
+    "explicit_threshold": true,
+    "automatic_threshold_learning": false,
+    "physical_probe": false,
+    "early_OFF_from_preference": false,
+    "validation": "19_additional_signal_regressions_including_real_isolated_history_worker_and_atomic_promotion",
+    "preserved": [
+      "observed_action_labels",
+      "manual_priority",
+      "control_lease",
+      "own_command_exclusion",
+      "existing_sensor_context"
+    ],
+    "corrections": [
+      "causal_sensor_anchor_received_time",
+      "schema_signal_pin",
+      "objective_daylight_and_dark_coverage",
+      "atomic_model_and_signal_promotion"
+    ],
+    "limitations": [
+      "synthetic_validation_not_live_HA_proof",
+      "remote_sensor_must_represent_target_area",
+      "lamp_contamination_requires_sensor_selection",
+      "threshold_not_inferred_from_motion_only_history"
+    ]
   }
 }

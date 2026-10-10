@@ -102,6 +102,9 @@ def ensure_shadow_tables(store):
             """
         )
         columns = {row["name"] for row in c.execute("PRAGMA table_info(candidate_generation_pairs)").fetchall()}
+        for name, sql_type in (("objective_outcome", "REAL"), ("objective_source", "TEXT")):
+            if name not in columns:
+                c.execute(f"ALTER TABLE candidate_generation_pairs ADD COLUMN {name} {sql_type}")
         if "evidence_kind" not in columns:
             c.execute("ALTER TABLE candidate_generation_pairs ADD COLUMN evidence_kind TEXT NOT NULL DEFAULT 'legacy_unclassified'")
         if "calibration_eligible" not in columns:
@@ -219,7 +222,8 @@ def _predict_candidate(manager, generation, state_map, event_ts):
         if callable(backend_predictor):
             selected = backend_predictor(generation, state_map, event_ts)
             if selected is not None:
-                return selected
+                from additional_signal import shadow_prediction
+                return shadow_prediction(manager, generation, state_map, event_ts, selected, _candidate_temporal(manager))
 
         policy = manager.engine.models.get(str(agent_id))
         if policy is None:
@@ -240,14 +244,15 @@ def _predict_candidate(manager, generation, state_map, event_ts):
         confidence = None if confidence is None else float(confidence)
         if not math.isfinite(desired) or (confidence is not None and not math.isfinite(confidence)):
             return None
-        return {
+        from additional_signal import shadow_prediction
+        return shadow_prediction(manager, generation, state_map, event_ts, {
             "generation_id": generation["generation_id"],
             "agent_id": str(agent_id),
             "desired": desired,
             "confidence": confidence,
             "model_revision": _model_revision(policy, generation),
             "schema_revision": _schema_revision(policy, generation),
-        }
+        }, temporal, getattr(policy, "agent", None))
     except Exception as exc:
         manager.store.event(
             generation["root_agent_id"], "warning", "candidate_shadow_inference_gap",
@@ -779,7 +784,8 @@ def install(manager):
                     should = True
                     break
                 old_conf, new_conf = old.get("confidence"), result.get("confidence")
-                if old_conf is None or new_conf is None or abs(float(old_conf) - float(new_conf)) >= .02:
+                if ((old_conf is None) != (new_conf is None)
+                        or (old_conf is not None and new_conf is not None and abs(float(old_conf) - float(new_conf)) >= .02)):
                     should = True
                     break
                 if old.get("model_revision") != result.get("model_revision") or old.get("schema_revision") != result.get("schema_revision"):
@@ -824,6 +830,8 @@ def install(manager):
         current = current_bundle["current"]
         parent_false = (not _same_value(agent, prev_parent["desired"], current) and _same_value(agent, now_parent["desired"], current))
         child_false = (not _same_value(agent, prev_child["desired"], current) and _same_value(agent, now_child["desired"], current))
+        if (prev_child.get("additional_signal") or {}).get("applied"):
+            child_false = False
         if not parent_false and not child_false:
             return
         existing = _comparison_row(manager.store, parent_gid, child_gid)
@@ -905,6 +913,20 @@ def install(manager):
         p_ok = _same_value(agent, parent["desired"], outcome)
         c_ok = _same_value(agent, child["desired"], outcome)
         evidence = _transition_evidence(target_state, agent.get("target_entity"), outcome_ts)
+        # Preserve the observed outcome/correctness and calibration columns. The
+        # explicit daylight objective is a separately named comparison criterion.
+        from additional_signal import goal_transition
+        signal = child.get("additional_signal") or {}
+        objective, objective_source = None, None
+        if (signal.get("purpose") == "avoid_bright_on" and signal.get("need") in (True, False)
+                and not ((target_state.get("context") or {}).get("user_id") or target_state.get("context_user_id"))
+                and outcome_ts <= float(signal.get("valid_until") or 0)
+                and float(previous_current) < .5 and outcome >= .5):
+            objective, objective_source = goal_transition(signal, outcome,
+                manual=bool((target_state.get("context") or {}).get("user_id")
+                            or target_state.get("context_user_id")))
+            if objective_source == "observed_action" and signal.get("need") is True:
+                objective_source = "dark_observed_action"
         if c_ok and not p_ok:
             paired_result = "child_win"
         elif p_ok and not c_ok:
@@ -930,8 +952,8 @@ def install(manager):
                     outcome_ts,outcome,parent_prediction,child_prediction,parent_confidence,child_confidence,
                     parent_correct,child_correct,paired_result,evidence_kind,calibration_eligible,dependency_cluster,
                     calibration_outcome,calibration_parent_correct,calibration_child_correct,calibration_source_id,
-                    parent_lead_seconds,child_lead_seconds,lead_gain_seconds)
-                   VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                    parent_lead_seconds,child_lead_seconds,lead_gain_seconds,objective_outcome,objective_source)
+                   VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                 (
                     str(agent["id"]), edge["parent_generation_id"], edge["child_generation_id"],
                     bundle["event_id"], float(bundle["ts"]), float(outcome_ts), float(outcome),
@@ -942,7 +964,7 @@ def install(manager):
                     int(p_ok) if evidence["calibration_eligible"] else None,
                     int(c_ok) if evidence["calibration_eligible"] else None,
                     (bundle["event_id"] if evidence["calibration_eligible"] else None),
-                    parent_lead, child_lead, lead_gain,
+                    parent_lead, child_lead, lead_gain, objective, objective_source,
                 ),
             )
             inserted = c.total_changes > before
