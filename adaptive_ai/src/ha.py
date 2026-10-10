@@ -10,6 +10,7 @@ from urllib.parse import urlencode
 from urllib.request import urlopen
 from settings import (HA_BASE_URL, HA_TOKEN, OPTIONS, now_ts)
 from storage import STORE
+from lighting_conditions import condition_tree, direct_on_conditions
 
 class HAClient:
     def __init__(self, base_url, token):
@@ -379,6 +380,10 @@ class AutomationKnowledge:
                 "context_entities": sorted(context_entities - action_entities),
                 "baseline_rules": baseline_rules,
                 "action_services": action_services,
+                "condition_tree": (previous.get("condition_tree") if eid in failures and previous
+                                   else condition_tree(conditions)),
+                "direct_on_conditions": (previous.get("direct_on_conditions", False) if eid in failures and previous
+                                         else eid not in failures and direct_on_conditions(actions)),
                 "baseline_contract": "structural_prior_not_ground_truth",
                 "config_status": 'cached' if eid in failures and previous else 'unavailable' if eid in failures else 'fresh',
                 "config_error": failures.get(eid),

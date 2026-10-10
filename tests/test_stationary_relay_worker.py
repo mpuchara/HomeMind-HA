@@ -20,7 +20,7 @@ class StationaryRelayWorkerTests(unittest.TestCase):
         report = run(feature_contract=2, wildcard_unmapped=True)
         self.assertEqual(set(report["persisted_entities"]), {
             "sensor.espen4_stationary_energy", "sensor.espen4_moving_energy"})
-        self.assertEqual(report["persisted_feature_contract"], 3)
+        self.assertEqual(report["persisted_feature_contract"], 4)
         self.assertTrue(report["pass"], report["predictions"])
 
     def test_real_worker_and_persisted_policy_maintain_stationary_stay(self):
@@ -36,7 +36,7 @@ class StationaryRelayWorkerTests(unittest.TestCase):
 
     def test_rebuild_upgrades_old_feature_seed_in_actual_worker(self):
         report = run(feature_contract=2)
-        self.assertEqual(report["persisted_feature_contract"], 3)
+        self.assertEqual(report["persisted_feature_contract"], 4)
         self.assertTrue(report["pass"], report["predictions"])
 
     def test_neural_tournament_scores_whole_dwell_once(self):

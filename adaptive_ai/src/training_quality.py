@@ -13,7 +13,7 @@ from radar_context import radar_family, radar_role
 CONTRACT = "conditional_light_training_quality_v1"
 
 
-def sensor_snapshot(agent, entities, states, registry, *, local_radars=()):
+def sensor_snapshot(agent, entities, states, registry, *, local_radars=(), lighting=None):
     target_area = (registry.get(agent.get("target_entity")) or {}).get("area_id")
     signature, active, absent, reliable, radar = [], [], [], [], []
     unresolved_radar_devices = set()
@@ -43,7 +43,7 @@ def sensor_snapshot(agent, entities, states, registry, *, local_radars=()):
                             and not (source_area and target_area and source_area != target_area))
         # The exact automation source may have no registry area. This preserves
         # uncertainty within the recorded ON dwell; it never asserts occupancy.
-        if (same_area or baseline_numeric) and role:
+        if (same_area or baseline_numeric) and role and role != "illumination":
             radar.append(eid)
             if role in ("energy", "distance") and available:
                 try:
@@ -78,7 +78,13 @@ def sensor_snapshot(agent, entities, states, registry, *, local_radars=()):
     # create presence. Keep this unresolved and learn the observed state/weights.
     absent = [eid for eid in absent if
               radar_group(eid) not in unresolved_radar_devices]
-    return {"signature": signature, "active": active, "absent": absent, "reliable": reliable, "radar": radar}
+    result = {"signature": signature, "active": active, "absent": absent, "reliable": reliable, "radar": radar}
+    if lighting is not None:
+        result["lighting_need"] = lighting.get("need")
+        result["lighting_context"] = dict(lighting)
+        if lighting.get("configured"):
+            signature.append(("lighting:need", lighting.get("need")))
+    return result
 
 
 def light_dwell_reward(action, reward, before, after, positive_during, *,
@@ -91,6 +97,8 @@ def light_dwell_reward(action, reward, before, after, positive_during, *,
             and before.get("active") and not positive_during):
         return 0.0, "conflicting_presence_unknown"
     if float(action) < .5 and before.get("active"):
+        if before.get("lighting_need", True) is not True:
+            return reward, "occupied_daylight_off" if before.get("lighting_need") is False else "occupied_off_unknown_lighting"
         return -1.0, "premature_off_confirmed_presence"
     complete_absence = bool(
         observation_complete and reliable and reliable == set(after.get("reliable") or ())

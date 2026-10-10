@@ -136,7 +136,7 @@ class RelayObservationContractTests(unittest.TestCase):
             before = copy.deepcopy(raw)
             seed = manager._remember_training_schema(agent(target_entity=TARGET, input_entities=[ENERGY]), raw)
             self.assertEqual(seed["heads"], {})
-            self.assertEqual(seed["schema"]["feature_contract_version"], 3)
+            self.assertEqual(seed["schema"]["feature_contract_version"], 4)
             self.assertEqual(seed["selection_meta"], raw["selection_meta"])
             self.assertEqual(raw, before)
         finally:

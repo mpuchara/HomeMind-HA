@@ -1,10 +1,10 @@
 {
-  "version": "0.14.166",
-  "release_date": "2026-10-09",
-  "base_version": "0.14.165",
-  "base_commit": "b741891fe5fb4409881f92aeb6b87f644146ef5f",
-  "release_status": "bounded-recorder-import-writes-with-resumable-durability",
-  "release_validation_tests_passed": 1977,
+  "version": "0.14.167",
+  "release_date": "2026-10-10",
+  "base_version": "0.14.166",
+  "base_commit": "f044a29e9b4297bccf4ab60a40930fafa950ec76",
+  "release_status": "conditional-presence-and-ambient-light-history-training",
+  "release_validation_tests_passed": 1990,
   "release_014140": {
     "scope": "inventory_and_remove_remaining_shipped_feature_Handler_fallbacks_for_Candidate_Live_and_manual_feedback_transport",
     "explicit_routes": "manual_feedback.js, candidate_ui.js, candidate_preference_ui.js, /api/candidates, Candidate Teach-RL status/train, generation history/comparison, /api/candidate-live, /api/live and Candidate discard",
@@ -2274,5 +2274,26 @@
       "bounded_median_total_ms": 100.478,
       "limit": "128 rows does not bound physical I/O duration; checkpoint/I/O outlier retained, not discarded"
     }
+  },
+  "release_014167": {
+    "scope": "daylight_off_preserved_and_raw_ld2410_light_learned_causally",
+    "feature_contract": 4,
+    "old_feature_contracts_preserved": [
+      1,
+      2,
+      3
+    ],
+    "corrections": [
+      "occupied_OFF_preserved_when_bright_or_unknown",
+      "boolean_ON_conditions_retained",
+      "ON_assist_checks_illumination",
+      "OFF_dwell_not_cut_at_daylight_presence",
+      "raw_0_255_ambient_pre_action_photometry",
+      "target_chronology_reconstructed_as_dependency_not_input"
+    ],
+    "validation": "12_condition_photometry_regressions_and_real_isolated_kitchen_training",
+    "rebuild_required_for_kitchen": true,
+    "explicit_user_priority_preserved": true,
+    "no_automatic_Control_authorization": true
   }
 }

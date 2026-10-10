@@ -51,6 +51,8 @@ def _automation_diagnostics(infos):
             "context_count": len(info.get("context_entities") or []),
             "baseline_rules": list(info.get("baseline_rules") or []),
             "action_services": list(info.get("action_services") or []),
+            "condition_tree": info.get("condition_tree"),
+            "direct_on_conditions": bool(info.get("direct_on_conditions")),
             "baseline_contract": info.get("baseline_contract") or "structural_prior_not_ground_truth",
         }
         for info in _preferred_automation_infos(infos)

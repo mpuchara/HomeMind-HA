@@ -2833,6 +2833,19 @@ class HistoryManager(threading.Thread):
         # the exact same feature timestamp/reward semantics as before.
         horizons = sorted({h for p in policies.values() for h in p.horizons})
         watched_entities = {eid for p in policies.values() for eid in p.schema.entities}
+        # Ambient pre-action photometry needs causal lamp chronology. The target
+        # remains excluded from policy inputs, but must be reconstructed alongside
+        # the sensor; otherwise every historical illumination value is "unknown".
+        from lighting_conditions import illumination_sensor
+        photometric_dependencies = {}
+        for a in agents:
+            p = policies[a["id"]]
+            if (getattr(p.schema, "feature_contract_version", 0) >= 4
+                    and a.get("target_property") == "power"
+                    and is_fast_reactive_agent(a)
+                    and any(illumination_sensor(e, discovery_states.get(e)) for e in p.schema.entities)):
+                photometric_dependencies[str(a["id"])] = (a["target_entity"],)
+                watched_entities.add(a["target_entity"])
         # Fast-light anchor/dwell semantics repeatedly ask for directional edges from a
         # tiny subset of the selected schema. Preindex exactly those sources in Stage 2.
         edge_entities = set()
@@ -3258,7 +3271,7 @@ class HistoryManager(threading.Thread):
                 )
             )
             feature_snapshot_entities[_aid] = tuple(dict.fromkeys(
-                [*_schema_entities, *_mask_entities]
+                [*_schema_entities, *_mask_entities, *photometric_dependencies.get(_aid, ())]
             ))
             feature_snapshot_namespaces[_aid] = (
                 "historical_training_feature_snapshot_v1",
@@ -3730,6 +3743,13 @@ class HistoryManager(threading.Thread):
             if not is_fast_reactive_agent(agent):
                 return float(action_ts), None
             positive = float(action_value) >= 0.5
+            def eligible_anchor(edge):
+                if positive and edge is not None:
+                    from lighting_conditions import lighting_context
+                    tracker.advance(float(edge))
+                    if lighting_context(policy.selection_meta, tracker.state_map).get("need") is not True:
+                        return float(action_ts)
+                return float(edge if edge is not None else action_ts)
             window = float(OPTIONS.get(
                 "fast_precursor_on_seconds" if positive else "fast_precursor_off_seconds",
                 8 if positive else 120,
@@ -3746,7 +3766,7 @@ class HistoryManager(threading.Thread):
                     latest=True,
                 )
                 if edge is not None:
-                    return float(edge), None
+                    return eligible_anchor(edge), None
             primary = _primary_occupancy_sensor(policy)
             local_ts = (
                 tracker.directional_transition_before(primary, action_ts, positive, window)
@@ -3764,13 +3784,23 @@ class HistoryManager(threading.Thread):
                     )
                     if ts is not None and (upstream_ts is None or ts > upstream_ts):
                         upstream_ts = ts
-            return float(local_ts if local_ts is not None else action_ts), upstream_ts
+            local_anchor = eligible_anchor(local_ts)
+            if local_anchor == float(action_ts) and local_ts is not None and local_anchor != float(local_ts):
+                upstream_ts = None
+            if upstream_ts is not None:
+                from lighting_conditions import lighting_context
+                tracker.advance(float(upstream_ts))
+                if lighting_context(policy.selection_meta, tracker.state_map).get("need") is not True:
+                    upstream_ts = None
+            return local_anchor, upstream_ts
 
         def _quality_snapshot(agent, policy, tracker):
+            from lighting_conditions import lighting_context
             pair = paired_numeric_baseline(policy.selection_meta)
             return sensor_snapshot(
                 agent, policy.schema.entities, tracker.state_map, quality_registry,
                 local_radars=(pair["sensor"],) if pair else (),
+                lighting=lighting_context(policy.selection_meta, tracker.state_map),
             )
 
         def _safe_presence_boundary(agent, policy, action_value, edge, end_ts, tracker):
@@ -3815,6 +3845,11 @@ class HistoryManager(threading.Thread):
                     hold_seconds=pair["on_hold"] if next_positive else pair["off_hold"],
                 )
                 if edge is not None:
+                    if float(action_value) < .5:
+                        from lighting_conditions import lighting_context
+                        tracker.advance(float(edge))
+                        if lighting_context(policy.selection_meta, tracker.state_map).get("need") is not True:
+                            return float(end_ts)
                     return _safe_presence_boundary(agent, policy, action_value, edge, end_ts, tracker)
             primary = _primary_occupancy_sensor(policy)
             if not primary:
@@ -3823,6 +3858,11 @@ class HistoryManager(threading.Thread):
             edge = tracker.first_directional_transition_after(
                 primary, start_ts, end_ts, opposite_positive
             )
+            if edge is not None and float(action_value) < .5:
+                from lighting_conditions import lighting_context
+                tracker.advance(float(edge))
+                if lighting_context(policy.selection_meta, tracker.state_map).get("need") is not True:
+                    return float(end_ts)
             return _safe_presence_boundary(agent, policy, action_value, edge, end_ts, tracker) if edge is not None else float(end_ts)
 
         def learn_or_validate(

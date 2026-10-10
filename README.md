@@ -1,6 +1,6 @@
-# HomeMind-HA / Adaptive AI 0.14.166
+# HomeMind-HA / Adaptive AI 0.14.167
 
-0.14.166: krótkie transakcje importu Recorder, współdzielone połączenie i przerwy dopiero po commit. Aktualizacja i restart; bez Rebuild. [Opis wydania](docs/RELEASE_0_14_166_PL.md).
+0.14.167: trening światła zależny od obecności i jasności, surowy pomiar LD2410 oraz ochrona przed światłem samej żarówki. Aktualizacja i restart; agent kuchni wymaga Rebuild. [Opis wydania](docs/RELEASE_0_14_167_PL.md).
 
 
 Karta agenta ma cztery akcje: **Shadow/Control**, **Wrong decision**, **Settings** i **Teach**. Wrong decision uczy poprawnego Desired. Teach otwiera powiększalny wykres historii z wyborem dokładnej chwili i zapisem poprawnego Desired. Cofanie ostatniej korekty jest dostępne w Teach oraz Settings; pozostałe operacje i diagnostyka są w Settings.

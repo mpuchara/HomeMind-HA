@@ -1,6 +1,6 @@
-# HomeMind-HA / Adaptive AI 0.14.166
+# HomeMind-HA / Adaptive AI 0.14.167
 
-0.14.166: krótkie transakcje importu Recorder, współdzielone połączenie i przerwy dopiero po commit. Aktualizacja i restart; bez Rebuild.
+0.14.167: trening światła zależny od obecności i jasności, surowy pomiar LD2410 oraz ochrona przed światłem samej żarówki. Aktualizacja i restart; agent kuchni wymaga Rebuild.
 
 
 Cztery akcje każdego agenta: Shadow/Control, Wrong decision, Settings, Teach.

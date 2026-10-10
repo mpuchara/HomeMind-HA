@@ -42,9 +42,11 @@ CONTRACT_VERSION = 1
 # photometric leakage. Fresh/rebuilt contract 3 extends that to relays, canonicalizes
 # radar units and enables supervised binary desired-state learning. Old columns retain
 # their meaning until an explicit rebuild creates a new, empty-head generation.
+# Contract 4 applies the same causal photometry to LD2410's raw 0..255 light
+# channel. It is not calibrated lux; contracts 1..3 retain their old raw columns.
 LEGACY_FEATURE_CONTRACT_VERSION = 1
 PHOTOMETRIC_FEATURE_CONTRACT_VERSION = 2
-FEATURE_CONTRACT_VERSION = 3
+FEATURE_CONTRACT_VERSION = 4
 HOME_FEATURE_NAMES = tuple(LEGACY_HOME_FEATURE_NAMES) + ("known",)
 HOME_TAIL = len(HOME_FEATURE_NAMES)
 
@@ -352,7 +354,7 @@ class FeatureSchemaV12:
         self.dims = int(dims)
         self.feature_contract_version = int(feature_contract_version)
         if self.feature_contract_version not in (
-            LEGACY_FEATURE_CONTRACT_VERSION, PHOTOMETRIC_FEATURE_CONTRACT_VERSION, FEATURE_CONTRACT_VERSION
+            LEGACY_FEATURE_CONTRACT_VERSION, PHOTOMETRIC_FEATURE_CONTRACT_VERSION, 3, FEATURE_CONTRACT_VERSION
         ):
             raise ValueError("unsupported feature contract version")
         max_entities = max(1, (self.dims - 5 - HOME_TAIL) // ENTITY_WIDTH)
@@ -379,7 +381,7 @@ class FeatureSchemaV12:
             "feature_contract_version", LEGACY_FEATURE_CONTRACT_VERSION
         ))
         if feature_contract not in (
-            LEGACY_FEATURE_CONTRACT_VERSION, PHOTOMETRIC_FEATURE_CONTRACT_VERSION, FEATURE_CONTRACT_VERSION
+            LEGACY_FEATURE_CONTRACT_VERSION, PHOTOMETRIC_FEATURE_CONTRACT_VERSION, 3, FEATURE_CONTRACT_VERSION
         ):
             return None
         return cls(dims, raw.get("entities") or [], feature_contract_version=feature_contract)
@@ -422,12 +424,13 @@ def _lag_state(entity_id, current, temporal, query_ts, at_ts):
     return None, None
 
 
-def _is_illuminance_state(state):
+def _is_illuminance_state(state, raw_light=False):
     attrs = _attrs(state)
     unit = _normalized_unit(state)
     dc = str(attrs.get("device_class") or "").strip().lower()
     eid = str((state or {}).get("entity_id") or "").lower()
-    return unit in ("lx", "lux") or dc == "illuminance" or "illuminance" in eid or "lux" in eid
+    from lighting_conditions import illumination_sensor
+    return unit in ("lx", "lux") or dc == "illuminance" or "illuminance" in eid or "lux" in eid or (raw_light and illumination_sensor(eid, state))
 
 
 def _target_power_at(agent, state_map, temporal, query_ts, knowledge_ts):
@@ -476,21 +479,21 @@ def _current_on_run_start(agent, temporal, query_ts, knowledge_ts):
     return start if saw_off else None
 
 
-def _last_valid_illuminance_before(entity_id, temporal, query_ts, knowledge_ts):
+def _last_valid_illuminance_before(entity_id, temporal, query_ts, knowledge_ts, raw_light=False):
     for ts, state in reversed(_samples(temporal, entity_id)):
         ts = float(ts)
         if not _eligible_sample(state, ts, query_ts, knowledge_ts):
             continue
         obs = observation_value(state)
-        if (obs.get("valid") and obs.get("canonical_unit") == "lx"
+        if (obs.get("valid") and (_is_illuminance_state(state, raw_light) and (raw_light or obs.get("canonical_unit") == "lx"))
                 and obs.get("physical_value") is not None):
             return ts, state
     return None, None
 
 
-def _darkness_observation(state):
+def _darkness_observation(state, raw_light=False):
     obs = observation_value(state)
-    if not (obs.get("valid") and obs.get("canonical_unit") == "lx"
+    if not (obs.get("valid") and _is_illuminance_state(state, raw_light) and (raw_light or obs.get("canonical_unit") == "lx")
             and obs.get("physical_value") is not None):
         return {"valid": 0.0, "value": 0.0, "physical_value": None,
                 "category": (0.0, 0.0, 0.0), "kind": "missing",
@@ -499,7 +502,8 @@ def _darkness_observation(state):
     # Log-scale physical illuminance without embedding a policy/benchmark darkness
     # threshold. The important contract change is causal: emitted lamp light is removed.
     # Log compression simply gives indoor low-light ranges useful numeric resolution.
-    normalized = clamp(math.log1p(ambient_lux) / math.log1p(1000.0), 0.0, 1.0)
+    scale = 1000.0 if obs.get("canonical_unit") == "lx" else 255.0
+    normalized = clamp(math.log1p(ambient_lux) / math.log1p(scale), 0.0, 1.0)
     return {**obs, "value": normalized,
             "physical_value": ambient_lux, "photometric_mode": "ambient_pre_action_v2"}
 
@@ -516,33 +520,34 @@ def _feature_observation(schema, entity_id, state, agent, state_map, temporal,
         and (feature_contract >= 3 or str(agent.get("target_entity") or "").split(".", 1)[0] == "light")
         and str(agent.get("target_property") or "") == "power"
     )
-    if feature_contract < PHOTOMETRIC_FEATURE_CONTRACT_VERSION or not fast_light or not _is_illuminance_state(state):
+    raw_light = feature_contract >= 4
+    if feature_contract < PHOTOMETRIC_FEATURE_CONTRACT_VERSION or not fast_light or not _is_illuminance_state(state, raw_light):
         return legacy, None
 
     target_power = _target_power_at(agent, state_map, temporal, query_ts, knowledge_ts)
     if target_power is None:
-        return _darkness_observation(None), {
+        return _darkness_observation(None, raw_light), {
             "mode": "ambient_pre_action_v2", "source": "target_power_unknown"
         }
     if target_power < .5:
-        return _darkness_observation(state), {
+        return _darkness_observation(state, raw_light), {
             "mode": "ambient_pre_action_v2", "source": "current_light_off"
         }
 
     on_start = _current_on_run_start(agent, temporal, query_ts, knowledge_ts)
     if on_start is None:
-        return _darkness_observation(None), {
+        return _darkness_observation(None, raw_light), {
             "mode": "ambient_pre_action_v2", "source": "unresolved_light_on"
         }
     _, baseline = _last_valid_illuminance_before(
-        entity_id, temporal, float(on_start) - 1e-6, knowledge_ts
+        entity_id, temporal, float(on_start) - 1e-6, knowledge_ts, raw_light
     )
     if baseline is None:
-        return _darkness_observation(None), {
+        return _darkness_observation(None, raw_light), {
             "mode": "ambient_pre_action_v2", "source": "pre_action_baseline_missing",
             "on_start": float(on_start),
         }
-    return _darkness_observation(baseline), {
+    return _darkness_observation(baseline, raw_light), {
         "mode": "ambient_pre_action_v2", "source": "pre_action_baseline",
         "on_start": float(on_start),
     }
