@@ -1,10 +1,10 @@
 {
-  "version": "0.14.168",
+  "version": "0.14.169",
   "release_date": "2026-10-10",
-  "base_version": "0.14.167",
-  "base_commit": "d467aff9cc96a4b0abd72c44e04b110470f959ea",
-  "release_status": "additional-illumination-context-and-explicit-on-preference",
-  "release_validation_tests_passed": 2009,
+  "base_version": "0.14.168",
+  "base_commit": "072a646497fea765d9162c6b22f284d55dff3a49",
+  "release_status": "editable-same-sensor-illumination-threshold-references",
+  "release_validation_tests_passed": 2022,
   "release_014140": {
     "scope": "inventory_and_remove_remaining_shipped_feature_Handler_fallbacks_for_Candidate_Live_and_manual_feedback_transport",
     "explicit_routes": "manual_feedback.js, candidate_ui.js, candidate_preference_ui.js, /api/candidates, Candidate Teach-RL status/train, generation history/comparison, /api/candidate-live, /api/live and Candidate discard",
@@ -2323,5 +2323,25 @@
       "lamp_contamination_requires_sensor_selection",
       "threshold_not_inferred_from_motion_only_history"
     ]
+  },
+  "release_014169": {
+    "scope": "Explore_threshold_reference_and_editing_only",
+    "validation": "13_reference_workflow_and_actual_JS_form_regressions",
+    "threshold_sources": [
+      "selected_agent",
+      "target_automation",
+      "qualified_live_agent",
+      "other_automation"
+    ],
+    "copied_snapshot_not_live_link": true,
+    "manual_edits_win": true,
+    "no_arbitrary_default": true,
+    "no_cross_sensor_or_unit_copy": true,
+    "no_inference_path_scan": true,
+    "limits": [
+      "necessary_numeric_below_conditions_only",
+      "no_OR_NOT_attribute_or_template_translation"
+    ],
+    "candidate_shadow_and_control_guards_preserved": true
   }
 }
