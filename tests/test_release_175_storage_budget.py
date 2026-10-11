@@ -92,6 +92,8 @@ class StorageBudget175Tests(unittest.TestCase):
         def rows():
             yield ('a', 'one')
             with self.free(self.budget.hard_reserve - 1):
+                # The next row arrives after the bounded in-batch sampling window.
+                self.budget._last_sample_at -= .051
                 yield ('b', 'two')
         with self.assertRaises(StoragePressure), self.store.conn() as c:
             c.executemany('INSERT INTO app_meta VALUES(?,?)', rows())
@@ -107,6 +109,7 @@ class StorageBudget175Tests(unittest.TestCase):
         def rows():
             yield ('a', 'one')
             with self.free(self.budget.reserve - MIB):
+                self.budget._last_sample_at -= .051
                 yield ('b', 'two')
         with self.assertRaises(StoragePressure), self.store.conn() as c:
             c.executemany('INSERT INTO app_meta VALUES(?,?)', rows())
@@ -141,7 +144,7 @@ class StorageBudget175Tests(unittest.TestCase):
         with closing(sqlite3.connect(self.store.path, isolation_level=None)) as raw:
             from wal_checkpoint import WALCheckpointWorker
             worker = WALCheckpointWorker(self.store)
-            self.assertEqual(worker.RECLAIM_THRESHOLD_BYTES, self.budget.wal_limit // 2)
+            self.assertEqual(worker.RECLAIM_THRESHOLD_BYTES, self.budget.wal_limit // 4)
             self.assertTrue(worker.reclaim(raw, worker.checkpoint(raw)))
             self.assertEqual(Path(self.store.path + '-wal').stat().st_size, 0)
         self.write('after')

@@ -1,10 +1,10 @@
 {
-  "version": "0.14.179",
+  "version": "0.14.180",
   "release_date": "2026-10-11",
-  "base_version": "0.14.178",
-  "base_commit": "6858ae22e917fa68078ece72fc77780649ade172",
-  "release_status": "live-training-session-and-recorder-preparation-progress",
-  "release_validation_tests_passed": 2145,
+  "base_version": "0.14.179",
+  "base_commit": "eb4950ab65be379ae27dfecd63390cff4afe65bf",
+  "release_status": "fast-guarded-recorder-import-and-configurable-storage-capacity",
+  "release_validation_tests_passed": 2157,
   "release_014140": {
     "scope": "inventory_and_remove_remaining_shipped_feature_Handler_fallbacks_for_Candidate_Live_and_manual_feedback_transport",
     "explicit_routes": "manual_feedback.js, candidate_ui.js, candidate_preference_ui.js, /api/candidates, Candidate Teach-RL status/train, generation history/comparison, /api/candidate-live, /api/live and Candidate discard",
@@ -2536,5 +2536,26 @@
     "hot_status_and_debug_export_are_RAM_only": true,
     "history_rows_and_durable_replay_cursors_unchanged": true,
     "new_regression_tests": 7
+  },
+  "release_014180": {
+    "scope": "bounded_storage_sampling_early_wal_reclaim_and_durable_partial_Recorder_coverage",
+    "new_regression_tests": 12,
+    "batch_sample_interval_seconds": 0.05,
+    "batch_sample_payload_bytes": 1048576,
+    "per_row_payload_max_bytes": 16777216,
+    "fresh_statement_and_commit_admission": true,
+    "sqlite_hard_page_cap_preserved": true,
+    "wal_reclaim_threshold": "min(64 MiB, configured WAL budget / 4)",
+    "reclaim_retry_seconds": 5,
+    "configuration_max_mib": {
+      "database": 65536,
+      "wal": 4096,
+      "free_reserve": 65536
+    },
+    "conservative_defaults_preserved": true,
+    "history_rows_sampling_and_replay_semantics_preserved": true,
+    "completed_Recorder_windows_saved_before_next_request": true,
+    "benchmark": "docs/benchmarks/STORAGE_IMPORT_0_14_180.json",
+    "limit": "Local SQLite component result; deployed HA, SD-card and complete training speed require a runtime log"
   }
 }

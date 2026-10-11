@@ -1,4 +1,5 @@
 import unittest
+import threading
 
 from history import HistoryManager
 from settings import OPTIONS
@@ -13,6 +14,8 @@ class RecorderCoverageReuseTests(unittest.TestCase):
         manager.training_recorder_coverage_misses = 0
         manager.recorder_skipped_slices = 0
         manager.progress = 0.0
+        manager.stop_event = threading.Event()
+        manager.job_cancel_event = None
         manager.calls = []
 
         def fake_import(entity_ids, start_ts, end_ts, **kwargs):

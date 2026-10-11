@@ -14,6 +14,8 @@ from pathlib import Path
 
 MIB = 1024 * 1024
 MAX_WRITE_BYTES = 16 * MIB
+SAMPLE_INTERVAL_SECONDS = 0.05
+SAMPLE_PAYLOAD_BYTES = MIB
 
 # Durable preferences, models and control ownership are deliberately absent.
 BULK_TABLES = frozenset({
@@ -49,12 +51,14 @@ def _payload_bytes(parameters):
 class StorageBudget:
     def __init__(self, path, options):
         self.path = Path(path)
-        self.db_limit = max(128, min(8192, int(options.get('storage_database_max_mb', 2048)))) * MIB
-        self.wal_limit = max(32, min(512, int(options.get('storage_wal_max_mb', 128)))) * MIB
-        self.reserve = max(256, min(8192, int(options.get('storage_min_free_mb', 2048)))) * MIB
+        self.db_limit = max(128, min(65536, int(options.get('storage_database_max_mb', 2048)))) * MIB
+        self.wal_limit = max(32, min(4096, int(options.get('storage_wal_max_mb', 128)))) * MIB
+        self.reserve = max(256, min(65536, int(options.get('storage_min_free_mb', 2048)))) * MIB
         self.hard_reserve = min(256 * MIB, self.reserve // 2)
         self.lock = threading.Lock()
         self.local = threading.local()
+        self._last_sample_at = float('-inf')
+        self._unchecked_payload_bytes = 0
         self.training_process = os.environ.get('ADAPTIVE_AI_TRAINING_WORKER') == '1'
         self.stats = dict(level='normal', reason=None, blocked_writes=0,
                           db_bytes=0, database_used_bytes=0, wal_bytes=0,
@@ -91,13 +95,18 @@ class StorageBudget:
                         sample_error=f'{type(exc).__name__}: {exc}')
         with self.lock:
             self.stats.update(data)
+            self._last_sample_at = time.monotonic()
+            self._unchecked_payload_bytes = 0
+            self.stats['disk_samples'] = self.stats.get('disk_samples', 0) + 1
             return dict(self.stats)
 
     def snapshot(self):
         with self.lock:
             return {**self.stats, 'database_max_bytes': self.db_limit,
                     'wal_max_bytes': self.wal_limit, 'minimum_free_bytes': self.reserve,
-                    'max_statement_payload_bytes': MAX_WRITE_BYTES}
+                    'max_statement_payload_bytes': MAX_WRITE_BYTES,
+                    'batch_sample_interval_seconds': SAMPLE_INTERVAL_SECONDS,
+                    'batch_sample_payload_bytes': SAMPLE_PAYLOAD_BYTES}
 
     def reject(self, reason):
         with self.lock:
@@ -116,10 +125,20 @@ class StorageBudget:
         error.reason = reason
         return error
 
-    def check(self, parameters=()):
-        if _payload_bytes(parameters) > MAX_WRITE_BYTES:
+    def check(self, parameters=(), *, refresh=True):
+        payload_bytes = _payload_bytes(parameters)
+        if payload_bytes > MAX_WRITE_BYTES:
             self.reject('statement_payload_budget')
-        data = self.sample()
+        # Statements and commit always sample freshly. Within executemany and the
+        # SQLite VM, reuse the shared snapshot for at most 50 ms / 1 MiB of input.
+        # The SQLite page cap, per-row payload cap and final commit guard remain.
+        with self.lock:
+            self._unchecked_payload_bytes += payload_bytes
+            due = (refresh or time.monotonic() - self._last_sample_at >= SAMPLE_INTERVAL_SECONDS
+                   or self._unchecked_payload_bytes >= SAMPLE_PAYLOAD_BYTES)
+            data = dict(self.stats)
+        if due:
+            data = self.sample()
         maintenance = getattr(self.local, 'maintenance', False)
         if data['level'] == 'blocked':
             self.reject(data['reason'])
@@ -188,7 +207,7 @@ class BudgetConnection(sqlite3.Connection):
         if not self.storage_writing or self.storage_budget is None:
             return 0
         try:
-            self.storage_budget.check()
+            self.storage_budget.check(refresh=False)
             return 0
         except StoragePressure as exc:
             self.storage_denial = exc
@@ -268,7 +287,7 @@ class BudgetCursor(sqlite3.Cursor):
         def checked():
             for row in parameters:
                 if budget is not None:
-                    level = budget.check(row)
+                    level = budget.check(row, refresh=False)
                     if level != self.connection.storage_level:
                         budget.reject('storage_pressure_changed_during_batch')
                 yield row

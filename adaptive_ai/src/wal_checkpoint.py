@@ -24,8 +24,8 @@ class WALCheckpointWorker:
         if budget is not None and isinstance(getattr(budget, 'wal_limit', None), int):
             # Reclaim before admission pauses every writer. Otherwise a smaller
             # configured WAL budget could prevent the reset that restores writes.
-            self.RECLAIM_THRESHOLD_BYTES = min(self.RECLAIM_THRESHOLD_BYTES, budget.wal_limit // 2)
-            self.storage_pressure_threshold_bytes = budget.wal_limit // 2
+            self.RECLAIM_THRESHOLD_BYTES = min(self.RECLAIM_THRESHOLD_BYTES, budget.wal_limit // 4)
+            self.storage_pressure_threshold_bytes = self.RECLAIM_THRESHOLD_BYTES
         self.lock = threading.RLock()
         self.stop_event = threading.Event()
         self.ready = threading.Event()

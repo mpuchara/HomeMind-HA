@@ -1,5 +1,5 @@
 name: "Adaptive AI"
-version: "0.14.179"
+version: "0.14.180"
 slug: "adaptive_ai"
 description: >-
   History-first local reinforcement-learning policies for Home Assistant. Imports
@@ -301,9 +301,9 @@ schema:
   rl_alpha: "float(0.05,2.0)"
   history_bootstrap_days: "int(1,30)"
   archive_retention_days: "int(1,3650)"
-  storage_database_max_mb: "int(128,8192)"
-  storage_wal_max_mb: "int(32,512)"
-  storage_min_free_mb: "int(256,8192)"
+  storage_database_max_mb: "int(128,65536)"
+  storage_wal_max_mb: "int(32,4096)"
+  storage_min_free_mb: "int(256,65536)"
   archive_context_interval_seconds: "int(5,300)"
   auto_agent_min_changes: "int(1,50)"
   auto_agent_recent_days: "int(1,30)"

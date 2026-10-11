@@ -59,6 +59,9 @@ jobs:
       - name: 0.14.166 bounded Recorder import row parity and transaction size
         if: matrix.python == '3.11'
         run: python tools/benchmark_history_import.py --rows-per-entity 1200 --compact
+      - name: 0.14.180 guarded Recorder insert/upsert row parity and disk sampling
+        if: matrix.python == '3.11'
+        run: python tools/benchmark_storage_import.py --rows-per-entity 2000 --compact
       - name: 0.14.158 compact classifier fit reference parity benchmark
         if: matrix.python == '3.11'
         run: python tools/benchmark_classifier_fit.py --passes 3
