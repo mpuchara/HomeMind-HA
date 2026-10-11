@@ -1,10 +1,10 @@
 {
-  "version": "0.14.177",
+  "version": "0.14.178",
   "release_date": "2026-10-11",
-  "base_version": "0.14.176",
-  "base_commit": "445fe597153adc3612e26c3ed27aa9551086d9b4",
-  "release_status": "storage-pressure-aware-writers-and-resumable-wal-training",
-  "release_validation_tests_passed": 2131,
+  "base_version": "0.14.177",
+  "base_commit": "82971441a375584b5d45c2c1a8b419b6f2547686",
+  "release_status": "bounded-wal-pressure-recovery-and-quiet-housekeeping",
+  "release_validation_tests_passed": 2138,
   "release_014140": {
     "scope": "inventory_and_remove_remaining_shipped_feature_Handler_fallbacks_for_Candidate_Live_and_manual_feedback_transport",
     "explicit_routes": "manual_feedback.js, candidate_ui.js, candidate_preference_ui.js, /api/candidates, Candidate Teach-RL status/train, generation history/comparison, /api/candidate-live, /api/live and Candidate discard",
@@ -2512,5 +2512,20 @@
     "completed_rebuild_reset_not_repeated": true,
     "worker_storage_pressure_preserved": true,
     "new_regression_tests": 18
+  },
+  "release_014178": {
+    "scope": "WAL_pressure_does_not_wait_for_ordinary_60s_reclaim_cooldown",
+    "wal_pressure_retry_seconds": 5,
+    "ordinary_wal_reclaim_interval_seconds": 60,
+    "passive_copy_complete_required": true,
+    "truncate_busy_timeout_ms": 0,
+    "housekeeping_storage_pressure_is_expected": true,
+    "housekeeping_retry_seconds": 5,
+    "unrelated_errors_report_interval_seconds": 60,
+    "existing_pending_archive_preserved": true,
+    "raw_archive_acquisition_paused_without_RAM_growth": true,
+    "recovered_budget_RAM_snapshot_refreshed": true,
+    "database_wal_and_free_space_limits_unchanged": true,
+    "new_regression_tests": 7
   }
 }

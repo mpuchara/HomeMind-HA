@@ -1,5 +1,5 @@
 from sqlite_background import background_sqlite
-from storage_budget import storage_status
+from storage_budget import StoragePressure, StorageRetry, require_storage_available, storage_recording_paused, storage_status
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import nullcontext
 import json
@@ -343,6 +343,7 @@ class Engine(threading.Thread):
         self.housekeeping_worker = ThreadPoolExecutor(max_workers=1, thread_name_prefix="runtime-housekeeping")
         self.housekeeping_future = None
         self.housekeeping_last_submit = 0.0
+        self.housekeeping_retry = StorageRetry()
         self.housekeeping_stats = {
             "runs": 0,
             "deferred_for_realtime": 0,
@@ -352,6 +353,8 @@ class Engine(threading.Thread):
             "archive_rows": 0,
             "decision_rows": 0,
             "context_saves": 0,
+            "archive_storage_skipped": 0,
+            "errors": 0,
         }
         self.in_flight = {}
         self.resubmit_targets = set()
@@ -433,7 +436,7 @@ class Engine(threading.Thread):
             last_state_sync_error = self.last_state_sync_error
             state_resync_stats = dict(self.state_resync_stats)
             registry_refresh_stats = dict(self.registry_refresh_stats)
-            housekeeping_stats = dict(self.housekeeping_stats)
+            housekeeping_stats = {**self.housekeeping_stats, "storage_retry": self.housekeeping_retry.snapshot()}
             inference_scheduler = dict(self.inference_scheduler)
         # Status is polled before/through startup and must never aggregate the complete
         # feedback/experience tables from cold microSD. Detailed per-agent counters are
@@ -641,6 +644,12 @@ class Engine(threading.Thread):
     def _queue_archive_state(self, st, force=False, received_ts=None):
         entity_id = st.get("entity_id")
         if not entity_id:
+            return
+        # Realtime context still receives this state. Pause only raw archive
+        # acquisition; retaining new rows through a storage pause grows RAM.
+        if storage_recording_paused(STORE):
+            with self.lock:
+                self.housekeeping_stats['archive_storage_skipped'] += 1
             return
         now = float(received_ts if received_ts is not None else now_ts())
         compact_attrs = self._compact_attrs(st)
@@ -929,19 +938,30 @@ class Engine(threading.Thread):
 
     def _run_housekeeping(self):
         """Persist low-priority runtime state away from the event->intent thread."""
+        if self.housekeeping_retry.delay() > 0:
+            return {"skipped": True}
         started = time.perf_counter()
         archive_rows = decision_rows = 0
         context_saved = False
         try:
+            require_storage_available(STORE)
             with background_sqlite(STORE):
                 archive_rows = int(self.flush_archive(force=False) or 0)
                 decision_rows = int(self.teaching.flush(force=False) or 0)
                 context_saved = bool(self.context.save())
+            self.housekeeping_retry.recovered()
+        except StoragePressure as exc:
+            # This is expected admission backpressure, not a runtime failure.
+            # Keep queued rows and never write an error event for the refusal.
+            self.housekeeping_retry.defer(exc)
         except Exception as exc:
-            STORE.event(
-                None, "warning", "runtime_housekeeping_error",
-                f"{type(exc).__name__}: {exc}", None,
-            )
+            with self.lock:
+                self.housekeeping_stats['errors'] += 1
+            if self.housekeeping_retry.defer(exc):
+                STORE.event(
+                    None, "warning", "runtime_housekeeping_error",
+                    f"{type(exc).__name__}: {exc}", None,
+                )
         elapsed_ms = (time.perf_counter() - started) * 1000.0
         with self.lock:
             stats = self.housekeeping_stats
@@ -959,6 +979,8 @@ class Engine(threading.Thread):
         }
 
     def _schedule_housekeeping(self, *, force=False):
+        if self.housekeeping_retry.delay() > 0:
+            return False
         now = time.monotonic()
         future = self.housekeeping_future
         if future is not None and not future.done():

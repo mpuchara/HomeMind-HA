@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from contextlib import nullcontext
 import json
 import threading
 
@@ -130,6 +131,14 @@ class RuntimeDebugLogService:
                         deferred_persistence[name] = getter()
                     except Exception as exc:
                         deferred_persistence[name] = {"error": f"{type(exc).__name__}: {exc}"}
+            retry = getattr(engine, 'housekeeping_retry', None)
+            if retry is not None:
+                with lock if lock is not None else nullcontext():
+                    deferred_persistence['housekeeping'] = {
+                        **dict(getattr(engine, 'housekeeping_stats', {}) or {}),
+                        'pending_archive': len(getattr(engine, 'pending_archive', []) or []),
+                        'storage_retry': retry.snapshot(),
+                    }
 
         return {
             "contract_version": CONTRACT_VERSION,

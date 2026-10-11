@@ -15,14 +15,17 @@ class WALCheckpointWorker:
     THRESHOLD_PAGES = 1000
     RECLAIM_THRESHOLD_BYTES = 64 * 1024 * 1024
     RECLAIM_INTERVAL_SECONDS = 60.0
+    RECLAIM_PRESSURE_INTERVAL_SECONDS = 5.0
 
     def __init__(self, store):
         self.store = store
         budget = getattr(store, 'storage_budget', None)
+        self.storage_pressure_threshold_bytes = None
         if budget is not None and isinstance(getattr(budget, 'wal_limit', None), int):
             # Reclaim before admission pauses every writer. Otherwise a smaller
             # configured WAL budget could prevent the reset that restores writes.
             self.RECLAIM_THRESHOLD_BYTES = min(self.RECLAIM_THRESHOLD_BYTES, budget.wal_limit // 2)
+            self.storage_pressure_threshold_bytes = budget.wal_limit // 2
         self.lock = threading.RLock()
         self.stop_event = threading.Event()
         self.ready = threading.Event()
@@ -35,6 +38,7 @@ class WALCheckpointWorker:
                           max_duration_ms=0.0, last_checkpoint_at=None,
                           db_bytes=0, disk_free_bytes=None, storage_sample_error=None,
                           reclaim_attempts=0, reclaim_successes=0, reclaim_busy=0, reclaim_errors=0,
+                          reclaim_pressure_attempts=0,
                           reclaimed_bytes=0, last_reclaim_duration_ms=0.0,
                           last_reclaim_error=None)
 
@@ -74,6 +78,7 @@ class WALCheckpointWorker:
                     "wal_retain_bytes": WAL_RETAIN_BYTES,
                     "reclaim_threshold_bytes": self.RECLAIM_THRESHOLD_BYTES,
                     "reclaim_interval_seconds": self.RECLAIM_INTERVAL_SECONDS,
+                    "reclaim_pressure_interval_seconds": self.RECLAIM_PRESSURE_INTERVAL_SECONDS,
                     "reclaim_mode": "TRUNCATE", "reclaim_busy_timeout_ms": 0}
 
     def sample_storage(self):
@@ -111,13 +116,18 @@ class WALCheckpointWorker:
                 or checkpoint_result.get("remaining_frames") != 0):
             return False
         now = time.monotonic() if now is None else now
+        pressure = (self.storage_pressure_threshold_bytes is not None
+                    and size >= self.storage_pressure_threshold_bytes)
+        interval = self.RECLAIM_PRESSURE_INTERVAL_SECONDS if pressure else self.RECLAIM_INTERVAL_SECONDS
         if (self._last_reclaim_attempt is not None
-                and now - self._last_reclaim_attempt < self.RECLAIM_INTERVAL_SECONDS):
+                and now - self._last_reclaim_attempt < interval):
             return False
         self._last_reclaim_attempt = now
         with self.lock:
             self.stats["reclaim_attempts"] += 1
-        trace = RUNTIME_DEBUG.begin("sqlite_wal_reclaim", mode="TRUNCATE", wal_bytes=size)
+            self.stats["reclaim_pressure_attempts"] += int(pressure)
+        trace = RUNTIME_DEBUG.begin("sqlite_wal_reclaim", mode="TRUNCATE", wal_bytes=size,
+                                    reason="wal_budget" if pressure else "periodic")
         started = time.perf_counter()
         status, fields = "error", {}
         try:
@@ -133,6 +143,10 @@ class WALCheckpointWorker:
                 self.stats["last_reclaim_error"] = None
             fields["reclaimed_bytes"] = reclaimed
             status = "busy" if busy else "ok"
+            if not busy:
+                budget = getattr(self.store, 'storage_budget', None)
+                if budget is not None:
+                    budget.sample()  # Resume RAM-only recording admission after recovery.
             return not bool(busy)
         except Exception as exc:
             # Keep PASSIVE scheduling alive. Busy is a normal row result; an I/O
