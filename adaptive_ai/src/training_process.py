@@ -580,7 +580,7 @@ def _build_job(history, start_ts, end_ts, kwargs):
     from storage_budget import StorageBudget, StoragePressure
     budget = getattr(STORE, 'storage_budget', None)
     if isinstance(budget, StorageBudget) and budget.sample()['level'] != 'normal':
-        raise StoragePressure('Storage protection: training paused until disk budget recovers')
+        raise budget.pressure()
     from ha import AUTOMATION_KNOWLEDGE
 
     agent_ids = sorted(set(kwargs.get("agent_ids") or ()))

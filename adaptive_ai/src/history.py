@@ -10,6 +10,7 @@ import time
 import traceback
 from settings import (OPTIONS, TRAINING_REVISION, clamp, iso_from_ts, now_ts, parse_ts)
 from storage import STORE
+from storage_budget import StoragePressure, require_storage_available
 from ha import HA, AUTOMATION_KNOWLEDGE
 from context import (archived_state, balanced_presence_driver_score, controllable_context_exclusions, default_action_interval, electrical_context_exclusions, entity_capability_tags, historical_reward, is_context_candidate_entity, is_esphome_sensor_entity, is_fast_reactive_agent, numeric_activity_driver_score, occupancy_state_bool, target_options_for_state, target_value, transition_edges)
 from telemetry import HEAVY_JOBS, RUNTIME_DEBUG, rss_mb
@@ -644,6 +645,7 @@ class HistoryManager(threading.Thread):
         return session
 
     def _start_agent_job(self, agent_id, rebuild=False, rebuild_reason=None):
+        require_storage_available(STORE)
         agent_id = str(agent_id)
         agent = STORE.get_agent_config(agent_id)
         if not agent:
@@ -688,9 +690,7 @@ class HistoryManager(threading.Thread):
                                 "policy_update": False,
                             },
                         )
-                    STORE.clear_learning(agent_id)
-                    self.engine.models.pop(agent_id, None)
-                    self.engine.runtime.pop(agent_id, None)
+                    # Retain the working model until Recorder preparation succeeds.
                 else:
                     STORE.set_training_state(
                         agent_id, "training", score=agent.get("benchmark_score"),
@@ -745,12 +745,14 @@ class HistoryManager(threading.Thread):
             except Exception as exc:
                 failure_text = f"{type(exc).__name__}: {exc}"
                 STORE.event(
-                    agent_id, "error", "agent_index_failed", str(exc),
+                    agent_id, "warning" if isinstance(exc, StoragePressure) else "error",
+                    "agent_storage_paused" if isinstance(exc, StoragePressure) else "agent_index_failed", str(exc),
                     {"trace": traceback.format_exc(limit=6)},
                 )
                 if not bool(getattr(exc, "preserve_training_state", False)):
                     STORE.set_training_state(
-                        agent_id, "paused", detail={"reason": str(exc)}
+                        agent_id, "paused", detail={"reason": str(exc),
+                            "storage_pressure": isinstance(exc, StoragePressure)}
                     )
             finally:
                 try:
@@ -1105,6 +1107,8 @@ class HistoryManager(threading.Thread):
                         label=f"Agent {agent['id']} · context history", max_hours=12,
                     )
             self.refresh_archive_cache()
+        except StoragePressure:
+            raise
         except Exception as exc:
             # A Recorder backfill failure must not destroy resumability. Train from the
             # locally available archive and leave a diagnostic event.
@@ -1132,6 +1136,12 @@ class HistoryManager(threading.Thread):
             "history_window_hours": round(max(0.0, target_end - refresh_start) / 3600.0, 3),
         }
         self._refresh_agent_history(agent, refresh_start, target_end, rebuild=rebuild)
+        require_storage_available(STORE)
+        if rebuild:
+            with self.engine.executor.target_lock(agent['target_entity']):
+                STORE.clear_learning(agent_id)
+                self.engine.models.pop(agent_id, None)
+                self.engine.runtime.pop(agent_id, None)
         self.training_job_timings["recorder_refresh_seconds"] = round(
             time.perf_counter() - recorder_wall_started, 4
         )

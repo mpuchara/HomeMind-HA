@@ -17,6 +17,7 @@ from collections import OrderedDict
 from context import target_value
 from control import same_value
 from settings import iso_now, now_ts
+from storage_budget import storage_recording_paused
 
 CONTRACT_VERSION = 1
 UNKNOWN = "unknown"
@@ -337,6 +338,13 @@ class ProvenanceJournal:
             "state_json": _json(payload) if payload is not None else None,
             "processed_time": None,
         }
+        if storage_recording_paused(self.store):
+            # Keep origin in the bounded event cache for live command matching,
+            # but suspend raw audit acquisition while disk admission is paused.
+            with self._event_cache_lock:
+                self._remember_event(row)
+                self._dropped_pending_events += 1
+            return str(event_id), False
         with self._event_cache_lock:
             overflow = len(self._pending_events) >= self._pending_event_limit
             if overflow:

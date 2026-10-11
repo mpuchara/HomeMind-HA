@@ -1,6 +1,6 @@
-# HomeMind-HA / Adaptive AI 0.14.176
+# HomeMind-HA / Adaptive AI 0.14.177
 
-0.14.176: retencja 10 dni, limit bazy, rezerwa dysku i automatyczne odzyskiwanie zapisów także przy mniejszym limicie WAL. [Opis wydania](docs/RELEASE_0_14_176_PL.md).
+0.14.177: retencja 10 dni i limity dysku, spokojne ponawianie zapisów oraz oczekiwanie treningu na odzyskanie miejsca. [Opis wydania](docs/RELEASE_0_14_177_PL.md).
 
 
 Karta agenta ma cztery akcje: **Shadow/Control**, **Wrong decision**, **Settings** i **Teach**. Wrong decision uczy poprawnego Desired. Teach otwiera powiększalny wykres historii z wyborem dokładnej chwili i zapisem poprawnego Desired. Cofanie ostatniej korekty jest dostępne w Teach oraz Settings; pozostałe operacje i diagnostyka są w Settings.
