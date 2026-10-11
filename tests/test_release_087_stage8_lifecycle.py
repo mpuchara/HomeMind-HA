@@ -344,7 +344,8 @@ class StatefulChunkSchedulingTests(unittest.TestCase):
         manager.stop_event = threading.Event()
         manager.temporal_replay_stats = {}
         manager.training_stateful_replay_status = {}
-        manager.engine = SimpleNamespace(wake_event=threading.Event())
+        manager.engine = SimpleNamespace(wake_event=threading.Event(), models={}, runtime={},
+            executor=SimpleNamespace(target_lock=lambda target: threading.RLock()))
         manager._training_bounds = lambda: (0.0, 18 * 3600.0)
         manager._refresh_agent_history = lambda *args, **kwargs: None
 
@@ -366,6 +367,7 @@ class StatefulChunkSchedulingTests(unittest.TestCase):
 
         agent = {
             "id": "stage8-agent",
+            "target_entity": "light.stage8",
             "name": "Stage 8",
             "training_window_start_ts": None,
             "training_cursor_ts": None,
@@ -378,6 +380,9 @@ class StatefulChunkSchedulingTests(unittest.TestCase):
         }
 
         class FakeStore:
+            def clear_learning(self, agent_id):
+                self.cleared = agent_id
+
             def get_agent_config(self, agent_id):
                 return dict(agent)
 
@@ -397,7 +402,8 @@ class StatefulChunkSchedulingTests(unittest.TestCase):
             "agent_training_stateful_continuation": True,
             "agent_training_pause_ms": 0,
         }
-        with patch.object(history_module, "STORE", FakeStore()), \
+        store = FakeStore()
+        with patch.object(history_module, "STORE", store), \
              patch.object(history_module, "OPTIONS", options), \
              patch.object(history_module, "now_ts", return_value=18 * 3600.0):
             manager._run_agent_indexing(
@@ -407,6 +413,7 @@ class StatefulChunkSchedulingTests(unittest.TestCase):
             )
 
         self.assertEqual(len(calls), 3)
+        self.assertEqual(store.cleared, agent['id'])
         self.assertEqual((calls[0][0], calls[0][1]), (0.0, 6 * 3600.0))
         self.assertIsNone(calls[0][2]["continuation_from_ts"])
 
