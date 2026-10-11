@@ -1,10 +1,10 @@
 {
-  "version": "0.14.173",
+  "version": "0.14.174",
   "release_date": "2026-10-11",
-  "base_version": "0.14.172",
-  "base_commit": "319af9d286a99d0ef1aaa924ed333ab097822758",
-  "release_status": "per-observation-shadow-context-sharing",
-  "release_validation_tests_passed": 2073,
+  "base_version": "0.14.173",
+  "base_commit": "a445b9bb96bbe80469ea1d17b62b652f7ed01357",
+  "release_status": "bounded-retained-wal-and-background-reclamation",
+  "release_validation_tests_passed": 2086,
   "release_014140": {
     "scope": "inventory_and_remove_remaining_shipped_feature_Handler_fallbacks_for_Candidate_Live_and_manual_feedback_transport",
     "explicit_routes": "manual_feedback.js, candidate_ui.js, candidate_preference_ui.js, /api/candidates, Candidate Teach-RL status/train, generation history/comparison, /api/candidate-live, /api/live and Candidate discard",
@@ -2459,5 +2459,18 @@
     "original_training_labels_weights_gates_and_history": true,
     "benchmark": "docs/benchmarks/SHADOW_CONTEXT_0_14_173.json",
     "limit": "Synthetic real candidate observer; not a whole HA latency forecast"
+  },
+  "release_014174": {
+    "scope": "retained_wal_high_water_and_infrequent_background_reclamation",
+    "validation": "13_real_sqlite_retention_recovery_reader_writer_rollback_worker_trace_regressions",
+    "wal_retain_bytes": 67108864,
+    "reclaim_threshold_bytes": 268435456,
+    "reclaim_interval_seconds": 60,
+    "reclaim_busy_timeout_ms": 0,
+    "active_frames_are_not_size_capped": true,
+    "passive_copy_before_reclaim": true,
+    "no_store_lock_during_reclaim": true,
+    "original_training_labels_weights_gates_and_history": true,
+    "limit": "SQLite disk I/O has no wall-clock bound; deployed CPU and latency require a new runtime log"
   }
 }
