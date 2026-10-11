@@ -3,8 +3,8 @@
   "release_date": "2026-10-11",
   "base_version": "0.14.176",
   "base_commit": "445fe597153adc3612e26c3ed27aa9551086d9b4",
-  "release_status": "storage-pressure-aware-writers-and-training-admission",
-  "release_validation_tests_passed": 2124,
+  "release_status": "storage-pressure-aware-writers-and-resumable-wal-training",
+  "release_validation_tests_passed": 2131,
   "release_014140": {
     "scope": "inventory_and_remove_remaining_shipped_feature_Handler_fallbacks_for_Candidate_Live_and_manual_feedback_transport",
     "explicit_routes": "manual_feedback.js, candidate_ui.js, candidate_preference_ui.js, /api/candidates, Candidate Teach-RL status/train, generation history/comparison, /api/candidate-live, /api/live and Candidate discard",
@@ -2504,6 +2504,13 @@
     "training_waits_in_queue_before_model_reset": true,
     "model_reset_after_recorder_preparation": true,
     "raw_acquisition_paused_without_unbounded_pending_growth": true,
-    "existing_disk_limits_preserved": true
+    "existing_disk_limits_preserved": true,
+    "wal_batch_retry_timeout_seconds": 90,
+    "wal_wait_cancel_poll_seconds": 1,
+    "same_rolled_back_batch_retried": true,
+    "low_free_space_and_database_capacity_not_retried": true,
+    "completed_rebuild_reset_not_repeated": true,
+    "worker_storage_pressure_preserved": true,
+    "new_regression_tests": 18
   }
 }

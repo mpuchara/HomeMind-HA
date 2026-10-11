@@ -23,6 +23,7 @@ import uuid
 from settings import (
     APP_VERSION, DATA_DIR, OPTIONS, TRAINING_REVISION, now_ts,
 )
+from storage_budget import StoragePressure
 
 
 JOB_FORMAT = "homemind-isolated-training-job"
@@ -577,10 +578,9 @@ def _snapshot_parent_context(history, agent_id):
 
 def _build_job(history, start_ts, end_ts, kwargs):
     from storage import STORE
-    from storage_budget import StorageBudget, StoragePressure
-    budget = getattr(STORE, 'storage_budget', None)
-    if isinstance(budget, StorageBudget) and budget.sample()['level'] != 'normal':
-        raise budget.pressure()
+    from storage_budget import require_storage_available, run_storage_write
+    run_storage_write(STORE, lambda: require_storage_available(STORE),
+        getattr(history, 'stop_event', threading.Event()), getattr(history, 'job_cancel_event', None))
     from ha import AUTOMATION_KNOWLEDGE
 
     agent_ids = sorted(set(kwargs.get("agent_ids") or ()))
@@ -1092,6 +1092,10 @@ def run_isolated_training_chunk(history, start_ts, end_ts, **kwargs):
                 raise MemoryError(
                     detail or "isolated worker exceeded its memory budget"
                 )
+            if error_type == "StoragePressure":
+                pressure = StoragePressure(detail or "isolated worker paused by storage protection")
+                pressure.reason = result.get("storage_pressure_reason")
+                raise pressure
             raise RuntimeError(
                 detail or f"isolated training worker exited with code {return_code}"
             )
@@ -1305,7 +1309,7 @@ def run_isolated_training_chunk(history, start_ts, end_ts, **kwargs):
         history.engine.agent_index_revision = -1
         history.training_process_status = {
             **history.training_process_status,
-            "state": "cancelled" if cancelled else "failed",
+            "state": "cancelled" if cancelled else "paused" if isinstance(exc, StoragePressure) else "failed",
             "exit_code": process.poll(),
             "wall_seconds": round(time.monotonic() - started, 3),
             "peak_rss_mb": round(peak_rss, 3),
@@ -1729,6 +1733,7 @@ def worker_main(job_path):
         result.update({
             "error": f"{type(exc).__name__}: {exc}",
             "error_type": type(exc).__name__,
+            "storage_pressure_reason": getattr(exc, 'reason', None) if isinstance(exc, StoragePressure) else None,
             "trace": traceback.format_exc(limit=12),
             "training_budget": TRAINING_BUDGET.snapshot(),
             "elapsed_seconds": round(time.monotonic() - started, 3),

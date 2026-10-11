@@ -828,7 +828,8 @@ class TrainingQueue(threading.Thread):
             ((agent or {}).get('benchmark_detail') or {}).get('storage_pressure')
         )
         if storage_interrupted and not cancelled and job.get('reason') != 'teach_rl':
-            self.enqueue(agent_id, rebuild=bool(job.get('rebuild')),
+            reset_completed = bool(((agent or {}).get('benchmark_detail') or {}).get('rebuild_reset_completed'))
+            self.enqueue(agent_id, rebuild=bool(job.get('rebuild')) and not reset_completed,
                          reason=job.get('reason') or 'training',
                          rebuild_reason=job.get('rebuild_reason'))
         if cancelled:

@@ -1,5 +1,7 @@
 """Expected storage pressure must not become an authorization/error storm."""
 import sqlite3
+import json
+import os
 import tempfile
 import threading
 import time
@@ -10,12 +12,13 @@ from unittest.mock import Mock, patch
 
 import support
 from storage import Store
-from storage_budget import StorageBudget, StoragePressure, StorageRetry, MIB
+from storage_budget import StorageBudget, StoragePressure, StorageRetry, MIB, run_storage_write
 from provenance import ProvenanceJournal
 from history import HistoryManager
 from training_queue import TrainingQueue
 from test_training_queue import FakeStore, FakeEngine, FakeHistory
 import test_executor as executor_fixture
+import test_release_080_training_process as process_fixture
 from provenance_runtime import install
 
 
@@ -128,6 +131,139 @@ class Pressure177Tests(unittest.TestCase):
             self.assertFalse(queue._finish_active_if_done())
             self.assertEqual(queue.snapshot()['queued_count'], 1)
         queue._try_start_head()
+        store.agents['a']['benchmark_detail'] = {}
+        history.complete('a')
+        queue._finish_active_if_done()
+
+    def test_real_wal_pause_retries_same_transaction_after_worker_reclaim(self):
+        from contextlib import closing
+        from wal_checkpoint import WALCheckpointWorker
+        self.store.start_wal_keeper()
+        self.addCleanup(self.store.stop_wal_keeper)
+        self.budget.wal_limit = 512 * 1024
+        with closing(sqlite3.connect(self.store.path, isolation_level=None)) as raw:
+            raw.execute('PRAGMA wal_checkpoint(TRUNCATE)')
+        with closing(sqlite3.connect(self.store.path, isolation_level=None)) as reader:
+            reader.execute('BEGIN')
+            reader.execute('SELECT count(*) FROM app_meta').fetchone()
+            for index in range(100):
+                with self.store.conn() as c:
+                    c.execute('INSERT INTO app_meta VALUES(?,?)', (str(index), 'x' * 8192))
+                if self.budget.sample()['level'] == 'paused':
+                    break
+            self.assertEqual(self.budget.sample()['reason'], 'wal_budget')
+            stop = Mock()
+            stop.is_set.return_value = False
+            def recover(seconds):
+                self.assertFalse(self.store.lock._is_owned())
+                reader.execute('COMMIT')
+                with closing(sqlite3.connect(self.store.path, isolation_level=None)) as raw:
+                    worker = WALCheckpointWorker(self.store)
+                    self.assertTrue(worker.reclaim(raw, worker.checkpoint(raw)))
+            stop.wait.side_effect = recover
+            rows = [('sensor.radar', 1, 'on', {}, None, 'ha_history_full')]
+            callback = Mock(side_effect=lambda: self.store.archive_batch(rows))
+            self.assertEqual(run_storage_write(self.store, callback, stop), 1)
+            self.assertEqual(callback.call_count, 2)
+            stop.wait.assert_called_once_with(1.0)
+        with self.store.conn() as c:
+            self.assertEqual(c.execute('SELECT count(*) FROM entity_history').fetchone()[0], 1)
+            self.assertEqual(c.execute('PRAGMA integrity_check').fetchone()[0], 'ok')
+
+    def test_disk_and_database_pressure_never_wait_for_wal(self):
+        stop = Mock()
+        stop.is_set.return_value = False
+        for reason in ('disk_reserve', 'database_budget', 'statement_payload_budget'):
+            callback = Mock(side_effect=self.budget.pressure(reason))
+            with self.assertRaises(StoragePressure):
+                run_storage_write(self.store, callback, stop)
+            callback.assert_called_once()
+        stop.wait.assert_not_called()
+
+    def test_wal_wait_has_timeout_and_remains_cancellable(self):
+        stop = threading.Event()
+        callback = Mock(side_effect=self.budget.pressure('wal_budget'))
+        with self.assertRaises(StoragePressure):
+            run_storage_write(self.store, callback, stop, timeout=0)
+        callback.assert_called_once()
+        cancel = threading.Event()
+        cancel.set()
+        callback.reset_mock()
+        with self.assertRaises(InterruptedError):
+            run_storage_write(self.store, callback, stop, cancel)
+        callback.assert_not_called()
+
+    def test_unrelated_sql_failure_is_not_retried(self):
+        callback = Mock(side_effect=sqlite3.DatabaseError('not authorized'))
+        with self.assertRaises(sqlite3.DatabaseError):
+            run_storage_write(self.store, callback, threading.Event())
+        callback.assert_called_once()
+
+    def test_import_retains_payload_and_counts_only_committed_retry(self):
+        manager = object.__new__(HistoryManager)
+        manager.stop_event = Mock()
+        manager.stop_event.is_set.return_value = False
+        manager.stop_event.wait.return_value = False
+        manager.job_cancel_event = None
+        data = [[support.state('sensor.radar', 'on') | {'last_changed': '2026-10-11T12:00:00+00:00'},
+                 support.state('sensor.radar', 'off') | {'last_changed': '2026-10-11T12:00:01+00:00'}]]
+        original = self.store.archive_batch
+        attempts = []
+        def archive(rows):
+            attempts.append(list(rows))
+            if len(attempts) == 1:
+                raise self.budget.pressure('wal_budget')
+            return original(rows)
+        with patch('history.STORE', self.store), patch.object(self.store, 'archive_batch', side_effect=archive):
+            self.assertEqual(manager._archive_history_payload(data, 'ha_history_full'), 2)
+        self.assertEqual(attempts[0], attempts[1])
+        self.assertEqual(self.store.archive_count(), 2)
+        manager.stop_event.wait.assert_called_once_with(1.0)
+
+    def test_worker_pressure_keeps_type_and_rolls_back_uncommitted_chunk(self):
+        import storage as storage_module
+        import training_process
+        fixture = process_fixture.SupervisorRollbackContracts()
+        fixture.setUp()
+        try:
+            manager = fixture._fake_history()
+            job = fixture._supervisor_job(fixture.temp.name)
+            aid = fixture.agent['id']
+            def start(*args, **kwargs):
+                fixture.store.add_historical_experience(aid, 2, 1, 1.0, 1.0, 10.0, {0: 2.0})
+                fixture.store.save_model(aid, {'version': 1, 'value': 'uncommitted-child'})
+                Path(job['result_path']).write_text(json.dumps({
+                    'ok': False, 'error_type': 'StoragePressure',
+                    'error': 'Storage protection: wal_budget', 'storage_pressure_reason': 'wal_budget',
+                }), encoding='utf-8')
+                return SimpleNamespace(pid=os.getpid(), poll=lambda: 2, wait=lambda timeout=None: 2)
+            with patch.object(storage_module, 'STORE', fixture.store), \
+                 patch.object(training_process, 'DATA_DIR', Path(fixture.temp.name)), \
+                 patch.object(training_process, '_build_job', return_value=dict(job)), \
+                 patch.object(training_process, '_prune_job_files', return_value=None), \
+                 patch.object(training_process.subprocess, 'Popen', side_effect=start):
+                with self.assertRaises(StoragePressure) as error:
+                    training_process.run_isolated_training_chunk(manager, 1.0, 2.0, agent_ids={aid})
+            self.assertEqual(error.exception.reason, 'wal_budget')
+            self.assertEqual(manager.training_process_status['state'], 'paused')
+            self.assertEqual(fixture.store.get_model(aid)['value'], 'pre-worker')
+            self.assertEqual([row['target_history_id'] for row in fixture.store.list_historical_experiences(aid)], [1])
+        finally:
+            fixture.tearDown()
+
+    def test_interrupted_rebuild_after_reset_resumes_saved_progress(self):
+        store = FakeStore()
+        trace = []
+        history = FakeHistory(store, trace)
+        queue = TrainingQueue(history, store, FakeEngine(trace))
+        queue.enqueue('a', rebuild=True)
+        queue._try_start_head()
+        history.complete('a', state='paused', progress=.4)
+        store.agents['a']['benchmark_detail'] = {'storage_pressure': True, 'rebuild_reset_completed': True}
+        queue._finish_active_if_done()
+        self.assertFalse(queue.jobs[0]['rebuild'])
+        queue._try_start_head()
+        self.assertEqual(history.started, [('a', True), ('a', False)])
         store.agents['a']['benchmark_detail'] = {}
         history.complete('a')
         queue._finish_active_if_done()

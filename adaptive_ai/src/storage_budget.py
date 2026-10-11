@@ -107,11 +107,14 @@ class StorageBudget:
 
     def pressure(self, reason=None):
         data = self.snapshot()
-        return StoragePressure(
-            f"Storage protection: {reason or data['reason']}; "
+        reason = reason or data['reason']
+        error = StoragePressure(
+            f"Storage protection: {reason}; "
             f"database used={data['database_used_bytes']} bytes, WAL={data['wal_bytes']} bytes, "
             f"free={data['free_bytes']} bytes; recording/training paused"
         )
+        error.reason = reason
+        return error
 
     def check(self, parameters=()):
         if _payload_bytes(parameters) > MAX_WRITE_BYTES:
@@ -291,6 +294,36 @@ def require_storage_available(store):
 def storage_recording_paused(store):
     # Producers use the existing RAM snapshot, with no disk calls in event->intent.
     return storage_status(store).get('level', 'normal') != 'normal'
+
+
+def run_storage_write(store, callback, stop_event, cancel_event=None, timeout=90.0):
+    """Retry the same rolled-back history batch after a transient WAL pause.
+
+    Called outside SQL/Store locks. The existing checkpoint worker owns recovery;
+    low free space, a full database and unrelated SQL errors are never retried here.
+    """
+    deadline = time.monotonic() + timeout
+    while True:
+        if stop_event.is_set() or (cancel_event is not None and cancel_event.is_set()):
+            raise InterruptedError('Training storage wait cancelled')
+        try:
+            return callback()
+        except StoragePressure as exc:
+            budget = getattr(store, 'storage_budget', None)
+            if not isinstance(budget, StorageBudget):
+                raise
+            if getattr(exc, 'reason', None) not in ('wal_budget', 'storage_pressure_changed_during_batch'):
+                raise
+            data = budget.sample()
+            healthy_capacity = (data.get('free_bytes') is not None
+                and data['free_bytes'] >= budget.reserve
+                and data['database_used_bytes'] < budget.db_limit * .90)
+            if (not healthy_capacity or data['reason'] not in (None, 'wal_budget')
+                    or time.monotonic() >= deadline):
+                raise
+            with budget.lock:
+                budget.stats['wal_recovery_waits'] = budget.stats.get('wal_recovery_waits', 0) + 1
+            stop_event.wait(1.0)
 
 
 class StorageRetry:

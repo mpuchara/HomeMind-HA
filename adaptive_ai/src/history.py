@@ -10,7 +10,7 @@ import time
 import traceback
 from settings import (OPTIONS, TRAINING_REVISION, clamp, iso_from_ts, now_ts, parse_ts)
 from storage import STORE
-from storage_budget import StoragePressure, require_storage_available
+from storage_budget import StoragePressure, require_storage_available, run_storage_write
 from ha import HA, AUTOMATION_KNOWLEDGE
 from context import (archived_state, balanced_presence_driver_score, controllable_context_exclusions, default_action_interval, electrical_context_exclusions, entity_capability_tags, historical_reward, is_context_candidate_entity, is_esphome_sensor_entity, is_fast_reactive_agent, numeric_activity_driver_score, occupancy_state_bool, target_options_for_state, target_value, transition_edges)
 from telemetry import HEAVY_JOBS, RUNTIME_DEBUG, rss_mb
@@ -752,7 +752,8 @@ class HistoryManager(threading.Thread):
                 if not bool(getattr(exc, "preserve_training_state", False)):
                     STORE.set_training_state(
                         agent_id, "paused", detail={"reason": str(exc),
-                            "storage_pressure": isinstance(exc, StoragePressure)}
+                            "storage_pressure": isinstance(exc, StoragePressure),
+                            "rebuild_reset_completed": bool(getattr(session, 'training_reset_completed', False))}
                     )
             finally:
                 try:
@@ -1136,12 +1137,14 @@ class HistoryManager(threading.Thread):
             "history_window_hours": round(max(0.0, target_end - refresh_start) / 3600.0, 3),
         }
         self._refresh_agent_history(agent, refresh_start, target_end, rebuild=rebuild)
-        require_storage_available(STORE)
+        run_storage_write(STORE, lambda: require_storage_available(STORE),
+            self.stop_event, getattr(self, 'job_cancel_event', None))
         if rebuild:
             with self.engine.executor.target_lock(agent['target_entity']):
                 STORE.clear_learning(agent_id)
                 self.engine.models.pop(agent_id, None)
                 self.engine.runtime.pop(agent_id, None)
+                self.training_reset_completed = True
         self.training_job_timings["recorder_refresh_seconds"] = round(
             time.perf_counter() - recorder_wall_started, 4
         )
@@ -1715,7 +1718,8 @@ class HistoryManager(threading.Thread):
                 return
             check_cancelled()
             count = len(rows)
-            written += STORE.archive_batch(rows)
+            written += run_storage_write(STORE, lambda: STORE.archive_batch(rows),
+                self.stop_event, self.job_cancel_event)
             batches += 1
             max_batch_rows = max(max_batch_rows, count)
             rows.clear()
@@ -3545,7 +3549,9 @@ class HistoryManager(threading.Thread):
                 1 for row in batch
                 if str((row.get("_provenance") or {}).get("origin") or "unknown") != "own_command"
             )
-            inserted = STORE.add_historical_experiences_batch(batch)
+            inserted = run_storage_write(STORE,
+                lambda: STORE.add_historical_experiences_batch(batch),
+                self.stop_event, self.job_cancel_event)
             if inserted != expected_inserted:
                 # A concurrent duplicate would make the in-memory policy diverge from the
                 # durable audit log. Abort rather than silently checkpoint inconsistent
