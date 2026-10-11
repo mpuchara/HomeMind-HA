@@ -13,7 +13,7 @@ class WALCheckpointWorker:
     POLL_SECONDS = 5.0
     MAX_IDLE_SECONDS = 30.0
     THRESHOLD_PAGES = 1000
-    RECLAIM_THRESHOLD_BYTES = 256 * 1024 * 1024
+    RECLAIM_THRESHOLD_BYTES = 64 * 1024 * 1024
     RECLAIM_INTERVAL_SECONDS = 60.0
 
     def __init__(self, store):

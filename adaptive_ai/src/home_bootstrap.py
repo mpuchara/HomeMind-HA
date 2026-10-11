@@ -15,6 +15,7 @@ from context import archived_state
 from context_engine import ContextEngine
 from home_state import RoomBeliefModel
 from telemetry import HEAVY_JOBS, rss_mb
+from storage_budget import StoragePressure
 
 
 class HomeBootstrap:
@@ -46,6 +47,9 @@ class HomeBootstrap:
         memory = rss_mb()
         if memory is not None and memory > 500:
             raise MemoryError('500 MB RSS training limit reached')
+        budget = getattr(self.store, 'storage_budget', None)
+        if budget is not None and budget.sample()['level'] != 'normal':
+            raise StoragePressure('Storage protection: home backfill paused')
 
     def _run(self, import_recorder):
         started = time.monotonic()
@@ -82,6 +86,7 @@ class HomeBootstrap:
             with tempfile.TemporaryDirectory(prefix='homemind-bootstrap-') as temp:
                 path = str(Path(temp) / 'checkpoints.sqlite')
                 with closing(sqlite3.connect(path)) as checkpoint:
+                    checkpoint.execute('PRAGMA max_page_count=16384')
                     checkpoint.execute('CREATE TABLE home_checkpoints (ts REAL PRIMARY KEY, model TEXT NOT NULL)')
                     for row in self.store.archive_iter(begin, cutoff, ids, chunk_size=256):
                         self._check()

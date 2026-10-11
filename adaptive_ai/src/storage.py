@@ -10,12 +10,15 @@ from sqlite_policy import WAL_RETAIN_BYTES
 import threading
 import time
 import uuid
-from settings import (DATA_DIR, DB_PATH, clamp, iso_now, now_ts)
+from settings import (DATA_DIR, DB_PATH, OPTIONS, clamp, iso_now, now_ts)
+from storage_budget import BudgetConnection, StorageBudget
 
 class Store:
     def __init__(self, path):
         DATA_DIR.mkdir(parents=True, exist_ok=True)
         self.path = str(path)
+        self.storage_budget = StorageBudget(self.path, OPTIONS)
+        self._retention_worker = None
         self.lock = threading.RLock()
         self._meta_lock = threading.RLock()
         self._connection_session = threading.local()
@@ -40,6 +43,7 @@ class Store:
         self._event_buffer_first_at = None
         self._event_buffer_seq = 0
         self._event_prune_batches = 0
+        self._event_error_print_at = float('-inf')
         # Process-isolated historical workers may install a publication guard and
         # request keyset-paged archive reads. Both are process-local switches: the
         # realtime process keeps the ordinary Store contract unchanged.
@@ -56,6 +60,7 @@ class Store:
         if self.training_worker_process:
             self._load_meta_cache()
         else:
+            self.storage_budget.prepare_existing_wal()
             self._init()
             self._load_meta_cache()
             self._load_recent_events()
@@ -114,6 +119,9 @@ class Store:
         """RAM-only diagnostics, never run SQL from the debug export."""
         with self._wal_keeper_lock:
             return dict(version=sqlite3.sqlite_version,
+                        storage_budget=self.storage_budget.snapshot(),
+                        storage_retention=(self._retention_worker.snapshot()
+                                           if self._retention_worker is not None else None),
                         wal_keeper_active=self._wal_keeper is not None,
                         wal_keeper_starts=self._wal_keeper_starts,
                         wal_keeper_stops=self._wal_keeper_stops,
@@ -133,6 +141,19 @@ class Store:
     def stop_wal_checkpoint(self):
         if self._wal_checkpoint_worker is not None:
             self._wal_checkpoint_worker.stop()
+
+    def start_storage_retention(self):
+        from storage_retention import StorageRetention
+        if self.training_worker_process:
+            return False
+        if self._retention_worker is None:
+            self._retention_worker = StorageRetention(self, OPTIONS.get('archive_retention_days', 10))
+        self._retention_worker.start()
+        return True
+
+    def stop_storage_retention(self):
+        if self._retention_worker is not None:
+            self._retention_worker.stop()
 
     @contextmanager
     def background_sqlite(self):
@@ -178,7 +199,8 @@ class Store:
             if reuse and busy_timeout_ms != getattr(self._connection_session, "connection_busy_timeout_ms", None):
                 previous_timeout = int(c.execute("PRAGMA busy_timeout").fetchone()[0])
             elif not reuse:
-                c = sqlite3.connect(self.path, timeout=busy_timeout_ms / 1000.0)
+                c = sqlite3.connect(self.path, timeout=busy_timeout_ms / 1000.0,
+                                    factory=BudgetConnection)
                 c.row_factory = sqlite3.Row
             phase = "configure"
             checkpoint_worker = self._wal_checkpoint_worker
@@ -202,6 +224,8 @@ class Store:
                     c.execute("PRAGMA mmap_size=67108864")
                 except sqlite3.DatabaseError:
                     pass
+                if isinstance(c, BudgetConnection):
+                    self.storage_budget.install(c)
             with c:
                 if trace:
                     body_started = time.perf_counter()
@@ -315,6 +339,8 @@ class Store:
 
     def _init(self):
         with self.lock, self.conn() as c:
+            if int(c.execute('PRAGMA page_count').fetchone()[0]) == 0:
+                c.execute('PRAGMA auto_vacuum=INCREMENTAL')
             c.execute("PRAGMA journal_mode=WAL")
             c.executescript(
                 """
@@ -997,7 +1023,15 @@ class Store:
                 with self.background_sqlite():
                     self.flush_events(nonblocking=True)
         except Exception as exc:
-            print(f"[event] {exc}", flush=True)
+            # A full/paused database must not turn every radar event into another
+            # unbounded Supervisor log entry. Recent diagnostics stay in RAM.
+            with self._event_lock:
+                now = time.monotonic()
+                report = now - self._event_error_print_at >= 60.0
+                if report:
+                    self._event_error_print_at = now
+            if report:
+                print(f"[event] {exc}", flush=True)
 
     def flush_events(self, nonblocking=False):
         # Serialize the SQLite batch with other durable Store writers, but let realtime

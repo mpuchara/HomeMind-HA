@@ -427,7 +427,7 @@ class HistoryManager(threading.Thread):
         # Explicit agent training intentionally uses a recent rolling window rather than
         # replaying the entire local archive. Older history remains durable for diagnostics
         # and future offline analysis, but does not multiply every interactive retrain.
-        days = max(1.0, min(30.0, float(OPTIONS.get("agent_training_history_days", 7) or 7)))
+        days = max(1.0, min(30.0, float(OPTIONS.get("agent_training_history_days", 10) or 10)))
         start_ts = max(earliest, end_ts - days * 86400.0)
         return start_ts, end_ts
 
@@ -4453,13 +4453,13 @@ class HistoryManager(threading.Thread):
             )
             recent_days = max(
                 1.0,
-                float(OPTIONS.get("agent_training_history_days", 7) or 7),
+                float(OPTIONS.get("agent_training_history_days", 10) or 10),
             )
             long_days = max(
                 recent_days,
                 min(
                     90.0,
-                    float(OPTIONS.get("agent_training_long_memory_days", 35) or 35),
+                    float(OPTIONS.get("agent_training_long_memory_days", 10) or 10),
                 ),
             )
             max_long_samples = max(

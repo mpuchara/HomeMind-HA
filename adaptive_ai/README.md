@@ -1,6 +1,6 @@
-# HomeMind-HA / Adaptive AI 0.14.174
+# HomeMind-HA / Adaptive AI 0.14.175
 
-0.14.174: odzyskiwanie dużego pliku WAL w tle, ograniczenie zatrzymanego miejsca po resecie oraz diagnostyka rozmiaru bazy i wolnego dysku.
+0.14.175: automatyczna retencja 10 dni, limit rozmiaru bazy, rezerwa wolnego dysku oraz ograniczone pliki i logi treningu.
 
 
 Cztery akcje każdego agenta: Shadow/Control, Wrong decision, Settings, Teach.

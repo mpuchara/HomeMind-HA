@@ -14,6 +14,7 @@ import os
 from pathlib import Path
 import subprocess
 import sys
+from storage_files import atomic_text, start_log_drain
 import threading
 import time
 import traceback
@@ -310,9 +311,7 @@ def _same_process_alive(pid, start_token=None):
 def _atomic_json(path, payload):
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    temp = path.with_suffix(path.suffix + ".tmp")
-    temp.write_text(_canonical(payload), encoding="utf-8")
-    os.replace(temp, path)
+    atomic_text(path, _canonical(payload))
 
 
 def _read_json(path, default=None):
@@ -546,7 +545,7 @@ def _job_dir():
 def _prune_job_files(keep=12):
     try:
         files = sorted(
-            _job_dir().glob("*"),
+            (p for p in _job_dir().glob("*") if p.is_file() and not p.is_symlink() and not p.name.startswith('.')),
             key=lambda p: p.stat().st_mtime,
             reverse=True,
         )
@@ -577,8 +576,12 @@ def _snapshot_parent_context(history, agent_id):
 
 
 def _build_job(history, start_ts, end_ts, kwargs):
-    from ha import AUTOMATION_KNOWLEDGE
     from storage import STORE
+    from storage_budget import StorageBudget, StoragePressure
+    budget = getattr(STORE, 'storage_budget', None)
+    if isinstance(budget, StorageBudget) and budget.sample()['level'] != 'normal':
+        raise StoragePressure('Storage protection: training paused until disk budget recovers')
+    from ha import AUTOMATION_KNOWLEDGE
 
     agent_ids = sorted(set(kwargs.get("agent_ids") or ()))
     if len(agent_ids) != 1:
@@ -900,8 +903,8 @@ def run_isolated_training_chunk(history, start_ts, end_ts, **kwargs):
     # Recompute after adding the non-semantic resource profile so the worker also verifies
     # that its RAM/SQLite limits were not corrupted in transit.
     job["checksum"] = descriptor_checksum(job)
-    _atomic_json(job_path, job)
     _prune_job_files()
+    _atomic_json(job_path, job)
 
     agent_id = job["agent_id"]
     agent_before = STORE.get_agent_config(agent_id)
@@ -932,17 +935,16 @@ def run_isolated_training_chunk(history, start_ts, end_ts, **kwargs):
     env["MKL_NUM_THREADS"] = "1"
     env["NUMEXPR_NUM_THREADS"] = "1"
 
-    log_handle = open(job["log_path"], "ab", buffering=0)
     process = subprocess.Popen(
         [sys.executable, str(Path(__file__).resolve()), "--worker", str(job_path)],
         cwd=str(Path(__file__).resolve().parent),
         env=env,
         stdin=subprocess.DEVNULL,
-        stdout=log_handle,
+        stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         start_new_session=True,
     )
-    log_handle.close()
+    log_writer = start_log_drain(process, job['log_path'])
 
     history.active_training_process = process
     started = time.monotonic()
@@ -1311,6 +1313,8 @@ def run_isolated_training_chunk(history, start_ts, end_ts, **kwargs):
         }
         raise
     finally:
+        if log_writer is not None and process.poll() is not None:
+            log_writer.join(1)
         history.active_training_process = None
 
 

@@ -41,6 +41,7 @@ function renderHome(status){
   const sourcePanel=$('#homePanel').querySelector('.home-source-details');
   const sourcesOpen=sourcePanel?.open||false, sourceScroll=sourcePanel?.querySelector('.home-source-table')?.scrollTop||0;
   const h=status.home_intelligence||{}, b=status.home_bootstrap||{}, t=status.telemetry||{};
+  const storage=status.storage||{}, mb=value=>num(Number(value||0)/1048576,1);
   const inf=t.metrics?.inference||{}, latency=t.metrics?.event_to_decision||t.metrics?.event_to_intent||{};
   const candidateInf=t.metrics?.candidate_inference||{}, candidateLatency=t.metrics?.candidate_event_to_decision||{};
   const drift=status.drift_observer||{}, scheduler=status.inference_scheduler||{}, resync=status.state_resync||{};
@@ -83,6 +84,8 @@ function renderHome(status){
       [eventP95==null?'—':num(eventP95,2)+' ms',eventP95Label]
     ].map(([v,label])=>'<div><b>'+v+'</b><span>'+label+'</span></div>').join('')+'</div>'+
     '<div class="history-meta"><span>Full agent p95: '+runtimeCost('wrapped_inference')+'</span><span>Context observation p95: '+runtimeCost('context_shadow_observation')+'</span><span>Sensor pool p95: '+runtimeCost('context_observed_pool')+'</span></div>'+
+    (storage.database_max_bytes?'<div class="history-meta"><span>App database: '+mb(storage.db_bytes)+' / '+mb(storage.database_max_bytes)+' MiB</span><span>Write journal: '+mb(storage.wal_bytes)+' MiB</span><span>Free disk: '+(storage.free_bytes==null?'unknown':mb(storage.free_bytes)+' MiB')+'</span><span>History: up to 10 days</span></div>':'')+
+    (storage.level&&storage.level!=='normal'?'<p role="alert"><b>Storage protection active.</b> Recording and training are paused to protect disk space. Reason: '+esc(storage.reason||'storage unavailable')+'. Free space reserve: '+mb(storage.minimum_free_bytes)+' MiB. Settings and learned models are preserved.</p>':'')+
     '<div class="home-transitions">'+(paths.length?paths.map(p=>'<span>'+p.path.map(id=>esc(names[id]||id)).join(' → ')+' <b>'+pct(p.probability)+'</b></span>').join(''):'No observed area-to-area transitions yet. Existing mapped presence/activity sensors learn the live map automatically as state changes arrive.')+'</div>'+
     '<div class="history-meta"><span>Graph half-life '+num(h.half_life_days)+' days</span><span>Policy half-life '+num(status.options?.policy_half_life_days||30)+' days</span><span>Heavy job: '+esc(status.heavy_job||'idle')+'</span><span>Inference count '+num(inf.count)+' live · '+num(candidateInf.count)+' Candidate</span><span>Event/timer passes '+num(scheduler.event_passes||0)+' / '+num(scheduler.timer_passes||0)+'</span><span>Drift observer '+num(drift.runs||0)+' runs · '+num(drift.pending||0)+' pending · max '+num(drift.max_run_ms||0,1)+' ms</span><span>State resync '+num(resync.last_changed_entities||0)+' changed · '+num(resync.last_duration_ms||0,1)+' ms · max '+num(resync.max_duration_ms||0,1)+' ms</span></div>'+
     (running?'<div class="bar history-bar"><i style="width:'+Math.round((b.progress||0)*100)+'%"></i></div><p>'+num(b.rows)+' rows · '+num(b.rows_per_second)+' rows/s · '+esc(duration(b.eta_seconds)||'ETA pending')+'</p>':'')+
