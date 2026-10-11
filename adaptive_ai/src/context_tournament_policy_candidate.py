@@ -27,6 +27,7 @@ from manual_context_learning import _migrate_schema
 from policy import MultiHorizonPolicy
 from policy_backend import verify_model_checksum
 from settings import OPTIONS
+from shared_inference_context import shared_inference_temporal
 from telemetry import RUNTIME_DEBUG, TELEMETRY
 from training_phase_metrics import measure_training_phase
 
@@ -785,7 +786,7 @@ def install_policy_candidates(service):
         candidate = candidate_from_model(agent, challenger, model,
                                          policy=(getattr(service.engine, "models", {}) or {}).get(aid),
                                          tournament=original_state(aid))
-        temporal = getattr(service.engine, "temporal_history", None)
+        temporal = context.get("temporal")
         if candidate is None or temporal is None:
             return int(active_idx)
         try:
@@ -1014,13 +1015,31 @@ def install_policy_candidates(service):
                     choose_members(agent, original_state(aid), states)
         before = service.promotion_status(agent) if hasattr(service, "promotion_status") else {}
         before_ts = before.get("last_promotion_ts")
+        temporal = getattr(service.engine, "temporal_history", None)
+        home_provider = (getattr(temporal, "home_context", None)
+                         or getattr(service.engine, "context", None))
+        shared_temporal = (shared_inference_temporal(
+            temporal, now, home_provider=home_provider,
+        ) if temporal is not None else None)
+        if shared_temporal is not None and home_provider is None:
+            # Keep the legacy no-home contract: do not add an empty forecast tail.
+            shared_temporal.home_context = None
         with lock:
-            current_context[aid] = {"agent": agent, "states": states, "now": now}
+            # All challengers in this observation see the same causal timestamp.
+            # Reuse only read-only temporal/forecast inputs; policies and their
+            # mandatory checksum validation remain independent and fresh.
+            current_context[aid] = {"agent": agent, "states": states, "now": now,
+                                    "temporal": shared_temporal}
         try:
             result = original_observe(agent, states, changed_entities)
         finally:
             with lock:
                 current_context.pop(aid, None)
+            if RUNTIME_DEBUG.enabled:
+                diagnostics = getattr(shared_temporal, 'diagnostics', None)
+                if callable(diagnostics):
+                    RUNTIME_DEBUG.instant('context_candidate_shared_context', agent_id=aid,
+                                          **diagnostics())
         after = service.promotion_status(agent) if hasattr(service, "promotion_status") else {}
         if after.get("last_promotion_ts") is not None and after.get("last_promotion_ts") != before_ts:
             audit = dict(getattr(service, "_last_exact_policy_promotion", {}) or {})

@@ -55,6 +55,8 @@ class SharedInferenceTemporal:
 
     def __init__(self, temporal, timestamp, *, home_provider=None):
         self._temporal = temporal
+        self._observation_edge_cache = {}
+        self.edge_hits = self.edge_misses = 0
         self.timestamp = float(timestamp)
         provider = home_provider
         if provider is None:
@@ -160,6 +162,20 @@ class SharedInferenceTemporal:
         self.last_change_misses += 1
         return value
 
+    def observation_edge(self, entity_id, at_ts, current, compute):
+        # Last valid value edge depends only on this observation's materialized
+        # entity history and fallback timestamp, not a policy's schema or weights.
+        if abs(float(at_ts) - self.timestamp) > 1e-9:
+            return compute(self, entity_id, at_ts, current)
+        key = (str(entity_id), float(at_ts), self._fallback_key(current))
+        if key in self._observation_edge_cache:
+            self.edge_hits += 1
+            return self._observation_edge_cache[key]
+        result = compute(self, entity_id, at_ts, current)
+        self._observation_edge_cache[key] = result
+        self.edge_misses += 1
+        return result
+
     def diagnostics(self):
         home = self.home_context
         return {
@@ -174,6 +190,8 @@ class SharedInferenceTemporal:
             "causal_asof_misses": self.causal_asof_misses,
             "last_change_hits": self.last_change_hits,
             "last_change_misses": self.last_change_misses,
+            "observation_edge_hits": self.edge_hits,
+            "observation_edge_misses": self.edge_misses,
             "forecast_hits": int(getattr(home, "forecast_hits", 0) or 0),
             "forecast_misses": int(getattr(home, "forecast_misses", 0) or 0),
         }

@@ -53,6 +53,9 @@ jobs:
       - name: 0.14.172 targeted retries terminate without peer replay
         if: matrix.python == '3.11'
         run: python tools/benchmark_target_retries.py --targets 4 --completions 32 --compact
+      - name: 0.14.173 candidate observation causal feature and full checksum parity
+        if: matrix.python == '3.11'
+        run: python tools/benchmark_shadow_context.py --passes 16 --compact
       - name: 0.14.166 bounded Recorder import row parity and transaction size
         if: matrix.python == '3.11'
         run: python tools/benchmark_history_import.py --rows-per-entity 1200 --compact
