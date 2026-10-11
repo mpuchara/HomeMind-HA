@@ -320,6 +320,10 @@ class HistoryManager(threading.Thread):
                 ),
                 "training_stage_eta_seconds": self.stage_eta_seconds,
                 "training_rebuild_reason": self.training_rebuild_reason,
+                "training_preparation_active": (
+                    self.training_job_agent_id is not None
+                    and getattr(self, "training_replay_progress_mapped", None) is False
+                ),
                 "stateful_replay": dict(self.training_stateful_replay_status or {}),
                 "temporal_replay": dict(self.temporal_replay_stats),
                 "training_phase_timings": dict(
@@ -343,12 +347,29 @@ class HistoryManager(threading.Thread):
         if sessions:
             rows = []
             for aid, session in sessions:
+                # The scheduler's fields still describe quiet startup. Read the active
+                # session atomically so its counters, phase and ETA reach the hot UI.
+                with session.lock:
+                    live_status = {
+                        key: getattr(session, key, None) for key in (
+                            "phase", "progress", "message", "phase_detail",
+                            "phase_started_at", "cycle_started_at", "eta_seconds",
+                            "stage_eta_seconds", "work_done", "work_total", "work_unit",
+                            "chunk_done", "chunk_total", "eta_source",
+                            "history_rows_per_second", "training_rows_per_second",
+                            "training_job_started_at", "training_overall_eta_seconds",
+                            "training_rebuild_reason",
+                        )
+                    }
+                    live_status["training_preparation_active"] = (
+                        getattr(session, "training_replay_progress_mapped", None) is False
+                    )
                 rows.append({
                     "agent_id": aid,
                     "name": session.training_job_name or aid,
-                    "progress": float(session.progress or 0.0),
-                    "message": session.message,
-                    "started_at": session.training_job_started_at,
+                    "progress": float(live_status["progress"] or 0.0),
+                    "message": live_status["message"],
+                    "started_at": live_status["training_job_started_at"],
                     "training_process": dict(session.training_process_status or {}),
                     "training_phase_timings": dict(
                         session.training_phase_timings or {}
@@ -359,6 +380,7 @@ class HistoryManager(threading.Thread):
                     "training_feature_snapshot_cache": dict(
                         session.training_feature_snapshot_cache_status or {}
                     ),
+                    "status": live_status,
                 })
             process_rows = [row["training_process"] for row in rows]
             worker_cpu_total = sum(
@@ -390,6 +412,16 @@ class HistoryManager(threading.Thread):
             # Backwards-compatible single-process surface follows the oldest active
             # session while new UI/debug surfaces can inspect all workers.
             d["training_process"] = dict(rows[0]["training_process"] or {})
+            d.update(rows[0]["status"])
+            d["training_stage_progress"] = (
+                d["work_done"] / d["work_total"] if d["work_total"] else None
+            )
+            d["training_stage_eta_seconds"] = d["stage_eta_seconds"]
+            d["training_elapsed_seconds"] = (
+                now_ts() - d["training_job_started_at"]
+                if d["training_job_started_at"] is not None else None
+            )
+            d["elapsed_seconds"] = d["training_elapsed_seconds"]
             d["training_overall_progress"] = d["parallel_training"]["aggregate_progress"]
             d["training_job_agent_id"] = rows[0]["agent_id"] if len(rows) == 1 else None
             d["training_job_name"] = rows[0]["name"] if len(rows) == 1 else f"{len(rows)} agents"
@@ -977,7 +1009,8 @@ class HistoryManager(threading.Thread):
         return True
 
     def _training_recorder_import(self, entity_ids, start_ts, end_ts, *, batch_size,
-                                  minimal, no_attributes, source, label, max_hours):
+                                  minimal, no_attributes, source, label, max_hours,
+                                  progress_lo=None, progress_hi=None):
         """Reuse successful Recorder coverage inside one process and fetch only deltas.
 
         The local entity_history archive is shared by Live and Candidate generations.
@@ -1020,15 +1053,28 @@ class HistoryManager(threading.Thread):
 
         inserted = 0
         coverage_changed = False
-        for plan_ids, plan_start, plan_end, plan_kind in plans:
+        plan_weights = [
+            max(1, math.ceil((end - start) / (max(1, int(max_hours)) * 3600)))
+            * max(1, math.ceil(len(plan_ids) / batch_size))
+            for plan_ids, start, end, _ in plans
+        ]
+        weight_done = 0
+        for (plan_ids, plan_start, plan_end, plan_kind), weight in zip(plans, plan_weights):
+            lo = self.progress if progress_lo is None else (
+                progress_lo + (progress_hi - progress_lo) * weight_done / sum(plan_weights)
+            )
+            hi = self.progress if progress_hi is None else (
+                progress_lo + (progress_hi - progress_lo) * (weight_done + weight) / sum(plan_weights)
+            )
             skipped_before = int(getattr(self, "recorder_skipped_slices", 0) or 0)
             inserted += self._import_section(
                 plan_ids, plan_start, plan_end,
                 batch_size=batch_size, minimal=minimal, no_attributes=no_attributes,
-                source=source, progress_lo=self.progress, progress_hi=self.progress,
+                source=source, progress_lo=lo, progress_hi=hi,
                 label=f"{label} · {plan_kind}", max_hours=max_hours, parallel_requests=1,
                 inter_chunk_pause_ms=int(OPTIONS.get("agent_training_pause_ms", 0)),
             )
+            weight_done += weight
             skipped_after = int(getattr(self, "recorder_skipped_slices", 0) or 0)
             if skipped_after == skipped_before:
                 for eid in plan_ids:
@@ -1080,18 +1126,35 @@ class HistoryManager(threading.Thread):
         else:
             model = STORE.get_model(agent["id"]) or self.training_schema_seed(agent["id"], agent) or {}
             context_ids = [eid for eid in ((model.get("schema") or {}).get("entities") or []) if eid != target]
+        with self.engine.lock:
+            live_states = dict(self.engine.state_map)
+        fast_ids = [eid for eid in context_ids if entity_capability_tags(eid, live_states.get(eid) or {}) & {"occupancy", "activity"}]
+        fast_set = set(fast_ids)
+        regular_ids = [eid for eid in context_ids if eid not in fast_set]
+        weights = [
+            max(1, math.ceil((end_ts - start_ts) / (hours * 3600)))
+            * math.ceil(len(ids) / batch)
+            for ids, batch, hours in (([target], 1, 6), (fast_ids, 30, 6), (regular_ids, 50, 12))
+        ]
+        start_progress = clamp(float(getattr(self, "training_job_start_progress", 0) or 0), 0, 1)
+        preparation_end = 0.10 + 0.90 * start_progress
+        ranges = []
+        done = 0
+        for weight in weights:
+            ranges.append((
+                start_progress + (preparation_end - start_progress) * done / sum(weights),
+                start_progress + (preparation_end - start_progress) * (done + weight) / sum(weights),
+            ))
+            done += weight
         try:
             self._training_recorder_import(
                 [target], start_ts, end_ts,
                 batch_size=1, minimal=False, no_attributes=False,
                 source="ha_history_full",
                 label=f"Agent {agent['id']} · target history", max_hours=6,
+                progress_lo=ranges[0][0], progress_hi=ranges[0][1],
             )
             if context_ids:
-                with self.engine.lock:
-                    live_states = dict(self.engine.state_map)
-                fast_ids = [eid for eid in context_ids if entity_capability_tags(eid, live_states.get(eid) or {}) & {"occupancy", "activity"}]
-                regular_ids = [eid for eid in context_ids if eid not in set(fast_ids)]
                 if fast_ids:
                     self._training_recorder_import(
                         fast_ids, start_ts, end_ts,
@@ -1099,6 +1162,7 @@ class HistoryManager(threading.Thread):
                         source="ha_history_fast_context",
                         label=f"Agent {agent['id']} · high-resolution behavioural context",
                         max_hours=6,
+                        progress_lo=ranges[1][0], progress_hi=ranges[1][1],
                     )
                 if regular_ids:
                     self._training_recorder_import(
@@ -1106,6 +1170,7 @@ class HistoryManager(threading.Thread):
                         batch_size=50, minimal=True, no_attributes=True,
                         source="ha_history_minimal",
                         label=f"Agent {agent['id']} · context history", max_hours=12,
+                        progress_lo=ranges[2][0], progress_hi=ranges[2][1],
                     )
             self.refresh_archive_cache()
         except StoragePressure:
@@ -1136,7 +1201,20 @@ class HistoryManager(threading.Thread):
             "rebuild": bool(rebuild),
             "history_window_hours": round(max(0.0, target_end - refresh_start) / 3600.0, 3),
         }
+        self.training_replay_progress_mapped = False
+        self.set_status(
+            "training", progress=float(getattr(self, "training_job_start_progress", 0) or 0),
+            message=f"Training {agent['name']}: preparing Recorder history",
+            work_done=0, work_total=0, stage_eta_seconds=0,
+            eta_source="measuring Recorder import", phase_detail="Preparing Recorder history for the selected agent",
+        )
         self._refresh_agent_history(agent, refresh_start, target_end, rebuild=rebuild)
+        self.set_status(
+            progress=0.10 + 0.90 * float(getattr(self, "training_job_start_progress", 0) or 0),
+            message=f"Training {agent['name']}: history prepared; starting replay",
+            work_done=0, work_total=0, phase_detail="Recorder preparation complete; chronological replay follows",
+        )
+        self.training_replay_progress_mapped = True
         run_storage_write(STORE, lambda: require_storage_available(STORE),
             self.stop_event, getattr(self, 'job_cancel_event', None))
         if rebuild:
@@ -1424,6 +1502,10 @@ class HistoryManager(threading.Thread):
                 self.phase_detail = None
             if progress is not None:
                 p = clamp(float(progress), 0, 1)
+                # UI-only stage weighting. Durable replay cursors and worker inputs
+                # retain their original 0..1 history-window contract.
+                if getattr(self, "training_replay_progress_mapped", False):
+                    p = 0.10 + 0.90 * p
                 self.progress = p
                 if self.cycle_started_at is not None:
                     self._progress_samples.append((now, p))
@@ -1434,7 +1516,7 @@ class HistoryManager(threading.Thread):
                         if now - sample[0] >= 12 and p - sample[1] >= 0.005:
                             base = sample
                             break
-                    if base is not None:
+                    if base is not None and getattr(self, "training_replay_progress_mapped", True):
                         dt = max(1.0, now - base[0])
                         dp = max(1e-6, p - base[1])
                         rate = dp / dt
@@ -1449,7 +1531,8 @@ class HistoryManager(threading.Thread):
                     start_p = clamp(float(self.training_job_start_progress or 0.0), 0.0, 0.999999)
                     effective = (p - start_p) / max(1e-9, 1.0 - start_p)
                     elapsed = max(0.0, now - float(self.training_job_started_at))
-                    if effective >= 0.005 and elapsed >= 5.0:
+                    if (getattr(self, "training_replay_progress_mapped", True)
+                            and effective >= 0.005 and elapsed >= 5.0):
                         raw_eta = elapsed * max(0.0, 1.0 - effective) / max(effective, 1e-9)
                         raw_eta = clamp(raw_eta, 0.0, 24 * 3600.0)
                         self.training_overall_eta_seconds = (
@@ -1706,6 +1789,10 @@ class HistoryManager(threading.Thread):
         written = 0
         batches = 0
         max_batch_rows = 0
+        scanned = 0
+        source_rows = sum(len(group) for group in (data or []) if group)
+        report = getattr(self, "_recorder_chunk_report", None)
+        last_report_at = time.monotonic()
         numeric_min_interval = max(5.0, float(OPTIONS.get("history_context_import_interval_seconds", 60)))
 
         def check_cancelled():
@@ -1713,7 +1800,7 @@ class HistoryManager(threading.Thread):
                 raise InterruptedError("History import cancelled")
 
         def flush():
-            nonlocal written, batches, max_batch_rows
+            nonlocal written, batches, max_batch_rows, last_report_at
             if not rows:
                 return
             check_cancelled()
@@ -1723,6 +1810,9 @@ class HistoryManager(threading.Thread):
             batches += 1
             max_batch_rows = max(max_batch_rows, count)
             rows.clear()
+            if report and time.monotonic() - last_report_at >= 1.0:
+                report(scanned / max(1, source_rows), scanned, source_rows, written)
+                last_report_at = time.monotonic()
             # archive_batch has committed and released Store.lock. Never throttle
             # while holding the SQLite writer; other writers can use this pause.
             TRAINING_BUDGET.checkpoint("history_import_committed_batch", force=True)
@@ -1733,6 +1823,7 @@ class HistoryManager(threading.Thread):
                 flush()
 
         def import_groups():
+            nonlocal scanned
             for group in data or []:
                 check_cancelled()
                 if not group:
@@ -1741,6 +1832,7 @@ class HistoryManager(threading.Thread):
                 last_kept_ts = None
                 last_item = None
                 for item in group:
+                    scanned += 1
                     check_cancelled()
                     TRAINING_BUDGET.checkpoint("history_import_parse_row")
                     eid = item.get("entity_id") or group_entity
@@ -1889,9 +1981,28 @@ class HistoryManager(threading.Thread):
 
         def fetch(task):
             ws, we, batch, wi, bi = task
-            count = self._fetch_history_resilient(
-                batch, ws, we, minimal=minimal, no_attributes=no_attributes, source=source
+            self.set_status(
+                progress=progress_lo + (progress_hi - progress_lo) * done / total,
+                message=f"{label}: requesting Recorder chunk {done + 1}/{total}",
+                chunk_done=done, chunk_total=total, work_done=done, work_total=total,
+                work_unit="Recorder chunks", stage_eta_seconds=0,
+                eta_source="awaiting Recorder response", phase_detail=f"Recorder: fetching chunk {done + 1}/{total}",
             )
+            def report(fraction, scanned, response_total, written):
+                self.set_status(
+                    progress=max(self.progress, progress_lo + (progress_hi - progress_lo) * (done + min(0.99, fraction)) / total),
+                    message=f"{label}: writing Recorder chunk {done + 1}/{total}",
+                    work_done=scanned, work_total=response_total, work_unit="Recorder response rows",
+                    eta_source="measuring Recorder writes",
+                    phase_detail=f"Recorder chunk {done + 1}/{total}: {written:,} archive rows committed",
+                )
+            self._recorder_chunk_report = report
+            try:
+                count = self._fetch_history_resilient(
+                    batch, ws, we, minimal=minimal, no_attributes=no_attributes, source=source
+                )
+            finally:
+                self._recorder_chunk_report = None
             return count, wi, bi, batch
 
         iterator = map(fetch, tasks)

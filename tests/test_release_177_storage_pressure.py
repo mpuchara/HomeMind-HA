@@ -109,6 +109,7 @@ class Pressure177Tests(unittest.TestCase):
         manager = object.__new__(HistoryManager)
         manager._training_bounds = Mock(return_value=(1, 2))
         manager._refresh_agent_history = Mock(side_effect=StoragePressure('WAL'))
+        manager.set_status = Mock()
         agent = support.agent(id='a')
         with patch('history.STORE', self.store), patch.object(self.store, 'get_agent_config', return_value=agent), patch.object(self.store, 'clear_learning') as clear:
             with self.assertRaises(StoragePressure):

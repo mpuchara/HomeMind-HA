@@ -1,10 +1,10 @@
 {
-  "version": "0.14.178",
+  "version": "0.14.179",
   "release_date": "2026-10-11",
-  "base_version": "0.14.177",
-  "base_commit": "82971441a375584b5d45c2c1a8b419b6f2547686",
-  "release_status": "bounded-wal-pressure-recovery-and-quiet-housekeeping",
-  "release_validation_tests_passed": 2138,
+  "base_version": "0.14.178",
+  "base_commit": "6858ae22e917fa68078ece72fc77780649ade172",
+  "release_status": "live-training-session-and-recorder-preparation-progress",
+  "release_validation_tests_passed": 2145,
   "release_014140": {
     "scope": "inventory_and_remove_remaining_shipped_feature_Handler_fallbacks_for_Candidate_Live_and_manual_feedback_transport",
     "explicit_routes": "manual_feedback.js, candidate_ui.js, candidate_preference_ui.js, /api/candidates, Candidate Teach-RL status/train, generation history/comparison, /api/candidate-live, /api/live and Candidate discard",
@@ -2526,6 +2526,15 @@
     "raw_archive_acquisition_paused_without_RAM_growth": true,
     "recovered_budget_RAM_snapshot_refreshed": true,
     "database_wal_and_free_space_limits_unchanged": true,
+    "new_regression_tests": 7
+  },
+  "release_014179": {
+    "scope": "active_training_session_status_and_measurable_Recorder_preparation",
+    "preparation_progress_weight": 0.1,
+    "replay_and_validation_progress_weight": 0.9,
+    "committed_prefix_report_interval_seconds": 1,
+    "hot_status_and_debug_export_are_RAM_only": true,
+    "history_rows_and_durable_replay_cursors_unchanged": true,
     "new_regression_tests": 7
   }
 }

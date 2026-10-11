@@ -1,6 +1,6 @@
-# HomeMind-HA / Adaptive AI 0.14.178
+# HomeMind-HA / Adaptive AI 0.14.179
 
-0.14.178: odzyskiwanie WAL co 5 sekund podczas blokady oraz housekeeping bez lawiny błędów ochrony dysku. [Opis wydania](docs/RELEASE_0_14_178_PL.md).
+0.14.179: rzeczywisty etap aktywnego treningu, postęp importu Recorder i liczniki zapisu dużych porcji historii. [Opis wydania](docs/RELEASE_0_14_179_PL.md).
 
 
 Karta agenta ma cztery akcje: **Shadow/Control**, **Wrong decision**, **Settings** i **Teach**. Wrong decision uczy poprawnego Desired. Teach otwiera powiększalny wykres historii z wyborem dokładnej chwili i zapisem poprawnego Desired. Cofanie ostatniej korekty jest dostępne w Teach oraz Settings; pozostałe operacje i diagnostyka są w Settings.
