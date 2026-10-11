@@ -1,6 +1,6 @@
-# HomeMind-HA / Adaptive AI 0.14.173
+# HomeMind-HA / Adaptive AI 0.14.174
 
-0.14.173: wspólny odczyt trajektorii i historii sensorów dla kandydatów w jednej obserwacji; osobne cechy, predykcje i pełna walidacja modeli.
+0.14.174: odzyskiwanie dużego pliku WAL w tle, ograniczenie zatrzymanego miejsca po resecie oraz diagnostyka rozmiaru bazy i wolnego dysku.
 
 
 Cztery akcje każdego agenta: Shadow/Control, Wrong decision, Settings, Teach.

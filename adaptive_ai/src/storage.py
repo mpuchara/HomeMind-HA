@@ -6,6 +6,7 @@ import os
 import sqlite3
 import sys
 from telemetry import RUNTIME_DEBUG
+from sqlite_policy import WAL_RETAIN_BYTES
 import threading
 import time
 import uuid
@@ -194,6 +195,7 @@ class Store:
                     self._connection_session.connection_busy_timeout_ms = busy_timeout_ms
             if not reuse:
                 c.execute("PRAGMA synchronous=NORMAL")
+                c.execute(f"PRAGMA journal_size_limit={WAL_RETAIN_BYTES}")
                 c.execute("PRAGMA temp_store=MEMORY")
                 c.execute("PRAGMA cache_size=-16384")
                 try:
