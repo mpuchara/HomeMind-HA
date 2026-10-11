@@ -23,7 +23,8 @@ class StorageBudget175Tests(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name)
-        self.store = Store(self.root / 'data.db')
+        with patch.dict('storage.OPTIONS', storage_budget_mode='manual'):
+            self.store = Store(self.root / 'data.db')
         self.addCleanup(self.store.stop_wal_keeper)
         self.addCleanup(self.store.stop_wal_checkpoint)
         self.addCleanup(self.store.stop_storage_retention)

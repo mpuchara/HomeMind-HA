@@ -5,6 +5,7 @@ admission/progress checks stop WAL growth and leave disk space for Home Assistan
 """
 import re
 import os
+import json
 import shutil
 import sqlite3
 import threading
@@ -51,6 +52,9 @@ def _payload_bytes(parameters):
 class StorageBudget:
     def __init__(self, path, options):
         self.path = Path(path)
+        self.mode = options.get('storage_budget_mode', 'auto')
+        self.auto_use_percent = max(10, min(80, int(options.get('storage_auto_use_percent', 50))))
+        self.auto_pool_bytes = None
         self.db_limit = max(128, min(65536, int(options.get('storage_database_max_mb', 2048)))) * MIB
         self.wal_limit = max(32, min(4096, int(options.get('storage_wal_max_mb', 128)))) * MIB
         self.reserve = max(256, min(65536, int(options.get('storage_min_free_mb', 2048)))) * MIB
@@ -63,18 +67,83 @@ class StorageBudget:
         self.stats = dict(level='normal', reason=None, blocked_writes=0,
                           db_bytes=0, database_used_bytes=0, wal_bytes=0,
                           free_bytes=None, sample_error=None)
+        inherited = os.environ.get('ADAPTIVE_AI_STORAGE_BUDGET')
+        if os.environ.get('ADAPTIVE_AI_STORAGE_WORKER') == '1' and inherited:
+            try:
+                data = json.loads(inherited)
+            except (ValueError, TypeError) as exc:
+                raise StoragePressure('Storage protection: invalid inherited worker budget') from exc
+            if (not isinstance(data, dict)
+                    or data.get('path') != str(self.path.resolve())
+                    or data.get('mode') not in ('auto', 'manual')
+                    or any(type(data.get(key)) is not int or data[key] < 0
+                           for key in ('db_limit', 'wal_limit', 'reserve', 'hard_reserve', 'auto_use_percent'))
+                    or min(data['db_limit'], data['wal_limit']) < 4096
+                    or data['hard_reserve'] > data['reserve']
+                    or not 10 <= data['auto_use_percent'] <= 80
+                    or 'auto_pool_bytes' not in data
+                    or (data['mode'] == 'auto' and
+                        (type(data['auto_pool_bytes']) is not int or data['auto_pool_bytes'] <= 0))):
+                raise StoragePressure('Storage protection: invalid inherited worker budget')
+            for key in ('mode', 'db_limit', 'wal_limit', 'reserve', 'hard_reserve',
+                        'auto_use_percent', 'auto_pool_bytes'):
+                setattr(self, key, data[key])
+            return
+        if self.mode != 'manual':
+            self.mode = 'auto'
+            # A failed sample cannot fall back to the old fixed limits. Retry when
+            # sampling next; writes remain blocked until capacity is known.
+            self.db_limit = self.wal_limit = self.reserve = self.hard_reserve = 0
+            try:
+                self._configure_auto()
+            except OSError:
+                pass
+
+    def _configure_auto(self):
+        free = shutil.disk_usage(self.path.parent).free
+        db = self.path.stat().st_size if self.path.exists() else 0
+        wal_path = Path(str(self.path) + '-wal')
+        wal = wal_path.stat().st_size if wal_path.exists() else 0
+        # Count existing app files back into the available pool. As the app grows,
+        # free space falls by the same amount: restarting cannot ratchet the quota
+        # upwards. Other applications' data is excluded. Freeze for this process,
+        # keeping the reserved space protected if another add-on later grows.
+        pool = max(0, int(free) + db + wal)
+        allocation = pool * self.auto_use_percent // 100
+        self.wal_limit = max(4096, allocation // 20)
+        self.db_limit = max(4096, allocation - self.wal_limit)
+        self.reserve = pool - allocation
+        self.hard_reserve = self.reserve // 10
+        self.auto_pool_bytes = pool
+
+    def worker_environment(self):
+        # A child created later must not recalculate a smaller reserve when some
+        # other add-on has grown. It shares the running parent's frozen admission.
+        if self.sample().get('sample_error') is not None:
+            raise self.pressure()
+        data = dict(path=str(self.path.resolve()))
+        for key in ('mode', 'db_limit', 'wal_limit', 'reserve', 'hard_reserve',
+                    'auto_use_percent', 'auto_pool_bytes'):
+            data[key] = getattr(self, key)
+        return {'ADAPTIVE_AI_STORAGE_WORKER': '1',
+                'ADAPTIVE_AI_STORAGE_BUDGET': json.dumps(data, separators=(',', ':'))}
 
     @contextmanager
-    def maintenance(self):
+    def maintenance(self, *, update_tables=()):
         previous = getattr(self.local, 'maintenance', False)
+        previous_updates = getattr(self.local, 'update_tables', frozenset())
         self.local.maintenance = True
+        self.local.update_tables = frozenset(update_tables)
         try:
             yield
         finally:
             self.local.maintenance = previous
+            self.local.update_tables = previous_updates
 
     def sample(self):
         try:
+            if self.mode == 'auto' and self.auto_pool_bytes is None:
+                self._configure_auto()
             db = self.path.stat().st_size if self.path.exists() else 0
             wal_path = Path(str(self.path) + '-wal')
             wal = wal_path.stat().st_size if wal_path.exists() else 0
@@ -103,6 +172,8 @@ class StorageBudget:
     def snapshot(self):
         with self.lock:
             return {**self.stats, 'database_max_bytes': self.db_limit,
+                    'budget_mode': self.mode, 'auto_use_percent': self.auto_use_percent,
+                    'auto_pool_bytes': self.auto_pool_bytes,
                     'wal_max_bytes': self.wal_limit, 'minimum_free_bytes': self.reserve,
                     'max_statement_payload_bytes': MAX_WRITE_BYTES,
                     'batch_sample_interval_seconds': SAMPLE_INTERVAL_SECONDS,
@@ -182,6 +253,7 @@ class StorageBudget:
 class BudgetConnection(sqlite3.Connection):
     storage_budget = None
     storage_level = None
+    storage_update_tables = frozenset()
     storage_writing = 0
     storage_external_authorizer = None
     storage_denial = None
@@ -196,7 +268,8 @@ class BudgetConnection(sqlite3.Connection):
             if result != sqlite3.SQLITE_OK:
                 return result
         if (self.storage_level == 'paused' and action in (sqlite3.SQLITE_INSERT, sqlite3.SQLITE_UPDATE)
-                and table in BULK_TABLES):
+                and table in BULK_TABLES
+                and not (action == sqlite3.SQLITE_UPDATE and table in self.storage_update_tables)):
             with self.storage_budget.lock:
                 self.storage_budget.stats['blocked_writes'] += 1
             self.storage_denial = self.storage_budget.pressure()
@@ -220,10 +293,12 @@ class BudgetConnection(sqlite3.Connection):
         write = budget is not None and _is_write(sql)
         if write:
             level = budget.check(parameters)
+            update_tables = getattr(budget.local, 'update_tables', frozenset())
             # Changing the authorizer invalidates prepared statements. Thus a
             # previously cached INSERT cannot bypass a newly reached soft limit.
-            if level != self.storage_level:
+            if level != self.storage_level or update_tables != self.storage_update_tables:
                 self.storage_level = level
+                self.storage_update_tables = update_tables
                 super().set_authorizer(self.storage_authorize)
             self.storage_writing += 1
         try:

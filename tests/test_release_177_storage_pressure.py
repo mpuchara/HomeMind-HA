@@ -26,7 +26,8 @@ class Pressure177Tests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
-        self.store = Store(Path(self.temp.name) / 'test.db')
+        with patch.dict('storage.OPTIONS', storage_budget_mode='manual'):
+            self.store = Store(Path(self.temp.name) / 'test.db')
         self.budget = self.store.storage_budget
 
     def pressure(self):

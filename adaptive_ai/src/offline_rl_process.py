@@ -13,7 +13,7 @@ import os
 from pathlib import Path
 import subprocess
 import sys
-from storage_files import atomic_text, start_log_drain
+from storage_files import atomic_text, start_log_drain, worker_storage_environment
 import tempfile
 import time
 import uuid
@@ -189,6 +189,7 @@ def run_isolated_offline_rl(
         _atomic(job_path, job)
 
         env = dict(os.environ)
+        env.update(worker_storage_environment())
         env["PYTHONUNBUFFERED"] = "1"
         process = subprocess.Popen(
             [sys.executable, str(Path(__file__).resolve()), "--worker", str(job_path)],

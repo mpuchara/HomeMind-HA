@@ -14,7 +14,7 @@ import os
 from pathlib import Path
 import subprocess
 import sys
-from storage_files import atomic_text, start_log_drain
+from storage_files import atomic_text, start_log_drain, worker_storage_environment
 import threading
 import time
 import traceback
@@ -924,6 +924,7 @@ def run_isolated_training_chunk(history, start_ts, end_ts, **kwargs):
         0.2, float(OPTIONS.get("training_worker_terminate_grace_seconds", 2.0) or 2.0)
     )
     env = dict(os.environ)
+    env.update(worker_storage_environment())
     env["ADAPTIVE_AI_DATA"] = str(DATA_DIR)
     env["ADAPTIVE_AI_TRAINING_WORKER"] = "1"
     env["PYTHONUNBUFFERED"] = "1"

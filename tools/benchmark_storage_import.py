@@ -40,7 +40,8 @@ def run(size=2000, repeats=3):
                 connection_class = previous.BudgetConnection if variant == 'previous' else storage.BudgetConnection
                 with tempfile.TemporaryDirectory(prefix='hm-storage-case-') as directory, \
                         patch.object(storage, 'StorageBudget', budget_class), \
-                        patch.object(storage, 'BudgetConnection', connection_class):
+                        patch.object(storage, 'BudgetConnection', connection_class), \
+                        patch.dict(storage.OPTIONS, storage_budget_mode='manual'):
                     store = storage.Store(Path(directory) / 'archive.db')
                     store.start_wal_keeper()
                     calls = [0]
