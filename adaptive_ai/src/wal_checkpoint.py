@@ -18,6 +18,11 @@ class WALCheckpointWorker:
 
     def __init__(self, store):
         self.store = store
+        budget = getattr(store, 'storage_budget', None)
+        if budget is not None and isinstance(getattr(budget, 'wal_limit', None), int):
+            # Reclaim before admission pauses every writer. Otherwise a smaller
+            # configured WAL budget could prevent the reset that restores writes.
+            self.RECLAIM_THRESHOLD_BYTES = min(self.RECLAIM_THRESHOLD_BYTES, budget.wal_limit // 2)
         self.lock = threading.RLock()
         self.stop_event = threading.Event()
         self.ready = threading.Event()

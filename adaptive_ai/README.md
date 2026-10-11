@@ -1,6 +1,6 @@
-# HomeMind-HA / Adaptive AI 0.14.175
+# HomeMind-HA / Adaptive AI 0.14.176
 
-0.14.175: automatyczna retencja 10 dni, limit rozmiaru bazy, rezerwa wolnego dysku oraz ograniczone pliki i logi treningu.
+0.14.176: retencja 10 dni, limit bazy, rezerwa dysku i automatyczne odzyskiwanie zapisów także przy mniejszym limicie WAL.
 
 
 Cztery akcje każdego agenta: Shadow/Control, Wrong decision, Settings, Teach.

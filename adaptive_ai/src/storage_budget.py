@@ -129,7 +129,7 @@ class StorageBudget:
 
     def prepare_existing_wal(self):
         wal = Path(str(self.path) + '-wal')
-        if not wal.exists() or wal.stat().st_size < 64 * MIB:
+        if not wal.exists() or wal.stat().st_size < min(64 * MIB, self.wal_limit // 2):
             return
         # Recovery precedes schema writes. Otherwise an old oversized WAL could
         # block startup before the periodic worker has a chance to reclaim it.
