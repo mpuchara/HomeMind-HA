@@ -139,7 +139,11 @@ class StorageBudget175Tests(unittest.TestCase):
             self.assertEqual(reader.execute("SELECT value FROM app_meta WHERE key='seed'").fetchone()[0], 'kept')
             reader.execute('COMMIT')
         with closing(sqlite3.connect(self.store.path, isolation_level=None)) as raw:
-            self.assertEqual(raw.execute('PRAGMA wal_checkpoint(TRUNCATE)').fetchone()[0], 0)
+            from wal_checkpoint import WALCheckpointWorker
+            worker = WALCheckpointWorker(self.store)
+            self.assertEqual(worker.RECLAIM_THRESHOLD_BYTES, self.budget.wal_limit // 2)
+            self.assertTrue(worker.reclaim(raw, worker.checkpoint(raw)))
+            self.assertEqual(Path(self.store.path + '-wal').stat().st_size, 0)
         self.write('after')
 
     def test_training_writer_stops_at_soft_pressure(self):
