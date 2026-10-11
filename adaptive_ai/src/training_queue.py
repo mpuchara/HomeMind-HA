@@ -19,6 +19,7 @@ import threading
 import time
 
 from telemetry import HEAVY_JOBS
+from storage_budget import StoragePressure, require_storage_available, storage_status
 from learning_lifecycle import INITIAL_MODEL_BUILD, normalize_rebuild_reason
 
 
@@ -578,6 +579,7 @@ class TrainingQueue(threading.Thread):
                 })
             return {
                 "active": active,
+                "storage_waiting": storage_status(self.store),
                 "active_jobs": active_jobs,
                 "active_count": active_count,
                 "effective_slots": self._effective_slots(),
@@ -609,6 +611,12 @@ class TrainingQueue(threading.Thread):
         return job
 
     def _try_start_head(self):
+        try:
+            require_storage_available(self.store)
+        except StoragePressure:
+            # Keep the request queued. Never clear a model for a job that cannot
+            # write its training data. Normal polling resumes after recovery.
+            return False
         with self.cv:
             if not self.jobs:
                 return False
@@ -665,6 +673,8 @@ class TrainingQueue(threading.Thread):
                 if job.get("rebuild")
                 else self.history.request_agent_resume(job["agent_id"])
             )
+        except StoragePressure:
+            return False
         except Exception as exc:
             if service is not None:
                 try:
@@ -814,6 +824,14 @@ class TrainingQueue(threading.Thread):
             "failure_reason": ((agent or {}).get("benchmark_detail") or {}).get("reason"),
             "cancel_requested": bool(cancelled),
         }
+        storage_interrupted = bool(
+            ((agent or {}).get('benchmark_detail') or {}).get('storage_pressure')
+        )
+        if storage_interrupted and not cancelled and job.get('reason') != 'teach_rl':
+            reset_completed = bool(((agent or {}).get('benchmark_detail') or {}).get('rebuild_reset_completed'))
+            self.enqueue(agent_id, rebuild=bool(job.get('rebuild')) and not reset_completed,
+                         reason=job.get('reason') or 'training',
+                         rebuild_reason=job.get('rebuild_reason'))
         if cancelled:
             self.store.event(
                 agent_id, "info", "training_queue_active_cancelled",

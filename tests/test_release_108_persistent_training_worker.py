@@ -119,12 +119,14 @@ class PersistentSchedulingTests(unittest.TestCase):
         manager.temporal_replay_stats = {}
         manager.training_stateful_replay_status = {}
         manager.training_process_status = {}
-        manager.engine = SimpleNamespace(wake_event=threading.Event())
+        manager.engine = SimpleNamespace(wake_event=threading.Event(), models={}, runtime={},
+            executor=SimpleNamespace(target_lock=lambda target: threading.RLock()))
         manager._training_bounds = lambda: (0.0, 18 * 3600.0)
         manager._refresh_agent_history = lambda *args, **kwargs: None
 
         agent = {
             "id": "persistent-agent",
+            "target_entity": "light.persistent",
             "name": "Persistent agent",
             "training_window_start_ts": None,
             "training_cursor_ts": None,
@@ -137,6 +139,9 @@ class PersistentSchedulingTests(unittest.TestCase):
         }
 
         class FakeStore:
+            def clear_learning(self, agent_id):
+                self.cleared = agent_id
+
             def get_agent_config(self, agent_id):
                 return dict(agent)
 
@@ -178,8 +183,9 @@ class PersistentSchedulingTests(unittest.TestCase):
             "agent_training_stateful_continuation": True,
             "agent_training_pause_ms": 0,
         }
+        store = FakeStore()
         with (
-            patch.object(history_module, "STORE", FakeStore()),
+            patch.object(history_module, "STORE", store),
             patch.object(history_module, "OPTIONS", options),
             patch.object(history_module, "now_ts", return_value=18 * 3600.0),
             patch.object(training_process, "run_isolated_training_sequence", side_effect=run_sequence),
@@ -191,6 +197,7 @@ class PersistentSchedulingTests(unittest.TestCase):
             )
 
         self.assertIs(captured["history"], manager)
+        self.assertEqual(store.cleared, agent['id'])
         chunks = captured["chunks"]
         self.assertEqual(len(chunks), 3)
         self.assertEqual(

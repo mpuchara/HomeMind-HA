@@ -7,6 +7,7 @@ untouched.
 """
 from __future__ import annotations
 from sqlite_background import background_sqlite
+from storage_budget import StoragePressure, StorageRetry, require_storage_available, storage_recording_paused
 
 from bisect import bisect_right
 from collections import deque
@@ -1971,6 +1972,7 @@ def install(core):
     # part of event->intent. Persist both through one bounded background writer.
     journal_lock = threading.RLock()
     journal_event = threading.Event()
+    storage_retry = StorageRetry()
     observation_rows = deque()
     window_rows = deque()
     observation_limit = 8192
@@ -1986,6 +1988,10 @@ def install(core):
 
     def queue_observation(entity_id, state, *, event_time, received_time, source,
                           event_key=None, quality=1.0):
+        if storage_recording_paused(store):
+            with journal_lock:
+                observation_stats['storage_skipped'] = observation_stats.get('storage_skipped', 0) + 1
+            return None
         prepared = journal._prepare_record(
             entity_id, state, event_time=event_time, received_time=received_time,
             source=source, event_key=event_key, quality=quality,
@@ -2026,6 +2032,10 @@ def install(core):
         return prepared["event_key"]
 
     def queue_window(window_id, agent_id, entities, anchor_time, kind):
+        if storage_recording_paused(store):
+            with journal_lock:
+                window_stats['storage_skipped'] = window_stats.get('storage_skipped', 0) + 1
+            return str(window_id)
         row = {
             "window_id": str(window_id), "agent_id": str(agent_id),
             "entities": tuple(entities or ()), "anchor_time": float(anchor_time),
@@ -2101,35 +2111,46 @@ def install(core):
     def journal_snapshot():
         with journal_lock:
             return {
+                'storage_retry': storage_retry.snapshot(),
                 "observations": {**observation_stats, "pending": len(observation_rows)},
                 "windows": {**window_stats, "pending": len(window_rows)},
             }
 
     def flush_feature_journal():
         """Drain both replay-evidence queues; one failed class never skips the other."""
+        require_storage_available(store)
         totals = {"observations": 0, "windows": 0}
         while True:
             errors = []
+            pressure = None
             progressed = False
             try:
                 count = int(flush_observations() or 0)
                 totals["observations"] += count
                 progressed = progressed or bool(count)
+            except StoragePressure as exc:
+                pressure = exc
             except Exception as exc:
                 errors.append(f"observations: {type(exc).__name__}: {exc}")
             try:
                 count = int(flush_windows() or 0)
                 totals["windows"] += count
                 progressed = progressed or bool(count)
+            except StoragePressure as exc:
+                pressure = exc
             except Exception as exc:
                 errors.append(f"windows: {type(exc).__name__}: {exc}")
             if errors:
                 raise RuntimeError("; ".join(errors))
+            if pressure is not None:
+                raise pressure
             if not progressed:
                 return totals
 
     def journal_writer():
         while not engine.stop_event.is_set():
+            if engine.stop_event.wait(storage_retry.delay()):
+                break
             # Replay/audit evidence can tolerate short RAM residency. Sparse sensors
             # would otherwise cause one tiny WAL transaction per event, so coalesce for
             # up to 2 seconds; large queues still wake the writer immediately.
@@ -2138,16 +2159,19 @@ def install(core):
             try:
                 with background_sqlite(store):
                     flush_feature_journal()
+                storage_retry.recovered()
+            except StoragePressure as exc:
+                storage_retry.defer(exc)
             except Exception as exc:
-                try:
-                    store.event(
-                        None, "warning", "feature_journal_batch_flush_failed",
-                        f"Deferred feature-journal flush failed: {type(exc).__name__}: {exc}",
-                        None,
-                    )
-                except Exception:
-                    pass
-                time.sleep(0.1)
+                if storage_retry.defer(exc):
+                    try:
+                        store.event(
+                            None, "warning", "feature_journal_batch_flush_failed",
+                            f"Deferred feature-journal flush failed: {type(exc).__name__}: {exc}",
+                            None,
+                        )
+                    except Exception:
+                        pass
         try:
             flush_feature_journal()
         except Exception:

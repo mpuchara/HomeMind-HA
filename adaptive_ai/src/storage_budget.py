@@ -8,6 +8,7 @@ import os
 import shutil
 import sqlite3
 import threading
+import time
 from contextlib import contextmanager, closing
 from pathlib import Path
 
@@ -102,7 +103,18 @@ class StorageBudget:
         with self.lock:
             self.stats['blocked_writes'] += 1
             self.stats['reason'] = reason
-        raise StoragePressure(f'Storage protection: {reason}; recording/training paused, free disk space')
+        raise self.pressure(reason)
+
+    def pressure(self, reason=None):
+        data = self.snapshot()
+        reason = reason or data['reason']
+        error = StoragePressure(
+            f"Storage protection: {reason}; "
+            f"database used={data['database_used_bytes']} bytes, WAL={data['wal_bytes']} bytes, "
+            f"free={data['free_bytes']} bytes; recording/training paused"
+        )
+        error.reason = reason
+        return error
 
     def check(self, parameters=()):
         if _payload_bytes(parameters) > MAX_WRITE_BYTES:
@@ -153,6 +165,7 @@ class BudgetConnection(sqlite3.Connection):
     storage_level = None
     storage_writing = 0
     storage_external_authorizer = None
+    storage_denial = None
 
     def set_authorizer(self, callback):
         self.storage_external_authorizer = callback
@@ -167,6 +180,7 @@ class BudgetConnection(sqlite3.Connection):
                 and table in BULK_TABLES):
             with self.storage_budget.lock:
                 self.storage_budget.stats['blocked_writes'] += 1
+            self.storage_denial = self.storage_budget.pressure()
             return sqlite3.SQLITE_DENY
         return sqlite3.SQLITE_OK
 
@@ -176,11 +190,13 @@ class BudgetConnection(sqlite3.Connection):
         try:
             self.storage_budget.check()
             return 0
-        except StoragePressure:
+        except StoragePressure as exc:
+            self.storage_denial = exc
             return 1
 
     @contextmanager
     def storage_statement(self, sql, parameters=()):
+        self.storage_denial = None
         budget = self.storage_budget
         write = budget is not None and _is_write(sql)
         if write:
@@ -195,7 +211,15 @@ class BudgetConnection(sqlite3.Connection):
             yield
             if write:
                 budget.check()
+        except sqlite3.DatabaseError as exc:
+            # SQLite suppresses exceptions in C callbacks. Translate only a denial
+            # issued by our budget; external authorizers retain SQLITE_AUTH semantics.
+            if self.storage_denial is not None and getattr(exc, 'sqlite_errorcode', None) in (
+                    sqlite3.SQLITE_AUTH, sqlite3.SQLITE_INTERRUPT):
+                raise self.storage_denial from exc
+            raise
         finally:
+            self.storage_denial = None
             if write:
                 self.storage_writing -= 1
 
@@ -259,3 +283,73 @@ class BudgetCursor(sqlite3.Cursor):
 def storage_status(store):
     budget = getattr(store, 'storage_budget', None)
     return budget.snapshot() if isinstance(budget, StorageBudget) else {}
+
+
+def require_storage_available(store):
+    budget = getattr(store, 'storage_budget', None)
+    if isinstance(budget, StorageBudget) and budget.sample()['level'] != 'normal':
+        raise budget.pressure()
+
+
+def storage_recording_paused(store):
+    # Producers use the existing RAM snapshot, with no disk calls in event->intent.
+    return storage_status(store).get('level', 'normal') != 'normal'
+
+
+def run_storage_write(store, callback, stop_event, cancel_event=None, timeout=90.0):
+    """Retry the same rolled-back history batch after a transient WAL pause.
+
+    Called outside SQL/Store locks. The existing checkpoint worker owns recovery;
+    low free space, a full database and unrelated SQL errors are never retried here.
+    """
+    deadline = time.monotonic() + timeout
+    while True:
+        if stop_event.is_set() or (cancel_event is not None and cancel_event.is_set()):
+            raise InterruptedError('Training storage wait cancelled')
+        try:
+            return callback()
+        except StoragePressure as exc:
+            budget = getattr(store, 'storage_budget', None)
+            if not isinstance(budget, StorageBudget):
+                raise
+            if getattr(exc, 'reason', None) not in ('wal_budget', 'storage_pressure_changed_during_batch'):
+                raise
+            data = budget.sample()
+            healthy_capacity = (data.get('free_bytes') is not None
+                and data['free_bytes'] >= budget.reserve
+                and data['database_used_bytes'] < budget.db_limit * .90)
+            if (not healthy_capacity or data['reason'] not in (None, 'wal_budget')
+                    or time.monotonic() >= deadline):
+                raise
+            with budget.lock:
+                budget.stats['wal_recovery_waits'] = budget.stats.get('wal_recovery_waits', 0) + 1
+            stop_event.wait(1.0)
+
+
+class StorageRetry:
+    """A producer wakeup must never bypass persistence-failure cooldown."""
+    def __init__(self):
+        self.next_attempt = 0.0
+        self.last_report = float('-inf')
+        self.reason = None
+        self.pauses = 0
+
+    def defer(self, exc):
+        pressure = isinstance(exc, StoragePressure)
+        self.next_attempt = time.monotonic() + (5.0 if pressure else 1.0)
+        self.reason = str(exc)
+        self.pauses += int(pressure)
+        if pressure or time.monotonic() - self.last_report < 60.0:
+            return False
+        self.last_report = time.monotonic()
+        return True
+
+    def recovered(self):
+        self.next_attempt = 0.0
+        self.reason = None
+
+    def delay(self):
+        return max(0.0, self.next_attempt - time.monotonic())
+
+    def snapshot(self):
+        return dict(reason=self.reason, pauses=self.pauses, retry_in_seconds=self.delay())

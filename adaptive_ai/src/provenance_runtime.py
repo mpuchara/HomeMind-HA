@@ -6,6 +6,7 @@ adding a second dispatcher: Executor remains the only HA command boundary.
 """
 from __future__ import annotations
 from sqlite_background import background_sqlite
+from storage_budget import StoragePressure, StorageRetry, require_storage_available, storage_recording_paused
 
 from contextlib import contextmanager
 import threading
@@ -95,6 +96,7 @@ def install(core):
     # it and write one transaction per batch so SQLite latency never sits in event->intent.
     deferred_lock = threading.RLock()
     deferred_event = threading.Event()
+    storage_retry = StorageRetry()
     deferred_rows = []
     decision_limit = 8192
     deferred_stats = {
@@ -177,6 +179,10 @@ def install(core):
         return inserted
 
     def queue_deferred(row):
+        if storage_recording_paused(store):
+            with deferred_lock:
+                deferred_stats['storage_skipped'] = deferred_stats.get('storage_skipped', 0) + 1
+            return False
         prepared = dict(row)
         with deferred_lock:
             overflow = len(deferred_rows) >= decision_limit
@@ -282,6 +288,7 @@ def install(core):
             acknowledgements = {**ack_stats, "pending": len(deferred_acks)}
         return {
             **decision,
+            'storage_retry': storage_retry.snapshot(),
             "decisions": decision,
             "acknowledgements": acknowledgements,
             "events": {
@@ -319,8 +326,10 @@ def install(core):
 
     def flush_all_provenance(*, max_event_batches=None):
         """Attempt every deferred provenance class even if one SQLite write fails."""
+        require_storage_available(store)
         results = {}
         errors = []
+        pressure = None
         callbacks = (
             ("events", lambda: flush_event_provenance(max_batches=max_event_batches)),
             ("decisions", flush_deferred),
@@ -329,14 +338,20 @@ def install(core):
         for name, callback in callbacks:
             try:
                 results[name] = int(callback() or 0)
+            except StoragePressure as exc:
+                pressure = exc
             except Exception as exc:
                 errors.append(f"{name}: {type(exc).__name__}: {exc}")
         if errors:
             raise RuntimeError("; ".join(errors))
+        if pressure is not None:
+            raise pressure
         return results
 
     def provenance_writer():
         while not engine.stop_event.is_set():
+            if engine.stop_event.wait(storage_retry.delay()):
+                break
             # Sparse event streams otherwise degenerate into one SQLite transaction per
             # event. Keep observational provenance in RAM for up to 2 seconds. Bound each
             # event turn so a very large event backlog cannot starve Shadow decisions/ACKs.
@@ -345,17 +360,20 @@ def install(core):
             try:
                 with background_sqlite(store):
                     flush_all_provenance(max_event_batches=4)
+                storage_retry.recovered()
+            except StoragePressure as exc:
+                storage_retry.defer(exc)
             except Exception as exc:
                 event_stats["errors"] += 1
-                try:
-                    store.event(
-                        None, "warning", "provenance_batch_flush_failed",
-                        f"Deferred provenance flush failed: {type(exc).__name__}: {exc}",
-                        None,
-                    )
-                except Exception:
-                    pass
-                time.sleep(0.1)
+                if storage_retry.defer(exc):
+                    try:
+                        store.event(
+                            None, "warning", "provenance_batch_flush_failed",
+                            f"Deferred provenance flush failed: {type(exc).__name__}: {exc}",
+                            None,
+                        )
+                    except Exception:
+                        pass
             if journal.pending_event_count():
                 # Continue draining a large backlog immediately on the next loop while
                 # still giving decisions and ACKs one turn on every cycle.
