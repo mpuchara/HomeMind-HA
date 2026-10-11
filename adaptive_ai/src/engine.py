@@ -1,4 +1,5 @@
 from sqlite_background import background_sqlite
+from storage_budget import storage_status
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import nullcontext
 import json
@@ -458,6 +459,7 @@ class Engine(threading.Thread):
             "last_poll": last_poll,
             "state_count": state_count,
             "options": OPTIONS,
+            "storage": storage_status(STORE),
             "ha_base_url": HA_BASE_URL,
             "agent_count": len(agents),
             "average_confidence": sum(confidences) / len(confidences) if confidences else 0.0,

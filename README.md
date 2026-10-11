@@ -1,6 +1,6 @@
-# HomeMind-HA / Adaptive AI 0.14.174
+# HomeMind-HA / Adaptive AI 0.14.175
 
-0.14.174: odzyskiwanie dużego pliku WAL w tle, ograniczenie zatrzymanego miejsca po resecie oraz diagnostyka rozmiaru bazy i wolnego dysku. [Opis wydania](docs/RELEASE_0_14_174_PL.md).
+0.14.175: automatyczna retencja 10 dni, limit rozmiaru bazy, rezerwa wolnego dysku oraz ograniczone pliki i logi treningu. [Opis wydania](docs/RELEASE_0_14_175_PL.md).
 
 
 Karta agenta ma cztery akcje: **Shadow/Control**, **Wrong decision**, **Settings** i **Teach**. Wrong decision uczy poprawnego Desired. Teach otwiera powiększalny wykres historii z wyborem dokładnej chwili i zapisem poprawnego Desired. Cofanie ostatniej korekty jest dostępne w Teach oraz Settings; pozostałe operacje i diagnostyka są w Settings.

@@ -1,10 +1,10 @@
 {
-  "version": "0.14.174",
+  "version": "0.14.175",
   "release_date": "2026-10-11",
-  "base_version": "0.14.173",
-  "base_commit": "a445b9bb96bbe80469ea1d17b62b652f7ed01357",
-  "release_status": "bounded-retained-wal-and-background-reclamation",
-  "release_validation_tests_passed": 2086,
+  "base_version": "0.14.174",
+  "base_commit": "694b13bbeb7a4571ddc1083afc834b71fb30d301",
+  "release_status": "bounded-storage-and-ten-day-retention",
+  "release_validation_tests_passed": 2113,
   "release_014140": {
     "scope": "inventory_and_remove_remaining_shipped_feature_Handler_fallbacks_for_Candidate_Live_and_manual_feedback_transport",
     "explicit_routes": "manual_feedback.js, candidate_ui.js, candidate_preference_ui.js, /api/candidates, Candidate Teach-RL status/train, generation history/comparison, /api/candidate-live, /api/live and Candidate discard",
@@ -2472,5 +2472,21 @@
     "no_store_lock_during_reclaim": true,
     "original_training_labels_weights_gates_and_history": true,
     "limit": "SQLite disk I/O has no wall-clock bound; deployed CPU and latency require a new runtime log"
+  },
+  "release_014175": {
+    "scope": "storage_admission_retention_and_bounded_training_transport",
+    "validation": "27_storage_pressure_retention_payload_worker_log_and_calibration_regressions",
+    "database_max_mib": 2048,
+    "wal_admission_max_mib": 128,
+    "minimum_free_mib": 2048,
+    "hard_free_reserve_mib": 256,
+    "history_days": 10,
+    "training_transport_max_mib": 128,
+    "worker_log_max_mib": 1,
+    "statement_payload_max_mib": 16,
+    "protected_models_and_manual_preferences": true,
+    "causal_boundary_seed_preserved": true,
+    "legacy_database_full_vacuum": false,
+    "limit": "WAL admission permits bounded transaction bursts; other applications can consume filesystem space"
   }
 }

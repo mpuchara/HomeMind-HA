@@ -13,6 +13,7 @@ import os
 from pathlib import Path
 import subprocess
 import sys
+from storage_files import atomic_text, start_log_drain
 import tempfile
 import time
 import uuid
@@ -42,9 +43,7 @@ def _canonical(value):
 
 def _atomic(path, payload):
     path = Path(path)
-    temp = path.with_suffix(path.suffix + ".tmp")
-    temp.write_text(_canonical(payload), encoding="utf-8")
-    os.replace(temp, path)
+    atomic_text(path, _canonical(payload))
 
 
 def _read(path):
@@ -191,17 +190,16 @@ def run_isolated_offline_rl(
 
         env = dict(os.environ)
         env["PYTHONUNBUFFERED"] = "1"
-        log_handle = open(log_path, "ab", buffering=0)
         process = subprocess.Popen(
             [sys.executable, str(Path(__file__).resolve()), "--worker", str(job_path)],
             cwd=str(Path(__file__).resolve().parent),
             env=env,
             stdin=subprocess.DEVNULL,
-            stdout=log_handle,
+            stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             start_new_session=True,
         )
-        log_handle.close()
+        log_writer = start_log_drain(process, log_path)
         started = time.monotonic()
         peak_rss = 0.0
         memory_exceeded = False
@@ -226,6 +224,8 @@ def run_isolated_offline_rl(
             time.sleep(poll_seconds)
 
         return_code = process.wait(timeout=4.0)
+        if log_writer is not None:
+            log_writer.join(1)
         wall = time.monotonic() - started
         if cancelled:
             raise InterruptedError("Offline-RL isolated worker cancelled")

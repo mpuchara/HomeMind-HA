@@ -157,6 +157,7 @@ def initialize_runtime():
             print(f"[startup] Fast-agent interval migration: {migrated}", flush=True)
 
         prepare_engine_extensions()
+        STORE.start_storage_retention()
 
         set_startup("starting_engine", 3, "Connecting to Home Assistant and reading current states")
         ENGINE.start()
@@ -820,6 +821,9 @@ def shutdown_runtime():
     except Exception:
         traceback.print_exc()
     finally:
+        stop_retention = getattr(STORE, 'stop_storage_retention', None)
+        if callable(stop_retention):
+            stop_retention()
         stop_checkpoint = getattr(STORE, "stop_wal_checkpoint", None)
         if callable(stop_checkpoint):
             try:

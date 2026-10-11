@@ -15,7 +15,7 @@ try:
 except Exception:
     ws_connect = None
 
-APP_VERSION = "0.14.174"
+APP_VERSION = "0.14.175"
 HISTORY_BOOTSTRAP_REVISION = "target-attrs-v2"
 TRAINING_REVISION = "shared-home-intents-v26"
 DATA_DIR = Path(os.environ.get("ADAPTIVE_AI_DATA", "/data"))
@@ -88,11 +88,9 @@ DEFAULT_OPTIONS = {
     # it after reconstructing the minimal open-dwell state at each chunk boundary.
     "agent_training_overlap_hours": 6,
     "agent_training_stateful_continuation": True,
-    "agent_training_history_days": 7,
-    # Agent Training vNext Stage 5: full-resolution recent replay stays at 7 days;
-    # older target history is sampled deterministically and reconstructed only for the
-    # bounded selected dwells under the current schema.
-    "agent_training_long_memory_days": 35,
+    "agent_training_history_days": 10,
+    # Raw replay and any optional sparse replay share the same storage horizon.
+    "agent_training_long_memory_days": 10,
     "agent_training_long_memory_max_samples": 96,
     "agent_training_long_memory_max_mass_ratio": 0.50,
     "agent_training_pause_ms": 0,
@@ -111,7 +109,10 @@ DEFAULT_OPTIONS = {
     "policy_backend_shadow_max_features": 24,
     "policy_backend_shadow_ridge": 1.0,
     "history_bootstrap_days": 10,
-    "archive_retention_days": 365,
+    "archive_retention_days": 10,
+    "storage_database_max_mb": 2048,
+    "storage_wal_max_mb": 128,
+    "storage_min_free_mb": 2048,
     "archive_context_interval_seconds": 30,
     "auto_agent_min_changes": 2,
     "auto_agent_recent_days": 10,
@@ -475,6 +476,12 @@ def load_options():
     # 0.9 never starts heavy replay implicitly, including installations with the
     # legacy automatic option. One shared job covers agent AND global bootstrap.
     options["manual_agent_training"] = True
+    # Migrate the historical default even when HA persists the old options.json.
+    if options.get('agent_training_history_days') == 7:
+        options['agent_training_history_days'] = 10
+    for key in ('agent_training_history_days', 'agent_training_long_memory_days',
+                'archive_retention_days', 'history_bootstrap_days', 'auto_agent_recent_days'):
+        options[key] = max(1, min(10, float(options.get(key, 10))))
     options["max_concurrent_training_jobs"] = 1
     return options
 
