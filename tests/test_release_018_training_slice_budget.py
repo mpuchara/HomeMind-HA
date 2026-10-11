@@ -134,7 +134,7 @@ assert slept == []
     def test_activity_ui_surfaces_slice_budget(self):
         source = (ROOT / "adaptive_ai/src/static/runtime_activity_ui.js").read_text(encoding="utf-8")
         self.assertIn("lp.max_continuous_work_ms", source)
-        self.assertIn("max slice", source)
+        self.assertIn("slice target", source)
         self.assertIn("lp.max_observed_slice_ms", source)
         self.assertIn("lp.slice_overruns", source)
 

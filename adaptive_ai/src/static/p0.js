@@ -58,8 +58,9 @@
     if (training) {
       const overall=h.training_overall_progress==null?Number(training.training_progress||0):Number(h.training_overall_progress);
       const stage=h.work_total?`${num(h.work_done)} / ${num(h.work_total)} ${h.work_unit||'history rows'}`:null;
-      const speed=Number(h.training_rows_per_second||0);
-      const stageEta=duration(h.training_stage_eta_seconds??h.stage_eta_seconds);
+      const speed=Number((h.training_preparation_active?h.history_rows_per_second:h.training_rows_per_second)||0);
+      const stageEtaSeconds=h.training_stage_eta_seconds??h.stage_eta_seconds;
+      const stageEta=Number(stageEtaSeconds)>0?duration(stageEtaSeconds):null;
       const details=[h.phase_detail||h.message||'Replaying recorded behaviour'];
       if(speed>0)details.push(`${num(speed)} rows/s`);
       if(stageEta)details.push(`current stage ${stageEta}`);

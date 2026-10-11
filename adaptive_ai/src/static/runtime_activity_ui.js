@@ -156,10 +156,10 @@
           const observed=Math.round(Number(lp.max_observed_slice_ms||0));
           const overruns=Number(lp.slice_overruns||0);
           const replayBatch=Math.round(Number(lp.experience_batch_rows||0));
-          const budget=duty?`wall duty target ${duty}%${slice?` · max slice ${slice} ms`:''}${replayBatch?` · replay batch ${replayBatch}`:''}`:'Pi-safe cooperative budget';
+          const budget=duty?`wall duty target ${duty}%${slice?` · slice target ${slice} ms`:''}${replayBatch?` · replay batch ${replayBatch}`:''}`:'Pi-safe cooperative budget';
           const observedText=observed?` · longest slice ${observed} ms${overruns?` · ${overruns} overrun${overruns===1?'':'s'}`:''}`:'';
           const timing=panel.querySelector('.history-timing span');
-          if(timing)timing.textContent=`${timing.textContent||''} ${reasonLabel} · ${budget}${observedText}. Training yields between bounded work slices so Ingress and realtime control keep CPU priority.`.trim();
+          if(timing)timing.textContent=`${timing.textContent||''} ${reasonLabel} · ${budget}${observedText}. Training yields between work slices; Recorder and database waits can exceed the slice target.`.trim();
         }
       }
       return result;

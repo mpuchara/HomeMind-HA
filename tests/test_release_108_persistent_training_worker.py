@@ -123,6 +123,7 @@ class PersistentSchedulingTests(unittest.TestCase):
             executor=SimpleNamespace(target_lock=lambda target: threading.RLock()))
         manager._training_bounds = lambda: (0.0, 18 * 3600.0)
         manager._refresh_agent_history = lambda *args, **kwargs: None
+        manager.set_status = lambda *args, **kwargs: None
 
         agent = {
             "id": "persistent-agent",

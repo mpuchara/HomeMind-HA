@@ -102,7 +102,7 @@ assert _budget_pause(2.0, 0.25, 2.0) == 2.0
         source = (ROOT / "adaptive_ai/src/static/runtime_activity_ui.js").read_text(encoding="utf-8")
         self.assertIn("lp.training_wall_duty_cycle_target??lp.training_cpu_duty_cycle", source)
         self.assertIn("wall duty target ${duty}%", source)
-        self.assertIn("Training yields between bounded work slices so Ingress and realtime control keep CPU priority.", source)
+        self.assertIn("Training yields between work slices; Recorder and database waits can exceed the slice target.", source)
         self.assertIn("Autonomous Candidate training", source)
 
 

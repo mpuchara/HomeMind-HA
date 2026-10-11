@@ -58,6 +58,16 @@ class RuntimeDebugLogService:
         except Exception as exc:
             return {"error": f"{type(exc).__name__}: {exc}"}
 
+    def _history_status(self):
+        history = getattr(self.core, "HISTORY", None)
+        getter = getattr(history, "status", None)
+        if not callable(getter):
+            return None
+        try:
+            return getter()
+        except Exception as exc:
+            return {"error": f"{type(exc).__name__}: {exc}"}
+
     def status(self):
         telemetry = TELEMETRY.snapshot()
         result = RUNTIME_DEBUG.summary(telemetry)
@@ -156,6 +166,7 @@ class RuntimeDebugLogService:
                 "context_persistence": context_persistence,
                 "deferred_persistence": deferred_persistence,
             },
+            "history": self._history_status(),
             "sqlite": sqlite_status,
             "model_encoding_cache": MODEL_ENCODING_CACHE.snapshot(),
             "shadow_json_encoding_cache": shadow_json_snapshot(),
