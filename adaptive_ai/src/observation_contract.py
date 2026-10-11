@@ -289,6 +289,13 @@ def _same_observation(left, right):
 
 
 def _last_edge_time(temporal, entity_id, at_ts, current):
+    shared = getattr(temporal, 'observation_edge', None)
+    if callable(shared):
+        return shared(entity_id, at_ts, current, _compute_last_edge_time)
+    return _compute_last_edge_time(temporal, entity_id, at_ts, current)
+
+
+def _compute_last_edge_time(temporal, entity_id, at_ts, current):
     """Last valid value edge; missing/unavailable samples never create an edge."""
     rows = _samples(temporal, entity_id)
     if not rows:

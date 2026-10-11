@@ -1,6 +1,6 @@
-# HomeMind-HA / Adaptive AI 0.14.172
+# HomeMind-HA / Adaptive AI 0.14.173
 
-0.14.172: przerwana pętla ponowień między agentami; zajęty cel ponawiany osobno, prawidłowe timestampy reakcji po REST resync.
+0.14.173: wspólny odczyt trajektorii i historii sensorów dla kandydatów w jednej obserwacji; osobne cechy, predykcje i pełna walidacja modeli.
 
 
 Cztery akcje każdego agenta: Shadow/Control, Wrong decision, Settings, Teach.

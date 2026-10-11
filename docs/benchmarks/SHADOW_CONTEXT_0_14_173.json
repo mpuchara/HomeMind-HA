@@ -1,0 +1,72 @@
+{
+  "synthetic": true,
+  "passes": 32,
+  "challengers": 4,
+  "presence_sources": 45,
+  "areas": 9,
+  "full_validation_on_every_candidate": true,
+  "every_features_labels_meta_identical": true,
+  "series": [
+    {
+      "previous": {
+        "observation_median_ms": 16.065758999999957,
+        "features_total_ms": 217.95795200000612,
+        "observation_total_ms": 545.0079139999957,
+        "forecast_calls": 128,
+        "checksum_calls": 128,
+        "every_features_labels_meta_sha256": "99344ba725154da737b72da2c753415af562f3465403985286a538fac54a796a"
+      },
+      "current": {
+        "observation_median_ms": 11.787429000008842,
+        "features_total_ms": 145.75537899997926,
+        "observation_total_ms": 382.1730079999952,
+        "forecast_calls": 32,
+        "checksum_calls": 128,
+        "every_features_labels_meta_sha256": "99344ba725154da737b72da2c753415af562f3465403985286a538fac54a796a"
+      },
+      "feature_speedup": 1.4953681537889394,
+      "observation_speedup": 1.426076417202134
+    },
+    {
+      "current": {
+        "observation_median_ms": 11.401575500002537,
+        "features_total_ms": 148.9833160002263,
+        "observation_total_ms": 374.4652390001022,
+        "forecast_calls": 32,
+        "checksum_calls": 128,
+        "every_features_labels_meta_sha256": "99344ba725154da737b72da2c753415af562f3465403985286a538fac54a796a"
+      },
+      "previous": {
+        "observation_median_ms": 12.891345499980389,
+        "features_total_ms": 187.24812599975849,
+        "observation_total_ms": 417.3102929999857,
+        "forecast_calls": 128,
+        "checksum_calls": 128,
+        "every_features_labels_meta_sha256": "99344ba725154da737b72da2c753415af562f3465403985286a538fac54a796a"
+      },
+      "feature_speedup": 1.2568395645018,
+      "observation_speedup": 1.1144166388161647
+    },
+    {
+      "previous": {
+        "observation_median_ms": 12.135579499982896,
+        "features_total_ms": 190.97817000007922,
+        "observation_total_ms": 401.593451999986,
+        "forecast_calls": 128,
+        "checksum_calls": 128,
+        "every_features_labels_meta_sha256": "99344ba725154da737b72da2c753415af562f3465403985286a538fac54a796a"
+      },
+      "current": {
+        "observation_median_ms": 11.231729499996845,
+        "features_total_ms": 147.1185220000848,
+        "observation_total_ms": 360.80507599999123,
+        "forecast_calls": 32,
+        "checksum_calls": 128,
+        "every_features_labels_meta_sha256": "99344ba725154da737b72da2c753415af562f3465403985286a538fac54a796a"
+      },
+      "feature_speedup": 1.2981245828446342,
+      "observation_speedup": 1.1130482321706465
+    }
+  ],
+  "limit": "Real candidate observer, policy validation/features/prediction, room forecast and SQLite. No HA ingress or concurrent storage I/O; not a whole-installation latency forecast."
+}
