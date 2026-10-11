@@ -1,6 +1,6 @@
-# HomeMind-HA / Adaptive AI 0.14.177
+# HomeMind-HA / Adaptive AI 0.14.178
 
-0.14.177: retencja 10 dni i limity dysku, spokojne ponawianie zapisów oraz oczekiwanie treningu na odzyskanie miejsca.
+0.14.178: odzyskiwanie WAL co 5 sekund podczas blokady oraz housekeeping bez lawiny błędów ochrony dysku.
 
 
 Cztery akcje każdego agenta: Shadow/Control, Wrong decision, Settings, Teach.
