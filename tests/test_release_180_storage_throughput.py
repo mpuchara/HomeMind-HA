@@ -19,7 +19,8 @@ class GuardedImport180Tests(unittest.TestCase):
     def setUp(self):
         temp = tempfile.TemporaryDirectory()
         self.addCleanup(temp.cleanup)
-        self.store = Store(Path(temp.name) / 'test.db')
+        with patch.dict('storage.OPTIONS', storage_budget_mode='manual'):
+            self.store = Store(Path(temp.name) / 'test.db')
         self.budget = self.store.storage_budget
 
     def free(self, count):
@@ -77,15 +78,15 @@ class GuardedImport180Tests(unittest.TestCase):
             self.assertEqual(c.execute('SELECT count(*) FROM app_meta').fetchone()[0], 0)
 
     def test_manual_capacity_above_8_gib_is_honoured_and_bounded(self):
-        budget = StorageBudget(self.store.path, dict(storage_database_max_mb=20480,
+        budget = StorageBudget(self.store.path, dict(storage_budget_mode='manual', storage_database_max_mb=20480,
             storage_wal_max_mb=512, storage_min_free_mb=4096))
         self.assertEqual((budget.db_limit, budget.wal_limit, budget.reserve),
                          (20480 * MIB, 512 * MIB, 4096 * MIB))
-        maximum = StorageBudget(self.store.path, dict(storage_database_max_mb=999999,
+        maximum = StorageBudget(self.store.path, dict(storage_budget_mode='manual', storage_database_max_mb=999999,
             storage_wal_max_mb=999999, storage_min_free_mb=999999))
         self.assertEqual((maximum.db_limit, maximum.wal_limit, maximum.reserve),
                          (65536 * MIB, 4096 * MIB, 65536 * MIB))
-        self.assertEqual(StorageBudget(self.store.path, {}).db_limit, 2048 * MIB)
+        self.assertEqual(StorageBudget(self.store.path, {'storage_budget_mode': 'manual'}).db_limit, 2048 * MIB)
 
     def test_real_wal_reclaims_before_pause_and_retries_after_five_seconds(self):
         self.store.start_wal_keeper()

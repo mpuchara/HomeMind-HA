@@ -19,6 +19,7 @@ import hashlib
 import json
 import math
 import threading
+from contextlib import nullcontext
 import time
 
 from control import timing_for
@@ -193,15 +194,29 @@ class AutomaticRewardJournal:
 
     def _interrupt_stale_pending(self):
         now = float(self.clock())
-        with self.store.lock, self.store.conn() as c:
-            c.execute(
-                """UPDATE automatic_reward_experiences
-                   SET status='unknown',resolved_ts=?,outcome='unknown',
-                       attribution_reason='restart_interrupted',
-                       unknown_reason='restart interrupted observation before a trustworthy outcome'
-                   WHERE status='pending'""",
-                (now,),
-            )
+        budget = getattr(self.store, 'storage_budget', None)
+        maintenance = (budget.maintenance(update_tables=('automatic_reward_experiences',))
+                       if budget is not None else nullcontext())
+        # Invalidating pre-restart observations is safety maintenance, not new
+        # training evidence. Small commits retain the hard disk/WAL/page guards;
+        # an empty journal performs no UPDATE and cannot fail soft admission.
+        with maintenance, self.store.lock:
+            while True:
+                with self.store.conn() as c:
+                    keys = [row[0] for row in c.execute(
+                        "SELECT resolution_key FROM automatic_reward_experiences "
+                        "WHERE status='pending' LIMIT 128"
+                    ).fetchall()]
+                    if not keys:
+                        break
+                    c.executemany(
+                        """UPDATE automatic_reward_experiences
+                           SET status='unknown',resolved_ts=?,outcome='unknown',
+                               attribution_reason='restart_interrupted',
+                               unknown_reason='restart interrupted observation before a trustworthy outcome'
+                           WHERE resolution_key=? AND status='pending'""",
+                        ((now, key) for key in keys),
+                    )
 
     @staticmethod
     def _decode(row):

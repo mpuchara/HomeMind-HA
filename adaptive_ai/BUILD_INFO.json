@@ -1,10 +1,10 @@
 {
-  "version": "0.14.180",
-  "release_date": "2026-10-11",
-  "base_version": "0.14.179",
-  "base_commit": "eb4950ab65be379ae27dfecd63390cff4afe65bf",
-  "release_status": "fast-guarded-recorder-import-and-configurable-storage-capacity",
-  "release_validation_tests_passed": 2157,
+  "version": "0.14.181",
+  "release_date": "2026-10-12",
+  "base_version": "0.14.180",
+  "base_commit": "f667df83b10d57fa478d806dc2111ec2ca14b75d",
+  "release_status": "adaptive-storage-capacity-and-soft-pressure-startup",
+  "release_validation_tests_passed": 2175,
   "release_014140": {
     "scope": "inventory_and_remove_remaining_shipped_feature_Handler_fallbacks_for_Candidate_Live_and_manual_feedback_transport",
     "explicit_routes": "manual_feedback.js, candidate_ui.js, candidate_preference_ui.js, /api/candidates, Candidate Teach-RL status/train, generation history/comparison, /api/candidate-live, /api/live and Candidate discard",
@@ -2557,5 +2557,28 @@
     "completed_Recorder_windows_saved_before_next_request": true,
     "benchmark": "docs/benchmarks/STORAGE_IMPORT_0_14_180.json",
     "limit": "Local SQLite component result; deployed HA, SD-card and complete training speed require a runtime log"
+  },
+  "release_014181": {
+    "scope": "adaptive_default_storage_budget_and_bounded_restart_reward_invalidation",
+    "new_regression_tests": 18,
+    "default_mode": "auto",
+    "default_auto_use_percent": 50,
+    "auto_use_percent_range": [
+      10,
+      80
+    ],
+    "pool": "filesystem_free_bytes_plus_existing_database_and_WAL_physical_bytes",
+    "allocation": "percentage_of_pool_split_95_percent_database_5_percent_WAL",
+    "reserve": "unallocated_pool_frozen_for_process_lifetime",
+    "restart_quota_invariance": true,
+    "manual_limits_opt_in": true,
+    "legacy_default_mib_values_ignored_in_auto_mode": true,
+    "worker_file_reserve_shared": true,
+    "restart_pending_reward_batch_rows": 128,
+    "hard_disk_wal_and_sqlite_page_guards_preserved": true,
+    "fast_import_014180_preserved": true,
+    "reference_014147": "No byte quota existed in that release; unbounded growth is not restored",
+    "limit": "No claim of deployed SD card or complete training speed equivalence without a new runtime log",
+    "parent_budget_inherited_by_training_and_offline_rl_workers": true
   }
 }

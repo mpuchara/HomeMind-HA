@@ -3,15 +3,33 @@ import io
 import os
 import re
 import shutil
+import sys
 import threading
 from contextlib import contextmanager
 from pathlib import Path
 
-from settings import OPTIONS
-from storage_budget import MIB, MAX_WRITE_BYTES, StoragePressure
+from settings import OPTIONS, DB_PATH
+from storage_budget import MIB, MAX_WRITE_BYTES, StorageBudget, StoragePressure
 
 DIRECTORY_LIMIT_BYTES = 128 * MIB
 LOG_LIMIT_BYTES = MIB
+_fallback_budget = None
+
+
+def worker_storage_budget():
+    # Reuse the parent's/worker's frozen adaptive reserve without importing Store
+    # during bootstrap (which would introduce a cycle and initialize the schema).
+    store = getattr(sys.modules.get('storage'), 'STORE', None)
+    if store is not None and getattr(store, 'storage_budget', None) is not None:
+        return store.storage_budget
+    global _fallback_budget
+    if _fallback_budget is None:
+        _fallback_budget = StorageBudget(DB_PATH, OPTIONS)
+    return _fallback_budget
+
+
+def worker_storage_environment():
+    return worker_storage_budget().worker_environment()
 
 
 @contextmanager
@@ -41,7 +59,10 @@ def _directory_lock(root):
 
 
 def _check(root, incoming):
-    reserve = max(256, int(OPTIONS.get('storage_min_free_mb', 2048))) * MIB
+    budget = worker_storage_budget()
+    if budget.sample().get('sample_error') is not None:
+        raise budget.pressure()
+    reserve = budget.reserve
     if shutil.disk_usage(root).free < reserve + incoming:
         raise StoragePressure('Storage protection: worker file would consume disk reserve')
     total = sum(p.stat().st_size for p in root.iterdir() if p.is_file() and not p.is_symlink())
