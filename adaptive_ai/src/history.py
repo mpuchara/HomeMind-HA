@@ -1027,23 +1027,29 @@ class HistoryManager(threading.Thread):
             60.0,
             float(OPTIONS.get("training_recorder_refresh_overlap_minutes", 30) or 30) * 60.0,
         )
-        full_ids, tail = [], []
+        full_ids, head, tail = [], [], []
         for eid in ids:
             item = self.training_recorder_coverage.get((str(source), eid))
-            if not item or float(item[0]) > float(start_ts) + 1.0:
+            if (not item or float(item[1]) < float(start_ts)
+                    or float(item[0]) > float(end_ts)):
                 full_ids.append(eid)
                 self.training_recorder_coverage_misses += 1
                 continue
             covered_end = float(item[1])
-            if covered_end >= float(end_ts) - 1.0:
+            if float(item[0]) <= float(start_ts) + 1.0 and covered_end >= float(end_ts) - 1.0:
                 self.training_recorder_coverage_hits += 1
                 continue
-            tail.append((eid, max(float(start_ts), covered_end - overlap)))
+            if float(item[0]) > float(start_ts) + 1.0:
+                head.append((eid, min(float(end_ts), float(item[0]) + overlap)))
+            if covered_end < float(end_ts) - 1.0:
+                tail.append((eid, max(float(start_ts), covered_end - overlap)))
             self.training_recorder_coverage_hits += 1
 
         plans = []
         if full_ids:
             plans.append((full_ids, float(start_ts), float(end_ts), "full"))
+        if head:
+            plans.append(([eid for eid, _ in head], float(start_ts), max(ts for _, ts in head), "older delta"))
         if tail:
             tail_ids = [eid for eid, _ in tail]
             tail_start = min(ts for _, ts in tail)
@@ -1053,6 +1059,18 @@ class HistoryManager(threading.Thread):
 
         inserted = 0
         coverage_changed = False
+        def committed_chunk(batch, chunk_start, chunk_end):
+            # Windows arrive newest first. Save their contiguous suffix after each
+            # complete response, so cancellation/restart reuses already durable work.
+            for eid in batch:
+                key = (str(source), eid)
+                previous = self.training_recorder_coverage.get(key)
+                if previous and float(previous[0]) <= chunk_end and float(previous[1]) >= chunk_start:
+                    self.training_recorder_coverage[key] = (
+                        min(float(previous[0]), chunk_start), max(float(previous[1]), chunk_end))
+                else:
+                    self.training_recorder_coverage[key] = (chunk_start, chunk_end)
+            self._persist_training_recorder_coverage()
         plan_weights = [
             max(1, math.ceil((end - start) / (max(1, int(max_hours)) * 3600)))
             * max(1, math.ceil(len(plan_ids) / batch_size))
@@ -1067,20 +1085,25 @@ class HistoryManager(threading.Thread):
                 progress_lo + (progress_hi - progress_lo) * (weight_done + weight) / sum(plan_weights)
             )
             skipped_before = int(getattr(self, "recorder_skipped_slices", 0) or 0)
+            previous_bounds = {eid: self.training_recorder_coverage.get((str(source), eid))
+                               for eid in plan_ids}
             inserted += self._import_section(
                 plan_ids, plan_start, plan_end,
                 batch_size=batch_size, minimal=minimal, no_attributes=no_attributes,
                 source=source, progress_lo=lo, progress_hi=hi,
                 label=f"{label} · {plan_kind}", max_hours=max_hours, parallel_requests=1,
                 inter_chunk_pause_ms=int(OPTIONS.get("agent_training_pause_ms", 0)),
+                on_successful_chunk=committed_chunk,
             )
             weight_done += weight
             skipped_after = int(getattr(self, "recorder_skipped_slices", 0) or 0)
-            if skipped_after == skipped_before:
+            if (skipped_after == skipped_before and not self.stop_event.is_set()
+                    and not (self.job_cancel_event and self.job_cancel_event.is_set())):
                 for eid in plan_ids:
                     key = (str(source), eid)
-                    previous = self.training_recorder_coverage.get(key)
-                    if previous and float(previous[1]) + overlap >= plan_start:
+                    previous = previous_bounds[eid]
+                    if (previous and float(previous[1]) >= plan_start
+                            and float(previous[0]) <= plan_end):
                         self.training_recorder_coverage[key] = (
                             min(float(previous[0]), plan_start),
                             max(float(previous[1]), plan_end),
@@ -1965,7 +1988,7 @@ class HistoryManager(threading.Thread):
 
     def _import_section(self, entity_ids, start_ts, end_ts, *, batch_size, minimal, no_attributes, source,
                         progress_lo, progress_hi, label, max_hours=24, parallel_requests=None, inter_chunk_pause_ms=0,
-                        on_chunk=None):
+                        on_chunk=None, on_successful_chunk=None):
         if not entity_ids or end_ts <= start_ts:
             return 0
         windows = self._time_windows(start_ts, end_ts, max_hours=max_hours)
@@ -1997,12 +2020,16 @@ class HistoryManager(threading.Thread):
                     phase_detail=f"Recorder chunk {done + 1}/{total}: {written:,} archive rows committed",
                 )
             self._recorder_chunk_report = report
+            skipped_before = int(getattr(self, "recorder_skipped_slices", 0) or 0)
             try:
                 count = self._fetch_history_resilient(
                     batch, ws, we, minimal=minimal, no_attributes=no_attributes, source=source
                 )
             finally:
                 self._recorder_chunk_report = None
+            if (on_successful_chunk is not None
+                    and int(getattr(self, "recorder_skipped_slices", 0) or 0) == skipped_before):
+                on_successful_chunk(batch, ws, we)
             return count, wi, bi, batch
 
         iterator = map(fetch, tasks)

@@ -1,0 +1,48 @@
+{
+  "reference": "frozen 0.14.179 guard from eb4950ab65be379ae27dfecd63390cff4afe65bf",
+  "date": "2026-10-11",
+  "host": "Windows Python 3.11 local SQLite",
+  "rows_per_entity": 2000,
+  "batch_rows": 128,
+  "cases": [
+    {
+      "source": "ha_history_fast_context",
+      "rows": 8000,
+      "previous_seconds": [
+        3.459141,
+        3.144723,
+        3.161117
+      ],
+      "current_seconds": [
+        0.462142,
+        0.474681,
+        0.460672
+      ],
+      "previous_disk_samples": 18111,
+      "current_disk_samples": 630,
+      "median_component_speedup": 6.862,
+      "checksum_sha256": "844c381f4f45271ce4714d81a75935f8e96e3e1e7875f85f2f62afef914b6b2e"
+    },
+    {
+      "source": "ha_history_minimal",
+      "rows": 4070,
+      "previous_seconds": [
+        1.662698,
+        1.643942,
+        1.627006
+      ],
+      "current_seconds": [
+        0.28125,
+        0.304767,
+        0.287506
+      ],
+      "previous_disk_samples": 9212,
+      "current_disk_samples": 320,
+      "median_component_speedup": 5.659,
+      "checksum_sha256": "b33b4ad323cd68e8e2181d27ea6b15d7147d4d4543ab58c9f97eb7ffd09dd5ae"
+    }
+  ],
+  "every_archive_row_parity": true,
+  "insert_and_duplicate_upsert": true,
+  "limits": "Cooperative sleeps disabled. Local parsing/SQLite component only; no HA or complete training speed guarantee."
+}

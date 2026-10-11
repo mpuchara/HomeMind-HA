@@ -1,5 +1,6 @@
 """0.14.130 fast full-training regressions."""
 import json
+import threading
 import unittest
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -70,6 +71,8 @@ class DurableRecorderCoverageTests(unittest.TestCase):
         manager.training_recorder_coverage_misses = 0
         manager.recorder_skipped_slices = 0
         manager.progress = 0.0
+        manager.stop_event = threading.Event()
+        manager.job_cancel_event = None
         return manager
 
     def test_coverage_round_trip_is_versioned_and_filters_invalid_rows(self):
