@@ -151,9 +151,10 @@ class WALReclaim174Tests(unittest.TestCase):
         self.assertEqual(result, [True])
 
     def test_periodic_worker_reclaims_after_copy_and_refreshes_size(self):
-        with patch.object(WALCheckpointWorker, 'POLL_SECONDS', .02), patch.object(WALCheckpointWorker, 'THRESHOLD_PAGES', 1), patch.object(WALCheckpointWorker, 'RECLAIM_THRESHOLD_BYTES', 1):
+        with patch.object(WALCheckpointWorker, 'POLL_SECONDS', .02), patch.object(WALCheckpointWorker, 'THRESHOLD_PAGES', 1):
             self.store.start_wal_checkpoint()
             worker = self.store._wal_checkpoint_worker
+            worker.RECLAIM_THRESHOLD_BYTES = 1
             self.write('large', 'x' * 180000)
             deadline = time.monotonic() + 3
             while worker.snapshot()['reclaim_successes'] == 0 and time.monotonic() < deadline:

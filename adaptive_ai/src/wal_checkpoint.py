@@ -24,8 +24,12 @@ class WALCheckpointWorker:
         if budget is not None and isinstance(getattr(budget, 'wal_limit', None), int):
             # Reclaim before admission pauses every writer. Otherwise a smaller
             # configured WAL budget could prevent the reset that restores writes.
-            self.RECLAIM_THRESHOLD_BYTES = min(self.RECLAIM_THRESHOLD_BYTES, budget.wal_limit // 4)
-            self.storage_pressure_threshold_bytes = self.RECLAIM_THRESHOLD_BYTES
+            self.RECLAIM_THRESHOLD_BYTES = max(1, budget.wal_limit // 4)
+            # Ordinary reclamation uses the minute cooldown. Only nearing the
+            # admission pause (50% of the WAL budget) needs fast recovery. A
+            # fixed 64 MiB threshold used to turn every large installation into
+            # pressure recovery, taking SQLite's writer lock every five seconds.
+            self.storage_pressure_threshold_bytes = max(1, budget.wal_limit * 2 // 5)
         self.lock = threading.RLock()
         self.stop_event = threading.Event()
         self.ready = threading.Event()
@@ -77,6 +81,7 @@ class WALCheckpointWorker:
                     "threshold_pages": self.THRESHOLD_PAGES,
                     "wal_retain_bytes": WAL_RETAIN_BYTES,
                     "reclaim_threshold_bytes": self.RECLAIM_THRESHOLD_BYTES,
+                    "reclaim_pressure_threshold_bytes": self.storage_pressure_threshold_bytes,
                     "reclaim_interval_seconds": self.RECLAIM_INTERVAL_SECONDS,
                     "reclaim_pressure_interval_seconds": self.RECLAIM_PRESSURE_INTERVAL_SECONDS,
                     "reclaim_mode": "TRUNCATE", "reclaim_busy_timeout_ms": 0}

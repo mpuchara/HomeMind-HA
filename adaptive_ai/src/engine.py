@@ -1,4 +1,4 @@
-from sqlite_background import background_sqlite
+from sqlite_background import background_sqlite, is_sqlite_busy
 from storage_budget import StoragePressure, StorageRetry, require_storage_available, storage_recording_paused, storage_status
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import nullcontext
@@ -956,7 +956,7 @@ class Engine(threading.Thread):
             self.housekeeping_retry.defer(exc)
         except Exception as exc:
             with self.lock:
-                self.housekeeping_stats['errors'] += 1
+                self.housekeeping_stats['errors'] += int(not is_sqlite_busy(exc))
             if self.housekeeping_retry.defer(exc):
                 STORE.event(
                     None, "warning", "runtime_housekeeping_error",

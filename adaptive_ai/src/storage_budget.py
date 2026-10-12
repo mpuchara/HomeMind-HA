@@ -12,6 +12,7 @@ import threading
 import time
 from contextlib import contextmanager, closing
 from pathlib import Path
+from sqlite_background import is_sqlite_busy
 
 MIB = 1024 * 1024
 MAX_WRITE_BYTES = 16 * MIB
@@ -427,13 +428,16 @@ class StorageRetry:
         self.last_report = float('-inf')
         self.reason = None
         self.pauses = 0
+        self.busy_retries = 0
 
     def defer(self, exc):
         pressure = isinstance(exc, StoragePressure)
+        busy = is_sqlite_busy(exc)
         self.next_attempt = time.monotonic() + (5.0 if pressure else 1.0)
         self.reason = str(exc)
         self.pauses += int(pressure)
-        if pressure or time.monotonic() - self.last_report < 60.0:
+        self.busy_retries += int(busy)
+        if pressure or busy or time.monotonic() - self.last_report < 60.0:
             return False
         self.last_report = time.monotonic()
         return True
@@ -446,4 +450,5 @@ class StorageRetry:
         return max(0.0, self.next_attempt - time.monotonic())
 
     def snapshot(self):
-        return dict(reason=self.reason, pauses=self.pauses, retry_in_seconds=self.delay())
+        return dict(reason=self.reason, pauses=self.pauses, busy_retries=self.busy_retries,
+                    retry_in_seconds=self.delay())

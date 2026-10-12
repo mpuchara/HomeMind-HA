@@ -1,6 +1,6 @@
-# HomeMind-HA / Adaptive AI 0.14.181
+# HomeMind-HA / Adaptive AI 0.14.182
 
-0.14.181: automatyczny budżet dysku dopasowany do instalacji, konfigurowalny udział procentowy i poprawiony start runtime przy wstrzymanym zapisie historii. [Opis wydania](docs/RELEASE_0_14_181_PL.md).
+0.14.182: progi odzyskiwania WAL zależne od budżetu instalacji, rzadsze skracanie WAL i trwałe ponawianie konfliktów SQLite podczas importu historii. [Opis wydania](docs/RELEASE_0_14_182_PL.md).
 
 
 Karta agenta ma cztery akcje: **Shadow/Control**, **Wrong decision**, **Settings** i **Teach**. Wrong decision uczy poprawnego Desired. Teach otwiera powiększalny wykres historii z wyborem dokładnej chwili i zapisem poprawnego Desired. Cofanie ostatniej korekty jest dostępne w Teach oraz Settings; pozostałe operacje i diagnostyka są w Settings.
