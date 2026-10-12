@@ -153,6 +153,8 @@ class WorkerProgressTests(unittest.TestCase):
         self.assertEqual(parent.training_process_status['status_updated_at'], payload['updated_at'])
 
     def test_minimal_bootstrap_does_not_erase_existing_diagnostics_or_parent_identity(self):
+        _apply_status(SimpleNamespace(), {})
+        _apply_status(SimpleNamespace(), None)
         parent = self.manager()
         parent.training_phase_timings = {'screening_seconds': 3}
         _apply_status(parent, {'phase': 'worker_bootstrap', 'progress': 0,

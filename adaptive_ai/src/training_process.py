@@ -698,7 +698,7 @@ def _build_sequence_job(history, chunks):
 
 
 def _apply_status(history, payload):
-    if not isinstance(payload, dict):
+    if not isinstance(payload, dict) or not payload:
         return
     allowed = {
         "phase", "progress", "message", "chunk_done", "chunk_total",
