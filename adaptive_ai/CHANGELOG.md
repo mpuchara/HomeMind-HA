@@ -1,3 +1,9 @@
+## 0.14.185
+- Import Recorder współdzieli pomiary pojemności w krótkiej transakcji, z zachowanymi kontrolami wejścia/wyjścia/commit i granicami 50 ms / 1 MiB. Rozmiar pliku jest odczytywany jednym stat(), bez dodatkowego exists().
+- Identyczny wynik UPSERT nie przepisuje wiersza historii ani jego rewizji. Zmiany stanu, atrybutów, użytkownika, źródła i czasu odbioru nadal unieważniają cache replay.
+- Benchmark względem 0.14.184: pierwszy import 1,086–1,148x, ponowienie 1,300–1,433x; 40% mniej pomiarów miejsca i 74–76% mniej przyrostu WAL przy ponowieniu. Pomiar lokalnego komponentu, nie pełnego treningu na Pi.
+- Zachowane partie 128 wierszy, dane, modele, limity i retencja. Aktualizacja i restart, potem Resume, bez Full Rebuild. Szczegóły w docs/RELEASE_0_14_185_PL.md.
+
 ## 0.14.166
 - Import odpowiedzi Recorder zapisuje najwyżej 128 wierszy w jednej transakcji. Każda partia zwalnia SQLite i Store.lock przed przerwą budżetu treningu.
 - Jedno połączenie na import zachowuje osobne commit/rollback. Zapisany fragment przetrwa anulowanie lub późniejszy błąd; ponowienie uzupełnia dane istniejącym UPSERT.

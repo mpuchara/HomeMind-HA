@@ -1,10 +1,10 @@
 {
-  "version": "0.14.184",
+  "version": "0.14.185",
   "release_date": "2026-10-12",
-  "base_version": "0.14.183",
-  "base_commit": "e1d434e9cf45f641e962c9e65c95e1f95cde4a3d",
-  "release_status": "fourteen-day-training-and-retention",
-  "release_validation_tests_passed": 2202,
+  "base_version": "0.14.184",
+  "base_commit": "91c7343324d38a1922bfed6486b4ef6dd7a3ba06",
+  "release_status": "guarded-recorder-import-and-idempotent-archive-writes",
+  "release_validation_tests_passed": 2214,
   "release_014140": {
     "scope": "inventory_and_remove_remaining_shipped_feature_Handler_fallbacks_for_Candidate_Live_and_manual_feedback_transport",
     "explicit_routes": "manual_feedback.js, candidate_ui.js, candidate_preference_ui.js, /api/candidates, Candidate Teach-RL status/train, generation history/comparison, /api/candidate-live, /api/live and Candidate discard",
@@ -250,7 +250,7 @@
   "pi4_release_gate_contract": "pi4_release_gate_v1",
   "pi4_real_hardware_required": true,
   "stage7_offline_rl_control_unlock": false,
-  "tests_passed": 1669,
+  "tests_passed": 2214,
   "profile": "rpi4-ram-first-complete-discovery-manual-agent-selection",
   "manual_agent_training": true,
   "max_concurrent_training_jobs": 1,
@@ -2620,5 +2620,16 @@
     "storage_budgets_unchanged": true,
     "existing_replay_checkpoints_preserved": true,
     "new_regression_tests": 3
+  },
+  "release_014185": {
+    "scope": "bounded archive admission and unchanged UPSERT suppression",
+    "archive_batch_rows": 128,
+    "sampling_seconds": 0.05,
+    "sampling_payload_bytes": 1048576,
+    "storage_limits_changed": false,
+    "training_semantics_changed": false,
+    "new_regression_tests": 12,
+    "benchmark": "docs/benchmarks/ARCHIVE_WRITES_0_14_185.json",
+    "validation": "2214 tests passed on Linux/WSL Python 3.12.3, no skips; 54 storage tests passed on Windows Python 3.13; source entrypoint 0.14.185 reached ready; benchmark parity and WAL checks passed on both systems"
   }
 }

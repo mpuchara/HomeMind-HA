@@ -1178,7 +1178,7 @@ class Store:
             )
 
         packed = [pack(row) for row in rows]
-        with self.lock, self.conn() as c:
+        with self.lock, self.conn() as c, c.storage_batch():
             revision = self._next_entity_history_revision(c)
             versioned = [(*item, revision) for item in packed]
             c.executemany(
@@ -1196,7 +1196,18 @@ class Store:
                      attributes_json=CASE WHEN excluded.attributes_json!='{}' THEN excluded.attributes_json ELSE entity_history.attributes_json END,
                      context_user_id=COALESCE(excluded.context_user_id, entity_history.context_user_id),
                      source=CASE WHEN excluded.source='ha_history_full' THEN excluded.source ELSE entity_history.source END,
-                     mutation_revision=excluded.mutation_revision""",
+                     mutation_revision=excluded.mutation_revision
+                   WHERE entity_history.state IS NOT excluded.state
+                     OR (excluded.attributes_json!='{}'
+                         AND entity_history.attributes_json IS NOT excluded.attributes_json)
+                     OR (excluded.context_user_id IS NOT NULL
+                         AND entity_history.context_user_id IS NOT excluded.context_user_id)
+                     OR (excluded.source='ha_history_full'
+                         AND entity_history.source IS NOT excluded.source)
+                     OR (entity_history.source!='live' AND
+                         entity_history.received_ts IS NOT
+                           CASE WHEN excluded.source='live' THEN excluded.received_ts
+                                ELSE COALESCE(entity_history.received_ts, excluded.received_ts) END)""",
                 versioned,
             )
         return len(packed)

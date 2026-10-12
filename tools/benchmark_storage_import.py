@@ -20,6 +20,8 @@ if __name__ == '__main__':
 import history
 import storage
 from tools.benchmark_history_import import payload, manager, canonical
+from tools.fixtures.archive_batch_014184 import archive_batch as reference_archive_batch
+from types import MethodType
 
 spec = importlib.util.spec_from_file_location('storage_guard_179', ROOT / 'tools/fixtures/storage_budget_014179.py')
 previous = importlib.util.module_from_spec(spec)
@@ -43,6 +45,8 @@ def run(size=2000, repeats=3):
                         patch.object(storage, 'BudgetConnection', connection_class), \
                         patch.dict(storage.OPTIONS, storage_budget_mode='manual'):
                     store = storage.Store(Path(directory) / 'archive.db')
+                    if variant == 'previous':
+                        store.archive_batch = MethodType(reference_archive_batch, store)
                     store.start_wal_keeper()
                     calls = [0]
                     sample = store.storage_budget.sample

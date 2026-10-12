@@ -1,0 +1,21 @@
+# Adaptive AI 0.14.185
+
+Poprawka ogranicza koszt zapisu historii Recorder podczas przygotowania treningu na Raspberry Pi 4. Ukończone fragmenty historii, modele, etykiety użytkownika i checkpointy treningu pozostają zgodne.
+
+W dostarczonym raporcie z 0.14.184 przygotowanie historii trwało około 1988 sekund, przy ukończonych 49 ze 123 fragmentów bieżącej sekcji i postępie całego zadania około 3,7%. Replay modelu jeszcze nie pracował. Trzy duże importy kontekstu po około 106–117 tys. wierszy zajmowały 43–48 sekund. W końcowym buforze debug średnia z 1057 transakcji archive_batch wynosiła około 30,9 ms. Kontrola pojemności zebrała 188 499 pomiarów; WAL był 20 razy skutecznie skracany, łącznie o około 4,8 GiB. To suma zwolnień w całej sesji, a nie jednoczesny rozmiar pliku. W chwili eksportu było około 20,7 GiB wolnego miejsca i baza około 1 GiB. Raport nie potwierdza przyczyny wcześniejszego zapełnienia karty.
+
+Zapis jednej partii korzysta teraz ze wspólnego pomiaru miejsca przez najwyżej 50 ms lub 1 MiB danych wejściowych. Wejście, zakończenie partii i commit nadal sprawdzają pojemność na bieżąco. Zwykłe operacje SQL zachowują oddzielne kontrole. Odczyt rozmiaru pliku nie wykonuje już osobnego exists() przed stat(). Nieznana pojemność nadal wstrzymuje zapis.
+
+UPSERT pomija aktualizację istniejącego wiersza, jeśli wynik scalenia stanu, atrybutów, użytkownika, źródła i czasu odbioru jest identyczny. Ponowienie importu nie zmienia wtedy rewizji wiersza i nie unieważnia zgodnego cache replay. Każda rzeczywista zmiana nadal otrzymuje nową rewizję. Funkcja nadal zwraca liczbę obsłużonych wierszy, także przy powtórzeniach, więc postęp i pokrycie Recorder zachowują dotychczasowe znaczenie.
+
+Zachowane są transakcje po najwyżej 128 wierszy, zwalnianie blokad przed przerwą treningu, wszystkie wiersze kontekstu o wysokiej rozdzielczości, próbkowanie zwykłych sensorów i ich stan końcowy. Nie zmieniają się limity bazy/WAL, rezerwa miejsca, 14-dniowa retencja ani harmonogram checkpointów. Jeśli karta rzeczywiście nie ma wymaganej rezerwy miejsca, import nadal zostanie wstrzymany.
+
+Benchmark `python tools/benchmark_archive_writes.py --rows-per-entity 6000 --repeats 3 --compact` porównuje parser i rzeczywiste SQLite z zamrożonym zapisem 0.14.184. Dla 24 tys. wierszy szybkiego kontekstu mediana przyspieszenia pierwszego importu wyniosła 1,139x, a ponowienia 1,329x. Dla zwykłego kontekstu: 1,086x i 1,433x; dla pełnej historii: 1,148x i 1,300x. Liczba pomiarów miejsca spadła o 40%, a przyrost WAL przy ponowieniu o około 74–76%. [Pełne wyniki](benchmarks/ARCHIVE_WRITES_0_14_185.json).
+
+To pomiar lokalnego komponentu na Windows, przy wyłączonych przerwach treningu i checkpointach dla porównania liczby zapisanych bajtów. Nie jest pomiarem pełnego treningu, HTTP Recorder ani karty SD na Pi. Nadal trzeba zmierzyć czas przygotowania i replay w docelowej instalacji.
+
+12 nowych regresji sprawdza zgodność scalenia z poprzednim zapisem, rewizje zmian, niezmienione ponowienia, limity 50 ms/1 MiB, duży pojedynczy wiersz, brak informacji o miejscu, wycofanie partii przy presji na końcu zapisu i niezależny commit. Dotychczasowe testy pokrywają anulowanie, wznowienie, rzeczywisty limit WAL, retencję, modele i bieżące sterowanie.
+
+Pełny zestaw: **2214 testów OK**, bez pominięć, w Linuksie/WSL na Pythonie 3.12.3, z numpy 2.3.3 i websockets 15.0.1. [Raport](TEST_RESULTS_0_14_185_LINUX_312.txt). Dodatkowo 54 regresje zapisu i limitów przeszły na Pythonie 3.13 w Windows, a rzeczywisty entrypoint zgłosił HTTP ready z wersją 0.14.185. Nowy benchmark przeszedł także w Linuksie. Pełny zestaw na Windows nie jest zielony: występują istniejące ograniczenia platformy związane z os.kill(pid, 0), os.nice(), historycznymi datami i usuwaniem otwartych plików SQLite. Walidacją docelowej platformy jest pełny wynik Linux; CI nadal uruchamia niezmodyfikowany zestaw na Pythonie 3.11 i 3.13.
+
+Po instalacji tej wersji uruchom dodatek ponownie i użyj Resume dla przerwanego treningu. Nie jest potrzebny Full Rebuild ani usuwanie bazy. Zmiana nie odzyskuje automatycznie miejsca zajętego przez inne dodatki lub Home Assistant Recorder. Po zakończeniu lub wznowieniu przygotowania historii porównaj `history.training_job_timings.recorder_refresh_seconds`, `history.history_rows_per_second` i `sqlite.storage_budget` w nowym eksporcie debug.
