@@ -1,0 +1,22 @@
+{
+  "version": "0.14.188",
+  "base_commit": "9de14cfe5d48b08ba75471f0e3d1071a32f4cd21",
+  "full_suite": {
+    "passed": 2252,
+    "seconds": 331.201,
+    "platform": "WSL Ubuntu / Python 3.12.3",
+    "skipped": 0,
+    "log_sha256": "24b8b44662e50b5366d9dea2b0e1357f56019f143e04752bdaae32c9de8fb695"
+  },
+  "new_regressions": 10,
+  "benchmark": {
+    "parity": true,
+    "trajectory_builds_before": 6,
+    "trajectory_builds_after": 1,
+    "real_worker_chunks": 3,
+    "learned_weights_and_experiences": "exact semantic match; exclude only wall-clock head initialization timestamp",
+    "fallback_results": "exact row match"
+  },
+  "compileall": true,
+  "scope": "synthetic inputs; real isolated worker; Pi trace diagnosed but post-update Pi training not measured"
+}

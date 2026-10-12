@@ -1,3 +1,9 @@
+## 0.14.188
+- Fragmenty jednego workera współdzielą statystyki trajektorii dla identycznego okna po sprawdzeniu pełnego odcisku danych źródłowych. Zmiany historii, checkpointu, mapowania lub wiarygodności sensorów powodują ponowną budowę.
+- Zapytania replay poza RAM rozdzielają nowe zdarzenia i późny odbiór. Używają istniejącego indeksu czasu odbioru, z zachowaniem kolejności oraz limitu próbek.
+- Bez nowych indeksów na dysku, zwiększenia limitów RAM, zmiany sensorów, nagród czy cech modelu. Model z .187 może korzystać z Resume.
+- Szczegóły w docs/RELEASE_0_14_188_PL.md.
+
 ## 0.14.187
 - Replay dekoduje powtarzane próbki sensorów przez ograniczony cache w pamięci procesu: do 512 wpisów i 1 MiB jednostek budżetu na tracker. Duże atrybuty omijają cache, a zamknięcie trackera go czyści.
 - Klucz obejmuje stan, atrybuty, użytkownika, czas i encję, więc korekty historii i metadane odbioru z FeatureJournal nie używają starego odczytu.

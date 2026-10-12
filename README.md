@@ -1,6 +1,6 @@
-# HomeMind-HA / Adaptive AI 0.14.187
+# HomeMind-HA / Adaptive AI 0.14.188
 
-0.14.187: szybszy chronological reward replay przez ograniczony cache odczytanych próbek w RAM, z zachowaniem oceny sensorów i wyników treningu. [Opis poprawki](docs/RELEASE_0_14_187_PL.md).
+0.14.188: ponowne użycie statystyk trajektorii między fragmentami treningu i szybsze zapytania SQLite poza indeksem RAM. [Opis poprawki](docs/RELEASE_0_14_188_PL.md).
 
 
 Karta agenta ma cztery akcje: **Shadow/Control**, **Wrong decision**, **Settings** i **Teach**. Wrong decision uczy poprawnego Desired. Teach otwiera powiększalny wykres historii z wyborem dokładnej chwili i zapisem poprawnego Desired. Cofanie ostatniej korekty jest dostępne w Teach oraz Settings; pozostałe operacje i diagnostyka są w Settings.

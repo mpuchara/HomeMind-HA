@@ -1020,6 +1020,9 @@ class SQLiteTemporalTracker:
         self._owns_connection = connection is None
         self.conn = connection or sqlite3.connect(store.path, timeout=30)
         self.conn.row_factory = sqlite3.Row
+        self._archive_received_index = bool(self.conn.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='index' "
+            "AND name='idx_entity_history_received_ts'").fetchone())
         context_options = dict(getattr(context, "options", {}) or {})
         # Keep the realtime/parent tracker at the historical 2 MB cache. Only an
         # isolated worker receives the larger effective value from its resource profile.
@@ -1191,31 +1194,48 @@ class SQLiteTemporalTracker:
         if float(hi) <= float(lo):
             return []
         result = []
+        columns = "id,entity_id,ts,received_ts,state,attributes_json,context_user_id,source"
+        # The late-receipt branch must seek by receipt time, not scan the entire
+        # old entity prefix. Reuse the existing index; no schema/disk growth.
+        late_table = "entity_history" + (
+            " INDEXED BY idx_entity_history_received_ts" if self._archive_received_index else "")
         for ids in self._chunks(entity_ids):
             marks = ",".join("?" for _ in ids)
             if per_entity_limit is None:
                 sql = (
-                    "SELECT id,entity_id,ts,received_ts,state,attributes_json,context_user_id,source "
+                    f"SELECT {columns} "
                     f"FROM entity_history WHERE entity_id IN ({marks}) "
-                    "AND ts<=? AND COALESCE(received_ts,ts)<=? "
-                    "AND (ts>? OR COALESCE(received_ts,ts)>?) ORDER BY ts,id"
+                    "AND ts>? AND ts<=? AND COALESCE(received_ts,ts)<=? "
+                    "UNION ALL "
+                    f"SELECT {columns} FROM {late_table} WHERE entity_id IN ({marks}) "
+                    "AND ts<=? AND received_ts>? AND received_ts<=? ORDER BY ts,id"
                 )
-                params = [*ids, float(hi), float(hi), float(lo), float(lo)]
+                params = [*ids, float(lo), float(hi), float(hi),
+                          *ids, float(lo), float(lo), float(hi)]
             else:
                 limit = max(1, int(per_entity_limit))
                 parts, params = [], []
                 for eid in ids:
-                    parts.append(
-                        "SELECT * FROM ("
-                        "SELECT id,entity_id,ts,received_ts,state,attributes_json,context_user_id,source "
-                        "FROM entity_history WHERE entity_id=? "
-                        "AND ts<=? AND COALESCE(received_ts,ts)<=? "
-                        "AND (ts>? OR COALESCE(received_ts,ts)>?) "
-                        "ORDER BY ts DESC,id DESC LIMIT ?)"
-                    )
-                    params.extend([eid, float(hi), float(hi), float(lo), float(lo), limit])
+                    # Each disjoint branch may contribute to the final newest K rows.
+                    # Keep its newest K, then merge with the original SQL ts/id order.
+                    parts.extend([
+                        f"SELECT * FROM (SELECT {columns} FROM entity_history WHERE entity_id=? "
+                        "AND ts>? AND ts<=? AND COALESCE(received_ts,ts)<=? "
+                        "ORDER BY ts DESC,id DESC LIMIT ?)",
+                        f"SELECT * FROM (SELECT {columns} FROM {late_table} WHERE entity_id=? "
+                        "AND ts<=? AND received_ts>? AND received_ts<=? "
+                        "ORDER BY ts DESC,id DESC LIMIT ?)"])
+                    params.extend([eid, float(lo), float(hi), float(hi), limit,
+                                   eid, float(lo), float(lo), float(hi), limit])
                 sql = " UNION ALL ".join(parts)
-            result.extend(self._fetch_rows(sql, params))
+            rows = self._fetch_rows(sql, params)
+            if per_entity_limit is not None:
+                grouped = defaultdict(list)
+                for row in rows:
+                    grouped[row['entity_id']].append(row)
+                rows = [row for group in grouped.values()
+                        for row in sorted(group, key=lambda r: (float(r['ts']), int(r['id'])))[-limit:]]
+            result.extend(rows)
             TRAINING_BUDGET.checkpoint("temporal_forward_query")
         result.sort(key=self._row_order)
         return result

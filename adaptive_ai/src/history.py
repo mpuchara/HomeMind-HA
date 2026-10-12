@@ -203,6 +203,7 @@ class HistoryManager(threading.Thread):
         self._persistent_home_context_cache = None
         self._persistent_ram_replay_index = None
         self._persistent_transition_edge_index = None
+        self._persistent_home_statistics = None
         # 0.14.120: exact immutable feature snapshots may live for the whole
         # persistent selected-agent sequence. Keys already include schema/mask,
         # exact causal entity revisions and Home Context revision, so extending
@@ -1627,11 +1628,32 @@ class HistoryManager(threading.Thread):
         self._persistent_home_context_cache = None
         self._persistent_ram_replay_index = None
         self._persistent_transition_edge_index = None
+        self._persistent_home_statistics = None
         self._persistent_feature_snapshot_cache = None
         self._persistent_experience_ids = {}
         self._persistent_replay_provenance_state = None
         self._persistent_continuation_seed_state = None
         self._persistent_neural_sample_state = {}
+
+    def _training_home_statistics(self, connection, start, end, persistent_cache):
+        from causal_home_statistics import CausalHomeStatistics
+        cached = getattr(self, '_persistent_home_statistics', None) if persistent_cache else None
+        started = time.perf_counter()
+        reused = bool(cached is not None and cached.reusable_for(
+            connection, self.engine.context, start, end))
+        self.training_phase_timings['causal_home_statistics_validation_seconds'] = round(
+            time.perf_counter() - started, 6)
+        started = time.perf_counter()
+        if reused:
+            cached.begin_chunk()
+        else:
+            cached = CausalHomeStatistics(connection, self.engine.context, start, end)
+        if persistent_cache:
+            self._persistent_home_statistics = cached
+        self.training_phase_timings['causal_home_statistics_reused'] = reused
+        self.training_phase_timings['causal_home_statistics_build_seconds'] = round(
+            time.perf_counter() - started, 6)
+        return cached
 
     def _persistent_neural_train_buffer(self, agent_id, identity, maxlen):
         """Return one bounded session buffer, resetting it on schema/mask changes."""
@@ -3431,7 +3453,6 @@ class HistoryManager(threading.Thread):
         })
 
         tracker_init_started = time.perf_counter()
-        from causal_home_statistics import CausalHomeStatistics
         timeline = SQLiteTemporalTracker(
             STORE, watched_entities, self.engine.context, start_ts, end_ts,
             query_cache=replay_query_cache,
@@ -3441,9 +3462,8 @@ class HistoryManager(threading.Thread):
             ram_replay_index=ram_replay_index,
             transition_edge_index=transition_edge_index,
         )
-        home_statistics = CausalHomeStatistics(
-            timeline.conn, self.engine.context, ram_cover_start, ram_cover_end
-        )
+        home_statistics = self._training_home_statistics(
+            timeline.conn, ram_cover_start, ram_cover_end, persistent_cache)
         timeline.home_statistics = home_statistics
         self.training_phase_timings['causal_home_statistics'] = home_statistics.status()
         persistence_timeline = SQLiteTemporalTracker(
