@@ -1,0 +1,22 @@
+{
+  "version": "0.14.187",
+  "base_commit": "8acf7011e63cd7e3e438de3ff386d929ea0d2ffe",
+  "full_suite": {
+    "passed": 2242,
+    "seconds": 220.32,
+    "platform": "WSL Ubuntu / Python 3.12.3",
+    "skipped": 0,
+    "log_sha256": "d686d8147a8439650e97c7bbd403a5be070faa550532a70e919c5b140da7f198"
+  },
+  "new_regressions": 5,
+  "benchmark": {
+    "repeats_per_case": 3,
+    "cases": 2,
+    "parity": true,
+    "semantic_model_weights": "exact match, excluding wall-clock last_decay_ts only",
+    "bathroom_replay_reduction_percent": 15.484639605139982,
+    "kitchen_replay_reduction_percent": 11.891405487162787
+  },
+  "scope": "synthetic observations, real isolated worker; no Raspberry Pi end-to-end timing",
+  "compileall": true
+}

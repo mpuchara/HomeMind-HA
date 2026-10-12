@@ -1,10 +1,10 @@
 {
-  "version": "0.14.186",
+  "version": "0.14.187",
   "release_date": "2026-10-12",
-  "base_version": "0.14.185",
-  "base_commit": "f4efd1fd9da39d6189d7d5db519f89481896f213",
-  "release_status": "causal-pretraining-context-assessment",
-  "release_validation_tests_passed": 2237,
+  "base_version": "0.14.186",
+  "base_commit": "8acf7011e63cd7e3e438de3ff386d929ea0d2ffe",
+  "release_status": "bounded-replay-state-decode-reuse",
+  "release_validation_tests_passed": 2242,
   "release_014140": {
     "scope": "inventory_and_remove_remaining_shipped_feature_Handler_fallbacks_for_Candidate_Live_and_manual_feedback_transport",
     "explicit_routes": "manual_feedback.js, candidate_ui.js, candidate_preference_ui.js, /api/candidates, Candidate Teach-RL status/train, generation history/comparison, /api/candidate-live, /api/live and Candidate discard",
@@ -250,7 +250,7 @@
   "pi4_release_gate_contract": "pi4_release_gate_v1",
   "pi4_real_hardware_required": true,
   "stage7_offline_rl_control_unlock": false,
-  "tests_passed": 2214,
+  "tests_passed": 2242,
   "profile": "rpi4-ram-first-complete-discovery-manual-agent-selection",
   "manual_agent_training": true,
   "max_concurrent_training_jobs": 1,
@@ -2641,5 +2641,16 @@
     "control_semantics_changed": false,
     "new_regression_tests": 23,
     "validation": "2237 tests passed, no skips, Linux/WSL Python 3.12.3; 21 new focused tests passed on Windows Python 3.11; actual isolated relay/kitchen training and persisted predictions verified"
+  },
+  "release_014187": {
+    "scope": "bounded tracker-local reuse of decoded archive and journal states",
+    "max_entries_per_tracker": 512,
+    "max_budget_units_per_tracker": 1048576,
+    "training_semantics_changed": false,
+    "storage_limits_changed": false,
+    "new_regression_tests": 5,
+    "validation_tests_expected": 2242,
+    "benchmark": "docs/benchmarks/REPLAY_STATE_CACHE_0_14_187.json",
+    "validation": "2242 tests passed, no skips, Linux/WSL Python 3.12.3; 5 new focused tests also passed on Windows Python 3.11; 3 A/B repetitions per scenario preserved exact semantic model and predictions; compileall passed"
   }
 }

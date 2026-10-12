@@ -1,0 +1,3749 @@
+{
+  "scope": "WSL/Linux real isolated worker, synthetic inputs; not measured on Raspberry Pi",
+  "baseline": "0.14.186",
+  "optimized": "0.14.187",
+  "repeats": 3,
+  "cases": {
+    "bathroom": {
+      "parity": true,
+      "replay_median_seconds": {
+        "baseline": 5.8755,
+        "optimized": 4.9657
+      },
+      "speedup": 1.1832168677125077,
+      "replay_time_reduction_percent": 15.484639605139982,
+      "runs": {
+        "baseline": [
+          {
+            "scope": "real isolated HistoryManager + persisted Ridge; synthetic observations, no HA dispatch",
+            "target": "switch.shellyplus1pm_441793a613bc_switch_0",
+            "primary": "sensor.espen4_stationary_energy",
+            "predictions": [
+              {
+                "phase": "empty",
+                "energy": 8,
+                "expected": 0,
+                "predicted": 0.0,
+                "means": [
+                  0.92725,
+                  -0.92725
+                ]
+              },
+              {
+                "phase": "entry",
+                "energy": 55,
+                "expected": 1,
+                "predicted": 1.0,
+                "means": [
+                  -0.99905,
+                  0.99905
+                ]
+              },
+              {
+                "phase": "stationary",
+                "energy": 24,
+                "expected": 1,
+                "predicted": 1.0,
+                "means": [
+                  -0.84465,
+                  0.84465
+                ]
+              },
+              {
+                "phase": "washbasin",
+                "energy": 28,
+                "expected": 1,
+                "predicted": 1.0,
+                "means": [
+                  -0.88662,
+                  0.88662
+                ]
+              },
+              {
+                "phase": "exit",
+                "energy": 8,
+                "expected": 0,
+                "predicted": 0.0,
+                "means": [
+                  0.94181,
+                  -0.94181
+                ]
+              },
+              {
+                "phase": "short_dip",
+                "energy": 8,
+                "expected": 1,
+                "predicted": 1.0,
+                "means": [
+                  -0.1049,
+                  0.1049
+                ]
+              },
+              {
+                "phase": "short_visit_entry",
+                "energy": 55,
+                "expected": 1,
+                "predicted": 1.0,
+                "means": [
+                  -0.99989,
+                  0.99989
+                ]
+              },
+              {
+                "phase": "short_visit_stay",
+                "energy": 55,
+                "expected": 1,
+                "predicted": 1.0,
+                "means": [
+                  -0.99282,
+                  0.99282
+                ]
+              }
+            ],
+            "updates": 116.62499999999942,
+            "policy_contract": [
+              128,
+              11,
+              11,
+              [
+                0.0,
+                1.0
+              ],
+              0.0,
+              1.0
+            ],
+            "raw_heads": {
+              "1": {
+                "counts": [
+                  60.000000000000306,
+                  56.625
+                ],
+                "updates": 116.62499999999942,
+                "dims": 128
+              }
+            },
+            "experience_rewards": [
+              0.5951879358997025,
+              0.8,
+              0.8
+            ],
+            "training_quality": {
+              "patterns": {
+                "contract": "conditional_light_training_quality_v1",
+                "contexts": 3,
+                "queries": 240,
+                "downweighted": 0,
+                "manual_preserved": 0,
+                "minimum_independent_days": 3,
+                "minority_weight_floor": 0.2
+              },
+              "outcomes": {
+                "unknown_outcome": 240
+              },
+              "historical_accuracy_is_superiority_proof": false
+            },
+            "maintenance_holdout": {
+              "contract": "frozen_or_prequential_holdout_v1",
+              "samples": 45,
+              "correct": 45,
+              "overall_accuracy": 1.0,
+              "balanced_accuracy": 1.0,
+              "per_action_accuracy": {
+                "0": 1.0,
+                "1": 1.0
+              },
+              "class_coverage": true,
+              "balanced": true,
+              "minimum_samples": 12,
+              "enough_samples": true,
+              "status": "ok",
+              "score": 1.0,
+              "counts": {
+                "samples": 45,
+                "correct": 45,
+                "per_action": {
+                  "0": {
+                    "samples": 24,
+                    "correct": 24
+                  },
+                  "1": {
+                    "samples": 21,
+                    "correct": 21
+                  }
+                }
+              },
+              "enabled": true,
+              "passed": true,
+              "unit": "one completed dwell; all bounded interior predictions correct"
+            },
+            "frozen_onset": {
+              "contract": "frozen_or_prequential_holdout_v1",
+              "samples": 48,
+              "correct": 48,
+              "overall_accuracy": 1.0,
+              "balanced_accuracy": 1.0,
+              "per_action_accuracy": {
+                "0": 1.0,
+                "1": 1.0
+              },
+              "class_coverage": true,
+              "balanced": true,
+              "minimum_samples": 12,
+              "enough_samples": true,
+              "status": "ok",
+              "score": 1.0,
+              "counts": {
+                "samples": 48,
+                "correct": 48,
+                "per_action": {
+                  "0": {
+                    "samples": 24,
+                    "correct": 24
+                  },
+                  "1": {
+                    "samples": 24,
+                    "correct": 24
+                  }
+                }
+              }
+            },
+            "feature_contract": 3,
+            "persisted_feature_contract": 4,
+            "persisted_entities": [
+              "sensor.espen4_stationary_energy",
+              "sensor.espen4_moving_energy",
+              "sensor.espen4_stationary_target_distance"
+            ],
+            "context_assessment": {
+              "version": 1,
+              "driver": "sensor.espen4_stationary_energy",
+              "opportunities": 96,
+              "rows": 52970,
+              "bounded": false,
+              "end_ts": 1800131435.0,
+              "sensors": {
+                "sensor.espen4_light": {
+                  "samples": 96,
+                  "status": "uninformative_range"
+                }
+              },
+              "basis": "pre_arrival_target_off; chronological_training_slice",
+              "start_ts": 1799999955.0,
+              "selected": [
+                "sensor.espen4_stationary_energy",
+                "sensor.espen4_moving_energy",
+                "sensor.espen4_stationary_target_distance"
+              ],
+              "excluded": [
+                "sensor.espen4_light"
+              ],
+              "configured_lighting": false,
+              "behavioural_scores": {
+                "sensor.espen4_stationary_energy": 1.0,
+                "sensor.espen4_moving_energy": 1.0
+              },
+              "target_entity": "switch.shellyplus1pm_441793a613bc_switch_0",
+              "target_property": "power"
+            },
+            "worker_wall_seconds": 8.445215378,
+            "neural_tournament": null,
+            "pass": true,
+            "semantic_model_sha256": "7a055df1b78a664a1ef05a13f8500a722f21bc21bed5c99330e45ddd110c1659",
+            "schema": {
+              "version": 12,
+              "dims": 128,
+              "entities": [
+                "sensor.espen4_stationary_energy",
+                "sensor.espen4_moving_energy",
+                "sensor.espen4_stationary_target_distance"
+              ],
+              "entity_features": [
+                "value",
+                "valid",
+                "communication_age",
+                "event_age",
+                "quality",
+                "trend_1",
+                "trend_2",
+                "trend_3",
+                "time_since_edge",
+                "category_bit_0",
+                "category_bit_1",
+                "category_bit_2"
+              ],
+              "home_features": [
+                "occupancy_now",
+                "occupancy_in_1s",
+                "occupancy_in_3s",
+                "occupancy_in_5s",
+                "arrival_probability",
+                "departure_probability",
+                "trajectory_confidence",
+                "known"
+              ],
+              "feature_contract_version": 4
+            },
+            "phase_timings": {
+              "benchmark_persist_seconds": 0.001113,
+              "causal_home_statistics": {
+                "compressed_bytes": 226,
+                "contract": "causal_home_statistics_v1",
+                "cursor_bytes": 9786,
+                "cursor_entries": 2,
+                "cursor_hits": 1151,
+                "cursor_restores": 122,
+                "direct_sources": 0,
+                "max_bytes": 8388608,
+                "query_calls": 1273,
+                "query_rows": 0,
+                "snapshots": 1,
+                "source_rows": 0
+              },
+              "context_assessment_seconds": 1.3532,
+              "context_entities_reconstructed_by_trackers": 3,
+              "context_screening_scope": "seeded_context",
+              "continuation_cached_rows": 15,
+              "contract": "single_agent_training_phase_timing_v1",
+              "end_ts": 1800164305.0,
+              "experience_dedup_cache_hits": 0,
+              "experience_dedup_cached_ids": 0,
+              "experience_dedup_db_loads": 1,
+              "experience_dedup_load_seconds": 0.000502,
+              "feature_snapshot_build_seconds": 0.866439,
+              "feature_snapshot_builds": 1153,
+              "feature_snapshot_cache_hits": 0,
+              "feature_snapshot_cache_misses": 1153,
+              "feature_snapshot_duplicate_hits": 0,
+              "feature_snapshot_session_builds_total": 1153,
+              "feature_snapshot_session_hits_total": 0,
+              "feature_snapshot_session_reused": false,
+              "feature_snapshot_unique_timestamps": 1153,
+              "finalization_seconds": 0.0587,
+              "full_archive_count_skipped": false,
+              "heldout_fold_seconds": 3e-06,
+              "legacy_outer_stream_entity_count": 4,
+              "neural_finalize_requested": true,
+              "neural_train_samples_buffered": 0,
+              "policy_serialize_persist_seconds": 0.011702,
+              "provenance_cache_hits": 0,
+              "provenance_cached_rows": 0,
+              "provenance_db_loads": 0,
+              "provenance_load_seconds": 1e-06,
+              "provenance_loaded_rows": 0,
+              "qualification_seconds": 0.001479,
+              "ram_index_construction_seconds": 0.1591,
+              "ram_replay_actual_bytes": 3088137,
+              "ram_replay_entities": 11,
+              "ram_replay_estimated_bytes": 3102601,
+              "ram_replay_fallback": false,
+              "ram_replay_fallback_entities": 0,
+              "ram_replay_index_reused": false,
+              "ram_replay_lookup_seconds": 0.1909,
+              "ram_replay_lookups": 4997,
+              "ram_replay_rows": 51466,
+              "replay_driver_rows_planned": 241,
+              "replay_driver_rows_processed": 241,
+              "replay_seconds": 6.0167,
+              "replay_stream_contract": "target_only_driver_v1",
+              "rewarded_dwells": 240,
+              "screening_rows": 52970,
+              "screening_seconds": 0.6764,
+              "sqlite_fallback_lookups": 0,
+              "sqlite_fallback_seconds": 0.0,
+              "start_ts": 1799999955.0,
+              "target_entities": 1,
+              "tiny_mlp_finalization_deferred": false,
+              "tiny_mlp_finalization_seconds": 4e-06,
+              "total_seconds": 8.3233,
+              "tracker_init_seconds": 0.00197,
+              "transition_edge_cursor_rewinds": 0,
+              "transition_edge_entities": 0,
+              "transition_edge_estimated_bytes": 0,
+              "transition_edge_fallback_entities": 0,
+              "transition_edge_index_construction_seconds": 0.0,
+              "transition_edge_index_fallbacks": 0,
+              "transition_edge_index_hits": 0,
+              "transition_edge_index_lookups": 0,
+              "transition_edge_index_reused": false,
+              "transition_edge_rows_applied": 0,
+              "transition_edge_scan_rows_avoided_estimate": 0,
+              "transition_edge_source_rows": 0
+            }
+          },
+          {
+            "scope": "real isolated HistoryManager + persisted Ridge; synthetic observations, no HA dispatch",
+            "target": "switch.shellyplus1pm_441793a613bc_switch_0",
+            "primary": "sensor.espen4_stationary_energy",
+            "predictions": [
+              {
+                "phase": "empty",
+                "energy": 8,
+                "expected": 0,
+                "predicted": 0.0,
+                "means": [
+                  0.92725,
+                  -0.92725
+                ]
+              },
+              {
+                "phase": "entry",
+                "energy": 55,
+                "expected": 1,
+                "predicted": 1.0,
+                "means": [
+                  -0.99905,
+                  0.99905
+                ]
+              },
+              {
+                "phase": "stationary",
+                "energy": 24,
+                "expected": 1,
+                "predicted": 1.0,
+                "means": [
+                  -0.84465,
+                  0.84465
+                ]
+              },
+              {
+                "phase": "washbasin",
+                "energy": 28,
+                "expected": 1,
+                "predicted": 1.0,
+                "means": [
+                  -0.88662,
+                  0.88662
+                ]
+              },
+              {
+                "phase": "exit",
+                "energy": 8,
+                "expected": 0,
+                "predicted": 0.0,
+                "means": [
+                  0.94181,
+                  -0.94181
+                ]
+              },
+              {
+                "phase": "short_dip",
+                "energy": 8,
+                "expected": 1,
+                "predicted": 1.0,
+                "means": [
+                  -0.1049,
+                  0.1049
+                ]
+              },
+              {
+                "phase": "short_visit_entry",
+                "energy": 55,
+                "expected": 1,
+                "predicted": 1.0,
+                "means": [
+                  -0.99989,
+                  0.99989
+                ]
+              },
+              {
+                "phase": "short_visit_stay",
+                "energy": 55,
+                "expected": 1,
+                "predicted": 1.0,
+                "means": [
+                  -0.99282,
+                  0.99282
+                ]
+              }
+            ],
+            "updates": 116.62499999999942,
+            "policy_contract": [
+              128,
+              11,
+              11,
+              [
+                0.0,
+                1.0
+              ],
+              0.0,
+              1.0
+            ],
+            "raw_heads": {
+              "1": {
+                "counts": [
+                  60.000000000000306,
+                  56.625
+                ],
+                "updates": 116.62499999999942,
+                "dims": 128
+              }
+            },
+            "experience_rewards": [
+              0.5951879358997025,
+              0.8,
+              0.8
+            ],
+            "training_quality": {
+              "patterns": {
+                "contract": "conditional_light_training_quality_v1",
+                "contexts": 3,
+                "queries": 240,
+                "downweighted": 0,
+                "manual_preserved": 0,
+                "minimum_independent_days": 3,
+                "minority_weight_floor": 0.2
+              },
+              "outcomes": {
+                "unknown_outcome": 240
+              },
+              "historical_accuracy_is_superiority_proof": false
+            },
+            "maintenance_holdout": {
+              "contract": "frozen_or_prequential_holdout_v1",
+              "samples": 45,
+              "correct": 45,
+              "overall_accuracy": 1.0,
+              "balanced_accuracy": 1.0,
+              "per_action_accuracy": {
+                "0": 1.0,
+                "1": 1.0
+              },
+              "class_coverage": true,
+              "balanced": true,
+              "minimum_samples": 12,
+              "enough_samples": true,
+              "status": "ok",
+              "score": 1.0,
+              "counts": {
+                "samples": 45,
+                "correct": 45,
+                "per_action": {
+                  "0": {
+                    "samples": 24,
+                    "correct": 24
+                  },
+                  "1": {
+                    "samples": 21,
+                    "correct": 21
+                  }
+                }
+              },
+              "enabled": true,
+              "passed": true,
+              "unit": "one completed dwell; all bounded interior predictions correct"
+            },
+            "frozen_onset": {
+              "contract": "frozen_or_prequential_holdout_v1",
+              "samples": 48,
+              "correct": 48,
+              "overall_accuracy": 1.0,
+              "balanced_accuracy": 1.0,
+              "per_action_accuracy": {
+                "0": 1.0,
+                "1": 1.0
+              },
+              "class_coverage": true,
+              "balanced": true,
+              "minimum_samples": 12,
+              "enough_samples": true,
+              "status": "ok",
+              "score": 1.0,
+              "counts": {
+                "samples": 48,
+                "correct": 48,
+                "per_action": {
+                  "0": {
+                    "samples": 24,
+                    "correct": 24
+                  },
+                  "1": {
+                    "samples": 24,
+                    "correct": 24
+                  }
+                }
+              }
+            },
+            "feature_contract": 3,
+            "persisted_feature_contract": 4,
+            "persisted_entities": [
+              "sensor.espen4_stationary_energy",
+              "sensor.espen4_moving_energy",
+              "sensor.espen4_stationary_target_distance"
+            ],
+            "context_assessment": {
+              "version": 1,
+              "driver": "sensor.espen4_stationary_energy",
+              "opportunities": 96,
+              "rows": 52970,
+              "bounded": false,
+              "end_ts": 1800131435.0,
+              "sensors": {
+                "sensor.espen4_light": {
+                  "samples": 96,
+                  "status": "uninformative_range"
+                }
+              },
+              "basis": "pre_arrival_target_off; chronological_training_slice",
+              "start_ts": 1799999955.0,
+              "selected": [
+                "sensor.espen4_stationary_energy",
+                "sensor.espen4_moving_energy",
+                "sensor.espen4_stationary_target_distance"
+              ],
+              "excluded": [
+                "sensor.espen4_light"
+              ],
+              "configured_lighting": false,
+              "behavioural_scores": {
+                "sensor.espen4_moving_energy": 1.0,
+                "sensor.espen4_stationary_energy": 1.0
+              },
+              "target_entity": "switch.shellyplus1pm_441793a613bc_switch_0",
+              "target_property": "power"
+            },
+            "worker_wall_seconds": 8.126374541999997,
+            "neural_tournament": null,
+            "pass": true,
+            "semantic_model_sha256": "7a055df1b78a664a1ef05a13f8500a722f21bc21bed5c99330e45ddd110c1659",
+            "schema": {
+              "version": 12,
+              "dims": 128,
+              "entities": [
+                "sensor.espen4_stationary_energy",
+                "sensor.espen4_moving_energy",
+                "sensor.espen4_stationary_target_distance"
+              ],
+              "entity_features": [
+                "value",
+                "valid",
+                "communication_age",
+                "event_age",
+                "quality",
+                "trend_1",
+                "trend_2",
+                "trend_3",
+                "time_since_edge",
+                "category_bit_0",
+                "category_bit_1",
+                "category_bit_2"
+              ],
+              "home_features": [
+                "occupancy_now",
+                "occupancy_in_1s",
+                "occupancy_in_3s",
+                "occupancy_in_5s",
+                "arrival_probability",
+                "departure_probability",
+                "trajectory_confidence",
+                "known"
+              ],
+              "feature_contract_version": 4
+            },
+            "phase_timings": {
+              "benchmark_persist_seconds": 0.001012,
+              "causal_home_statistics": {
+                "compressed_bytes": 226,
+                "contract": "causal_home_statistics_v1",
+                "cursor_bytes": 9786,
+                "cursor_entries": 2,
+                "cursor_hits": 1151,
+                "cursor_restores": 122,
+                "direct_sources": 0,
+                "max_bytes": 8388608,
+                "query_calls": 1273,
+                "query_rows": 0,
+                "snapshots": 1,
+                "source_rows": 0
+              },
+              "context_assessment_seconds": 1.2765,
+              "context_entities_reconstructed_by_trackers": 3,
+              "context_screening_scope": "seeded_context",
+              "continuation_cached_rows": 15,
+              "contract": "single_agent_training_phase_timing_v1",
+              "end_ts": 1800164305.0,
+              "experience_dedup_cache_hits": 0,
+              "experience_dedup_cached_ids": 0,
+              "experience_dedup_db_loads": 1,
+              "experience_dedup_load_seconds": 0.000423,
+              "feature_snapshot_build_seconds": 0.834659,
+              "feature_snapshot_builds": 1153,
+              "feature_snapshot_cache_hits": 0,
+              "feature_snapshot_cache_misses": 1153,
+              "feature_snapshot_duplicate_hits": 0,
+              "feature_snapshot_session_builds_total": 1153,
+              "feature_snapshot_session_hits_total": 0,
+              "feature_snapshot_session_reused": false,
+              "feature_snapshot_unique_timestamps": 1153,
+              "finalization_seconds": 0.0507,
+              "full_archive_count_skipped": false,
+              "heldout_fold_seconds": 3e-06,
+              "legacy_outer_stream_entity_count": 4,
+              "neural_finalize_requested": true,
+              "neural_train_samples_buffered": 0,
+              "policy_serialize_persist_seconds": 0.013562,
+              "provenance_cache_hits": 0,
+              "provenance_cached_rows": 0,
+              "provenance_db_loads": 0,
+              "provenance_load_seconds": 1e-06,
+              "provenance_loaded_rows": 0,
+              "qualification_seconds": 0.001547,
+              "ram_index_construction_seconds": 0.1533,
+              "ram_replay_actual_bytes": 3088137,
+              "ram_replay_entities": 11,
+              "ram_replay_estimated_bytes": 3102601,
+              "ram_replay_fallback": false,
+              "ram_replay_fallback_entities": 0,
+              "ram_replay_index_reused": false,
+              "ram_replay_lookup_seconds": 0.180074,
+              "ram_replay_lookups": 4997,
+              "ram_replay_rows": 51466,
+              "replay_driver_rows_planned": 241,
+              "replay_driver_rows_processed": 241,
+              "replay_seconds": 5.7346,
+              "replay_stream_contract": "target_only_driver_v1",
+              "rewarded_dwells": 240,
+              "screening_rows": 52970,
+              "screening_seconds": 0.7229,
+              "sqlite_fallback_lookups": 0,
+              "sqlite_fallback_seconds": 0.0,
+              "start_ts": 1799999955.0,
+              "target_entities": 1,
+              "tiny_mlp_finalization_deferred": false,
+              "tiny_mlp_finalization_seconds": 5e-06,
+              "total_seconds": 7.994,
+              "tracker_init_seconds": 0.000797,
+              "transition_edge_cursor_rewinds": 0,
+              "transition_edge_entities": 0,
+              "transition_edge_estimated_bytes": 0,
+              "transition_edge_fallback_entities": 0,
+              "transition_edge_index_construction_seconds": 0.0,
+              "transition_edge_index_fallbacks": 0,
+              "transition_edge_index_hits": 0,
+              "transition_edge_index_lookups": 0,
+              "transition_edge_index_reused": false,
+              "transition_edge_rows_applied": 0,
+              "transition_edge_scan_rows_avoided_estimate": 0,
+              "transition_edge_source_rows": 0
+            }
+          },
+          {
+            "scope": "real isolated HistoryManager + persisted Ridge; synthetic observations, no HA dispatch",
+            "target": "switch.shellyplus1pm_441793a613bc_switch_0",
+            "primary": "sensor.espen4_stationary_energy",
+            "predictions": [
+              {
+                "phase": "empty",
+                "energy": 8,
+                "expected": 0,
+                "predicted": 0.0,
+                "means": [
+                  0.92725,
+                  -0.92725
+                ]
+              },
+              {
+                "phase": "entry",
+                "energy": 55,
+                "expected": 1,
+                "predicted": 1.0,
+                "means": [
+                  -0.99905,
+                  0.99905
+                ]
+              },
+              {
+                "phase": "stationary",
+                "energy": 24,
+                "expected": 1,
+                "predicted": 1.0,
+                "means": [
+                  -0.84465,
+                  0.84465
+                ]
+              },
+              {
+                "phase": "washbasin",
+                "energy": 28,
+                "expected": 1,
+                "predicted": 1.0,
+                "means": [
+                  -0.88662,
+                  0.88662
+                ]
+              },
+              {
+                "phase": "exit",
+                "energy": 8,
+                "expected": 0,
+                "predicted": 0.0,
+                "means": [
+                  0.94181,
+                  -0.94181
+                ]
+              },
+              {
+                "phase": "short_dip",
+                "energy": 8,
+                "expected": 1,
+                "predicted": 1.0,
+                "means": [
+                  -0.1049,
+                  0.1049
+                ]
+              },
+              {
+                "phase": "short_visit_entry",
+                "energy": 55,
+                "expected": 1,
+                "predicted": 1.0,
+                "means": [
+                  -0.99989,
+                  0.99989
+                ]
+              },
+              {
+                "phase": "short_visit_stay",
+                "energy": 55,
+                "expected": 1,
+                "predicted": 1.0,
+                "means": [
+                  -0.99282,
+                  0.99282
+                ]
+              }
+            ],
+            "updates": 116.62499999999942,
+            "policy_contract": [
+              128,
+              11,
+              11,
+              [
+                0.0,
+                1.0
+              ],
+              0.0,
+              1.0
+            ],
+            "raw_heads": {
+              "1": {
+                "counts": [
+                  60.000000000000306,
+                  56.625
+                ],
+                "updates": 116.62499999999942,
+                "dims": 128
+              }
+            },
+            "experience_rewards": [
+              0.5951879358997025,
+              0.8,
+              0.8
+            ],
+            "training_quality": {
+              "patterns": {
+                "contract": "conditional_light_training_quality_v1",
+                "contexts": 3,
+                "queries": 240,
+                "downweighted": 0,
+                "manual_preserved": 0,
+                "minimum_independent_days": 3,
+                "minority_weight_floor": 0.2
+              },
+              "outcomes": {
+                "unknown_outcome": 240
+              },
+              "historical_accuracy_is_superiority_proof": false
+            },
+            "maintenance_holdout": {
+              "contract": "frozen_or_prequential_holdout_v1",
+              "samples": 45,
+              "correct": 45,
+              "overall_accuracy": 1.0,
+              "balanced_accuracy": 1.0,
+              "per_action_accuracy": {
+                "0": 1.0,
+                "1": 1.0
+              },
+              "class_coverage": true,
+              "balanced": true,
+              "minimum_samples": 12,
+              "enough_samples": true,
+              "status": "ok",
+              "score": 1.0,
+              "counts": {
+                "samples": 45,
+                "correct": 45,
+                "per_action": {
+                  "0": {
+                    "samples": 24,
+                    "correct": 24
+                  },
+                  "1": {
+                    "samples": 21,
+                    "correct": 21
+                  }
+                }
+              },
+              "enabled": true,
+              "passed": true,
+              "unit": "one completed dwell; all bounded interior predictions correct"
+            },
+            "frozen_onset": {
+              "contract": "frozen_or_prequential_holdout_v1",
+              "samples": 48,
+              "correct": 48,
+              "overall_accuracy": 1.0,
+              "balanced_accuracy": 1.0,
+              "per_action_accuracy": {
+                "0": 1.0,
+                "1": 1.0
+              },
+              "class_coverage": true,
+              "balanced": true,
+              "minimum_samples": 12,
+              "enough_samples": true,
+              "status": "ok",
+              "score": 1.0,
+              "counts": {
+                "samples": 48,
+                "correct": 48,
+                "per_action": {
+                  "0": {
+                    "samples": 24,
+                    "correct": 24
+                  },
+                  "1": {
+                    "samples": 24,
+                    "correct": 24
+                  }
+                }
+              }
+            },
+            "feature_contract": 3,
+            "persisted_feature_contract": 4,
+            "persisted_entities": [
+              "sensor.espen4_stationary_energy",
+              "sensor.espen4_moving_energy",
+              "sensor.espen4_stationary_target_distance"
+            ],
+            "context_assessment": {
+              "version": 1,
+              "driver": "sensor.espen4_stationary_energy",
+              "opportunities": 96,
+              "rows": 52970,
+              "bounded": false,
+              "end_ts": 1800131435.0,
+              "sensors": {
+                "sensor.espen4_light": {
+                  "samples": 96,
+                  "status": "uninformative_range"
+                }
+              },
+              "basis": "pre_arrival_target_off; chronological_training_slice",
+              "start_ts": 1799999955.0,
+              "selected": [
+                "sensor.espen4_stationary_energy",
+                "sensor.espen4_moving_energy",
+                "sensor.espen4_stationary_target_distance"
+              ],
+              "excluded": [
+                "sensor.espen4_light"
+              ],
+              "configured_lighting": false,
+              "behavioural_scores": {
+                "sensor.espen4_stationary_energy": 1.0,
+                "sensor.espen4_moving_energy": 1.0
+              },
+              "target_entity": "switch.shellyplus1pm_441793a613bc_switch_0",
+              "target_property": "power"
+            },
+            "worker_wall_seconds": 8.248623240999997,
+            "neural_tournament": null,
+            "pass": true,
+            "semantic_model_sha256": "7a055df1b78a664a1ef05a13f8500a722f21bc21bed5c99330e45ddd110c1659",
+            "schema": {
+              "version": 12,
+              "dims": 128,
+              "entities": [
+                "sensor.espen4_stationary_energy",
+                "sensor.espen4_moving_energy",
+                "sensor.espen4_stationary_target_distance"
+              ],
+              "entity_features": [
+                "value",
+                "valid",
+                "communication_age",
+                "event_age",
+                "quality",
+                "trend_1",
+                "trend_2",
+                "trend_3",
+                "time_since_edge",
+                "category_bit_0",
+                "category_bit_1",
+                "category_bit_2"
+              ],
+              "home_features": [
+                "occupancy_now",
+                "occupancy_in_1s",
+                "occupancy_in_3s",
+                "occupancy_in_5s",
+                "arrival_probability",
+                "departure_probability",
+                "trajectory_confidence",
+                "known"
+              ],
+              "feature_contract_version": 4
+            },
+            "phase_timings": {
+              "benchmark_persist_seconds": 0.001341,
+              "causal_home_statistics": {
+                "compressed_bytes": 226,
+                "contract": "causal_home_statistics_v1",
+                "cursor_bytes": 9786,
+                "cursor_entries": 2,
+                "cursor_hits": 1151,
+                "cursor_restores": 122,
+                "direct_sources": 0,
+                "max_bytes": 8388608,
+                "query_calls": 1273,
+                "query_rows": 0,
+                "snapshots": 1,
+                "source_rows": 0
+              },
+              "context_assessment_seconds": 1.2721,
+              "context_entities_reconstructed_by_trackers": 3,
+              "context_screening_scope": "seeded_context",
+              "continuation_cached_rows": 15,
+              "contract": "single_agent_training_phase_timing_v1",
+              "end_ts": 1800164305.0,
+              "experience_dedup_cache_hits": 0,
+              "experience_dedup_cached_ids": 0,
+              "experience_dedup_db_loads": 1,
+              "experience_dedup_load_seconds": 0.000372,
+              "feature_snapshot_build_seconds": 0.856283,
+              "feature_snapshot_builds": 1153,
+              "feature_snapshot_cache_hits": 0,
+              "feature_snapshot_cache_misses": 1153,
+              "feature_snapshot_duplicate_hits": 0,
+              "feature_snapshot_session_builds_total": 1153,
+              "feature_snapshot_session_hits_total": 0,
+              "feature_snapshot_session_reused": false,
+              "feature_snapshot_unique_timestamps": 1153,
+              "finalization_seconds": 0.0561,
+              "full_archive_count_skipped": false,
+              "heldout_fold_seconds": 3e-06,
+              "legacy_outer_stream_entity_count": 4,
+              "neural_finalize_requested": true,
+              "neural_train_samples_buffered": 0,
+              "policy_serialize_persist_seconds": 0.012101,
+              "provenance_cache_hits": 0,
+              "provenance_cached_rows": 0,
+              "provenance_db_loads": 0,
+              "provenance_load_seconds": 1e-06,
+              "provenance_loaded_rows": 0,
+              "qualification_seconds": 0.001701,
+              "ram_index_construction_seconds": 0.15,
+              "ram_replay_actual_bytes": 3088137,
+              "ram_replay_entities": 11,
+              "ram_replay_estimated_bytes": 3102601,
+              "ram_replay_fallback": false,
+              "ram_replay_fallback_entities": 0,
+              "ram_replay_index_reused": false,
+              "ram_replay_lookup_seconds": 0.186673,
+              "ram_replay_lookups": 4997,
+              "ram_replay_rows": 51466,
+              "replay_driver_rows_planned": 241,
+              "replay_driver_rows_processed": 241,
+              "replay_seconds": 5.8755,
+              "replay_stream_contract": "target_only_driver_v1",
+              "rewarded_dwells": 240,
+              "screening_rows": 52970,
+              "screening_seconds": 0.6952,
+              "sqlite_fallback_lookups": 0,
+              "sqlite_fallback_seconds": 0.0,
+              "start_ts": 1799999955.0,
+              "target_entities": 1,
+              "tiny_mlp_finalization_deferred": false,
+              "tiny_mlp_finalization_seconds": 5e-06,
+              "total_seconds": 8.1019,
+              "tracker_init_seconds": 0.000823,
+              "transition_edge_cursor_rewinds": 0,
+              "transition_edge_entities": 0,
+              "transition_edge_estimated_bytes": 0,
+              "transition_edge_fallback_entities": 0,
+              "transition_edge_index_construction_seconds": 0.0,
+              "transition_edge_index_fallbacks": 0,
+              "transition_edge_index_hits": 0,
+              "transition_edge_index_lookups": 0,
+              "transition_edge_index_reused": false,
+              "transition_edge_rows_applied": 0,
+              "transition_edge_scan_rows_avoided_estimate": 0,
+              "transition_edge_source_rows": 0
+            }
+          }
+        ],
+        "optimized": [
+          {
+            "scope": "real isolated HistoryManager + persisted Ridge; synthetic observations, no HA dispatch",
+            "target": "switch.shellyplus1pm_441793a613bc_switch_0",
+            "primary": "sensor.espen4_stationary_energy",
+            "predictions": [
+              {
+                "phase": "empty",
+                "energy": 8,
+                "expected": 0,
+                "predicted": 0.0,
+                "means": [
+                  0.92725,
+                  -0.92725
+                ]
+              },
+              {
+                "phase": "entry",
+                "energy": 55,
+                "expected": 1,
+                "predicted": 1.0,
+                "means": [
+                  -0.99905,
+                  0.99905
+                ]
+              },
+              {
+                "phase": "stationary",
+                "energy": 24,
+                "expected": 1,
+                "predicted": 1.0,
+                "means": [
+                  -0.84465,
+                  0.84465
+                ]
+              },
+              {
+                "phase": "washbasin",
+                "energy": 28,
+                "expected": 1,
+                "predicted": 1.0,
+                "means": [
+                  -0.88662,
+                  0.88662
+                ]
+              },
+              {
+                "phase": "exit",
+                "energy": 8,
+                "expected": 0,
+                "predicted": 0.0,
+                "means": [
+                  0.94181,
+                  -0.94181
+                ]
+              },
+              {
+                "phase": "short_dip",
+                "energy": 8,
+                "expected": 1,
+                "predicted": 1.0,
+                "means": [
+                  -0.1049,
+                  0.1049
+                ]
+              },
+              {
+                "phase": "short_visit_entry",
+                "energy": 55,
+                "expected": 1,
+                "predicted": 1.0,
+                "means": [
+                  -0.99989,
+                  0.99989
+                ]
+              },
+              {
+                "phase": "short_visit_stay",
+                "energy": 55,
+                "expected": 1,
+                "predicted": 1.0,
+                "means": [
+                  -0.99282,
+                  0.99282
+                ]
+              }
+            ],
+            "updates": 116.62499999999942,
+            "policy_contract": [
+              128,
+              11,
+              11,
+              [
+                0.0,
+                1.0
+              ],
+              0.0,
+              1.0
+            ],
+            "raw_heads": {
+              "1": {
+                "counts": [
+                  60.000000000000306,
+                  56.625
+                ],
+                "updates": 116.62499999999942,
+                "dims": 128
+              }
+            },
+            "experience_rewards": [
+              0.5951879358997025,
+              0.8,
+              0.8
+            ],
+            "training_quality": {
+              "patterns": {
+                "contract": "conditional_light_training_quality_v1",
+                "contexts": 3,
+                "queries": 240,
+                "downweighted": 0,
+                "manual_preserved": 0,
+                "minimum_independent_days": 3,
+                "minority_weight_floor": 0.2
+              },
+              "outcomes": {
+                "unknown_outcome": 240
+              },
+              "historical_accuracy_is_superiority_proof": false
+            },
+            "maintenance_holdout": {
+              "contract": "frozen_or_prequential_holdout_v1",
+              "samples": 45,
+              "correct": 45,
+              "overall_accuracy": 1.0,
+              "balanced_accuracy": 1.0,
+              "per_action_accuracy": {
+                "0": 1.0,
+                "1": 1.0
+              },
+              "class_coverage": true,
+              "balanced": true,
+              "minimum_samples": 12,
+              "enough_samples": true,
+              "status": "ok",
+              "score": 1.0,
+              "counts": {
+                "samples": 45,
+                "correct": 45,
+                "per_action": {
+                  "0": {
+                    "samples": 24,
+                    "correct": 24
+                  },
+                  "1": {
+                    "samples": 21,
+                    "correct": 21
+                  }
+                }
+              },
+              "enabled": true,
+              "passed": true,
+              "unit": "one completed dwell; all bounded interior predictions correct"
+            },
+            "frozen_onset": {
+              "contract": "frozen_or_prequential_holdout_v1",
+              "samples": 48,
+              "correct": 48,
+              "overall_accuracy": 1.0,
+              "balanced_accuracy": 1.0,
+              "per_action_accuracy": {
+                "0": 1.0,
+                "1": 1.0
+              },
+              "class_coverage": true,
+              "balanced": true,
+              "minimum_samples": 12,
+              "enough_samples": true,
+              "status": "ok",
+              "score": 1.0,
+              "counts": {
+                "samples": 48,
+                "correct": 48,
+                "per_action": {
+                  "0": {
+                    "samples": 24,
+                    "correct": 24
+                  },
+                  "1": {
+                    "samples": 24,
+                    "correct": 24
+                  }
+                }
+              }
+            },
+            "feature_contract": 3,
+            "persisted_feature_contract": 4,
+            "persisted_entities": [
+              "sensor.espen4_stationary_energy",
+              "sensor.espen4_moving_energy",
+              "sensor.espen4_stationary_target_distance"
+            ],
+            "context_assessment": {
+              "version": 1,
+              "driver": "sensor.espen4_stationary_energy",
+              "opportunities": 96,
+              "rows": 52970,
+              "bounded": false,
+              "end_ts": 1800131435.0,
+              "sensors": {
+                "sensor.espen4_light": {
+                  "samples": 96,
+                  "status": "uninformative_range"
+                }
+              },
+              "basis": "pre_arrival_target_off; chronological_training_slice",
+              "start_ts": 1799999955.0,
+              "selected": [
+                "sensor.espen4_stationary_energy",
+                "sensor.espen4_moving_energy",
+                "sensor.espen4_stationary_target_distance"
+              ],
+              "excluded": [
+                "sensor.espen4_light"
+              ],
+              "configured_lighting": false,
+              "behavioural_scores": {
+                "sensor.espen4_stationary_energy": 1.0,
+                "sensor.espen4_moving_energy": 1.0
+              },
+              "target_entity": "switch.shellyplus1pm_441793a613bc_switch_0",
+              "target_property": "power"
+            },
+            "worker_wall_seconds": 7.327772438,
+            "neural_tournament": null,
+            "pass": true,
+            "semantic_model_sha256": "7a055df1b78a664a1ef05a13f8500a722f21bc21bed5c99330e45ddd110c1659",
+            "schema": {
+              "version": 12,
+              "dims": 128,
+              "entities": [
+                "sensor.espen4_stationary_energy",
+                "sensor.espen4_moving_energy",
+                "sensor.espen4_stationary_target_distance"
+              ],
+              "entity_features": [
+                "value",
+                "valid",
+                "communication_age",
+                "event_age",
+                "quality",
+                "trend_1",
+                "trend_2",
+                "trend_3",
+                "time_since_edge",
+                "category_bit_0",
+                "category_bit_1",
+                "category_bit_2"
+              ],
+              "home_features": [
+                "occupancy_now",
+                "occupancy_in_1s",
+                "occupancy_in_3s",
+                "occupancy_in_5s",
+                "arrival_probability",
+                "departure_probability",
+                "trajectory_confidence",
+                "known"
+              ],
+              "feature_contract_version": 4
+            },
+            "phase_timings": {
+              "benchmark_persist_seconds": 0.000991,
+              "causal_home_statistics": {
+                "compressed_bytes": 226,
+                "contract": "causal_home_statistics_v1",
+                "cursor_bytes": 9786,
+                "cursor_entries": 2,
+                "cursor_hits": 1151,
+                "cursor_restores": 122,
+                "direct_sources": 0,
+                "max_bytes": 8388608,
+                "query_calls": 1273,
+                "query_rows": 0,
+                "snapshots": 1,
+                "source_rows": 0
+              },
+              "context_assessment_seconds": 1.3109,
+              "context_entities_reconstructed_by_trackers": 3,
+              "context_screening_scope": "seeded_context",
+              "continuation_cached_rows": 15,
+              "contract": "single_agent_training_phase_timing_v1",
+              "end_ts": 1800164305.0,
+              "experience_dedup_cache_hits": 0,
+              "experience_dedup_cached_ids": 0,
+              "experience_dedup_db_loads": 1,
+              "experience_dedup_load_seconds": 0.000441,
+              "feature_snapshot_build_seconds": 0.861979,
+              "feature_snapshot_builds": 1153,
+              "feature_snapshot_cache_hits": 0,
+              "feature_snapshot_cache_misses": 1153,
+              "feature_snapshot_duplicate_hits": 0,
+              "feature_snapshot_session_builds_total": 1153,
+              "feature_snapshot_session_hits_total": 0,
+              "feature_snapshot_session_reused": false,
+              "feature_snapshot_unique_timestamps": 1153,
+              "finalization_seconds": 0.086,
+              "full_archive_count_skipped": false,
+              "heldout_fold_seconds": 4e-06,
+              "legacy_outer_stream_entity_count": 4,
+              "neural_finalize_requested": true,
+              "neural_train_samples_buffered": 0,
+              "policy_serialize_persist_seconds": 0.014661,
+              "provenance_cache_hits": 0,
+              "provenance_cached_rows": 0,
+              "provenance_db_loads": 0,
+              "provenance_load_seconds": 1e-06,
+              "provenance_loaded_rows": 0,
+              "qualification_seconds": 0.001849,
+              "ram_index_construction_seconds": 0.1526,
+              "ram_replay_actual_bytes": 3088137,
+              "ram_replay_entities": 11,
+              "ram_replay_estimated_bytes": 3102601,
+              "ram_replay_fallback": false,
+              "ram_replay_fallback_entities": 0,
+              "ram_replay_index_reused": false,
+              "ram_replay_lookup_seconds": 0.218878,
+              "ram_replay_lookups": 4997,
+              "ram_replay_rows": 51466,
+              "replay_driver_rows_planned": 241,
+              "replay_driver_rows_processed": 241,
+              "replay_seconds": 4.9657,
+              "replay_stream_contract": "target_only_driver_v1",
+              "rewarded_dwells": 240,
+              "screening_rows": 52970,
+              "screening_seconds": 0.6279,
+              "sqlite_fallback_lookups": 0,
+              "sqlite_fallback_seconds": 0.0,
+              "start_ts": 1799999955.0,
+              "target_entities": 1,
+              "tiny_mlp_finalization_deferred": false,
+              "tiny_mlp_finalization_seconds": 5e-06,
+              "total_seconds": 7.2036,
+              "tracker_init_seconds": 0.002791,
+              "transition_edge_cursor_rewinds": 0,
+              "transition_edge_entities": 0,
+              "transition_edge_estimated_bytes": 0,
+              "transition_edge_fallback_entities": 0,
+              "transition_edge_index_construction_seconds": 0.0,
+              "transition_edge_index_fallbacks": 0,
+              "transition_edge_index_hits": 0,
+              "transition_edge_index_lookups": 0,
+              "transition_edge_index_reused": false,
+              "transition_edge_rows_applied": 0,
+              "transition_edge_scan_rows_avoided_estimate": 0,
+              "transition_edge_source_rows": 0
+            }
+          },
+          {
+            "scope": "real isolated HistoryManager + persisted Ridge; synthetic observations, no HA dispatch",
+            "target": "switch.shellyplus1pm_441793a613bc_switch_0",
+            "primary": "sensor.espen4_stationary_energy",
+            "predictions": [
+              {
+                "phase": "empty",
+                "energy": 8,
+                "expected": 0,
+                "predicted": 0.0,
+                "means": [
+                  0.92725,
+                  -0.92725
+                ]
+              },
+              {
+                "phase": "entry",
+                "energy": 55,
+                "expected": 1,
+                "predicted": 1.0,
+                "means": [
+                  -0.99905,
+                  0.99905
+                ]
+              },
+              {
+                "phase": "stationary",
+                "energy": 24,
+                "expected": 1,
+                "predicted": 1.0,
+                "means": [
+                  -0.84465,
+                  0.84465
+                ]
+              },
+              {
+                "phase": "washbasin",
+                "energy": 28,
+                "expected": 1,
+                "predicted": 1.0,
+                "means": [
+                  -0.88662,
+                  0.88662
+                ]
+              },
+              {
+                "phase": "exit",
+                "energy": 8,
+                "expected": 0,
+                "predicted": 0.0,
+                "means": [
+                  0.94181,
+                  -0.94181
+                ]
+              },
+              {
+                "phase": "short_dip",
+                "energy": 8,
+                "expected": 1,
+                "predicted": 1.0,
+                "means": [
+                  -0.1049,
+                  0.1049
+                ]
+              },
+              {
+                "phase": "short_visit_entry",
+                "energy": 55,
+                "expected": 1,
+                "predicted": 1.0,
+                "means": [
+                  -0.99989,
+                  0.99989
+                ]
+              },
+              {
+                "phase": "short_visit_stay",
+                "energy": 55,
+                "expected": 1,
+                "predicted": 1.0,
+                "means": [
+                  -0.99282,
+                  0.99282
+                ]
+              }
+            ],
+            "updates": 116.62499999999942,
+            "policy_contract": [
+              128,
+              11,
+              11,
+              [
+                0.0,
+                1.0
+              ],
+              0.0,
+              1.0
+            ],
+            "raw_heads": {
+              "1": {
+                "counts": [
+                  60.000000000000306,
+                  56.625
+                ],
+                "updates": 116.62499999999942,
+                "dims": 128
+              }
+            },
+            "experience_rewards": [
+              0.5951879358997025,
+              0.8,
+              0.8
+            ],
+            "training_quality": {
+              "patterns": {
+                "contract": "conditional_light_training_quality_v1",
+                "contexts": 3,
+                "queries": 240,
+                "downweighted": 0,
+                "manual_preserved": 0,
+                "minimum_independent_days": 3,
+                "minority_weight_floor": 0.2
+              },
+              "outcomes": {
+                "unknown_outcome": 240
+              },
+              "historical_accuracy_is_superiority_proof": false
+            },
+            "maintenance_holdout": {
+              "contract": "frozen_or_prequential_holdout_v1",
+              "samples": 45,
+              "correct": 45,
+              "overall_accuracy": 1.0,
+              "balanced_accuracy": 1.0,
+              "per_action_accuracy": {
+                "0": 1.0,
+                "1": 1.0
+              },
+              "class_coverage": true,
+              "balanced": true,
+              "minimum_samples": 12,
+              "enough_samples": true,
+              "status": "ok",
+              "score": 1.0,
+              "counts": {
+                "samples": 45,
+                "correct": 45,
+                "per_action": {
+                  "0": {
+                    "samples": 24,
+                    "correct": 24
+                  },
+                  "1": {
+                    "samples": 21,
+                    "correct": 21
+                  }
+                }
+              },
+              "enabled": true,
+              "passed": true,
+              "unit": "one completed dwell; all bounded interior predictions correct"
+            },
+            "frozen_onset": {
+              "contract": "frozen_or_prequential_holdout_v1",
+              "samples": 48,
+              "correct": 48,
+              "overall_accuracy": 1.0,
+              "balanced_accuracy": 1.0,
+              "per_action_accuracy": {
+                "0": 1.0,
+                "1": 1.0
+              },
+              "class_coverage": true,
+              "balanced": true,
+              "minimum_samples": 12,
+              "enough_samples": true,
+              "status": "ok",
+              "score": 1.0,
+              "counts": {
+                "samples": 48,
+                "correct": 48,
+                "per_action": {
+                  "0": {
+                    "samples": 24,
+                    "correct": 24
+                  },
+                  "1": {
+                    "samples": 24,
+                    "correct": 24
+                  }
+                }
+              }
+            },
+            "feature_contract": 3,
+            "persisted_feature_contract": 4,
+            "persisted_entities": [
+              "sensor.espen4_stationary_energy",
+              "sensor.espen4_moving_energy",
+              "sensor.espen4_stationary_target_distance"
+            ],
+            "context_assessment": {
+              "version": 1,
+              "driver": "sensor.espen4_stationary_energy",
+              "opportunities": 96,
+              "rows": 52970,
+              "bounded": false,
+              "end_ts": 1800131435.0,
+              "sensors": {
+                "sensor.espen4_light": {
+                  "samples": 96,
+                  "status": "uninformative_range"
+                }
+              },
+              "basis": "pre_arrival_target_off; chronological_training_slice",
+              "start_ts": 1799999955.0,
+              "selected": [
+                "sensor.espen4_stationary_energy",
+                "sensor.espen4_moving_energy",
+                "sensor.espen4_stationary_target_distance"
+              ],
+              "excluded": [
+                "sensor.espen4_light"
+              ],
+              "configured_lighting": false,
+              "behavioural_scores": {
+                "sensor.espen4_moving_energy": 1.0,
+                "sensor.espen4_stationary_energy": 1.0
+              },
+              "target_entity": "switch.shellyplus1pm_441793a613bc_switch_0",
+              "target_property": "power"
+            },
+            "worker_wall_seconds": 7.1746435139999996,
+            "neural_tournament": null,
+            "pass": true,
+            "semantic_model_sha256": "7a055df1b78a664a1ef05a13f8500a722f21bc21bed5c99330e45ddd110c1659",
+            "schema": {
+              "version": 12,
+              "dims": 128,
+              "entities": [
+                "sensor.espen4_stationary_energy",
+                "sensor.espen4_moving_energy",
+                "sensor.espen4_stationary_target_distance"
+              ],
+              "entity_features": [
+                "value",
+                "valid",
+                "communication_age",
+                "event_age",
+                "quality",
+                "trend_1",
+                "trend_2",
+                "trend_3",
+                "time_since_edge",
+                "category_bit_0",
+                "category_bit_1",
+                "category_bit_2"
+              ],
+              "home_features": [
+                "occupancy_now",
+                "occupancy_in_1s",
+                "occupancy_in_3s",
+                "occupancy_in_5s",
+                "arrival_probability",
+                "departure_probability",
+                "trajectory_confidence",
+                "known"
+              ],
+              "feature_contract_version": 4
+            },
+            "phase_timings": {
+              "benchmark_persist_seconds": 0.000792,
+              "causal_home_statistics": {
+                "compressed_bytes": 226,
+                "contract": "causal_home_statistics_v1",
+                "cursor_bytes": 9786,
+                "cursor_entries": 2,
+                "cursor_hits": 1151,
+                "cursor_restores": 122,
+                "direct_sources": 0,
+                "max_bytes": 8388608,
+                "query_calls": 1273,
+                "query_rows": 0,
+                "snapshots": 1,
+                "source_rows": 0
+              },
+              "context_assessment_seconds": 1.2059,
+              "context_entities_reconstructed_by_trackers": 3,
+              "context_screening_scope": "seeded_context",
+              "continuation_cached_rows": 15,
+              "contract": "single_agent_training_phase_timing_v1",
+              "end_ts": 1800164305.0,
+              "experience_dedup_cache_hits": 0,
+              "experience_dedup_cached_ids": 0,
+              "experience_dedup_db_loads": 1,
+              "experience_dedup_load_seconds": 0.00043,
+              "feature_snapshot_build_seconds": 0.860443,
+              "feature_snapshot_builds": 1153,
+              "feature_snapshot_cache_hits": 0,
+              "feature_snapshot_cache_misses": 1153,
+              "feature_snapshot_duplicate_hits": 0,
+              "feature_snapshot_session_builds_total": 1153,
+              "feature_snapshot_session_hits_total": 0,
+              "feature_snapshot_session_reused": false,
+              "feature_snapshot_unique_timestamps": 1153,
+              "finalization_seconds": 0.0643,
+              "full_archive_count_skipped": false,
+              "heldout_fold_seconds": 4e-06,
+              "legacy_outer_stream_entity_count": 4,
+              "neural_finalize_requested": true,
+              "neural_train_samples_buffered": 0,
+              "policy_serialize_persist_seconds": 0.012422,
+              "provenance_cache_hits": 0,
+              "provenance_cached_rows": 0,
+              "provenance_db_loads": 0,
+              "provenance_load_seconds": 1e-06,
+              "provenance_loaded_rows": 0,
+              "qualification_seconds": 0.001452,
+              "ram_index_construction_seconds": 0.1566,
+              "ram_replay_actual_bytes": 3088137,
+              "ram_replay_entities": 11,
+              "ram_replay_estimated_bytes": 3102601,
+              "ram_replay_fallback": false,
+              "ram_replay_fallback_entities": 0,
+              "ram_replay_index_reused": false,
+              "ram_replay_lookup_seconds": 0.216184,
+              "ram_replay_lookups": 4997,
+              "ram_replay_rows": 51466,
+              "replay_driver_rows_planned": 241,
+              "replay_driver_rows_processed": 241,
+              "replay_seconds": 4.9181,
+              "replay_stream_contract": "target_only_driver_v1",
+              "rewarded_dwells": 240,
+              "screening_rows": 52970,
+              "screening_seconds": 0.6593,
+              "sqlite_fallback_lookups": 0,
+              "sqlite_fallback_seconds": 0.0,
+              "start_ts": 1799999955.0,
+              "target_entities": 1,
+              "tiny_mlp_finalization_deferred": false,
+              "tiny_mlp_finalization_seconds": 4e-06,
+              "total_seconds": 7.0612,
+              "tracker_init_seconds": 0.001028,
+              "transition_edge_cursor_rewinds": 0,
+              "transition_edge_entities": 0,
+              "transition_edge_estimated_bytes": 0,
+              "transition_edge_fallback_entities": 0,
+              "transition_edge_index_construction_seconds": 0.0,
+              "transition_edge_index_fallbacks": 0,
+              "transition_edge_index_hits": 0,
+              "transition_edge_index_lookups": 0,
+              "transition_edge_index_reused": false,
+              "transition_edge_rows_applied": 0,
+              "transition_edge_scan_rows_avoided_estimate": 0,
+              "transition_edge_source_rows": 0
+            }
+          },
+          {
+            "scope": "real isolated HistoryManager + persisted Ridge; synthetic observations, no HA dispatch",
+            "target": "switch.shellyplus1pm_441793a613bc_switch_0",
+            "primary": "sensor.espen4_stationary_energy",
+            "predictions": [
+              {
+                "phase": "empty",
+                "energy": 8,
+                "expected": 0,
+                "predicted": 0.0,
+                "means": [
+                  0.92725,
+                  -0.92725
+                ]
+              },
+              {
+                "phase": "entry",
+                "energy": 55,
+                "expected": 1,
+                "predicted": 1.0,
+                "means": [
+                  -0.99905,
+                  0.99905
+                ]
+              },
+              {
+                "phase": "stationary",
+                "energy": 24,
+                "expected": 1,
+                "predicted": 1.0,
+                "means": [
+                  -0.84465,
+                  0.84465
+                ]
+              },
+              {
+                "phase": "washbasin",
+                "energy": 28,
+                "expected": 1,
+                "predicted": 1.0,
+                "means": [
+                  -0.88662,
+                  0.88662
+                ]
+              },
+              {
+                "phase": "exit",
+                "energy": 8,
+                "expected": 0,
+                "predicted": 0.0,
+                "means": [
+                  0.94181,
+                  -0.94181
+                ]
+              },
+              {
+                "phase": "short_dip",
+                "energy": 8,
+                "expected": 1,
+                "predicted": 1.0,
+                "means": [
+                  -0.1049,
+                  0.1049
+                ]
+              },
+              {
+                "phase": "short_visit_entry",
+                "energy": 55,
+                "expected": 1,
+                "predicted": 1.0,
+                "means": [
+                  -0.99989,
+                  0.99989
+                ]
+              },
+              {
+                "phase": "short_visit_stay",
+                "energy": 55,
+                "expected": 1,
+                "predicted": 1.0,
+                "means": [
+                  -0.99282,
+                  0.99282
+                ]
+              }
+            ],
+            "updates": 116.62499999999942,
+            "policy_contract": [
+              128,
+              11,
+              11,
+              [
+                0.0,
+                1.0
+              ],
+              0.0,
+              1.0
+            ],
+            "raw_heads": {
+              "1": {
+                "counts": [
+                  60.000000000000306,
+                  56.625
+                ],
+                "updates": 116.62499999999942,
+                "dims": 128
+              }
+            },
+            "experience_rewards": [
+              0.5951879358997025,
+              0.8,
+              0.8
+            ],
+            "training_quality": {
+              "patterns": {
+                "contract": "conditional_light_training_quality_v1",
+                "contexts": 3,
+                "queries": 240,
+                "downweighted": 0,
+                "manual_preserved": 0,
+                "minimum_independent_days": 3,
+                "minority_weight_floor": 0.2
+              },
+              "outcomes": {
+                "unknown_outcome": 240
+              },
+              "historical_accuracy_is_superiority_proof": false
+            },
+            "maintenance_holdout": {
+              "contract": "frozen_or_prequential_holdout_v1",
+              "samples": 45,
+              "correct": 45,
+              "overall_accuracy": 1.0,
+              "balanced_accuracy": 1.0,
+              "per_action_accuracy": {
+                "0": 1.0,
+                "1": 1.0
+              },
+              "class_coverage": true,
+              "balanced": true,
+              "minimum_samples": 12,
+              "enough_samples": true,
+              "status": "ok",
+              "score": 1.0,
+              "counts": {
+                "samples": 45,
+                "correct": 45,
+                "per_action": {
+                  "0": {
+                    "samples": 24,
+                    "correct": 24
+                  },
+                  "1": {
+                    "samples": 21,
+                    "correct": 21
+                  }
+                }
+              },
+              "enabled": true,
+              "passed": true,
+              "unit": "one completed dwell; all bounded interior predictions correct"
+            },
+            "frozen_onset": {
+              "contract": "frozen_or_prequential_holdout_v1",
+              "samples": 48,
+              "correct": 48,
+              "overall_accuracy": 1.0,
+              "balanced_accuracy": 1.0,
+              "per_action_accuracy": {
+                "0": 1.0,
+                "1": 1.0
+              },
+              "class_coverage": true,
+              "balanced": true,
+              "minimum_samples": 12,
+              "enough_samples": true,
+              "status": "ok",
+              "score": 1.0,
+              "counts": {
+                "samples": 48,
+                "correct": 48,
+                "per_action": {
+                  "0": {
+                    "samples": 24,
+                    "correct": 24
+                  },
+                  "1": {
+                    "samples": 24,
+                    "correct": 24
+                  }
+                }
+              }
+            },
+            "feature_contract": 3,
+            "persisted_feature_contract": 4,
+            "persisted_entities": [
+              "sensor.espen4_stationary_energy",
+              "sensor.espen4_moving_energy",
+              "sensor.espen4_stationary_target_distance"
+            ],
+            "context_assessment": {
+              "version": 1,
+              "driver": "sensor.espen4_stationary_energy",
+              "opportunities": 96,
+              "rows": 52970,
+              "bounded": false,
+              "end_ts": 1800131435.0,
+              "sensors": {
+                "sensor.espen4_light": {
+                  "samples": 96,
+                  "status": "uninformative_range"
+                }
+              },
+              "basis": "pre_arrival_target_off; chronological_training_slice",
+              "start_ts": 1799999955.0,
+              "selected": [
+                "sensor.espen4_stationary_energy",
+                "sensor.espen4_moving_energy",
+                "sensor.espen4_stationary_target_distance"
+              ],
+              "excluded": [
+                "sensor.espen4_light"
+              ],
+              "configured_lighting": false,
+              "behavioural_scores": {
+                "sensor.espen4_stationary_energy": 1.0,
+                "sensor.espen4_moving_energy": 1.0
+              },
+              "target_entity": "switch.shellyplus1pm_441793a613bc_switch_0",
+              "target_property": "power"
+            },
+            "worker_wall_seconds": 7.301199156000003,
+            "neural_tournament": null,
+            "pass": true,
+            "semantic_model_sha256": "7a055df1b78a664a1ef05a13f8500a722f21bc21bed5c99330e45ddd110c1659",
+            "schema": {
+              "version": 12,
+              "dims": 128,
+              "entities": [
+                "sensor.espen4_stationary_energy",
+                "sensor.espen4_moving_energy",
+                "sensor.espen4_stationary_target_distance"
+              ],
+              "entity_features": [
+                "value",
+                "valid",
+                "communication_age",
+                "event_age",
+                "quality",
+                "trend_1",
+                "trend_2",
+                "trend_3",
+                "time_since_edge",
+                "category_bit_0",
+                "category_bit_1",
+                "category_bit_2"
+              ],
+              "home_features": [
+                "occupancy_now",
+                "occupancy_in_1s",
+                "occupancy_in_3s",
+                "occupancy_in_5s",
+                "arrival_probability",
+                "departure_probability",
+                "trajectory_confidence",
+                "known"
+              ],
+              "feature_contract_version": 4
+            },
+            "phase_timings": {
+              "benchmark_persist_seconds": 0.000918,
+              "causal_home_statistics": {
+                "compressed_bytes": 226,
+                "contract": "causal_home_statistics_v1",
+                "cursor_bytes": 9786,
+                "cursor_entries": 2,
+                "cursor_hits": 1151,
+                "cursor_restores": 122,
+                "direct_sources": 0,
+                "max_bytes": 8388608,
+                "query_calls": 1273,
+                "query_rows": 0,
+                "snapshots": 1,
+                "source_rows": 0
+              },
+              "context_assessment_seconds": 1.2102,
+              "context_entities_reconstructed_by_trackers": 3,
+              "context_screening_scope": "seeded_context",
+              "continuation_cached_rows": 15,
+              "contract": "single_agent_training_phase_timing_v1",
+              "end_ts": 1800164305.0,
+              "experience_dedup_cache_hits": 0,
+              "experience_dedup_cached_ids": 0,
+              "experience_dedup_db_loads": 1,
+              "experience_dedup_load_seconds": 0.000405,
+              "feature_snapshot_build_seconds": 0.883615,
+              "feature_snapshot_builds": 1153,
+              "feature_snapshot_cache_hits": 0,
+              "feature_snapshot_cache_misses": 1153,
+              "feature_snapshot_duplicate_hits": 0,
+              "feature_snapshot_session_builds_total": 1153,
+              "feature_snapshot_session_hits_total": 0,
+              "feature_snapshot_session_reused": false,
+              "feature_snapshot_unique_timestamps": 1153,
+              "finalization_seconds": 0.0777,
+              "full_archive_count_skipped": false,
+              "heldout_fold_seconds": 5e-06,
+              "legacy_outer_stream_entity_count": 4,
+              "neural_finalize_requested": true,
+              "neural_train_samples_buffered": 0,
+              "policy_serialize_persist_seconds": 0.012877,
+              "provenance_cache_hits": 0,
+              "provenance_cached_rows": 0,
+              "provenance_db_loads": 0,
+              "provenance_load_seconds": 1e-06,
+              "provenance_loaded_rows": 0,
+              "qualification_seconds": 0.001595,
+              "ram_index_construction_seconds": 0.1372,
+              "ram_replay_actual_bytes": 3088137,
+              "ram_replay_entities": 11,
+              "ram_replay_estimated_bytes": 3102601,
+              "ram_replay_fallback": false,
+              "ram_replay_fallback_entities": 0,
+              "ram_replay_index_reused": false,
+              "ram_replay_lookup_seconds": 0.221327,
+              "ram_replay_lookups": 4997,
+              "ram_replay_rows": 51466,
+              "replay_driver_rows_planned": 241,
+              "replay_driver_rows_processed": 241,
+              "replay_seconds": 5.0357,
+              "replay_stream_contract": "target_only_driver_v1",
+              "rewarded_dwells": 240,
+              "screening_rows": 52970,
+              "screening_seconds": 0.6679,
+              "sqlite_fallback_lookups": 0,
+              "sqlite_fallback_seconds": 0.0,
+              "start_ts": 1799999955.0,
+              "target_entities": 1,
+              "tiny_mlp_finalization_deferred": false,
+              "tiny_mlp_finalization_seconds": 5e-06,
+              "total_seconds": 7.1799,
+              "tracker_init_seconds": 0.000906,
+              "transition_edge_cursor_rewinds": 0,
+              "transition_edge_entities": 0,
+              "transition_edge_estimated_bytes": 0,
+              "transition_edge_fallback_entities": 0,
+              "transition_edge_index_construction_seconds": 0.0,
+              "transition_edge_index_fallbacks": 0,
+              "transition_edge_index_hits": 0,
+              "transition_edge_index_lookups": 0,
+              "transition_edge_index_reused": false,
+              "transition_edge_rows_applied": 0,
+              "transition_edge_scan_rows_avoided_estimate": 0,
+              "transition_edge_source_rows": 0
+            }
+          }
+        ]
+      }
+    },
+    "kitchen": {
+      "parity": true,
+      "replay_median_seconds": {
+        "baseline": 5.2231,
+        "optimized": 4.602
+      },
+      "speedup": 1.1349630595393305,
+      "replay_time_reduction_percent": 11.891405487162787,
+      "runs": {
+        "baseline": [
+          {
+            "scope": "isolated HistoryManager and persisted policy, synthetic data, no HA dispatch",
+            "predictions": [
+              {
+                "phase": "empty_dark",
+                "expected": 0,
+                "predicted": 0.0,
+                "raw_prediction": 0.0,
+                "means": [
+                  0.9951806494212017,
+                  -0.9951806494212017
+                ],
+                "values": {
+                  "5": -1.0,
+                  "17": 0.5490396778473451,
+                  "29": 0.07982976911113136
+                }
+              },
+              {
+                "phase": "occupied_dark_entry",
+                "expected": 1,
+                "predicted": 1.0,
+                "raw_prediction": 1.0,
+                "means": [
+                  -0.6774944558358436,
+                  0.6774944558358436
+                ],
+                "values": {
+                  "5": 1.0,
+                  "17": 0.5490396778473451,
+                  "29": 0.23549574953849794
+                }
+              },
+              {
+                "phase": "empty_bright",
+                "expected": 0,
+                "predicted": 0.0,
+                "raw_prediction": 0.0,
+                "means": [
+                  0.9999746568514047,
+                  -0.9999746568514047
+                ],
+                "values": {
+                  "5": -1.0,
+                  "17": 0.9048005924156349,
+                  "29": 0.07982976911113136
+                }
+              },
+              {
+                "phase": "occupied_daylight",
+                "expected": 0,
+                "predicted": 0.0,
+                "raw_prediction": 0.0,
+                "means": [
+                  0.9468757090899222,
+                  -0.9468757090899222
+                ],
+                "values": {
+                  "5": 1.0,
+                  "17": 0.9048005924156349,
+                  "29": 0.23549574953849794
+                }
+              },
+              {
+                "phase": "stationary_with_emitted_light",
+                "expected": 1,
+                "predicted": 1.0,
+                "raw_prediction": 1.0,
+                "means": [
+                  -0.6752057098448414,
+                  0.6752057098448414
+                ],
+                "values": {
+                  "5": 1.0,
+                  "17": 0.5490396778473451,
+                  "29": 0.23549574953849794
+                }
+              }
+            ],
+            "training_quality": {
+              "patterns": {
+                "contract": "conditional_light_training_quality_v1",
+                "contexts": 2,
+                "queries": 120,
+                "downweighted": 0,
+                "manual_preserved": 0,
+                "minimum_independent_days": 3,
+                "minority_weight_floor": 0.2
+              },
+              "outcomes": {
+                "unknown_outcome": 60,
+                "confirmed_use": 60
+              },
+              "historical_accuracy_is_superiority_proof": false
+            },
+            "additional_signal_objective": null,
+            "persisted_feature_contract": 4,
+            "context_assessment": {
+              "version": 1,
+              "driver": "sensor.kitchen_stationary_energy",
+              "opportunities": 96,
+              "rows": 20830,
+              "bounded": false,
+              "end_ts": 1800034551.8,
+              "sensors": {
+                "sensor.kitchen_light": {
+                  "samples": 96,
+                  "status": "dependent",
+                  "low_on_rate": 1.0,
+                  "high_on_rate": 0.0,
+                  "split_value": 25.0
+                }
+              },
+              "basis": "pre_arrival_target_off; chronological_training_slice",
+              "start_ts": 1799999955.0,
+              "selected": [
+                "binary_sensor.kitchen_has_target",
+                "sensor.kitchen_light",
+                "sensor.kitchen_stationary_energy"
+              ],
+              "excluded": [],
+              "configured_lighting": true,
+              "behavioural_scores": {
+                "binary_sensor.kitchen_has_target": 1.0,
+                "sensor.kitchen_stationary_energy": 1.0
+              },
+              "target_entity": "light.kitchen",
+              "target_property": "power"
+            },
+            "updates": 59.583333333333634,
+            "worker_seconds": 6.3577168169999965,
+            "classifier": {
+              "ready": true,
+              "fits": 9,
+              "seen": [
+                237,
+                240
+              ]
+            },
+            "pass": true,
+            "semantic_model_sha256": "dc1eaba64eb61aed2d53e00447a5d8f5d8ce39a14891d2f6dd9f6599cb039d93",
+            "schema": {
+              "version": 12,
+              "dims": 128,
+              "entities": [
+                "binary_sensor.kitchen_has_target",
+                "sensor.kitchen_light",
+                "sensor.kitchen_stationary_energy"
+              ],
+              "entity_features": [
+                "value",
+                "valid",
+                "communication_age",
+                "event_age",
+                "quality",
+                "trend_1",
+                "trend_2",
+                "trend_3",
+                "time_since_edge",
+                "category_bit_0",
+                "category_bit_1",
+                "category_bit_2"
+              ],
+              "home_features": [
+                "occupancy_now",
+                "occupancy_in_1s",
+                "occupancy_in_3s",
+                "occupancy_in_5s",
+                "arrival_probability",
+                "departure_probability",
+                "trajectory_confidence",
+                "known"
+              ],
+              "feature_contract_version": 4
+            },
+            "phase_timings": {
+              "benchmark_persist_seconds": 0.000901,
+              "causal_home_statistics": {
+                "compressed_bytes": 36651,
+                "contract": "causal_home_statistics_v1",
+                "cursor_bytes": 24838,
+                "cursor_entries": 2,
+                "cursor_hits": 532,
+                "cursor_restores": 188,
+                "direct_sources": 1,
+                "max_bytes": 8388608,
+                "query_calls": 720,
+                "query_rows": 18168,
+                "snapshots": 64,
+                "source_rows": 8641
+              },
+              "context_assessment_seconds": 0.3252,
+              "context_entities_reconstructed_by_trackers": 4,
+              "context_screening_scope": "seeded_context",
+              "continuation_cached_rows": 30,
+              "contract": "single_agent_training_phase_timing_v1",
+              "end_ts": 1800043201.0,
+              "experience_dedup_cache_hits": 0,
+              "experience_dedup_cached_ids": 0,
+              "experience_dedup_db_loads": 1,
+              "experience_dedup_load_seconds": 0.000387,
+              "feature_snapshot_build_seconds": 0.41155,
+              "feature_snapshot_builds": 541,
+              "feature_snapshot_cache_hits": 0,
+              "feature_snapshot_cache_misses": 541,
+              "feature_snapshot_duplicate_hits": 0,
+              "feature_snapshot_session_builds_total": 541,
+              "feature_snapshot_session_hits_total": 0,
+              "feature_snapshot_session_reused": false,
+              "feature_snapshot_unique_timestamps": 541,
+              "finalization_seconds": 0.0796,
+              "full_archive_count_skipped": false,
+              "heldout_fold_seconds": 3e-06,
+              "legacy_outer_stream_entity_count": 4,
+              "neural_finalize_requested": true,
+              "neural_train_samples_buffered": 0,
+              "policy_serialize_persist_seconds": 0.012598,
+              "provenance_cache_hits": 0,
+              "provenance_cached_rows": 0,
+              "provenance_db_loads": 0,
+              "provenance_load_seconds": 1e-06,
+              "provenance_loaded_rows": 0,
+              "qualification_seconds": 0.0,
+              "ram_index_construction_seconds": 0.0668,
+              "ram_replay_actual_bytes": 1562748,
+              "ram_replay_entities": 4,
+              "ram_replay_estimated_bytes": 1568636,
+              "ram_replay_fallback": false,
+              "ram_replay_fallback_entities": 0,
+              "ram_replay_index_reused": false,
+              "ram_replay_lookup_seconds": 0.116803,
+              "ram_replay_lookups": 2762,
+              "ram_replay_rows": 26044,
+              "replay_driver_rows_planned": 121,
+              "replay_driver_rows_processed": 121,
+              "replay_seconds": 5.223,
+              "replay_stream_contract": "target_only_driver_v1",
+              "rewarded_dwells": 120,
+              "screening_rows": 20830,
+              "screening_seconds": 0.1893,
+              "sqlite_fallback_lookups": 0,
+              "sqlite_fallback_seconds": 0.0,
+              "start_ts": 1799999955.0,
+              "target_entities": 1,
+              "tiny_mlp_finalization_deferred": false,
+              "tiny_mlp_finalization_seconds": 5e-06,
+              "total_seconds": 6.2354,
+              "tracker_init_seconds": 0.236451,
+              "transition_edge_cursor_rewinds": 0,
+              "transition_edge_entities": 1,
+              "transition_edge_estimated_bytes": 1382560,
+              "transition_edge_fallback_entities": 0,
+              "transition_edge_index_construction_seconds": 0.071,
+              "transition_edge_index_fallbacks": 0,
+              "transition_edge_index_hits": 121,
+              "transition_edge_index_lookups": 121,
+              "transition_edge_index_reused": false,
+              "transition_edge_rows_applied": 8569,
+              "transition_edge_scan_rows_avoided_estimate": 59656,
+              "transition_edge_source_rows": 8641
+            }
+          },
+          {
+            "scope": "isolated HistoryManager and persisted policy, synthetic data, no HA dispatch",
+            "predictions": [
+              {
+                "phase": "empty_dark",
+                "expected": 0,
+                "predicted": 0.0,
+                "raw_prediction": 0.0,
+                "means": [
+                  0.9951806494212017,
+                  -0.9951806494212017
+                ],
+                "values": {
+                  "5": -1.0,
+                  "17": 0.5490396778473451,
+                  "29": 0.07982976911113136
+                }
+              },
+              {
+                "phase": "occupied_dark_entry",
+                "expected": 1,
+                "predicted": 1.0,
+                "raw_prediction": 1.0,
+                "means": [
+                  -0.6774944558358436,
+                  0.6774944558358436
+                ],
+                "values": {
+                  "5": 1.0,
+                  "17": 0.5490396778473451,
+                  "29": 0.23549574953849794
+                }
+              },
+              {
+                "phase": "empty_bright",
+                "expected": 0,
+                "predicted": 0.0,
+                "raw_prediction": 0.0,
+                "means": [
+                  0.9999746568514047,
+                  -0.9999746568514047
+                ],
+                "values": {
+                  "5": -1.0,
+                  "17": 0.9048005924156349,
+                  "29": 0.07982976911113136
+                }
+              },
+              {
+                "phase": "occupied_daylight",
+                "expected": 0,
+                "predicted": 0.0,
+                "raw_prediction": 0.0,
+                "means": [
+                  0.9468757090899222,
+                  -0.9468757090899222
+                ],
+                "values": {
+                  "5": 1.0,
+                  "17": 0.9048005924156349,
+                  "29": 0.23549574953849794
+                }
+              },
+              {
+                "phase": "stationary_with_emitted_light",
+                "expected": 1,
+                "predicted": 1.0,
+                "raw_prediction": 1.0,
+                "means": [
+                  -0.6752057098448414,
+                  0.6752057098448414
+                ],
+                "values": {
+                  "5": 1.0,
+                  "17": 0.5490396778473451,
+                  "29": 0.23549574953849794
+                }
+              }
+            ],
+            "training_quality": {
+              "patterns": {
+                "contract": "conditional_light_training_quality_v1",
+                "contexts": 2,
+                "queries": 120,
+                "downweighted": 0,
+                "manual_preserved": 0,
+                "minimum_independent_days": 3,
+                "minority_weight_floor": 0.2
+              },
+              "outcomes": {
+                "unknown_outcome": 60,
+                "confirmed_use": 60
+              },
+              "historical_accuracy_is_superiority_proof": false
+            },
+            "additional_signal_objective": null,
+            "persisted_feature_contract": 4,
+            "context_assessment": {
+              "version": 1,
+              "driver": "sensor.kitchen_stationary_energy",
+              "opportunities": 96,
+              "rows": 20830,
+              "bounded": false,
+              "end_ts": 1800034551.8,
+              "sensors": {
+                "sensor.kitchen_light": {
+                  "samples": 96,
+                  "status": "dependent",
+                  "low_on_rate": 1.0,
+                  "high_on_rate": 0.0,
+                  "split_value": 25.0
+                }
+              },
+              "basis": "pre_arrival_target_off; chronological_training_slice",
+              "start_ts": 1799999955.0,
+              "selected": [
+                "binary_sensor.kitchen_has_target",
+                "sensor.kitchen_light",
+                "sensor.kitchen_stationary_energy"
+              ],
+              "excluded": [],
+              "configured_lighting": true,
+              "behavioural_scores": {
+                "binary_sensor.kitchen_has_target": 1.0,
+                "sensor.kitchen_stationary_energy": 1.0
+              },
+              "target_entity": "light.kitchen",
+              "target_property": "power"
+            },
+            "updates": 59.583333333333634,
+            "worker_seconds": 6.355457203,
+            "classifier": {
+              "ready": true,
+              "fits": 9,
+              "seen": [
+                237,
+                240
+              ]
+            },
+            "pass": true,
+            "semantic_model_sha256": "dc1eaba64eb61aed2d53e00447a5d8f5d8ce39a14891d2f6dd9f6599cb039d93",
+            "schema": {
+              "version": 12,
+              "dims": 128,
+              "entities": [
+                "binary_sensor.kitchen_has_target",
+                "sensor.kitchen_light",
+                "sensor.kitchen_stationary_energy"
+              ],
+              "entity_features": [
+                "value",
+                "valid",
+                "communication_age",
+                "event_age",
+                "quality",
+                "trend_1",
+                "trend_2",
+                "trend_3",
+                "time_since_edge",
+                "category_bit_0",
+                "category_bit_1",
+                "category_bit_2"
+              ],
+              "home_features": [
+                "occupancy_now",
+                "occupancy_in_1s",
+                "occupancy_in_3s",
+                "occupancy_in_5s",
+                "arrival_probability",
+                "departure_probability",
+                "trajectory_confidence",
+                "known"
+              ],
+              "feature_contract_version": 4
+            },
+            "phase_timings": {
+              "benchmark_persist_seconds": 0.001118,
+              "causal_home_statistics": {
+                "compressed_bytes": 36651,
+                "contract": "causal_home_statistics_v1",
+                "cursor_bytes": 24838,
+                "cursor_entries": 2,
+                "cursor_hits": 532,
+                "cursor_restores": 188,
+                "direct_sources": 1,
+                "max_bytes": 8388608,
+                "query_calls": 720,
+                "query_rows": 18168,
+                "snapshots": 64,
+                "source_rows": 8641
+              },
+              "context_assessment_seconds": 0.3185,
+              "context_entities_reconstructed_by_trackers": 4,
+              "context_screening_scope": "seeded_context",
+              "continuation_cached_rows": 30,
+              "contract": "single_agent_training_phase_timing_v1",
+              "end_ts": 1800043201.0,
+              "experience_dedup_cache_hits": 0,
+              "experience_dedup_cached_ids": 0,
+              "experience_dedup_db_loads": 1,
+              "experience_dedup_load_seconds": 0.0004,
+              "feature_snapshot_build_seconds": 0.417694,
+              "feature_snapshot_builds": 541,
+              "feature_snapshot_cache_hits": 0,
+              "feature_snapshot_cache_misses": 541,
+              "feature_snapshot_duplicate_hits": 0,
+              "feature_snapshot_session_builds_total": 541,
+              "feature_snapshot_session_hits_total": 0,
+              "feature_snapshot_session_reused": false,
+              "feature_snapshot_unique_timestamps": 541,
+              "finalization_seconds": 0.0819,
+              "full_archive_count_skipped": false,
+              "heldout_fold_seconds": 4e-06,
+              "legacy_outer_stream_entity_count": 4,
+              "neural_finalize_requested": true,
+              "neural_train_samples_buffered": 0,
+              "policy_serialize_persist_seconds": 0.012454,
+              "provenance_cache_hits": 0,
+              "provenance_cached_rows": 0,
+              "provenance_db_loads": 0,
+              "provenance_load_seconds": 1e-06,
+              "provenance_loaded_rows": 0,
+              "qualification_seconds": 1e-06,
+              "ram_index_construction_seconds": 0.0663,
+              "ram_replay_actual_bytes": 1562748,
+              "ram_replay_entities": 4,
+              "ram_replay_estimated_bytes": 1568636,
+              "ram_replay_fallback": false,
+              "ram_replay_fallback_entities": 0,
+              "ram_replay_index_reused": false,
+              "ram_replay_lookup_seconds": 0.117631,
+              "ram_replay_lookups": 2762,
+              "ram_replay_rows": 26044,
+              "replay_driver_rows_planned": 121,
+              "replay_driver_rows_processed": 121,
+              "replay_seconds": 5.2231,
+              "replay_stream_contract": "target_only_driver_v1",
+              "rewarded_dwells": 120,
+              "screening_rows": 20830,
+              "screening_seconds": 0.2005,
+              "sqlite_fallback_lookups": 0,
+              "sqlite_fallback_seconds": 0.0,
+              "start_ts": 1799999955.0,
+              "target_entities": 1,
+              "tiny_mlp_finalization_deferred": false,
+              "tiny_mlp_finalization_seconds": 5e-06,
+              "total_seconds": 6.2393,
+              "tracker_init_seconds": 0.239093,
+              "transition_edge_cursor_rewinds": 0,
+              "transition_edge_entities": 1,
+              "transition_edge_estimated_bytes": 1382560,
+              "transition_edge_fallback_entities": 0,
+              "transition_edge_index_construction_seconds": 0.0637,
+              "transition_edge_index_fallbacks": 0,
+              "transition_edge_index_hits": 121,
+              "transition_edge_index_lookups": 121,
+              "transition_edge_index_reused": false,
+              "transition_edge_rows_applied": 8569,
+              "transition_edge_scan_rows_avoided_estimate": 59656,
+              "transition_edge_source_rows": 8641
+            }
+          },
+          {
+            "scope": "isolated HistoryManager and persisted policy, synthetic data, no HA dispatch",
+            "predictions": [
+              {
+                "phase": "empty_dark",
+                "expected": 0,
+                "predicted": 0.0,
+                "raw_prediction": 0.0,
+                "means": [
+                  0.9951806494212017,
+                  -0.9951806494212017
+                ],
+                "values": {
+                  "5": -1.0,
+                  "17": 0.5490396778473451,
+                  "29": 0.07982976911113136
+                }
+              },
+              {
+                "phase": "occupied_dark_entry",
+                "expected": 1,
+                "predicted": 1.0,
+                "raw_prediction": 1.0,
+                "means": [
+                  -0.6774944558358436,
+                  0.6774944558358436
+                ],
+                "values": {
+                  "5": 1.0,
+                  "17": 0.5490396778473451,
+                  "29": 0.23549574953849794
+                }
+              },
+              {
+                "phase": "empty_bright",
+                "expected": 0,
+                "predicted": 0.0,
+                "raw_prediction": 0.0,
+                "means": [
+                  0.9999746568514047,
+                  -0.9999746568514047
+                ],
+                "values": {
+                  "5": -1.0,
+                  "17": 0.9048005924156349,
+                  "29": 0.07982976911113136
+                }
+              },
+              {
+                "phase": "occupied_daylight",
+                "expected": 0,
+                "predicted": 0.0,
+                "raw_prediction": 0.0,
+                "means": [
+                  0.9468757090899222,
+                  -0.9468757090899222
+                ],
+                "values": {
+                  "5": 1.0,
+                  "17": 0.9048005924156349,
+                  "29": 0.23549574953849794
+                }
+              },
+              {
+                "phase": "stationary_with_emitted_light",
+                "expected": 1,
+                "predicted": 1.0,
+                "raw_prediction": 1.0,
+                "means": [
+                  -0.6752057098448414,
+                  0.6752057098448414
+                ],
+                "values": {
+                  "5": 1.0,
+                  "17": 0.5490396778473451,
+                  "29": 0.23549574953849794
+                }
+              }
+            ],
+            "training_quality": {
+              "patterns": {
+                "contract": "conditional_light_training_quality_v1",
+                "contexts": 2,
+                "queries": 120,
+                "downweighted": 0,
+                "manual_preserved": 0,
+                "minimum_independent_days": 3,
+                "minority_weight_floor": 0.2
+              },
+              "outcomes": {
+                "unknown_outcome": 60,
+                "confirmed_use": 60
+              },
+              "historical_accuracy_is_superiority_proof": false
+            },
+            "additional_signal_objective": null,
+            "persisted_feature_contract": 4,
+            "context_assessment": {
+              "version": 1,
+              "driver": "sensor.kitchen_stationary_energy",
+              "opportunities": 96,
+              "rows": 20830,
+              "bounded": false,
+              "end_ts": 1800034551.8,
+              "sensors": {
+                "sensor.kitchen_light": {
+                  "samples": 96,
+                  "status": "dependent",
+                  "low_on_rate": 1.0,
+                  "high_on_rate": 0.0,
+                  "split_value": 25.0
+                }
+              },
+              "basis": "pre_arrival_target_off; chronological_training_slice",
+              "start_ts": 1799999955.0,
+              "selected": [
+                "binary_sensor.kitchen_has_target",
+                "sensor.kitchen_light",
+                "sensor.kitchen_stationary_energy"
+              ],
+              "excluded": [],
+              "configured_lighting": true,
+              "behavioural_scores": {
+                "binary_sensor.kitchen_has_target": 1.0,
+                "sensor.kitchen_stationary_energy": 1.0
+              },
+              "target_entity": "light.kitchen",
+              "target_property": "power"
+            },
+            "updates": 59.583333333333634,
+            "worker_seconds": 6.629088901999992,
+            "classifier": {
+              "ready": true,
+              "fits": 9,
+              "seen": [
+                237,
+                240
+              ]
+            },
+            "pass": true,
+            "semantic_model_sha256": "dc1eaba64eb61aed2d53e00447a5d8f5d8ce39a14891d2f6dd9f6599cb039d93",
+            "schema": {
+              "version": 12,
+              "dims": 128,
+              "entities": [
+                "binary_sensor.kitchen_has_target",
+                "sensor.kitchen_light",
+                "sensor.kitchen_stationary_energy"
+              ],
+              "entity_features": [
+                "value",
+                "valid",
+                "communication_age",
+                "event_age",
+                "quality",
+                "trend_1",
+                "trend_2",
+                "trend_3",
+                "time_since_edge",
+                "category_bit_0",
+                "category_bit_1",
+                "category_bit_2"
+              ],
+              "home_features": [
+                "occupancy_now",
+                "occupancy_in_1s",
+                "occupancy_in_3s",
+                "occupancy_in_5s",
+                "arrival_probability",
+                "departure_probability",
+                "trajectory_confidence",
+                "known"
+              ],
+              "feature_contract_version": 4
+            },
+            "phase_timings": {
+              "benchmark_persist_seconds": 0.000882,
+              "causal_home_statistics": {
+                "compressed_bytes": 36651,
+                "contract": "causal_home_statistics_v1",
+                "cursor_bytes": 24838,
+                "cursor_entries": 2,
+                "cursor_hits": 532,
+                "cursor_restores": 188,
+                "direct_sources": 1,
+                "max_bytes": 8388608,
+                "query_calls": 720,
+                "query_rows": 18168,
+                "snapshots": 64,
+                "source_rows": 8641
+              },
+              "context_assessment_seconds": 0.3372,
+              "context_entities_reconstructed_by_trackers": 4,
+              "context_screening_scope": "seeded_context",
+              "continuation_cached_rows": 30,
+              "contract": "single_agent_training_phase_timing_v1",
+              "end_ts": 1800043201.0,
+              "experience_dedup_cache_hits": 0,
+              "experience_dedup_cached_ids": 0,
+              "experience_dedup_db_loads": 1,
+              "experience_dedup_load_seconds": 0.000431,
+              "feature_snapshot_build_seconds": 0.433511,
+              "feature_snapshot_builds": 541,
+              "feature_snapshot_cache_hits": 0,
+              "feature_snapshot_cache_misses": 541,
+              "feature_snapshot_duplicate_hits": 0,
+              "feature_snapshot_session_builds_total": 541,
+              "feature_snapshot_session_hits_total": 0,
+              "feature_snapshot_session_reused": false,
+              "feature_snapshot_unique_timestamps": 541,
+              "finalization_seconds": 0.0534,
+              "full_archive_count_skipped": false,
+              "heldout_fold_seconds": 5e-06,
+              "legacy_outer_stream_entity_count": 4,
+              "neural_finalize_requested": true,
+              "neural_train_samples_buffered": 0,
+              "policy_serialize_persist_seconds": 0.012316,
+              "provenance_cache_hits": 0,
+              "provenance_cached_rows": 0,
+              "provenance_db_loads": 0,
+              "provenance_load_seconds": 1e-06,
+              "provenance_loaded_rows": 0,
+              "qualification_seconds": 2.9e-05,
+              "ram_index_construction_seconds": 0.0701,
+              "ram_replay_actual_bytes": 1562748,
+              "ram_replay_entities": 4,
+              "ram_replay_estimated_bytes": 1568636,
+              "ram_replay_fallback": false,
+              "ram_replay_fallback_entities": 0,
+              "ram_replay_index_reused": false,
+              "ram_replay_lookup_seconds": 0.123131,
+              "ram_replay_lookups": 2762,
+              "ram_replay_rows": 26044,
+              "replay_driver_rows_planned": 121,
+              "replay_driver_rows_processed": 121,
+              "replay_seconds": 5.4881,
+              "replay_stream_contract": "target_only_driver_v1",
+              "rewarded_dwells": 120,
+              "screening_rows": 20830,
+              "screening_seconds": 0.1824,
+              "sqlite_fallback_lookups": 0,
+              "sqlite_fallback_seconds": 0.0,
+              "start_ts": 1799999955.0,
+              "target_entities": 1,
+              "tiny_mlp_finalization_deferred": false,
+              "tiny_mlp_finalization_seconds": 6e-06,
+              "total_seconds": 6.5059,
+              "tracker_init_seconds": 0.20946,
+              "transition_edge_cursor_rewinds": 0,
+              "transition_edge_entities": 1,
+              "transition_edge_estimated_bytes": 1382560,
+              "transition_edge_fallback_entities": 0,
+              "transition_edge_index_construction_seconds": 0.1188,
+              "transition_edge_index_fallbacks": 0,
+              "transition_edge_index_hits": 121,
+              "transition_edge_index_lookups": 121,
+              "transition_edge_index_reused": false,
+              "transition_edge_rows_applied": 8569,
+              "transition_edge_scan_rows_avoided_estimate": 59656,
+              "transition_edge_source_rows": 8641
+            }
+          }
+        ],
+        "optimized": [
+          {
+            "scope": "isolated HistoryManager and persisted policy, synthetic data, no HA dispatch",
+            "predictions": [
+              {
+                "phase": "empty_dark",
+                "expected": 0,
+                "predicted": 0.0,
+                "raw_prediction": 0.0,
+                "means": [
+                  0.9951806494212017,
+                  -0.9951806494212017
+                ],
+                "values": {
+                  "5": -1.0,
+                  "17": 0.5490396778473451,
+                  "29": 0.07982976911113136
+                }
+              },
+              {
+                "phase": "occupied_dark_entry",
+                "expected": 1,
+                "predicted": 1.0,
+                "raw_prediction": 1.0,
+                "means": [
+                  -0.6774944558358436,
+                  0.6774944558358436
+                ],
+                "values": {
+                  "5": 1.0,
+                  "17": 0.5490396778473451,
+                  "29": 0.23549574953849794
+                }
+              },
+              {
+                "phase": "empty_bright",
+                "expected": 0,
+                "predicted": 0.0,
+                "raw_prediction": 0.0,
+                "means": [
+                  0.9999746568514047,
+                  -0.9999746568514047
+                ],
+                "values": {
+                  "5": -1.0,
+                  "17": 0.9048005924156349,
+                  "29": 0.07982976911113136
+                }
+              },
+              {
+                "phase": "occupied_daylight",
+                "expected": 0,
+                "predicted": 0.0,
+                "raw_prediction": 0.0,
+                "means": [
+                  0.9468757090899222,
+                  -0.9468757090899222
+                ],
+                "values": {
+                  "5": 1.0,
+                  "17": 0.9048005924156349,
+                  "29": 0.23549574953849794
+                }
+              },
+              {
+                "phase": "stationary_with_emitted_light",
+                "expected": 1,
+                "predicted": 1.0,
+                "raw_prediction": 1.0,
+                "means": [
+                  -0.6752057098448414,
+                  0.6752057098448414
+                ],
+                "values": {
+                  "5": 1.0,
+                  "17": 0.5490396778473451,
+                  "29": 0.23549574953849794
+                }
+              }
+            ],
+            "training_quality": {
+              "patterns": {
+                "contract": "conditional_light_training_quality_v1",
+                "contexts": 2,
+                "queries": 120,
+                "downweighted": 0,
+                "manual_preserved": 0,
+                "minimum_independent_days": 3,
+                "minority_weight_floor": 0.2
+              },
+              "outcomes": {
+                "unknown_outcome": 60,
+                "confirmed_use": 60
+              },
+              "historical_accuracy_is_superiority_proof": false
+            },
+            "additional_signal_objective": null,
+            "persisted_feature_contract": 4,
+            "context_assessment": {
+              "version": 1,
+              "driver": "sensor.kitchen_stationary_energy",
+              "opportunities": 96,
+              "rows": 20830,
+              "bounded": false,
+              "end_ts": 1800034551.8,
+              "sensors": {
+                "sensor.kitchen_light": {
+                  "samples": 96,
+                  "status": "dependent",
+                  "low_on_rate": 1.0,
+                  "high_on_rate": 0.0,
+                  "split_value": 25.0
+                }
+              },
+              "basis": "pre_arrival_target_off; chronological_training_slice",
+              "start_ts": 1799999955.0,
+              "selected": [
+                "binary_sensor.kitchen_has_target",
+                "sensor.kitchen_light",
+                "sensor.kitchen_stationary_energy"
+              ],
+              "excluded": [],
+              "configured_lighting": true,
+              "behavioural_scores": {
+                "binary_sensor.kitchen_has_target": 1.0,
+                "sensor.kitchen_stationary_energy": 1.0
+              },
+              "target_entity": "light.kitchen",
+              "target_property": "power"
+            },
+            "updates": 59.583333333333634,
+            "worker_seconds": 5.738572520000005,
+            "classifier": {
+              "ready": true,
+              "fits": 9,
+              "seen": [
+                237,
+                240
+              ]
+            },
+            "pass": true,
+            "semantic_model_sha256": "dc1eaba64eb61aed2d53e00447a5d8f5d8ce39a14891d2f6dd9f6599cb039d93",
+            "schema": {
+              "version": 12,
+              "dims": 128,
+              "entities": [
+                "binary_sensor.kitchen_has_target",
+                "sensor.kitchen_light",
+                "sensor.kitchen_stationary_energy"
+              ],
+              "entity_features": [
+                "value",
+                "valid",
+                "communication_age",
+                "event_age",
+                "quality",
+                "trend_1",
+                "trend_2",
+                "trend_3",
+                "time_since_edge",
+                "category_bit_0",
+                "category_bit_1",
+                "category_bit_2"
+              ],
+              "home_features": [
+                "occupancy_now",
+                "occupancy_in_1s",
+                "occupancy_in_3s",
+                "occupancy_in_5s",
+                "arrival_probability",
+                "departure_probability",
+                "trajectory_confidence",
+                "known"
+              ],
+              "feature_contract_version": 4
+            },
+            "phase_timings": {
+              "benchmark_persist_seconds": 0.000841,
+              "causal_home_statistics": {
+                "compressed_bytes": 36651,
+                "contract": "causal_home_statistics_v1",
+                "cursor_bytes": 24838,
+                "cursor_entries": 2,
+                "cursor_hits": 532,
+                "cursor_restores": 188,
+                "direct_sources": 1,
+                "max_bytes": 8388608,
+                "query_calls": 720,
+                "query_rows": 18168,
+                "snapshots": 64,
+                "source_rows": 8641
+              },
+              "context_assessment_seconds": 0.3347,
+              "context_entities_reconstructed_by_trackers": 4,
+              "context_screening_scope": "seeded_context",
+              "continuation_cached_rows": 30,
+              "contract": "single_agent_training_phase_timing_v1",
+              "end_ts": 1800043201.0,
+              "experience_dedup_cache_hits": 0,
+              "experience_dedup_cached_ids": 0,
+              "experience_dedup_db_loads": 1,
+              "experience_dedup_load_seconds": 0.000429,
+              "feature_snapshot_build_seconds": 0.454073,
+              "feature_snapshot_builds": 541,
+              "feature_snapshot_cache_hits": 0,
+              "feature_snapshot_cache_misses": 541,
+              "feature_snapshot_duplicate_hits": 0,
+              "feature_snapshot_session_builds_total": 541,
+              "feature_snapshot_session_hits_total": 0,
+              "feature_snapshot_session_reused": false,
+              "feature_snapshot_unique_timestamps": 541,
+              "finalization_seconds": 0.073,
+              "full_archive_count_skipped": false,
+              "heldout_fold_seconds": 4e-06,
+              "legacy_outer_stream_entity_count": 4,
+              "neural_finalize_requested": true,
+              "neural_train_samples_buffered": 0,
+              "policy_serialize_persist_seconds": 0.01135,
+              "provenance_cache_hits": 0,
+              "provenance_cached_rows": 0,
+              "provenance_db_loads": 0,
+              "provenance_load_seconds": 1e-06,
+              "provenance_loaded_rows": 0,
+              "qualification_seconds": 0.0,
+              "ram_index_construction_seconds": 0.0662,
+              "ram_replay_actual_bytes": 1562748,
+              "ram_replay_entities": 4,
+              "ram_replay_estimated_bytes": 1568636,
+              "ram_replay_fallback": false,
+              "ram_replay_fallback_entities": 0,
+              "ram_replay_index_reused": false,
+              "ram_replay_lookup_seconds": 0.119718,
+              "ram_replay_lookups": 2762,
+              "ram_replay_rows": 26044,
+              "replay_driver_rows_planned": 121,
+              "replay_driver_rows_processed": 121,
+              "replay_seconds": 4.602,
+              "replay_stream_contract": "target_only_driver_v1",
+              "rewarded_dwells": 120,
+              "screening_rows": 20830,
+              "screening_seconds": 0.1904,
+              "sqlite_fallback_lookups": 0,
+              "sqlite_fallback_seconds": 0.0,
+              "start_ts": 1799999955.0,
+              "target_entities": 1,
+              "tiny_mlp_finalization_deferred": false,
+              "tiny_mlp_finalization_seconds": 6e-06,
+              "total_seconds": 5.6252,
+              "tracker_init_seconds": 0.1933,
+              "transition_edge_cursor_rewinds": 0,
+              "transition_edge_entities": 1,
+              "transition_edge_estimated_bytes": 1382560,
+              "transition_edge_fallback_entities": 0,
+              "transition_edge_index_construction_seconds": 0.1234,
+              "transition_edge_index_fallbacks": 0,
+              "transition_edge_index_hits": 121,
+              "transition_edge_index_lookups": 121,
+              "transition_edge_index_reused": false,
+              "transition_edge_rows_applied": 8569,
+              "transition_edge_scan_rows_avoided_estimate": 59656,
+              "transition_edge_source_rows": 8641
+            }
+          },
+          {
+            "scope": "isolated HistoryManager and persisted policy, synthetic data, no HA dispatch",
+            "predictions": [
+              {
+                "phase": "empty_dark",
+                "expected": 0,
+                "predicted": 0.0,
+                "raw_prediction": 0.0,
+                "means": [
+                  0.9951806494212017,
+                  -0.9951806494212017
+                ],
+                "values": {
+                  "5": -1.0,
+                  "17": 0.5490396778473451,
+                  "29": 0.07982976911113136
+                }
+              },
+              {
+                "phase": "occupied_dark_entry",
+                "expected": 1,
+                "predicted": 1.0,
+                "raw_prediction": 1.0,
+                "means": [
+                  -0.6774944558358436,
+                  0.6774944558358436
+                ],
+                "values": {
+                  "5": 1.0,
+                  "17": 0.5490396778473451,
+                  "29": 0.23549574953849794
+                }
+              },
+              {
+                "phase": "empty_bright",
+                "expected": 0,
+                "predicted": 0.0,
+                "raw_prediction": 0.0,
+                "means": [
+                  0.9999746568514047,
+                  -0.9999746568514047
+                ],
+                "values": {
+                  "5": -1.0,
+                  "17": 0.9048005924156349,
+                  "29": 0.07982976911113136
+                }
+              },
+              {
+                "phase": "occupied_daylight",
+                "expected": 0,
+                "predicted": 0.0,
+                "raw_prediction": 0.0,
+                "means": [
+                  0.9468757090899222,
+                  -0.9468757090899222
+                ],
+                "values": {
+                  "5": 1.0,
+                  "17": 0.9048005924156349,
+                  "29": 0.23549574953849794
+                }
+              },
+              {
+                "phase": "stationary_with_emitted_light",
+                "expected": 1,
+                "predicted": 1.0,
+                "raw_prediction": 1.0,
+                "means": [
+                  -0.6752057098448414,
+                  0.6752057098448414
+                ],
+                "values": {
+                  "5": 1.0,
+                  "17": 0.5490396778473451,
+                  "29": 0.23549574953849794
+                }
+              }
+            ],
+            "training_quality": {
+              "patterns": {
+                "contract": "conditional_light_training_quality_v1",
+                "contexts": 2,
+                "queries": 120,
+                "downweighted": 0,
+                "manual_preserved": 0,
+                "minimum_independent_days": 3,
+                "minority_weight_floor": 0.2
+              },
+              "outcomes": {
+                "unknown_outcome": 60,
+                "confirmed_use": 60
+              },
+              "historical_accuracy_is_superiority_proof": false
+            },
+            "additional_signal_objective": null,
+            "persisted_feature_contract": 4,
+            "context_assessment": {
+              "version": 1,
+              "driver": "sensor.kitchen_stationary_energy",
+              "opportunities": 96,
+              "rows": 20830,
+              "bounded": false,
+              "end_ts": 1800034551.8,
+              "sensors": {
+                "sensor.kitchen_light": {
+                  "samples": 96,
+                  "status": "dependent",
+                  "low_on_rate": 1.0,
+                  "high_on_rate": 0.0,
+                  "split_value": 25.0
+                }
+              },
+              "basis": "pre_arrival_target_off; chronological_training_slice",
+              "start_ts": 1799999955.0,
+              "selected": [
+                "binary_sensor.kitchen_has_target",
+                "sensor.kitchen_light",
+                "sensor.kitchen_stationary_energy"
+              ],
+              "excluded": [],
+              "configured_lighting": true,
+              "behavioural_scores": {
+                "binary_sensor.kitchen_has_target": 1.0,
+                "sensor.kitchen_stationary_energy": 1.0
+              },
+              "target_entity": "light.kitchen",
+              "target_property": "power"
+            },
+            "updates": 59.583333333333634,
+            "worker_seconds": 5.764420346999998,
+            "classifier": {
+              "ready": true,
+              "fits": 9,
+              "seen": [
+                237,
+                240
+              ]
+            },
+            "pass": true,
+            "semantic_model_sha256": "dc1eaba64eb61aed2d53e00447a5d8f5d8ce39a14891d2f6dd9f6599cb039d93",
+            "schema": {
+              "version": 12,
+              "dims": 128,
+              "entities": [
+                "binary_sensor.kitchen_has_target",
+                "sensor.kitchen_light",
+                "sensor.kitchen_stationary_energy"
+              ],
+              "entity_features": [
+                "value",
+                "valid",
+                "communication_age",
+                "event_age",
+                "quality",
+                "trend_1",
+                "trend_2",
+                "trend_3",
+                "time_since_edge",
+                "category_bit_0",
+                "category_bit_1",
+                "category_bit_2"
+              ],
+              "home_features": [
+                "occupancy_now",
+                "occupancy_in_1s",
+                "occupancy_in_3s",
+                "occupancy_in_5s",
+                "arrival_probability",
+                "departure_probability",
+                "trajectory_confidence",
+                "known"
+              ],
+              "feature_contract_version": 4
+            },
+            "phase_timings": {
+              "benchmark_persist_seconds": 0.001102,
+              "causal_home_statistics": {
+                "compressed_bytes": 36651,
+                "contract": "causal_home_statistics_v1",
+                "cursor_bytes": 24838,
+                "cursor_entries": 2,
+                "cursor_hits": 532,
+                "cursor_restores": 188,
+                "direct_sources": 1,
+                "max_bytes": 8388608,
+                "query_calls": 720,
+                "query_rows": 18168,
+                "snapshots": 64,
+                "source_rows": 8641
+              },
+              "context_assessment_seconds": 0.3161,
+              "context_entities_reconstructed_by_trackers": 4,
+              "context_screening_scope": "seeded_context",
+              "continuation_cached_rows": 30,
+              "contract": "single_agent_training_phase_timing_v1",
+              "end_ts": 1800043201.0,
+              "experience_dedup_cache_hits": 0,
+              "experience_dedup_cached_ids": 0,
+              "experience_dedup_db_loads": 1,
+              "experience_dedup_load_seconds": 0.000529,
+              "feature_snapshot_build_seconds": 0.450763,
+              "feature_snapshot_builds": 541,
+              "feature_snapshot_cache_hits": 0,
+              "feature_snapshot_cache_misses": 541,
+              "feature_snapshot_duplicate_hits": 0,
+              "feature_snapshot_session_builds_total": 541,
+              "feature_snapshot_session_hits_total": 0,
+              "feature_snapshot_session_reused": false,
+              "feature_snapshot_unique_timestamps": 541,
+              "finalization_seconds": 0.0767,
+              "full_archive_count_skipped": false,
+              "heldout_fold_seconds": 5e-06,
+              "legacy_outer_stream_entity_count": 4,
+              "neural_finalize_requested": true,
+              "neural_train_samples_buffered": 0,
+              "policy_serialize_persist_seconds": 0.01078,
+              "provenance_cache_hits": 0,
+              "provenance_cached_rows": 0,
+              "provenance_db_loads": 0,
+              "provenance_load_seconds": 1e-06,
+              "provenance_loaded_rows": 0,
+              "qualification_seconds": 0.0,
+              "ram_index_construction_seconds": 0.0675,
+              "ram_replay_actual_bytes": 1562748,
+              "ram_replay_entities": 4,
+              "ram_replay_estimated_bytes": 1568636,
+              "ram_replay_fallback": false,
+              "ram_replay_fallback_entities": 0,
+              "ram_replay_index_reused": false,
+              "ram_replay_lookup_seconds": 0.115371,
+              "ram_replay_lookups": 2762,
+              "ram_replay_rows": 26044,
+              "replay_driver_rows_planned": 121,
+              "replay_driver_rows_processed": 121,
+              "replay_seconds": 4.5765,
+              "replay_stream_contract": "target_only_driver_v1",
+              "rewarded_dwells": 120,
+              "screening_rows": 20830,
+              "screening_seconds": 0.1872,
+              "sqlite_fallback_lookups": 0,
+              "sqlite_fallback_seconds": 0.0,
+              "start_ts": 1799999955.0,
+              "target_entities": 1,
+              "tiny_mlp_finalization_deferred": false,
+              "tiny_mlp_finalization_seconds": 8e-06,
+              "total_seconds": 5.6553,
+              "tracker_init_seconds": 0.321311,
+              "transition_edge_cursor_rewinds": 0,
+              "transition_edge_entities": 1,
+              "transition_edge_estimated_bytes": 1382560,
+              "transition_edge_fallback_entities": 0,
+              "transition_edge_index_construction_seconds": 0.0657,
+              "transition_edge_index_fallbacks": 0,
+              "transition_edge_index_hits": 121,
+              "transition_edge_index_lookups": 121,
+              "transition_edge_index_reused": false,
+              "transition_edge_rows_applied": 8569,
+              "transition_edge_scan_rows_avoided_estimate": 59656,
+              "transition_edge_source_rows": 8641
+            }
+          },
+          {
+            "scope": "isolated HistoryManager and persisted policy, synthetic data, no HA dispatch",
+            "predictions": [
+              {
+                "phase": "empty_dark",
+                "expected": 0,
+                "predicted": 0.0,
+                "raw_prediction": 0.0,
+                "means": [
+                  0.9951806494212017,
+                  -0.9951806494212017
+                ],
+                "values": {
+                  "5": -1.0,
+                  "17": 0.5490396778473451,
+                  "29": 0.07982976911113136
+                }
+              },
+              {
+                "phase": "occupied_dark_entry",
+                "expected": 1,
+                "predicted": 1.0,
+                "raw_prediction": 1.0,
+                "means": [
+                  -0.6774944558358436,
+                  0.6774944558358436
+                ],
+                "values": {
+                  "5": 1.0,
+                  "17": 0.5490396778473451,
+                  "29": 0.23549574953849794
+                }
+              },
+              {
+                "phase": "empty_bright",
+                "expected": 0,
+                "predicted": 0.0,
+                "raw_prediction": 0.0,
+                "means": [
+                  0.9999746568514047,
+                  -0.9999746568514047
+                ],
+                "values": {
+                  "5": -1.0,
+                  "17": 0.9048005924156349,
+                  "29": 0.07982976911113136
+                }
+              },
+              {
+                "phase": "occupied_daylight",
+                "expected": 0,
+                "predicted": 0.0,
+                "raw_prediction": 0.0,
+                "means": [
+                  0.9468757090899222,
+                  -0.9468757090899222
+                ],
+                "values": {
+                  "5": 1.0,
+                  "17": 0.9048005924156349,
+                  "29": 0.23549574953849794
+                }
+              },
+              {
+                "phase": "stationary_with_emitted_light",
+                "expected": 1,
+                "predicted": 1.0,
+                "raw_prediction": 1.0,
+                "means": [
+                  -0.6752057098448414,
+                  0.6752057098448414
+                ],
+                "values": {
+                  "5": 1.0,
+                  "17": 0.5490396778473451,
+                  "29": 0.23549574953849794
+                }
+              }
+            ],
+            "training_quality": {
+              "patterns": {
+                "contract": "conditional_light_training_quality_v1",
+                "contexts": 2,
+                "queries": 120,
+                "downweighted": 0,
+                "manual_preserved": 0,
+                "minimum_independent_days": 3,
+                "minority_weight_floor": 0.2
+              },
+              "outcomes": {
+                "unknown_outcome": 60,
+                "confirmed_use": 60
+              },
+              "historical_accuracy_is_superiority_proof": false
+            },
+            "additional_signal_objective": null,
+            "persisted_feature_contract": 4,
+            "context_assessment": {
+              "version": 1,
+              "driver": "sensor.kitchen_stationary_energy",
+              "opportunities": 96,
+              "rows": 20830,
+              "bounded": false,
+              "end_ts": 1800034551.8,
+              "sensors": {
+                "sensor.kitchen_light": {
+                  "samples": 96,
+                  "status": "dependent",
+                  "low_on_rate": 1.0,
+                  "high_on_rate": 0.0,
+                  "split_value": 25.0
+                }
+              },
+              "basis": "pre_arrival_target_off; chronological_training_slice",
+              "start_ts": 1799999955.0,
+              "selected": [
+                "binary_sensor.kitchen_has_target",
+                "sensor.kitchen_light",
+                "sensor.kitchen_stationary_energy"
+              ],
+              "excluded": [],
+              "configured_lighting": true,
+              "behavioural_scores": {
+                "binary_sensor.kitchen_has_target": 1.0,
+                "sensor.kitchen_stationary_energy": 1.0
+              },
+              "target_entity": "light.kitchen",
+              "target_property": "power"
+            },
+            "updates": 59.583333333333634,
+            "worker_seconds": 5.938383872999992,
+            "classifier": {
+              "ready": true,
+              "fits": 9,
+              "seen": [
+                237,
+                240
+              ]
+            },
+            "pass": true,
+            "semantic_model_sha256": "dc1eaba64eb61aed2d53e00447a5d8f5d8ce39a14891d2f6dd9f6599cb039d93",
+            "schema": {
+              "version": 12,
+              "dims": 128,
+              "entities": [
+                "binary_sensor.kitchen_has_target",
+                "sensor.kitchen_light",
+                "sensor.kitchen_stationary_energy"
+              ],
+              "entity_features": [
+                "value",
+                "valid",
+                "communication_age",
+                "event_age",
+                "quality",
+                "trend_1",
+                "trend_2",
+                "trend_3",
+                "time_since_edge",
+                "category_bit_0",
+                "category_bit_1",
+                "category_bit_2"
+              ],
+              "home_features": [
+                "occupancy_now",
+                "occupancy_in_1s",
+                "occupancy_in_3s",
+                "occupancy_in_5s",
+                "arrival_probability",
+                "departure_probability",
+                "trajectory_confidence",
+                "known"
+              ],
+              "feature_contract_version": 4
+            },
+            "phase_timings": {
+              "benchmark_persist_seconds": 0.000837,
+              "causal_home_statistics": {
+                "compressed_bytes": 36651,
+                "contract": "causal_home_statistics_v1",
+                "cursor_bytes": 24838,
+                "cursor_entries": 2,
+                "cursor_hits": 532,
+                "cursor_restores": 188,
+                "direct_sources": 1,
+                "max_bytes": 8388608,
+                "query_calls": 720,
+                "query_rows": 18168,
+                "snapshots": 64,
+                "source_rows": 8641
+              },
+              "context_assessment_seconds": 0.3316,
+              "context_entities_reconstructed_by_trackers": 4,
+              "context_screening_scope": "seeded_context",
+              "continuation_cached_rows": 30,
+              "contract": "single_agent_training_phase_timing_v1",
+              "end_ts": 1800043201.0,
+              "experience_dedup_cache_hits": 0,
+              "experience_dedup_cached_ids": 0,
+              "experience_dedup_db_loads": 1,
+              "experience_dedup_load_seconds": 0.000364,
+              "feature_snapshot_build_seconds": 0.472671,
+              "feature_snapshot_builds": 541,
+              "feature_snapshot_cache_hits": 0,
+              "feature_snapshot_cache_misses": 541,
+              "feature_snapshot_duplicate_hits": 0,
+              "feature_snapshot_session_builds_total": 541,
+              "feature_snapshot_session_hits_total": 0,
+              "feature_snapshot_session_reused": false,
+              "feature_snapshot_unique_timestamps": 541,
+              "finalization_seconds": 0.0382,
+              "full_archive_count_skipped": false,
+              "heldout_fold_seconds": 4e-06,
+              "legacy_outer_stream_entity_count": 4,
+              "neural_finalize_requested": true,
+              "neural_train_samples_buffered": 0,
+              "policy_serialize_persist_seconds": 0.011317,
+              "provenance_cache_hits": 0,
+              "provenance_cached_rows": 0,
+              "provenance_db_loads": 0,
+              "provenance_load_seconds": 1e-06,
+              "provenance_loaded_rows": 0,
+              "qualification_seconds": 1e-06,
+              "ram_index_construction_seconds": 0.0672,
+              "ram_replay_actual_bytes": 1562748,
+              "ram_replay_entities": 4,
+              "ram_replay_estimated_bytes": 1568636,
+              "ram_replay_fallback": false,
+              "ram_replay_fallback_entities": 0,
+              "ram_replay_index_reused": false,
+              "ram_replay_lookup_seconds": 0.123525,
+              "ram_replay_lookups": 2762,
+              "ram_replay_rows": 26044,
+              "replay_driver_rows_planned": 121,
+              "replay_driver_rows_processed": 121,
+              "replay_seconds": 4.8213,
+              "replay_stream_contract": "target_only_driver_v1",
+              "rewarded_dwells": 120,
+              "screening_rows": 20830,
+              "screening_seconds": 0.1926,
+              "sqlite_fallback_lookups": 0,
+              "sqlite_fallback_seconds": 0.0,
+              "start_ts": 1799999955.0,
+              "target_entities": 1,
+              "tiny_mlp_finalization_deferred": false,
+              "tiny_mlp_finalization_seconds": 6e-06,
+              "total_seconds": 5.8213,
+              "tracker_init_seconds": 0.199837,
+              "transition_edge_cursor_rewinds": 0,
+              "transition_edge_entities": 1,
+              "transition_edge_estimated_bytes": 1382560,
+              "transition_edge_fallback_entities": 0,
+              "transition_edge_index_construction_seconds": 0.1193,
+              "transition_edge_index_fallbacks": 0,
+              "transition_edge_index_hits": 121,
+              "transition_edge_index_lookups": 121,
+              "transition_edge_index_reused": false,
+              "transition_edge_rows_applied": 8569,
+              "transition_edge_scan_rows_avoided_estimate": 59656,
+              "transition_edge_source_rows": 8641
+            }
+          }
+        ]
+      }
+    }
+  },
+  "pass": true,
+  "baseline_commit": "8acf7011e63cd7e3e438de3ff386d929ea0d2ffe",
+  "comparison": "Identical fixtures; semantic model hash excludes only existing last_decay_ts wall-clock initialization metadata, includes learned arrays and classifier; all other non-timing outputs compared exactly."
+}
