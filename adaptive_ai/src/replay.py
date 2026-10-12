@@ -1379,7 +1379,7 @@ class SQLiteTemporalTracker:
         ts = float(ts)
         view = self.home_view
         if self.home_statistics is not None:
-            view.stats = self.home_statistics.statistics_at(ts)
+            view.stats = self.home_statistics.statistics_at(ts, cursor=id(self))
             view.home.graph, view.home.dwell, view.home.calibration = view.stats
             self._home_checkpoint_revision = self.home_statistics.identity
         self._metrics["home_rebuilds"] += 1

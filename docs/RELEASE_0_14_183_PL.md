@@ -1,0 +1,13 @@
+# Adaptive AI 0.14.183
+
+Raport z 0.14.182 pokazuje zakończone przygotowanie Recorder i aktywny replay: 37/87 zmian celu w pierwszym fragmencie, około 11% całego treningu po 8 minutach. Ochrona dysku nie blokuje pracy: WAL ma 16 MiB, brak błędów zapisów i blokad budżetu. Raport nie zawierał jednak bieżących pomiarów etapów procesu treningowego, pokazywał prędkość 0 rows/s oraz różne ETA na dwóch powierzchniach diagnostycznych.
+
+Rekonstrukcja przyczynowych statystyk domu zachowuje teraz najwyżej dwa niezależne kursory: dla początku i wnętrza zachowania. Rosnące zapytania w obrębie tego samego checkpointu odtwarzają tylko nowy odcinek historii. Cofnięcie czasu, przejście do innego checkpointu, zmiana kontekstu albo commit SQLite unieważnia kursory. Wynik zapytania jest prywatną kopią; wygaśnięcie hipotezy w czasie zapytania nie uczy kolejnego odcinka i nie przenosi przyszłych informacji do przeszłości.
+
+Kursory korzystają z miejsca pozostałego w istniejącym budżecie statystyk. Gdy nie mieszczą się w nim, używany jest pełny poprzedni algorytm. Limit przestrzeni dyskowej pozostaje procentowy i konfigurowalny; poprawka nie zmniejsza historii, próbkowania sensorów ani jakości uczenia.
+
+Proces treningowy przekazuje bieżącą prędkość, pomiary etapów, RAM replay, cache cech i statystyki odtwarzania przed zakończeniem całego treningu. Eksport zawiera czas ostatniego raportu procesu. Widoki prędkości zachowują części ułamkowe, etap procesu ma stan training, a zgodne pola całkowitego ETA są oddzielone od czasu lokalnego etapu. ETA wykorzystuje rzeczywisty postęp replay, bez traktowania 10% przydzielonych w interfejsie na przygotowanie Recorder jako wykonanej pracy replay. Zegar zadania i mapowanie postępu pozostają po stronie procesu głównego.
+
+12 nowych regresji sprawdza zgodność ze starym algorytmem, opóźnione odebranie zdarzeń, niezależne kursory, cofnięcia, granice checkpointów, prywatność wyników, zapisy z drugiego połączenia SQLite, zmiany danych/kontekstu, wyczerpanie RAM i przekazywanie stanu procesu. Benchmark komponentu dla 8 000 zapytań daje identyczne wyniki, 2 400 odtworzonych zdarzeń zamiast 121 200 i około 1,9 raza krótszy czas na lokalnym komputerze. Jest to pomiar syntetycznego komponentu, nie deklaracja czasu pełnego treningu Raspberry Pi. Benchmark rzeczywistego izolowanego treningu przekaźnika oraz porównanie zapisanych modeli Ridge, neural i doświadczeń także przechodzą.
+
+Po aktualizacji uruchom ponownie dodatek i wznów trening. Nie trzeba usuwać bazy ani wykonywać Full Rebuild. Kolejny raport pokaże bieżące koszty poszczególnych etapów, także podczas aktywnego treningu.

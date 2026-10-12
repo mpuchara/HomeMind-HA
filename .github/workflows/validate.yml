@@ -29,6 +29,9 @@ jobs:
         run: python tools/benchmark_transition_edges.py --entities 4 --rows-per-entity 1600 --queries 800 --compact
       - name: Numeric radar and relay full training benchmark
         run: python tools/benchmark_stationary_relay.py
+      - name: Causal statistics prefix parity and bounded replay work
+        if: matrix.python == '3.11'
+        run: python tools/benchmark_causal_statistics.py --compact
       - name: 0.14.157 Shadow JSON data and checksum parity benchmark
         if: matrix.python == '3.11'
         run: python tools/benchmark_shadow_json.py
