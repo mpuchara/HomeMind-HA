@@ -1,3 +1,9 @@
+## 0.14.187
+- Replay dekoduje powtarzane próbki sensorów przez ograniczony cache w pamięci procesu: do 512 wpisów i 1 MiB jednostek budżetu na tracker. Duże atrybuty omijają cache, a zamknięcie trackera go czyści.
+- Klucz obejmuje stan, atrybuty, użytkownika, czas i encję, więc korekty historii i metadane odbioru z FeatureJournal nie używają starego odczytu.
+- Dobór sensorów, korelacja jasności, historia, nagrody i modele pozostają zachowane. Aktualizacja nie wymaga Rebuild modelu wytrenowanego w .186.
+- Szczegóły oraz lokalny pomiar A/B w docs/RELEASE_0_14_187_PL.md.
+
 ## 0.14.186
 - Rebuild ocenia ponownie niewyuczony schemat szybkiego agenta, również przy zachowaniu poprzedniego doboru sensorów.
 - Automatyczna jasność i stan słońca są oceniane na wejściach obecności przy wyłączonej lampie, przed akcją, w treningowej części historii. Brak dowodu zależności nie dodaje jasności do modelu; jawne wejścia i warunki HA są zachowane.

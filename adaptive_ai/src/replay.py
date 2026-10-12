@@ -90,6 +90,52 @@ class ReplayQueryCache:
         }
 
 
+class ReplayStateCache:
+    """Small tracker-local LRU of decoded, read-only historical states.
+
+    Forward replay repeatedly retains the same 64 samples per sensor and renders
+    overlapping home windows. Decode their JSON/timestamps once. Content keys include
+    every field consumed by archived_state, so corrected rows and journal receipt
+    metadata cannot reuse an older interpretation. Nothing is persisted to disk.
+    """
+    def __init__(self, max_entries=512, max_units=1024 * 1024):
+        self.max_entries = max(0, int(max_entries))
+        self.max_units = max(0, int(max_units))
+        self.data = OrderedDict()
+        self.units = self.hits = self.misses = self.evictions = 0
+
+    def state(self, row):
+        key = (row["entity_id"], row.get("state"), row.get("attributes_json"),
+               row.get("context_user_id"), row["ts"])
+        item = self.data.pop(key, None)
+        if item is not None:
+            self.data[key] = item
+            self.hits += 1
+            return item[0]
+        self.misses += 1
+        value = archived_state(row)
+        # Charge decoded object overhead as well as raw text. Large attributes bypass
+        # the cache; both the entry count and the retained payload have hard caps.
+        units = 1024 + 8 * sum(len(str(part)) for part in key if part is not None)
+        if self.max_entries and units <= self.max_units:
+            self.data[key] = (value, units)
+            self.units += units
+            while len(self.data) > self.max_entries or self.units > self.max_units:
+                _, (_, removed_units) = self.data.popitem(last=False)
+                self.units -= removed_units
+                self.evictions += 1
+        return value
+
+    def clear(self):
+        self.data.clear()
+        self.units = 0
+
+    def status(self):
+        return {"entries": len(self.data), "units": self.units,
+                "max_entries": self.max_entries, "max_units": self.max_units,
+                "hits": self.hits, "misses": self.misses, "evictions": self.evictions}
+
+
 
 class _RAMEntityTimeline:
     """Compact columnar entity_history slice used by RAMReplayIndex.
@@ -1001,6 +1047,7 @@ class SQLiteTemporalTracker:
         self.current_ts = None
         self._watched_rows = {}
         self._watched_entity_fingerprints = {}
+        self.state_cache = ReplayStateCache()
         self._home_seed_rows = {}
         self._home_window_rows = []
         self._home_cache_ts = None
@@ -1277,7 +1324,7 @@ class SQLiteTemporalTracker:
             self._watched_entity_fingerprints[eid] = None
             dq = deque(maxlen=self.HISTORY_SAMPLES)
             for row in compact:
-                sample = (float(row["ts"]), archived_state(row))
+                sample = (float(row["ts"]), self.state_cache.state(row))
                 if dq and abs(float(dq[-1][0]) - sample[0]) < 1e-6:
                     dq[-1] = sample
                 else:
@@ -1406,7 +1453,7 @@ class SQLiteTemporalTracker:
                 event_ts = float(row["ts"])
                 received_ts = self._availability_time(row)
                 if event_ts <= cutoff and received_ts <= cutoff:
-                    st = archived_state(row)
+                    st = self.state_cache.state(row)
                     area = self.context.area_for(eid)
                     view.home.observe(
                         eid, area, self.context.sensor_probability(eid, st),
@@ -1431,7 +1478,7 @@ class SQLiteTemporalTracker:
                 continue
             eid = row["entity_id"]
             area = self.context.area_for(eid)
-            probability = self.context.sensor_probability(eid, archived_state(row))
+            probability = self.context.sensor_probability(eid, self.state_cache.state(row))
             view.home.observe(
                 eid, area, probability, received_ts,
                 learn=False, evidence=self.context.evidence_metadata(eid),
@@ -1584,9 +1631,9 @@ class SQLiteTemporalTracker:
 
     def _edges(self, eid, lo, hi):
         previous = self._before(eid, lo, 1)
-        prev = state_scalar(archived_state(previous[-1])) if previous else None
+        prev = state_scalar(self.state_cache.state(previous[-1])) if previous else None
         for row in self._base_interval_rows([eid], lo, hi, per_entity_limit=None):
-            cur = state_scalar(archived_state(row))
+            cur = state_scalar(self.state_cache.state(row))
             if prev is not None and cur is not None:
                 if cur > .25 and prev <= .25:
                     yield row["ts"], True
@@ -1620,7 +1667,7 @@ class SQLiteTemporalTracker:
             counts[eid] = counts.get(eid, 0) + 1
             if (counts[eid] > 4096
                     or str(row.get("state") or "").lower() in ("unknown", "unavailable", "none", "")
-                    or state_scalar(archived_state(row)) is None):
+                    or state_scalar(self.state_cache.state(row)) is None):
                 return False
         return True
 
@@ -1635,6 +1682,7 @@ class SQLiteTemporalTracker:
             "home_window_rows": len(self._home_window_rows),
             "home_seed_entities": len(self._home_seed_rows),
             "history_samples_per_entity": self.HISTORY_SAMPLES,
+            "decoded_state_cache": self.state_cache.status(),
             "home_context_cache_enabled": self.home_context_cache is not None,
             "context_cache_contract": self.context_cache_contract,
             "ram_replay_index_enabled": self.ram_replay_index is not None,
@@ -1657,6 +1705,7 @@ class SQLiteTemporalTracker:
         if self._closed:
             return
         self._closed = True
+        self.state_cache.clear()
         if self._owns_connection:
             try:
                 self.conn.close()
