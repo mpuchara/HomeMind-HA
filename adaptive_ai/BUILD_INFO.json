@@ -1,10 +1,10 @@
 {
-  "version": "0.14.181",
+  "version": "0.14.182",
   "release_date": "2026-10-12",
-  "base_version": "0.14.180",
-  "base_commit": "f667df83b10d57fa478d806dc2111ec2ca14b75d",
-  "release_status": "adaptive-storage-capacity-and-soft-pressure-startup",
-  "release_validation_tests_passed": 2175,
+  "base_version": "0.14.181",
+  "base_commit": "537e06ae16d4be0aedc7c9e443c94d51b96ebc6a",
+  "release_status": "capacity-aware-wal-and-durable-contention-retry",
+  "release_validation_tests_passed": 2187,
   "release_014140": {
     "scope": "inventory_and_remove_remaining_shipped_feature_Handler_fallbacks_for_Candidate_Live_and_manual_feedback_transport",
     "explicit_routes": "manual_feedback.js, candidate_ui.js, candidate_preference_ui.js, /api/candidates, Candidate Teach-RL status/train, generation history/comparison, /api/candidate-live, /api/live and Candidate discard",
@@ -2580,5 +2580,19 @@
     "reference_014147": "No byte quota existed in that release; unbounded growth is not restored",
     "limit": "No claim of deployed SD card or complete training speed equivalence without a new runtime log",
     "parent_budget_inherited_by_training_and_offline_rl_workers": true
+  },
+  "release_014182": {
+    "scope": "capacity_scaled_wal_reclaim_thresholds_and_native_sqlite_contention_retry",
+    "new_regression_tests": 12,
+    "ordinary_wal_budget_fraction": 0.25,
+    "pressure_wal_budget_fraction": 0.4,
+    "ordinary_reclaim_interval_seconds": 60,
+    "pressure_reclaim_interval_seconds": 5,
+    "native_busy_and_locked_result_codes_preserved": true,
+    "retryable_batches_preserved": true,
+    "busy_retries_exposed": true,
+    "io_errors_remain_visible": true,
+    "storage_admission_and_recorder_rows_unchanged": true,
+    "limit": "No deployed SD card or complete training speed guarantee"
   }
 }

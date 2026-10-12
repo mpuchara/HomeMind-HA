@@ -5,7 +5,7 @@ History workers consume events. It decorates the established contracts rather th
 adding a second dispatcher: Executor remains the only HA command boundary.
 """
 from __future__ import annotations
-from sqlite_background import background_sqlite
+from sqlite_background import background_sqlite, is_sqlite_busy
 from storage_budget import StoragePressure, StorageRetry, require_storage_available, storage_recording_paused
 
 from contextlib import contextmanager
@@ -330,6 +330,7 @@ def install(core):
         results = {}
         errors = []
         pressure = None
+        busy = None
         callbacks = (
             ("events", lambda: flush_event_provenance(max_batches=max_event_batches)),
             ("decisions", flush_deferred),
@@ -341,11 +342,18 @@ def install(core):
             except StoragePressure as exc:
                 pressure = exc
             except Exception as exc:
-                errors.append(f"{name}: {type(exc).__name__}: {exc}")
+                if is_sqlite_busy(exc):
+                    busy = exc
+                else:
+                    errors.append(f"{name}: {type(exc).__name__}: {exc}")
         if errors:
             raise RuntimeError("; ".join(errors))
         if pressure is not None:
             raise pressure
+        if busy is not None:
+            # Keep the native result code for the retry policy and explicit
+            # durability callers. Failed callbacks have restored their queues.
+            raise busy
         return results
 
     def provenance_writer():
@@ -364,7 +372,7 @@ def install(core):
             except StoragePressure as exc:
                 storage_retry.defer(exc)
             except Exception as exc:
-                event_stats["errors"] += 1
+                event_stats["errors"] += int(not is_sqlite_busy(exc))
                 if storage_retry.defer(exc):
                     try:
                         store.event(

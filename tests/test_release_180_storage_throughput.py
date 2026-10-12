@@ -100,7 +100,7 @@ class GuardedImport180Tests(unittest.TestCase):
             for index in range(20):
                 with self.store.conn() as writer:
                     writer.execute('INSERT INTO app_meta VALUES(?,?)', (prefix + str(index), 'x' * 32000))
-                if self.budget.sample()['wal_bytes'] >= worker.RECLAIM_THRESHOLD_BYTES:
+                if self.budget.sample()['wal_bytes'] >= worker.storage_pressure_threshold_bytes:
                     break
             self.assertEqual(self.budget.snapshot()['level'], 'normal')
         grow('first')
