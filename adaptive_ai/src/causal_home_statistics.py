@@ -34,6 +34,8 @@ class CausalHomeStatistics:
         self._cursors = OrderedDict()
         self._cursor_revision = None
         self.query_calls = self.query_rows = self.cursor_hits = self.cursor_restores = 0
+        self._build_scope = self._scope(context)
+        source_digest = hashlib.sha256()
         try:
             checkpoint = connection.execute(
                 'SELECT model FROM home_checkpoints WHERE ts<? ORDER BY ts DESC LIMIT 1',
@@ -43,6 +45,7 @@ class CausalHomeStatistics:
             if 'no such table' not in str(exc):
                 raise
             checkpoint = None
+        source_digest.update(repr(checkpoint[0] if checkpoint else None).encode())
         model = RoomBeliefModel(context.options.get('home_model_half_life_days', 45),
                                json.loads(checkpoint[0]) if checkpoint else None)
         # Existing ON in the initial snapshot is not a fresh arrival.
@@ -53,6 +56,7 @@ class CausalHomeStatistics:
                 (eid, self.start, self.start),
             ).fetchone()
             if row:
+                self._fingerprint_row(source_digest, dict(row))
                 self._observe(model, dict(row), learn=False)
             TRAINING_BUDGET.checkpoint('home_statistics_seed')
         model.reset_movement_state()
@@ -60,6 +64,7 @@ class CausalHomeStatistics:
         interval = max(300.0, (self.end - self.start) / 64.0)
         boundary = self.start + interval
         for row in self._rows(self.start, self.end):
+            self._fingerprint_row(source_digest, row)
             available = self._available(row)
             while boundary < available and boundary < self.end:
                 model.expire(boundary)
@@ -67,11 +72,62 @@ class CausalHomeStatistics:
                 boundary += interval
             self._observe(model, row)
             self.rows += 1
+        self.source_fingerprint = source_digest.digest()
         self.identity = hashlib.sha256(
             repr((self.CONTRACT, self.start, self.end, context.registry_revision,
                   tuple(self.entities), self.rows, tuple(self.times))).encode()
             + b''.join(self.snapshots)
         ).hexdigest()[:24]
+
+    @classmethod
+    def _scope(cls, context):
+        return (context.registry_revision,
+                getattr(getattr(context, 'semantic_reliability', None), 'revision', 0),
+                context.options.get('home_model_half_life_days', 45),
+                tuple(sorted(eid for eid in context.relevant_entities()
+                             if context.evidence_metadata(eid).get('role') in cls.ROLES)))
+
+    @staticmethod
+    def _fingerprint_row(digest, row):
+        # Hash actual source content, including order/receipt metadata. This also
+        # detects raw SQL corrections and deletions without a new on-disk index.
+        digest.update(repr(tuple(row.get(name) for name in (
+            'id', 'entity_id', 'ts', 'received_ts', 'state', 'attributes_json',
+            'context_user_id', 'source'))).encode())
+
+    def reusable_for(self, connection, context, start, end):
+        if (connection is not self.conn or context is not self.context
+                or float(start) != self.start or float(end) != self.end
+                or self._scope(context) != self._build_scope):
+            return False
+        try:
+            checkpoint = connection.execute(
+                'SELECT model FROM home_checkpoints WHERE ts<? ORDER BY ts DESC LIMIT 1',
+                (self.start,)).fetchone()
+        except sqlite3.OperationalError as exc:
+            if 'no such table' not in str(exc):
+                raise
+            checkpoint = None
+        digest = hashlib.sha256()
+        digest.update(repr(checkpoint[0] if checkpoint else None).encode())
+        for eid in self.entities:
+            row = connection.execute(
+                'SELECT * FROM entity_history WHERE entity_id=? AND ts<=? '
+                'AND COALESCE(received_ts,ts)<=? ORDER BY ts DESC,id DESC LIMIT 1',
+                (eid, self.start, self.start)).fetchone()
+            if row:
+                self._fingerprint_row(digest, dict(row))
+            TRAINING_BUDGET.checkpoint('home_statistics_validate_seed')
+        for row in self._rows(self.start, self.end):
+            self._fingerprint_row(digest, row)
+        return digest.digest() == self.source_fingerprint
+
+    def begin_chunk(self):
+        # Tracker IDs change at a chunk boundary. Retain only immutable checkpoints,
+        # keeping query counters local to the chunk and the existing 8 MiB budget.
+        self._cursors.clear()
+        self._cursor_revision = None
+        self.query_calls = self.query_rows = self.cursor_hits = self.cursor_restores = 0
 
     @staticmethod
     def _available(row):
