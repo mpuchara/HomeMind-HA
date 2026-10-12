@@ -19,6 +19,13 @@ MAX_WRITE_BYTES = 16 * MIB
 SAMPLE_INTERVAL_SECONDS = 0.05
 SAMPLE_PAYLOAD_BYTES = MIB
 
+
+def _file_bytes(path):
+    try:
+        return path.stat().st_size
+    except FileNotFoundError:
+        return 0
+
 # Durable preferences, models and control ownership are deliberately absent.
 BULK_TABLES = frozenset({
     'entity_history', 'historical_experiences', 'events', 'provenance_events',
@@ -102,9 +109,9 @@ class StorageBudget:
 
     def _configure_auto(self):
         free = shutil.disk_usage(self.path.parent).free
-        db = self.path.stat().st_size if self.path.exists() else 0
+        db = _file_bytes(self.path)
         wal_path = Path(str(self.path) + '-wal')
-        wal = wal_path.stat().st_size if wal_path.exists() else 0
+        wal = _file_bytes(wal_path)
         # Count existing app files back into the available pool. As the app grows,
         # free space falls by the same amount: restarting cannot ratchet the quota
         # upwards. Other applications' data is excluded. Freeze for this process,
@@ -145,9 +152,9 @@ class StorageBudget:
         try:
             if self.mode == 'auto' and self.auto_pool_bytes is None:
                 self._configure_auto()
-            db = self.path.stat().st_size if self.path.exists() else 0
+            db = _file_bytes(self.path)
             wal_path = Path(str(self.path) + '-wal')
-            wal = wal_path.stat().st_size if wal_path.exists() else 0
+            wal = _file_bytes(wal_path)
             free = shutil.disk_usage(self.path.parent).free
             hard = free < self.hard_reserve or wal >= self.wal_limit
             with self.lock:
@@ -201,7 +208,8 @@ class StorageBudget:
         payload_bytes = _payload_bytes(parameters)
         if payload_bytes > MAX_WRITE_BYTES:
             self.reject('statement_payload_budget')
-        # Statements and commit always sample freshly. Within executemany and the
+        # Ordinary statements and commit sample freshly. Archive storage_batch
+        # scopes also refresh on entry/exit. Within these scopes, executemany and the
         # SQLite VM, reuse the shared snapshot for at most 50 ms / 1 MiB of input.
         # The SQLite page cap, per-row payload cap and final commit guard remain.
         with self.lock:
@@ -258,6 +266,27 @@ class BudgetConnection(sqlite3.Connection):
     storage_writing = 0
     storage_external_authorizer = None
     storage_denial = None
+    storage_batch_depth = 0
+
+    @contextmanager
+    def storage_batch(self):
+        """Share bounded admission samples within one short archive transaction.
+
+        Entry, exit and commit still sample freshly. Per-row payload and VM checks keep
+        the existing 50 ms / 1 MiB limits between them. This scope belongs to this
+        connection only; other writers and ordinary execute calls are unchanged.
+        """
+        if self.storage_budget is not None:
+            self.storage_budget.check()
+        self.storage_batch_depth += 1
+        try:
+            yield
+            if self.storage_budget is not None:
+                level = self.storage_budget.check()
+                if level != 'normal':
+                    self.storage_budget.reject(self.storage_budget.snapshot()['reason'])
+        finally:
+            self.storage_batch_depth -= 1
 
     def set_authorizer(self, callback):
         self.storage_external_authorizer = callback
@@ -293,7 +322,7 @@ class BudgetConnection(sqlite3.Connection):
         budget = self.storage_budget
         write = budget is not None and _is_write(sql)
         if write:
-            level = budget.check(parameters)
+            level = budget.check(parameters, refresh=not self.storage_batch_depth)
             update_tables = getattr(budget.local, 'update_tables', frozenset())
             # Changing the authorizer invalidates prepared statements. Thus a
             # previously cached INSERT cannot bypass a newly reached soft limit.
@@ -305,7 +334,7 @@ class BudgetConnection(sqlite3.Connection):
         try:
             yield
             if write:
-                budget.check()
+                budget.check(refresh=not self.storage_batch_depth)
         except sqlite3.DatabaseError as exc:
             # SQLite suppresses exceptions in C callbacks. Translate only a denial
             # issued by our budget; external authorizers retain SQLITE_AUTH semantics.

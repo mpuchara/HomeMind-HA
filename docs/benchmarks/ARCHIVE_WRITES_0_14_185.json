@@ -1,0 +1,247 @@
+{
+  "reference": "91c7343 / 0.14.184",
+  "cases": [
+    {
+      "source": "ha_history_fast_context",
+      "content_parity": true,
+      "median_insert_speedup": 1.139,
+      "median_retry_speedup": 1.329,
+      "repeats": [
+        {
+          "previous": {
+            "rows": 24000,
+            "insert_seconds": 0.813021,
+            "retry_seconds": 0.771779,
+            "retry_wal_growth_bytes": 6443680,
+            "disk_samples": 1880,
+            "batches": 376,
+            "max_batch_rows": 128,
+            "median_batch_ms": 3.013,
+            "max_batch_ms": 14.327
+          },
+          "current": {
+            "rows": 24000,
+            "insert_seconds": 0.713679,
+            "retry_seconds": 0.481615,
+            "retry_wal_growth_bytes": 1549120,
+            "disk_samples": 1128,
+            "batches": 376,
+            "max_batch_rows": 128,
+            "median_batch_ms": 2.284,
+            "max_batch_ms": 5.564
+          }
+        },
+        {
+          "current": {
+            "rows": 24000,
+            "insert_seconds": 0.635896,
+            "retry_seconds": 0.525955,
+            "retry_wal_growth_bytes": 1549120,
+            "disk_samples": 1128,
+            "batches": 376,
+            "max_batch_rows": 128,
+            "median_batch_ms": 2.305,
+            "max_batch_ms": 5.245
+          },
+          "previous": {
+            "rows": 24000,
+            "insert_seconds": 0.806487,
+            "retry_seconds": 0.639623,
+            "retry_wal_growth_bytes": 6443680,
+            "disk_samples": 1880,
+            "batches": 376,
+            "max_batch_rows": 128,
+            "median_batch_ms": 2.845,
+            "max_batch_ms": 8.889
+          }
+        },
+        {
+          "previous": {
+            "rows": 24000,
+            "insert_seconds": 0.794576,
+            "retry_seconds": 0.690411,
+            "retry_wal_growth_bytes": 6443680,
+            "disk_samples": 1880,
+            "batches": 376,
+            "max_batch_rows": 128,
+            "median_batch_ms": 3.016,
+            "max_batch_ms": 8.277
+          },
+          "current": {
+            "rows": 24000,
+            "insert_seconds": 0.730129,
+            "retry_seconds": 0.519641,
+            "retry_wal_growth_bytes": 1549120,
+            "disk_samples": 1128,
+            "batches": 376,
+            "max_batch_rows": 128,
+            "median_batch_ms": 2.374,
+            "max_batch_ms": 10.151
+          }
+        }
+      ]
+    },
+    {
+      "source": "ha_history_minimal",
+      "content_parity": true,
+      "median_insert_speedup": 1.086,
+      "median_retry_speedup": 1.433,
+      "repeats": [
+        {
+          "previous": {
+            "rows": 12202,
+            "insert_seconds": 0.507626,
+            "retry_seconds": 0.459396,
+            "retry_wal_growth_bytes": 3028200,
+            "disk_samples": 960,
+            "batches": 192,
+            "max_batch_rows": 128,
+            "median_batch_ms": 3.135,
+            "max_batch_ms": 6.031
+          },
+          "current": {
+            "rows": 12202,
+            "insert_seconds": 0.441078,
+            "retry_seconds": 0.290957,
+            "retry_wal_growth_bytes": 791040,
+            "disk_samples": 576,
+            "batches": 192,
+            "max_batch_rows": 128,
+            "median_batch_ms": 2.179,
+            "max_batch_ms": 6.384
+          }
+        },
+        {
+          "current": {
+            "rows": 12202,
+            "insert_seconds": 0.497493,
+            "retry_seconds": 0.356123,
+            "retry_wal_growth_bytes": 791040,
+            "disk_samples": 576,
+            "batches": 192,
+            "max_batch_rows": 128,
+            "median_batch_ms": 2.547,
+            "max_batch_ms": 6.245
+          },
+          "previous": {
+            "rows": 12202,
+            "insert_seconds": 0.51396,
+            "retry_seconds": 0.447278,
+            "retry_wal_growth_bytes": 3028200,
+            "disk_samples": 960,
+            "batches": 192,
+            "max_batch_rows": 128,
+            "median_batch_ms": 3.062,
+            "max_batch_ms": 7.798
+          }
+        },
+        {
+          "previous": {
+            "rows": 12202,
+            "insert_seconds": 0.535591,
+            "retry_seconds": 0.474327,
+            "retry_wal_growth_bytes": 3028200,
+            "disk_samples": 960,
+            "batches": 192,
+            "max_batch_rows": 128,
+            "median_batch_ms": 3.156,
+            "max_batch_ms": 16.77
+          },
+          "current": {
+            "rows": 12202,
+            "insert_seconds": 0.493033,
+            "retry_seconds": 0.33091,
+            "retry_wal_growth_bytes": 791040,
+            "disk_samples": 576,
+            "batches": 192,
+            "max_batch_rows": 128,
+            "median_batch_ms": 2.459,
+            "max_batch_ms": 22.913
+          }
+        }
+      ]
+    },
+    {
+      "source": "ha_history_full",
+      "content_parity": true,
+      "median_insert_speedup": 1.148,
+      "median_retry_speedup": 1.3,
+      "repeats": [
+        {
+          "previous": {
+            "rows": 24000,
+            "insert_seconds": 0.828101,
+            "retry_seconds": 0.703252,
+            "retry_wal_growth_bytes": 6147040,
+            "disk_samples": 1880,
+            "batches": 376,
+            "max_batch_rows": 128,
+            "median_batch_ms": 3.073,
+            "max_batch_ms": 9.489
+          },
+          "current": {
+            "rows": 24000,
+            "insert_seconds": 0.721307,
+            "retry_seconds": 0.485329,
+            "retry_wal_growth_bytes": 1549120,
+            "disk_samples": 1128,
+            "batches": 376,
+            "max_batch_rows": 128,
+            "median_batch_ms": 2.384,
+            "max_batch_ms": 14.056
+          }
+        },
+        {
+          "current": {
+            "rows": 24000,
+            "insert_seconds": 0.660762,
+            "retry_seconds": 0.527619,
+            "retry_wal_growth_bytes": 1549120,
+            "disk_samples": 1128,
+            "batches": 376,
+            "max_batch_rows": 128,
+            "median_batch_ms": 2.413,
+            "max_batch_ms": 14.374
+          },
+          "previous": {
+            "rows": 24000,
+            "insert_seconds": 0.91125,
+            "retry_seconds": 0.686121,
+            "retry_wal_growth_bytes": 6147040,
+            "disk_samples": 1880,
+            "batches": 376,
+            "max_batch_rows": 128,
+            "median_batch_ms": 3.177,
+            "max_batch_ms": 33.484
+          }
+        },
+        {
+          "previous": {
+            "rows": 24000,
+            "insert_seconds": 0.779989,
+            "retry_seconds": 0.698346,
+            "retry_wal_growth_bytes": 6147040,
+            "disk_samples": 1880,
+            "batches": 376,
+            "max_batch_rows": 128,
+            "median_batch_ms": 3.052,
+            "max_batch_ms": 7.776
+          },
+          "current": {
+            "rows": 24000,
+            "insert_seconds": 0.74168,
+            "retry_seconds": 0.574306,
+            "retry_wal_growth_bytes": 1549120,
+            "disk_samples": 1128,
+            "batches": 376,
+            "max_batch_rows": 128,
+            "median_batch_ms": 2.465,
+            "max_batch_ms": 6.309
+          }
+        }
+      ]
+    }
+  ],
+  "batch_rows": 128,
+  "limits": "Synthetic local parser/SQLite component with cooperative sleeps and checkpoints disabled for WAL byte comparison. Not a full training, HA or Raspberry Pi SD-card measurement. Mutation revisions differ for unchanged retries only."
+}
