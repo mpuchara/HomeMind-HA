@@ -476,7 +476,7 @@ class HistoryManager(threading.Thread):
         # Explicit agent training intentionally uses a recent rolling window rather than
         # replaying the entire local archive. Older history remains durable for diagnostics
         # and future offline analysis, but does not multiply every interactive retrain.
-        days = max(1.0, min(30.0, float(OPTIONS.get("agent_training_history_days", 10) or 10)))
+        days = max(1.0, min(30.0, float(OPTIONS.get("agent_training_history_days", 14) or 14)))
         start_ts = max(earliest, end_ts - days * 86400.0)
         return start_ts, end_ts
 
@@ -1933,7 +1933,7 @@ class HistoryManager(threading.Thread):
     def _fetch_history_resilient(self, entity_ids, start_ts, end_ts, *, minimal, no_attributes, source, depth=0):
         """Fetch Recorder history without allowing one large query to kill bootstrap.
 
-        A Raspberry Pi can legitimately need >45 s for a 10-day multi-entity Recorder query.
+        A Raspberry Pi can legitimately need >45 s for a multi-day multi-entity Recorder query.
         We therefore request short windows and, on timeout/server errors, automatically split
         first by entity list and then by time. Successful pieces are committed immediately,
         so a restart resumes safely thanks to the archive UNIQUE(entity_id, ts) constraint.
@@ -2103,10 +2103,10 @@ class HistoryManager(threading.Thread):
         else:
             refresh_start = max(start_ts, end_ts - max(6.0, float(OPTIONS.get("manual_discovery_hours", 24))) * 3600.0)
 
-        # Discovery classifies activity across history_bootstrap_days (10 d by default).
+        # Discovery classifies activity across history_bootstrap_days (14 d by default).
         # The previous low-memory path imported only the last 24 h on a clean database,
-        # so targets used on days 2..10 were impossible to discover even though the
-        # classifier advertised a 10-day window. Backfill that older slice exactly once.
+        # so targets used on days 2..14 were impossible to discover even though the
+        # classifier advertised a 14-day window. Backfill that older slice exactly once.
         #
         # Most actuator activity is encoded in the entity state. Fetch those targets with
         # minimal/no-attribute Recorder responses and 24 h windows. Only targets whose
@@ -4634,13 +4634,13 @@ class HistoryManager(threading.Thread):
             )
             recent_days = max(
                 1.0,
-                float(OPTIONS.get("agent_training_history_days", 10) or 10),
+                float(OPTIONS.get("agent_training_history_days", 14) or 14),
             )
             long_days = max(
                 recent_days,
                 min(
                     90.0,
-                    float(OPTIONS.get("agent_training_long_memory_days", 10) or 10),
+                    float(OPTIONS.get("agent_training_long_memory_days", 14) or 14),
                 ),
             )
             max_long_samples = max(

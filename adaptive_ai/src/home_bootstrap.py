@@ -64,7 +64,7 @@ class HomeBootstrap:
                 mapping = {eid: self.context.area_for(eid) for eid in ids}
                 metadata = {eid: dict(self.context.source_metadata.get(eid, {})) for eid in ids}
                 evidence = {eid: self.context.evidence_metadata(eid) for eid in ids}
-            begin = cutoff - float(self.context.options.get('history_bootstrap_days', 10)) * 86400
+            begin = cutoff - float(self.context.options.get('history_bootstrap_days', 14)) * 86400
             if import_recorder:
                 windows = self.history._time_windows(begin, cutoff, max_hours=1)
                 total = math.ceil((cutoff - begin) / 3600) * ((len(ids) + 5) // 6)

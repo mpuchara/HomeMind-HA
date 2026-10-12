@@ -24,9 +24,9 @@ class StorageRetention:
     BATCH_ROWS = 128
     MAX_BATCHES = 16
 
-    def __init__(self, store, days=10):
+    def __init__(self, store, days=14):
         self.store = store
-        self.days = max(1, min(10, float(days)))
+        self.days = max(1, min(14, float(days)))
         self.stop_event = threading.Event()
         self.thread = None
         self.lock = threading.Lock()
@@ -114,7 +114,7 @@ class StorageRetention:
                     extra = ''
                     if table == 'entity_history':
                         # One causal seed per entity is enough to reconstruct a
-                        # state unchanged for >10 days at the replay boundary.
+                        # state unchanged beyond the retained window at the replay boundary.
                         extra = ' AND EXISTS (SELECT 1 FROM entity_history newer WHERE newer.entity_id=entity_history.entity_id AND newer.ts>entity_history.ts AND newer.ts<?)'
                     elif table == 'home_checkpoints':
                         extra = ' AND ts < (SELECT MAX(ts) FROM home_checkpoints WHERE ts<?)'
