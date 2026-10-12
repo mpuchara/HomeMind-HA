@@ -1,10 +1,10 @@
 {
-  "version": "0.14.188",
-  "release_date": "2026-10-12",
-  "base_version": "0.14.187",
-  "base_commit": "9de14cfe5d48b08ba75471f0e3d1071a32f4cd21",
-  "release_status": "causal-statistics-chunk-reuse-and-indexed-replay-fallback",
-  "release_validation_tests_passed": 2252,
+  "version": "0.14.189",
+  "release_date": "2026-10-13",
+  "base_version": "0.14.188",
+  "base_commit": "7b89870cdd35f2cda53fb6f9e56bdd81e94bde27",
+  "release_status": "correct-candidate-installed-contract-and-parent-preservation",
+  "release_validation_tests_passed": 2263,
   "release_014140": {
     "scope": "inventory_and_remove_remaining_shipped_feature_Handler_fallbacks_for_Candidate_Live_and_manual_feedback_transport",
     "explicit_routes": "manual_feedback.js, candidate_ui.js, candidate_preference_ui.js, /api/candidates, Candidate Teach-RL status/train, generation history/comparison, /api/candidate-live, /api/live and Candidate discard",
@@ -250,7 +250,7 @@
   "pi4_release_gate_contract": "pi4_release_gate_v1",
   "pi4_real_hardware_required": true,
   "stage7_offline_rl_control_unlock": false,
-  "tests_passed": 2252,
+  "tests_passed": 2263,
   "profile": "rpi4-ram-first-complete-discovery-manual-agent-selection",
   "manual_agent_training": true,
   "max_concurrent_training_jobs": 1,
@@ -2662,5 +2662,13 @@
     "validation_tests_expected": 2252,
     "benchmark": "docs/benchmarks/CHUNK_REPLAY_0_14_188.json",
     "validation": "2252 tests passed, no skips, Linux/WSL Python 3.12.3; 10 focused Windows regressions passed; exact statistics, fallback row, and real three-chunk worker model/experience parity passed; compileall passed"
+  },
+  "release_014189": {
+    "scope": "installed_runtime_schema_validation_and_compatible_parent_correct_recovery",
+    "validation": "cold_composition_real_binary_classifier_five_on_corrections_off_preservation_and_semantic_schema_migration",
+    "live_model_changed": false,
+    "historical_rebuild_for_compatible_parent": false,
+    "tests_passed": 2263,
+    "new_regressions": 11
   }
 }

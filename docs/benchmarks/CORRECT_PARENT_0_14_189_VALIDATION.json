@@ -1,0 +1,56 @@
+{
+  "version": "0.14.189",
+  "base_commit": "7b89870cdd35f2cda53fb6f9e56bdd81e94bde27",
+  "full_suite": {
+    "passed": 2263,
+    "seconds": 244.072,
+    "platform": "WSL Ubuntu / Python 3.12.3",
+    "skipped": 0,
+    "log_sha256": "bd9d41a55115db8bc63f67994b6e5dbc37cee7f5b86c5294e7c60bef3563509f"
+  },
+  "new_regressions": 11,
+  "compileall": true,
+  "cold_composition": {
+    "before": {
+      "stored_schema": 12,
+      "correct_required_schema": 11,
+      "compatible": false
+    },
+    "after": {
+      "stored_schema": 12,
+      "correct_required_schema": 12,
+      "compatible": true
+    }
+  },
+  "integration": {
+    "input": "synthetic real binary desired-state policy; five ON corrections",
+    "parent_prediction_before": 0.0,
+    "candidate_corrected_prediction": 1.0,
+    "empty_predictions": [
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0
+    ],
+    "parent_unchanged": true,
+    "historical_rebuild_calls": 0,
+    "offline_gate_passed": true,
+    "historical_samples": 24,
+    "historical_parent_score": 1.0,
+    "historical_candidate_score": 1.0,
+    "stability_anchors": 5,
+    "stability_anchors_retained": 5
+  },
+  "source_export": {
+    "version": "0.14.188",
+    "unique_correct_events": 5,
+    "physical_label_rows": 10,
+    "candidate_build_reason": "schema_upgrade_rebuild",
+    "parent_schema_version": 12,
+    "parent_feature_contract": 4,
+    "parent_checksum_valid": true,
+    "candidate_offline_status": "insufficient_evidence"
+  },
+  "scope": "Confirmed false schema rejection plus synthetic pipeline regression; source export contains model summaries, not full weights; post-update user-device behavior not measured"
+}
