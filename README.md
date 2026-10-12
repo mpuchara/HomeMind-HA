@@ -1,6 +1,6 @@
-# HomeMind-HA / Adaptive AI 0.14.185
+# HomeMind-HA / Adaptive AI 0.14.186
 
-0.14.185: tańsze kontrole miejsca podczas importu Recorder i mniej zapisów do WAL przy ponawianiu historii. Zachowane limity dysku i 14 dni historii. [Opis poprawki i pomiary](docs/RELEASE_0_14_185_PL.md).
+0.14.186: ponowna ocena kontekstu przy Rebuild, dobór jasności według historii przed zapaleniem lampy i zgodna ocena treningowa. [Opis poprawki](docs/RELEASE_0_14_186_PL.md).
 
 
 Karta agenta ma cztery akcje: **Shadow/Control**, **Wrong decision**, **Settings** i **Teach**. Wrong decision uczy poprawnego Desired. Teach otwiera powiększalny wykres historii z wyborem dokładnej chwili i zapisem poprawnego Desired. Cofanie ostatniej korekty jest dostępne w Teach oraz Settings; pozostałe operacje i diagnostyka są w Settings.

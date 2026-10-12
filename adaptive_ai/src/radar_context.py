@@ -70,7 +70,7 @@ def radar_context_entities(agent, baseline, states, registry, limit=8):
         area = (registry.get(agent.get("target_entity")) or {}).get("area_id")
         if area:
             areas.add(area)
-    order = {"presence": 0, "still": 1, "moving": 2, "illumination": 3, "energy": 4, "distance": 5, "gate_energy": 6}
+    order = {"presence": 0, "still": 1, "moving": 2, "energy": 3, "distance": 4, "gate_energy": 5, "illumination": 6}
     candidates = []
     for eid, state in states.items():
         role = radar_role(eid, state)

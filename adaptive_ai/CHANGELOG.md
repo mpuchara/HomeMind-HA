@@ -1,3 +1,10 @@
+## 0.14.186
+- Rebuild ocenia ponownie niewyuczony schemat szybkiego agenta, również przy zachowaniu poprzedniego doboru sensorów.
+- Automatyczna jasność i stan słońca są oceniane na wejściach obecności przy wyłączonej lampie, przed akcją, w treningowej części historii. Brak dowodu zależności nie dodaje jasności do modelu; jawne wejścia i warunki HA są zachowane.
+- Ocena warunków jasności nowych modeli korzysta z pomiaru otoczenia sprzed zapalenia lampy, zgodnie z cechami modelu.
+- Lokalne kanały obecności, energii i odległości mają pierwszeństwo przed niepotwierdzoną jasnością. Do 9 sensorów w istniejącym wymiarze 128, bez zwiększania rozmiaru modelu lub retencji.
+- Po aktualizacji wykonaj Rebuild wybranego agenta i sprawdź wyniki w Shadow. Szczegóły w docs/RELEASE_0_14_186_PL.md.
+
 ## 0.14.185
 - Import Recorder współdzieli pomiary pojemności w krótkiej transakcji, z zachowanymi kontrolami wejścia/wyjścia/commit i granicami 50 ms / 1 MiB. Rozmiar pliku jest odczytywany jednym stat(), bez dodatkowego exists().
 - Identyczny wynik UPSERT nie przepisuje wiersza historii ani jego rewizji. Zmiany stanu, atrybutów, użytkownika, źródła i czasu odbioru nadal unieważniają cache replay.

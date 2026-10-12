@@ -148,6 +148,21 @@ def _automation_lighting_context(selection_meta, states):
 
 def lighting_context(selection_meta, states, at_ts=None, temporal=None):
     out = _automation_lighting_context(selection_meta, states)
+    assessment = (selection_meta or {}).get("training_context_assessment") or {}
+    if assessment.get("version") == 1 and at_ts is not None and out["sensors"]:
+        # New rebuilt models use the same ambient observation for features and ON
+        # eligibility. Emitted lamp light cannot reward an occupied OFF interval.
+        from types import SimpleNamespace
+        from observation_contract import _feature_observation, _resolve_current_state
+        condition_states = dict(states)
+        schema = SimpleNamespace(feature_contract_version=4)
+        for eid in out["sensors"]:
+            _, state = _resolve_current_state(eid, states, temporal, float(at_ts))
+            state = state or {"entity_id": eid, "state": "unknown"}
+            obs, _ = _feature_observation(schema, eid, state, assessment, states,
+                                          temporal, float(at_ts), float(at_ts))
+            condition_states[eid] = {**state, "state": str(obs["physical_value"]) if obs["valid"] else "unknown"}
+        out = _automation_lighting_context(selection_meta, condition_states)
     from additional_signal import evaluate
     evidence = evaluate(selection_meta, states, at_ts, temporal)
     if evidence.get("purpose") == "avoid_bright_on":

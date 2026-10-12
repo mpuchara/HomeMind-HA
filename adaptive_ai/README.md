@@ -1,6 +1,6 @@
-# HomeMind-HA / Adaptive AI 0.14.179
+# HomeMind-HA / Adaptive AI 0.14.186
 
-0.14.179: rzeczywisty etap aktywnego treningu, postęp importu Recorder i liczniki zapisu dużych porcji historii.
+0.14.186: ponowna ocena kontekstu przy Rebuild oraz przyczynowy dobór jasności i sensorów radaru.
 
 
 Cztery akcje każdego agenta: Shadow/Control, Wrong decision, Settings, Teach.

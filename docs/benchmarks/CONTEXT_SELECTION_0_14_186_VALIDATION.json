@@ -1,0 +1,18 @@
+{
+  "version": "0.14.186",
+  "base_commit": "f4efd1fd9da39d6189d7d5db519f89481896f213",
+  "full_suite": {
+    "passed": 2237,
+    "seconds": 235.417,
+    "platform": "WSL Ubuntu / Python 3.12.3",
+    "skipped": 0,
+    "log_sha256": "d4865e779fa5f03539a9a89c00e433f4a37bd84f45f901a951d0ee22a4e0384d"
+  },
+  "new_regressions": {
+    "focused_context": 21,
+    "isolated_workers": 2
+  },
+  "bathroom_worker": "8 probes: empty, entry, stationary, washbasin, exit, short dip, short visit entry/stay; maintenance holdout passed; lamp-emission sensor excluded",
+  "kitchen_worker": "configured illumination retained; persisted daylight OFF and dark stationary ON predictions passed",
+  "scope": "synthetic observations; real isolated HistoryManager and persisted policy; no HA dispatch or Pi end-to-end timing"
+}

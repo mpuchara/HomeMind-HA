@@ -1,10 +1,10 @@
 {
-  "version": "0.14.185",
+  "version": "0.14.186",
   "release_date": "2026-10-12",
-  "base_version": "0.14.184",
-  "base_commit": "91c7343324d38a1922bfed6486b4ef6dd7a3ba06",
-  "release_status": "guarded-recorder-import-and-idempotent-archive-writes",
-  "release_validation_tests_passed": 2214,
+  "base_version": "0.14.185",
+  "base_commit": "f4efd1fd9da39d6189d7d5db519f89481896f213",
+  "release_status": "causal-pretraining-context-assessment",
+  "release_validation_tests_passed": 2237,
   "release_014140": {
     "scope": "inventory_and_remove_remaining_shipped_feature_Handler_fallbacks_for_Candidate_Live_and_manual_feedback_transport",
     "explicit_routes": "manual_feedback.js, candidate_ui.js, candidate_preference_ui.js, /api/candidates, Candidate Teach-RL status/train, generation history/comparison, /api/candidate-live, /api/live and Candidate discard",
@@ -2631,5 +2631,15 @@
     "new_regression_tests": 12,
     "benchmark": "docs/benchmarks/ARCHIVE_WRITES_0_14_185.json",
     "validation": "2214 tests passed on Linux/WSL Python 3.12.3, no skips; 54 storage tests passed on Windows Python 3.13; source entrypoint 0.14.185 reached ready; benchmark parity and WAL checks passed on both systems"
+  },
+  "release_014186": {
+    "scope": "bounded causal daylight assessment for empty automatic fast-agent schemas, including cached Rebuild",
+    "feature_contract": 4,
+    "max_assessment_rows": 65536,
+    "max_arrivals": 256,
+    "validation_tests_expected": 2237,
+    "control_semantics_changed": false,
+    "new_regression_tests": 23,
+    "validation": "2237 tests passed, no skips, Linux/WSL Python 3.12.3; 21 new focused tests passed on Windows Python 3.11; actual isolated relay/kitchen training and persisted predictions verified"
   }
 }
