@@ -5,10 +5,13 @@ current live graph are never used as occupancy labels or past trajectory statist
 Compressed internal snapshots bound memory; queries replay only the remaining prefix.
 """
 import bisect
+import copy
 import hashlib
 import json
 import sqlite3
+import sys
 import zlib
+from collections import OrderedDict
 
 from context import archived_state
 from home_state import RoomBeliefModel
@@ -28,6 +31,9 @@ class CausalHomeStatistics:
         self.times, self.snapshots = [], []
         self.max_bytes = int(max_bytes)
         self.bytes = self.rows = 0
+        self._cursors = OrderedDict()
+        self._cursor_revision = None
+        self.query_calls = self.query_rows = self.cursor_hits = self.cursor_restores = 0
         try:
             checkpoint = connection.execute(
                 'SELECT model FROM home_checkpoints WHERE ts<? ORDER BY ts DESC LIMIT 1',
@@ -115,8 +121,34 @@ class CausalHomeStatistics:
         self.snapshots.append(blob)
         self.bytes += len(blob)
 
-    def statistics_at(self, timestamp):
+    @staticmethod
+    def _model_bytes(model):
+        # Count the retained Python containers, rather than assuming that a serialized
+        # byte is a byte of RAM. Locks are private to each model and are not copied.
+        seen = set()
+        def size(value):
+            if id(value) in seen:
+                return 0
+            seen.add(id(value))
+            result = sys.getsizeof(value)
+            if isinstance(value, dict):
+                result += sum(size(k) + size(v) for k, v in value.items())
+            elif isinstance(value, (list, tuple, set)) or type(value).__name__ == 'deque':
+                result += sum(size(v) for v in value)
+            return result
+        return size({k: v for k, v in vars(model).items() if k != 'lock'})
+
+    @staticmethod
+    def _copy_model(model):
+        result = RoomBeliefModel(model.half_life / 86400.0)
+        for name, value in vars(model).items():
+            if name != 'lock':
+                setattr(result, name, copy.deepcopy(value))
+        return result
+
+    def statistics_at(self, timestamp, *, cursor='default'):
         timestamp = float(timestamp)
+        self.query_calls += 1
         if timestamp < self.start:
             # No information from this training window may reach an earlier sample.
             model = RoomBeliefModel(self.context.options.get('home_model_half_life_days', 45))
@@ -124,18 +156,51 @@ class CausalHomeStatistics:
         if timestamp > self.end:
             raise ValueError('causal home statistics query outside training window')
         index = max(0, bisect.bisect_right(self.times, timestamp) - 1)
-        raw = json.loads(zlib.decompress(self.snapshots[index]))
-        model = RoomBeliefModel(self.context.options.get('home_model_half_life_days', 45), raw['stats'])
-        for name, value in raw['runtime'].items():
-            setattr(model, name, value)
-        model.area_sources = {area: set(ids) for area, ids in raw['area_sources'].items()}
-        model.arrivals.extend((area, stamp) for area, stamp in raw['arrivals'])
-        for row in self._rows(self.times[index], timestamp):
+        revision = (
+            self.conn.execute('PRAGMA data_version').fetchone()[0],
+            self.conn.total_changes,
+            self.context.registry_revision,
+            getattr(getattr(self.context, 'semantic_reliability', None), 'revision', 0),
+            self.context.options.get('home_model_half_life_days', 45),
+        )
+        if revision != self._cursor_revision:
+            self._cursors.clear()
+            self._cursor_revision = revision
+        previous = self._cursors.pop(cursor, None)
+        if previous is not None and previous[0] == index and previous[1] <= timestamp:
+            _, lo, model, _ = previous
+            self.cursor_hits += 1
+        else:
+            raw = json.loads(zlib.decompress(self.snapshots[index]))
+            model = RoomBeliefModel(self.context.options.get('home_model_half_life_days', 45), raw['stats'])
+            for name, value in raw['runtime'].items():
+                setattr(model, name, value)
+            model.area_sources = {area: set(ids) for area, ids in raw['area_sources'].items()}
+            model.arrivals.extend((area, stamp) for area, stamp in raw['arrivals'])
+            lo = self.times[index]
+            self.cursor_restores += 1
+        for row in self._rows(lo, timestamp):
             self._observe(model, row)
-        model.expire(timestamp)
-        return model.graph, model.dwell, model.calibration
+            self.query_rows += 1
+        model_bytes = self._model_bytes(model)
+        remaining = max(0, self.max_bytes - self.bytes)
+        if model_bytes <= remaining:
+            self._cursors[cursor] = (index, timestamp, model, model_bytes)
+            while len(self._cursors) > 2 or sum(item[3] for item in self._cursors.values()) > remaining:
+                self._cursors.popitem(last=False)
+        # Query-only expiry can teach a missing destination at this timestamp. It must
+        # never enter the next prefix, where the legacy replay expires only at actual
+        # source events/checkpoint boundaries. Returned dictionaries are private too.
+        view = self._copy_model(model)
+        view.expire(timestamp)
+        return view.graph, view.dwell, view.calibration
 
     def status(self):
         return {'contract': self.CONTRACT, 'direct_sources': len(self.entities),
                 'source_rows': self.rows, 'snapshots': len(self.times),
-                'compressed_bytes': self.bytes}
+                'compressed_bytes': self.bytes,
+                'query_calls': self.query_calls, 'query_rows': self.query_rows,
+                'cursor_hits': self.cursor_hits, 'cursor_restores': self.cursor_restores,
+                'cursor_entries': len(self._cursors),
+                'cursor_bytes': sum(item[3] for item in self._cursors.values()),
+                'max_bytes': self.max_bytes}

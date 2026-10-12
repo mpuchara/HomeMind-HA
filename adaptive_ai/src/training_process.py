@@ -698,7 +698,7 @@ def _build_sequence_job(history, chunks):
 
 
 def _apply_status(history, payload):
-    if not isinstance(payload, dict):
+    if not isinstance(payload, dict) or not payload:
         return
     allowed = {
         "phase", "progress", "message", "chunk_done", "chunk_total",
@@ -708,6 +708,26 @@ def _apply_status(history, payload):
     kwargs = {key: payload[key] for key in allowed if key in payload}
     if kwargs:
         history.set_status(**kwargs)
+    # Worker status is an observation, not authority to change the parent job's
+    # clock, progress mapping or model. Keep fractional throughput and live profiling
+    # while allowing the parent to calculate its complete-pass ETA exactly once.
+    with history.lock:
+        for field in ('training_rows_per_second', 'history_rows_per_second'):
+            if field in payload:
+                setattr(history, field, max(0.0, float(payload[field] or 0.0)))
+        for field, attribute in (
+            ('training_phase_timings', 'training_phase_timings'),
+            ('temporal_replay', 'temporal_replay_stats'),
+            ('training_ram_replay_index', 'training_ram_replay_index_status'),
+            ('training_transition_edge_index', 'training_transition_edge_index_status'),
+            ('training_feature_snapshot_cache', 'training_feature_snapshot_cache_status'),
+            ('training_home_context_cache', 'training_home_context_cache_status'),
+            ('training_replay_cache', 'training_replay_cache_status'),
+        ):
+            if isinstance(payload.get(field), dict):
+                setattr(history, attribute, dict(payload[field]))
+        if payload.get('updated_at') is not None:
+            history.training_process_status['status_updated_at'] = float(payload['updated_at'])
 
 
 def _terminate(process, grace_seconds=2.0):
@@ -1599,6 +1619,7 @@ def worker_main(job_path):
                 raise InterruptedError("Persistent training worker cancelled")
             chunk_kwargs = dict(chunk.get("train_kwargs") or {})
             history.set_status(
+                phase='training',
                 progress=chunk_kwargs.get("progress_lo"),
                 message=(
                     f"Persistent training worker: chunk {chunk_position + 1}/"

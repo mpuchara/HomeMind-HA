@@ -1,10 +1,10 @@
 {
-  "version": "0.14.182",
+  "version": "0.14.183",
   "release_date": "2026-10-12",
-  "base_version": "0.14.181",
-  "base_commit": "537e06ae16d4be0aedc7c9e443c94d51b96ebc6a",
-  "release_status": "capacity-aware-wal-and-durable-contention-retry",
-  "release_validation_tests_passed": 2187,
+  "base_version": "0.14.182",
+  "base_commit": "e0ca2687083f062378877649902eb17e5fb3d21f",
+  "release_status": "bounded-causal-prefix-replay-and-live-worker-diagnostics",
+  "release_validation_tests_passed": 2199,
   "release_014140": {
     "scope": "inventory_and_remove_remaining_shipped_feature_Handler_fallbacks_for_Candidate_Live_and_manual_feedback_transport",
     "explicit_routes": "manual_feedback.js, candidate_ui.js, candidate_preference_ui.js, /api/candidates, Candidate Teach-RL status/train, generation history/comparison, /api/candidate-live, /api/live and Candidate discard",
@@ -2594,5 +2594,21 @@
     "io_errors_remain_visible": true,
     "storage_admission_and_recorder_rows_unchanged": true,
     "limit": "No deployed SD card or complete training speed guarantee"
+  },
+  "release_014183": {
+    "scope": "bounded causal statistics prefix reuse and live isolated worker profiling",
+    "causal_statistics_contract": "causal_home_statistics_v1",
+    "cursor_limit": 2,
+    "memory_budget": "shares remaining existing causal statistics budget; exact replay fallback",
+    "invalidation": "SQLite data_version/own changes, topology, semantic reliability, half life, rewind and checkpoint boundary",
+    "query_expiry": "private copy, excluded from persistent prefix",
+    "storage_budget": "unchanged configurable capacity fraction",
+    "live_worker_diagnostics": true,
+    "validation_tests_expected": 2199,
+    "benchmark_queries": 8000,
+    "benchmark_legacy_rows": 121200,
+    "benchmark_optimized_rows": 2400,
+    "timing_scope": "synthetic component; not a full Raspberry Pi training estimate",
+    "eta_contract": "actual replay progress after Recorder preparation; independent of 10 percent UI allocation"
   }
 }

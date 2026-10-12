@@ -182,6 +182,7 @@ class HistoryManager(threading.Thread):
         self.training_job_started_at = None
         self.training_job_start_progress = 0.0
         self.training_overall_eta_seconds = None
+        self.training_replay_started_at = None
         self.training_rebuild_reason = None
         self.training_stateful_replay_status = {}
         # Rebuild resets learned heads, not the expensive sensor-selection result.
@@ -413,6 +414,21 @@ class HistoryManager(threading.Thread):
             # session while new UI/debug surfaces can inspect all workers.
             d["training_process"] = dict(rows[0]["training_process"] or {})
             d.update(rows[0]["status"])
+            oldest_session = sessions[0][1]
+            for key, attribute in (
+                ('training_phase_timings', 'training_phase_timings'),
+                ('training_job_timings', 'training_job_timings'),
+                ('temporal_replay', 'temporal_replay_stats'),
+                ('training_ram_replay_index', 'training_ram_replay_index_status'),
+                ('training_transition_edge_index', 'training_transition_edge_index_status'),
+                ('training_feature_snapshot_cache', 'training_feature_snapshot_cache_status'),
+                ('training_home_context_cache', 'training_home_context_cache_status'),
+                ('training_replay_cache', 'training_replay_cache_status'),
+            ):
+                d[key] = dict(getattr(oldest_session, attribute, {}) or {})
+            # Expose one complete-pass estimate consistently on both compatibility
+            # and current UI surfaces. The local replay ETA remains stage_eta_seconds.
+            d['eta_seconds'] = d['training_overall_eta_seconds']
             d["training_stage_progress"] = (
                 d["work_done"] / d["work_total"] if d["work_total"] else None
             )
@@ -1238,6 +1254,8 @@ class HistoryManager(threading.Thread):
             work_done=0, work_total=0, phase_detail="Recorder preparation complete; chronological replay follows",
         )
         self.training_replay_progress_mapped = True
+        self.training_replay_started_at = now_ts()
+        self.training_overall_eta_seconds = None
         run_storage_write(STORE, lambda: require_storage_available(STORE),
             self.stop_event, getattr(self, 'job_cancel_event', None))
         if rebuild:
@@ -1552,8 +1570,16 @@ class HistoryManager(threading.Thread):
                 # includes Recorder waits, Pi-safe throttling and every completed chunk.
                 if self.training_job_agent_id is not None and self.training_job_started_at is not None:
                     start_p = clamp(float(self.training_job_start_progress or 0.0), 0.0, 0.999999)
+                    replay_started = getattr(self, 'training_replay_started_at', None)
+                    if replay_started is not None:
+                        # Recorder's 10% UI allocation is not replay work. Extrapolate
+                        # only actual replay progress, including worker startup/reset
+                        # and later checkpoint/finalization work in its elapsed time.
+                        start_p = 0.10 + 0.90 * start_p
                     effective = (p - start_p) / max(1e-9, 1.0 - start_p)
-                    elapsed = max(0.0, now - float(self.training_job_started_at))
+                    elapsed = max(0.0, now - float(
+                        replay_started if replay_started is not None else self.training_job_started_at
+                    ))
                     if (getattr(self, "training_replay_progress_mapped", True)
                             and effective >= 0.005 and elapsed >= 5.0):
                         raw_eta = elapsed * max(0.0, 1.0 - effective) / max(effective, 1e-9)
@@ -3770,6 +3796,7 @@ class HistoryManager(threading.Thread):
                 max(0.0, 1.0 - totals["sql_queries"] / legacy) if legacy else None
             )
             self.training_phase_timings.update({
+                'causal_home_statistics': home_statistics.status(),
                 "ram_replay_lookup_seconds": round(
                     float(onset.get("ram_index_lookup_seconds") or 0.0)
                     + float(persistence.get("ram_index_lookup_seconds") or 0.0),
@@ -5039,7 +5066,7 @@ class HistoryManager(threading.Thread):
                 self.set_status(progress=p, message=f"{progress_label}: replay {replay_done:,}/{replay_total:,} target history rows",
                                 stage_eta_seconds=remaining, work_done=replay_done, work_total=replay_total,
                                 work_unit="target history rows", eta_source="measured replay throughput",
-                                phase_detail=f"Chronological reward replay for {len(agents)} agent(s) · {rate:,.0f} rows/s")
+                                phase_detail=f"Chronological reward replay for {len(agents)} agent(s) · {rate:,.2f} rows/s")
                 replay_last_report = now_report
             if (
                 not frozen_boundary_captured
