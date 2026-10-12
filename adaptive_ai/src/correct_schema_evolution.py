@@ -36,10 +36,11 @@ import agent_candidate_conservative_correct as conservative
 import agent_candidate_balanced_correct as balanced
 import correct_data_foundation as foundation
 import correct_margin_repair as margin
-from context import ExplicitFeatureSchema, archived_state, context_scalar, is_fast_reactive_agent
+from context import archived_state, context_scalar, is_fast_reactive_agent
+import policy as policy_module
+import replay as replay_module
 from policy import MultiHorizonPolicy
 from policy_backend import serialize_backend_model, verify_model_checksum
-from replay import SQLiteTemporalTracker
 from settings import OPTIONS, iso_now
 
 
@@ -74,9 +75,13 @@ def _stable_model_schema_compatible(raw_model):
         dims = int(raw.get("dims") or schema.get("dims") or OPTIONS.get("feature_dimensions", 128))
         if int(raw.get("version", 0)) != int(MultiHorizonPolicy.VERSION):
             return False
+        if dims != int(OPTIONS.get("feature_dimensions", 128)):
+            return False
     except (TypeError, ValueError):
         return False
-    return ExplicitFeatureSchema.from_export(schema, dims) is not None
+    # Final runtime composition imports Correct before installing the observation
+    # contract. Resolve the installed class at use time, just as policy loading does.
+    return policy_module.ExplicitFeatureSchema.from_export(schema, dims) is not None
 
 
 def _schema_contract_detail(raw_model):
@@ -86,11 +91,57 @@ def _schema_contract_detail(raw_model):
         "policy_version": raw.get("version"),
         "required_policy_version": MultiHorizonPolicy.VERSION,
         "schema_version": schema.get("version"),
-        "required_schema_version": ExplicitFeatureSchema.VERSION,
+        "required_schema_version": policy_module.ExplicitFeatureSchema.VERSION,
         "model_dims": raw.get("dims"),
         "schema_dims": schema.get("dims"),
         "required_dims": int(OPTIONS.get("feature_dimensions", 128)),
     }
+
+
+def _recover_compatible_correct_builds(manager):
+    """Retry obsolete-schema detours as Correct when the parent loads normally.
+
+    Completed, unapproved children from the false v11 check may contain a history
+    rebuild rather than a correction. Keep their identity and labels, but let the
+    ordinary Correct worker replace their weights with the immutable parent snapshot.
+    Never interrupt an active historical worker or touch an approved generation.
+    """
+    recovered = 0
+    for row in manager._all_rows():
+        if (str(row.get("reason") or "") != _SCHEMA_UPGRADE_REASON
+                or str(row.get("state") or "") not in {
+                    "queued", "failed", "insufficient_evidence", "offline_blocked", "missing_context"
+                } or row.get("discard_requested")):
+            continue
+        parent_model = manager.store.get_model(str(row["parent_agent_id"]))
+        if not parent_model or not _stable_model_schema_compatible(parent_model):
+            continue
+        queue = manager._queue()
+        job = queue.status_for(row["candidate_id"]) if queue is not None else None
+        if job and str(job.get("state") or "") == "active":
+            continue
+        if job and str(job.get("state") or "") == "queued":
+            queue.cancel(row["candidate_id"])
+        now = time.time()
+        with manager.lock, manager.store.lock, manager.store.conn() as db:
+            changed = db.execute(
+                """UPDATE agent_candidates SET reason='feedback',state='queued',dirty=1,
+                   queued_ts=?,updated_ts=?,last_error=NULL,offline_gate_json='{}',comparison_json='{}',
+                   build_started_ts=NULL,build_finished_ts=NULL,comparison_started_ts=NULL
+                   WHERE parent_agent_id=? AND reason=? AND state=? AND discard_requested=0""",
+                (now, now, str(row["parent_agent_id"]), _SCHEMA_UPGRADE_REASON, row["state"]),
+            ).rowcount
+        if changed:
+            manager.runtime.pop(str(row["parent_agent_id"]), None)
+            manager.store.event(
+                row["parent_agent_id"], "info", "candidate_correct_schema_detour_recovered",
+                "Compatible parent restored as Candidate Correct base; retained corrections requeued",
+                {"candidate_id": row["candidate_id"], "previous_state": row["state"]},
+            )
+            recovered += 1
+    if recovered:
+        manager.wake_event.set()
+    return recovered
 
 
 def _json(raw, default=None):
@@ -511,10 +562,13 @@ def migrate_model_schema(raw_model, new_entities, evolution_meta=None):
     """Remap head dimensions by semantic feature label; never reinterpret an old index."""
     raw = copy.deepcopy(raw_model or {})
     dims = int(raw.get("dims") or (raw.get("schema") or {}).get("dims") or 128)
-    old_schema = ExplicitFeatureSchema.from_export(raw.get("schema"), dims)
+    schema_class = policy_module.ExplicitFeatureSchema
+    old_schema = schema_class.from_export(raw.get("schema"), dims)
     if old_schema is None:
         raise ValueError("Stable correction base schema is incompatible")
-    new_schema = ExplicitFeatureSchema(dims, list(new_entities or ()))
+    # Adding sensors must preserve the parent's photometric/observation semantics.
+    new_contract = {**old_schema.export(), "entities": list(new_entities or ())}
+    new_schema = schema_class.from_export(new_contract, dims)
     old_map = _feature_index_map(old_schema)
     new_map = _feature_index_map(new_schema)
     mapping = {
@@ -522,7 +576,8 @@ def migrate_model_schema(raw_model, new_entities, evolution_meta=None):
         for label, old_index in old_map.items()
         if label in new_map
     }
-    for index in range(max(0, dims - 7), dims):
+    home_width = len(new_contract.get("home_features") or ()) or 7
+    for index in range(max(0, dims - home_width), dims):
         mapping[index] = index
 
     heads = {}
@@ -557,6 +612,19 @@ def migrate_model_schema(raw_model, new_entities, evolution_meta=None):
         head["b"] = new_b
         head["ctx_sum"] = new_sum
         head["ctx_sq"] = new_sq
+        if head.get("rejection_b") is not None:
+            old_rejection = head["rejection_b"]
+            head["rejection_b"] = [
+                [0.0] * dims for _ in range(action_count)
+            ]
+            for arm in range(action_count):
+                for old_index, new_index in mapping.items():
+                    head["rejection_b"][arm][new_index] = old_rejection[arm][old_index]
+        if head.get("binary_state_classifier") is not None:
+            from binary_state_classifier import BinaryStateClassifier
+            classifier = BinaryStateClassifier(dims, head["binary_state_classifier"])
+            classifier.remap({new: old for old, new in mapping.items()})
+            head["binary_state_classifier"] = classifier.export()
         head["validation_weight"] = 0.0
         head["validation_correct_weight"] = 0.0
         head["validation_samples"] = 0.0
@@ -634,7 +702,7 @@ def _score_schema_replay(core, policy, agent, rows):
         float(OPTIONS.get("fast_precursor_off_seconds", 120) or 120) + 30.0,
     )
     watched = list(getattr(policy.schema, "entities", []) or [])
-    tracker = SQLiteTemporalTracker(
+    tracker = replay_module.SQLiteTemporalTracker(
         core.STORE,
         watched,
         core.ENGINE.context,
@@ -744,7 +812,7 @@ def _raw_anchor_pool(core, manager, candidate, policy, teach_times):
         180.0,
         float(OPTIONS.get("fast_precursor_off_seconds", 120) or 120) + 30.0,
     )
-    tracker = SQLiteTemporalTracker(
+    tracker = replay_module.SQLiteTemporalTracker(
         core.STORE,
         list(getattr(policy.schema, "entities", []) or []),
         core.ENGINE.context,
@@ -1167,6 +1235,7 @@ def install(core, manager):
     manager.correct_schema_upgrade_contract = (
         "incompatible_stable_correct_base_routes_to_isolated_historical_candidate_rebuild"
     )
+    _recover_compatible_correct_builds(manager)
     core.STORE.event(
         None,
         "info",

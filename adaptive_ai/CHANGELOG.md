@@ -1,3 +1,9 @@
+## 0.14.189
+- Correct sprawdza schemat zainstalowany w runtime, zamiast klasy v11 zachowanej przez wcześniejszy import. Prawidłowy model v12 jest korygowany jako kopia rodzica bez pełnej przebudowy.
+- Niezaakceptowany kandydat po błędnym `schema_upgrade_rebuild` wraca do Correct, jeśli jego rodzic ma zgodny model. Zachowane są ID i etykiety; aktywnego treningu ani zaakceptowanego kandydata nie przerywamy.
+- Rozszerzenie kontekstu zachowuje wersję cech, klasyfikator Desired, współczynniki odrzuceń i cały ogon obserwacji domu. Replay używa trackera zainstalowanego w runtime.
+- Szczegóły w docs/RELEASE_0_14_189_PL.md.
+
 ## 0.14.188
 - Fragmenty jednego workera współdzielą statystyki trajektorii dla identycznego okna po sprawdzeniu pełnego odcisku danych źródłowych. Zmiany historii, checkpointu, mapowania lub wiarygodności sensorów powodują ponowną budowę.
 - Zapytania replay poza RAM rozdzielają nowe zdarzenia i późny odbiór. Używają istniejącego indeksu czasu odbioru, z zachowaniem kolejności oraz limitu próbek.
