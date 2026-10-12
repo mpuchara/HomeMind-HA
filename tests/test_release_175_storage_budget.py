@@ -181,7 +181,7 @@ class StorageBudget175Tests(unittest.TestCase):
             c.executescript('CREATE TABLE provenance_events(event_time REAL, payload TEXT); CREATE TABLE manual_feedback_journal(created_time REAL, payload TEXT);')
             c.executemany('INSERT INTO provenance_events VALUES(?,?)', [(now - 11 * 86400, 'old'), (now, 'new')])
             c.execute('INSERT INTO manual_feedback_journal VALUES(?,?)', (now - 100 * 86400, 'keep'))
-        StorageRetention(self.store).run_once(now)
+        StorageRetention(self.store, 10).run_once(now)
         with self.store.conn() as c:
             self.assertEqual([r[0] for r in c.execute('SELECT payload FROM provenance_events')], ['new'])
             self.assertEqual(c.execute('SELECT payload FROM manual_feedback_journal').fetchone()[0], 'keep')
@@ -192,7 +192,7 @@ class StorageBudget175Tests(unittest.TestCase):
             c.execute('CREATE TABLE provenance_events(event_time REAL, payload TEXT)')
             c.executemany('INSERT INTO provenance_events VALUES(?,?)', [(now - 11 * 86400, 'x' * 4096)] * 100)
         before = Path(self.store.path).stat().st_size
-        worker = StorageRetention(self.store)
+        worker = StorageRetention(self.store, 10)
         worker.run_once(now)
         self.assertGreater(worker.snapshot()['reclaimed_pages'], 0)
         self.assertLess(Path(self.store.path).stat().st_size, before)
@@ -203,7 +203,7 @@ class StorageBudget175Tests(unittest.TestCase):
             c.execute('CREATE TABLE provenance_events(event_time REAL, payload TEXT)')
             c.execute('INSERT INTO provenance_events VALUES(?,?)', (now - 11 * 86400, 'old'))
         with self.free(self.budget.reserve - MIB):
-            StorageRetention(self.store).run_once(now)
+            StorageRetention(self.store, 10).run_once(now)
         with self.store.conn() as c:
             self.assertEqual(c.execute('SELECT count(*) FROM provenance_events').fetchone()[0], 0)
 
@@ -214,7 +214,7 @@ class StorageBudget175Tests(unittest.TestCase):
         new = datetime.fromtimestamp(now - 10 * 86400 + 60, timezone(timedelta(hours=-12))).isoformat()
         with self.store.conn() as c:
             c.executemany('INSERT INTO events(created_at,level,kind,message) VALUES(?,?,?,?)', [(old,'info','old','old'), (new,'info','new','new')])
-        StorageRetention(self.store).run_once(now)
+        StorageRetention(self.store, 10).run_once(now)
         with self.store.conn() as c:
             self.assertEqual([r[0] for r in c.execute('SELECT kind FROM events')], ['new'])
 
@@ -233,9 +233,9 @@ class StorageBudget175Tests(unittest.TestCase):
         path.write_text(json.dumps({'agent_training_history_days': 7, 'agent_training_long_memory_days': 35, 'archive_retention_days': 365}))
         with patch.object(settings, 'OPTIONS_PATH', path):
             options = settings.load_options()
-        self.assertEqual(options['agent_training_history_days'], 10)
-        self.assertEqual(options['agent_training_long_memory_days'], 10)
-        self.assertEqual(options['archive_retention_days'], 10)
+        self.assertEqual(options['agent_training_history_days'], 14)
+        self.assertEqual(options['agent_training_long_memory_days'], 14)
+        self.assertEqual(options['archive_retention_days'], 14)
 
     def test_worker_json_quota_preserves_previous_result(self):
         path = self.root / 'result.json'
@@ -277,7 +277,7 @@ class StorageBudget175Tests(unittest.TestCase):
                        observed=1, source_kind='human')
         with self.store.conn() as c:
             before = c.execute('SELECT revision FROM confidence_probability_revisions').fetchone()[0]
-        StorageRetention(self.store).run_once(now)
+        StorageRetention(self.store, 10).run_once(now)
         self.assertEqual(journal.rows('action', 'model', 'room'), [])
         with self.store.conn() as c:
             after = c.execute('SELECT revision FROM confidence_probability_revisions').fetchone()[0]

@@ -15,7 +15,7 @@ try:
 except Exception:
     ws_connect = None
 
-APP_VERSION = "0.14.183"
+APP_VERSION = "0.14.184"
 HISTORY_BOOTSTRAP_REVISION = "target-attrs-v2"
 TRAINING_REVISION = "shared-home-intents-v26"
 DATA_DIR = Path(os.environ.get("ADAPTIVE_AI_DATA", "/data"))
@@ -88,9 +88,9 @@ DEFAULT_OPTIONS = {
     # it after reconstructing the minimal open-dwell state at each chunk boundary.
     "agent_training_overlap_hours": 6,
     "agent_training_stateful_continuation": True,
-    "agent_training_history_days": 10,
+    "agent_training_history_days": 14,
     # Raw replay and any optional sparse replay share the same storage horizon.
-    "agent_training_long_memory_days": 10,
+    "agent_training_long_memory_days": 14,
     "agent_training_long_memory_max_samples": 96,
     "agent_training_long_memory_max_mass_ratio": 0.50,
     "agent_training_pause_ms": 0,
@@ -108,8 +108,8 @@ DEFAULT_OPTIONS = {
     "policy_backend_shadow_enabled": False,
     "policy_backend_shadow_max_features": 24,
     "policy_backend_shadow_ridge": 1.0,
-    "history_bootstrap_days": 10,
-    "archive_retention_days": 10,
+    "history_bootstrap_days": 14,
+    "archive_retention_days": 14,
     "storage_budget_mode": "auto",
     "storage_auto_use_percent": 50,
     "storage_database_max_mb": 2048,
@@ -117,7 +117,7 @@ DEFAULT_OPTIONS = {
     "storage_min_free_mb": 2048,
     "archive_context_interval_seconds": 30,
     "auto_agent_min_changes": 2,
-    "auto_agent_recent_days": 10,
+    "auto_agent_recent_days": 14,
     "max_auto_agents": 250,
     "automation_scan_enabled": True,
     "automation_hint_weight": 0.85,
@@ -434,7 +434,7 @@ def load_options():
             if data.get("auto_agent_min_changes") == 4:
                 options["auto_agent_min_changes"] = 2
             if data.get("auto_agent_recent_days") == 7:
-                options["auto_agent_recent_days"] = 10
+                options["auto_agent_recent_days"] = 14
             if data.get("feature_dimensions") == 192:
                 options["feature_dimensions"] = 128
             # v0.7.3: migrate the old shipped realtime debounce so existing installs
@@ -480,10 +480,12 @@ def load_options():
     options["manual_agent_training"] = True
     # Migrate the historical default even when HA persists the old options.json.
     if options.get('agent_training_history_days') == 7:
-        options['agent_training_history_days'] = 10
+        options['agent_training_history_days'] = 14
     for key in ('agent_training_history_days', 'agent_training_long_memory_days',
                 'archive_retention_days', 'history_bootstrap_days', 'auto_agent_recent_days'):
-        options[key] = max(1, min(10, float(options.get(key, 10))))
+        # Upgrade the former persisted default; retain shorter custom windows.
+        value = float(options.get(key, 14))
+        options[key] = 14 if value == 10 else max(1, min(14, value))
     options["max_concurrent_training_jobs"] = 1
     return options
 

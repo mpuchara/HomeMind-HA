@@ -40,7 +40,7 @@ class Release047TrainingCorrectEventsTests(unittest.TestCase):
     def test_release_defaults_are_fast_but_short_sliced(self):
         settings=(ROOT/'adaptive_ai/src/settings.py').read_text(encoding='utf-8')
         config=(ROOT/'adaptive_ai/config.yaml').read_text(encoding='utf-8')
-        self.assertIn('"agent_training_history_days": 10', settings)
+        self.assertIn('"agent_training_history_days": 14', settings)
         self.assertIn('"agent_training_pause_ms": 0', settings)
         self.assertIn('"training_cpu_duty_cycle": 0.85', settings)
         self.assertIn('"training_max_continuous_work_ms": 35', settings)

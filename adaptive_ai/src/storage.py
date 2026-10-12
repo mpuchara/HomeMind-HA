@@ -147,7 +147,7 @@ class Store:
         if self.training_worker_process:
             return False
         if self._retention_worker is None:
-            self._retention_worker = StorageRetention(self, OPTIONS.get('archive_retention_days', 10))
+            self._retention_worker = StorageRetention(self, OPTIONS.get('archive_retention_days', 14))
         self._retention_worker.start()
         return True
 

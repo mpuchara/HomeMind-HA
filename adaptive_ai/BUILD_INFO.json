@@ -1,10 +1,10 @@
 {
-  "version": "0.14.183",
+  "version": "0.14.184",
   "release_date": "2026-10-12",
-  "base_version": "0.14.182",
-  "base_commit": "e0ca2687083f062378877649902eb17e5fb3d21f",
-  "release_status": "bounded-causal-prefix-replay-and-live-worker-diagnostics",
-  "release_validation_tests_passed": 2199,
+  "base_version": "0.14.183",
+  "base_commit": "e1d434e9cf45f641e962c9e65c95e1f95cde4a3d",
+  "release_status": "fourteen-day-training-and-retention",
+  "release_validation_tests_passed": 2202,
   "release_014140": {
     "scope": "inventory_and_remove_remaining_shipped_feature_Handler_fallbacks_for_Candidate_Live_and_manual_feedback_transport",
     "explicit_routes": "manual_feedback.js, candidate_ui.js, candidate_preference_ui.js, /api/candidates, Candidate Teach-RL status/train, generation history/comparison, /api/candidate-live, /api/live and Candidate discard",
@@ -2610,5 +2610,15 @@
     "benchmark_optimized_rows": 2400,
     "timing_scope": "synthetic component; not a full Raspberry Pi training estimate",
     "eta_contract": "actual replay progress after Recorder preparation; independent of 10 percent UI allocation"
+  },
+  "release_014184": {
+    "scope": "fourteen day training, optional bootstrap/discovery and archive retention horizon",
+    "default_history_days": 14,
+    "maximum_history_days": 14,
+    "persisted_ten_day_defaults_migrated": true,
+    "shorter_custom_windows_preserved": true,
+    "storage_budgets_unchanged": true,
+    "existing_replay_checkpoints_preserved": true,
+    "new_regression_tests": 3
   }
 }
