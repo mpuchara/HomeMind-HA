@@ -486,7 +486,7 @@ class HistoryManager(threading.Thread):
         signal = agent.get("additional_signal")
         return inputs + ((json.dumps(signal, sort_keys=True),) if signal else ())
 
-    def _remember_training_schema(self, agent, raw_model=None):
+    def _remember_training_schema(self, agent, raw_model=None, *, rescreen=False):
         raw = raw_model
         if raw is None:
             raw = STORE.get_model(agent["id"])
@@ -516,12 +516,15 @@ class HistoryManager(threading.Thread):
             # Empty heads are deliberate: Rebuild relearns policy values from scratch.
             "heads": {},
         }
+        if rescreen:
+            seed["selection_meta"].pop("training_context_assessment", None)
         if int(schema.get("version") or 0) == 12:
             # This cache contains no coefficients. Upgrade only the next rebuilt
             # generation; never reinterpret the live model's existing feature slots.
             from observation_contract import FeatureSchemaV12, FEATURE_CONTRACT_VERSION
             entities = list(schema.get("entities") or [])
-            if is_fast_reactive_agent(agent) and "*" in set(agent.get("input_entities") or ["*"]):
+            if (is_fast_reactive_agent(agent) and "*" in set(agent.get("input_entities") or ["*"])
+                    and not seed["selection_meta"].get("training_context_assessment")):
                 from radar_context import radar_context_entities
                 with self.engine.lock:
                     states = dict(self.engine.state_map)
@@ -535,10 +538,10 @@ class HistoryManager(threading.Thread):
                 # before old correlated features consume every slot.
                 if baseline and bundle:
                     entities = list(dict.fromkeys(sorted(baseline) + bundle))
-                    seed["selection_meta"] = {
+                    seed["selection_meta"].update({
                         "automation_baseline_entities": sorted(baseline),
                         "automation_baseline_mode": "automation_first",
-                    }
+                    })
                 else:
                     entities = list(dict.fromkeys(entities + bundle))
                 seed["selection_meta"]["radar_context_entities"] = bundle
@@ -716,7 +719,7 @@ class HistoryManager(threading.Thread):
             with self.engine.executor.target_lock(agent["target_entity"]):
                 if rebuild:
                     # Capture schema/input selection before deleting learned weights.
-                    seed = self._remember_training_schema(agent)
+                    seed = self._remember_training_schema(agent, rescreen=True)
                     suppressors = self._false_activation_schema_rescreen(
                         agent, seed
                     )
@@ -1167,6 +1170,11 @@ class HistoryManager(threading.Thread):
             context_ids = [eid for eid in ((model.get("schema") or {}).get("entities") or []) if eid != target]
         with self.engine.lock:
             live_states = dict(self.engine.state_map)
+            live_registry = dict(self.engine.entity_registry)
+        if rebuild and seed and is_fast_reactive_agent(agent) and "*" in set(agent.get("input_entities") or ["*"]):
+            from training_context_selection import candidates
+            context_ids = candidates(agent, seed.get("selection_meta") or {},
+                                     live_states, live_registry, context_ids)
         fast_ids = [eid for eid in context_ids if entity_capability_tags(eid, live_states.get(eid) or {}) & {"occupancy", "activity"}]
         fast_set = set(fast_ids)
         regular_ids = [eid for eid in context_ids if eid not in fast_set]
@@ -2514,23 +2522,39 @@ class HistoryManager(threading.Thread):
                 min(float(end_ts), float(continuation_from_ts)),
             )
 
-        # Feature screening is only needed while the policy schema is unresolved.
-        # Once a model checkpoint exists, its explicit schema is authoritative for later
-        # chunks/resume. Likewise, an explicitly selected input list (Teach/Correct or a
-        # manual agent) does not need another whole-home precursor scan.
+        # Learned checkpoints are authoritative. An empty Rebuild seed preserves
+        # slots for Recorder preparation, but must recheck their relevance once.
         saved_models = {
             a["id"]: (STORE.get_model(a["id"]) or self.training_schema_seed(a["id"], a))
             for a in agents
         }
+        with self.engine.lock:
+            screening_states = dict(self.engine.state_map)
+            screening_registry = dict(self.engine.entity_registry)
+        from training_context_selection import candidates as training_candidates
+        seeded_screen_entities = set()
+        seeded_screen_agents = set()
+        for agent in agents:
+            raw = saved_models.get(agent["id"])
+            if (raw and not raw.get("heads") and is_fast_reactive_agent(agent)
+                    and not (raw.get("selection_meta") or {}).get("training_context_assessment")
+                    and "*" in set(agent.get("input_entities") or ["*"])):
+                seeded_screen_agents.add(agent["id"])
+                seeded_screen_entities.update(training_candidates(
+                    agent, raw.get("selection_meta") or {}, screening_states,
+                    screening_registry, (raw.get("schema") or {}).get("entities") or []))
         screen_agents = [
             a for a in agents
-            if saved_models.get(a["id"]) is None
+            if (saved_models.get(a["id"]) is None or a["id"] in seeded_screen_agents)
             and ("*" in set(a.get("input_entities") or ["*"]))
         ]
+        scoped_screening = bool(screen_agents) and len(seeded_screen_agents) == len(screen_agents)
         screen_target_map = {}
         for a in screen_agents:
             screen_target_map.setdefault(a["target_entity"], []).append(a)
         screening_required = bool(screen_agents)
+        self.training_phase_timings["context_screening_scope"] = (
+            "seeded_context" if scoped_screening else "whole_home" if screening_required else "persisted_schema")
 
         # A full-archive COUNT is required only while feature screening is unresolved.
         # Once a persisted/explicit schema exists, replay below counts only target rows.
@@ -2538,7 +2562,8 @@ class HistoryManager(threading.Thread):
         # logical checkpoint of a seven-day selected-agent pass.
         if screening_required:
             archive_row_count = STORE.archive_count(
-                start_ts=start_ts, end_ts=end_ts
+                start_ts=start_ts, end_ts=end_ts,
+                entity_ids=(seeded_screen_entities | set(screen_target_map)) if scoped_screening else None,
             )
             if archive_row_count <= 0:
                 return 0
@@ -2598,6 +2623,8 @@ class HistoryManager(threading.Thread):
             eid for eid, st in discovery_states.items()
             if is_context_candidate_entity(eid, st, discovery_excluded)
         }
+        if scoped_screening:
+            context_candidates &= seeded_screen_entities
         behaviour_candidates = {
             eid for eid in context_candidates
             if entity_capability_tags(eid, discovery_states.get(eid) or {}) & {"occupancy", "activity"}
@@ -2832,6 +2859,28 @@ class HistoryManager(threading.Thread):
                 ),
             )
         policies = {a["id"]: self.engine.policy(a) for a in agents}
+        for agent in agents:
+            if agent["id"] in seeded_screen_agents:
+                meta = policies[agent["id"]].selection_meta
+                scores = fast_driver_scores.get(agent["id"]) or {}
+                meta["causal_behaviour_scores"] = scores
+                meta["causal_presence_scores"] = {eid: score for eid, score in scores.items()
+                                                  if eid in occupancy_edge_index}
+        from training_context_selection import select_training_context
+        assessment_started = time.perf_counter()
+        assessment_end = float(end_ts) - max(
+            1800.0, archive_span * float(OPTIONS.get("confidence_validation_fraction", .2)))
+        if assessment_end > float(start_ts):
+            for agent in agents:
+                if select_training_context(policies[agent["id"]], agent,
+                                           discovery_states, discovery_registry, STORE,
+                                           float(start_ts), assessment_end):
+                    assessment = policies[agent["id"]].selection_meta["training_context_assessment"]
+                    STORE.event(agent["id"], "info", "training_context_assessed",
+                                "Assessed pre-action lighting dependency and radar context before learning",
+                                assessment)
+        self.training_phase_timings["context_assessment_seconds"] = round(
+            time.perf_counter() - assessment_started, 4)
         quality_registry = self.engine.context.resolved_registry()
         quality_memory = {}
         quality_outcomes = {}

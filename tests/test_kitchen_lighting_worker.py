@@ -8,6 +8,12 @@ from tools.benchmark_kitchen_lighting import run
 
 
 class KitchenLightingWorkerTests(unittest.TestCase):
+    def test_automatic_rebuild_preserves_configured_daylight_dependency(self):
+        report = run(wildcard=True)
+        self.assertTrue(report["pass"], report)
+        self.assertTrue(report["context_assessment"]["configured_lighting"])
+        self.assertIn("sensor.kitchen_light", report["context_assessment"]["selected"])
+
     def test_real_training_preserves_daylight_off_and_dark_stationary_on(self):
         report = run()
         self.assertTrue(report["pass"], report)

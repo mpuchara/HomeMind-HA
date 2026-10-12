@@ -7,6 +7,14 @@ from benchmark_stationary_relay import run
 
 
 class StationaryRelayWorkerTests(unittest.TestCase):
+    def test_bathroom_rebuild_rejects_emitted_light_and_keeps_radar_accuracy(self):
+        report = run(noisy=True, wildcard_unmapped=True, lamp_feedback=True)
+        self.assertNotIn("sensor.espen4_light", report["persisted_entities"])
+        self.assertIn("sensor.espen4_stationary_target_distance", report["persisted_entities"])
+        self.assertIsNotNone(report["context_assessment"])
+        self.assertTrue(report["pass"], report["predictions"])
+        self.assertTrue(report["maintenance_holdout"]["passed"])
+
     def test_worker_learns_short_dropout_and_preserves_brief_handwashing_visits(self):
         report = run(noisy=True, wildcard_unmapped=True)
         by_phase = {row["phase"]: row for row in report["predictions"]}

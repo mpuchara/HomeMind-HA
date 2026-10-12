@@ -15,15 +15,15 @@ TARGET = "switch.shellyplus1pm_441793a613bc_switch_0"
 RADAR = "sensor.espen4_stationary_energy"
 
 
-def run(feature_contract=3, neural=False, contradictory_binary=False, wildcard_unmapped=False, noisy=False):
+def run(feature_contract=3, neural=False, contradictory_binary=False, wildcard_unmapped=False, noisy=False, lamp_feedback=False):
     contract = install_training_contract()
     try:
-        return _run(feature_contract, neural, contradictory_binary, wildcard_unmapped, noisy)
+        return _run(feature_contract, neural, contradictory_binary, wildcard_unmapped, noisy, lamp_feedback)
     finally:
         contract["restore"]()
 
 
-def _run(feature_contract, neural, contradictory_binary, wildcard_unmapped, noisy):
+def _run(feature_contract, neural, contradictory_binary, wildcard_unmapped, noisy, lamp_feedback):
     with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
         root = Path(tmp)
         db, aid, base, end, _, _ = fixture.seed_database(root)
@@ -42,6 +42,9 @@ def _run(feature_contract, neural, contradictory_binary, wildcard_unmapped, nois
         foreign = [f"sensor.kitchen_presence_g{i}_still_energy" for i in range(7)]
         if wildcard_unmapped:
             inputs += ["sensor.espen4_moving_energy"] + foreign
+        light = "sensor.espen4_light"
+        if lamp_feedback:
+            inputs += [light]
         with store.conn() as conn:
             conn.execute("DELETE FROM entity_history")
             conn.execute("UPDATE agents SET target_entity=?, input_entities=? WHERE id=?",
@@ -62,6 +65,8 @@ def _run(feature_contract, neural, contradictory_binary, wildcard_unmapped, nois
                     extra_value = str(value) if wildcard_unmapped else "off"
                     if eid == distance:
                         extra_value = str(380 if short_visit else 110 if on else 0)
+                    if eid == light:
+                        extra_value = "200" if on and offset >= 10 else "20"
                     rows.append((eid, t + offset, extra_value, {}, None, "test", t + offset + .05))
             if noisy and on and not short_visit:
                 rows.extend([(RADAR, t + 43, "8", attrs, None, "test", t + 43.05),
@@ -75,6 +80,8 @@ def _run(feature_contract, neural, contradictory_binary, wildcard_unmapped, nois
         for eid in inputs[1:]:
             states[eid] = {"entity_id": eid, "state": "off", "attributes": {}}
             registry[eid] = {"area_id": "lazienka", "device_id": "radar"}
+        if lamp_feedback:
+            states[light]["state"] = "20"
         if wildcard_unmapped:
             registry.pop(RADAR)
             registry.pop("sensor.espen4_moving_energy")
@@ -179,6 +186,7 @@ def _run(feature_contract, neural, contradictory_binary, wildcard_unmapped, nois
                 "feature_contract": feature_contract,
                 "persisted_feature_contract": raw["schema"]["feature_contract_version"],
                 "persisted_entities": raw["schema"]["entities"],
+                "context_assessment": raw.get("selection_meta", {}).get("training_context_assessment"),
                 "worker_wall_seconds": result["wall_seconds"],
                 "neural_tournament": (fixture.load_training_record(result["store"], aid) or {}).get("tournament"),
                 "pass": all(row["expected"] == row["predicted"] for row in predictions)}

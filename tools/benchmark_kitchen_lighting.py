@@ -22,15 +22,15 @@ PRESENCE = "binary_sensor.kitchen_has_target"
 LIGHT = "sensor.kitchen_light"
 
 
-def run(*, additional_signal=None, motion_only=False):
+def run(*, additional_signal=None, motion_only=False, wildcard=False):
     contract = install_training_contract()
     try:
-        return _run(additional_signal=additional_signal, motion_only=motion_only)
+        return _run(additional_signal=additional_signal, motion_only=motion_only, wildcard=wildcard)
     finally:
         contract["restore"]()
 
 
-def _run(*, additional_signal=None, motion_only=False):
+def _run(*, additional_signal=None, motion_only=False, wildcard=False):
     with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
         root = Path(tmp)
         db, aid, base, _, _, _ = fixture.seed_database(root)
@@ -41,7 +41,7 @@ def _run(*, additional_signal=None, motion_only=False):
             store.update_agent(aid, {"additional_signal": additional_signal})
         with store.conn() as conn:
             conn.execute("DELETE FROM entity_history")
-            conn.execute("UPDATE agents SET target_entity=?, input_entities=? WHERE id=?", (TARGET, json.dumps(inputs), aid))
+            conn.execute("UPDATE agents SET target_entity=?, input_entities=? WHERE id=?", (TARGET, json.dumps(["*"] if wildcard else inputs), aid))
         attrs = {ENERGY: {"unit_of_measurement": "%"}, PRESENCE: {"device_class": "occupancy"}, LIGHT: {}}
         rows = [(TARGET, base-30, "off", {}, None, "test", base-30)]
         cycles, duration = 60, 180
@@ -84,7 +84,7 @@ def _run(*, additional_signal=None, motion_only=False):
             data["options"]["tiny_mlp_supervised_training_enabled"] = False
             data["automation_infos"] = [on_rule, off_rule]
             data["automation_hints"] = inputs
-            data["schema_cache_item"] = {"input_fingerprint": sorted(inputs), "model": {
+            data["schema_cache_item"] = {"input_fingerprint": ["*"] if wildcard else sorted(inputs), "model": {
                 "version": MultiHorizonPolicy.VERSION, "dims": 128, "actions": [0, 1], "horizons": [1],
                 "schema": FeatureSchemaV12(128, schema_inputs).export(), "heads": {},
                 "selection_meta": {"automation_baseline_candidates": inputs, "automation_baseline_entities": inputs,
@@ -154,6 +154,7 @@ def _run(*, additional_signal=None, motion_only=False):
                 "predictions": predictions, "training_quality": raw.get("_training_quality"),
                 "additional_signal_objective": raw.get("_benchmark_counts",{}).get("additional_signal_objective"),
                 "persisted_feature_contract": raw["schema"]["feature_contract_version"],
+                "context_assessment": raw.get("selection_meta", {}).get("training_context_assessment"),
                 "updates": policy.total_updates, "worker_seconds": result["wall_seconds"],
                 "classifier": {k: v for k, v in raw["heads"]["1"].get("binary_state_classifier", {}).items() if k in ("ready", "fits", "seen")},
                 "pass": all(p["expected"] == p["predicted"] for p in predictions)}

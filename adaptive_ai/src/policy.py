@@ -350,7 +350,7 @@ class MultiHorizonPolicy(PolicyBackend):
             fresh_meta["causal_behaviour_scores"] = {k:v for k,v in (fresh_meta.get("causal_behaviour_scores") or {}).items() if k in set(self.schema.entities)}
             fresh_meta["primary_behavioural_drivers"] = [x for x in fresh_meta.get("primary_behavioural_drivers", []) if x in set(self.schema.entities)]
             fresh_meta["upstream_sensors"] = [x for x in fresh_meta.get("upstream_sensors", []) if x in set(self.schema.entities)]
-            selection_meta = fresh_meta
+            selection_meta = {**selection_meta, **fresh_meta}
         selection_meta.update(self.context_exclusion_meta)
         selection_meta["additional_signal"] = agent.get("additional_signal")
         self.selection_meta = selection_meta
