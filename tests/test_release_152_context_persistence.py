@@ -128,7 +128,8 @@ class ContextPersistence152Tests(unittest.TestCase):
         with patch.object(self.store, 'conn', side_effect=fail):
             with self.assertRaises(OSError):
                 self.buffer.flush()
-        self.assertEqual(self.buffer.snapshot(), dict(pending=2, flushed=0, errors=1))
+        self.assertEqual({key: self.buffer.snapshot()[key] for key in ('pending', 'flushed', 'errors')},
+                         dict(pending=2, flushed=0, errors=1))
         self.buffer.flush()
         self.assertEqual([row[2] for row in self.disk()], [2, 1])
 

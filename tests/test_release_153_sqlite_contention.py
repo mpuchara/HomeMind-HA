@@ -197,7 +197,7 @@ class SQLiteContention153Tests(unittest.TestCase):
         service._shadow_flush_event = threading.Event()
         service._shadow_flush_event.set()
         timeouts = []
-        def flush():
+        def flush(**kwargs):
             with self.store.conn() as c:
                 timeouts.append(c.execute('PRAGMA busy_timeout').fetchone()[0])
             service.engine.stop_event.set()
