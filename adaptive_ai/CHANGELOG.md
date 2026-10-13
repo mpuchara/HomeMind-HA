@@ -1,3 +1,10 @@
+## 0.14.191 (2026-10-13)
+
+- RAM: kompletne statystyki puli sensorów i ich jakości scalane do zapisu co około 30 sekund. Limit domyślnie 16 MiB i 4096 wierszy na bufor, także dla zapisu w toku. Przepełnienie wymusza dotychczasowy zapis do SQLite; brak plików tymczasowych.
+- Shadow: liczba sensorów odczytywana raz na obserwację i współdzielona w RAM. Schemat/model pozostają świeże; cache jest usuwany również po wyjątku.
+- Weryfikacja modeli: jeden przebieg po memo zamiast dodatkowych kopii i skanów. Świeży SHA kanonicznego JSON i wykrywanie mutacji pozostają przy każdym użyciu.
+- Diagnostyka: zajętość i limit buforów RAM, liczba zapisów po przepełnieniu oraz trafienia cache metadanych obserwacji. Jawny zapis i zamknięcie wymuszają opróżnienie buforów.
+
 ## 0.14.190 (2026-10-13)
 
 - Correct: klasyfikator binarny startuje od wag, normalizacji i odrzuceń rodzica. Aktualizuje tylko nierozwiązane punkty; wcześniejsze poprawne punkty są chronione przed regresją.

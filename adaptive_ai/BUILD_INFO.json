@@ -1,10 +1,10 @@
 {
-  "version": "0.14.190",
+  "version": "0.14.191",
   "release_date": "2026-10-13",
-  "base_version": "0.14.189",
-  "base_commit": "82a39ae352fee3f58275359d1be63ff604729820",
-  "release_status": "correct-generation-stability-frozen-classifier-basis",
-  "release_validation_tests_passed": 2272,
+  "base_version": "0.14.190",
+  "base_commit": "ce332508a36d906423103ced218791edf0d3edd5",
+  "release_status": "bounded-runtime-ram-context-statistics-and-metadata",
+  "release_validation_tests_passed": 2279,
   "release_014140": {
     "scope": "inventory_and_remove_remaining_shipped_feature_Handler_fallbacks_for_Candidate_Live_and_manual_feedback_transport",
     "explicit_routes": "manual_feedback.js, candidate_ui.js, candidate_preference_ui.js, /api/candidates, Candidate Teach-RL status/train, generation history/comparison, /api/candidate-live, /api/live and Candidate discard",
@@ -250,7 +250,7 @@
   "pi4_release_gate_contract": "pi4_release_gate_v1",
   "pi4_real_hardware_required": true,
   "stage7_offline_rl_control_unlock": false,
-  "tests_passed": 2272,
+  "tests_passed": 2279,
   "profile": "rpi4-ram-first-complete-discovery-manual-agent-selection",
   "manual_agent_training": true,
   "max_concurrent_training_jobs": 1,
@@ -2682,5 +2682,16 @@
     "validation": "2272 tests passed in WSL without skips; compileall and real candidate pipeline passed",
     "legacy_collapse_recovery": "same_unapproved_child_requeued_only_after_both_classes_have_at_least_8_paired_observations_and_one_class_is_completely_lost",
     "tests_passed": 2272
+  },
+  "release_014191": {
+    "context_row_flush_seconds": 30,
+    "context_row_ram_mb_per_buffer": 16,
+    "max_rows_per_buffer": 4096,
+    "inflight_bytes_included": true,
+    "observation_pool_count_cache": "thread_local_for_one_observation_only",
+    "checksum_verification": "fresh_full_canonical_sha_each_use",
+    "model_and_correct_learning_changed": false,
+    "validation": "2279 tests passed in WSL without skips; compileall and baseline/current RAM benchmark passed",
+    "tests_passed": 2279
   }
 }

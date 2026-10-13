@@ -47,20 +47,25 @@ def builtin_witness(value):
         pickler.dump(value)
     except _UnsupportedBuiltin:
         return None
-    objects = [obj for _, obj in pickler.memo.copy().values()]
-    if any(id(type(obj)) not in _BUILTIN_TYPE_IDS for obj in objects):
-        return None
-    has_tuple = any(type(obj) is tuple for obj in objects)
-    for obj in objects:
-        if type(obj) is dict:
-            # Containers cannot be keys except tuples. Nonempty tuples appear in
-            # the memo; empty tuples do not. Avoid rescanning every string key in
-            # normal JSON-loaded models, while retaining scalar-only dict keys.
-            if has_tuple:
-                if any(id(type(key)) not in _SCALAR_TYPE_IDS for key in obj):
-                    return None
-            elif () in obj:
-                return None
+    dictionaries = []
+    has_tuple = False
+    # Inspect the memo once; retain only mappings that need a key check, not
+    # another list of every string/container followed by two complete scans.
+    for _, obj in pickler.memo.copy().values():
+        kind = type(obj)
+        if kind is dict:
+            dictionaries.append(obj)
+        elif kind is tuple:
+            has_tuple = True
+        elif id(kind) not in _BUILTIN_TYPE_IDS:
+            return None
+    for obj in dictionaries:
+        # Containers cannot be keys except tuples. Nonempty tuples appear in
+        # the memo; empty tuples do not. Keep the same scalar-only key guard.
+        if has_tuple and any(id(type(key)) not in _SCALAR_TYPE_IDS for key in obj):
+            return None
+        if not has_tuple and () in obj:
+            return None
     return stream.getvalue()
 
 

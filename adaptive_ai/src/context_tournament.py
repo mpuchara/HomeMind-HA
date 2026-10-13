@@ -92,13 +92,16 @@ class ContextTournament:
         with self.lock:
             buffer = self._context_row_buffers.get(name)
             if buffer is None:
-                buffer = ContextRowBuffer(self.store, name, statement)
+                buffer = ContextRowBuffer(self.store, name, statement,
+                    flush_seconds=max(5., min(60., float(OPTIONS.get('context_row_flush_seconds', 30)))),
+                    max_bytes=max(1, min(64, int(OPTIONS.get('context_row_ram_mb', 16)))) * 1024 * 1024)
                 self._context_row_buffers[name] = buffer
             return buffer
 
-    def _flush_background_context(self):
+    def _flush_background_context(self, *, force=True):
         with self.lock:
-            writers = [buffer.flush for buffer in self._context_row_buffers.values()]
+            writers = [buffer.flush if force else buffer.flush_if_due
+                       for buffer in self._context_row_buffers.values()]
         error = None
         for write in writers + [self._flush_shadow_models]:
             try:
@@ -429,7 +432,7 @@ class ContextTournament:
                     stop_event.wait(max(0.0, 0.75 - quiet_for))
             try:
                 with background_sqlite(self.store):
-                    self._flush_background_context()
+                    self._flush_background_context(force=False)
             except Exception as exc:
                 self.report_runtime_error(exc)
                 time.sleep(0.1)
@@ -440,11 +443,15 @@ class ContextTournament:
 
     def shadow_persistence_snapshot(self):
         with self.lock:
-            return {
+            result = {
                 **self._shadow_persistence_stats,
                 "pending": len(self._shadow_dirty),
                 "context_rows": {name: buffer.snapshot() for name, buffer in self._context_row_buffers.items()},
             }
+        getter = getattr(self, "observation_pool_cache_snapshot", None)
+        if callable(getter):
+            result["observation_pool_cache"] = getter()
+        return result
 
     def _save_shadow_model(self, agent_id, challenger, model):
         key = (str(agent_id), str(challenger))

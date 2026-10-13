@@ -15,7 +15,7 @@ try:
 except Exception:
     ws_connect = None
 
-APP_VERSION = "0.14.190"
+APP_VERSION = "0.14.191"
 HISTORY_BOOTSTRAP_REVISION = "target-attrs-v2"
 TRAINING_REVISION = "shared-home-intents-v26"
 DATA_DIR = Path(os.environ.get("ADAPTIVE_AI_DATA", "/data"))
@@ -64,6 +64,8 @@ DEFAULT_OPTIONS = {
     "fast_series_lags_seconds": "1,3,10",
     "fast_max_context_entities": 8,
     "context_challenger_count": 4,
+    "context_row_flush_seconds": 30,
+    "context_row_ram_mb": 16,
     "context_tournament_enabled": True,
     "context_tournament_min_samples": 40,
     "context_tournament_min_days": 3,

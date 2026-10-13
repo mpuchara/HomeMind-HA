@@ -368,6 +368,7 @@ def install_policy_candidates(service):
     current_context, candidate_cache, pending_training = {}, {}, {}
     last_target, last_own_action = {}, {}
     tls = threading.local()
+    pool_read_stats = {"hits": 0, "reads": 0}
 
     original_state = service.state
     original_sync = service.sync_agent
@@ -1031,8 +1032,11 @@ def install_policy_candidates(service):
             current_context[aid] = {"agent": agent, "states": states, "now": now,
                                     "temporal": shared_temporal}
         try:
+            previous_counts = getattr(tls, "observation_pool_counts", None)
+            tls.observation_pool_counts = {}
             result = original_observe(agent, states, changed_entities)
         finally:
+            tls.observation_pool_counts = previous_counts
             with lock:
                 current_context.pop(aid, None)
             if RUNTIME_DEBUG.enabled:
@@ -1114,7 +1118,13 @@ def install_policy_candidates(service):
         # Hot observers need a count, not health/screening summaries for every
         # sensor. Keep the same bounded-count contract as all_pool_rows().
         limit = max(32, int(OPTIONS.get("context_observed_pool_limit", DEFAULT_POOL_LIMIT)) * 2)
-        if pool_buffer is not None and service.background_persistence_available():
+        scoped_counts = getattr(tls, "observation_pool_counts", None)
+        key = (str(agent_id), limit)
+        if scoped_counts is not None and key in scoped_counts:
+            state["observed_pool_count"] = scoped_counts[key]
+            with lock:
+                pool_read_stats["hits"] += 1
+        elif pool_buffer is not None and service.background_persistence_available():
             # Include pending keys without summing duplicate durable/RAM rows.
             with service.store.conn() as connection:
                 ids = {str(row[0]) for row in connection.execute(
@@ -1129,10 +1139,19 @@ def install_policy_candidates(service):
                     "SELECT COUNT(*) FROM (SELECT 1 FROM context_tournament_observed_pool "
                     "WHERE agent_id=? LIMIT ?)", (str(agent_id), limit),
                 ).fetchone()[0])
+        if scoped_counts is not None:
+            if key not in scoped_counts:
+                with lock:
+                    pool_read_stats["reads"] += 1
+            scoped_counts[key] = state["observed_pool_count"]
         state["active_feature_count"] = len(state.get("active_features") or [])
         return state
 
     service.state = state_with_pool
+    def pool_cache_snapshot():
+        with lock:
+            return {**pool_read_stats, "scope": "one_observation", "persistent_entries": 0}
+    service.observation_pool_cache_snapshot = pool_cache_snapshot
     service.observed_pool = all_pool_rows
     service.sensor_pool_stats = pool_stats
     service.semantic_predictive_score = semantic_predictive_score

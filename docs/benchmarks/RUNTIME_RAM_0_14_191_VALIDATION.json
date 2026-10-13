@@ -1,0 +1,152 @@
+{
+  "version": "0.14.191",
+  "base_commit": "ce332508a36d906423103ced218791edf0d3edd5",
+  "full_suite": {
+    "passed": 2279,
+    "seconds": 243.294,
+    "platform": "WSL Ubuntu / Python 3.12.3",
+    "skipped": 0,
+    "log_sha256": "c24c22a230d41a4f5b8324d4091b80a2cf87d8b11c81b0bbb331d848942ea73e"
+  },
+  "new_regressions": 7,
+  "compileall": true,
+  "benchmark": {
+    "synthetic": true,
+    "series": [
+      {
+        "before": {
+          "counter_flushes": 12,
+          "counter_rows_written": 1152,
+          "counter_seconds": 0.254245128000008,
+          "final_counter_sha256": "391d6c7dfc39b23dca5f4745dfd166a2044295e24b02fe92093b9bc0c892ef8d",
+          "warm_checksum_median_ms": 11.387164766667487,
+          "full_canonical_sha_preserved": true,
+          "deep_mutation_detected": true,
+          "ram_buffer": {
+            "pending": 0,
+            "flushed": 1152,
+            "errors": 0
+          }
+        },
+        "after": {
+          "counter_flushes": 2,
+          "counter_rows_written": 192,
+          "counter_seconds": 0.25347187799999915,
+          "final_counter_sha256": "391d6c7dfc39b23dca5f4745dfd166a2044295e24b02fe92093b9bc0c892ef8d",
+          "warm_checksum_median_ms": 10.830426733332388,
+          "full_canonical_sha_preserved": true,
+          "deep_mutation_detected": true,
+          "ram_buffer": {
+            "pending": 0,
+            "flushed": 192,
+            "errors": 0,
+            "bytes": 0,
+            "max_bytes": 16777216,
+            "max_rows": 4096,
+            "inflight": 0,
+            "flush_seconds": 30.0,
+            "overflow_flushes": 0
+          }
+        },
+        "checksum_speedup": 1.0514049951163649,
+        "counter_write_reduction": 6.0
+      },
+      {
+        "after": {
+          "counter_flushes": 2,
+          "counter_rows_written": 192,
+          "counter_seconds": 0.2603629619999879,
+          "final_counter_sha256": "391d6c7dfc39b23dca5f4745dfd166a2044295e24b02fe92093b9bc0c892ef8d",
+          "warm_checksum_median_ms": 9.989854099999699,
+          "full_canonical_sha_preserved": true,
+          "deep_mutation_detected": true,
+          "ram_buffer": {
+            "pending": 0,
+            "flushed": 192,
+            "errors": 0,
+            "bytes": 0,
+            "max_bytes": 16777216,
+            "max_rows": 4096,
+            "inflight": 0,
+            "flush_seconds": 30.0,
+            "overflow_flushes": 0
+          }
+        },
+        "before": {
+          "counter_flushes": 12,
+          "counter_rows_written": 1152,
+          "counter_seconds": 0.2579784530000211,
+          "final_counter_sha256": "391d6c7dfc39b23dca5f4745dfd166a2044295e24b02fe92093b9bc0c892ef8d",
+          "warm_checksum_median_ms": 12.26232076666823,
+          "full_canonical_sha_preserved": true,
+          "deep_mutation_detected": true,
+          "ram_buffer": {
+            "pending": 0,
+            "flushed": 1152,
+            "errors": 0
+          }
+        },
+        "checksum_speedup": 1.2274774630260716,
+        "counter_write_reduction": 6.0
+      },
+      {
+        "before": {
+          "counter_flushes": 12,
+          "counter_rows_written": 1152,
+          "counter_seconds": 0.24716734899999437,
+          "final_counter_sha256": "391d6c7dfc39b23dca5f4745dfd166a2044295e24b02fe92093b9bc0c892ef8d",
+          "warm_checksum_median_ms": 12.676071033333377,
+          "full_canonical_sha_preserved": true,
+          "deep_mutation_detected": true,
+          "ram_buffer": {
+            "pending": 0,
+            "flushed": 1152,
+            "errors": 0
+          }
+        },
+        "after": {
+          "counter_flushes": 2,
+          "counter_rows_written": 192,
+          "counter_seconds": 0.2515897300000347,
+          "final_counter_sha256": "391d6c7dfc39b23dca5f4745dfd166a2044295e24b02fe92093b9bc0c892ef8d",
+          "warm_checksum_median_ms": 11.683420033333883,
+          "full_canonical_sha_preserved": true,
+          "deep_mutation_detected": true,
+          "ram_buffer": {
+            "pending": 0,
+            "flushed": 192,
+            "errors": 0,
+            "bytes": 0,
+            "max_bytes": 16777216,
+            "max_rows": 4096,
+            "inflight": 0,
+            "flush_seconds": 30.0,
+            "overflow_flushes": 0
+          }
+        },
+        "checksum_speedup": 1.0849623652293052,
+        "counter_write_reduction": 6.0
+      }
+    ],
+    "identical_final_counters_and_labels": true,
+    "limits": "Component workload on this host, not measured Raspberry Pi latency. RAM counters flush after the configured interval, on capacity pressure, explicit barriers and shutdown."
+  },
+  "observation_count_regression": {
+    "reads_in_one_observation": 6,
+    "sql_count_queries": 1,
+    "next_observation_fresh": true,
+    "schema_still_fresh": true,
+    "exception_clears_cache": true
+  },
+  "source_export": {
+    "version": "0.14.190",
+    "training_active": false,
+    "rss_mb": 135.6484375,
+    "wrapped_inference_avg_ms": 278.1477529563005,
+    "context_shadow_observation_avg_ms": 192.51484236506207,
+    "context_candidate_validation_avg_ms": 13.144206161664076,
+    "context_rows_persist_count": 1443,
+    "wal_checkpoint_count": 882
+  },
+  "scope": "Component timings and write counts on test host; user-device latency after update not measured"
+}
