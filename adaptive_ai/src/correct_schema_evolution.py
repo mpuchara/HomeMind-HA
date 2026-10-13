@@ -1236,6 +1236,8 @@ def install(core, manager):
         "incompatible_stable_correct_base_routes_to_isolated_historical_candidate_rebuild"
     )
     _recover_compatible_correct_builds(manager)
+    from correct_classifier_finetune import recover_collapsed_correct
+    recover_collapsed_correct(manager)
     core.STORE.event(
         None,
         "info",

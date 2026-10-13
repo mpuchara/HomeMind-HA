@@ -307,6 +307,10 @@ def _repair_margins(
 def _margin_correct_fine_tune(manager, candidate):
     """Balanced first pass followed by bounded pairwise margin repair."""
     report = dict(_BASE_BALANCED_FINE_TUNE(manager, candidate) or {})
+    if report.get("classifier_incremental"):
+        # The constrained classifier optimizer already checks actual arm margins.
+        # An ordinary reward update here would refit its reservoir from zero again.
+        return report
     if report.get("balance_mode") != "error_only_labels_plus_context_matched_historical_anchors":
         return report
 
@@ -463,6 +467,13 @@ def _margin_offline_gate(parent, parent_stats, candidate_stats, teach_report=Non
     report = dict(teach_report or {})
     gate = dict(_BASE_HARD_GATE(parent, parent_stats, candidate_stats, report) or {})
     for key in (
+        "classifier_incremental",
+        "classifier_update_accepted",
+        "classifier_optimizer_steps",
+        "classifier_unresolved_updates",
+        "classifier_already_fitted_labels",
+        "classifier_recent_stability_samples",
+        "classifier_protected_samples",
         "hard_repair_positive_updates",
         "hard_repair_negative_updates",
         "hard_repair_stop_reason",
@@ -501,7 +512,9 @@ def _margin_offline_gate(parent, parent_stats, candidate_stats, teach_report=Non
         if "Correct minimum margin is below target" not in reasons:
             reasons.append("Correct minimum margin is below target")
     gate["reasons"] = reasons
-    gate["correct_optimizer"] = "pairwise_desired_plus_wrong_arm_penalty"
+    gate["correct_optimizer"] = ("warm_classifier_frozen_basis_with_retention"
+                                 if report.get("classifier_incremental")
+                                 else "pairwise_desired_plus_wrong_arm_penalty")
     return gate
 
 

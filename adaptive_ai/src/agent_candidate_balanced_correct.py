@@ -86,7 +86,7 @@ def _anchor_pool(manager, candidate, policy, teach_times):
     return out
 
 
-def _select_balancing_anchors(manager, candidate, policy, usable):
+def _select_balancing_anchors(manager, candidate, policy, usable, *, pool=None):
     """Fill binary Desired-class deficits with nearest correct historical examples."""
     if len(policy.actions) != 2:
         return [], {"required": False, "correction_class_counts": {}, "anchor_class_counts": {}, "shortfall": {}}
@@ -104,7 +104,8 @@ def _select_balancing_anchors(manager, candidate, policy, usable):
         }
 
     teach_times = [float(x["label"]["sample_ts"]) for x in usable]
-    pool = _anchor_pool(manager, candidate, policy, teach_times)
+    if pool is None:
+        pool = _anchor_pool(manager, candidate, policy, teach_times)
     anchors = []
     anchor_counts = {0: 0, 1: 0}
     shortfall = {0: 0, 1: 0}
@@ -160,6 +161,9 @@ def _balanced_fine_tune(manager, candidate):
     policy = manager.engine.policy(candidate)
     if len(policy.actions) != 2:
         return _BASE_FINE_TUNE(manager, candidate)
+    from correct_classifier_finetune import applies, fine_tune
+    if applies(policy):
+        return fine_tune(manager, candidate, policy)
 
     labels = conservative._teach_rows(service, candidate)
     deadband = max(.01, float(candidate.get("deadband") or .01))

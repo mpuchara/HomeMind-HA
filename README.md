@@ -1,6 +1,6 @@
-# HomeMind-HA / Adaptive AI 0.14.189
+# HomeMind-HA / Adaptive AI 0.14.190
 
-0.14.189: Correct zachowuje wyuczony model rodzica i korzysta z aktualnego kontraktu obserwacji. Naprawa błędnego przejścia kandydata na pełną przebudowę. [Opis poprawki](docs/RELEASE_0_14_189_PL.md).
+0.14.190: kolejne generacje Correct zachowują wyuczoną granicę ON/OFF rodzica. Korekty nie uruchamiają ponownego dopasowania klasyfikatora od zera; poprawne decyzje historyczne i ostatnie obserwacje chronią model przed stałym ON. [Opis poprawki](docs/RELEASE_0_14_190_PL.md).
 
 
 Karta agenta ma cztery akcje: **Shadow/Control**, **Wrong decision**, **Settings** i **Teach**. Wrong decision uczy poprawnego Desired. Teach otwiera powiększalny wykres historii z wyborem dokładnej chwili i zapisem poprawnego Desired. Cofanie ostatniej korekty jest dostępne w Teach oraz Settings; pozostałe operacje i diagnostyka są w Settings.

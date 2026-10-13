@@ -1,0 +1,138 @@
+{
+  "version": "0.14.190",
+  "base_commit": "82a39ae352fee3f58275359d1be63ff604729820",
+  "full_suite": {
+    "passed": 2272,
+    "seconds": 223.039,
+    "platform": "WSL Ubuntu / Python 3.12.3",
+    "skipped": 0,
+    "log_sha256": "2ef10f7fc04339f6a1616551c02727ce924b5440cb218d7e6c114b474f5ae806"
+  },
+  "new_regressions": 9,
+  "compileall": true,
+  "source_evidence": {
+    "source_version": "0.14.189",
+    "unique_correct_events": 8,
+    "parent_classifier_fits": 122,
+    "child_classifier_fits": 138,
+    "offline_history_samples": 1462,
+    "offline_passed": true,
+    "future_per_action": {
+      "1.0": {
+        "samples": 9,
+        "live_correct": 5,
+        "candidate_correct": 9
+      },
+      "0.0": {
+        "samples": 9,
+        "live_correct": 9,
+        "candidate_correct": 0
+      }
+    },
+    "models_contain_full_weights": false
+  },
+  "integration": {
+    "parent_prediction_before": 0.0,
+    "candidate_corrected_prediction": 1.0,
+    "empty_predictions": [
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0
+    ],
+    "parent_unchanged": true,
+    "historical_rebuild_calls": 0,
+    "gate": {
+      "status": "passed",
+      "passed": true,
+      "teach_fit_before": 0.0,
+      "teach_fit_after": 1.0,
+      "teach_fit_before_count": 0,
+      "teach_fit_after_count": 5,
+      "teach_fit_total": 5,
+      "historical_parent_score": 1.0,
+      "historical_candidate_score": 1.0,
+      "regression_delta": 0.0,
+      "benchmark_samples": 24,
+      "minimum_samples": 12,
+      "max_regression": 0.03,
+      "balanced": true,
+      "binary_collapse": false,
+      "parent_per_action_accuracy": {
+        "0": 1.0,
+        "1": 1.0
+      },
+      "candidate_per_action_accuracy": {
+        "0": 1.0,
+        "1": 1.0
+      },
+      "candidate_predicted_class_coverage": 2,
+      "reasons": [],
+      "base_model_revision": "2e2a15a9-36ed-4ff2-8615-44ca2eb1a994",
+      "candidate_model_revision": "4e1a0d62-025c-4223-ba4b-6e6166ab4b09",
+      "schema_changed": false,
+      "updated_ts": 1791912505.8188126,
+      "balance_mode": "error_only_labels_plus_context_matched_historical_anchors",
+      "correction_class_counts": {
+        "0": 0,
+        "1": 5
+      },
+      "stability_anchor_class_counts": {
+        "0": 5,
+        "1": 0
+      },
+      "stability_anchor_shortfall": {
+        "0": 0,
+        "1": 0
+      },
+      "stability_anchor_total": 5,
+      "stability_anchor_retained": 5,
+      "correction_rounds": 0,
+      "hard_repair_rounds": 0,
+      "hard_repair_updates": 0,
+      "conflicting_correction_count": 0,
+      "conflicting_correction_groups": [],
+      "conflicting_label_ids": [],
+      "conflict_warning": false,
+      "conflict_resolution": null,
+      "stability_anchor_retention": 1.0,
+      "stability_anchor_warning": false,
+      "hard_correction_satisfied": true,
+      "hard_fit_target_total": 5,
+      "hard_fit_after_count": 5,
+      "classifier_incremental": true,
+      "classifier_update_accepted": true,
+      "classifier_optimizer_steps": 5,
+      "classifier_unresolved_updates": 5,
+      "classifier_already_fitted_labels": 0,
+      "classifier_recent_stability_samples": 0,
+      "classifier_protected_samples": 29,
+      "hard_repair_stop_reason": "incremental_constraints_satisfied",
+      "hard_margin_target": 0.02,
+      "hard_margin_after_min": 0.945977696195708,
+      "hard_unresolved_supervision_ids": [],
+      "correct_optimizer": "warm_classifier_frozen_basis_with_retention",
+      "schema_evolution_status": "not_needed",
+      "schema_evolution_reason": "stage2_resolved_all_supervision",
+      "missing_context": false
+    },
+    "passed": true
+  },
+  "two_generation_regression": {
+    "input": "synthetic real binary classifier, progressively weaker radar presence and current communication age different from base history",
+    "both_on_corrections_fitted": true,
+    "off_preserved": true,
+    "normalization_preserved": true,
+    "rejections_preserved": true,
+    "already_fitted_labels_noop": true,
+    "impossible_update_restores_complete_classifier": true
+  },
+  "recovery": {
+    "same_candidate_requeued": true,
+    "parent_and_labels_unchanged": true,
+    "collapsed_child_excluded_from_snapshot_selection": true,
+    "approved_and_active_work_skipped": true
+  },
+  "scope": "Synthetic regression and source-export diagnostics; export has no full classifier weights; user-device accuracy after update not measured"
+}
