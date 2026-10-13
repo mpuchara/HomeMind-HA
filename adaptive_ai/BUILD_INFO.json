@@ -1,10 +1,10 @@
 {
-  "version": "0.14.189",
+  "version": "0.14.190",
   "release_date": "2026-10-13",
-  "base_version": "0.14.188",
-  "base_commit": "7b89870cdd35f2cda53fb6f9e56bdd81e94bde27",
-  "release_status": "correct-candidate-installed-contract-and-parent-preservation",
-  "release_validation_tests_passed": 2263,
+  "base_version": "0.14.189",
+  "base_commit": "82a39ae352fee3f58275359d1be63ff604729820",
+  "release_status": "correct-generation-stability-frozen-classifier-basis",
+  "release_validation_tests_passed": 2272,
   "release_014140": {
     "scope": "inventory_and_remove_remaining_shipped_feature_Handler_fallbacks_for_Candidate_Live_and_manual_feedback_transport",
     "explicit_routes": "manual_feedback.js, candidate_ui.js, candidate_preference_ui.js, /api/candidates, Candidate Teach-RL status/train, generation history/comparison, /api/candidate-live, /api/live and Candidate discard",
@@ -250,7 +250,7 @@
   "pi4_release_gate_contract": "pi4_release_gate_v1",
   "pi4_real_hardware_required": true,
   "stage7_offline_rl_control_unlock": false,
-  "tests_passed": 2263,
+  "tests_passed": 2272,
   "profile": "rpi4-ram-first-complete-discovery-manual-agent-selection",
   "manual_agent_training": true,
   "max_concurrent_training_jobs": 1,
@@ -2670,5 +2670,17 @@
     "historical_rebuild_for_compatible_parent": false,
     "tests_passed": 2263,
     "new_regressions": 11
+  },
+  "release_014190": {
+    "scope": "binary_correct_warm_start_and_recent_observed_agreement_retention",
+    "normalization": "parent_center_and_scale_preserved",
+    "already_fitted_labels": "retention_constraints_only",
+    "recent_guard": "at_most_512_observations_and_24_reconstructed_agreement_samples_per_class",
+    "optimizer_steps_max": 240,
+    "unstable_update": "restore_parent_classifier_and_block_unresolved_correct_gate",
+    "historical_training_changed": false,
+    "validation": "2272 tests passed in WSL without skips; compileall and real candidate pipeline passed",
+    "legacy_collapse_recovery": "same_unapproved_child_requeued_only_after_both_classes_have_at_least_8_paired_observations_and_one_class_is_completely_lost",
+    "tests_passed": 2272
   }
 }

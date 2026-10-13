@@ -1,3 +1,10 @@
+## 0.14.190 (2026-10-13)
+
+- Correct: klasyfikator binarny startuje od wag, normalizacji i odrzuceń rodzica. Aktualizuje tylko nierozwiązane punkty; wcześniejsze poprawne punkty są chronione przed regresją.
+- Ograniczony zbiór poprawnych historycznych decyzji i ostatnich zgodnych obserwacji rodzica/Current zabezpiecza granicę ON/OFF. Niedopuszczalna aktualizacja przywraca klasyfikator rodzica i blokuje bramkę Correct.
+- Start: niezatwierdzony stary kandydat z potwierdzoną w porównaniu utratą całej klasy wraca do Correct z zachowaniem rodzica, ID i punktów. Unieważniony wynik offline zapobiega ponownemu wybraniu błędnego dziecka jako bazy.
+- Diagnostyka pokazuje rzeczywiste dopasowanie przed korektą, liczbę nowych aktualizacji i próbek stabilizujących. Brak zmian schematu i pełnego treningu dla zgodnego modelu.
+
 ## 0.14.189
 - Correct sprawdza schemat zainstalowany w runtime, zamiast klasy v11 zachowanej przez wcześniejszy import. Prawidłowy model v12 jest korygowany jako kopia rodzica bez pełnej przebudowy.
 - Niezaakceptowany kandydat po błędnym `schema_upgrade_rebuild` wraca do Correct, jeśli jego rodzic ma zgodny model. Zachowane są ID i etykiety; aktywnego treningu ani zaakceptowanego kandydata nie przerywamy.
