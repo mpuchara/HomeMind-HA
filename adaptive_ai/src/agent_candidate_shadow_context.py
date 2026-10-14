@@ -190,6 +190,11 @@ def install(manager):
             old_ts = float(bundle["ts"])
         except (KeyError, TypeError, ValueError):
             return bundle
+        # Deferred runtime already creates and persists the bundle at context_ts.
+        # A no-op UPDATE still needs SQLite's writer lock and used to turn a valid
+        # observation into a timestamp-alignment warning during WAL reclamation.
+        if old_ts == context_ts:
+            return bundle
         bundle["ts"] = context_ts
         align_runtime = getattr(manager, "align_candidate_shadow_event_timestamp", None)
         if callable(align_runtime):

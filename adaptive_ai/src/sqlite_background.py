@@ -25,9 +25,11 @@ def is_sqlite_busy(exc):
     return message == 'database is locked' or message.startswith('database table is locked')
 
 
-def background_sqlite(store):
+def background_sqlite(store, *, retryable=True):
     scope = getattr(store, "background_sqlite", None)
-    return scope() if callable(scope) else nullcontext()
+    if not callable(scope):
+        return nullcontext()
+    return scope() if retryable else scope(retryable=False)
 
 
 def admit_background_write(store):

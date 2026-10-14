@@ -19,6 +19,7 @@ from urllib.parse import parse_qs, unquote, urlsplit
 
 from context import target_value
 from candidate_shadow_deferred import DeferredCandidateShadowQueue
+from deferred_evidence import DeferredEvidence
 from fast_runtime import is_fast_target
 from settings import parse_ts
 from inference_hot_path_metrics import observe_elapsed
@@ -662,7 +663,8 @@ def install(manager):
             "previous_current": None,
             "bundle": None,
             "last_persist": 0.0,
-            "persisted": {},
+            "last_queued": 0.0,
+            "queued_decisions": {},
             "generation_state": {},
             "generation_cache_at": 0.0,
             "shadow_generations": None,
@@ -770,13 +772,29 @@ def install(manager):
                 }
         return bundle
 
+    def _write_bundle(bundle):
+        with manager.store.lock, manager.store.conn() as c:
+            for gid, result in bundle["results"].items():
+                c.execute(
+                    """INSERT OR REPLACE INTO candidate_generation_decisions
+                       (root_agent_id,generation_id,event_id,ts,current,desired,confidence,model_revision,schema_revision)
+                       VALUES(?,?,?,?,?,?,?,?,?)""",
+                    (bundle["root_agent_id"], gid, bundle["event_id"], float(bundle["ts"]),
+                     float(bundle["current"]), float(result["desired"]), result.get("confidence"),
+                     result.get("model_revision"), result.get("schema_revision")),
+                )
+        root_rt = _root_runtime(bundle["root_agent_id"])
+        root_rt["last_persist"] = float(bundle["ts"])
+
+    decision_writes = DeferredEvidence(manager.store, _write_bundle)
+
     def _persist_bundle(bundle, force=False):
         if not bundle:
             return False
         root_rt = _root_runtime(bundle["root_agent_id"])
         now = float(bundle["ts"])
-        should = bool(force or now - float(root_rt.get("last_persist") or 0.0) >= DECISION_HEARTBEAT_SECONDS)
-        previous = root_rt.get("persisted") or {}
+        should = bool(force or now - float(root_rt.get("last_queued") or 0.0) >= DECISION_HEARTBEAT_SECONDS)
+        previous = root_rt.get("queued_decisions") or {}
         if not should:
             for gid, result in bundle["results"].items():
                 old = previous.get(gid)
@@ -793,24 +811,22 @@ def install(manager):
                     break
         if not should:
             return False
-        with manager.store.lock, manager.store.conn() as c:
-            for gid, result in bundle["results"].items():
-                c.execute(
-                    """INSERT OR REPLACE INTO candidate_generation_decisions
-                       (root_agent_id,generation_id,event_id,ts,current,desired,confidence,model_revision,schema_revision)
-                       VALUES(?,?,?,?,?,?,?,?,?)""",
-                    (
-                        bundle["root_agent_id"], gid, bundle["event_id"], float(bundle["ts"]),
-                        float(bundle["current"]), float(result["desired"]), result.get("confidence"),
-                        result.get("model_revision"), result.get("schema_revision"),
-                    ),
-                )
-        root_rt["last_persist"] = now
-        root_rt["persisted"] = {
+        # Freeze only the persisted fields. The retry must never re-run Candidate
+        # inference against newer state or retain mutable policy result metadata.
+        decision_writes.submit(bundle["event_id"], {
+            "root_agent_id": bundle["root_agent_id"], "event_id": bundle["event_id"],
+            "ts": now, "current": bundle["current"],
+            "results": {gid: {name: result.get(name) for name in
+                ("desired", "confidence", "model_revision", "schema_revision")}
+                for gid, result in bundle["results"].items()},
+        })
+        root_rt["last_queued"] = now
+        root_rt["queued_decisions"] = {
             gid: {"current": bundle["current"], "desired": result.get("desired"), "confidence": result.get("confidence"),
                   "model_revision": result.get("model_revision"), "schema_revision": result.get("schema_revision")}
             for gid, result in bundle["results"].items()
         }
+        decision_writes.flush()
         return True
 
     def _increment_false_early(root_id, previous_bundle, current_bundle):
@@ -856,7 +872,6 @@ def install(manager):
         )
         if not bundle:
             return None
-        _increment_false_early(agent["id"], previous_bundle, bundle)
         root_rt["bundle"] = bundle
         root_rt["previous_current"] = bundle["current"]
         try:
@@ -866,6 +881,7 @@ def install(manager):
         root_rt["last_candidate_observed_revision"] = observed_revision
         root_rt["last_candidate_observed_monotonic"] = time.monotonic()
         _persist_bundle(bundle, force=False)
+        _increment_false_early(agent["id"], previous_bundle, bundle)
         return bundle
 
     def _cached_active_edge(root_id):
@@ -1364,6 +1380,7 @@ def install(manager):
         return result
 
     def maintenance():
+        decision_writes.flush()
         deferred_shadow.drain(max_roots=4)
         # Runtime evidence is never synthesized from history. Passive observations use
         # only the live websocket-backed state map and run on the Candidate worker, never
@@ -1427,6 +1444,8 @@ def install(manager):
     manager.candidate_shadow_current_job = deferred_shadow.current_job
     manager.candidate_shadow_async_diagnostics = deferred_shadow.diagnostics
     manager.candidate_shadow_async = deferred_shadow
+    manager.flush_candidate_shadow_decisions = decision_writes.flush
+    manager.candidate_shadow_persistence_snapshot = decision_writes.snapshot
     manager.drain_candidate_shadow_events = drain_candidate_shadow_events
     manager.candidate_live_runtime_snapshots = candidate_live_runtime_snapshots
     manager.candidate_latest_runtime = lambda generation_id: _latest_shadow(generation_id)
