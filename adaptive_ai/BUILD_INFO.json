@@ -1,9 +1,9 @@
 {
-  "version": "0.14.197",
+  "version": "0.14.198",
   "release_date": "2026-10-14",
-  "base_version": "0.14.196",
-  "base_commit": "1b4d961c3da764bff9a925700ea5c5c29ff5915f",
-  "release_status": "complete-shadow-observation-census-scope",
+  "base_version": "0.14.197",
+  "base_commit": "daae55611e5f5ae8905beeca8305040f739bb03a",
+  "release_status": "runtime-evidence-retry-local-validation-complete",
   "release_014140": {
     "scope": "inventory_and_remove_remaining_shipped_feature_Handler_fallbacks_for_Candidate_Live_and_manual_feedback_transport",
     "explicit_routes": "manual_feedback.js, candidate_ui.js, candidate_preference_ui.js, /api/candidates, Candidate Teach-RL status/train, generation history/comparison, /api/candidate-live, /api/live and Candidate discard",
@@ -249,7 +249,7 @@
   "pi4_release_gate_contract": "pi4_release_gate_v1",
   "pi4_real_hardware_required": true,
   "stage7_offline_rl_control_unlock": false,
-  "tests_passed": 2317,
+  "tests_passed": 2350,
   "profile": "rpi4-ram-first-complete-discovery-manual-agent-selection",
   "manual_agent_training": true,
   "max_concurrent_training_jobs": 1,
@@ -2759,7 +2759,7 @@
     "benchmark": "docs/benchmarks/CONTEXT_BUFFER_0_14_195_VALIDATION.json",
     "median_observer_speedup": 1.018396920512725
   },
-  "release_validation_tests_passed": 2339,
+  "release_validation_tests_passed": 2350,
   "release_014196": {
     "scope": "typed_deferred_batch_busy_retry_and_cooperative_wal_reclaim_write_admission",
     "learning_semantics_changed": false,
@@ -2786,5 +2786,18 @@
     "warm_census_sql_before": 5,
     "warm_census_sql_after": 1,
     "median_observer_speedup": 1.0838068457052845
+  },
+  "release_014198": {
+    "scope": "bounded_observed_evidence_retry_and_noop_timestamp_alignment_removal",
+    "max_queue_items": 128,
+    "max_queue_bytes": 4194304,
+    "new_threads": 0,
+    "policy_replay_on_retry": false,
+    "storage_limits_changed": false,
+    "learning_semantics_changed": false,
+    "validation": "2349 full-suite tests and 28 final focused tests passed; focused validation includes the additional explicit-flush test; no skips; compileall and JS syntax passed",
+    "tests_passed": 2350,
+    "new_regressions": 11,
+    "validation_report": "docs/benchmarks/RUNTIME_EVIDENCE_0_14_198_VALIDATION.json"
   }
 }

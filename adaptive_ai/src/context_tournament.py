@@ -107,6 +107,9 @@ class ContextTournament:
             writers = [buffer.flush if force else buffer.flush_if_due
                        for buffer in self._context_row_buffers.values()]
         error = None
+        episode_flush = getattr(self, 'flush_tournament_episodes', None)
+        if callable(episode_flush):
+            writers.append(lambda: episode_flush(force=force))
         for write in writers + [self._flush_shadow_models]:
             try:
                 write()
@@ -726,7 +729,9 @@ def install(store, engine):
         try:
             session = getattr(store, "connection_session", None)
             census = getattr(service, "observation_pool_scope", None)
-            with (background_sqlite(store),
+            # This observer is not a retained write batch. Keep the short native
+            # timeout, but do not synthesize BUSY solely because reclaim is active.
+            with (background_sqlite(store, retryable=False),
                   session() if callable(session) else nullcontext(),
                   census() if callable(census) else nullcontext()):
                 service.observe_shadow(agent, state_map, changed_entities)

@@ -1,0 +1,51 @@
+{
+  "version": "0.14.198",
+  "date": "2026-10-14",
+  "host": "WSL Ubuntu, Python 3.12.3",
+  "full_suite": {
+    "passed": 2349,
+    "seconds": 244.878,
+    "skips": 0
+  },
+  "final_focused_suite": {
+    "passed": 28,
+    "additional_test_since_full_run": [
+      "test_release_198_runtime_evidence.RetainedEvidenceTests.test_force_flush_overrides_background_timeout_and_restores_its_admission"
+    ],
+    "seconds": 3.044,
+    "skips": 0
+  },
+  "final_suite_case_count": 2350,
+  "compileall": "passed",
+  "runtime_debug_ui_js_syntax": "passed",
+  "new_regressions": 11,
+  "mechanisms_verified": [
+    "native BEGIN IMMEDIATE contention retains the exact observed Candidate timestamp/value",
+    "flush does not call the policy again",
+    "already aligned Candidate events issue no timestamp UPDATE",
+    "finalized Tournament start/end and two policy rows survive retry and restart",
+    "existing context writer drains queued episodes even without a new observation",
+    "immutable source snapshot, queue byte/item caps and conflicting ids",
+    "native I/O errors remain visible; pressure retains evidence",
+    "forced flush overrides background timeout and restores it",
+    "drift retry sees latest runtime state and preserves real errors"
+  ],
+  "device_logs": {
+    "version": "0.14.197",
+    "files": [
+      "adaptive-ai-runtime-debug-20261014-201722.json",
+      "adaptive-ai-runtime-debug-20261014-201821.json",
+      "adaptive-ai-runtime-debug-20261014-201927.json"
+    ],
+    "reported_warning_exception_details_available": false,
+    "confirmed_later_sqlite_busy_callers": [
+      "provenance.record_decisions_batch",
+      "context_row_buffer.flush"
+    ],
+    "last_export_wal_writer_deferrals": 70,
+    "last_export_storage_budget_level": "normal",
+    "last_export_blocked_writes_cumulative": 26
+  },
+  "device_latency_improvement_measured": false,
+  "abrupt_shutdown_retains_pending_ram_evidence": false
+}

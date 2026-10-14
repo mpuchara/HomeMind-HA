@@ -12,6 +12,7 @@ import hashlib
 import time
 
 from context import target_value
+from deferred_evidence import DeferredEvidence
 from episode_evaluator import EpisodeEvaluator
 
 
@@ -226,6 +227,9 @@ def install_tournament(service, evaluator: EpisodeEvaluator):
     state = {}
     original_observe = service.observe_shadow
     original_status = service.shadow_status
+    episode_writes = DeferredEvidence(service.store, evaluator._persist)
+    service.flush_tournament_episodes = episode_writes.flush
+    service.tournament_episode_persistence_snapshot = episode_writes.snapshot
 
     def finish_pending(aid, challenger, pending, now, current, reason):
         active_key, shadow_key = _tournament_keys(aid, challenger)
@@ -236,7 +240,7 @@ def install_tournament(service, evaluator: EpisodeEvaluator):
             {"ts": now, "presence": None, "light_need": None, "power": current},
         ]
         automation = [{"ts": start, "power": initial}, {"ts": now, "power": current}]
-        return evaluator.evaluate_episode(
+        payload = evaluator.evaluate_episode(
             episode_id=_stable("tournament", aid, challenger, pending["event"], f"{start:.6f}"),
             agent_id=str(aid), start_ts=start, end_ts=now,
             observations=observations,
@@ -254,7 +258,15 @@ def install_tournament(service, evaluator: EpisodeEvaluator):
             automation_initial=initial,
             context={"challenger": challenger, "evaluation": "sensor_tournament"},
             end_reason=reason,
+            persist=False,
         )
+        episode_writes.submit(payload["episode_id"], payload)
+        available = getattr(service, "background_persistence_available", None)
+        if callable(available) and available():
+            service._shadow_flush_event.set()
+        else:
+            episode_writes.flush()
+        return payload
 
     def observe(agent, state_map=None, changed_entities=None):
         states = dict(state_map or getattr(engine, "state_map", {}) or {})

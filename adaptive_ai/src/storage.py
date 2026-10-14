@@ -160,17 +160,37 @@ class Store:
             self._retention_worker.stop()
 
     @contextmanager
-    def background_sqlite(self):
-        """Bound busy waits for retryable background batches, per thread only.
+    def background_sqlite(self, *, retryable=True):
+        """Bound busy waits per thread; only retained batches opt into deferral.
 
         This does not alter explicit durability barriers or training worker writes.
-        It limits SQLite contention, not Store lock wait or slow physical I/O.
+        retryable=False preserves native timeout behavior for observations without
+        a retained write queue. This does not bound Store lock or physical I/O.
         """
         previous = getattr(self._connection_session, "busy_timeout_ms", None)
+        previous_retryable = getattr(self._connection_session, "retryable_write", True)
         self._connection_session.busy_timeout_ms = 250
+        self._connection_session.retryable_write = retryable
         try:
             yield
         finally:
+            self._connection_session.retryable_write = previous_retryable
+            if previous is None:
+                del self._connection_session.busy_timeout_ms
+            else:
+                self._connection_session.busy_timeout_ms = previous
+
+    @contextmanager
+    def explicit_sqlite(self):
+        """Durability barrier even when called inside a background writer scope."""
+        previous = getattr(self._connection_session, "busy_timeout_ms", None)
+        retryable = getattr(self._connection_session, "retryable_write", True)
+        self._connection_session.busy_timeout_ms = 60000 if self.training_worker_process else 30000
+        self._connection_session.retryable_write = False
+        try:
+            yield
+        finally:
+            self._connection_session.retryable_write = retryable
             if previous is None:
                 del self._connection_session.busy_timeout_ms
             else:
@@ -282,6 +302,7 @@ class Store:
         # Store.lock or encode large models just to collide with our own worker.
         # Reads, explicit durability and isolated training retain their contract.
         if (getattr(self._connection_session, 'busy_timeout_ms', None) == 250
+                and getattr(self._connection_session, 'retryable_write', True)
                 and self._wal_reclaiming.is_set()):
             with self._wal_keeper_lock:
                 self._wal_writer_deferrals += 1

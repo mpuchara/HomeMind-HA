@@ -17,6 +17,8 @@ from collections import Counter
 
 from confidence_contract import CONTRACT_VERSION as CONFIDENCE_CONTRACT_VERSION, DEFAULT_HALF_LIFE_EPISODES
 from settings import OPTIONS, iso_now
+from sqlite_background import background_sqlite, is_sqlite_busy
+from storage_budget import StoragePressure
 
 
 CONTRACT_VERSION = 2
@@ -297,6 +299,7 @@ class AdaptationService:
         self._observer_stats = {
             "scheduled": 0, "coalesced": 0, "runs": 0, "errors": 0,
             "pending_high_water": 0, "last_run_ms": 0.0, "max_run_ms": 0.0,
+            "busy_retries": 0, "storage_pauses": 0,
         }
         ensure_tables(self.store)
 
@@ -1319,26 +1322,46 @@ class AdaptationService:
                     self._observer_pending.pop(aid, None)
                     self._observer_last_run[aid] = now
             for aid, agent in due:
-                started = time.perf_counter()
+                self._observe_background(agent, now)
+
+    def _observe_background(self, agent, now):
+        aid = str(agent["id"])
+        started = time.perf_counter()
+        try:
+            with self.engine.lock:
+                states = dict(getattr(self.engine, "state_map", {}) or {})
+            with background_sqlite(self.store):
+                self.observe_live(agent, states, now=now)
+            elapsed = (time.perf_counter() - started) * 1000.0
+            with self._observer_lock:
+                self._observer_stats["runs"] += 1
+                self._observer_stats["last_run_ms"] = elapsed
+                self._observer_stats["max_run_ms"] = max(
+                    float(self._observer_stats["max_run_ms"]), elapsed
+                )
+            return True
+        except Exception as exc:
+            busy, pressure = is_sqlite_busy(exc), isinstance(exc, StoragePressure)
+            with self._observer_lock:
+                if busy or pressure:
+                    # Drift samples current runtime, so retry a fresh snapshot after
+                    # backpressure; do not claim the failed observation completed.
+                    self._observer_pending.setdefault(aid, dict(agent))
+                    delay = 5.0 if pressure else 1.0
+                    self._observer_last_run[aid] = now - OBSERVE_THROTTLE_SECONDS + delay
+                    self._observer_stats["busy_retries" if busy else "storage_pauses"] += 1
+                else:
+                    self._observer_stats["errors"] += 1
+            if not busy and not pressure:
                 try:
-                    with self.engine.lock:
-                        states = dict(getattr(self.engine, "state_map", {}) or {})
-                    self.observe_live(agent, states, now=now)
-                    elapsed = (time.perf_counter() - started) * 1000.0
-                    with self._observer_lock:
-                        self._observer_stats["runs"] += 1
-                        self._observer_stats["last_run_ms"] = elapsed
-                        self._observer_stats["max_run_ms"] = max(
-                            float(self._observer_stats["max_run_ms"]), elapsed
-                        )
-                except Exception as exc:
-                    with self._observer_lock:
-                        self._observer_stats["errors"] += 1
                     self.store.event(
                         aid, "warning", "controlled_drift_monitor_gap",
                         "Background drift monitor could not evaluate this runtime observation",
                         {"error": f"{type(exc).__name__}: {exc}"},
                     )
+                except Exception:
+                    pass
+            return False
 
     def start_observer(self):
         if self._observer_thread is not None and self._observer_thread.is_alive():

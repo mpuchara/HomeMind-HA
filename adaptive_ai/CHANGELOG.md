@@ -1,3 +1,11 @@
+## 0.14.198
+
+- Skip timestamp-alignment UPDATE when the Candidate decision is already anchored to Root context time.
+- Retain immutable observed Candidate decisions and finalized Tournament episodes in bounded RAM queues (128 items / 4 MiB each); retry writes without replaying predictions or changing episode endpoints.
+- Drain on existing workers and explicit shutdown barriers. Export pending evidence and retry counters. RAM-only evidence is lost on abrupt process termination; capacity exhaustion and non-transient failures remain explicit gaps.
+- Restrict cooperative WAL rejection to retained batches; native short timeouts still protect unbuffered Tournament observations. Retry drift monitoring with the latest runtime snapshot after transient storage contention.
+- Preserve storage admission, features, labels, policy learning and promotion gates. No retraining is required.
+
 ## 0.14.197
 
 - Share the bounded observed-pool census through the full production Shadow observation, including outer quality/timing decorators. Nested candidate scopes reuse the same thread-local frame.

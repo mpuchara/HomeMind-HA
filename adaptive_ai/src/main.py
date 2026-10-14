@@ -751,6 +751,9 @@ def shutdown_runtime():
             HISTORY.stop_event.set()
         if ENGINE is not None:
             ENGINE.stop_event.set()
+            candidate_manager = getattr(ENGINE, "agent_candidates", None)
+            if candidate_manager is not None:
+                candidate_manager.stop()
 
             # No new inference/poll work may be admitted after stop_event. Let already
             # running jobs finish before stopping the deferred writers so their final
@@ -792,6 +795,12 @@ def shutdown_runtime():
                     return None
 
             shutdown_step("context", lambda: ENGINE.context.save(force=True))
+            candidate_manager = getattr(ENGINE, "agent_candidates", None)
+            if candidate_manager is not None and candidate_manager.is_alive():
+                candidate_manager.join(timeout=6.0)
+            flush_candidates = getattr(candidate_manager, "flush_candidate_shadow_decisions", None)
+            if callable(flush_candidates):
+                shutdown_step("candidate_shadow_decisions", lambda: flush_candidates(force=True))
             tournament = getattr(ENGINE, "context_tournament", None)
             if tournament is not None:
                 tournament._shadow_flush_event.set()

@@ -1,6 +1,6 @@
-# HomeMind-HA / Adaptive AI 0.14.186
+# HomeMind-HA / Adaptive AI 0.14.198
 
-0.14.186: ponowna ocena kontekstu przy Rebuild oraz przyczynowy dobór jasności i sensorów radaru.
+0.14.198: zachowanie obliczonych decyzji Candidate i zakończonych epizodów przy chwilowej blokadzie SQLite oraz retry monitora driftu. [Opis zmian](../docs/RELEASE_0_14_198_PL.md).
 
 
 Cztery akcje każdego agenta: Shadow/Control, Wrong decision, Settings, Teach.

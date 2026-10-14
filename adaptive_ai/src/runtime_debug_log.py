@@ -135,6 +135,9 @@ class RuntimeDebugLogService:
                 ("provenance", engine, "provenance_deferred_snapshot"),
                 ("feature_journal", engine, "feature_observation_deferred_snapshot"),
                 ("fast_light", tournament, "fast_light_persistence_snapshot"),
+                ("candidate_shadow", self.manager, "candidate_shadow_persistence_snapshot"),
+                ("tournament_episodes", tournament, "tournament_episode_persistence_snapshot"),
+                ("drift_observer", getattr(self.manager, "adaptation_service", None), "observer_snapshot"),
             ):
                 getter = getattr(owner, method, None)
                 if callable(getter):
