@@ -725,7 +725,10 @@ def install(store, engine):
         status = "ok"
         try:
             session = getattr(store, "connection_session", None)
-            with background_sqlite(store), session() if callable(session) else nullcontext():
+            census = getattr(service, "observation_pool_scope", None)
+            with (background_sqlite(store),
+                  session() if callable(session) else nullcontext(),
+                  census() if callable(census) else nullcontext()):
                 service.observe_shadow(agent, state_map, changed_entities)
         except Exception as exc:
             status = "error"

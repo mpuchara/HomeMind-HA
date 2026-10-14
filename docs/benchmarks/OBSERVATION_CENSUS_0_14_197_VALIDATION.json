@@ -1,0 +1,254 @@
+{
+  "version": "0.14.197",
+  "baseline": "0.14.196",
+  "validation": {
+    "tests_passed": 2339,
+    "skipped": 0,
+    "seconds": 223.301,
+    "environment": "WSL Linux Python 3.12.3",
+    "compileall": true,
+    "new_regressions": 8
+  },
+  "benchmark": {
+    "series": [
+      {
+        "before": {
+          "observation_median_ms": 9.46477099998333,
+          "census_sql_per_frame": [
+            5,
+            5,
+            5,
+            5,
+            5,
+            5,
+            5,
+            5,
+            5,
+            5,
+            5,
+            5,
+            5,
+            5,
+            5,
+            5,
+            5,
+            5,
+            5,
+            5
+          ],
+          "features_sha256": "b875961122025025cac7938d4eb3edd79ddf7064ed00d510a6dce47dd4fbb9b5",
+          "decisions_and_counts_sha256": "6c6cfae9f0f87b08e5eb506c74e2b08f584e8f13af205c53a4d6e71a69d7e979",
+          "trained_heads_sha256": "153715874d97bc4aa562ad1e37694056199376547c2961816f425fc20fce9be6",
+          "labels": {
+            "sensor.challenger_0": 1,
+            "sensor.challenger_1": 1,
+            "sensor.challenger_2": 1,
+            "sensor.challenger_3": 1
+          },
+          "checksum_checks": 100
+        },
+        "after": {
+          "observation_median_ms": 6.86991199999909,
+          "census_sql_per_frame": [
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ],
+          "features_sha256": "b875961122025025cac7938d4eb3edd79ddf7064ed00d510a6dce47dd4fbb9b5",
+          "decisions_and_counts_sha256": "6c6cfae9f0f87b08e5eb506c74e2b08f584e8f13af205c53a4d6e71a69d7e979",
+          "trained_heads_sha256": "153715874d97bc4aa562ad1e37694056199376547c2961816f425fc20fce9be6",
+          "labels": {
+            "sensor.challenger_0": 1,
+            "sensor.challenger_1": 1,
+            "sensor.challenger_2": 1,
+            "sensor.challenger_3": 1
+          },
+          "checksum_checks": 100
+        },
+        "speedup": 1.3777135718746591
+      },
+      {
+        "after": {
+          "observation_median_ms": 7.3198145000077375,
+          "census_sql_per_frame": [
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ],
+          "features_sha256": "b875961122025025cac7938d4eb3edd79ddf7064ed00d510a6dce47dd4fbb9b5",
+          "decisions_and_counts_sha256": "6c6cfae9f0f87b08e5eb506c74e2b08f584e8f13af205c53a4d6e71a69d7e979",
+          "trained_heads_sha256": "153715874d97bc4aa562ad1e37694056199376547c2961816f425fc20fce9be6",
+          "labels": {
+            "sensor.challenger_0": 1,
+            "sensor.challenger_1": 1,
+            "sensor.challenger_2": 1,
+            "sensor.challenger_3": 1
+          },
+          "checksum_checks": 100
+        },
+        "before": {
+          "observation_median_ms": 6.717632000004414,
+          "census_sql_per_frame": [
+            5,
+            5,
+            5,
+            5,
+            5,
+            5,
+            5,
+            5,
+            5,
+            5,
+            5,
+            5,
+            5,
+            5,
+            5,
+            5,
+            5,
+            5,
+            5,
+            5
+          ],
+          "features_sha256": "b875961122025025cac7938d4eb3edd79ddf7064ed00d510a6dce47dd4fbb9b5",
+          "decisions_and_counts_sha256": "6c6cfae9f0f87b08e5eb506c74e2b08f584e8f13af205c53a4d6e71a69d7e979",
+          "trained_heads_sha256": "153715874d97bc4aa562ad1e37694056199376547c2961816f425fc20fce9be6",
+          "labels": {
+            "sensor.challenger_0": 1,
+            "sensor.challenger_1": 1,
+            "sensor.challenger_2": 1,
+            "sensor.challenger_3": 1
+          },
+          "checksum_checks": 100
+        },
+        "speedup": 0.9177325463640251
+      },
+      {
+        "before": {
+          "observation_median_ms": 7.411637499998847,
+          "census_sql_per_frame": [
+            5,
+            5,
+            5,
+            5,
+            5,
+            5,
+            5,
+            5,
+            5,
+            5,
+            5,
+            5,
+            5,
+            5,
+            5,
+            5,
+            5,
+            5,
+            5,
+            5
+          ],
+          "features_sha256": "b875961122025025cac7938d4eb3edd79ddf7064ed00d510a6dce47dd4fbb9b5",
+          "decisions_and_counts_sha256": "6c6cfae9f0f87b08e5eb506c74e2b08f584e8f13af205c53a4d6e71a69d7e979",
+          "trained_heads_sha256": "153715874d97bc4aa562ad1e37694056199376547c2961816f425fc20fce9be6",
+          "labels": {
+            "sensor.challenger_0": 1,
+            "sensor.challenger_1": 1,
+            "sensor.challenger_2": 1,
+            "sensor.challenger_3": 1
+          },
+          "checksum_checks": 100
+        },
+        "after": {
+          "observation_median_ms": 6.838522499990063,
+          "census_sql_per_frame": [
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ],
+          "features_sha256": "b875961122025025cac7938d4eb3edd79ddf7064ed00d510a6dce47dd4fbb9b5",
+          "decisions_and_counts_sha256": "6c6cfae9f0f87b08e5eb506c74e2b08f584e8f13af205c53a4d6e71a69d7e979",
+          "trained_heads_sha256": "153715874d97bc4aa562ad1e37694056199376547c2961816f425fc20fce9be6",
+          "labels": {
+            "sensor.challenger_0": 1,
+            "sensor.challenger_1": 1,
+            "sensor.challenger_2": 1,
+            "sensor.challenger_3": 1
+          },
+          "checksum_checks": 100
+        },
+        "speedup": 1.0838068457052845
+      }
+    ],
+    "real_process_wrapper": true,
+    "outer_state_reads": 4,
+    "features_decisions_counts_weights_and_labels_identical": true,
+    "limit": "Synthetic 96-sensor durable/RAM pool and real production wrapper; no simulated delay, HA ingress or Pi microSD contention."
+  },
+  "median_observer_speedup": 1.0838068457052845,
+  "log_evidence": {
+    "export_local_time": "2026-10-14T18:55:50+02:00",
+    "version": "0.14.196",
+    "event_to_decision_avg_ms": 332.88624459464637,
+    "event_to_decision_recent_p95_ms": 371.15230900235474,
+    "inference_avg_ms": 63.84916927034082,
+    "context_shadow_avg_ms": 266.1990239935489,
+    "trace_complete_observations": 30,
+    "trace_census_queries_inside_shadow": 147,
+    "trace_census_queries_outside_shadow": 0,
+    "trace_census_total_ms": 2082.091,
+    "trace_shadow_total_ms": 8499.084,
+    "no_device_speedup_claim": true
+  }
+}

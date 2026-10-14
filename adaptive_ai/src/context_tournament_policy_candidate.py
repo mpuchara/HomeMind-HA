@@ -18,6 +18,7 @@ import math
 import threading
 import time
 from collections import defaultdict
+from contextlib import contextmanager
 
 import context_tournament_promotion as promotion
 from context import action_values, context_scalar, target_value
@@ -387,6 +388,20 @@ def install_policy_candidates(service):
                 "first_seen_ts": None, "last_seen_ts": None, "last_change_ts": None,
                 "last_value": None, "history": [], "samples": [], "screening": {}}
 
+    def remember_pool_keys(keys):
+        with lock:
+            added = set(keys) - observed_pool_keys
+            observed_pool_keys.update(added)
+        # A synchronous INSERT can change a COUNT already read in this frame.
+        # Buffered census entries retain durable ids and union live pending keys,
+        # so they need no second SQL read when a new sensor joins the RAM pool.
+        counts = getattr(tls, 'observation_pool_counts', None)
+        if added and counts is not None:
+            owners = {owner for owner, _ in added}
+            for key, (ids, count) in list(counts.items()):
+                if key[0] in owners and ids is None:
+                    del counts[key]
+
     def load_pool(agent_id, entity_id):
         key = (str(agent_id), str(entity_id))
         with lock:
@@ -465,7 +480,7 @@ def install_policy_candidates(service):
                         packed = pool_write_args(aid, eid, row, now, samples_changed=False)
                         payload = pool_payloads[(aid, str(eid))] = tuple(packed[13:16])
                     prepared.append(pool_counter_args(aid, eid, row) + payload + (float(now),))
-                observed_pool_keys.update((str(row[0]), str(row[1])) for row in prepared)
+                remember_pool_keys((str(row[0]), str(row[1])) for row in prepared)
             pool_buffer.submit(prepared)
             if not service.background_persistence_available():
                 pool_buffer.flush()
@@ -497,7 +512,7 @@ def install_policy_candidates(service):
                         aid, eid, row, now, samples_changed=False
                     ) for eid, row in counters])
         with lock:
-            observed_pool_keys.update((str(row[0]), str(row[1])) for row in rows)
+            remember_pool_keys((str(row[0]), str(row[1])) for row in rows)
 
     def pool_stats(agent_id, entity_id):
         row = load_pool(agent_id, entity_id)
@@ -1076,16 +1091,23 @@ def install_policy_candidates(service):
                                      "exact_candidate_policy": True})
         return result
 
-    def observe_with_pool_census(agent, state_map=None, changed_entities=None):
-        # Include the before/after promotion status reads in the same observation.
-        # Only the census is shared; schema, policy and promotion reads stay fresh.
+    @contextmanager
+    def observation_pool_scope():
+        # Reuse the outer production observation scope through all decorators.
+        # Standalone observers still own and clean up their own frame.
         previous_counts = getattr(tls, "observation_pool_counts", None)
-        tls.observation_pool_counts = {}
+        if previous_counts is None:
+            tls.observation_pool_counts = {}
         try:
-            return observe_with_candidates(agent, state_map, changed_entities)
+            yield
         finally:
             tls.observation_pool_counts = previous_counts
 
+    def observe_with_pool_census(agent, state_map=None, changed_entities=None):
+        with observation_pool_scope():
+            return observe_with_candidates(agent, state_map, changed_entities)
+
+    service.observation_pool_scope = observation_pool_scope
     service.observe_shadow = observe_with_pool_census
 
     def status_with_candidates(agent):
@@ -1143,7 +1165,7 @@ def install_policy_candidates(service):
         scoped_counts = getattr(tls, "observation_pool_counts", None)
         key = (str(agent_id), limit)
         if scoped_counts is not None and key in scoped_counts:
-            state["observed_pool_count"] = scoped_counts[key]
+            ids, count = scoped_counts[key]
             with lock:
                 pool_read_stats["hits"] += 1
         elif pool_buffer is not None and service.background_persistence_available():
@@ -1152,20 +1174,24 @@ def install_policy_candidates(service):
                 ids = {str(row[0]) for row in connection.execute(
                     "SELECT entity_id FROM context_tournament_observed_pool WHERE agent_id=? LIMIT ?",
                     (str(agent_id), limit))}
-            with lock:
-                ids.update(eid for owner, eid in observed_pool_keys if owner == str(agent_id))
-            state["observed_pool_count"] = min(limit, len(ids))
+            ids, count = frozenset(ids), None
         else:
             with service.store.conn() as connection:
-                state["observed_pool_count"] = int(connection.execute(
+                count = int(connection.execute(
                     "SELECT COUNT(*) FROM (SELECT 1 FROM context_tournament_observed_pool "
                     "WHERE agent_id=? LIMIT ?)", (str(agent_id), limit),
                 ).fetchone()[0])
+            ids = None
         if scoped_counts is not None:
             if key not in scoped_counts:
                 with lock:
                     pool_read_stats["reads"] += 1
-            scoped_counts[key] = state["observed_pool_count"]
+            scoped_counts[key] = (ids, count)
+        if ids is not None:
+            with lock:
+                pending = {eid for owner, eid in observed_pool_keys if owner == str(agent_id)}
+            count = min(limit, len(ids | pending))
+        state["observed_pool_count"] = count
         state["active_feature_count"] = len(state.get("active_features") or [])
         return state
 

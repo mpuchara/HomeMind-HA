@@ -1,9 +1,9 @@
 {
-  "version": "0.14.196",
+  "version": "0.14.197",
   "release_date": "2026-10-14",
-  "base_version": "0.14.195",
-  "base_commit": "141e064e3d62eb36fdaa2553eb05936c3224a475",
-  "release_status": "deferred-writer-wal-reclamation-coordination",
+  "base_version": "0.14.196",
+  "base_commit": "1b4d961c3da764bff9a925700ea5c5c29ff5915f",
+  "release_status": "complete-shadow-observation-census-scope",
   "release_014140": {
     "scope": "inventory_and_remove_remaining_shipped_feature_Handler_fallbacks_for_Candidate_Live_and_manual_feedback_transport",
     "explicit_routes": "manual_feedback.js, candidate_ui.js, candidate_preference_ui.js, /api/candidates, Candidate Teach-RL status/train, generation history/comparison, /api/candidate-live, /api/live and Candidate discard",
@@ -2759,7 +2759,7 @@
     "benchmark": "docs/benchmarks/CONTEXT_BUFFER_0_14_195_VALIDATION.json",
     "median_observer_speedup": 1.018396920512725
   },
-  "release_validation_tests_passed": 2331,
+  "release_validation_tests_passed": 2339,
   "release_014196": {
     "scope": "typed_deferred_batch_busy_retry_and_cooperative_wal_reclaim_write_admission",
     "learning_semantics_changed": false,
@@ -2773,5 +2773,18 @@
     "median_contended_flush_before_ms": 251.8059930000005,
     "median_contended_flush_after_ms": 0.021512000000001308,
     "median_observer_speedup": 0.9762394936119455
+  },
+  "release_014197": {
+    "scope": "nested_thread_local_pool_census_shared_through_production_shadow_decorators",
+    "learning_semantics_changed": false,
+    "storage_limits_changed": false,
+    "persistent_census_entries": 0,
+    "new_regressions": 8,
+    "validation": "2339 tests passed in WSL without skips; compileall and three production-wrapper census/learning parity pairs passed",
+    "tests_passed": 2339,
+    "benchmark": "docs/benchmarks/OBSERVATION_CENSUS_0_14_197_VALIDATION.json",
+    "warm_census_sql_before": 5,
+    "warm_census_sql_after": 1,
+    "median_observer_speedup": 1.0838068457052845
   }
 }
