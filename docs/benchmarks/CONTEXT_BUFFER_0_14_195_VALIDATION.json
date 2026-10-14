@@ -1,0 +1,387 @@
+{
+  "version": "0.14.195",
+  "base_commit": "e5b14217dd26a071bc698f89b34fa7d16afa0514",
+  "full_suite": {
+    "passed": 2317,
+    "seconds": 283.189,
+    "skipped": 0,
+    "platform": "WSL Ubuntu / Python 3.12.3",
+    "log_sha256": "ed9521344fc61e3bffc1b10763a384097a6493879ba3b3a31840a895aa8a4b2f"
+  },
+  "new_regressions": 8,
+  "compileall": true,
+  "controlled_writer_benchmark": {
+    "controlled_writer_pause_ms": 300,
+    "rows": 288,
+    "rounds": 3,
+    "same_buffer_limit_mb": 16,
+    "values": {
+      "before": {
+        "results": [
+          {
+            "submit_ms": 300.67276300002277,
+            "overflow_flushes": 1,
+            "while_writer_paused": false,
+            "while_paused_buffer": {
+              "pending": 124,
+              "flushed": 452,
+              "errors": 0,
+              "bytes": 4600152,
+              "max_bytes": 16777216,
+              "max_rows": 4096,
+              "inflight": 0,
+              "flush_seconds": 30.0,
+              "overflow_flushes": 1
+            },
+            "commit_count": 3,
+            "final_rows_sha256": "5def29490f229c8eb56cbd5f11d230b27aa873acbf2a069fc80bd7a543cf4624"
+          },
+          {
+            "submit_ms": 300.6129030000011,
+            "overflow_flushes": 1,
+            "while_writer_paused": false,
+            "while_paused_buffer": {
+              "pending": 124,
+              "flushed": 452,
+              "errors": 0,
+              "bytes": 4600152,
+              "max_bytes": 16777216,
+              "max_rows": 4096,
+              "inflight": 0,
+              "flush_seconds": 30.0,
+              "overflow_flushes": 1
+            },
+            "commit_count": 3,
+            "final_rows_sha256": "5def29490f229c8eb56cbd5f11d230b27aa873acbf2a069fc80bd7a543cf4624"
+          },
+          {
+            "submit_ms": 303.24540999998817,
+            "overflow_flushes": 1,
+            "while_writer_paused": false,
+            "while_paused_buffer": {
+              "pending": 124,
+              "flushed": 452,
+              "errors": 0,
+              "bytes": 4600152,
+              "max_bytes": 16777216,
+              "max_rows": 4096,
+              "inflight": 0,
+              "flush_seconds": 30.0,
+              "overflow_flushes": 1
+            },
+            "commit_count": 3,
+            "final_rows_sha256": "5def29490f229c8eb56cbd5f11d230b27aa873acbf2a069fc80bd7a543cf4624"
+          }
+        ],
+        "submit_median_ms": 300.67276300002277,
+        "payload_bytes": 10470130
+      },
+      "after": {
+        "results": [
+          {
+            "submit_ms": 1.4782869999976356,
+            "overflow_flushes": 0,
+            "while_writer_paused": true,
+            "while_paused_buffer": {
+              "pending": 288,
+              "flushed": 0,
+              "errors": 0,
+              "bytes": 11033526,
+              "max_bytes": 16777216,
+              "max_rows": 4096,
+              "inflight": 288,
+              "flush_seconds": 30.0,
+              "overflow_flushes": 0,
+              "shared_payload_columns": [
+                3
+              ],
+              "shared_payloads": 288,
+              "shared_payload_references": 576,
+              "shared_payload_bytes": 10629394,
+              "duplicate_payload_charge_avoided_bytes": 10481938
+            },
+            "commit_count": 2,
+            "final_rows_sha256": "5def29490f229c8eb56cbd5f11d230b27aa873acbf2a069fc80bd7a543cf4624"
+          },
+          {
+            "submit_ms": 0.9017660000267824,
+            "overflow_flushes": 0,
+            "while_writer_paused": true,
+            "while_paused_buffer": {
+              "pending": 288,
+              "flushed": 0,
+              "errors": 0,
+              "bytes": 11033526,
+              "max_bytes": 16777216,
+              "max_rows": 4096,
+              "inflight": 288,
+              "flush_seconds": 30.0,
+              "overflow_flushes": 0,
+              "shared_payload_columns": [
+                3
+              ],
+              "shared_payloads": 288,
+              "shared_payload_references": 576,
+              "shared_payload_bytes": 10629394,
+              "duplicate_payload_charge_avoided_bytes": 10481938
+            },
+            "commit_count": 2,
+            "final_rows_sha256": "5def29490f229c8eb56cbd5f11d230b27aa873acbf2a069fc80bd7a543cf4624"
+          },
+          {
+            "submit_ms": 0.7844170000339545,
+            "overflow_flushes": 0,
+            "while_writer_paused": true,
+            "while_paused_buffer": {
+              "pending": 288,
+              "flushed": 0,
+              "errors": 0,
+              "bytes": 11033526,
+              "max_bytes": 16777216,
+              "max_rows": 4096,
+              "inflight": 288,
+              "flush_seconds": 30.0,
+              "overflow_flushes": 0,
+              "shared_payload_columns": [
+                3
+              ],
+              "shared_payloads": 288,
+              "shared_payload_references": 576,
+              "shared_payload_bytes": 10629394,
+              "duplicate_payload_charge_avoided_bytes": 10481938
+            },
+            "commit_count": 2,
+            "final_rows_sha256": "5def29490f229c8eb56cbd5f11d230b27aa873acbf2a069fc80bd7a543cf4624"
+          }
+        ],
+        "submit_median_ms": 0.9017660000267824,
+        "payload_bytes": 10470130
+      }
+    },
+    "exact_final_rows": true,
+    "limit": "Synthetic immutable pool payloads and controlled writer pause; not measured Raspberry Pi latency or proof of a particular device stall cause."
+  },
+  "observer_parity": {
+    "synthetic": true,
+    "series": [
+      {
+        "before": {
+          "observation_median_ms": 11.620468000018036,
+          "observation_total_ms": 236.39323500003684,
+          "checks": 100,
+          "features_sha256": "b875961122025025cac7938d4eb3edd79ddf7064ed00d510a6dce47dd4fbb9b5",
+          "predictions_sha256": "651f9ed93fda32f3816c545cd593207d373dbe11ab2f0528b2145d47f5e5f56e",
+          "trained_heads_sha256": "153715874d97bc4aa562ad1e37694056199376547c2961816f425fc20fce9be6",
+          "future_training_samples": {
+            "sensor.challenger_0": 1,
+            "sensor.challenger_1": 1,
+            "sensor.challenger_2": 1,
+            "sensor.challenger_3": 1
+          }
+        },
+        "after": {
+          "observation_median_ms": 12.455833000018401,
+          "observation_total_ms": 255.82878699987077,
+          "checks": 100,
+          "features_sha256": "b875961122025025cac7938d4eb3edd79ddf7064ed00d510a6dce47dd4fbb9b5",
+          "predictions_sha256": "651f9ed93fda32f3816c545cd593207d373dbe11ab2f0528b2145d47f5e5f56e",
+          "trained_heads_sha256": "153715874d97bc4aa562ad1e37694056199376547c2961816f425fc20fce9be6",
+          "future_training_samples": {
+            "sensor.challenger_0": 1,
+            "sensor.challenger_1": 1,
+            "sensor.challenger_2": 1,
+            "sensor.challenger_3": 1
+          }
+        },
+        "observation_speedup": 0.9329338310814594
+      },
+      {
+        "after": {
+          "observation_median_ms": 11.759223499979043,
+          "observation_total_ms": 242.7606010001,
+          "checks": 100,
+          "features_sha256": "b875961122025025cac7938d4eb3edd79ddf7064ed00d510a6dce47dd4fbb9b5",
+          "predictions_sha256": "651f9ed93fda32f3816c545cd593207d373dbe11ab2f0528b2145d47f5e5f56e",
+          "trained_heads_sha256": "153715874d97bc4aa562ad1e37694056199376547c2961816f425fc20fce9be6",
+          "future_training_samples": {
+            "sensor.challenger_0": 1,
+            "sensor.challenger_1": 1,
+            "sensor.challenger_2": 1,
+            "sensor.challenger_3": 1
+          }
+        },
+        "before": {
+          "observation_median_ms": 11.975556999999526,
+          "observation_total_ms": 247.61122099999966,
+          "checks": 100,
+          "features_sha256": "b875961122025025cac7938d4eb3edd79ddf7064ed00d510a6dce47dd4fbb9b5",
+          "predictions_sha256": "651f9ed93fda32f3816c545cd593207d373dbe11ab2f0528b2145d47f5e5f56e",
+          "trained_heads_sha256": "153715874d97bc4aa562ad1e37694056199376547c2961816f425fc20fce9be6",
+          "future_training_samples": {
+            "sensor.challenger_0": 1,
+            "sensor.challenger_1": 1,
+            "sensor.challenger_2": 1,
+            "sensor.challenger_3": 1
+          }
+        },
+        "observation_speedup": 1.018396920512725
+      },
+      {
+        "before": {
+          "observation_median_ms": 12.203001499983657,
+          "observation_total_ms": 254.6389229999022,
+          "checks": 100,
+          "features_sha256": "b875961122025025cac7938d4eb3edd79ddf7064ed00d510a6dce47dd4fbb9b5",
+          "predictions_sha256": "651f9ed93fda32f3816c545cd593207d373dbe11ab2f0528b2145d47f5e5f56e",
+          "trained_heads_sha256": "153715874d97bc4aa562ad1e37694056199376547c2961816f425fc20fce9be6",
+          "future_training_samples": {
+            "sensor.challenger_0": 1,
+            "sensor.challenger_1": 1,
+            "sensor.challenger_2": 1,
+            "sensor.challenger_3": 1
+          }
+        },
+        "after": {
+          "observation_median_ms": 11.638879499997756,
+          "observation_total_ms": 239.59317199984298,
+          "checks": 100,
+          "features_sha256": "b875961122025025cac7938d4eb3edd79ddf7064ed00d510a6dce47dd4fbb9b5",
+          "predictions_sha256": "651f9ed93fda32f3816c545cd593207d373dbe11ab2f0528b2145d47f5e5f56e",
+          "trained_heads_sha256": "153715874d97bc4aa562ad1e37694056199376547c2961816f425fc20fce9be6",
+          "future_training_samples": {
+            "sensor.challenger_0": 1,
+            "sensor.challenger_1": 1,
+            "sensor.challenger_2": 1,
+            "sensor.challenger_3": 1
+          }
+        },
+        "observation_speedup": 1.0484687550881517
+      }
+    ],
+    "passes_per_pair": 20,
+    "challengers": 4,
+    "accepted_dense_rows_per_class": 128,
+    "features_predictions_and_future_trained_heads_identical": true,
+    "limit": "Production observer on this test host, no HA ingress or concurrent microSD contention; not measured Pi latency."
+  },
+  "median_observer_speedup": 1.018396920512725,
+  "source_export": {
+    "version": "0.14.193",
+    "generated_at": "2026-10-14T13:01:17.748236+00:00",
+    "training_active_count": 0,
+    "metrics": {
+      "event_to_decision": {
+        "avg_ms": 259.03264054326297,
+        "count": 12598,
+        "p95_ms": 739.4669819623232,
+        "recent_count": 156,
+        "recent_p95_ms": 1015.8535880036652
+      },
+      "wrapped_inference": {
+        "avg_ms": 351.9476371092839,
+        "count": 12619,
+        "p95_ms": 650.6267780205235,
+        "recent_count": 160,
+        "recent_p95_ms": 758.4904420073144
+      },
+      "context_shadow_observation": {
+        "avg_ms": 236.84083028640921,
+        "count": 12619,
+        "p95_ms": 427.6564230094664,
+        "recent_count": 160,
+        "recent_p95_ms": 464.79322598315775
+      },
+      "inference": {
+        "avg_ms": 58.74085084146645,
+        "count": 12619,
+        "p95_ms": 105.01784196821973,
+        "recent_count": 160,
+        "recent_p95_ms": 109.6016860101372
+      },
+      "context_shadow_snapshot": {
+        "avg_ms": 60.68001781696523,
+        "count": 1453,
+        "p95_ms": 142.82798097701743,
+        "recent_count": 12,
+        "recent_p95_ms": 219.18096498120576
+      },
+      "context_shadow_json": {
+        "avg_ms": 197.77332059305334,
+        "count": 238,
+        "p95_ms": 624.6321870130487,
+        "recent_count": 4,
+        "recent_p95_ms": 216.0839950083755
+      }
+    },
+    "previous_export_metrics": {
+      "event_to_decision": {
+        "avg_ms": 650.21940557621,
+        "count": 1577,
+        "p95_ms": 1054.4664380140603,
+        "recent_count": 150,
+        "recent_p95_ms": 3025.631591968704
+      },
+      "wrapped_inference": {
+        "avg_ms": 480.0085964891868,
+        "count": 1579,
+        "p95_ms": 652.138996985741,
+        "recent_count": 154,
+        "recent_p95_ms": 1815.795372996945
+      },
+      "context_shadow_observation": {
+        "avg_ms": 318.1250433312116,
+        "count": 1579,
+        "p95_ms": 479.2308759642765,
+        "recent_count": 154,
+        "recent_p95_ms": 1406.3412830000743
+      },
+      "inference": {
+        "avg_ms": 77.83661483988885,
+        "count": 1580,
+        "p95_ms": 120.95835502259433,
+        "recent_count": 153,
+        "recent_p95_ms": 123.73630900401622
+      },
+      "context_shadow_snapshot": {
+        "avg_ms": 53.15014382722438,
+        "count": 224,
+        "p95_ms": 94.60966195911169,
+        "recent_count": 92,
+        "recent_p95_ms": 114.57251297542825
+      },
+      "context_shadow_json": {
+        "avg_ms": 191.70702831719868,
+        "count": 35,
+        "p95_ms": 615.3356700087897,
+        "recent_count": 8,
+        "recent_p95_ms": 1002.8087429818697
+      }
+    },
+    "observed_pool_buffer": {
+      "bytes": 10030917,
+      "errors": 0,
+      "flush_seconds": 30.0,
+      "flushed": 37126,
+      "inflight": 0,
+      "max_bytes": 16777216,
+      "max_rows": 4096,
+      "overflow_flushes": 21,
+      "pending": 288
+    },
+    "readonly_page_observations_skipped": 429727,
+    "checkpoint_max_duration_ms": 5964.338151970878,
+    "bathroom_critical_stall_ms": 11725.165,
+    "bathroom_critical_shadow_ms": 9008.799,
+    "caveat": "Export windows/workloads differ; overflow totals do not prove the precise cause of every critical stall."
+  },
+  "guards": {
+    "same_default_buffer_limit_mb": 16,
+    "inflight_included_in_reference_accounting": true,
+    "separate_objects_and_rows_charged_separately": true,
+    "metadata_and_payload_latest_after_failure": true,
+    "over_budget_input_atomic_rejection": true,
+    "only_observed_pool_opted_in": true,
+    "storage_and_learning_semantics_unchanged": true
+  },
+  "limits": "Controlled 300 ms writer pause on synthetic data demonstrates the blocking mechanism; not measured Raspberry Pi latency, nor proof it caused the full 11.7 s stall."
+}

@@ -1,9 +1,9 @@
 {
-  "version": "0.14.194",
+  "version": "0.14.195",
   "release_date": "2026-10-14",
-  "base_version": "0.14.193",
-  "base_commit": "be7621c3514fd7ec145ae534c28c1fd2833f646a",
-  "release_status": "owned-shadow-metadata-snapshots-and-immutable-source-json",
+  "base_version": "0.14.194",
+  "base_commit": "e5b14217dd26a071bc698f89b34fa7d16afa0514",
+  "release_status": "owned-observed-pool-payload-reference-accounting",
   "release_014140": {
     "scope": "inventory_and_remove_remaining_shipped_feature_Handler_fallbacks_for_Candidate_Live_and_manual_feedback_transport",
     "explicit_routes": "manual_feedback.js, candidate_ui.js, candidate_preference_ui.js, /api/candidates, Candidate Teach-RL status/train, generation history/comparison, /api/candidate-live, /api/live and Candidate discard",
@@ -249,7 +249,7 @@
   "pi4_release_gate_contract": "pi4_release_gate_v1",
   "pi4_real_hardware_required": true,
   "stage7_offline_rl_control_unlock": false,
-  "tests_passed": 2309,
+  "tests_passed": 2317,
   "profile": "rpi4-ram-first-complete-discovery-manual-agent-selection",
   "manual_agent_training": true,
   "max_concurrent_training_jobs": 1,
@@ -2740,5 +2740,24 @@
     },
     "median_observer_speedup": 0.9855442228587925
   },
-  "release_validation_tests_passed": 2309
+  "release_014195": {
+    "scope": "same_row_and_column_immutable_json_identity_sharing_between_pending_and_inflight_snapshots",
+    "default_buffer_mb": 16,
+    "shared_observed_pool_columns": [
+      13,
+      14,
+      15
+    ],
+    "minimum_shared_object_bytes": 1024,
+    "per_reference_ledger_overhead_bytes": 512,
+    "other_rows_and_equal_distinct_objects_shared": false,
+    "learning_semantics_changed": false,
+    "disk_admission_guards_changed": false,
+    "new_regressions": 8,
+    "validation": "2317 tests passed in WSL without skips; compileall and controlled writer/observer parity benchmarks passed",
+    "tests_passed": 2317,
+    "benchmark": "docs/benchmarks/CONTEXT_BUFFER_0_14_195_VALIDATION.json",
+    "median_observer_speedup": 1.018396920512725
+  },
+  "release_validation_tests_passed": 2317
 }
