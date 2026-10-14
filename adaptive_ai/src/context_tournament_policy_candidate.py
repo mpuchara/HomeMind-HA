@@ -26,6 +26,7 @@ from context_tournament_primary_protection import primary_feature_ids, primary_r
 from manual_context_learning import _migrate_schema
 from policy import MultiHorizonPolicy
 from policy_backend import verify_model_checksum
+from sealed_policy_snapshot import SealedPolicy, seal_policy
 from settings import OPTIONS
 from shared_inference_context import shared_inference_temporal
 from telemetry import RUNTIME_DEBUG, TELEMETRY
@@ -69,7 +70,7 @@ def _verify_candidate_checksum(raw):
     trace = RUNTIME_DEBUG.begin("context_candidate_validation") if RUNTIME_DEBUG.enabled else None
     status = "error"
     try:
-        result = verify_model_checksum(raw)
+        result = raw.verify() if type(raw) is SealedPolicy else verify_model_checksum(raw)
         status = "ok"
         return result
     finally:
@@ -694,6 +695,20 @@ def install_policy_candidates(service):
         expected_revision = str(model.get("evaluation_champion_revision") or current_revision)
         raw = model.get("candidate_policy") if isinstance(model.get("candidate_policy"), dict) else None
         checksum_valid = bool(raw and _verify_candidate_checksum(raw))
+        if raw is not None and model.get('candidate_policy') is not raw:
+            return None
+        if checksum_valid and type(raw) is dict:
+            try:
+                with measure_training_phase('context_candidate_ram_admission', agent_id=aid):
+                    sealed = seal_policy(raw)
+                if sealed is not None:
+                    if model.get('candidate_policy') is not raw:
+                        # Preserve a newer source published during cold admission.
+                        # This observation falls back to its champion prediction.
+                        return None
+                    model['candidate_policy'] = raw = sealed
+            except ValueError:
+                checksum_valid = False
         valid = bool(checksum_valid and _candidate_epoch_matches(model, raw, target_schema, policy, tournament))
         if raw and not checksum_valid:
             # Older builds could deserialize the nested Candidate payload by reference.

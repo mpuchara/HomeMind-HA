@@ -1,0 +1,189 @@
+{
+  "version": "0.14.192",
+  "base_commit": "4a82f3a23cf8dd05c6db4f62272da26c816c6837",
+  "full_suite": {
+    "passed": 2294,
+    "seconds": 319.038,
+    "skipped": 0,
+    "platform": "WSL Ubuntu / Python 3.12.3",
+    "log_sha256": "c6c9e814c5c8d5360684390d5b61f85e871f30579ee2ba9cf5b65a3237df45c9"
+  },
+  "new_regressions": 15,
+  "compileall": true,
+  "benchmark": {
+    "synthetic": true,
+    "series": [
+      {
+        "before": {
+          "observation_median_ms": 27.103305499963426,
+          "observation_total_ms": 681.3331539995033,
+          "checks": 116,
+          "features_sha256": "8da2eb58283e189c236fccdcee29a7d574265e2663308030a395f621efc694ea",
+          "predictions_sha256": "a917f4cfc1152832235c324948135f46f5c356a62385b11230771a85c6ddb6ae",
+          "trained_heads_sha256": "153715874d97bc4aa562ad1e37694056199376547c2961816f425fc20fce9be6",
+          "future_training_samples": {
+            "sensor.challenger_0": 1,
+            "sensor.challenger_1": 1,
+            "sensor.challenger_2": 1,
+            "sensor.challenger_3": 1
+          }
+        },
+        "after": {
+          "observation_median_ms": 23.62932650004268,
+          "observation_total_ms": 599.556535000147,
+          "checks": 116,
+          "features_sha256": "8da2eb58283e189c236fccdcee29a7d574265e2663308030a395f621efc694ea",
+          "predictions_sha256": "a917f4cfc1152832235c324948135f46f5c356a62385b11230771a85c6ddb6ae",
+          "trained_heads_sha256": "153715874d97bc4aa562ad1e37694056199376547c2961816f425fc20fce9be6",
+          "future_training_samples": {
+            "sensor.challenger_0": 1,
+            "sensor.challenger_1": 1,
+            "sensor.challenger_2": 1,
+            "sensor.challenger_3": 1
+          }
+        },
+        "observation_speedup": 1.1470198060835324
+      },
+      {
+        "after": {
+          "observation_median_ms": 21.438682999985303,
+          "observation_total_ms": 514.0668179997192,
+          "checks": 116,
+          "features_sha256": "8da2eb58283e189c236fccdcee29a7d574265e2663308030a395f621efc694ea",
+          "predictions_sha256": "a917f4cfc1152832235c324948135f46f5c356a62385b11230771a85c6ddb6ae",
+          "trained_heads_sha256": "153715874d97bc4aa562ad1e37694056199376547c2961816f425fc20fce9be6",
+          "future_training_samples": {
+            "sensor.challenger_0": 1,
+            "sensor.challenger_1": 1,
+            "sensor.challenger_2": 1,
+            "sensor.challenger_3": 1
+          }
+        },
+        "before": {
+          "observation_median_ms": 28.383842500034007,
+          "observation_total_ms": 690.7601969998041,
+          "checks": 116,
+          "features_sha256": "8da2eb58283e189c236fccdcee29a7d574265e2663308030a395f621efc694ea",
+          "predictions_sha256": "a917f4cfc1152832235c324948135f46f5c356a62385b11230771a85c6ddb6ae",
+          "trained_heads_sha256": "153715874d97bc4aa562ad1e37694056199376547c2961816f425fc20fce9be6",
+          "future_training_samples": {
+            "sensor.challenger_0": 1,
+            "sensor.challenger_1": 1,
+            "sensor.challenger_2": 1,
+            "sensor.challenger_3": 1
+          }
+        },
+        "observation_speedup": 1.3239545778093489
+      },
+      {
+        "before": {
+          "observation_median_ms": 27.621166499955052,
+          "observation_total_ms": 683.813642999894,
+          "checks": 116,
+          "features_sha256": "8da2eb58283e189c236fccdcee29a7d574265e2663308030a395f621efc694ea",
+          "predictions_sha256": "a917f4cfc1152832235c324948135f46f5c356a62385b11230771a85c6ddb6ae",
+          "trained_heads_sha256": "153715874d97bc4aa562ad1e37694056199376547c2961816f425fc20fce9be6",
+          "future_training_samples": {
+            "sensor.challenger_0": 1,
+            "sensor.challenger_1": 1,
+            "sensor.challenger_2": 1,
+            "sensor.challenger_3": 1
+          }
+        },
+        "after": {
+          "observation_median_ms": 16.089470999929745,
+          "observation_total_ms": 393.70703099962157,
+          "checks": 116,
+          "features_sha256": "8da2eb58283e189c236fccdcee29a7d574265e2663308030a395f621efc694ea",
+          "predictions_sha256": "a917f4cfc1152832235c324948135f46f5c356a62385b11230771a85c6ddb6ae",
+          "trained_heads_sha256": "153715874d97bc4aa562ad1e37694056199376547c2961816f425fc20fce9be6",
+          "future_training_samples": {
+            "sensor.challenger_0": 1,
+            "sensor.challenger_1": 1,
+            "sensor.challenger_2": 1,
+            "sensor.challenger_3": 1
+          }
+        },
+        "observation_speedup": 1.7167230979859849
+      }
+    ],
+    "passes_per_pair": 24,
+    "challengers": 4,
+    "accepted_dense_rows_per_class": 128,
+    "features_predictions_and_future_trained_heads_identical": true,
+    "limit": "Production observer on this test host, no HA ingress or concurrent microSD contention; not measured Pi latency."
+  },
+  "median_observation_speedup": 1.3239545778093489,
+  "training_resources": {
+    "parallel_default_ceiling_mb": 768,
+    "ram_index_before_mb": 128,
+    "ram_index_after_mb": 192,
+    "default_transition_rows_before": 65536,
+    "default_transition_rows_after": 262144,
+    "custom_ceilings_preserved": true,
+    "low_ram_profile_unchanged": true,
+    "dense_66000_row_source_matches_legacy_queries": true,
+    "semantic_fingerprint_unchanged": true
+  },
+  "source_export": {
+    "version": "0.14.191",
+    "generated_at": "2026-10-14T07:07:10.240606+00:00",
+    "active_training_count": 0,
+    "metrics": {
+      "wrapped_inference": {
+        "avg_ms": 425.32176895305673,
+        "count": 74240,
+        "p95_ms": 759.7582280286588,
+        "recent_count": 164,
+        "recent_p95_ms": 806.4275910146534
+      },
+      "context_shadow_observation": {
+        "avg_ms": 305.57308918326595,
+        "count": 74240,
+        "p95_ms": 552.9963620356284,
+        "recent_count": 164,
+        "recent_p95_ms": 670.2630569925532
+      },
+      "context_candidate_validation": {
+        "avg_ms": 23.282837594022613,
+        "count": 297220,
+        "p95_ms": 43.02541195647791,
+        "recent_count": 512,
+        "recent_p95_ms": 43.02541195647791
+      },
+      "context_rows_persist": {
+        "avg_ms": 352.94656852192907,
+        "count": 2203,
+        "p95_ms": 1688.4134489810094,
+        "recent_count": 3,
+        "recent_p95_ms": 610.0554220029153
+      },
+      "sqlite_wal_checkpoint": {
+        "avg_ms": 836.2341827766678,
+        "count": 6645,
+        "p95_ms": 2858.4231209824793,
+        "recent_count": 10,
+        "recent_p95_ms": 1897.319333977066
+      }
+    },
+    "completed_training_profiles": [
+      {
+        "completed": true,
+        "chunk_elapsed_seconds": 9773.6567,
+        "cpu_seconds": 7392.21,
+        "peak_rss_mb": 340.367,
+        "memory_limit_mb": 768.0,
+        "parallel_slots": 2
+      },
+      {
+        "completed": true,
+        "chunk_elapsed_seconds": 9772.8985,
+        "cpu_seconds": 7370.04,
+        "peak_rss_mb": 341.816,
+        "memory_limit_mb": 768.0,
+        "parallel_slots": 2
+      }
+    ]
+  },
+  "limits": "Synthetic production-observer component timings on test host. Raspberry Pi end-to-end inference and training improvements not measured."
+}

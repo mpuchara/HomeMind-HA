@@ -417,7 +417,7 @@ def resolve_training_resource_profile(options=None, memory=None):
         tier = "medium_plus"
         target = {
             "replay_rows": 32768, "replay_entry_rows": 1536,
-            "ram_index_mb": 128,
+            "ram_index_mb": min(192, effective // 4),
             "feature_entries": 256, "feature_units": 32768,
             "home_entries": 32, "home_units": 16384, "sqlite_mb": 24,
         }
@@ -444,7 +444,11 @@ def resolve_training_resource_profile(options=None, memory=None):
             return 0
         return max(minimum, min(configured, int(target_value)))
 
+    edge_rows = int(options.get("training_transition_edge_max_rows_per_entity", 65536) or 65536)
+    if edge_rows == 65536 and effective >= 768:
+        edge_rows = 262144
     worker_options = {
+        "training_worker_effective_transition_edge_max_rows_per_entity": edge_rows,
         "training_worker_effective_memory_limit_mb": int(effective),
         "training_worker_effective_replay_cache_rows": bounded_int(
             "training_replay_ram_cache_rows", 65536, target["replay_rows"]
@@ -486,6 +490,21 @@ def resolve_training_resource_profile(options=None, memory=None):
         "reserved_for_parent_mb": round(reserve, 1),
         "worker_options": worker_options,
     }
+
+
+def parallel_profile_options(options, slots, memory):
+    """Share available RAM while retaining the parent's reserve and user ceilings."""
+    result = dict(options)
+    if slots <= 1:
+        return result
+    cap = max(448, int(options.get("training_parallel_worker_memory_limit_mb", 768) or 768))
+    available = memory.get("available_mb")
+    if isinstance(available, (int, float)) and available > 0:
+        reserve = max(128., float(options.get("training_worker_memory_reserve_mb", 512) or 512))
+        cap = min(cap, max(128, int((available - reserve) / slots)))
+    result["training_worker_memory_limit_mb"] = min(
+        int(options.get("training_worker_memory_limit_mb", 1024) or 1024), cap)
+    return result
 
 
 def _proc_metrics(pid):
@@ -905,17 +924,9 @@ def run_isolated_training_chunk(history, start_ts, end_ts, **kwargs):
     parallel_slots = max(
         1, int(getattr(history, "training_parallel_slot_count", 1) or 1)
     )
-    profile_options = dict(OPTIONS)
-    if parallel_slots > 1:
-        parallel_cap = max(
-            448,
-            int(OPTIONS.get("training_parallel_worker_memory_limit_mb", 768) or 768),
-        )
-        profile_options["training_worker_memory_limit_mb"] = min(
-            int(profile_options.get("training_worker_memory_limit_mb", 1024) or 1024),
-            parallel_cap,
-        )
-    resource_profile = resolve_training_resource_profile(profile_options)
+    host_memory = _host_memory_mb()
+    profile_options = parallel_profile_options(OPTIONS, parallel_slots, host_memory)
+    resource_profile = resolve_training_resource_profile(profile_options, host_memory)
     resource_profile["parallel_slots"] = int(parallel_slots)
     resource_profile["parallel_memory_cap_applied"] = bool(parallel_slots > 1)
     job["resource_profile"] = resource_profile

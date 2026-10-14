@@ -52,12 +52,13 @@ class CandidateIntegrity149Tests(unittest.TestCase):
 
     def test_warm_candidate_has_one_checksum_verification_per_observation(self):
         raw = self.service._model['candidate_policy']
-        with patch.object(candidates, 'verify_model_checksum', wraps=verify_model_checksum) as verify:
+        with patch.object(candidates, '_verify_candidate_checksum', wraps=candidates._verify_candidate_checksum) as verify:
             self.service.observe_shadow(self.agent, self.states, set())
             self.assertEqual(verify.call_count, 1)
             self.assertIs(verify.call_args.args[0], raw)
             self.service.observe_shadow(self.agent, self.states, set())
             self.assertEqual(verify.call_count, 2)
+            self.assertIs(verify.call_args.args[0], self.service._model['candidate_policy'])
 
     def test_mutated_warm_payload_is_rechecked_and_rebuilt_without_changing_live(self):
         before = self.live.serialize()

@@ -90,6 +90,7 @@ class RuntimeDebugLogService:
 
     def export_payload(self):
         from model_encoding_cache import MODEL_ENCODING_CACHE
+        from sealed_policy_snapshot import snapshot as sealed_policy_snapshot
         from shadow_model_json import snapshot as shadow_json_snapshot
         engine = getattr(self.core, "ENGINE", None)
         scheduler = None
@@ -169,6 +170,7 @@ class RuntimeDebugLogService:
             "history": self._history_status(),
             "sqlite": sqlite_status,
             "model_encoding_cache": MODEL_ENCODING_CACHE.snapshot(),
+            "sealed_policy_snapshots": sealed_policy_snapshot(),
             "shadow_json_encoding_cache": shadow_json_snapshot(),
             "threads": _thread_snapshot(),
             "notes": {
