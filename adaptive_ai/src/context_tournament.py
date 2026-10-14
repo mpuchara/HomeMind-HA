@@ -11,7 +11,7 @@ prediction and a bounded sensor-value bucket. It learns only from later observed
 transitions. This makes shadow comparison cheap enough to run alongside normal inference
 while leaving the production control path untouched.
 """
-from sqlite_background import background_sqlite
+from sqlite_background import background_sqlite, admit_background_write
 import json
 import pickle
 import math
@@ -31,6 +31,7 @@ from settings import OPTIONS
 from process_agent_pipeline import install_process_agent_wrapper
 from telemetry import RUNTIME_DEBUG, TELEMETRY
 from context_row_buffer import ContextRowBuffer
+from storage_budget import StorageRetry
 from shadow_model_json import shadow_model_json
 from shadow_model_snapshot import freeze_shadow_model, snapshot_json, ShadowModelSnapshot
 
@@ -54,6 +55,7 @@ class ContextTournament:
         self._shadow_flush_lock = threading.Lock()
         self._shadow_flush_event = threading.Event()
         self._context_row_buffers = {}
+        self._shadow_storage_retry = StorageRetry()
         self._shadow_persistence_stats = {"queued": 0, "flushed": 0, "flushes": 0, "errors": 0, "shared_source_snapshots": 0}
         self._last_error_ts = 0.0
         with self.store.lock, self.store.conn() as c:
@@ -372,6 +374,7 @@ class ContextTournament:
         with self.lock:
             if not self._shadow_dirty:
                 return 0
+            admit_background_write(self.store)
             batch = dict(self._shadow_dirty)
             self._shadow_dirty.clear()
         now = time.time()
@@ -423,6 +426,8 @@ class ContextTournament:
         if stop_event is None:
             return
         while not stop_event.is_set():
+            if stop_event.wait(self._shadow_storage_retry.delay()):
+                break
             self._shadow_flush_event.wait(5.0)
             self._shadow_flush_event.clear()
             # Shadow persistence yields briefly to fresh realtime inference.
@@ -434,9 +439,10 @@ class ContextTournament:
             try:
                 with background_sqlite(self.store):
                     self._flush_background_context(force=False)
+                self._shadow_storage_retry.recovered()
             except Exception as exc:
-                self.report_runtime_error(exc)
-                time.sleep(0.1)
+                if self._shadow_storage_retry.defer(exc):
+                    self.report_runtime_error(exc)
         try:
             self._flush_background_context()
         except Exception:
@@ -447,6 +453,7 @@ class ContextTournament:
             result = {
                 **self._shadow_persistence_stats,
                 "pending": len(self._shadow_dirty),
+                "storage_retry": self._shadow_storage_retry.snapshot(),
                 "context_rows": {name: buffer.snapshot() for name, buffer in self._context_row_buffers.items()},
             }
         getter = getattr(self, "observation_pool_cache_snapshot", None)

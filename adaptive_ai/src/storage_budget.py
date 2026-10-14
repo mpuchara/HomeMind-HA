@@ -274,6 +274,7 @@ class StorageBudget:
 
 
 class BudgetConnection(sqlite3.Connection):
+    storage_write_admission = None
     storage_budget = None
     storage_level = None
     storage_update_tables = frozenset()
@@ -336,6 +337,8 @@ class BudgetConnection(sqlite3.Connection):
         self.storage_denial = None
         budget = self.storage_budget
         write = budget is not None and _is_write(sql)
+        if write and not self.in_transaction and self.storage_write_admission is not None:
+            self.storage_write_admission()
         if budget is not None:
             # Reused read-only connections do not change page ownership. Avoid
             # three page PRAGMAs after every SELECT, especially on the microSD.

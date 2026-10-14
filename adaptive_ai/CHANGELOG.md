@@ -1,3 +1,10 @@
+## 0.14.196
+
+- Coordinate retryable background writes with WAL reclamation before model encoding or SQLite lock waits, retaining complete pending evidence in RAM.
+- Preserve native SQLite failures in combined feature-journal drains; retry BUSY quietly while reporting mixed I/O errors.
+- Apply StorageRetry cooldown to fast-light and context persistence; producer wakeups cannot bypass it. Reads, explicit durability barriers, active transactions, learning and disk guards retain their contract.
+- Add native contention, recovery and storage rollback regressions plus a controlled maintenance-admission benchmark.
+
 ## 0.14.195 (2026-10-14)
 
 - Bufor observed_pool liczy wspólny niezmienny obiekt JSON jeden raz dla tego samego wiersza i kolumny w wersji oczekującej oraz zapisie w toku.

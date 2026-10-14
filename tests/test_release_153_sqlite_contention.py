@@ -9,6 +9,7 @@ from unittest.mock import patch, MagicMock
 
 import support  # Configure the temporary data directory before importing Store.
 from storage import Store
+from storage_budget import StorageRetry
 from context_row_buffer import ContextRowBuffer
 from sqlite_background import background_sqlite
 from telemetry import RUNTIME_DEBUG, RuntimeDebugTrace
@@ -195,6 +196,7 @@ class SQLiteContention153Tests(unittest.TestCase):
         service.store = self.store
         service.engine = SimpleNamespace(stop_event=threading.Event())
         service._shadow_flush_event = threading.Event()
+        service._shadow_storage_retry = StorageRetry()
         service._shadow_flush_event.set()
         timeouts = []
         def flush(**kwargs):

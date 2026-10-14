@@ -6,7 +6,7 @@ extractor + historical view) rather than adding per-agent wrappers.  Executor ow
 untouched.
 """
 from __future__ import annotations
-from sqlite_background import background_sqlite
+from sqlite_background import background_sqlite, DeferredBatchError, admit_background_write
 from storage_budget import StoragePressure, StorageRetry, require_storage_available, storage_recording_paused
 
 from bisect import bisect_right
@@ -2118,6 +2118,7 @@ def install(core):
 
     def flush_feature_journal():
         """Drain both replay-evidence queues; one failed class never skips the other."""
+        admit_background_write(store)
         require_storage_available(store)
         totals = {"observations": 0, "windows": 0}
         while True:
@@ -2131,7 +2132,7 @@ def install(core):
             except StoragePressure as exc:
                 pressure = exc
             except Exception as exc:
-                errors.append(f"observations: {type(exc).__name__}: {exc}")
+                errors.append(("observations", exc))
             try:
                 count = int(flush_windows() or 0)
                 totals["windows"] += count
@@ -2139,9 +2140,9 @@ def install(core):
             except StoragePressure as exc:
                 pressure = exc
             except Exception as exc:
-                errors.append(f"windows: {type(exc).__name__}: {exc}")
+                errors.append(("windows", exc))
             if errors:
-                raise RuntimeError("; ".join(errors))
+                raise DeferredBatchError(errors)
             if pressure is not None:
                 raise pressure
             if not progressed:

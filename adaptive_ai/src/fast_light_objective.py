@@ -17,7 +17,8 @@ Weight-only Shadow timing updates intentionally keep ``model_revision`` unchange
 revision is structural identity for Tournament epochs; changing it for every online
 weight update would continuously reset future-only challenger evidence.
 """
-from sqlite_background import background_sqlite
+from sqlite_background import background_sqlite, admit_background_write
+from storage_budget import StorageRetry
 import json
 import math
 import threading
@@ -352,6 +353,7 @@ def install(service):
     lock = threading.RLock()
     persistence_lock = threading.RLock()
     persistence_event = threading.Event()
+    storage_retry = StorageRetry()
     active_runtime = {}
     pair_runtime = {}
     benchmark_cache = {}
@@ -413,6 +415,7 @@ def install(service):
             persistence_event.set()
 
     def flush_persistence():
+        admit_background_write(store)
         with persistence_lock:
             metrics_batch = dict(dirty_benchmarks)
             model_batch = dict(dirty_models)
@@ -458,18 +461,21 @@ def install(service):
 
     def persistence_writer():
         while not engine.stop_event.is_set():
+            if engine.stop_event.wait(storage_retry.delay()):
+                break
             persistence_event.wait(5.0)
             persistence_event.clear()
             try:
                 with background_sqlite(store):
                     flush_persistence()
+                storage_retry.recovered()
             except Exception as exc:
-                try:
-                    store.event(None, "warning", "fast_light_persistence_failed",
-                                f"Deferred fast-light persistence failed: {type(exc).__name__}: {exc}", None)
-                except Exception:
-                    pass
-                time.sleep(0.1)
+                if storage_retry.defer(exc):
+                    try:
+                        store.event(None, "warning", "fast_light_persistence_failed",
+                                    f"Deferred fast-light persistence failed: {type(exc).__name__}: {exc}", None)
+                    except Exception:
+                        pass
         try:
             flush_persistence()
         except Exception:
@@ -479,6 +485,7 @@ def install(service):
         with persistence_lock:
             return {
                 **persistence_stats,
+                "storage_retry": storage_retry.snapshot(),
                 "pending_metrics": len(dirty_benchmarks),
                 "pending_models": len(dirty_models),
             }
