@@ -1,9 +1,9 @@
 {
-  "version": "0.14.193",
+  "version": "0.14.194",
   "release_date": "2026-10-14",
-  "base_version": "0.14.192",
-  "base_commit": "70e3d94ae843996d66b13717e01351ff53a70e53",
-  "release_status": "readonly-sqlite-page-probe-and-complete-observation-census",
+  "base_version": "0.14.193",
+  "base_commit": "be7621c3514fd7ec145ae534c28c1fd2833f646a",
+  "release_status": "owned-shadow-metadata-snapshots-and-immutable-source-json",
   "release_014140": {
     "scope": "inventory_and_remove_remaining_shipped_feature_Handler_fallbacks_for_Candidate_Live_and_manual_feedback_transport",
     "explicit_routes": "manual_feedback.js, candidate_ui.js, candidate_preference_ui.js, /api/candidates, Candidate Teach-RL status/train, generation history/comparison, /api/candidate-live, /api/live and Candidate discard",
@@ -249,7 +249,7 @@
   "pi4_release_gate_contract": "pi4_release_gate_v1",
   "pi4_real_hardware_required": true,
   "stage7_offline_rl_control_unlock": false,
-  "tests_passed": 2301,
+  "tests_passed": 2309,
   "profile": "rpi4-ram-first-complete-discovery-manual-agent-selection",
   "manual_agent_training": true,
   "max_concurrent_training_jobs": 1,
@@ -2720,5 +2720,25 @@
     "median_read_scope_speedup": 2.3258036036054133,
     "median_shadow_observation_speedup": 1.0453318996078687
   },
-  "release_validation_tests_passed": 2301
+  "release_014194": {
+    "scope": "shared_immutable_policy_source_with_frozen_mutable_shadow_metadata",
+    "combined_encoding_ram_limit_mb": 64,
+    "max_source_entries": 64,
+    "per_canonical_or_json_fragment_limit_mb": 2,
+    "fresh_sha_per_inference_use": true,
+    "persisted_json_format_changed": false,
+    "learning_semantics_changed": false,
+    "persistence_schedule_changed": false,
+    "new_regressions": 8,
+    "validation": "2309 tests passed in WSL without skips; compileall and three persistence/observer benchmark pairs passed",
+    "tests_passed": 2309,
+    "benchmark": "docs/benchmarks/SHADOW_PERSISTENCE_0_14_194_VALIDATION.json",
+    "median_component_speedups": {
+      "snapshot": 152.96003684183378,
+      "json": 9.854891493395478,
+      "flush": 1.914381275943322
+    },
+    "median_observer_speedup": 0.9855442228587925
+  },
+  "release_validation_tests_passed": 2309
 }

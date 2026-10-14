@@ -1,4 +1,4 @@
-"""Private read-only JSON policy snapshots with bounded canonical bytes in RAM.
+"""Private read-only JSON policy snapshots with bounded encodings in RAM.
 
 Admission verifies a detached builtin tree. Ordinary nested mutation is refused;
 each use still hashes its exact canonical bytes. Copies and internal pickle snapshots
@@ -7,6 +7,8 @@ No external pickle is loaded. A missing checksum/custom value/quota uses the old
 """
 import copy
 import hashlib
+import json
+import sys
 import threading
 import weakref
 
@@ -45,7 +47,7 @@ class _SealedList(_ReadOnly, list):
 
 
 class SealedPolicy(_SealedDict):
-    __slots__ = ('_canonical_bytes', '__weakref__')
+    __slots__ = ('_canonical_bytes', '_persistence_json', '__weakref__')
 
     def verify(self):
         # SHA is fresh on every call; an immutable source avoids repeated encoding.
@@ -117,23 +119,35 @@ class SnapshotBudget:
         self.lock = threading.RLock()
         self.refs = {}
         self.bytes = self.seals = self.fallbacks = self.checks = 0
+        self.canonical_bytes = self.persistence_json_bytes = self.persistence_fallbacks = 0
 
     def fallback(self):
         with self.lock:
             self.fallbacks += 1
 
-    def admit(self, value, size):
+    def admit(self, value, size, *, json_size=0):
         with self.lock:
             if size > self.max_policy_bytes or self.bytes + size > self.max_bytes or len(self.refs) >= self.max_entries:
                 self.fallbacks += 1
                 return False
+            # Preserve canonical admission even when the optional JSON fragment
+            # cannot fit. Large sources keep their fast, fresh checksum path.
+            if json_size > self.max_policy_bytes or self.bytes + size + json_size > self.max_bytes:
+                object.__setattr__(value, '_persistence_json', None)
+                json_size = 0
+                self.persistence_fallbacks += 1
+            charge = size + json_size
             token = id(value)
             def release(_ref):
                 with self.lock:
                     if self.refs.pop(token, None) is not None:
-                        self.bytes -= size
+                        self.bytes -= charge
+                        self.canonical_bytes -= size
+                        self.persistence_json_bytes -= json_size
             self.refs[token] = weakref.ref(value, release)
-            self.bytes += size
+            self.bytes += charge
+            self.canonical_bytes += size
+            self.persistence_json_bytes += json_size
             self.seals += 1
             return True
 
@@ -141,7 +155,9 @@ class SnapshotBudget:
         with self.lock:
             return dict(bytes=self.bytes, entries=len(self.refs), seals=self.seals,
                         fallbacks=self.fallbacks, checks=self.checks, max_bytes=self.max_bytes,
-                        max_entries=self.max_entries, max_policy_bytes=self.max_policy_bytes)
+                        max_entries=self.max_entries, max_policy_bytes=self.max_policy_bytes,
+                        canonical_bytes=self.canonical_bytes, persistence_json_bytes=self.persistence_json_bytes,
+                        persistence_fallbacks=self.persistence_fallbacks)
 
 
 _BUDGET = SnapshotBudget()
@@ -160,9 +176,17 @@ def seal_policy(raw):
     if len(canonical) > _BUDGET.max_policy_bytes:
         _BUDGET.fallback()
         return None
+    # Body bytes already have the exact builtin JSON encoding. Preserve checksum
+    # and ignored bookkeeping too, once, for later non-controlling persistence.
+    body_json = canonical.decode('utf-8')
+    extra = {key: value for key, value in detached.items()
+             if key == 'model_checksum' or str(key).startswith('_')}
+    source_json = body_json[:-1] + (',' if clean else '') + json.dumps(
+        extra, separators=(',', ':'), sort_keys=True)[1:]
     sealed = _freeze(detached, {}, root=True)
     object.__setattr__(sealed, '_canonical_bytes', canonical)
-    return sealed if _BUDGET.admit(sealed, len(canonical)) else None
+    object.__setattr__(sealed, '_persistence_json', source_json)
+    return sealed if _BUDGET.admit(sealed, len(canonical), json_size=sys.getsizeof(source_json)) else None
 
 
 def snapshot():

@@ -1,3 +1,10 @@
+## 0.14.194 (2026-10-14)
+
+- Snapshoty Shadow zachowują niezmienny model przez referencję, zamrażając jedynie bieżące metadane.
+- Zapis JSON współdzieli gotowy fragment zweryfikowanego modelu; checksum i pola bookkeeping pozostają kompletne.
+- Fragment JSON i kanoniczne bajty wspólnie mieszczą się w dotychczasowym limicie 64 MiB. Brak miejsca na fragment zachowuje szybką weryfikację i wcześniejszą ścieżkę zapisu.
+- Format SQLite, harmonogram zapisu, liczba zapisów, uczenie oraz ochrony dysku pozostają zgodne.
+
 ## 0.14.193 (2026-10-14)
 
 - Odczyty SQLite na współdzielonym połączeniu nie powtarzają trzech PRAGMA zajętości bazy po każdym SELECT.
