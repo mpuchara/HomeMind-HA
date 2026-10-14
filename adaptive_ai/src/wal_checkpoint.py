@@ -18,7 +18,9 @@ class WALCheckpointWorker:
     RECLAIM_PRESSURE_INTERVAL_SECONDS = 5.0
 
     def __init__(self, store):
+        from settings import OPTIONS
         self.store = store
+        self.quiesce_seconds = max(0, min(500, int(OPTIONS.get('storage_wal_quiesce_ms', 100)))) / 1000.
         budget = getattr(store, 'storage_budget', None)
         self.storage_pressure_threshold_bytes = None
         if budget is not None and isinstance(getattr(budget, 'wal_limit', None), int):
@@ -32,6 +34,7 @@ class WALCheckpointWorker:
             self.storage_pressure_threshold_bytes = max(1, budget.wal_limit * 2 // 5)
         self.lock = threading.RLock()
         self.stop_event = threading.Event()
+        self.wake_event = threading.Event()
         self.ready = threading.Event()
         self.thread = None
         self.active = False
@@ -43,6 +46,7 @@ class WALCheckpointWorker:
                           db_bytes=0, disk_free_bytes=None, storage_sample_error=None,
                           reclaim_attempts=0, reclaim_successes=0, reclaim_busy=0, reclaim_errors=0,
                           reclaim_pressure_attempts=0,
+                          recovery_requests=0, quiesce_runs=0,
                           reclaimed_bytes=0, last_reclaim_duration_ms=0.0,
                           last_reclaim_error=None)
 
@@ -67,6 +71,7 @@ class WALCheckpointWorker:
 
     def stop(self):
         self.stop_event.set()
+        self.wake_event.set()
         thread = self.thread
         if thread is not None and thread is not threading.current_thread():
             # Do not abandon an in-flight disk operation or release the keeper under it.
@@ -84,7 +89,14 @@ class WALCheckpointWorker:
                     "reclaim_pressure_threshold_bytes": self.storage_pressure_threshold_bytes,
                     "reclaim_interval_seconds": self.RECLAIM_INTERVAL_SECONDS,
                     "reclaim_pressure_interval_seconds": self.RECLAIM_PRESSURE_INTERVAL_SECONDS,
+                    "quiesce_ms": self.quiesce_seconds * 1000,
                     "reclaim_mode": "TRUNCATE", "reclaim_busy_timeout_ms": 0}
+
+    def request_recovery(self):
+        """Wake existing maintenance only; never checkpoint on an inference thread."""
+        with self.lock:
+            self.stats['recovery_requests'] += 1
+        self.wake_event.set()
 
     def sample_storage(self):
         """Worker-only filesystem sampling; debug export still reads RAM only."""
@@ -139,6 +151,16 @@ class WALCheckpointWorker:
         if reclaiming is not None:
             reclaiming.set()
         try:
+            # The marker used to be raised immediately before a zero-timeout
+            # TRUNCATE. Writers already admitted had no time to finish, so a BUSY
+            # result often cleared the marker before any quiet window existed.
+            # Hold no Store lock, keep active transactions intact, and give retained
+            # background batches a bounded opportunity to drain before trying.
+            with self.lock:
+                self.stats['quiesce_runs'] += 1
+            if self.stop_event.wait(self.quiesce_seconds):
+                status = 'cancelled'
+                return False
             connection.execute("PRAGMA busy_timeout=0")
             busy, frames, copied = connection.execute("PRAGMA wal_checkpoint(TRUNCATE)").fetchone()
             fields = dict(busy=int(busy), log_frames=int(frames), checkpointed_frames=int(copied))
@@ -235,16 +257,24 @@ class WALCheckpointWorker:
                 self.active = True
             self.ready.set()
             last_attempt = time.monotonic()
-            while not self.stop_event.wait(self.POLL_SECONDS):
+            while not self.stop_event.is_set():
+                requested = self.wake_event.wait(self.POLL_SECONDS)
+                self.wake_event.clear()
+                if self.stop_event.is_set():
+                    break
                 try:
+                    age = time.monotonic() - last_attempt
+                    # Repeated paused inferences cannot turn pressure wakeups into
+                    # an unbounded checkpoint loop on the microSD.
+                    if age < 1.0:
+                        continue
                     size = self.sample_storage()
                     if size is None:
                         continue
-                    age = time.monotonic() - last_attempt
                 except Exception as exc:
                     self._error(exc)
                     continue
-                if size > 32 and (size >= threshold or age >= self.MAX_IDLE_SECONDS):
+                if size > 32 and (requested or size >= threshold or age >= self.MAX_IDLE_SECONDS):
                     try:
                         result = self.checkpoint(connection)
                         if not self.stop_event.is_set():

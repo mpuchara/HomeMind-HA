@@ -1,3 +1,11 @@
+## 0.14.199
+
+- Reuse worker-owned SQLite connections for provenance, feature-journal and context persistence while retaining independent transactions and rollback/admission checks.
+- Read bounded Tournament event bookkeeping once per observation; refresh on the next observation and publish in-frame state only after commit.
+- Compare registry entries by identity and all semantic fields. Timestamp/order changes refresh metadata without rebuilding topology or clearing live presence hysteresis; nested caller mutations remain detectable.
+- Report StoragePressure as a throttled runtime pause instead of an agent-error storm. Wake the existing checkpoint worker for WAL pressure, with a one-second attempt floor.
+- Before TRUNCATE, allow already-admitted background writers to drain for configurable storage_wal_quiesce_ms (default 100, range 0–500). Preserve zero native busy timeout, incomplete-checkpoint guards, cooldowns and disk/WAL quotas.
+
 ## 0.14.198
 
 - Skip timestamp-alignment UPDATE when the Candidate decision is already anchored to Root context time.

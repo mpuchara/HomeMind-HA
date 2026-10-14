@@ -11,7 +11,7 @@ prediction and a bounded sensor-value bucket. It learns only from later observed
 transitions. This makes shadow comparison cheap enough to run alongside normal inference
 while leaving the production control path untouched.
 """
-from sqlite_background import background_sqlite, admit_background_write
+from sqlite_background import background_sqlite, admit_background_write, run_connection_worker
 import json
 import pickle
 import math
@@ -428,6 +428,11 @@ class ContextTournament:
         stop_event = getattr(self.engine, "stop_event", None)
         if stop_event is None:
             return
+        run_connection_worker(self.store, stop_event, self._shadow_writer_session,
+                              self._shadow_storage_retry, self.report_runtime_error)
+
+    def _shadow_writer_session(self):
+        stop_event = self.engine.stop_event
         while not stop_event.is_set():
             if stop_event.wait(self._shadow_storage_retry.delay()):
                 break

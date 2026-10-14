@@ -36,3 +36,29 @@ def admit_background_write(store):
     check = getattr(store, 'admit_background_write', None)
     if callable(check):
         check()
+
+
+def connection_session(store):
+    """Reuse a worker-owned connection; conn() still owns each transaction."""
+    scope = getattr(store, 'connection_session', None)
+    return scope() if callable(scope) else nullcontext()
+
+
+def run_connection_worker(store, stop_event, callback, retry, report):
+    """Retain worker retry behavior when opening its reusable connection fails."""
+    while not stop_event.is_set():
+        if stop_event.wait(retry.delay()):
+            break
+        try:
+            with connection_session(store):
+                callback()
+            return
+        except Exception as exc:
+            if retry.defer(exc):
+                try:
+                    report(exc)
+                except Exception:
+                    pass
+    # The owner callback also performs its explicit final flush when already
+    # stopped. A stop before connection admission must not skip that barrier.
+    callback()

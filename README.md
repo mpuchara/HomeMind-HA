@@ -1,6 +1,6 @@
-# HomeMind-HA / Adaptive AI 0.14.198
+# HomeMind-HA / Adaptive AI 0.14.199
 
-0.14.198: zachowanie obliczonych decyzji Candidate i zakończonych epizodów przy chwilowej blokadzie SQLite oraz retry monitora driftu. [Opis zmian](docs/RELEASE_0_14_198_PL.md).
+0.14.199: współdzielenie połączeń writerów, mniej odczytów zdarzeń Shadow, bezpieczne odzyskiwanie WAL i odświeżanie registry bez zbędnej przebudowy kontekstu. [Opis zmian](docs/RELEASE_0_14_199_PL.md).
 
 
 Karta agenta ma cztery akcje: **Shadow/Control**, **Wrong decision**, **Settings** i **Teach**. Wrong decision uczy poprawnego Desired. Teach otwiera powiększalny wykres historii z wyborem dokładnej chwili i zapisem poprawnego Desired. Cofanie ostatniej korekty jest dostępne w Teach oraz Settings; pozostałe operacje i diagnostyka są w Settings.

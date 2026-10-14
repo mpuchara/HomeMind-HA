@@ -2,6 +2,7 @@ from sqlite_background import background_sqlite, is_sqlite_busy
 from storage_budget import StoragePressure, StorageRetry, require_storage_available, storage_recording_paused, storage_status
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import nullcontext
+import copy
 import json
 import math
 import os
@@ -505,7 +506,19 @@ class Engine(threading.Thread):
 
     @staticmethod
     def _registry_payload_snapshot(entries):
-        return [dict(item) if isinstance(item, dict) else item for item in (entries or [])]
+        return copy.deepcopy(list(entries or []))
+
+    @staticmethod
+    def _registry_semantics(kind, payload):
+        identity = {'entity': 'entity_id', 'device': 'id', 'area': 'area_id'}[kind]
+        rows = {}
+        for row in payload:
+            if not isinstance(row, dict) or not row.get(identity) or row[identity] in rows:
+                # Invalid/ambiguous payloads retain the exact comparison path.
+                return payload
+            rows[row[identity]] = {key: value for key, value in row.items()
+                                   if key not in ('created_at', 'modified_at')}
+        return rows
 
     def _registry_update(self, kind, entries):
         started = time.perf_counter()
@@ -513,8 +526,21 @@ class Engine(threading.Thread):
         payload = self._registry_payload_snapshot(entries)
         with self.lock:
             previous = getattr(self, attr, None)
-            if previous is not None and previous == payload:
+            if previous is not None and Engine._registry_semantics(kind, previous) == Engine._registry_semantics(kind, payload):
                 self.registry_refresh_stats["duplicates"] += 1
+                setattr(self, attr, payload)
+                if previous != payload:
+                    # Preserve latest metadata without resetting inferred mapping,
+                    # live presence hysteresis or event routing for timestamps/order.
+                    with getattr(self.context, 'lock', nullcontext()):
+                        if kind == 'entity' and hasattr(self.context, 'entities'):
+                            self.context.entities = {e['entity_id']: e for e in payload}
+                        elif kind == 'device' and hasattr(self.context, 'devices'):
+                            self.context.devices = {e['id']: e for e in payload}
+                        elif kind == 'area' and hasattr(self.context, 'areas'):
+                            self.context.areas = {e['area_id']: e for e in payload}
+                    self.entity_registry = self.context.resolved_registry()
+                    self.registry_refresh_stats['metadata_only'] = self.registry_refresh_stats.get('metadata_only', 0) + 1
                 return False
             setattr(self, attr, payload)
 
@@ -1592,7 +1618,14 @@ class Engine(threading.Thread):
                     with session() if callable(session) else nullcontext():
                         self.process_agent(agent, states, changed_entities if changed_entities else None)
                     TELEMETRY.observe("wrapped_inference", (time.perf_counter() - wrapped_started) * 1000)
+                    pressure = (getattr(self, 'runtime', {}).get(agent['id']) or {}).get('storage_pressure')
+                    if pressure and pressure.get('active'):
+                        with self.lock:
+                            pressure.update(active=False, resumed_at=now_ts())
                     RUNTIME_DEBUG.end(agent_trace, status="ok")
+                except StoragePressure as exc:
+                    self._record_storage_pressure(agent, exc)
+                    RUNTIME_DEBUG.end(agent_trace, status="paused", reason=getattr(exc, 'reason', None))
                 except Exception as exc:
                     RUNTIME_DEBUG.end(agent_trace, status="error", error=f"{type(exc).__name__}: {exc}")
                     STORE.event(agent["id"], "error", "agent_error", str(exc), {"trace": traceback.format_exc(limit=4)})
@@ -1605,6 +1638,37 @@ class Engine(threading.Thread):
             RUNTIME_DEBUG.end(target_trace, status="ok")
         if self.state_revision != revision:
             self.wake_event.set()
+
+    def _record_storage_pressure(self, agent, exc):
+        reason = getattr(exc, 'reason', None) or storage_status(STORE).get('reason') or 'storage_pressure'
+        now = time.monotonic()
+        with self.lock:
+            runtime = getattr(self, 'runtime', None)
+            if runtime is None:
+                runtime = self.runtime = {}
+            runtime.setdefault(agent['id'], {})['storage_pressure'] = {
+                'active': True, 'reason': reason, 'observed_at': now_ts(),
+            }
+            stats = getattr(self, 'storage_pressure_stats', None)
+            if stats is None:
+                stats = self.storage_pressure_stats = {'paused_passes': 0, 'warnings': 0}
+            stats['paused_passes'] += 1
+            reports = getattr(self, '_storage_pressure_reports', None)
+            if reports is None:
+                reports = self._storage_pressure_reports = {}
+            report = now - reports.get(reason, float('-inf')) >= 60.
+            if report:
+                reports[reason] = now
+                stats['warnings'] += 1
+        if reason == 'wal_budget':
+            worker = getattr(STORE, '_wal_checkpoint_worker', None)
+            request = getattr(worker, 'request_recovery', None)
+            if callable(request):
+                request()
+        if report:
+            STORE.event(None, 'warning', 'runtime_storage_paused',
+                        'Storage protection paused an agent pipeline; bounded maintenance remains active',
+                        {'reason': reason, 'error': str(exc), 'storage': storage_status(STORE)})
 
     def release_manual_hold(self, agent_id):
         STORE.meta_set("manual_hold:" + agent_id, "0")

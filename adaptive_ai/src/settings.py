@@ -15,7 +15,7 @@ try:
 except Exception:
     ws_connect = None
 
-APP_VERSION = "0.14.198"
+APP_VERSION = "0.14.199"
 HISTORY_BOOTSTRAP_REVISION = "target-attrs-v2"
 TRAINING_REVISION = "shared-home-intents-v26"
 DATA_DIR = Path(os.environ.get("ADAPTIVE_AI_DATA", "/data"))
@@ -116,6 +116,7 @@ DEFAULT_OPTIONS = {
     "storage_auto_use_percent": 50,
     "storage_database_max_mb": 2048,
     "storage_wal_max_mb": 128,
+    "storage_wal_quiesce_ms": 100,
     "storage_min_free_mb": 2048,
     "archive_context_interval_seconds": 30,
     "auto_agent_min_changes": 2,
