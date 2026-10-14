@@ -1,3 +1,10 @@
+## 0.14.192 (2026-10-14)
+
+- Niezmienne źródła modeli kontekstowego Shadow w RAM: świeży SHA przy każdym użyciu bez powtarzanej serializacji.
+- Limit kanonicznych buforów 64 MiB, 64 modele i 2 MiB na model; zgodny format zapisu oraz bezpieczny powrót do dotychczasowej ścieżki.
+- Indeks replay 192 MiB przy limicie workera 768 MiB; większy indeks przejść i podział dostępnej pamięci między workerami.
+- Zgodne cechy, predykcje i aktualizacje modeli w porównaniu z .191.
+
 ## 0.14.191 (2026-10-13)
 
 - RAM: kompletne statystyki puli sensorów i ich jakości scalane do zapisu co około 30 sekund. Limit domyślnie 16 MiB i 4096 wierszy na bufor, także dla zapisu w toku. Przepełnienie wymusza dotychczasowy zapis do SQLite; brak plików tymczasowych.

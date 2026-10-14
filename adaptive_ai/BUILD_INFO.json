@@ -1,10 +1,9 @@
 {
-  "version": "0.14.191",
-  "release_date": "2026-10-13",
-  "base_version": "0.14.190",
-  "base_commit": "ce332508a36d906423103ced218791edf0d3edd5",
-  "release_status": "bounded-runtime-ram-context-statistics-and-metadata",
-  "release_validation_tests_passed": 2279,
+  "version": "0.14.192",
+  "release_date": "2026-10-14",
+  "base_version": "0.14.191",
+  "base_commit": "4a82f3a23cf8dd05c6db4f62272da26c816c6837",
+  "release_status": "sealed-context-shadow-ram-and-training-index-budgets",
   "release_014140": {
     "scope": "inventory_and_remove_remaining_shipped_feature_Handler_fallbacks_for_Candidate_Live_and_manual_feedback_transport",
     "explicit_routes": "manual_feedback.js, candidate_ui.js, candidate_preference_ui.js, /api/candidates, Candidate Teach-RL status/train, generation history/comparison, /api/candidate-live, /api/live and Candidate discard",
@@ -250,7 +249,7 @@
   "pi4_release_gate_contract": "pi4_release_gate_v1",
   "pi4_real_hardware_required": true,
   "stage7_offline_rl_control_unlock": false,
-  "tests_passed": 2279,
+  "tests_passed": 2294,
   "profile": "rpi4-ram-first-complete-discovery-manual-agent-selection",
   "manual_agent_training": true,
   "max_concurrent_training_jobs": 1,
@@ -2693,5 +2692,21 @@
     "model_and_correct_learning_changed": false,
     "validation": "2279 tests passed in WSL without skips; compileall and baseline/current RAM benchmark passed",
     "tests_passed": 2279
-  }
+  },
+  "release_014192": {
+    "canonical_ram_limit_mb": 64,
+    "source_entries_limit": 64,
+    "canonical_per_source_limit_mb": 2,
+    "checks": "fresh_sha256_per_use_on_verified_readonly_source",
+    "training_parallel_default_limit_mb": 768,
+    "training_ram_index_mb_at_768": 192,
+    "default_transition_edge_rows_at_768": 262144,
+    "training_and_correct_semantics_changed": false,
+    "validation": "2294 tests passed in WSL without skips; compileall and three .191/.192 production-observer benchmark pairs passed",
+    "tests_passed": 2294,
+    "new_regressions": 15,
+    "benchmark": "docs/benchmarks/SEALED_SHADOW_RAM_0_14_192_VALIDATION.json",
+    "median_observation_speedup": 1.3239545778093489
+  },
+  "release_validation_tests_passed": 2294
 }

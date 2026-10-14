@@ -1377,8 +1377,8 @@ class ObservationTransitionEdgeIndex:
             int(
                 max_rows_per_entity
                 or OPTIONS.get(
-                    "training_transition_edge_max_rows_per_entity",
-                    cls.DEFAULT_MAX_ROWS_PER_ENTITY,
+                    "training_worker_effective_transition_edge_max_rows_per_entity",
+                    OPTIONS.get("training_transition_edge_max_rows_per_entity", cls.DEFAULT_MAX_ROWS_PER_ENTITY),
                 )
                 or cls.DEFAULT_MAX_ROWS_PER_ENTITY
             ),

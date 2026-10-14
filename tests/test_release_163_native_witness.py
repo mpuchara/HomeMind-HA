@@ -190,7 +190,7 @@ class CandidatePhase163Tests(unittest.TestCase):
         with patch('training_phase_metrics.TELEMETRY') as telemetry:
             case.observe()
         names = [call.args[0] for call in telemetry.observe.call_args_list]
-        self.assertEqual(names, ['context_candidate_features', 'context_candidate_predict'])
+        self.assertEqual(names, ['context_candidate_ram_admission', 'context_candidate_features', 'context_candidate_predict'])
 
     def test_feature_failure_is_measured_and_prevents_prediction(self):
         case = self.case()
@@ -209,7 +209,7 @@ class CandidatePhase163Tests(unittest.TestCase):
         with patch.object(case.created[0], 'predict', side_effect=RuntimeError('predict failed')), patch(
                 'training_phase_metrics.RUNTIME_DEBUG', debug):
             case.observe()
-        self.assertEqual([call.kwargs['status'] for call in debug.end.call_args_list], ['ok', 'error'])
+        self.assertEqual([call.kwargs['status'] for call in debug.end.call_args_list], ['ok', 'ok', 'error'])
         self.assertEqual(case.service._model['candidate_blocked_reason'], 'candidate_prediction:RuntimeError')
 
     def test_runtime_export_declares_both_prediction_metrics(self):

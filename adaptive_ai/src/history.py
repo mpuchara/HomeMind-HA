@@ -5116,9 +5116,10 @@ class HistoryManager(threading.Thread):
                 memory = rss_mb()
                 if self.stop_event.is_set():
                     raise InterruptedError("Training interrupted")
-                if memory is not None and memory > 500:
+                rss_limit = float(OPTIONS.get("training_worker_effective_memory_limit_mb", 500) or 500)
+                if memory is not None and memory > rss_limit:
                     raise MemoryError(
-                        f"Training replay exceeded 500 MB RSS at row "
+                        f"Training replay exceeded {rss_limit:g} MB RSS at row "
                         f"{replay_done}/{replay_total}"
                     )
                 self.stop_event.wait(.001)
