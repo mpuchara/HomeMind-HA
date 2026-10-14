@@ -32,6 +32,7 @@ from process_agent_pipeline import install_process_agent_wrapper
 from telemetry import RUNTIME_DEBUG, TELEMETRY
 from context_row_buffer import ContextRowBuffer
 from shadow_model_json import shadow_model_json
+from shadow_model_snapshot import freeze_shadow_model, snapshot_json, ShadowModelSnapshot
 
 
 SHADOW_MODEL_VERSION = 1
@@ -53,7 +54,7 @@ class ContextTournament:
         self._shadow_flush_lock = threading.Lock()
         self._shadow_flush_event = threading.Event()
         self._context_row_buffers = {}
-        self._shadow_persistence_stats = {"queued": 0, "flushed": 0, "flushes": 0, "errors": 0}
+        self._shadow_persistence_stats = {"queued": 0, "flushed": 0, "flushes": 0, "errors": 0, "shared_source_snapshots": 0}
         self._last_error_ts = 0.0
         with self.store.lock, self.store.conn() as c:
             c.executescript(
@@ -379,8 +380,7 @@ class ContextTournament:
             status = "error"
             try:
                 packed = [
-                    (key[0], key[1], raw if isinstance(raw, str) else shadow_model_json(
-                        pickle.loads(raw)), now)
+                    (key[0], key[1], snapshot_json(raw), now)
                     for key, raw in batch.items()
                 ]
                 status = "ok"
@@ -459,12 +459,10 @@ class ContextTournament:
         trace = RUNTIME_DEBUG.begin("context_shadow_snapshot", agent_id=key[0], challenger=key[1]) if RUNTIME_DEBUG.enabled else None
         status = "error"
         try:
-            # Private RAM bytes freeze the exact observation before callers mutate
-            # the cached model again. Only our own snapshot is decoded; SQLite,
-            # exports and restarts continue to use JSON exclusively.
-            # Pickle preserves JSON-compatible scalar subclasses without turning
-            # numpy floats into buffer bytes. Never load external/persisted bytes.
-            raw = pickle.dumps(model, protocol=5)
+            # Freeze mutable metadata now and retain an owned immutable source
+            # when available. Other sources keep the complete pickle snapshot.
+            # Only our own internal bytes are decoded; disk remains plain JSON.
+            raw = freeze_shadow_model(model)
             status = "ok"
         finally:
             TELEMETRY.observe("context_shadow_snapshot", (time.perf_counter() - started) * 1000)
@@ -473,6 +471,7 @@ class ContextTournament:
             self._shadow_models[key] = model
             self._shadow_dirty[key] = raw
             self._shadow_persistence_stats["queued"] += 1
+            self._shadow_persistence_stats["shared_source_snapshots"] += int(type(raw) is ShadowModelSnapshot)
             wake = len(self._shadow_dirty) >= 32
         if wake:
             self._shadow_flush_event.set()

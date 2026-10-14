@@ -1,0 +1,367 @@
+{
+  "version": "0.14.194",
+  "base_commit": "be7621c3514fd7ec145ae534c28c1fd2833f646a",
+  "full_suite": {
+    "passed": 2309,
+    "seconds": 324.531,
+    "skipped": 0,
+    "platform": "WSL Ubuntu / Python 3.12.3",
+    "log_sha256": "7581684906fff582189b8b430f3c7dbe3435900a7ed7c8fbf5a5884af3ecbc8f"
+  },
+  "new_regressions": 8,
+  "compileall": true,
+  "persistence_benchmark": {
+    "synthetic": true,
+    "passes": 24,
+    "dense_rows_per_class": 128,
+    "fresh_source_every": 8,
+    "series": [
+      {
+        "before": {
+          "snapshot_median_ms": 7.886619499998915,
+          "json_median_ms": 4.1239754999935485,
+          "flush_median_ms": 13.463854999997693,
+          "new_source_admission_ms": [
+            33.213413999988006,
+            56.766110000012304
+          ],
+          "source_canonical_bytes": 749940,
+          "all_snapshots_sha256": "727c49458f6e243ad6b3d9b873838677b4407e40f77d895109b4ccb140189eea",
+          "snapshot_count": 24,
+          "flushed": 24,
+          "persisted_restart_exact": true,
+          "ram": {
+            "bytes": 749940,
+            "entries": 1,
+            "seals": 3,
+            "fallbacks": 0,
+            "checks": 24,
+            "max_bytes": 67108864,
+            "max_entries": 64,
+            "max_policy_bytes": 2097152
+          }
+        },
+        "after": {
+          "snapshot_median_ms": 0.051560000002837114,
+          "json_median_ms": 0.413877999989154,
+          "flush_median_ms": 7.033006000000341,
+          "new_source_admission_ms": [
+            35.08401100003766,
+            34.71091000000115
+          ],
+          "source_canonical_bytes": 749940,
+          "all_snapshots_sha256": "727c49458f6e243ad6b3d9b873838677b4407e40f77d895109b4ccb140189eea",
+          "snapshot_count": 24,
+          "flushed": 24,
+          "persisted_restart_exact": true,
+          "ram": {
+            "bytes": 1500038,
+            "entries": 1,
+            "seals": 3,
+            "fallbacks": 0,
+            "checks": 24,
+            "max_bytes": 67108864,
+            "max_entries": 64,
+            "max_policy_bytes": 2097152,
+            "canonical_bytes": 749940,
+            "persistence_json_bytes": 750098,
+            "persistence_fallbacks": 0
+          }
+        },
+        "snapshot_speedup": 152.96003684183378,
+        "json_speedup": 9.964229797432143,
+        "flush_speedup": 1.914381275943322
+      },
+      {
+        "after": {
+          "snapshot_median_ms": 0.048322499992536905,
+          "json_median_ms": 0.39541099997109086,
+          "flush_median_ms": 6.059807000042383,
+          "new_source_admission_ms": [
+            34.04278899995461,
+            39.93851600000653
+          ],
+          "source_canonical_bytes": 749940,
+          "all_snapshots_sha256": "727c49458f6e243ad6b3d9b873838677b4407e40f77d895109b4ccb140189eea",
+          "snapshot_count": 24,
+          "flushed": 24,
+          "persisted_restart_exact": true,
+          "ram": {
+            "bytes": 1500038,
+            "entries": 1,
+            "seals": 3,
+            "fallbacks": 0,
+            "checks": 24,
+            "max_bytes": 67108864,
+            "max_entries": 64,
+            "max_policy_bytes": 2097152,
+            "canonical_bytes": 749940,
+            "persistence_json_bytes": 750098,
+            "persistence_fallbacks": 0
+          }
+        },
+        "before": {
+          "snapshot_median_ms": 7.715885999971306,
+          "json_median_ms": 3.8967325000101027,
+          "flush_median_ms": 12.870316499999035,
+          "new_source_admission_ms": [
+            33.37447000001248,
+            34.03381300000774
+          ],
+          "source_canonical_bytes": 749940,
+          "all_snapshots_sha256": "727c49458f6e243ad6b3d9b873838677b4407e40f77d895109b4ccb140189eea",
+          "snapshot_count": 24,
+          "flushed": 24,
+          "persisted_restart_exact": true,
+          "ram": {
+            "bytes": 749940,
+            "entries": 1,
+            "seals": 3,
+            "fallbacks": 0,
+            "checks": 24,
+            "max_bytes": 67108864,
+            "max_entries": 64,
+            "max_policy_bytes": 2097152
+          }
+        },
+        "snapshot_speedup": 159.67480989524495,
+        "json_speedup": 9.854891493395478,
+        "flush_speedup": 2.1238822457396775
+      },
+      {
+        "before": {
+          "snapshot_median_ms": 7.52481799997895,
+          "json_median_ms": 3.795311499999343,
+          "flush_median_ms": 10.388756499992269,
+          "new_source_admission_ms": [
+            35.114770000006956,
+            33.78321700000697
+          ],
+          "source_canonical_bytes": 749940,
+          "all_snapshots_sha256": "727c49458f6e243ad6b3d9b873838677b4407e40f77d895109b4ccb140189eea",
+          "snapshot_count": 24,
+          "flushed": 24,
+          "persisted_restart_exact": true,
+          "ram": {
+            "bytes": 749940,
+            "entries": 1,
+            "seals": 3,
+            "fallbacks": 0,
+            "checks": 24,
+            "max_bytes": 67108864,
+            "max_entries": 64,
+            "max_policy_bytes": 2097152
+          }
+        },
+        "after": {
+          "snapshot_median_ms": 0.05228500000953318,
+          "json_median_ms": 0.4112524999868583,
+          "flush_median_ms": 6.371995999984392,
+          "new_source_admission_ms": [
+            33.958012999960374,
+            34.08111099997768
+          ],
+          "source_canonical_bytes": 749940,
+          "all_snapshots_sha256": "727c49458f6e243ad6b3d9b873838677b4407e40f77d895109b4ccb140189eea",
+          "snapshot_count": 24,
+          "flushed": 24,
+          "persisted_restart_exact": true,
+          "ram": {
+            "bytes": 1500038,
+            "entries": 1,
+            "seals": 3,
+            "fallbacks": 0,
+            "checks": 24,
+            "max_bytes": 67108864,
+            "max_entries": 64,
+            "max_policy_bytes": 2097152,
+            "canonical_bytes": 749940,
+            "persistence_json_bytes": 750098,
+            "persistence_fallbacks": 0
+          }
+        },
+        "snapshot_speedup": 143.9192502363382,
+        "json_speedup": 9.228664871631475,
+        "flush_speedup": 1.6303771220223169
+      }
+    ],
+    "every_json_byte_identical": true,
+    "limit": "Production snapshot/JSON/SQLite paths on test host. No microSD contention, not whole Pi inference or training speed."
+  },
+  "median_component_speedups": {
+    "snapshot": 152.96003684183378,
+    "json": 9.854891493395478,
+    "flush": 1.914381275943322
+  },
+  "observer_parity": {
+    "synthetic": true,
+    "series": [
+      {
+        "before": {
+          "observation_median_ms": 13.537738500019714,
+          "observation_total_ms": 358.39928100011775,
+          "checks": 100,
+          "features_sha256": "b875961122025025cac7938d4eb3edd79ddf7064ed00d510a6dce47dd4fbb9b5",
+          "predictions_sha256": "651f9ed93fda32f3816c545cd593207d373dbe11ab2f0528b2145d47f5e5f56e",
+          "trained_heads_sha256": "153715874d97bc4aa562ad1e37694056199376547c2961816f425fc20fce9be6",
+          "future_training_samples": {
+            "sensor.challenger_0": 1,
+            "sensor.challenger_1": 1,
+            "sensor.challenger_2": 1,
+            "sensor.challenger_3": 1
+          }
+        },
+        "after": {
+          "observation_median_ms": 13.736307499982559,
+          "observation_total_ms": 275.8605240001657,
+          "checks": 100,
+          "features_sha256": "b875961122025025cac7938d4eb3edd79ddf7064ed00d510a6dce47dd4fbb9b5",
+          "predictions_sha256": "651f9ed93fda32f3816c545cd593207d373dbe11ab2f0528b2145d47f5e5f56e",
+          "trained_heads_sha256": "153715874d97bc4aa562ad1e37694056199376547c2961816f425fc20fce9be6",
+          "future_training_samples": {
+            "sensor.challenger_0": 1,
+            "sensor.challenger_1": 1,
+            "sensor.challenger_2": 1,
+            "sensor.challenger_3": 1
+          }
+        },
+        "observation_speedup": 0.9855442228587925
+      },
+      {
+        "after": {
+          "observation_median_ms": 12.702730000000884,
+          "observation_total_ms": 305.4407440001228,
+          "checks": 100,
+          "features_sha256": "b875961122025025cac7938d4eb3edd79ddf7064ed00d510a6dce47dd4fbb9b5",
+          "predictions_sha256": "651f9ed93fda32f3816c545cd593207d373dbe11ab2f0528b2145d47f5e5f56e",
+          "trained_heads_sha256": "153715874d97bc4aa562ad1e37694056199376547c2961816f425fc20fce9be6",
+          "future_training_samples": {
+            "sensor.challenger_0": 1,
+            "sensor.challenger_1": 1,
+            "sensor.challenger_2": 1,
+            "sensor.challenger_3": 1
+          }
+        },
+        "before": {
+          "observation_median_ms": 13.596019499999557,
+          "observation_total_ms": 269.77982999994765,
+          "checks": 100,
+          "features_sha256": "b875961122025025cac7938d4eb3edd79ddf7064ed00d510a6dce47dd4fbb9b5",
+          "predictions_sha256": "651f9ed93fda32f3816c545cd593207d373dbe11ab2f0528b2145d47f5e5f56e",
+          "trained_heads_sha256": "153715874d97bc4aa562ad1e37694056199376547c2961816f425fc20fce9be6",
+          "future_training_samples": {
+            "sensor.challenger_0": 1,
+            "sensor.challenger_1": 1,
+            "sensor.challenger_2": 1,
+            "sensor.challenger_3": 1
+          }
+        },
+        "observation_speedup": 1.0703226393065595
+      },
+      {
+        "before": {
+          "observation_median_ms": 12.813944500010166,
+          "observation_total_ms": 265.5609830000003,
+          "checks": 100,
+          "features_sha256": "b875961122025025cac7938d4eb3edd79ddf7064ed00d510a6dce47dd4fbb9b5",
+          "predictions_sha256": "651f9ed93fda32f3816c545cd593207d373dbe11ab2f0528b2145d47f5e5f56e",
+          "trained_heads_sha256": "153715874d97bc4aa562ad1e37694056199376547c2961816f425fc20fce9be6",
+          "future_training_samples": {
+            "sensor.challenger_0": 1,
+            "sensor.challenger_1": 1,
+            "sensor.challenger_2": 1,
+            "sensor.challenger_3": 1
+          }
+        },
+        "after": {
+          "observation_median_ms": 14.578145000001541,
+          "observation_total_ms": 315.64548199997944,
+          "checks": 100,
+          "features_sha256": "b875961122025025cac7938d4eb3edd79ddf7064ed00d510a6dce47dd4fbb9b5",
+          "predictions_sha256": "651f9ed93fda32f3816c545cd593207d373dbe11ab2f0528b2145d47f5e5f56e",
+          "trained_heads_sha256": "153715874d97bc4aa562ad1e37694056199376547c2961816f425fc20fce9be6",
+          "future_training_samples": {
+            "sensor.challenger_0": 1,
+            "sensor.challenger_1": 1,
+            "sensor.challenger_2": 1,
+            "sensor.challenger_3": 1
+          }
+        },
+        "observation_speedup": 0.8789831971083297
+      }
+    ],
+    "passes_per_pair": 20,
+    "challengers": 4,
+    "accepted_dense_rows_per_class": 128,
+    "features_predictions_and_future_trained_heads_identical": true,
+    "limit": "Production observer on this test host, no HA ingress or concurrent microSD contention; not measured Pi latency."
+  },
+  "median_observer_speedup": 0.9855442228587925,
+  "source_export": {
+    "version": "0.14.192",
+    "generated_at": "2026-10-14T10:34:45.210130+00:00",
+    "metrics": {
+      "context_shadow_snapshot": {
+        "avg_ms": 53.15014382722438,
+        "count": 224,
+        "p95_ms": 94.60966195911169,
+        "recent_count": 92,
+        "recent_p95_ms": 114.57251297542825
+      },
+      "context_shadow_json": {
+        "avg_ms": 191.70702831719868,
+        "count": 35,
+        "p95_ms": 615.3356700087897,
+        "recent_count": 8,
+        "recent_p95_ms": 1002.8087429818697
+      },
+      "context_shadow_persist": {
+        "avg_ms": 600.1364386341136,
+        "count": 35,
+        "p95_ms": 2611.771716037765,
+        "recent_count": 8,
+        "recent_p95_ms": 4060.8780230395496
+      },
+      "wrapped_inference": {
+        "avg_ms": 480.0085964891868,
+        "count": 1579,
+        "p95_ms": 652.138996985741,
+        "recent_count": 154,
+        "recent_p95_ms": 1815.795372996945
+      },
+      "context_shadow_observation": {
+        "avg_ms": 318.1250433312116,
+        "count": 1579,
+        "p95_ms": 479.2308759642765,
+        "recent_count": 154,
+        "recent_p95_ms": 1406.3412830000743
+      },
+      "context_candidate_validation": {
+        "avg_ms": 5.3933255163116485,
+        "count": 6336,
+        "p95_ms": 12.941794004291296,
+        "recent_count": 512,
+        "recent_p95_ms": 12.941794004291296
+      },
+      "sqlite_wal_checkpoint": {
+        "avg_ms": 1309.2269576116164,
+        "count": 121,
+        "p95_ms": 2848.5608720220625,
+        "recent_count": 10,
+        "recent_p95_ms": 2849.6409660438076
+      }
+    },
+    "current_release_export_available": false
+  },
+  "guards": {
+    "immutable_source_owned_by_each_snapshot": true,
+    "frozen_metadata_preserved": true,
+    "newer_snapshot_retained_after_failed_commit": true,
+    "complete_json_byte_parity": true,
+    "fresh_sha_on_use": true,
+    "optional_json_quota_fallback_keeps_canonical_cache": true,
+    "plain_json_restart_exact": true,
+    "combined_ram_budget_mb": 64
+  },
+  "limits": "Synthetic test-host measurements. No current .193/.194 device export; inference/whole-training speed and physical microSD checkpoint improvements not measured. Write count/schedule unchanged."
+}
