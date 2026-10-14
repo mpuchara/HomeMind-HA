@@ -1,3 +1,9 @@
+## 0.14.197
+
+- Share the bounded observed-pool census through the full production Shadow observation, including outer quality/timing decorators. Nested candidate scopes reuse the same thread-local frame.
+- Retain durable ids within one observation, union current pending keys in RAM, and invalidate synchronous counts after new inserts. Fresh schema/promotion reads and the next observation remain independent.
+- Add full process-wrapper, nested-scope, pending-growth, exception, limit and thread-isolation regressions plus a paired 96-sensor observer benchmark with exact learning parity.
+
 ## 0.14.196
 
 - Coordinate retryable background writes with WAL reclamation before model encoding or SQLite lock waits, retaining complete pending evidence in RAM.
