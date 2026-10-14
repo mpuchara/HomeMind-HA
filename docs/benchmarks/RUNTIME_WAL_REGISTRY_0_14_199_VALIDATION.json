@@ -1,0 +1,194 @@
+{
+  "version": "0.14.199",
+  "date": "2026-10-15",
+  "base_commit": "21c12ef8a8ad023d1cf158fed85d5e97ede538fa",
+  "host": "WSL Ubuntu / Python 3.12.3",
+  "full_suite": {
+    "passed": 2363,
+    "seconds": 283.717,
+    "skips": 0
+  },
+  "new_regressions": 13,
+  "compileall": "passed",
+  "runtime_debug_ui_js_syntax": "passed",
+  "benchmarks": {
+    "pairs": [
+      {
+        "before": {
+          "writer": {
+            "connections": 20,
+            "batches": 20,
+            "elapsed_ms": 105.98931200001971,
+            "final_sha": "1500f15b15f0ed630fec031968d5c6884f2fa8b120bdda2bbb85e2bfc501dfaf"
+          },
+          "registry": {
+            "metadata_refreshes": 10,
+            "topology_rebuilds": 10,
+            "elapsed_ms": 9.316371000011259,
+            "entities": 1333,
+            "mapping_sha": "03f1e5740d247511c4a795bd8bd7ebce431af7d596ddc64e082b4b95ab357705"
+          },
+          "event_state": {
+            "observations": 20,
+            "reads": 160,
+            "events_sha": "8de6d8b41fccd7a373fc6f970504dfbfb9289c91fff08d9d8b844891b5583a6b",
+            "models_sha": "bc404261e4a5a2c7435807c53846c7e428c105cf01a06b09ef0077d2937e19fd"
+          }
+        },
+        "after": {
+          "writer": {
+            "connections": 1,
+            "batches": 20,
+            "elapsed_ms": 34.46179399998073,
+            "final_sha": "1500f15b15f0ed630fec031968d5c6884f2fa8b120bdda2bbb85e2bfc501dfaf"
+          },
+          "registry": {
+            "metadata_refreshes": 10,
+            "topology_rebuilds": 0,
+            "elapsed_ms": 31.94400099999939,
+            "entities": 1333,
+            "mapping_sha": "03f1e5740d247511c4a795bd8bd7ebce431af7d596ddc64e082b4b95ab357705"
+          },
+          "event_state": {
+            "observations": 20,
+            "reads": 20,
+            "events_sha": "8de6d8b41fccd7a373fc6f970504dfbfb9289c91fff08d9d8b844891b5583a6b",
+            "models_sha": "bc404261e4a5a2c7435807c53846c7e428c105cf01a06b09ef0077d2937e19fd"
+          }
+        }
+      },
+      {
+        "before": {
+          "writer": {
+            "connections": 20,
+            "batches": 20,
+            "elapsed_ms": 129.77759099999275,
+            "final_sha": "1500f15b15f0ed630fec031968d5c6884f2fa8b120bdda2bbb85e2bfc501dfaf"
+          },
+          "registry": {
+            "metadata_refreshes": 10,
+            "topology_rebuilds": 10,
+            "elapsed_ms": 10.426945999995496,
+            "entities": 1333,
+            "mapping_sha": "03f1e5740d247511c4a795bd8bd7ebce431af7d596ddc64e082b4b95ab357705"
+          },
+          "event_state": {
+            "observations": 20,
+            "reads": 160,
+            "events_sha": "8de6d8b41fccd7a373fc6f970504dfbfb9289c91fff08d9d8b844891b5583a6b",
+            "models_sha": "bc404261e4a5a2c7435807c53846c7e428c105cf01a06b09ef0077d2937e19fd"
+          }
+        },
+        "after": {
+          "writer": {
+            "connections": 1,
+            "batches": 20,
+            "elapsed_ms": 40.0021190000075,
+            "final_sha": "1500f15b15f0ed630fec031968d5c6884f2fa8b120bdda2bbb85e2bfc501dfaf"
+          },
+          "registry": {
+            "metadata_refreshes": 10,
+            "topology_rebuilds": 0,
+            "elapsed_ms": 34.2762590000234,
+            "entities": 1333,
+            "mapping_sha": "03f1e5740d247511c4a795bd8bd7ebce431af7d596ddc64e082b4b95ab357705"
+          },
+          "event_state": {
+            "observations": 20,
+            "reads": 20,
+            "events_sha": "8de6d8b41fccd7a373fc6f970504dfbfb9289c91fff08d9d8b844891b5583a6b",
+            "models_sha": "bc404261e4a5a2c7435807c53846c7e428c105cf01a06b09ef0077d2937e19fd"
+          }
+        }
+      },
+      {
+        "before": {
+          "writer": {
+            "connections": 20,
+            "batches": 20,
+            "elapsed_ms": 107.58475200003659,
+            "final_sha": "1500f15b15f0ed630fec031968d5c6884f2fa8b120bdda2bbb85e2bfc501dfaf"
+          },
+          "registry": {
+            "metadata_refreshes": 10,
+            "topology_rebuilds": 10,
+            "elapsed_ms": 9.215122999989944,
+            "entities": 1333,
+            "mapping_sha": "03f1e5740d247511c4a795bd8bd7ebce431af7d596ddc64e082b4b95ab357705"
+          },
+          "event_state": {
+            "observations": 20,
+            "reads": 160,
+            "events_sha": "8de6d8b41fccd7a373fc6f970504dfbfb9289c91fff08d9d8b844891b5583a6b",
+            "models_sha": "bc404261e4a5a2c7435807c53846c7e428c105cf01a06b09ef0077d2937e19fd"
+          }
+        },
+        "after": {
+          "writer": {
+            "connections": 1,
+            "batches": 20,
+            "elapsed_ms": 33.56721000000107,
+            "final_sha": "1500f15b15f0ed630fec031968d5c6884f2fa8b120bdda2bbb85e2bfc501dfaf"
+          },
+          "registry": {
+            "metadata_refreshes": 10,
+            "topology_rebuilds": 0,
+            "elapsed_ms": 31.984027000021342,
+            "entities": 1333,
+            "mapping_sha": "03f1e5740d247511c4a795bd8bd7ebce431af7d596ddc64e082b4b95ab357705"
+          },
+          "event_state": {
+            "observations": 20,
+            "reads": 20,
+            "events_sha": "8de6d8b41fccd7a373fc6f970504dfbfb9289c91fff08d9d8b844891b5583a6b",
+            "models_sha": "bc404261e4a5a2c7435807c53846c7e428c105cf01a06b09ef0077d2937e19fd"
+          }
+        }
+      }
+    ],
+    "source_parity": true,
+    "device_latency_claim": false
+  },
+  "median_writer_component_speedup": 3.2050549330740674,
+  "writer_connections_before_after": [
+    20,
+    1
+  ],
+  "event_state_reads_per_observation_before_after": [
+    8,
+    1
+  ],
+  "registry_metadata_rebuilds_before_after": [
+    10,
+    0
+  ],
+  "registry_timing_caveat": "Empty-state-map registry fixture is slower with owned deep snapshots; it validates skipped topology rebuilds, not device source-configuration speed. All raw timing results are retained.",
+  "worker_connection_cache_maximum_existing_mib_each": 16,
+  "new_persistent_writer_connections": 3,
+  "storage_limits_changed": false,
+  "native_truncate_busy_timeout_ms": 0,
+  "quiesce_default_ms": 100,
+  "quiesce_range_ms": [
+    0,
+    500
+  ],
+  "device_latency_improvement_measured": false,
+  "runtime_export_evidence": {
+    "version": "0.14.198",
+    "files": [
+      "adaptive-ai-runtime-debug-20261015-005752.json",
+      "adaptive-ai-runtime-debug-20261015-005830.json",
+      "adaptive-ai-runtime-debug-20261015-005854.json"
+    ],
+    "candidate_shadow_errors": 0,
+    "tournament_episode_errors": 0,
+    "candidate_shadow_pending": 0,
+    "tournament_episode_pending": 0,
+    "drift_errors": 0,
+    "blocked_storage_writes_cumulative": 11,
+    "latest_wal_bytes": 38818672,
+    "wal_limit_bytes": 550593845,
+    "latest_storage_level": "normal",
+    "reported_pressure_incident_trace_available": false
+  }
+}

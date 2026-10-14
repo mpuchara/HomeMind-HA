@@ -5,7 +5,7 @@ History workers consume events. It decorates the established contracts rather th
 adding a second dispatcher: Executor remains the only HA command boundary.
 """
 from __future__ import annotations
-from sqlite_background import background_sqlite, is_sqlite_busy
+from sqlite_background import background_sqlite, is_sqlite_busy, run_connection_worker
 from storage_budget import StoragePressure, StorageRetry, require_storage_available, storage_recording_paused
 
 from contextlib import contextmanager
@@ -357,6 +357,11 @@ def install(core):
         return results
 
     def provenance_writer():
+        run_connection_worker(store, engine.stop_event, provenance_writer_session, storage_retry,
+            lambda exc: store.event(None, 'warning', 'provenance_batch_flush_failed',
+                                    f'Provenance writer connection failed: {type(exc).__name__}: {exc}', None))
+
+    def provenance_writer_session():
         while not engine.stop_event.is_set():
             if engine.stop_event.wait(storage_retry.delay()):
                 break

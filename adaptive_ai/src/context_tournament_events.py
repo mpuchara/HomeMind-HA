@@ -8,7 +8,9 @@ All Context Tournament decision events use deterministic event names/messages an
 structured numeric evidence.  There is deliberately no generated explanatory text.
 """
 import math
+import threading
 import time
+from contextlib import contextmanager
 
 from context import action_values
 from context_tournament_metrics import availability_stats, metric_row
@@ -119,27 +121,55 @@ def install_context_events(service):
     raw_event = service.store.event
     original_sync = service.sync_agent
     original_observe = service.observe_shadow
+    event_tls = threading.local()
+
+    def decode_event_state(row):
+        if not row:
+            return _event_state_defaults()
+        return {
+            'evaluation_started_ts': None if row['evaluation_started_ts'] is None else float(row['evaluation_started_ts']),
+            'evaluated_windows': int(row['evaluated_windows'] or 0),
+            'rejected_started_ts': None if row['rejected_started_ts'] is None else float(row['rejected_started_ts']),
+            'unreliable_started_ts': None if row['unreliable_started_ts'] is None else float(row['unreliable_started_ts']),
+        }
+
+    @contextmanager
+    def event_state_scope(agent_id, entity_ids):
+        previous = getattr(event_tls, 'frame', None)
+        aid = str(agent_id)
+        if previous is not None and previous[0] == aid:
+            yield
+            return
+        ids = list(dict.fromkeys(str(eid) for eid in entity_ids))[:128]
+        frame = {}
+        if ids:
+            marks = ','.join('?' for _ in ids)
+            with service.store.conn() as c:
+                rows = c.execute(
+                    f'SELECT * FROM context_tournament_event_state WHERE agent_id=? AND entity_id IN ({marks})',
+                    (aid, *ids),
+                ).fetchall()
+            frame = {eid: _event_state_defaults() for eid in ids}
+            frame.update({str(row['entity_id']): decode_event_state(row) for row in rows})
+        event_tls.frame = (aid, frame)
+        try:
+            yield
+        finally:
+            event_tls.frame = previous
 
     def read_event_state(agent_id, entity_id):
+        frame = getattr(event_tls, 'frame', None)
+        if frame is not None and frame[0] == str(agent_id) and str(entity_id) in frame[1]:
+            return dict(frame[1][str(entity_id)])
         with service.store.conn() as c:
             row = c.execute(
                 "SELECT * FROM context_tournament_event_state WHERE agent_id=? AND entity_id=?",
                 (str(agent_id), str(entity_id)),
             ).fetchone()
-        if not row:
-            return _event_state_defaults()
-        return {
-            "evaluation_started_ts": (
-                None if row["evaluation_started_ts"] is None else float(row["evaluation_started_ts"])
-            ),
-            "evaluated_windows": int(row["evaluated_windows"] or 0),
-            "rejected_started_ts": (
-                None if row["rejected_started_ts"] is None else float(row["rejected_started_ts"])
-            ),
-            "unreliable_started_ts": (
-                None if row["unreliable_started_ts"] is None else float(row["unreliable_started_ts"])
-            ),
-        }
+        decoded = decode_event_state(row)
+        if frame is not None and frame[0] == str(agent_id) and len(frame[1]) < 128:
+            frame[1][str(entity_id)] = dict(decoded)
+        return decoded
 
     def save_event_state(agent_id, entity_id, row):
         now = time.time()
@@ -161,6 +191,10 @@ def install_context_events(service):
                     row.get("unreliable_started_ts"), now,
                 ),
             )
+
+        frame = getattr(event_tls, 'frame', None)
+        if frame is not None and frame[0] == str(agent_id) and (str(entity_id) in frame[1] or len(frame[1]) < 128):
+            frame[1][str(entity_id)] = dict(row)
 
     def emit(agent_id, level, kind, data):
         raw_event(
@@ -443,6 +477,11 @@ def install_context_events(service):
     def observe_with_events(agent, state_map=None, changed_entities=None):
         aid = str(agent["id"])
         before = service.state(aid)
+        with event_state_scope(aid, before.get('challenger_features') or []):
+            return observe_event_frame(agent, state_map, changed_entities, before)
+
+    def observe_event_frame(agent, state_map, changed_entities, before):
+        aid = str(agent['id'])
         for entity_id in before.get("challenger_features") or []:
             ensure_started_event(agent, before, entity_id)
 

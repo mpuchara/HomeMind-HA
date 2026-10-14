@@ -98,6 +98,7 @@ class RuntimeDebugLogService:
         realtime = None
         context_persistence = None
         deferred_persistence = {}
+        registry_refresh = None
         store = getattr(self.core, "STORE", None)
         sqlite_snapshot = getattr(store, "sqlite_snapshot", None)
         sqlite_status = sqlite_snapshot() if callable(sqlite_snapshot) else None
@@ -127,6 +128,10 @@ class RuntimeDebugLogService:
             else:
                 scheduler = dict(getattr(engine, "inference_scheduler", {}) or {})
                 engine_error = getattr(engine, "error", None)
+
+            with lock if lock is not None else nullcontext():
+                deferred_persistence['runtime_storage'] = dict(getattr(engine, 'storage_pressure_stats', {}) or {})
+                registry_refresh = dict(getattr(engine, 'registry_refresh_stats', {}) or {})
 
             tournament = getattr(engine, 'context_tournament', None)
             if tournament is not None:
@@ -167,6 +172,7 @@ class RuntimeDebugLogService:
                 "error": engine_error,
                 "realtime": realtime,
                 "inference_scheduler": scheduler,
+                "registry_refresh": registry_refresh,
                 "context_persistence": context_persistence,
                 "deferred_persistence": deferred_persistence,
             },

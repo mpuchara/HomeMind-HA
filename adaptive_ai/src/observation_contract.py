@@ -6,7 +6,7 @@ extractor + historical view) rather than adding per-agent wrappers.  Executor ow
 untouched.
 """
 from __future__ import annotations
-from sqlite_background import background_sqlite, DeferredBatchError, admit_background_write
+from sqlite_background import background_sqlite, DeferredBatchError, admit_background_write, run_connection_worker
 from storage_budget import StoragePressure, StorageRetry, require_storage_available, storage_recording_paused
 
 from bisect import bisect_right
@@ -2149,6 +2149,11 @@ def install(core):
                 return totals
 
     def journal_writer():
+        run_connection_worker(store, engine.stop_event, journal_writer_session, storage_retry,
+            lambda exc: store.event(None, 'warning', 'feature_journal_batch_flush_failed',
+                                    f'Feature writer connection failed: {type(exc).__name__}: {exc}', None))
+
+    def journal_writer_session():
         while not engine.stop_event.is_set():
             if engine.stop_event.wait(storage_retry.delay()):
                 break
