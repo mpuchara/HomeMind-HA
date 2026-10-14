@@ -1,0 +1,23 @@
+# 0.14.196: odroczone zapisy podczas blokady SQLite
+
+Eksport z 14 października 17:30 pochodzi z .195. Średni event_to_decision wynosi 438 ms, kontekstowy Shadow 309 ms, CPU procesu około 95%, RSS 212 MiB. W poprzednim eksporcie .194 było odpowiednio 263 ms, 200 ms, 64% i 169 MiB. Okresy pracy i obciążenie są różne: nie jest to kontrolowany benchmark wersji. W .195 wystąpiło 315 operacji uczenia challengerów, a poprzedni eksport nie zawierał ich pomiarów. Wymuszone opróżnienia observed_pool spadły do jednego, ale pojawiły się błędy zapisu feature journal, fast-light, provenance i kontekstu. Ochrona miejsca nie odmówiła zapisów.
+
+## Poprawka
+
+SQLite TRUNCATE potrzebuje blokady writera także przy busy_timeout=0. Sam timeout ogranicza oczekiwanie na zajętą blokadę; nie ogranicza czasu I/O operacji, która już ją uzyskała. W eksporcie maksymalny checkpoint wynosi 7 s, a maksymalne odzyskiwanie WAL 4,3 s. W tym czasie inny writer mógł zajmować Store.lock przez kolejne 250 ms oczekiwania na SQLite. Szczegółowy ślad zaczyna się dopiero po zgłoszonych błędach, więc nie przypisuje każdego błędu do konkretnego odzyskiwania WAL. [Dokumentacja SQLite](https://www.sqlite.org/c3ref/wal_checkpoint_v2.html).
+
+Worker oznacza teraz czas odzyskiwania WAL. Odroczone zapisy kontekstu, feature journal i fast-light sprawdzają ten stan przed wyjęciem danych z kolejki i kodowaniem dużych modeli. Pierwszy zapis przez BudgetConnection również sprawdza stan, obejmując pozostałe zapisy w istniejącym background_sqlite. Taki batch otrzymuje natychmiast rozpoznawalny SQLITE_BUSY, zachowuje dane w RAM i jest ponawiany po cooldownie. Natomiast SELECT-y, rozpoczęte transakcje, jawne bariery trwałości i trening zachowują dotychczasową ścieżkę. Znacznik nie zastępuje natywnych blokad SQLite: wyścig tuż po sprawdzeniu i blokady zewnętrznych procesów nadal podlegają dotychczasowemu timeoutowi i retry. Znacznik jest zawsze zwalniany w finally, również po błędzie I/O.
+
+Feature journal wcześniej sklejał błędy niezależnych kolejek w RuntimeError i tracił natywną klasyfikację BUSY. Nowy DeferredBatchError zachowuje oryginalne wyjątki. Chwilowa blokada jest rozpoznawana tylko wtedy, gdy wszystkie błędy w paczce są BUSY/LOCKED. Błąd I/O obok BUSY nadal jest raportowany. Fast-light i context writer używają StorageRetry; wybudzenia od producentów nie omijają sekundowego cooldownu. Nie jest to wyciszenie dowolnych błędów bazy.
+
+W debug eksporcie SQLite dodano wal_reclaiming i wal_writer_deferrals, a fast-light i context persistence pokazują storage_retry. Bufory RAM, limity bazy/WAL/wolnego miejsca, rollback i per-statement payload guard pozostają bez zmiany. Zmiana nie modyfikuje cech, etykiet, wag, rankingów sensorów ani promocji. Format danych na dysku pozostaje zgodny z poprzednią wersją.
+
+Pełny UPSERT puli nadal wiąże duże JSON-y. Kontrolowane sprawdzenie samego UPDATE liczników nie zmniejszyło fizycznego WAL dla tego układu tabeli, dlatego ta wersja nie obiecuje redukcji zapisu przez samą zmianę SQL. Rozdzielenie dużych danych i zmiennych liczników wymaga osobnej, zgodnej migracji storage.
+
+## Weryfikacja
+
+2331/2331 testów przeszło w Linuksie/WSL bez pominięć (356.059 s); compileall przeszedł. 14 nowych regresji obejmuje prawdziwy BEGIN IMMEDIATE blokujący oba typy evidence, wznowienie i kompletność zapisów, potwierdzone zdarzenie fast-light wraz z checkpointem, zachowanie kolejki przed kodowaniem, cooldown mimo wielu wybudzeń, mieszany BUSY/I/O, izolację wątku, odczyty podczas odzyskiwania, jawny commit, kontynuację rozpoczętej transakcji oraz rollback przy braku miejsca. Kontrolowany benchmark porównuje .195/.196 pod identyczną blokadą writera i ogłoszonym odzyskiwaniem WAL; po retry wszystkie końcowe wiersze mają identyczny SHA. W trzech próbach mediana czasu kolidującej próby zapisu spadła z 251,81 ms do 0,0215 ms: batch został odłożony przed SQL i później poprawnie zapisany. Oddzielne porównanie observera ma identyczne cechy, predykcje, wagi po uczeniu i liczby próbek; mediana stosunku czasu wynosi 0,98 razy. To pomiar mechanizmu kolizji, nie opóźnienia Raspberry Pi ani gwarancja przywrócenia całego CPU. Wyniki pełnego zestawu i benchmarków: [raport](benchmarks/DEFERRED_SQLITE_0_14_196_VALIDATION.json).
+
+## Instalacja
+
+Zainstaluj .196 i zrestartuj dodatek. Ponowny trening ani Full Rebuild nie są potrzebne. Wszystkie wcześniejsze poprawki .194/.195 są zawarte. Po kilkunastu minutach aktywności sprawdź event_to_decision, CPU, storage_retry, wal_writer_deferrals i błędy I/O. Fizyczne I/O checkpointów i koszt online uczenia challengerów pozostają mierzalnymi kosztami.

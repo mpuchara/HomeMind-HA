@@ -1,0 +1,174 @@
+{
+  "version": "0.14.196",
+  "baseline": "0.14.195",
+  "validation": {
+    "tests_passed": 2331,
+    "skipped": 0,
+    "seconds": 356.059,
+    "environment": "WSL Linux Python 3.12.3",
+    "compileall": true,
+    "new_regressions": 14
+  },
+  "controlled_contention": {
+    "values": {
+      "before": {
+        "results": [
+          {
+            "contended_flush_ms": 251.97829299999964,
+            "final_sha256": "4a764fc369f7388e68e47261d46f869ef688f8746e329180107c0c888a0dbba5",
+            "writer_deferrals": 0
+          },
+          {
+            "contended_flush_ms": 251.8059930000005,
+            "final_sha256": "4a764fc369f7388e68e47261d46f869ef688f8746e329180107c0c888a0dbba5",
+            "writer_deferrals": 0
+          },
+          {
+            "contended_flush_ms": 251.61938299999952,
+            "final_sha256": "4a764fc369f7388e68e47261d46f869ef688f8746e329180107c0c888a0dbba5",
+            "writer_deferrals": 0
+          }
+        ],
+        "median_contended_flush_ms": 251.8059930000005
+      },
+      "after": {
+        "results": [
+          {
+            "contended_flush_ms": 0.02234799999989434,
+            "final_sha256": "4a764fc369f7388e68e47261d46f869ef688f8746e329180107c0c888a0dbba5",
+            "writer_deferrals": 1
+          },
+          {
+            "contended_flush_ms": 0.021512000000001308,
+            "final_sha256": "4a764fc369f7388e68e47261d46f869ef688f8746e329180107c0c888a0dbba5",
+            "writer_deferrals": 1
+          },
+          {
+            "contended_flush_ms": 0.014426999999983536,
+            "final_sha256": "4a764fc369f7388e68e47261d46f869ef688f8746e329180107c0c888a0dbba5",
+            "writer_deferrals": 1
+          }
+        ],
+        "median_contended_flush_ms": 0.021512000000001308
+      }
+    },
+    "controlled_native_writer_lock": true,
+    "limit": "Announced WAL maintenance with a controlled native BEGIN IMMEDIATE writer lock; not Raspberry Pi latency, CPU or proof that every reported error came from reclamation.",
+    "exact_final_rows": true
+  },
+  "shadow_observer_parity": {
+    "synthetic": true,
+    "series": [
+      {
+        "before": {
+          "observation_median_ms": 12.846643500000088,
+          "observation_total_ms": 263.5093129999992,
+          "checks": 100,
+          "features_sha256": "b875961122025025cac7938d4eb3edd79ddf7064ed00d510a6dce47dd4fbb9b5",
+          "predictions_sha256": "651f9ed93fda32f3816c545cd593207d373dbe11ab2f0528b2145d47f5e5f56e",
+          "trained_heads_sha256": "153715874d97bc4aa562ad1e37694056199376547c2961816f425fc20fce9be6",
+          "future_training_samples": {
+            "sensor.challenger_0": 1,
+            "sensor.challenger_1": 1,
+            "sensor.challenger_2": 1,
+            "sensor.challenger_3": 1
+          }
+        },
+        "after": {
+          "observation_median_ms": 13.159315500000268,
+          "observation_total_ms": 264.80709899999954,
+          "checks": 100,
+          "features_sha256": "b875961122025025cac7938d4eb3edd79ddf7064ed00d510a6dce47dd4fbb9b5",
+          "predictions_sha256": "651f9ed93fda32f3816c545cd593207d373dbe11ab2f0528b2145d47f5e5f56e",
+          "trained_heads_sha256": "153715874d97bc4aa562ad1e37694056199376547c2961816f425fc20fce9be6",
+          "future_training_samples": {
+            "sensor.challenger_0": 1,
+            "sensor.challenger_1": 1,
+            "sensor.challenger_2": 1,
+            "sensor.challenger_3": 1
+          }
+        },
+        "observation_speedup": 0.9762394936119455
+      },
+      {
+        "after": {
+          "observation_median_ms": 13.033472500000087,
+          "observation_total_ms": 264.26974800000204,
+          "checks": 100,
+          "features_sha256": "b875961122025025cac7938d4eb3edd79ddf7064ed00d510a6dce47dd4fbb9b5",
+          "predictions_sha256": "651f9ed93fda32f3816c545cd593207d373dbe11ab2f0528b2145d47f5e5f56e",
+          "trained_heads_sha256": "153715874d97bc4aa562ad1e37694056199376547c2961816f425fc20fce9be6",
+          "future_training_samples": {
+            "sensor.challenger_0": 1,
+            "sensor.challenger_1": 1,
+            "sensor.challenger_2": 1,
+            "sensor.challenger_3": 1
+          }
+        },
+        "before": {
+          "observation_median_ms": 12.639708500000069,
+          "observation_total_ms": 258.85066300000227,
+          "checks": 100,
+          "features_sha256": "b875961122025025cac7938d4eb3edd79ddf7064ed00d510a6dce47dd4fbb9b5",
+          "predictions_sha256": "651f9ed93fda32f3816c545cd593207d373dbe11ab2f0528b2145d47f5e5f56e",
+          "trained_heads_sha256": "153715874d97bc4aa562ad1e37694056199376547c2961816f425fc20fce9be6",
+          "future_training_samples": {
+            "sensor.challenger_0": 1,
+            "sensor.challenger_1": 1,
+            "sensor.challenger_2": 1,
+            "sensor.challenger_3": 1
+          }
+        },
+        "observation_speedup": 0.9697882509822293
+      },
+      {
+        "before": {
+          "observation_median_ms": 13.28302850000096,
+          "observation_total_ms": 266.78342400000156,
+          "checks": 100,
+          "features_sha256": "b875961122025025cac7938d4eb3edd79ddf7064ed00d510a6dce47dd4fbb9b5",
+          "predictions_sha256": "651f9ed93fda32f3816c545cd593207d373dbe11ab2f0528b2145d47f5e5f56e",
+          "trained_heads_sha256": "153715874d97bc4aa562ad1e37694056199376547c2961816f425fc20fce9be6",
+          "future_training_samples": {
+            "sensor.challenger_0": 1,
+            "sensor.challenger_1": 1,
+            "sensor.challenger_2": 1,
+            "sensor.challenger_3": 1
+          }
+        },
+        "after": {
+          "observation_median_ms": 12.83638099999962,
+          "observation_total_ms": 271.0178019999958,
+          "checks": 100,
+          "features_sha256": "b875961122025025cac7938d4eb3edd79ddf7064ed00d510a6dce47dd4fbb9b5",
+          "predictions_sha256": "651f9ed93fda32f3816c545cd593207d373dbe11ab2f0528b2145d47f5e5f56e",
+          "trained_heads_sha256": "153715874d97bc4aa562ad1e37694056199376547c2961816f425fc20fce9be6",
+          "future_training_samples": {
+            "sensor.challenger_0": 1,
+            "sensor.challenger_1": 1,
+            "sensor.challenger_2": 1,
+            "sensor.challenger_3": 1
+          }
+        },
+        "observation_speedup": 1.0347954380601008
+      }
+    ],
+    "passes_per_pair": 20,
+    "challengers": 4,
+    "accepted_dense_rows_per_class": 128,
+    "features_predictions_and_future_trained_heads_identical": true,
+    "limit": "Production observer on this test host, no HA ingress or concurrent microSD contention; not measured Pi latency."
+  },
+  "median_observer_speedup": 0.9762394936119455,
+  "log_evidence": {
+    "version": "0.14.195",
+    "export_local_time": "2026-10-14T17:30:28+02:00",
+    "event_to_decision_avg_ms": 438.1653262682322,
+    "context_shadow_avg_ms": 309.1542535424581,
+    "cpu_recent_percent": 94.86408242439359,
+    "observed_pool_overflow_flushes": 1,
+    "blocked_storage_writes": 0,
+    "context_candidate_training_operations": 315,
+    "limits": "Different runtime windows and online-learning load; no causal version benchmark. Trace begins after the reported errors."
+  }
+}

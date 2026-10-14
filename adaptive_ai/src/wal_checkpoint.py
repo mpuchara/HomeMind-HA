@@ -135,6 +135,9 @@ class WALCheckpointWorker:
                                     reason="wal_budget" if pressure else "periodic")
         started = time.perf_counter()
         status, fields = "error", {}
+        reclaiming = getattr(self.store, '_wal_reclaiming', None)
+        if reclaiming is not None:
+            reclaiming.set()
         try:
             connection.execute("PRAGMA busy_timeout=0")
             busy, frames, copied = connection.execute("PRAGMA wal_checkpoint(TRUNCATE)").fetchone()
@@ -164,6 +167,8 @@ class WALCheckpointWorker:
                           sqlite_errorname=getattr(exc, "sqlite_errorname", None))
             return False
         finally:
+            if reclaiming is not None:
+                reclaiming.clear()
             elapsed = (time.perf_counter() - started) * 1000
             with self.lock:
                 self.stats["last_reclaim_duration_ms"] = elapsed

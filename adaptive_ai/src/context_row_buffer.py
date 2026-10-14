@@ -2,6 +2,7 @@
 import threading
 import sys
 import time
+from sqlite_background import admit_background_write
 
 from telemetry import RUNTIME_DEBUG, TELEMETRY
 
@@ -126,6 +127,8 @@ class ContextRowBuffer:
         # Serialize drains through commit: an older batch cannot overwrite a newer one.
         with self.flush_lock:
             with self.lock:
+                if self.pending:
+                    admit_background_write(self.store)
                 batch, self.pending = self.pending, {}
                 batch_sizes, self.pending_sizes = self.pending_sizes, {}
                 queued_at, self.first_pending_at = self.first_pending_at, None

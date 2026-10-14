@@ -27,6 +27,8 @@ class Store:
         self._wal_keeper_starts = 0
         self._wal_keeper_stops = 0
         self._wal_checkpoint_worker = None
+        self._wal_reclaiming = threading.Event()
+        self._wal_writer_deferrals = 0
         # Diagnostic events are operational telemetry, not Store transaction state.
         # Keep their tiny RAM ring independently accessible while a large microSD write
         # owns self.lock. This prevents /api/events and diagnostic producers from being
@@ -125,6 +127,8 @@ class Store:
                         wal_keeper_active=self._wal_keeper is not None,
                         wal_keeper_starts=self._wal_keeper_starts,
                         wal_keeper_stops=self._wal_keeper_stops,
+                        wal_reclaiming=self._wal_reclaiming.is_set(),
+                        wal_writer_deferrals=self._wal_writer_deferrals,
                         wal_checkpoint=(self._wal_checkpoint_worker.snapshot()
                                         if self._wal_checkpoint_worker is not None else None))
 
@@ -226,6 +230,7 @@ class Store:
                     pass
                 if isinstance(c, BudgetConnection):
                     self.storage_budget.install(c)
+                    c.storage_write_admission = self.admit_background_write
             with c:
                 if trace:
                     body_started = time.perf_counter()
@@ -270,6 +275,20 @@ class Store:
                     timings["close_ms"] = round((time.perf_counter() - close_started) * 1000, 3)
                 RUNTIME_DEBUG.end(trace, status=status, autocheckpoint_pages=checkpoint_pages,
                                   **error_fields, **timings)
+
+    def admit_background_write(self):
+        # TRUNCATE owns SQLite's writer lock even with busy_timeout=0. Retryable
+        # batches already keep their data in RAM: don't spend 250 ms under
+        # Store.lock or encode large models just to collide with our own worker.
+        # Reads, explicit durability and isolated training retain their contract.
+        if (getattr(self._connection_session, 'busy_timeout_ms', None) == 250
+                and self._wal_reclaiming.is_set()):
+            with self._wal_keeper_lock:
+                self._wal_writer_deferrals += 1
+            exc = sqlite3.OperationalError('database is locked')
+            exc.sqlite_errorcode = sqlite3.SQLITE_BUSY
+            exc.sqlite_errorname = 'SQLITE_BUSY'
+            raise exc
 
     @contextmanager
     def connection_session(self):

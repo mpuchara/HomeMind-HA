@@ -1,9 +1,9 @@
 {
-  "version": "0.14.195",
+  "version": "0.14.196",
   "release_date": "2026-10-14",
-  "base_version": "0.14.194",
-  "base_commit": "e5b14217dd26a071bc698f89b34fa7d16afa0514",
-  "release_status": "owned-observed-pool-payload-reference-accounting",
+  "base_version": "0.14.195",
+  "base_commit": "141e064e3d62eb36fdaa2553eb05936c3224a475",
+  "release_status": "deferred-writer-wal-reclamation-coordination",
   "release_014140": {
     "scope": "inventory_and_remove_remaining_shipped_feature_Handler_fallbacks_for_Candidate_Live_and_manual_feedback_transport",
     "explicit_routes": "manual_feedback.js, candidate_ui.js, candidate_preference_ui.js, /api/candidates, Candidate Teach-RL status/train, generation history/comparison, /api/candidate-live, /api/live and Candidate discard",
@@ -2759,5 +2759,19 @@
     "benchmark": "docs/benchmarks/CONTEXT_BUFFER_0_14_195_VALIDATION.json",
     "median_observer_speedup": 1.018396920512725
   },
-  "release_validation_tests_passed": 2317
+  "release_validation_tests_passed": 2331,
+  "release_014196": {
+    "scope": "typed_deferred_batch_busy_retry_and_cooperative_wal_reclaim_write_admission",
+    "learning_semantics_changed": false,
+    "storage_limits_changed": false,
+    "native_busy_timeout_ms": 250,
+    "retry_cooldown_seconds": 1,
+    "new_regressions": 14,
+    "validation": "2331 tests passed in WSL without skips; compileall, controlled contention and observer parity passed",
+    "tests_passed": 2331,
+    "benchmark": "docs/benchmarks/DEFERRED_SQLITE_0_14_196_VALIDATION.json",
+    "median_contended_flush_before_ms": 251.8059930000005,
+    "median_contended_flush_after_ms": 0.021512000000001308,
+    "median_observer_speedup": 0.9762394936119455
+  }
 }
