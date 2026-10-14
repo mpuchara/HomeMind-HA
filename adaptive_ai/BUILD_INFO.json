@@ -1,9 +1,9 @@
 {
-  "version": "0.14.192",
+  "version": "0.14.193",
   "release_date": "2026-10-14",
-  "base_version": "0.14.191",
-  "base_commit": "4a82f3a23cf8dd05c6db4f62272da26c816c6837",
-  "release_status": "sealed-context-shadow-ram-and-training-index-budgets",
+  "base_version": "0.14.192",
+  "base_commit": "70e3d94ae843996d66b13717e01351ff53a70e53",
+  "release_status": "readonly-sqlite-page-probe-and-complete-observation-census",
   "release_014140": {
     "scope": "inventory_and_remove_remaining_shipped_feature_Handler_fallbacks_for_Candidate_Live_and_manual_feedback_transport",
     "explicit_routes": "manual_feedback.js, candidate_ui.js, candidate_preference_ui.js, /api/candidates, Candidate Teach-RL status/train, generation history/comparison, /api/candidate-live, /api/live and Candidate discard",
@@ -249,7 +249,7 @@
   "pi4_release_gate_contract": "pi4_release_gate_v1",
   "pi4_real_hardware_required": true,
   "stage7_offline_rl_control_unlock": false,
-  "tests_passed": 2294,
+  "tests_passed": 2301,
   "profile": "rpi4-ram-first-complete-discovery-manual-agent-selection",
   "manual_agent_training": true,
   "max_concurrent_training_jobs": 1,
@@ -2708,5 +2708,17 @@
     "benchmark": "docs/benchmarks/SEALED_SHADOW_RAM_0_14_192_VALIDATION.json",
     "median_observation_speedup": 1.3239545778093489
   },
-  "release_validation_tests_passed": 2294
+  "release_014193": {
+    "scope": "avoid_redundant_page_probes_after_readonly_sql_and_duplicate_full_observation_census",
+    "new_regressions": 7,
+    "writer_page_sampling": "fresh_before_admission_and_after_commit_or_rollback",
+    "fresh_schema_and_promotion_reads": true,
+    "learning_semantics_changed": false,
+    "validation": "2301 tests passed in WSL without skips; compileall and three read/Shadow benchmark pairs passed",
+    "tests_passed": 2301,
+    "benchmark": "docs/benchmarks/READONLY_SQLITE_0_14_193_VALIDATION.json",
+    "median_read_scope_speedup": 2.3258036036054133,
+    "median_shadow_observation_speedup": 1.0453318996078687
+  },
+  "release_validation_tests_passed": 2301
 }

@@ -43,10 +43,22 @@ class StoragePressure(sqlite3.OperationalError):
     """A storage limit was reached before publishing a new transaction."""
 
 
+_READONLY_PAGE_PRAGMAS = frozenset({
+    'page_count', 'page_size', 'freelist_count', 'database_list', 'table_info',
+    'table_xinfo', 'index_list', 'index_info', 'index_xinfo', 'foreign_key_list',
+    'query_only', 'busy_timeout', 'synchronous', 'journal_size_limit', 'temp_store',
+    'cache_size', 'mmap_size', 'wal_autocheckpoint', 'max_page_count',
+})
+
+
+def _clean_sql(sql):
+    return re.sub(r'\A\s*(?:(?:--[^\n]*\n|/\*.*?\*/)\s*)*', '', str(sql), flags=re.S)
+
+
 def _is_write(sql):
     # CTEs are conservatively checked. Read PRAGMAs configure/inspect SQLite only;
     # application data writes through execute/cursor/executescript are guarded.
-    sql = re.sub(r'\A\s*(?:(?:--[^\n]*\n|/\*.*?\*/)\s*)*', '', str(sql), flags=re.S)
+    sql = _clean_sql(sql)
     return sql.split(None, 1)[0].upper() not in ('SELECT', 'EXPLAIN', 'PRAGMA', 'BEGIN', 'ROLLBACK', 'SAVEPOINT') if sql.strip() else False
 
 
@@ -74,7 +86,8 @@ class StorageBudget:
         self.training_process = os.environ.get('ADAPTIVE_AI_TRAINING_WORKER') == '1'
         self.stats = dict(level='normal', reason=None, blocked_writes=0,
                           db_bytes=0, database_used_bytes=0, wal_bytes=0,
-                          free_bytes=None, sample_error=None)
+                          free_bytes=None, sample_error=None, page_observations=0,
+                          readonly_page_observations_skipped=0)
         inherited = os.environ.get('ADAPTIVE_AI_STORAGE_BUDGET')
         if os.environ.get('ADAPTIVE_AI_STORAGE_WORKER') == '1' and inherited:
             try:
@@ -257,6 +270,7 @@ class StorageBudget:
         size = int(sqlite3.Connection.execute(connection, 'PRAGMA page_size').fetchone()[0])
         with self.lock:
             self.stats['database_used_bytes'] = max(0, count - free) * size
+            self.stats['page_observations'] += 1
 
 
 class BudgetConnection(sqlite3.Connection):
@@ -267,6 +281,7 @@ class BudgetConnection(sqlite3.Connection):
     storage_external_authorizer = None
     storage_denial = None
     storage_batch_depth = 0
+    storage_pages_dirty = False
 
     @contextmanager
     def storage_batch(self):
@@ -321,6 +336,17 @@ class BudgetConnection(sqlite3.Connection):
         self.storage_denial = None
         budget = self.storage_budget
         write = budget is not None and _is_write(sql)
+        if budget is not None:
+            # Reused read-only connections do not change page ownership. Avoid
+            # three page PRAGMAs after every SELECT, especially on the microSD.
+            # Non-read statements and data/unknown PRAGMAs remain conservative.
+            pragma = re.match(r'PRAGMA\s+(?:\w+\.)?(\w+)', _clean_sql(sql), re.I)
+            if write or (pragma and pragma[1].lower() not in _READONLY_PAGE_PRAGMAS):
+                if not self.storage_pages_dirty:
+                    # Another process can grow the database between reads. Sample
+                    # actual pages before the next writer's admission as well.
+                    budget.observe_pages(self)
+                self.storage_pages_dirty = True
         if write:
             level = budget.check(parameters, refresh=not self.storage_batch_depth)
             update_tables = getattr(budget.local, 'update_tables', frozenset())
@@ -369,8 +395,12 @@ class BudgetConnection(sqlite3.Connection):
         try:
             return super().__exit__(kind, value, tb)
         finally:
-            if self.storage_budget is not None:
+            if self.storage_budget is not None and self.storage_pages_dirty:
                 self.storage_budget.observe_pages(self)
+                self.storage_pages_dirty = False
+            elif self.storage_budget is not None:
+                with self.storage_budget.lock:
+                    self.storage_budget.stats['readonly_page_observations_skipped'] += 1
 
     def commit(self):
         if self.in_transaction and self.storage_budget is not None:
