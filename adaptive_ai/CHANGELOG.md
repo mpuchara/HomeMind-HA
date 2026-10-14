@@ -1,3 +1,10 @@
+## 0.14.193 (2026-10-14)
+
+- Odczyty SQLite na współdzielonym połączeniu nie powtarzają trzech PRAGMA zajętości bazy po każdym SELECT.
+- Świeży pomiar stron przed nowym zapisem oraz po commit/rollback; DDL i mutujące PRAGMA również odświeżają pomiar.
+- Liczba sensorów odczytywana raz na pełną obserwację Shadow, razem z odczytami statusu przed i po ocenie. Schemat i promocja pozostają świeże.
+- Diagnostyka: liczba pomiarów stron oraz pominiętych pomiarów po samych odczytach.
+
 ## 0.14.192 (2026-10-14)
 
 - Niezmienne źródła modeli kontekstowego Shadow w RAM: świeży SHA przy każdym użyciu bez powtarzanej serializacji.

@@ -1,6 +1,6 @@
-# HomeMind-HA / Adaptive AI 0.14.192
+# HomeMind-HA / Adaptive AI 0.14.193
 
-0.14.192: szybszy kontekstowy Shadow dzięki niezmiennym modelom w RAM oraz większe indeksy treningowe w ramach dotychczasowego limitu pamięci. [Opis zmian](docs/RELEASE_0_14_192_PL.md).
+0.14.193: mniej zapytań SQLite podczas odczytów i jedna kontrola liczby sensorów na pełną obserwację Shadow. Świeża kontrola zajętości bazy przed i po zapisach. [Opis zmian](docs/RELEASE_0_14_193_PL.md).
 
 
 Karta agenta ma cztery akcje: **Shadow/Control**, **Wrong decision**, **Settings** i **Teach**. Wrong decision uczy poprawnego Desired. Teach otwiera powiększalny wykres historii z wyborem dokładnej chwili i zapisem poprawnego Desired. Cofanie ostatniej korekty jest dostępne w Teach oraz Settings; pozostałe operacje i diagnostyka są w Settings.

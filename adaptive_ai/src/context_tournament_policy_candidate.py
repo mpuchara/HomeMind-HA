@@ -1047,11 +1047,8 @@ def install_policy_candidates(service):
             current_context[aid] = {"agent": agent, "states": states, "now": now,
                                     "temporal": shared_temporal}
         try:
-            previous_counts = getattr(tls, "observation_pool_counts", None)
-            tls.observation_pool_counts = {}
             result = original_observe(agent, states, changed_entities)
         finally:
-            tls.observation_pool_counts = previous_counts
             with lock:
                 current_context.pop(aid, None)
             if RUNTIME_DEBUG.enabled:
@@ -1079,7 +1076,17 @@ def install_policy_candidates(service):
                                      "exact_candidate_policy": True})
         return result
 
-    service.observe_shadow = observe_with_candidates
+    def observe_with_pool_census(agent, state_map=None, changed_entities=None):
+        # Include the before/after promotion status reads in the same observation.
+        # Only the census is shared; schema, policy and promotion reads stay fresh.
+        previous_counts = getattr(tls, "observation_pool_counts", None)
+        tls.observation_pool_counts = {}
+        try:
+            return observe_with_candidates(agent, state_map, changed_entities)
+        finally:
+            tls.observation_pool_counts = previous_counts
+
+    service.observe_shadow = observe_with_pool_census
 
     def status_with_candidates(agent):
         payload = original_status(agent)
