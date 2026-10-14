@@ -1,6 +1,6 @@
-# HomeMind-HA / Adaptive AI 0.14.194
+# HomeMind-HA / Adaptive AI 0.14.195
 
-0.14.194: snapshoty Shadow zamrażają bieżące metadane i współdzielą niezmienny model w RAM. Gotowy fragment JSON ogranicza powtarzane kopiowanie i kodowanie, zachowując pełny format zapisu. [Opis zmian](docs/RELEASE_0_14_194_PL.md).
+0.14.195: bufor statystyk współdzieli niezmienny JSON pomiędzy oczekującą wersją wiersza i zapisem w toku, ograniczając wymuszone I/O na ścieżce Shadow przy zachowaniu limitu RAM. Zawiera też optymalizacje snapshotów z .194. [Opis zmian](docs/RELEASE_0_14_195_PL.md).
 
 
 Karta agenta ma cztery akcje: **Shadow/Control**, **Wrong decision**, **Settings** i **Teach**. Wrong decision uczy poprawnego Desired. Teach otwiera powiększalny wykres historii z wyborem dokładnej chwili i zapisem poprawnego Desired. Cofanie ostatniej korekty jest dostępne w Teach oraz Settings; pozostałe operacje i diagnostyka są w Settings.

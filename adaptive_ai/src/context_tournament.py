@@ -95,7 +95,8 @@ class ContextTournament:
             if buffer is None:
                 buffer = ContextRowBuffer(self.store, name, statement,
                     flush_seconds=max(5., min(60., float(OPTIONS.get('context_row_flush_seconds', 30)))),
-                    max_bytes=max(1, min(64, int(OPTIONS.get('context_row_ram_mb', 16)))) * 1024 * 1024)
+                    max_bytes=max(1, min(64, int(OPTIONS.get('context_row_ram_mb', 16)))) * 1024 * 1024,
+                    shared_columns=(13, 14, 15) if name == 'observed_pool' else ())
                 self._context_row_buffers[name] = buffer
             return buffer
 

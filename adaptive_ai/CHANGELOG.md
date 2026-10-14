@@ -1,3 +1,10 @@
+## 0.14.195 (2026-10-14)
+
+- Bufor observed_pool liczy wspólny niezmienny obiekt JSON jeden raz dla tego samego wiersza i kolumny w wersji oczekującej oraz zapisie w toku.
+- Ogranicza fałszywe przekroczenie limitu RAM i wymuszone czekanie na writer w wątku reakcji agenta. Domyślny limit 16 MiB pozostaje bez zmiany.
+- Różne obiekty z równym tekstem i inne wiersze nadal są liczone osobno. Błąd zapisu zachowuje najnowsze pełne liczniki i próbki.
+- Diagnostyka pokazuje liczbę współdzielonych obiektów, referencji i uniknięte podwójne naliczenie. Zawiera optymalizację snapshotów z .194.
+
 ## 0.14.194 (2026-10-14)
 
 - Snapshoty Shadow zachowują niezmienny model przez referencję, zamrażając jedynie bieżące metadane.
