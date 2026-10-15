@@ -11,6 +11,7 @@ from urllib.parse import parse_qs
 
 from settings import (APP_VERSION, OPTIONS, STATIC_DIR, SUPPORTED_TARGETS, clamp, now_ts)
 from training_request_semantics import train_request_decision
+from runtime_threading import configure_runtime_threads
 
 # UI scripts must be available before background runtime composition registers feature routes.
 # Exact names only: never expose arbitrary files or paths from the application directory.
@@ -866,6 +867,7 @@ def run_initialize_runtime():
 
 def main():
     global HTTP_SERVER
+    configure_runtime_threads(OPTIONS)
     try:
         nice_by = int(OPTIONS.get("process_nice", 10))
         if nice_by > 0 and hasattr(os, "nice"):

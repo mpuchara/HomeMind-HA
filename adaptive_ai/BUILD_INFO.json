@@ -1,9 +1,9 @@
 {
-  "version": "0.14.200",
+  "version": "0.14.201",
   "release_date": "2026-10-15",
-  "base_version": "0.14.199",
-  "base_commit": "be2aac45cf71518f58b79b0fd9c31d91e0bf80a5",
-  "release_status": "runtime-ram-cache-local-validation-complete",
+  "base_version": "0.14.200",
+  "base_commit": "aa79300971b369b1815b128cb895f89f032b3883",
+  "release_status": "runtime-hot-path-local-validation-complete",
   "release_014140": {
     "scope": "inventory_and_remove_remaining_shipped_feature_Handler_fallbacks_for_Candidate_Live_and_manual_feedback_transport",
     "explicit_routes": "manual_feedback.js, candidate_ui.js, candidate_preference_ui.js, /api/candidates, Candidate Teach-RL status/train, generation history/comparison, /api/candidate-live, /api/live and Candidate discard",
@@ -249,7 +249,7 @@
   "pi4_release_gate_contract": "pi4_release_gate_v1",
   "pi4_real_hardware_required": true,
   "stage7_offline_rl_control_unlock": false,
-  "tests_passed": 2380,
+  "tests_passed": 2396,
   "profile": "rpi4-ram-first-complete-discovery-manual-agent-selection",
   "manual_agent_training": true,
   "max_concurrent_training_jobs": 1,
@@ -2759,7 +2759,7 @@
     "benchmark": "docs/benchmarks/CONTEXT_BUFFER_0_14_195_VALIDATION.json",
     "median_observer_speedup": 1.018396920512725
   },
-  "release_validation_tests_passed": 2380,
+  "release_validation_tests_passed": 2396,
   "release_014196": {
     "scope": "typed_deferred_batch_busy_retry_and_cooperative_wal_reclaim_write_admission",
     "learning_semantics_changed": false,
@@ -2835,5 +2835,20 @@
     "regression_tests_added": 17,
     "paired_sql_component_speedup": 1.5162008439587475,
     "validation": "Linux Python 3.12.3 full unittest suite; compileall; JavaScript syntax; actual shipped entrypoint ready; result-parity benchmark"
+  },
+  "release_014201": {
+    "scope": "reduce shadow SQL amplification and cooperative thread contention",
+    "thread_switch_ms": 1,
+    "zero_option": "preserve existing interpreter setting",
+    "schema_audit_reads": "one before and one fresh after query per observation, invalidated after committed in-process writes",
+    "warm_candidate": "verify full SHA then skip unnecessary installation-wide state and registry copies",
+    "promotion": "RAM-only necessary gates first; fresh SQLite cooldown for otherwise eligible candidates",
+    "trace": "per-thread CPU and off-CPU wall time when ended on same thread",
+    "control_semantics_changed": false,
+    "tests_passed": 2396,
+    "regression_tests_added": 16,
+    "contended_observation_speedup_median": 4.231282185286296,
+    "uncontended_observation_speedup_median": 0.9498878378101475,
+    "validation": "Linux Python 3.12.3 full suite; full source-paired result parity; compileall; diagnostic JavaScript syntax; exact shipped entrypoint ready"
   }
 }

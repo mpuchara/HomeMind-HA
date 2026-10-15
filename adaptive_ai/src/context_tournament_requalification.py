@@ -21,8 +21,10 @@ PROMOTION_REASON = "sensor_tournament_promotion"
 REQUALIFICATION_REASON = "schema_changed_shadow_requalification"
 
 
-def _latest_history(service, agent_id):
-    rows = service.schema_history(str(agent_id), limit=1)
+def _latest_history(service, agent_id, phase):
+    read = getattr(service, 'schema_history_observation', None)
+    rows = (read(str(agent_id), phase) if callable(read)
+            else service.schema_history(str(agent_id), limit=1))
     return dict(rows[0]) if rows else None
 
 
@@ -37,12 +39,12 @@ def install_promotion_shadow_requalification(service):
 
     def observe_with_shadow_requalification(agent, state_map=None, changed_entities=None):
         aid = str(agent["id"])
-        before_history = _latest_history(service, aid)
+        before_history = _latest_history(service, aid, 'before')
         before_history_id = int(before_history.get("id") or 0) if before_history else 0
 
         result = original_observe(agent, state_map, changed_entities)
 
-        latest = _latest_history(service, aid)
+        latest = _latest_history(service, aid, 'after')
         if not latest or int(latest.get("id") or 0) <= before_history_id:
             return result
         if latest.get("reason") != PROMOTION_REASON or latest.get("status") != "promoted":

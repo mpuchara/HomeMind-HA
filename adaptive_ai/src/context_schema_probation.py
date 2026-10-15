@@ -435,7 +435,9 @@ def install_schema_probation(service):
         aid = str(agent["id"])
         states = dict(state_map or getattr(service.engine, "state_map", {}) or {})
         now = time.time()
-        before_history = service.schema_history(aid, limit=1)
+        history_read = getattr(service, 'schema_history_observation', None)
+        before_history = (history_read(aid, 'before') if callable(history_read)
+                          else service.schema_history(aid, limit=1))
         before_history_id = int(before_history[0]["id"]) if before_history else 0
 
         # Score the prediction made on the previous event before inner Tournament code can
@@ -453,7 +455,8 @@ def install_schema_probation(service):
             else:
                 capture_context.observation = previous
 
-        latest_rows = service.schema_history(aid, limit=1)
+        latest_rows = (history_read(aid, 'after') if callable(history_read)
+                       else service.schema_history(aid, limit=1))
         latest = dict(latest_rows[0]) if latest_rows else None
         if (
             latest and int(latest.get("id") or 0) > before_history_id

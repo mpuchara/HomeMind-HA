@@ -1,0 +1,416 @@
+{
+  "version": "0.14.201",
+  "base_commit": "aa79300971b369b1815b128cb895f89f032b3883",
+  "inputs": [
+    {
+      "file": "adaptive-ai-runtime-debug-20261015-094411.json",
+      "sha256": "8a404145de1215e9c5b2e25c060d60f94a75ee8ab4e283aadc2a2fffddb0a41b",
+      "version": "0.14.200",
+      "generated_at": "2026-10-15T07:44:11.386110+00:00",
+      "rss_mib": 212.15234375,
+      "runtime_cache": {
+        "active": true,
+        "bypasses": 0,
+        "cache_target_mb": 128,
+        "configured_mb": 256,
+        "discards": 3,
+        "effective_mb": 256,
+        "hits": 10482,
+        "idle": 0,
+        "leased": 2,
+        "max_connections": 4,
+        "misses": 5,
+        "mmap_mb": 0
+      },
+      "blocked_writes": 0,
+      "metrics": {
+        "wrapped_inference": {
+          "avg_ms": 331.15476392881595,
+          "count": 10485,
+          "p95_ms": 470.46957595739514,
+          "recent_count": 177,
+          "recent_p95_ms": 519.2783160018735
+        },
+        "event_to_decision": {
+          "avg_ms": 246.76310308384197,
+          "count": 10485,
+          "p95_ms": 396.54123299987987,
+          "recent_count": 177,
+          "recent_p95_ms": 394.580676977057
+        },
+        "context_shadow_observation": {
+          "avg_ms": 228.67196833137595,
+          "count": 10485,
+          "p95_ms": 342.86640997743234,
+          "recent_count": 177,
+          "recent_p95_ms": 344.13250896614045
+        },
+        "context_candidate_load": {
+          "avg_ms": 7.798354930349754,
+          "count": 41953,
+          "p95_ms": 18.206838984042406,
+          "recent_count": 512,
+          "recent_p95_ms": 18.206838984042406
+        },
+        "context_candidate_features": {
+          "avg_ms": 13.161554546258781,
+          "count": 41948,
+          "p95_ms": 31.612575985491276,
+          "recent_count": 512,
+          "recent_p95_ms": 31.612575985491276
+        },
+        "context_candidate_validation": {
+          "avg_ms": 5.942565373832075,
+          "count": 41949,
+          "p95_ms": 13.13585095340386,
+          "recent_count": 512,
+          "recent_p95_ms": 13.13585095340386
+        }
+      }
+    },
+    {
+      "file": "adaptive-ai-runtime-debug-20261015-094429.json",
+      "sha256": "837d1bde83b2dba6a93a3fffb6036b4dbd5167e701dd000673daa6f7af1eee86",
+      "version": "0.14.200",
+      "generated_at": "2026-10-15T07:44:29.627521+00:00",
+      "rss_mib": 223.921875,
+      "runtime_cache": {
+        "active": true,
+        "bypasses": 0,
+        "cache_target_mb": 128,
+        "configured_mb": 256,
+        "discards": 3,
+        "effective_mb": 256,
+        "hits": 10536,
+        "idle": 2,
+        "leased": 0,
+        "max_connections": 4,
+        "misses": 5,
+        "mmap_mb": 0
+      },
+      "blocked_writes": 0,
+      "metrics": {
+        "wrapped_inference": {
+          "avg_ms": 330.9969715389064,
+          "count": 10541,
+          "p95_ms": 470.46957595739514,
+          "recent_count": 181,
+          "recent_p95_ms": 493.830549006816
+        },
+        "event_to_decision": {
+          "avg_ms": 246.1200739525934,
+          "count": 10539,
+          "p95_ms": 396.54123299987987,
+          "recent_count": 181,
+          "recent_p95_ms": 361.679706024006
+        },
+        "context_shadow_observation": {
+          "avg_ms": 228.6016393016135,
+          "count": 10541,
+          "p95_ms": 343.3374250307679,
+          "recent_count": 181,
+          "recent_p95_ms": 344.13250896614045
+        },
+        "context_candidate_load": {
+          "avg_ms": 7.799778487836289,
+          "count": 42169,
+          "p95_ms": 19.917969999369234,
+          "recent_count": 512,
+          "recent_p95_ms": 19.917969999369234
+        },
+        "context_candidate_features": {
+          "avg_ms": 13.153716459818575,
+          "count": 42164,
+          "p95_ms": 29.795982991345227,
+          "recent_count": 512,
+          "recent_p95_ms": 29.795982991345227
+        },
+        "context_candidate_validation": {
+          "avg_ms": 5.942092422354751,
+          "count": 42165,
+          "p95_ms": 13.642402016557753,
+          "recent_count": 512,
+          "recent_p95_ms": 13.642402016557753
+        }
+      }
+    }
+  ],
+  "benchmarks": {
+    "contended": {
+      "synthetic": true,
+      "actual_independent_source_checkouts": true,
+      "baseline": "0.14.200",
+      "challengers": 4,
+      "sensor_history_rows_per_entity": 24,
+      "background_cpu_thread": true,
+      "ram_first_pool_buffer": true,
+      "series": [
+        {
+          "previous": {
+            "passes": 24,
+            "observation_total_ms": 2126.192321000005,
+            "observation_median_ms": 77.78993649999987,
+            "feature_total_ms": 54.111731999996415,
+            "feature_median_ms": 0.46656700000013984,
+            "full_checksum_calls": 96,
+            "feature_observation_computations_per_pass": 128,
+            "every_feature_label_meta_and_prediction_sha256": "cdc44a75956d811af34e40a09ddb2e8134a9000fcb270d1d8714947af5031bb8",
+            "reuse_snapshot": null,
+            "thread_switch_ms": 5.0,
+            "background_work_units_per_second": 9942.695826127681,
+            "process_cpu_seconds_per_second": 1.006455303965325
+          },
+          "current": {
+            "passes": 24,
+            "observation_total_ms": 456.27053399999886,
+            "observation_median_ms": 16.364177999999452,
+            "feature_total_ms": 63.33178799999928,
+            "feature_median_ms": 0.5052345000002845,
+            "full_checksum_calls": 96,
+            "feature_observation_computations_per_pass": 128,
+            "every_feature_label_meta_and_prediction_sha256": "cdc44a75956d811af34e40a09ddb2e8134a9000fcb270d1d8714947af5031bb8",
+            "reuse_snapshot": null,
+            "thread_switch_ms": 1.0,
+            "background_work_units_per_second": 7864.773927106321,
+            "process_cpu_seconds_per_second": 1.0296763376724598
+          },
+          "observation_speedup": 4.659937827587197,
+          "feature_speedup": 0.8544166161864407
+        },
+        {
+          "current": {
+            "passes": 24,
+            "observation_total_ms": 639.3770529999987,
+            "observation_median_ms": 27.665422500000147,
+            "feature_total_ms": 78.02777099998792,
+            "feature_median_ms": 0.4979304999999101,
+            "full_checksum_calls": 96,
+            "feature_observation_computations_per_pass": 128,
+            "every_feature_label_meta_and_prediction_sha256": "cdc44a75956d811af34e40a09ddb2e8134a9000fcb270d1d8714947af5031bb8",
+            "reuse_snapshot": null,
+            "thread_switch_ms": 1.0,
+            "background_work_units_per_second": 6661.951591342298,
+            "process_cpu_seconds_per_second": 1.0371610711021038
+          },
+          "previous": {
+            "passes": 24,
+            "observation_total_ms": 1831.9923140000008,
+            "observation_median_ms": 61.54534349999974,
+            "feature_total_ms": 51.806197999999526,
+            "feature_median_ms": 0.45041999999906324,
+            "full_checksum_calls": 96,
+            "feature_observation_computations_per_pass": 128,
+            "every_feature_label_meta_and_prediction_sha256": "cdc44a75956d811af34e40a09ddb2e8134a9000fcb270d1d8714947af5031bb8",
+            "reuse_snapshot": null,
+            "thread_switch_ms": 5.0,
+            "background_work_units_per_second": 10586.799642037035,
+            "process_cpu_seconds_per_second": 1.0066477455153908
+          },
+          "observation_speedup": 2.865276921347386,
+          "feature_speedup": 0.6639456354585286
+        },
+        {
+          "previous": {
+            "passes": 24,
+            "observation_total_ms": 1668.7533529999926,
+            "observation_median_ms": 61.452243999998934,
+            "feature_total_ms": 51.66460699999398,
+            "feature_median_ms": 0.448761499999506,
+            "full_checksum_calls": 96,
+            "feature_observation_computations_per_pass": 128,
+            "every_feature_label_meta_and_prediction_sha256": "cdc44a75956d811af34e40a09ddb2e8134a9000fcb270d1d8714947af5031bb8",
+            "reuse_snapshot": null,
+            "thread_switch_ms": 5.0,
+            "background_work_units_per_second": 10681.12051921602,
+            "process_cpu_seconds_per_second": 1.0050637055678153
+          },
+          "current": {
+            "passes": 24,
+            "observation_total_ms": 394.38479399999693,
+            "observation_median_ms": 15.298114000001029,
+            "feature_total_ms": 51.062038000008414,
+            "feature_median_ms": 0.42879449999944086,
+            "full_checksum_calls": 96,
+            "feature_observation_computations_per_pass": 128,
+            "every_feature_label_meta_and_prediction_sha256": "cdc44a75956d811af34e40a09ddb2e8134a9000fcb270d1d8714947af5031bb8",
+            "reuse_snapshot": null,
+            "thread_switch_ms": 1.0,
+            "background_work_units_per_second": 8642.93549086822,
+            "process_cpu_seconds_per_second": 1.0224694854826029
+          },
+          "observation_speedup": 4.231282185286296,
+          "feature_speedup": 1.011800723660608
+        }
+      ],
+      "observation_speedup_median": 4.231282185286296,
+      "feature_speedup_median": 0.8544166161864407,
+      "limit": "Host component fixture with real candidates, full checksum, vectors, metadata, prediction and SQLite. Excludes HA ingress and concurrent checkpoint I/O; not a device latency forecast."
+    },
+    "uncontended": {
+      "synthetic": true,
+      "actual_independent_source_checkouts": true,
+      "baseline": "0.14.200",
+      "challengers": 4,
+      "sensor_history_rows_per_entity": 24,
+      "background_cpu_thread": false,
+      "ram_first_pool_buffer": true,
+      "series": [
+        {
+          "previous": {
+            "passes": 64,
+            "observation_total_ms": 206.58598499999493,
+            "observation_median_ms": 2.983565500000118,
+            "feature_total_ms": 123.34888999999549,
+            "feature_median_ms": 0.39435399999998566,
+            "full_checksum_calls": 256,
+            "feature_observation_computations_per_pass": 128,
+            "every_feature_label_meta_and_prediction_sha256": "4cdd598c734ab7b3a6a005a7bcdbf6f5394f4d09b9fbee56be3daa3e516adc29",
+            "reuse_snapshot": null,
+            "thread_switch_ms": 5.0,
+            "background_work_units_per_second": null,
+            "process_cpu_seconds_per_second": 0.9981492141151351
+          },
+          "current": {
+            "passes": 64,
+            "observation_total_ms": 217.48460899999955,
+            "observation_median_ms": 3.2344264999997208,
+            "feature_total_ms": 130.92359900001503,
+            "feature_median_ms": 0.4127384999996764,
+            "full_checksum_calls": 256,
+            "feature_observation_computations_per_pass": 128,
+            "every_feature_label_meta_and_prediction_sha256": "4cdd598c734ab7b3a6a005a7bcdbf6f5394f4d09b9fbee56be3daa3e516adc29",
+            "reuse_snapshot": null,
+            "thread_switch_ms": 1.0,
+            "background_work_units_per_second": null,
+            "process_cpu_seconds_per_second": 0.9942077036808306
+          },
+          "observation_speedup": 0.9498878378101475,
+          "feature_speedup": 0.94214405150886
+        },
+        {
+          "current": {
+            "passes": 64,
+            "observation_total_ms": 230.75405099999278,
+            "observation_median_ms": 3.4282765000002158,
+            "feature_total_ms": 136.56445999999357,
+            "feature_median_ms": 0.43024150000015027,
+            "full_checksum_calls": 256,
+            "feature_observation_computations_per_pass": 128,
+            "every_feature_label_meta_and_prediction_sha256": "4cdd598c734ab7b3a6a005a7bcdbf6f5394f4d09b9fbee56be3daa3e516adc29",
+            "reuse_snapshot": null,
+            "thread_switch_ms": 1.0,
+            "background_work_units_per_second": null,
+            "process_cpu_seconds_per_second": 0.9984782665094238
+          },
+          "previous": {
+            "passes": 64,
+            "observation_total_ms": 213.140144999997,
+            "observation_median_ms": 3.10060850000049,
+            "feature_total_ms": 127.61832700000575,
+            "feature_median_ms": 0.4079980000000205,
+            "full_checksum_calls": 256,
+            "feature_observation_computations_per_pass": 128,
+            "every_feature_label_meta_and_prediction_sha256": "4cdd598c734ab7b3a6a005a7bcdbf6f5394f4d09b9fbee56be3daa3e516adc29",
+            "reuse_snapshot": null,
+            "thread_switch_ms": 5.0,
+            "background_work_units_per_second": null,
+            "process_cpu_seconds_per_second": 0.9986487708721312
+          },
+          "observation_speedup": 0.9236680529608716,
+          "feature_speedup": 0.9344914994722034
+        },
+        {
+          "previous": {
+            "passes": 64,
+            "observation_total_ms": 247.57959700000674,
+            "observation_median_ms": 3.509533999999981,
+            "feature_total_ms": 148.09099300000207,
+            "feature_median_ms": 0.43904649999948475,
+            "full_checksum_calls": 256,
+            "feature_observation_computations_per_pass": 128,
+            "every_feature_label_meta_and_prediction_sha256": "4cdd598c734ab7b3a6a005a7bcdbf6f5394f4d09b9fbee56be3daa3e516adc29",
+            "reuse_snapshot": null,
+            "thread_switch_ms": 5.0,
+            "background_work_units_per_second": null,
+            "process_cpu_seconds_per_second": 0.9986113718790535
+          },
+          "current": {
+            "passes": 64,
+            "observation_total_ms": 250.74590800000962,
+            "observation_median_ms": 3.699846500001769,
+            "feature_total_ms": 149.51448199998296,
+            "feature_median_ms": 0.47969900000133237,
+            "full_checksum_calls": 256,
+            "feature_observation_computations_per_pass": 128,
+            "every_feature_label_meta_and_prediction_sha256": "4cdd598c734ab7b3a6a005a7bcdbf6f5394f4d09b9fbee56be3daa3e516adc29",
+            "reuse_snapshot": null,
+            "thread_switch_ms": 1.0,
+            "background_work_units_per_second": null,
+            "process_cpu_seconds_per_second": 0.9986599859768471
+          },
+          "observation_speedup": 0.9873724320159085,
+          "feature_speedup": 0.9904792567185495
+        }
+      ],
+      "observation_speedup_median": 0.9498878378101475,
+      "feature_speedup_median": 0.94214405150886,
+      "limit": "Host component fixture with real candidates, full checksum, vectors, metadata, prediction and SQLite. Excludes HA ingress and concurrent checkpoint I/O; not a device latency forecast."
+    }
+  },
+  "tests": {
+    "status": "passed",
+    "count": 2396,
+    "seconds": 290.472,
+    "new_regressions": 16,
+    "platform": "Linux WSL Ubuntu",
+    "python": "3.12.3",
+    "compileall": "passed",
+    "diagnostic_javascript_syntax": "passed",
+    "entrypoint_smoke": {
+      "entrypoint": "adaptive_ai/src/trial_queue_main.py",
+      "health": {
+        "ok": true,
+        "ready": true,
+        "startup": {
+          "current_state_seconds": 0.04107658700002048,
+          "elapsed_seconds": 0.2813558578491211,
+          "error": null,
+          "message": "Adaptive AI runtime is ready",
+          "ready": true,
+          "started_at": 1792051756.676351,
+          "state": "ready",
+          "step": 7,
+          "steps": 7,
+          "timings": {
+            "building_runtime": 0.1434,
+            "http_ready": 0.0576,
+            "http_starting": 0.0097,
+            "loading_runtime": 0.0157,
+            "reconciling_control": 0.0001,
+            "starting_engine": 0.0007,
+            "starting_history": 0.0127,
+            "starting_realtime": 0.0005
+          }
+        },
+        "version": "0.14.201"
+      }
+    }
+  },
+  "scope": [
+    "full candidate SHA and predict/score/learn order retained",
+    "no feature math changes",
+    "no storage protection removal",
+    "no CPU affinity or OS priority changes"
+  ],
+  "limits": [
+    "Synthetic contended CPU fixture is not a device latency forecast",
+    "Off-CPU time combines I/O, locks, OS scheduling and interpreter waits",
+    "Background-work/sec and uncontended timing tradeoffs retained in raw series"
+  ],
+  "benchmark_tool_note": "After measurement only indentation and an unused null cache-snapshot field were cleaned; runtime and comparison math unchanged",
+  "previous_release_ci": {
+    "version": "0.14.200",
+    "run_id": 38665741087,
+    "conclusion": "success"
+  }
+}

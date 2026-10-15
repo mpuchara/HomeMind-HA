@@ -13,6 +13,9 @@ calls Executor, or invokes Home Assistant services.
 import json
 import math
 import time
+import copy
+import threading
+from contextlib import contextmanager
 
 from context import action_values
 from context_tournament_metrics import metric_row
@@ -89,6 +92,50 @@ def install_schema_history(service):
             """
         )
 
+    history_tls = threading.local()
+    history_lock = threading.RLock()
+    history_revision = 0
+    history_reads = {"reads": 0, "hits": 0}
+
+    def invalidate_history():
+        nonlocal history_revision
+        with history_lock:
+            history_revision += 1
+
+    @contextmanager
+    def schema_history_frame():
+        previous = getattr(history_tls, 'frame', None)
+        if previous is None:
+            history_tls.frame = {}
+        try:
+            yield
+        finally:
+            history_tls.frame = previous
+
+    def schema_history_observation(agent_id, phase):
+        # Probation and requalification share a before-read and an independently
+        # fresh after-read. No row crosses observations or before/after phases.
+        frame = getattr(history_tls, 'frame', None)
+        if frame is None or phase not in ('before', 'after'):
+            return schema_history(agent_id, limit=1)
+        key = (str(agent_id), phase)
+        with history_lock:
+            revision = history_revision
+            cached = frame.get(key)
+            if cached is not None and cached[0] == revision:
+                history_reads['hits'] += 1
+                return copy.deepcopy(cached[1])
+        rows = schema_history(agent_id, limit=1)
+        with history_lock:
+            history_reads['reads'] += 1
+            if revision == history_revision and len(frame) < 8:
+                frame[key] = (revision, copy.deepcopy(rows))
+        return rows
+
+    def history_cache_snapshot():
+        with history_lock:
+            return {**history_reads, "scope": "one_observation_before_after", "persistent_entries": 0}
+
     def record_schema_history(*, agent_id, old_schema, new_schema, reason,
                               baseline_score=None, challenger_score=None,
                               evaluation_samples=0, promoted_entity=None,
@@ -114,7 +161,9 @@ def install_schema_history(service):
                     None if removed_entity is None else str(removed_entity), status,
                 ),
             )
-            return int(cur.lastrowid)
+            created_id = int(cur.lastrowid)
+        invalidate_history()
+        return created_id
 
     def set_schema_history_status(history_id, status):
         status = str(status)
@@ -125,7 +174,10 @@ def install_schema_history(service):
                 "UPDATE context_schema_history SET status=? WHERE id=?",
                 (status, int(history_id)),
             )
-            return int(cur.rowcount or 0) > 0
+            changed = int(cur.rowcount or 0) > 0
+        if changed:
+            invalidate_history()
+        return changed
 
     def schema_history(agent_id, limit=50):
         limit = max(1, min(500, int(limit or 50)))
@@ -150,6 +202,9 @@ def install_schema_history(service):
     service.set_schema_history_status = set_schema_history_status
     service.schema_history = schema_history
     service.schema_history_by_id = schema_history_by_id
+    service.schema_history_frame = schema_history_frame
+    service.schema_history_observation = schema_history_observation
+    service.schema_history_cache_snapshot = history_cache_snapshot
 
     original_observe = service.observe_shadow
 

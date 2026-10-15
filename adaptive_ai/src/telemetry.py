@@ -128,6 +128,8 @@ class RuntimeDebugTrace:
                 "thread": threading.current_thread().name,
                 "started_at": row["ts"],
                 "started_mono": started_mono,
+                "started_thread_cpu": time.thread_time(),
+                "thread_ident": threading.get_ident(),
                 "fields": dict(fields),
             }
             return token
@@ -142,10 +144,15 @@ class RuntimeDebugTrace:
             duration_ms = max(0.0, (time.monotonic() - float(active["started_mono"])) * 1000.0)
             if not self.enabled:
                 return duration_ms
+            scheduling = {}
+            if active.get('thread_ident') == threading.get_ident():
+                cpu_ms = max(0, time.thread_time() - active['started_thread_cpu']) * 1000
+                scheduling = dict(thread_cpu_ms=round(cpu_ms, 3),
+                                  off_cpu_ms=round(max(0, duration_ms - cpu_ms), 3))
             row = self._append_locked(
                 "end",
                 active["operation"],
-                fields={**active.get("fields", {}), **fields},
+                fields={**active.get("fields", {}), **fields, **scheduling},
                 token=str(token),
                 status=str(status),
                 duration_ms=round(duration_ms, 3),

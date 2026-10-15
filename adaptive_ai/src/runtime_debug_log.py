@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 from contextlib import nullcontext
 import json
 import threading
+from runtime_threading import runtime_threading_snapshot
 
 from settings import APP_VERSION
 from telemetry import HEAVY_JOBS, RUNTIME_DEBUG, TELEMETRY
@@ -136,6 +137,9 @@ class RuntimeDebugLogService:
             tournament = getattr(engine, 'context_tournament', None)
             if tournament is not None:
                 context_persistence = tournament.shadow_persistence_snapshot()
+                history_cache = getattr(tournament, 'schema_history_cache_snapshot', None)
+                if callable(history_cache):
+                    context_persistence['schema_history_reads'] = history_cache()
             for name, owner, method in (
                 ("provenance", engine, "provenance_deferred_snapshot"),
                 ("feature_journal", engine, "feature_observation_deferred_snapshot"),
@@ -178,6 +182,7 @@ class RuntimeDebugLogService:
             },
             "history": self._history_status(),
             "sqlite": sqlite_status,
+            "runtime_threads": runtime_threading_snapshot(),
             "model_encoding_cache": MODEL_ENCODING_CACHE.snapshot(),
             "sealed_policy_snapshots": sealed_policy_snapshot(),
             "shadow_json_encoding_cache": shadow_json_snapshot(),
