@@ -1200,8 +1200,10 @@ class Engine(threading.Thread):
         while not self.stop_event.is_set():
             event_wakeup = self.wake_event.wait(tick)
             self.wake_event.clear()
-            if event_wakeup and debounce:
-                # Coalesce bursts (motion + lux + light state etc.) into one inference pass.
+            with self.lock:
+                retry_ready = bool(self.ready_target_changes)
+            if event_wakeup and debounce and not retry_ready:
+                # Ready retries already waited for the preceding pipeline. Coalesce bursts (motion + lux + light state etc.) into one inference pass.
                 self.stop_event.wait(debounce)
             try:
                 # Expiration is in-memory and affects current inference semantics. Durable
@@ -1581,6 +1583,8 @@ class Engine(threading.Thread):
             max(0.0, (time.perf_counter() - min(received_values)) * 1000.0)
             if received_values else None
         )
+        if oldest_event_age_ms is not None:
+            TELEMETRY.observe('event_to_target_start', oldest_event_age_ms)
         target_trace = (RUNTIME_DEBUG.begin(
             "inference_target",
             target_entity=str((agents[0] if agents else {}).get("target_entity") or "unknown"),
@@ -1852,6 +1856,8 @@ class Engine(threading.Thread):
             matches = same_value(current, pending["action_value"], agent["deadband"])
             age = timestamp - pending["started_ts"]
             if matches and pending.get("acknowledged_ts") is None:
+                from action_latency import acknowledged
+                acknowledged(rt, pending)
                 pending["acknowledged_ts"] = timestamp
                 rt["ack_latency_seconds"] = age
             elif pending.get("acknowledged_ts") is None and age >= timing.acknowledgement:
@@ -2049,12 +2055,17 @@ class Engine(threading.Thread):
         decision_source = base_decision_source
         if composer is not None:
             composer_started_ns = time.perf_counter_ns()
-            composed = composer.compose(
-                agent=agent, policy=policy, state_map=state_map, temporal=self.temporal_history,
-                timestamp=now_ts(), features=features, labels=labels, chosen=chosen,
-                confidence=confidence, arms=arms, horizon=horizon, support=support,
-                novelty=novelty, runtime=rt, registry=self.context.resolved_registry,
-            )
+            from decision_observation import decision_observation
+            # Instructions and preference matching consume exactly the observation
+            # that produced the policy proposal, including its causal timestamp.
+            with decision_observation(policy, state_map, shared_temporal, inference_ts,
+                                      (features, labels, context_meta)):
+                composed = composer.compose(
+                    agent=agent, policy=policy, state_map=state_map, temporal=shared_temporal,
+                    timestamp=inference_ts, features=features, labels=labels, chosen=chosen,
+                    confidence=confidence, arms=arms, horizon=horizon, support=support,
+                    novelty=novelty, runtime=rt, registry=self.context.resolved_registry,
+                )
             observe_elapsed(self, "decision_composer", composer_started_ns)
             chosen = composed["chosen"]
             confidence = composed["confidence"]

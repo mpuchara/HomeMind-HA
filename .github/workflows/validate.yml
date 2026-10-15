@@ -62,6 +62,9 @@ jobs:
       - name: 0.14.201 contended runtime full candidate checksum smoke
         if: matrix.python == '3.11'
         run: python tools/benchmark_runtime_hot_path.py --one --passes 8 --contended
+      - name: 0.14.202 causal observation handoff smoke
+        if: matrix.python == '3.11'
+        run: python tools/benchmark_reaction_observation.py --one --passes 8
       - name: 0.14.172 targeted retries terminate without peer replay
         if: matrix.python == '3.11'
         run: python tools/benchmark_target_retries.py --targets 4 --completions 32 --compact

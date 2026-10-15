@@ -102,12 +102,8 @@ def _agent_payloads(self):
         internal = core.ENGINE.runtime.get(agent["id"]) or {}
         runtime["event_to_service_ms"] = internal.get("event_to_service_ms")
         runtime["intent_to_service_ms"] = internal.get("intent_to_service_ms")
-        ack = runtime.get("ack_latency_seconds")
-        runtime["service_to_ack_ms"] = None if ack is None else float(ack) * 1000.0
-        if runtime.get("event_to_service_ms") is not None and runtime.get("service_to_ack_ms") is not None:
-            runtime["event_to_ack_ms"] = float(runtime["event_to_service_ms"]) + float(runtime["service_to_ack_ms"])
-        else:
-            runtime["event_to_ack_ms"] = None
+        runtime["service_to_ack_ms"] = internal.get("service_to_ack_ms")
+        runtime["event_to_ack_ms"] = internal.get("event_to_ack_ms")
         with core.ENGINE.lock:
             target_state = core.ENGINE.state_map.get(agent["target_entity"])
         agent["control_qualification"] = core.assess_control_qualification(agent)

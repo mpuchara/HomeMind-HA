@@ -115,7 +115,7 @@ def run(baseline, passes=24, contended=False):
         assert pair['previous']['every_feature_label_meta_and_prediction_sha256'] == pair['current']['every_feature_label_meta_and_prediction_sha256']
         series.append(dict(**pair, observation_speedup=pair['previous']['observation_total_ms'] / pair['current']['observation_total_ms'],
                            feature_speedup=pair['previous']['feature_total_ms'] / pair['current']['feature_total_ms']))
-    return dict(synthetic=True, actual_independent_source_checkouts=True, baseline='0.14.200',
+    return dict(synthetic=True, actual_independent_source_checkouts=True, baseline=json.loads((baseline / 'adaptive_ai/BUILD_INFO.json').read_text(encoding='utf-8'))['version'],
                 challengers=4, sensor_history_rows_per_entity=24, background_cpu_thread=contended,
                 ram_first_pool_buffer=True, series=series,
                 observation_speedup_median=statistics.median(row['observation_speedup'] for row in series),

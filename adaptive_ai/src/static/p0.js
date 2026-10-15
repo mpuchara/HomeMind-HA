@@ -36,13 +36,16 @@
     const liveCount=Number(latency.recent_count||0), candidateCount=Number(candidateLatency.recent_count||0);
     const liveRecent=liveCount>0&&latency.recent_p95_ms!=null?latency.recent_p95_ms:null;
     const candidateRecent=candidateCount>0&&candidateLatency.recent_p95_ms!=null?candidateLatency.recent_p95_ms:null;
+    const commandLatency=status.telemetry?.metrics?.event_to_service_dispatch||{};
+    const commandCount=Number(commandLatency.recent_count||0);
+    const commandP95=commandCount>0?commandLatency.recent_p95_ms:null;
     const p95=liveRecent??candidateRecent;
     const p95Label=liveRecent!=null
       ?'event → decision p95 · '+liveCount+' samples · last 60 s'
       :candidateRecent!=null
         ?'event → Candidate decision p95 · '+candidateCount+' samples · last 60 s'
         :'event → decision p95 · waiting · 0 samples';
-    $('#overview').innerHTML=`<div class="metric"><b>${lastAgents.length||status.agent_count||0}</b><span>agents</span></div><div class="metric"><b>${control}</b><span>Control · ${shadow} Shadow</span></div><div class="metric"><b>${status.state_count||0}</b><span>HA entities</span></div><div class="metric"><b>${p95==null?'—':ms(p95)}</b><span>${p95Label}</span></div>`;
+    $('#overview').innerHTML=`<div class="metric"><b>${lastAgents.length||status.agent_count||0}</b><span>agents</span></div><div class="metric"><b>${control}</b><span>Control · ${shadow} Shadow</span></div><div class="metric"><b>${status.state_count||0}</b><span>HA entities</span></div><div class="metric"><b>${p95==null?'—':ms(p95)}</b><span>${p95Label}</span></div><div class="metric"><b>${commandP95==null?'waiting':ms(commandP95)}</b><span>event → HA command p95 · ${commandCount} samples · last 60 s</span></div>`;
     const c=$('#connection'), s=status.startup||{}, rt=status.realtime||{};
     if (!s.ready) { c.textContent=s.error?'Startup error':`Starting · ${s.step||0}/${s.steps||7}`; c.className='pill'; return; }
     c.textContent=status.ha_connected?`HA connected${rt.connected?' · realtime':' · REST fallback'}`:`Connecting to HA${status.ha_error?' · '+status.ha_error:''}`;
@@ -84,7 +87,7 @@
   $('#diagnosticsPanel')?.addEventListener('toggle',()=>{ if($('#diagnosticsPanel').open) oldHome(lastStatus); });
 
   const driver = a => { const c=a.runtime?.context_meta||{}, xs=c.primary_behavioural_drivers||[]; return c.primary_occupancy_sensor||xs[0]||c.primary_local_sensor||null; };
-  const latency = a => { const r=a.runtime||{}; if(r.event_to_ack_ms!=null)return `event → device ${ms(r.event_to_ack_ms)}`; if(r.event_to_service_ms!=null)return `event → command ${ms(r.event_to_service_ms)}`; if(r.last_service_latency_ms!=null)return `HA call ${ms(r.last_service_latency_ms)}`; return r.realtime_connected?'⚡ realtime':'REST fallback'; };
+  const latency = a => { const r=a.runtime||{}; if(r.event_to_ack_ms!=null)return `event → state ACK ${ms(r.event_to_ack_ms)}`; if(r.event_to_service_ms!=null)return `event → command ${ms(r.event_to_service_ms)}`; if(r.last_service_latency_ms!=null)return `HA call ${ms(r.last_service_latency_ms)}`; return r.realtime_connected?'⚡ realtime':'REST fallback'; };
   const controlBlockReason = a => {
     if ((a.runtime?.training_state||a.training_state)!=='qualified') return 'Complete training and the historical benchmark first.';
     if (a.control_review && !a.control_review.ready) return a.control_review.approval_required && !a.control_review.approved ? 'Review this generic target in Settings before Control.' : 'Device capabilities changed; review the target again.';

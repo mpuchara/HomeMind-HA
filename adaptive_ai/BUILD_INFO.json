@@ -1,5 +1,5 @@
 {
-  "version": "0.14.201",
+  "version": "0.14.202",
   "release_date": "2026-10-15",
   "base_version": "0.14.200",
   "base_commit": "aa79300971b369b1815b128cb895f89f032b3883",
@@ -2850,5 +2850,17 @@
     "contended_observation_speedup_median": 4.231282185286296,
     "uncontended_observation_speedup_median": 0.9498878378101475,
     "validation": "Linux Python 3.12.3 full suite; full source-paired result parity; compileall; diagnostic JavaScript syntax; exact shipped entrypoint ready"
+  },
+  "release_014202": {
+    "scope": "reduce event-to-action computation and measure actual service boundaries",
+    "observation_reuse": "one policy observation and causal timestamp for Teach and preference composition; thread-scoped identity/revision guards",
+    "retry_debounce": "ready target retries skip the extra coalescing delay",
+    "communication_cache": "one causal decision; exact entity/current-state identity and timestamp",
+    "action_timing": "event to worker/decision/service request/response/state observation; no Shadow service samples",
+    "tests_passed": 2406,
+    "regression_tests_added": 10,
+    "validation": "2406 Linux Python 3.12.3 tests; three source-paired comparisons with full result parity; shipped entrypoint ready; compileall; JavaScript syntax; normalized tested-source hashes",
+    "explicit_feedback_component_speedup_median": 1.883772784589349,
+    "candidate_observation_component_speedup_median": 1.1375396032476166
   }
 }
