@@ -104,7 +104,7 @@ class SharedEntityFeaturesTests(unittest.TestCase):
     def test_agent_states_temporal_or_timestamp_identity_mismatch_bypasses(self):
         with self.frame(), patch.object(observation, '_entity_observation', wraps=observation._entity_observation) as compute:
             self.build()
-            for kwargs in ({'agent': dict(self.agent)}, {'state_map': dict(self.states)},
+            for kwargs in ({'agent': self.agent | {'target_property': 'temperature'}}, {'state_map': dict(self.states)},
                            {'temporal': copy.deepcopy(self.temporal)}, {'at_ts': 1_700_000_101.}):
                 before = compute.call_count
                 self.build(**kwargs)

@@ -1196,7 +1196,7 @@ class Engine(threading.Thread):
         except Exception as exc:
             self.error = f"{type(exc).__name__}: {exc}"
         tick = max(0.5, float(OPTIONS.get("proactive_tick_seconds", 1)))
-        debounce = max(0.0, float(OPTIONS.get("realtime_inference_debounce_ms", 150)) / 1000.0)
+        debounce = max(0.0, float(OPTIONS.get("realtime_inference_debounce_ms", 0)) / 1000.0)
         while not self.stop_event.is_set():
             event_wakeup = self.wake_event.wait(tick)
             self.wake_event.clear()

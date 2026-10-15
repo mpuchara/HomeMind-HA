@@ -1,0 +1,98 @@
+{
+  "platform": "Linux WSL Ubuntu",
+  "python": "3.12.3",
+  "numpy": "2.3.3",
+  "tests_passed": 2455,
+  "tests_skipped": 0,
+  "full_suite_seconds": 347.889,
+  "new_regression_tests": 18,
+  "compileall": "passed",
+  "all_shipped_javascript_syntax": "passed",
+  "entrypoint": {
+    "entrypoint": "adaptive_ai/src/trial_queue_main.py",
+    "health": {
+      "ok": true,
+      "ready": true,
+      "startup": {
+        "current_state_seconds": 0.1166852810000023,
+        "elapsed_seconds": 2.624321222305298,
+        "error": null,
+        "message": "Adaptive AI runtime is ready",
+        "ready": true,
+        "started_at": 1792087306.0517657,
+        "state": "ready",
+        "step": 7,
+        "steps": 7,
+        "timings": {
+          "building_runtime": 1.3991,
+          "http_ready": 0.5232,
+          "http_starting": 0.1682,
+          "loading_runtime": 0.3618,
+          "reconciling_control": 0.0001,
+          "starting_engine": 0.0003,
+          "starting_history": 0.054,
+          "starting_realtime": 0.001
+        }
+      },
+      "version": "0.14.205"
+    }
+  },
+  "guarded_control_dispatch_smoke": {
+    "events": 8,
+    "all_events_completed": true,
+    "actual_executor_control": true,
+    "root_prediction_fixture": true,
+    "ha_network": false,
+    "decisions_sha256": "9c486185884fa76d218de5f1a450e26c3c1ff2b24f73b68e3478ffcc0e9c6147",
+    "event_to_executor_median_ms": 7.3345575000018925,
+    "event_to_executor_p95_ms": 8.241788999981736,
+    "event_to_service_dispatch_ms": 11.780660999988868,
+    "service_calls": 1,
+    "process_cpu_seconds": 0.06645873600000002,
+    "elapsed_seconds": 0.06691036799998074,
+    "observation_scheduler": {
+      "interval_ms": 1000.0,
+      "executed": 1,
+      "skipped": 7,
+      "target_forced": 0,
+      "errors": 0,
+      "tracked_agents": 1,
+      "max_agents": 256,
+      "scope": "Engine-dispatched candidate observations; target events always admitted"
+    },
+    "debounce_ms": 0
+  },
+  "benchmark_report": "docs/benchmarks/CONTROL_PRIORITY_0_14_205_BENCHMARK.json",
+  "baseline_commit": "653b8b4f2e387d9c1b17319f84c073d964f953fe",
+  "median_reaction_speedup": 3.670167817930187,
+  "median_service_dispatch_speedup": 2.5871435563823173,
+  "candidate_observation_sampling_changed": true,
+  "target_label_admission": "all dispatched target events and value/availability changes bypass cooldown; own-command labels remain excluded",
+  "cold_or_failed_observation": "first/changed policy or schema and failed attempts are admitted",
+  "control_and_storage_guards_changed": false,
+  "new_worker_threads": 0,
+  "maximum_scheduled_agents": 256,
+  "legacy_cadence_option": "runtime_shadow_observation_interval_ms=0",
+  "hash_format": "LF normalized UTF-8 bytes",
+  "tested_source_sha256": {
+    "adaptive_ai/src/engine.py": "2432315c91e0c87ca0077b7f763d2a8c740d521bf5220a7593e230d6bb146701",
+    "adaptive_ai/src/context_tournament.py": "9a29cd914a7c4aba3c189c37c055c711129a39b5ed59e464e6f5a85924721490",
+    "adaptive_ai/src/context_tournament_policy_candidate.py": "8c84b3289a1e1923bd5fffd4deed2fcbb8d1d5a8422520cd2d221a621243a7ca",
+    "adaptive_ai/src/shared_observation_features.py": "8b6009e9c4339e8808c7742dd7801256fd926522308804a62825941027df9eff",
+    "adaptive_ai/src/shadow_observation_scheduler.py": "ff2ddc6e8203da3a730beea9733f003bc5dd35e160634455b0c21083adebe671",
+    "adaptive_ai/src/settings.py": "5ee6d72c582ce437fa0da89f1f654203bcd79385d22664ad63b9f58df8324bfd",
+    "adaptive_ai/src/runtime_debug_log.py": "b1d89414ba73e4207de2994f8520243315f0a21e3a7a542d547ebf3b2993e373",
+    "adaptive_ai/config.yaml": "e7ce2d4fd42196a6df87619da3f65afc62940f2815d107ed0a45e5bfee9c5784",
+    "adaptive_ai/Dockerfile": "6181ac32750d6eb053dfdd59db8e45256f657a709f038025326d882213e53a44",
+    "adaptive_ai/src/static/index.html": "55425c2f7565fb87e49c1435cff175997398b67c913dba0b34a39df08ce3a54d",
+    "tests/test_release_204_shared_entity_features.py": "a9aab3cb7f1c966ef2abb9410f7a5d8502ce78fd21772ba3cdfc65e5c725ec84",
+    "tests/test_release_205_control_priority.py": "d0dc184a2541d5bc33613ace3f0ad2af7ac1a86264e25ec7f28790949527faf1",
+    "tools/benchmark_control_priority.py": "96565f6004090690e077d5a6be354b4e389e310e0152c087f09dabbd2a4685ed"
+  },
+  "limits": [
+    "host component benchmark; deterministic Root action/confidence",
+    "real Control Executor dispatches to an HA stub",
+    "shipped outer observers, HA network, physical device ACK, Raspberry Pi SD/checkpoint I/O not measured",
+    "current device exports contain no HA service dispatch samples"
+  ]
+}

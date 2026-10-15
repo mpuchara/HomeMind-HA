@@ -15,7 +15,7 @@ try:
 except Exception:
     ws_connect = None
 
-APP_VERSION = "0.14.204"
+APP_VERSION = "0.14.205"
 HISTORY_BOOTSTRAP_REVISION = "target-attrs-v2"
 TRAINING_REVISION = "shared-home-intents-v26"
 DATA_DIR = Path(os.environ.get("ADAPTIVE_AI_DATA", "/data"))
@@ -49,7 +49,7 @@ DEFAULT_OPTIONS = {
     # The 1 s engine tick is a lightweight deadline scheduler, not a global inference loop.
     "fast_idle_inference_interval_seconds": 30,
     "idle_inference_interval_seconds": 30,
-    "realtime_inference_debounce_ms": 25,
+    "realtime_inference_debounce_ms": 0,
     "prediction_lead_seconds": 1,  # reactive default: act ~1s before the historical/manual action
     "prediction_horizons_seconds": "1",
     "correction_window_seconds": 90,
@@ -120,6 +120,7 @@ DEFAULT_OPTIONS = {
     "runtime_sqlite_cache_mb": 256,
     "runtime_episode_comparison_cache_mb": 64,
     "runtime_thread_switch_ms": 1,
+    "runtime_shadow_observation_interval_ms": 1000,
     "storage_min_free_mb": 2048,
     "archive_context_interval_seconds": 30,
     "auto_agent_min_changes": 2,
@@ -443,10 +444,10 @@ def load_options():
                 options["auto_agent_recent_days"] = 14
             if data.get("feature_dimensions") == 192:
                 options["feature_dimensions"] = 128
-            # v0.7.3: migrate the old shipped realtime debounce so existing installs
-            # actually receive the local-first fast-light latency improvement.
-            if data.get("realtime_inference_debounce_ms") == 75:
-                options["realtime_inference_debounce_ms"] = 25
+            # 0.14.205: ship immediate first-event admission. Busy-target sets
+            # still coalesce bursts; preserve other explicitly configured delays.
+            if data.get("realtime_inference_debounce_ms") in (25, 75):
+                options["realtime_inference_debounce_ms"] = 0
             # 0.14.15: migrate only the previously shipped defaults. Explicit custom
             # values remain untouched; the new defaults make long historical replay
             # suitable for Raspberry Pi class hosts.
