@@ -31,6 +31,7 @@ from context import (
 from home_state import FEATURE_NAMES as LEGACY_HOME_FEATURE_NAMES
 from provenance import stable_event_id
 from settings import OPTIONS, clamp, iso_now, now_ts, parse_ts
+from shared_observation_features import entity_observation_cache, MAX_ENTRIES
 from training_budget import TRAINING_BUDGET
 from state_event_pipeline import install_state_event_wrapper
 from process_agent_pipeline import install_process_agent_wrapper
@@ -568,6 +569,99 @@ def _feature_observation(schema, entity_id, state, agent, state_map, temporal,
     }
 
 
+def _entity_observation(schema, eid, state_map, temporal, at_ts, agent, excluded,
+                        fast_profile, feature_contract, lags):
+    """Schema-position-independent values with independently owned metadata."""
+    usable, reconstructable, reasons = 0, True, []
+    current_ts, current = (None, None) if eid in excluded else _resolve_current_state(eid, state_map, temporal, at_ts)
+    obs, photometric = _feature_observation(
+        schema, eid, current, agent, state_map, temporal, at_ts, at_ts
+    )
+    if obs["valid"]:
+        usable = 1
+    received = _latest_communication(temporal, eid, at_ts, current=current)
+    event_ts = _sample_event_time(current, fallback=current_ts) if current is not None else None
+    event_age = None if event_ts is None else max(0.0, at_ts - event_ts)
+    communication_age = None if received is None else max(0.0, at_ts - received)
+    # Lux edges produced by the controlled lamp are downstream effects, not causal
+    # context. Contract 2 therefore neutralizes this one timing slot; contract 1
+    # retains the exact historical representation for persisted old models.
+    edge_ts = (None if photometric is not None else
+               (_last_edge_time(temporal, eid, at_ts, current) if current is not None else None))
+    edge_age = None if edge_ts is None else max(0.0, at_ts - edge_ts)
+    quality, reporting_mode = _source_quality(current, obs, fast_profile)
+    lag_values = []
+    lag_coverage = []
+    for lag in lags:
+        query_ts = at_ts - lag
+        _, previous = _lag_state(eid, current, temporal, query_ts, at_ts)
+        pobs, _ = _feature_observation(
+            schema, eid, previous, agent, state_map, temporal, query_ts, at_ts
+        )
+        covered = bool(previous is not None and pobs["valid"])
+        lag_coverage.append(covered)
+        if obs["valid"] and pobs["valid"] and obs["kind"] != "category" and pobs["kind"] != "category":
+            lag_values.append(float(obs["value"]) - float(pobs["value"]))
+        else:
+            lag_values.append(0.0)
+    exact_received = received is not None
+    numeric_fast_gap = bool(fast_profile and obs["kind"] == "numeric"
+                            and (not exact_received or not all(lag_coverage)))
+    if obs["valid"] and numeric_fast_gap:
+        reconstructable = False
+        reasons.append(f"{eid}:high_resolution_numeric_history_unavailable")
+        quality = min(quality, 0.35)
+    if not obs["valid"]:
+        reconstructable = False
+        reasons.append(f"{eid}:value_unavailable")
+    if received is None:
+        reasons.append(f"{eid}:communication_time_unknown")
+    fast_light_v2 = bool(
+        feature_contract >= PHOTOMETRIC_FEATURE_CONTRACT_VERSION and fast_profile and agent
+        and (feature_contract >= 3 or str(agent.get("target_entity") or "").split(".", 1)[0] == "light")
+        and str(agent.get("target_property") or "") == "power"
+    )
+    if fast_light_v2:
+        # Contract 1 encoded nominal transport metadata as repeated positive
+        # predictors for every entity. In a diagonal per-action model those nearly
+        # constant columns accumulate a class-frequency bias (normally toward OFF).
+        # Contract 2 centers nominal health at zero; only actual degradation/missing
+        # evidence occupies these slots. Unknown transport timestamps are neutral,
+        # not equivalent to "maximally stale".
+        valid_feature = 0.0 if obs["valid"] else -1.0
+        communication_feature = (
+            0.0 if received is None else _age_feature(communication_age)
+        )
+        event_feature = (0.0 if not obs["valid"] or
+                         (feature_contract >= 3 and event_ts is None) else _age_feature(event_age))
+        if not obs["valid"]:
+            quality_feature = -1.0
+        elif received is None and reporting_mode in ("stateful_sparse", "sparse_numeric"):
+            quality_feature = 0.0
+        else:
+            quality_feature = float(quality) - 1.0
+        edge_feature = 0.0 if edge_ts is None else _age_feature(edge_age)
+    else:
+        valid_feature = float(obs["valid"])
+        communication_feature = _age_feature(communication_age)
+        event_feature = _age_feature(event_age)
+        quality_feature = float(quality)
+        edge_feature = _age_feature(edge_age)
+
+    values = (float(obs["value"]), valid_feature, communication_feature,
+              event_feature, quality_feature, float(lag_values[0]),
+              float(lag_values[1]), float(lag_values[2]), edge_feature,
+              float(obs["category"][0]), float(obs["category"][1]), float(obs["category"][2]))
+    metadata = {"kind": obs["kind"], "canonical_unit": obs.get("canonical_unit"),
+                        "valid": bool(obs["valid"]), "event_time": event_ts,
+                        "received_time": received, "communication_age_seconds": communication_age,
+                        "event_age_seconds": event_age, "time_since_edge_seconds": edge_age,
+                        "quality": quality, "reporting_mode": reporting_mode,
+                        "lag_seconds": list(lags), "lag_coverage": lag_coverage,
+                        "photometric": photometric}
+    return values, metadata, usable, reconstructable, tuple(reasons)
+
+
 def build_observation_features(schema, state_map, temporal, at_ts=None, agent=None, excluded_entities=None):
     from datetime import datetime
     at_ts = float(at_ts if at_ts is not None else now_ts())
@@ -598,101 +692,38 @@ def build_observation_features(schema, state_map, temporal, at_ts=None, agent=No
         long = float(OPTIONS.get("temporal_long_seconds", 300))
         lags = (short, long, max(long * 2.0, short))
 
+    cache = entity_observation_cache(agent, state_map, temporal, at_ts)
+    semantic_key = (type(schema), feature_contract, fast_profile, lags,
+                    str((agent or {}).get('target_entity') or ''),
+                    str((agent or {}).get('target_property') or ''))
     for eid in schema.entities:
         if idx >= limit:
             break
-        current_ts, current = (None, None) if eid in excluded else _resolve_current_state(eid, state_map, temporal, at_ts)
-        obs, photometric = _feature_observation(
-            schema, eid, current, agent, state_map, temporal, at_ts, at_ts
-        )
-        if obs["valid"]:
-            usable += 1
-        received = _latest_communication(temporal, eid, at_ts, current=current)
-        event_ts = _sample_event_time(current, fallback=current_ts) if current is not None else None
-        event_age = None if event_ts is None else max(0.0, at_ts - event_ts)
-        communication_age = None if received is None else max(0.0, at_ts - received)
-        # Lux edges produced by the controlled lamp are downstream effects, not causal
-        # context. Contract 2 therefore neutralizes this one timing slot; contract 1
-        # retains the exact historical representation for persisted old models.
-        edge_ts = (None if photometric is not None else
-                   (_last_edge_time(temporal, eid, at_ts, current) if current is not None else None))
-        edge_age = None if edge_ts is None else max(0.0, at_ts - edge_ts)
-        quality, reporting_mode = _source_quality(current, obs, fast_profile)
-        lag_values = []
-        lag_coverage = []
-        for lag in lags:
-            query_ts = at_ts - lag
-            _, previous = _lag_state(eid, current, temporal, query_ts, at_ts)
-            pobs, _ = _feature_observation(
-                schema, eid, previous, agent, state_map, temporal, query_ts, at_ts
+        key = (eid, semantic_key, eid in excluded)
+        descriptor = cache.get(key) if cache is not None else None
+        if descriptor is None:
+            descriptor = _entity_observation(
+                schema, eid, state_map, temporal, at_ts, agent, excluded,
+                fast_profile, feature_contract, lags,
             )
-            covered = bool(previous is not None and pobs["valid"])
-            lag_coverage.append(covered)
-            if obs["valid"] and pobs["valid"] and obs["kind"] != "category" and pobs["kind"] != "category":
-                lag_values.append(float(obs["value"]) - float(pobs["value"]))
-            else:
-                lag_values.append(0.0)
-        exact_received = received is not None
-        numeric_fast_gap = bool(fast_profile and obs["kind"] == "numeric"
-                                and (not exact_received or not all(lag_coverage)))
-        if obs["valid"] and numeric_fast_gap:
-            reconstructable = False
-            reasons.append(f"{eid}:high_resolution_numeric_history_unavailable")
-            quality = min(quality, 0.35)
-        if not obs["valid"]:
-            reconstructable = False
-            reasons.append(f"{eid}:value_unavailable")
-        if received is None:
-            reasons.append(f"{eid}:communication_time_unknown")
-        fast_light_v2 = bool(
-            feature_contract >= PHOTOMETRIC_FEATURE_CONTRACT_VERSION and fast_profile and agent
-            and (feature_contract >= 3 or str(agent.get("target_entity") or "").split(".", 1)[0] == "light")
-            and str(agent.get("target_property") or "") == "power"
-        )
-        if fast_light_v2:
-            # Contract 1 encoded nominal transport metadata as repeated positive
-            # predictors for every entity. In a diagonal per-action model those nearly
-            # constant columns accumulate a class-frequency bias (normally toward OFF).
-            # Contract 2 centers nominal health at zero; only actual degradation/missing
-            # evidence occupies these slots. Unknown transport timestamps are neutral,
-            # not equivalent to "maximally stale".
-            valid_feature = 0.0 if obs["valid"] else -1.0
-            communication_feature = (
-                0.0 if received is None else _age_feature(communication_age)
-            )
-            event_feature = (0.0 if not obs["valid"] or
-                             (feature_contract >= 3 and event_ts is None) else _age_feature(event_age))
-            if not obs["valid"]:
-                quality_feature = -1.0
-            elif received is None and reporting_mode in ("stateful_sparse", "sparse_numeric"):
-                quality_feature = 0.0
-            else:
-                quality_feature = float(quality) - 1.0
-            edge_feature = 0.0 if edge_ts is None else _age_feature(edge_age)
-        else:
-            valid_feature = float(obs["valid"])
-            communication_feature = _age_feature(communication_age)
-            event_feature = _age_feature(event_age)
-            quality_feature = float(quality)
-            edge_feature = _age_feature(edge_age)
-
-        values = (float(obs["value"]), valid_feature, communication_feature,
-                  event_feature, quality_feature, float(lag_values[0]),
-                  float(lag_values[1]), float(lag_values[2]), edge_feature,
-                  float(obs["category"][0]), float(obs["category"][1]), float(obs["category"][2]))
+            if cache is not None and len(cache) < MAX_ENTRIES:
+                cache[key] = descriptor
+        values, metadata, entity_usable, entity_complete, entity_reasons = descriptor
+        usable += entity_usable
+        reconstructable = reconstructable and entity_complete
+        reasons.extend(entity_reasons)
+        # Callers may annotate metadata. Never expose the cached nested objects.
+        entity_meta[eid] = (metadata if cache is None else
+                           {**metadata, 'lag_seconds': list(metadata['lag_seconds']),
+                            'lag_coverage': list(metadata['lag_coverage']),
+                            'photometric': (dict(metadata['photometric'])
+                                            if metadata['photometric'] is not None else None)})
         for value in values:
             if idx >= limit:
                 break
             if abs(value) > 1e-12:
                 vec[idx] = value
             idx += 1
-        entity_meta[eid] = {"kind": obs["kind"], "canonical_unit": obs.get("canonical_unit"),
-                            "valid": bool(obs["valid"]), "event_time": event_ts,
-                            "received_time": received, "communication_age_seconds": communication_age,
-                            "event_age_seconds": event_age, "time_since_edge_seconds": edge_age,
-                            "quality": quality, "reporting_mode": reporting_mode,
-                            "lag_seconds": list(lags), "lag_coverage": lag_coverage,
-                            "photometric": photometric}
     return vec, labels, {"feature_contract_version": feature_contract,
                          "schema_version": SCHEMA_VERSION,
                          "usable_entities": usable, "selected_entities": len(schema.entities),

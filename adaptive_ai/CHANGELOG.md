@@ -1,3 +1,10 @@
+## 0.14.204
+
+- Share schema-position-independent entity descriptors across candidate policies during one synchronous Shadow observation. Each policy still receives owned vectors, labels and nested metadata.
+- Keep strict agent/state/temporal identity, causal timestamp, semantic contract, lag and exclusion boundaries. Bound reuse to 256 entries, discard on scope exit and fall back to fresh computation on mismatch or capacity.
+- Preserve full checksum verification per candidate, prequential scoring, post-label learning and promotion gates. No retraining is required.
+- Add independent-source parity and component benchmarks; measured host results are not a Raspberry Pi latency guarantee.
+
 ## 0.14.199
 
 - Reuse worker-owned SQLite connections for provenance, feature-journal and context persistence while retaining independent transactions and rollback/admission checks.

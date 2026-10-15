@@ -1,0 +1,76 @@
+{
+  "platform": "Linux WSL Ubuntu",
+  "python": "3.12.3",
+  "numpy": "2.3.3",
+  "tests_passed": 2437,
+  "tests_skipped": 0,
+  "new_regressions": 15,
+  "full_suite_seconds": 286.877,
+  "compileall": "passed",
+  "javascript_syntax": "all shipped JS passed",
+  "entrypoint": {
+    "entrypoint": "adaptive_ai/src/trial_queue_main.py",
+    "health": {
+      "ok": true,
+      "ready": true,
+      "startup": {
+        "current_state_seconds": 0.056339166000043406,
+        "elapsed_seconds": 1.119642734527588,
+        "error": null,
+        "message": "Adaptive AI runtime is ready",
+        "ready": true,
+        "started_at": 1792072435.507157,
+        "state": "ready",
+        "step": 7,
+        "steps": 7,
+        "timings": {
+          "building_runtime": 0.6234,
+          "http_ready": 0.1693,
+          "http_starting": 0.0787,
+          "loading_runtime": 0.1347,
+          "reconciling_control": 0.0001,
+          "starting_engine": 0.0004,
+          "starting_history": 0.0556,
+          "starting_realtime": 0.0011
+        }
+      },
+      "version": "0.14.204"
+    }
+  },
+  "source_computation_extraction": "Text-identical to 0.14.203 apart from local usable-entity counter; vectors/labels/metadata/decisions/learned heads independently compared",
+  "baseline_commit": "058f3a32ff55474d516fcd564ccd1f1bf0fbfbd4",
+  "full_model_sha_verification_unchanged": true,
+  "features_observation_calls_before_after": [
+    128,
+    44
+  ],
+  "feature_speedup_uncontended_median": 1.3544956656208456,
+  "observation_speedup_uncontended_median": 1.1966818289935026,
+  "observation_time_reduction_uncontended_percent": 16.43559919004758,
+  "feature_speedup_contended_median": 1.1885123311394568,
+  "observation_speedup_contended_median": 1.0388764302732436,
+  "contended_total_time_result": "variable; no stable end-to-end gain established",
+  "tested_source_sha256": {
+    "adaptive_ai/src/observation_contract.py": "eb451a866f9e2b9aecbc0135fb55a5e5887bc5a0801079511e2ad52b55f06eaf",
+    "adaptive_ai/src/context_tournament_policy_candidate.py": "62df2e468d15b15fac7c47f19f75d0834af4f8de43f81b66855b232a72b5a9ed",
+    "adaptive_ai/src/shared_observation_features.py": "4657bed145c793a689c565e3ac6cc9079ebe7749b08567cb6a8545cbbfdb714f",
+    "adaptive_ai/src/settings.py": "542a0d4a14c7011d0bbc57ca2a98ad6e88fddcab0128dc509e0812c34edfc2a6",
+    "adaptive_ai/config.yaml": "73b7fedeb54daaaf58b16a7fb0fa555e0420873190100fdfe33ce0040fe052cd",
+    "adaptive_ai/Dockerfile": "d0e188a000951b625a200c5e44e0164bc50ab6ae0215bd8dfa87b2f7795e18da",
+    "adaptive_ai/src/static/index.html": "db3322db8c15a5747d2946d5bc6cdb7fe0219082ab2e08f74c4f0534e4cf7191",
+    "tests/test_release_204_shared_entity_features.py": "5b94f9f6f676990ab374e1e0f995c09e0a6433d257f5e203c0856e2991af232e",
+    "tools/benchmark_shadow_features.py": "49f08799c742549ecf291ab58a6ce091e42ed7fbde4b2220f8df1480d1a6ea46"
+  },
+  "hash_format": "LF normalized UTF-8 bytes",
+  "not_verified": [
+    "Raspberry Pi measurements",
+    "HA network and device ACK latency",
+    "concurrent microSD checkpoint I/O",
+    "Docker image build locally"
+  ],
+  "report_paths": [
+    "docs/benchmarks/SHADOW_FEATURES_0_14_204_UNCONTENDED.json",
+    "docs/benchmarks/SHADOW_FEATURES_0_14_204_CONTENDED.json",
+    "docs/benchmarks/SHADOW_FEATURES_0_14_204_DIAGNOSIS.json"
+  ]
+}

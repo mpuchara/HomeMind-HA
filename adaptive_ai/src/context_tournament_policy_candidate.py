@@ -30,6 +30,7 @@ from policy_backend import verify_model_checksum
 from sealed_policy_snapshot import SealedPolicy, seal_policy
 from settings import OPTIONS
 from shared_inference_context import shared_inference_temporal
+from shared_observation_features import shared_entity_observations
 from telemetry import RUNTIME_DEBUG, TELEMETRY
 from training_phase_metrics import measure_training_phase
 
@@ -1065,7 +1066,8 @@ def install_policy_candidates(service):
             current_context[aid] = {"agent": agent, "states": states, "now": now,
                                     "temporal": shared_temporal}
         try:
-            result = original_observe(agent, states, changed_entities)
+            with shared_entity_observations(agent, states, shared_temporal, now):
+                result = original_observe(agent, states, changed_entities)
         finally:
             with lock:
                 current_context.pop(aid, None)

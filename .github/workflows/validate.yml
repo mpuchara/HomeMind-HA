@@ -286,6 +286,7 @@ jobs:
                       prefix+'src/runtime_debug_log.py',
                       prefix+'src/runtime_sqlite_cache.py',
                       prefix+'src/runtime_threading.py',
+                      prefix+'src/shared_observation_features.py',
                   ):
                       assert required in names, (archive, required)
           print('verified package version/layout/runtime files:', expected)
