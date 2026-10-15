@@ -74,6 +74,8 @@ class SharedInferenceTemporal:
         self.causal_asof_hits = 0
         self.causal_asof_misses = 0
         self._last_change_cache = {}
+        self._communication_cache = {}
+        self.communication_hits = self.communication_misses = 0
         self.sample_hits = 0
         self.sample_misses = 0
         self.previous_hits = 0
@@ -162,6 +164,21 @@ class SharedInferenceTemporal:
         self.last_change_misses += 1
         return value
 
+    def latest_communication(self, entity_id, at_ts, current, compute):
+        # Match the exact current object as well as entity/time. Keeping a strong
+        # reference avoids id reuse; the frame dies with this causal decision.
+        if float(at_ts) != self.timestamp:
+            return compute(self, entity_id, at_ts, current)
+        key = (str(entity_id), id(current))
+        cached = self._communication_cache.get(key, _MISSING)
+        if cached is not _MISSING and cached[0] is current:
+            self.communication_hits += 1
+            return cached[1]
+        value = compute(self, entity_id, at_ts, current)
+        self._communication_cache[key] = (current, value)
+        self.communication_misses += 1
+        return value
+
     def observation_edge(self, entity_id, at_ts, current, compute):
         # Last valid value edge depends only on this observation's materialized
         # entity history and fallback timestamp, not a policy's schema or weights.
@@ -181,6 +198,8 @@ class SharedInferenceTemporal:
         return {
             "contract_version": self.CONTRACT_VERSION,
             "timestamp": self.timestamp if math.isfinite(self.timestamp) else None,
+            "communication_hits": self.communication_hits,
+            "communication_misses": self.communication_misses,
             "sample_entities_materialized": len(self._samples_cache),
             "sample_hits": self.sample_hits,
             "sample_misses": self.sample_misses,

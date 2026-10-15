@@ -12,6 +12,7 @@ from settings import (OPTIONS, now_ts)
 from storage import STORE
 from ha import HA, AUTOMATION_KNOWLEDGE
 from telemetry import TELEMETRY
+from action_latency import service_started, service_returned
 from rewards import RewardEngine
 from control_handoff import ControlHandoff
 from qualification import assess_control_qualification
@@ -340,8 +341,14 @@ class Executor:
                   device_dispatch_semantics=plan.get('semantics'))
         engine.record_command(agent, value)
         started = now_ts()
+        request_started = service_started(engine, rt, started)
         try:
-            response = self._service(domain, service, data)
+            request_ok = False
+            try:
+                response = self._service(domain, service, data)
+                request_ok = True
+            finally:
+                service_returned(rt, request_started, request_ok)
             engine.record_command(agent, value, response)
         except Exception as exc:
             self.device_agents.finish_dispatch(reservation, success=False)

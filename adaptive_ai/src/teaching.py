@@ -42,7 +42,8 @@ def signature(policy, states, temporal, timestamp):
         for e in entities
     ):
         return None
-    features, labels, meta = policy.features(states, temporal, at_ts=timestamp)
+    from decision_observation import signature_features
+    features, labels, meta = signature_features(policy, states, temporal, timestamp)
     result = {}
     for index, parts in labels.items():
         if int(index) <= 0:

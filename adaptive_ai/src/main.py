@@ -440,12 +440,8 @@ class Handler(BaseHTTPRequestHandler):
                     internal = ENGINE.runtime.get(a["id"]) or {}
                     runtime["event_to_service_ms"] = internal.get("event_to_service_ms")
                     runtime["intent_to_service_ms"] = internal.get("intent_to_service_ms")
-                    ack = runtime.get("ack_latency_seconds")
-                    runtime["service_to_ack_ms"] = None if ack is None else float(ack) * 1000.0
-                    if runtime.get("event_to_service_ms") is not None and runtime.get("service_to_ack_ms") is not None:
-                        runtime["event_to_ack_ms"] = float(runtime["event_to_service_ms"]) + float(runtime["service_to_ack_ms"])
-                    else:
-                        runtime["event_to_ack_ms"] = None
+                    runtime["service_to_ack_ms"] = internal.get("service_to_ack_ms")
+                    runtime["event_to_ack_ms"] = internal.get("event_to_ack_ms")
                     with ENGINE.lock:
                         target_state = ENGINE.state_map.get(a["target_entity"])
                     a["control_qualification"] = assess_control_qualification(a)

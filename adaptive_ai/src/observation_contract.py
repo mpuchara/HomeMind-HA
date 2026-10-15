@@ -262,6 +262,13 @@ def _sample_before(temporal, entity_id, query_ts, knowledge_ts):
 
 
 def _latest_communication(temporal, entity_id, at_ts, current=None):
+    shared = getattr(temporal, "latest_communication", None)
+    if callable(shared):
+        return shared(entity_id, at_ts, current, _compute_latest_communication)
+    return _compute_latest_communication(temporal, entity_id, at_ts, current)
+
+
+def _compute_latest_communication(temporal, entity_id, at_ts, current=None):
     latest = None
     for ts, st in _samples(temporal, entity_id):
         if float(ts) > float(at_ts) + 1e-9:
@@ -725,7 +732,8 @@ def teaching_signature(policy, states, temporal, timestamp):
     """
     if not list(policy.schema.entities):
         return None
-    features, labels, meta = policy.features(states, temporal, at_ts=timestamp)
+    from decision_observation import signature_features
+    features, labels, meta = signature_features(policy, states, temporal, timestamp)
     if not meta.get("reconstruction_complete", False):
         return None
     result = {" / ".join(labels[i]): float(features.get(i, 0.0))

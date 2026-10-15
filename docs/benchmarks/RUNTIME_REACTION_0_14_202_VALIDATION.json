@@ -1,0 +1,436 @@
+{
+  "runtime_before": [
+    {
+      "input_file": "adaptive-ai-runtime-debug-20261015-113205.json",
+      "sha256": "7cdee27a2cfcb7bf62a41586aee134343e558d8261883f57ff87ecc7aed857c7",
+      "app_version": "0.14.201",
+      "generated_at": "2026-10-15T09:32:05.510891+00:00",
+      "rss_mb": 214.15625,
+      "cpu_percent_recent": 115.52124302564836,
+      "metrics": {
+        "event_to_decision": {
+          "avg_ms": 186.82329235823772,
+          "count": 4717,
+          "p95_ms": 438.96693002898246,
+          "recent_count": 176,
+          "recent_p95_ms": 543.9202709821984
+        },
+        "inference": {
+          "avg_ms": 68.20315453190587,
+          "count": 4720,
+          "p95_ms": 132.9913520021364,
+          "recent_count": 176,
+          "recent_p95_ms": 165.84722301922739
+        },
+        "wrapped_inference": {
+          "avg_ms": 309.83958448495673,
+          "count": 4718,
+          "p95_ms": 527.6453050319105,
+          "recent_count": 174,
+          "recent_p95_ms": 602.9838749673218
+        },
+        "context_shadow_observation": {
+          "avg_ms": 212.4468255250796,
+          "count": 4718,
+          "p95_ms": 363.21684397989884,
+          "recent_count": 174,
+          "recent_p95_ms": 467.9014510475099
+        },
+        "decision_to_executor": {
+          "avg_ms": 0.8692370710763252,
+          "count": 4720,
+          "p95_ms": 3.3643919741734862,
+          "recent_count": 176,
+          "recent_p95_ms": 4.131032037548721
+        }
+      },
+      "intent_counts": {
+        "intent_rejected": 462,
+        "intent_shadow": 4258
+      },
+      "trace": {
+        "context_shadow_observation": {
+          "count": 41,
+          "average_wall_ms": 277.3568780487805,
+          "average_thread_cpu_ms": 125.96112195121951,
+          "average_off_cpu_ms": 151.39575609756096
+        },
+        "inference_agent": {
+          "count": 41,
+          "average_wall_ms": 399.83468292682926,
+          "average_thread_cpu_ms": 182.3349512195122,
+          "average_off_cpu_ms": 217.4998048780488
+        }
+      },
+      "worker_admission_trace": {
+        "count": 41,
+        "mean_ms": 100.47065853658536,
+        "max_ms": 433.885,
+        "p95_ms": 324.442
+      }
+    },
+    {
+      "input_file": "adaptive-ai-runtime-debug-20261015-113229.json",
+      "sha256": "6eee9fd93f4a963a32632a15608f65c98e7985545cdfc165cc45bf99929f724c",
+      "app_version": "0.14.201",
+      "generated_at": "2026-10-15T09:32:29.452779+00:00",
+      "rss_mb": 204.11328125,
+      "cpu_percent_recent": 129.0796085592688,
+      "metrics": {
+        "event_to_decision": {
+          "avg_ms": 186.10798459873624,
+          "count": 4790,
+          "p95_ms": 440.16009505139664,
+          "recent_count": 176,
+          "recent_p95_ms": 554.7496630460955
+        },
+        "inference": {
+          "avg_ms": 68.25686388690774,
+          "count": 4793,
+          "p95_ms": 138.77503294497728,
+          "recent_count": 176,
+          "recent_p95_ms": 165.84722301922739
+        },
+        "wrapped_inference": {
+          "avg_ms": 310.188560037767,
+          "count": 4791,
+          "p95_ms": 537.1261649997905,
+          "recent_count": 176,
+          "recent_p95_ms": 696.7242200043984
+        },
+        "context_shadow_observation": {
+          "avg_ms": 212.65839023547267,
+          "count": 4791,
+          "p95_ms": 378.97772301221266,
+          "recent_count": 176,
+          "recent_p95_ms": 502.2664919961244
+        },
+        "decision_to_executor": {
+          "avg_ms": 0.8683043030197889,
+          "count": 4793,
+          "p95_ms": 3.3643919741734862,
+          "recent_count": 176,
+          "recent_p95_ms": 3.6289080162532628
+        }
+      },
+      "intent_counts": {
+        "intent_rejected": 466,
+        "intent_shadow": 4327
+      },
+      "trace": {
+        "context_shadow_observation": {
+          "count": 43,
+          "average_wall_ms": 209.60602325581397,
+          "average_thread_cpu_ms": 102.4273023255814,
+          "average_off_cpu_ms": 107.17862790697674
+        },
+        "inference_agent": {
+          "count": 43,
+          "average_wall_ms": 308.03904651162793,
+          "average_thread_cpu_ms": 149.8963023255814,
+          "average_off_cpu_ms": 158.1427441860465
+        }
+      },
+      "worker_admission_trace": {
+        "count": 43,
+        "mean_ms": 56.421813953488375,
+        "max_ms": 495.048,
+        "p95_ms": 159.6
+      }
+    },
+    {
+      "input_file": "adaptive-ai-runtime-debug-20261015-113253.json",
+      "sha256": "014714f1d9ea80fc96c8a829496491b0b584b541dde08e680e8e59b0dadce448",
+      "app_version": "0.14.201",
+      "generated_at": "2026-10-15T09:32:52.888726+00:00",
+      "rss_mb": 212.96484375,
+      "cpu_percent_recent": 118.70240002287407,
+      "metrics": {
+        "event_to_decision": {
+          "avg_ms": 186.68909319272367,
+          "count": 4863,
+          "p95_ms": 510.9559060074389,
+          "recent_count": 180,
+          "recent_p95_ms": 623.9357020240277
+        },
+        "inference": {
+          "avg_ms": 68.59065103986985,
+          "count": 4866,
+          "p95_ms": 152.5249700061977,
+          "recent_count": 180,
+          "recent_p95_ms": 195.23481401847675
+        },
+        "wrapped_inference": {
+          "avg_ms": 311.2896110276803,
+          "count": 4864,
+          "p95_ms": 566.3417290197685,
+          "recent_count": 178,
+          "recent_p95_ms": 739.7142680129036
+        },
+        "context_shadow_observation": {
+          "avg_ms": 213.3604146986272,
+          "count": 4864,
+          "p95_ms": 383.3590869908221,
+          "recent_count": 178,
+          "recent_p95_ms": 546.9189650029875
+        },
+        "decision_to_executor": {
+          "avg_ms": 0.8785109386112935,
+          "count": 4866,
+          "p95_ms": 3.5157050006091595,
+          "recent_count": 180,
+          "recent_p95_ms": 3.7911830004304647
+        }
+      },
+      "intent_counts": {
+        "intent_rejected": 471,
+        "intent_shadow": 4395
+      },
+      "trace": {
+        "context_shadow_observation": {
+          "count": 42,
+          "average_wall_ms": 236.09480952380952,
+          "average_thread_cpu_ms": 120.56885714285714,
+          "average_off_cpu_ms": 115.52588095238096
+        },
+        "inference_agent": {
+          "count": 42,
+          "average_wall_ms": 343.2297857142857,
+          "average_thread_cpu_ms": 175.48040476190477,
+          "average_off_cpu_ms": 167.74933333333334
+        }
+      },
+      "worker_admission_trace": {
+        "count": 42,
+        "mean_ms": 101.40438095238095,
+        "max_ms": 670.785,
+        "p95_ms": 372.704
+      }
+    }
+  ],
+  "interpretation": "Shadow session only; no measured physical HA service dispatch in supplied inputs. Off-CPU includes waits, locks, I/O and scheduling. Signature gains require explicit matching facts; post-decision Tournament still serializes the same target.",
+  "validation": {
+    "tests_passed": 2406,
+    "regression_tests_added": 10,
+    "python": "3.12.3",
+    "platform": "Linux WSL Ubuntu",
+    "seconds": 274.226,
+    "compileall": true,
+    "javascript_syntax": true,
+    "full_test_log_sha256": "42e052677ed0c5f048f89fd01e356c14653edcfb1fe6792d1c0e78441bdbf977",
+    "tested_source_sha256": {
+      ".github/workflows/validate.yml": "57a972a025183b76cf38a50ea16412819881d06a49aef83b8abb171cd1383a4f",
+      "adaptive_ai/src/engine.py": "175a8b590bb86c85429ca2ca321acab78299b938bf714f4102c2611bc843d551",
+      "adaptive_ai/src/executor.py": "e32738a8ea30ad53c01535ed77f4686ebb06ad2136ee77495000b7e37eeba643",
+      "adaptive_ai/src/main.py": "9ed623ceab735eae6ef860deb402c8bf3d138594ad4314f46bf4047c56542bef",
+      "adaptive_ai/src/observation_contract.py": "d0e1debdd96ce20ed3ccc4d4a80b8b202a6fec40d9e7dcab8267d3466ab7bbcf",
+      "adaptive_ai/src/queue_main.py": "e10c4c73e03e4fcdd01f07190f07f8524d697c095dc0f8e80084f207c11b4325",
+      "adaptive_ai/src/runtime_debug_log.py": "d775ad13a8a18a22b48e35705dc95d635265b24c562c4592ac71d7c356c3c9b9",
+      "adaptive_ai/src/settings.py": "2f608fbdebaf0e1c9a1c5481df3483cd0c675aa04acd6b2a9be07035f5fc55a2",
+      "adaptive_ai/src/shared_inference_context.py": "d9b7d3b952bf9ebeea63a55dc810b6e8ff14d4f71fd0e53e36673090d3905528",
+      "adaptive_ai/src/static/index.html": "364d8e149ca2489cad387873f407b3650a1d5d218100035c1781e6e49dbd528d",
+      "adaptive_ai/src/static/p0.js": "7f41c6f1ed8055ddec24fa735ab1c3b1c61d493cb06ea772c6da9534e9a6a056",
+      "adaptive_ai/src/teaching.py": "7034beb52ab98a20a8708660f5a4749a2a4ad39cd6412eeb308fd72b01b30b63",
+      "tools/benchmark_runtime_hot_path.py": "cda2492f209f429a97ae74002e8b940a063d97ce15ce99b9c9fb124d4ec60e2f",
+      "adaptive_ai/src/action_latency.py": "f0f434f75162de088c22c3c7fb6f962dcc0ace6b70650733005c964e68af6881",
+      "adaptive_ai/src/decision_observation.py": "0026bd77a924ebc4e0d47782dff92d749b724352435ce983e70e62829e9088d1",
+      "tests/test_release_202_reaction_latency.py": "fa40aeba31c74a26e9975461c9b3610bbb8c9ae9375d6e38116e79b7f6d5c70d",
+      "tools/benchmark_reaction_observation.py": "0806c0de1965a3100769d6979760411b820468494765b5748141bd75432773ed"
+    }
+  },
+  "signature_component": {
+    "baseline_version": "0.14.201",
+    "current_version": "0.14.202",
+    "synthetic": true,
+    "real_policy_and_both_signature_builds": true,
+    "passes": 128,
+    "series": [
+      {
+        "previous": {
+          "passes": 128,
+          "feature_calls": 384,
+          "median_ms": 1.5241335000268919,
+          "total_ms": 196.42546600022115,
+          "sha256": "1ca38ee5785ae51229e159700b61d1661e8d1df8b1686356f6d5d7bb3d43d118"
+        },
+        "current": {
+          "passes": 128,
+          "feature_calls": 128,
+          "median_ms": 0.7449515000246265,
+          "total_ms": 101.90145000001394,
+          "sha256": "1ca38ee5785ae51229e159700b61d1661e8d1df8b1686356f6d5d7bb3d43d118"
+        },
+        "speedup": 1.9276022667017425
+      },
+      {
+        "current": {
+          "passes": 128,
+          "feature_calls": 128,
+          "median_ms": 0.6640854999773182,
+          "total_ms": 89.42891699990696,
+          "sha256": "1ca38ee5785ae51229e159700b61d1661e8d1df8b1686356f6d5d7bb3d43d118"
+        },
+        "previous": {
+          "passes": 128,
+          "feature_calls": 384,
+          "median_ms": 1.2679719999937333,
+          "total_ms": 168.46375999972452,
+          "sha256": "1ca38ee5785ae51229e159700b61d1661e8d1df8b1686356f6d5d7bb3d43d118"
+        },
+        "speedup": 1.883772784589349
+      },
+      {
+        "previous": {
+          "passes": 128,
+          "feature_calls": 384,
+          "median_ms": 1.2793385000122726,
+          "total_ms": 166.68906500029834,
+          "sha256": "1ca38ee5785ae51229e159700b61d1661e8d1df8b1686356f6d5d7bb3d43d118"
+        },
+        "current": {
+          "passes": 128,
+          "feature_calls": 128,
+          "median_ms": 0.6774034999921241,
+          "total_ms": 93.01481800014244,
+          "sha256": "1ca38ee5785ae51229e159700b61d1661e8d1df8b1686356f6d5d7bb3d43d118"
+        },
+        "speedup": 1.7920700011480222
+      }
+    ],
+    "speedup_median": 1.883772784589349,
+    "limit": "Explicit-feedback signature component before Executor; excludes ingress, queue, SQL guards, HA and device. No improvement expected from signature reuse when no facts need matching."
+  },
+  "candidate_observation_component": {
+    "synthetic": true,
+    "actual_independent_source_checkouts": true,
+    "baseline": "0.14.201",
+    "challengers": 4,
+    "sensor_history_rows_per_entity": 24,
+    "background_cpu_thread": false,
+    "ram_first_pool_buffer": true,
+    "series": [
+      {
+        "previous": {
+          "passes": 128,
+          "observation_total_ms": 424.97123299989426,
+          "observation_median_ms": 3.268792499994788,
+          "feature_total_ms": 251.11703800001806,
+          "feature_median_ms": 0.4118845000107285,
+          "full_checksum_calls": 512,
+          "feature_observation_computations_per_pass": 128,
+          "every_feature_label_meta_and_prediction_sha256": "f210f0de6b8343b28c8b39933ccefe354699678f899a4d20cf1e08f5acdb5d8f",
+          "thread_switch_ms": 1.0,
+          "background_work_units_per_second": null,
+          "process_cpu_seconds_per_second": 0.999947705957794
+        },
+        "current": {
+          "passes": 128,
+          "observation_total_ms": 425.4920379996747,
+          "observation_median_ms": 3.1716610000103174,
+          "feature_total_ms": 222.45464400049286,
+          "feature_median_ms": 0.3024849999917478,
+          "full_checksum_calls": 512,
+          "feature_observation_computations_per_pass": 128,
+          "every_feature_label_meta_and_prediction_sha256": "f210f0de6b8343b28c8b39933ccefe354699678f899a4d20cf1e08f5acdb5d8f",
+          "thread_switch_ms": 1.0,
+          "background_work_units_per_second": null,
+          "process_cpu_seconds_per_second": 0.9997573251898456
+        },
+        "observation_speedup": 0.9987759935480135,
+        "feature_speedup": 1.1288460132100533
+      },
+      {
+        "current": {
+          "passes": 128,
+          "observation_total_ms": 373.39866799965193,
+          "observation_median_ms": 2.81581099997652,
+          "feature_total_ms": 200.25549500070383,
+          "feature_median_ms": 0.2805649999970683,
+          "full_checksum_calls": 512,
+          "feature_observation_computations_per_pass": 128,
+          "every_feature_label_meta_and_prediction_sha256": "f210f0de6b8343b28c8b39933ccefe354699678f899a4d20cf1e08f5acdb5d8f",
+          "thread_switch_ms": 1.0,
+          "background_work_units_per_second": null,
+          "process_cpu_seconds_per_second": 1.0000110523701793
+        },
+        "previous": {
+          "passes": 128,
+          "observation_total_ms": 454.78988999957437,
+          "observation_median_ms": 3.3023674999981267,
+          "feature_total_ms": 266.11828199986576,
+          "feature_median_ms": 0.4178984999896329,
+          "full_checksum_calls": 512,
+          "feature_observation_computations_per_pass": 128,
+          "every_feature_label_meta_and_prediction_sha256": "f210f0de6b8343b28c8b39933ccefe354699678f899a4d20cf1e08f5acdb5d8f",
+          "thread_switch_ms": 1.0,
+          "background_work_units_per_second": null,
+          "process_cpu_seconds_per_second": 0.9946412093746043
+        },
+        "observation_speedup": 1.2179740555475103,
+        "feature_speedup": 1.3288937814112438
+      },
+      {
+        "previous": {
+          "passes": 128,
+          "observation_total_ms": 431.3176379999959,
+          "observation_median_ms": 3.2539245000293704,
+          "feature_total_ms": 250.35618300080387,
+          "feature_median_ms": 0.41017900002771057,
+          "full_checksum_calls": 512,
+          "feature_observation_computations_per_pass": 128,
+          "every_feature_label_meta_and_prediction_sha256": "f210f0de6b8343b28c8b39933ccefe354699678f899a4d20cf1e08f5acdb5d8f",
+          "thread_switch_ms": 1.0,
+          "background_work_units_per_second": null,
+          "process_cpu_seconds_per_second": 0.9998618928147713
+        },
+        "current": {
+          "passes": 128,
+          "observation_total_ms": 379.16713999987905,
+          "observation_median_ms": 2.8314875000035045,
+          "feature_total_ms": 203.75718700051948,
+          "feature_median_ms": 0.2773285000046144,
+          "full_checksum_calls": 512,
+          "feature_observation_computations_per_pass": 128,
+          "every_feature_label_meta_and_prediction_sha256": "f210f0de6b8343b28c8b39933ccefe354699678f899a4d20cf1e08f5acdb5d8f",
+          "thread_switch_ms": 1.0,
+          "background_work_units_per_second": null,
+          "process_cpu_seconds_per_second": 1.0000084059842111
+        },
+        "observation_speedup": 1.1375396032476166,
+        "feature_speedup": 1.2286986618055618
+      }
+    ],
+    "observation_speedup_median": 1.1375396032476166,
+    "feature_speedup_median": 1.2286986618055618,
+    "limit": "Host component fixture with real candidates, full checksum, vectors, metadata, prediction and SQLite. Excludes HA ingress and concurrent checkpoint I/O; not a device latency forecast."
+  },
+  "entrypoint_smoke": {
+    "entrypoint": "adaptive_ai/src/trial_queue_main.py",
+    "health": {
+      "ok": true,
+      "ready": true,
+      "startup": {
+        "current_state_seconds": 0.02834338099995648,
+        "elapsed_seconds": 0.27988338470458984,
+        "error": null,
+        "message": "Adaptive AI runtime is ready",
+        "ready": true,
+        "started_at": 1792058265.2966523,
+        "state": "ready",
+        "step": 7,
+        "steps": 7,
+        "timings": {
+          "building_runtime": 0.1544,
+          "http_ready": 0.0421,
+          "http_starting": 0.0157,
+          "loading_runtime": 0.0185,
+          "reconciling_control": 0.0002,
+          "starting_engine": 0.0002,
+          "starting_history": 0.0194,
+          "starting_realtime": 0.0011
+        }
+      },
+      "version": "0.14.202"
+    }
+  }
+}
