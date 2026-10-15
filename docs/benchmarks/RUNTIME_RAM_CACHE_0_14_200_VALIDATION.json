@@ -1,0 +1,254 @@
+{
+  "version": "0.14.200",
+  "source_base": "be2aac45cf71518f58b79b0fd9c31d91e0bf80a5",
+  "input_exports": [
+    {
+      "file": "adaptive-ai-runtime-debug-20261015-030517.json",
+      "sha256": "98ee6a7cd2ccef8421c9d89f48bd49332abc91113c74dd4abe95cf7264147135",
+      "generated_at": "2026-10-15T01:05:17.394822+00:00",
+      "app_version": "0.14.199",
+      "rss_mib": 228.90625,
+      "storage_blocked_writes": 0,
+      "wal_bytes": 64601632,
+      "wrapped_inference": {
+        "avg_ms": 338.99260601812045,
+        "count": 11788,
+        "p95_ms": 510.4734740452841,
+        "recent_count": 143,
+        "recent_p95_ms": 529.062663030345
+      },
+      "context_shadow_observation": {
+        "avg_ms": 212.71912712671713,
+        "count": 11788,
+        "p95_ms": 337.0062240283005,
+        "recent_count": 143,
+        "recent_p95_ms": 348.0490709771402
+      }
+    },
+    {
+      "file": "adaptive-ai-runtime-debug-20261015-030541.json",
+      "sha256": "b261e21bdbf3d10741f9832c3526b2dd9e5b08efb23e4831bbbd9af80b7d14df",
+      "generated_at": "2026-10-15T01:05:41.072351+00:00",
+      "app_version": "0.14.199",
+      "rss_mib": 222.92578125,
+      "storage_blocked_writes": 0,
+      "wal_bytes": 88728352,
+      "wrapped_inference": {
+        "avg_ms": 339.0310601118516,
+        "count": 11843,
+        "p95_ms": 490.3600350371562,
+        "recent_count": 139,
+        "recent_p95_ms": 529.062663030345
+      },
+      "context_shadow_observation": {
+        "avg_ms": 212.7874595180915,
+        "count": 11843,
+        "p95_ms": 330.4127469891682,
+        "recent_count": 139,
+        "recent_p95_ms": 356.47433903068304
+      }
+    },
+    {
+      "file": "adaptive-ai-runtime-debug-20261015-030604.json",
+      "sha256": "85ed126b67627507919d2b5e702d8c18b8802fe2149e9c94d38a3793c30f8012",
+      "generated_at": "2026-10-15T01:06:04.102949+00:00",
+      "app_version": "0.14.199",
+      "rss_mib": 233.05078125,
+      "storage_blocked_writes": 0,
+      "wal_bytes": 19808992,
+      "wrapped_inference": {
+        "avg_ms": 339.41034838079247,
+        "count": 11890,
+        "p95_ms": 520.7944969879463,
+        "recent_count": 135,
+        "recent_p95_ms": 546.4693340472877
+      },
+      "context_shadow_observation": {
+        "avg_ms": 212.97969772686332,
+        "count": 11890,
+        "p95_ms": 347.2778329742141,
+        "recent_count": 135,
+        "recent_p95_ms": 363.4868439985439
+      }
+    },
+    {
+      "file": "adaptive-ai-runtime-debug-20261015-030628.json",
+      "sha256": "b18a4b5b65f7655f77451c64d7989c8baef36f92bca3298932065088bb1bc335",
+      "generated_at": "2026-10-15T01:06:27.967789+00:00",
+      "app_version": "0.14.199",
+      "rss_mib": 221.94140625,
+      "storage_blocked_writes": 0,
+      "wal_bytes": 16777216,
+      "wrapped_inference": {
+        "avg_ms": 339.441474454668,
+        "count": 11944,
+        "p95_ms": 520.7944969879463,
+        "recent_count": 127,
+        "recent_p95_ms": 518.3494100347161
+      },
+      "context_shadow_observation": {
+        "avg_ms": 213.01253025863937,
+        "count": 11944,
+        "p95_ms": 347.9823539964855,
+        "recent_count": 127,
+        "recent_p95_ms": 347.2778329742141
+      }
+    }
+  ],
+  "benchmark": {
+    "synthetic": true,
+    "source_baseline": "0.14.199 connection_session lifetime",
+    "series": [
+      {
+        "previous": {
+          "median_ms": 0.7976429999985157,
+          "total_ms": 231.49589599978526,
+          "passes": 256,
+          "result_sha256": "1cf224a63706bf9f04abef4548f1e18ca26782ece3919deed0a228e13b4085e8",
+          "runtime_cache": null,
+          "sqlite_connections_in_timed_inference": 256
+        },
+        "current": {
+          "median_ms": 0.5095930000038607,
+          "total_ms": 142.29994399988755,
+          "passes": 256,
+          "result_sha256": "1cf224a63706bf9f04abef4548f1e18ca26782ece3919deed0a228e13b4085e8",
+          "runtime_cache": {
+            "active": true,
+            "configured_mb": 256,
+            "effective_mb": 256,
+            "cache_target_mb": 64,
+            "idle": 1,
+            "leased": 0,
+            "hits": 256,
+            "misses": 1,
+            "bypasses": 0,
+            "discards": 0,
+            "max_connections": 4,
+            "mmap_mb": 0
+          },
+          "sqlite_connections_in_timed_inference": 0
+        },
+        "total_speedup": 1.6268164940385936
+      },
+      {
+        "current": {
+          "median_ms": 0.6176254999843422,
+          "total_ms": 166.1267920002274,
+          "passes": 256,
+          "result_sha256": "1cf224a63706bf9f04abef4548f1e18ca26782ece3919deed0a228e13b4085e8",
+          "runtime_cache": {
+            "active": true,
+            "configured_mb": 256,
+            "effective_mb": 256,
+            "cache_target_mb": 64,
+            "idle": 1,
+            "leased": 0,
+            "hits": 256,
+            "misses": 1,
+            "bypasses": 0,
+            "discards": 0,
+            "max_connections": 4,
+            "mmap_mb": 0
+          },
+          "sqlite_connections_in_timed_inference": 0
+        },
+        "previous": {
+          "median_ms": 0.7472390000202722,
+          "total_ms": 210.74388699940982,
+          "passes": 256,
+          "result_sha256": "1cf224a63706bf9f04abef4548f1e18ca26782ece3919deed0a228e13b4085e8",
+          "runtime_cache": null,
+          "sqlite_connections_in_timed_inference": 256
+        },
+        "total_speedup": 1.268572543067715
+      },
+      {
+        "previous": {
+          "median_ms": 0.7637445000057141,
+          "total_ms": 209.32055700023966,
+          "passes": 256,
+          "result_sha256": "1cf224a63706bf9f04abef4548f1e18ca26782ece3919deed0a228e13b4085e8",
+          "runtime_cache": null,
+          "sqlite_connections_in_timed_inference": 256
+        },
+        "current": {
+          "median_ms": 0.5041664999794193,
+          "total_ms": 138.05595599967546,
+          "passes": 256,
+          "result_sha256": "1cf224a63706bf9f04abef4548f1e18ca26782ece3919deed0a228e13b4085e8",
+          "runtime_cache": {
+            "active": true,
+            "configured_mb": 256,
+            "effective_mb": 256,
+            "cache_target_mb": 64,
+            "idle": 1,
+            "leased": 0,
+            "hits": 256,
+            "misses": 1,
+            "bypasses": 0,
+            "discards": 0,
+            "max_connections": 4,
+            "mmap_mb": 0
+          },
+          "sqlite_connections_in_timed_inference": 0
+        },
+        "total_speedup": 1.5162008439587475
+      }
+    ],
+    "median_component_speedup": 1.5162008439587475,
+    "every_read_executes_sql": true,
+    "same_results": true,
+    "limit": "Host SQL component, warm sequential inference and 96 context rows. Excludes model CPU, HA and concurrent checkpoint I/O; not device-wide latency or RSS measurement."
+  },
+  "tests": {
+    "status": "passed",
+    "count": 2380,
+    "seconds": 289.957,
+    "python": "3.12.3",
+    "platform": "WSL Ubuntu Linux",
+    "new_regressions": 17,
+    "compileall": "passed",
+    "javascript_runtime_debug_syntax": "passed",
+    "entrypoint_smoke": {
+      "entrypoint": "adaptive_ai/src/trial_queue_main.py",
+      "health": {
+        "ok": true,
+        "ready": true,
+        "startup": {
+          "current_state_seconds": 0.13440006199999743,
+          "elapsed_seconds": 0.8647186756134033,
+          "error": null,
+          "message": "Adaptive AI runtime is ready",
+          "ready": true,
+          "started_at": 1792027312.5577636,
+          "state": "ready",
+          "step": 7,
+          "steps": 7,
+          "timings": {
+            "building_runtime": 0.3802,
+            "http_ready": 0.1955,
+            "http_starting": 0.017,
+            "loading_runtime": 0.0579,
+            "reconciling_control": 0.0003,
+            "starting_engine": 0.0017,
+            "starting_history": 0.0773,
+            "starting_realtime": 0.0005
+          }
+        },
+        "version": "0.14.200"
+      }
+    }
+  },
+  "notes": [
+    "No private entity inventory or raw input exports included",
+    "SQL component timings are not whole-device latency forecasts",
+    "SQLite cache targets are not hard process RSS limits"
+  ],
+  "ci_199_failure_addressed": {
+    "run_id": 38655107397,
+    "job_id": 116162894254,
+    "cause": "WAL quiet-window test assumed writer scheduling within 100 ms; production BUSY result was legitimate",
+    "fix": "event synchronization at quiet-window boundary plus real BUSY/row-preservation regression; no production timeout change"
+  }
+}

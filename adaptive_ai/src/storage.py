@@ -22,6 +22,7 @@ class Store:
         self.lock = threading.RLock()
         self._meta_lock = threading.RLock()
         self._connection_session = threading.local()
+        self._runtime_sqlite_cache = None
         self._wal_keeper_lock = threading.RLock()
         self._wal_keeper = None
         self._wal_keeper_starts = 0
@@ -121,6 +122,8 @@ class Store:
         """RAM-only diagnostics, never run SQL from the debug export."""
         with self._wal_keeper_lock:
             return dict(version=sqlite3.sqlite_version,
+                        runtime_cache=(self._runtime_sqlite_cache.snapshot()
+                                       if self._runtime_sqlite_cache is not None else None),
                         storage_budget=self.storage_budget.snapshot(),
                         storage_retention=(self._retention_worker.snapshot()
                                            if self._retention_worker is not None else None),
@@ -158,6 +161,77 @@ class Store:
     def stop_storage_retention(self):
         if self._retention_worker is not None:
             self._retention_worker.stop()
+
+    def start_runtime_cache(self):
+        if self.training_worker_process or self._runtime_sqlite_cache is not None:
+            return False
+        from runtime_sqlite_cache import RuntimeSQLiteCache
+        self._runtime_sqlite_cache = RuntimeSQLiteCache(OPTIONS.get('runtime_sqlite_cache_mb', 256))
+        return True
+
+    def stop_runtime_cache(self):
+        if self._runtime_sqlite_cache is not None:
+            self._runtime_sqlite_cache.stop()
+
+    def trim_runtime_cache(self):
+        if self._runtime_sqlite_cache is not None:
+            self._runtime_sqlite_cache.trim()
+
+    def _cached_connection(self, cache_mb):
+        from runtime_sqlite_cache import CachedBudgetConnection
+        connection = sqlite3.connect(self.path, timeout=30, factory=CachedBudgetConnection,
+                                     check_same_thread=False)
+        try:
+            connection.row_factory = sqlite3.Row
+            connection.execute('PRAGMA busy_timeout=30000')
+            connection.execute('PRAGMA synchronous=NORMAL')
+            connection.execute(f'PRAGMA journal_size_limit={WAL_RETAIN_BYTES}')
+            connection.execute('PRAGMA temp_store=MEMORY')
+            connection.execute(f'PRAGMA cache_size=-{cache_mb * 1024}')
+            # Page caches have one aggregate budget; avoid an additional mapping
+            # per idle connection making process RSS misleading or unbounded.
+            connection.execute('PRAGMA mmap_size=0')
+            self.storage_budget.install(connection)
+            connection.storage_write_admission = self.admit_background_write
+            connection.prepare_cache_tracking()
+            return connection
+        except BaseException:
+            connection.close()
+            raise
+
+    @contextmanager
+    def inference_connection_session(self):
+        """Retain bounded SQLite caches, never retain a transaction or query result."""
+        pool = self._runtime_sqlite_cache
+        if (pool is None or self.training_worker_process
+                or getattr(self._connection_session, 'connection', None) is not None):
+            with self.connection_session() as connection:
+                yield connection
+            return
+        connection = pool.acquire(self._cached_connection)
+        if connection is None:
+            with self.connection_session() as connection:
+                yield connection
+            return
+        healthy = False
+        try:
+            checkpoint_worker = self._wal_checkpoint_worker
+            pages = 0 if checkpoint_worker is not None and checkpoint_worker.active else 1000
+            connection.execute(f'PRAGMA wal_autocheckpoint={pages}')
+            self._connection_session.connection = connection
+            self._connection_session.connection_busy_timeout_ms = int(connection.execute('PRAGMA busy_timeout').fetchone()[0])
+            self._connection_session.checkpoint_pages = pages
+            # Ordinary nested conn() calls retain their independent commit and
+            # rollback barriers. This outer barrier matches connection_session.
+            with connection:
+                with self.connection_session():
+                    yield connection
+            healthy = True
+        finally:
+            for key in ('connection', 'connection_busy_timeout_ms', 'checkpoint_pages'):
+                if hasattr(self._connection_session, key):
+                    delattr(self._connection_session, key)
+            pool.release(connection, healthy=healthy)
 
     @contextmanager
     def background_sqlite(self, *, retryable=True):
