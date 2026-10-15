@@ -1065,8 +1065,9 @@ def install_policy_candidates(service):
             # mandatory checksum validation remain independent and fresh.
             current_context[aid] = {"agent": agent, "states": states, "now": now,
                                     "temporal": shared_temporal}
+        entity_cache = None
         try:
-            with shared_entity_observations(agent, states, shared_temporal, now):
+            with shared_entity_observations(agent, states, shared_temporal, now) as entity_cache:
                 result = original_observe(agent, states, changed_entities)
         finally:
             with lock:
@@ -1075,6 +1076,7 @@ def install_policy_candidates(service):
                 diagnostics = getattr(shared_temporal, 'diagnostics', None)
                 if callable(diagnostics):
                     RUNTIME_DEBUG.instant('context_candidate_shared_context', agent_id=aid,
+                                          entity_descriptors_cached=len(entity_cache or ()),
                                           **diagnostics())
         after = service.promotion_status(agent) if hasattr(service, "promotion_status") else {}
         if after.get("last_promotion_ts") is not None and after.get("last_promotion_ts") != before_ts:

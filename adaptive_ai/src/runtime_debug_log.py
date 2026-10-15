@@ -201,6 +201,8 @@ class RuntimeDebugLogService:
                 "decision_observation_reuse": "Teach and preference consume the policy observation at the same causal timestamp",
                 "wrapped_inference_metric": True,
                 "context_shadow_observation_metric": True,
+                "context_shadow_interval": "candidate sensor observations are sampled; target events always admitted; scheduler counters in context_persistence",
+                "candidate_entity_descriptor_cache": "semantic agent contract within one causal frame, including refreshed config objects",
                 "context_observed_pool_metric": True,
                 "context_probation_snapshot_metric": True,
                 "context_shadow_snapshot_metric": True,

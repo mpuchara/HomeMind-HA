@@ -1,0 +1,144 @@
+{
+  "synthetic": true,
+  "independent_sources": true,
+  "series": [
+    {
+      "before": {
+        "events": 32,
+        "all_events_completed": true,
+        "actual_executor_control": true,
+        "root_prediction_fixture": true,
+        "ha_network": false,
+        "decisions_sha256": "5bd2ed0559d3238b0002598a405b6556e322adcb4c4148ca6a2bef418a4f11f8",
+        "event_to_executor_median_ms": 24.509361999999868,
+        "event_to_executor_p95_ms": 31.063005999996562,
+        "event_to_service_dispatch_ms": 29.784529000004056,
+        "service_calls": 1,
+        "process_cpu_seconds": 0.35803182699999997,
+        "elapsed_seconds": 0.8482488980000014,
+        "observation_scheduler": null,
+        "debounce_ms": 25
+      },
+      "after": {
+        "events": 32,
+        "all_events_completed": true,
+        "actual_executor_control": true,
+        "root_prediction_fixture": true,
+        "ha_network": false,
+        "decisions_sha256": "5bd2ed0559d3238b0002598a405b6556e322adcb4c4148ca6a2bef418a4f11f8",
+        "event_to_executor_median_ms": 6.663548999998881,
+        "event_to_executor_p95_ms": 7.791951000001518,
+        "event_to_service_dispatch_ms": 11.512514999999723,
+        "service_calls": 1,
+        "process_cpu_seconds": 0.22939486699999997,
+        "elapsed_seconds": 0.23159940699999737,
+        "observation_scheduler": {
+          "interval_ms": 1000.0,
+          "executed": 1,
+          "skipped": 31,
+          "target_forced": 0,
+          "errors": 0,
+          "tracked_agents": 1,
+          "max_agents": 256,
+          "scope": "Engine-dispatched candidate observations; target events always admitted"
+        },
+        "debounce_ms": 0
+      },
+      "reaction_median_speedup": 3.678124374864503,
+      "service_dispatch_speedup": 2.5871435563823173
+    },
+    {
+      "after": {
+        "events": 32,
+        "all_events_completed": true,
+        "actual_executor_control": true,
+        "root_prediction_fixture": true,
+        "ha_network": false,
+        "decisions_sha256": "5bd2ed0559d3238b0002598a405b6556e322adcb4c4148ca6a2bef418a4f11f8",
+        "event_to_executor_median_ms": 6.663384999999522,
+        "event_to_executor_p95_ms": 8.606905000000609,
+        "event_to_service_dispatch_ms": 11.371899000003793,
+        "service_calls": 1,
+        "process_cpu_seconds": 0.224228712,
+        "elapsed_seconds": 0.229232709999998,
+        "observation_scheduler": {
+          "interval_ms": 1000.0,
+          "executed": 1,
+          "skipped": 31,
+          "target_forced": 0,
+          "errors": 0,
+          "tracked_agents": 1,
+          "max_agents": 256,
+          "scope": "Engine-dispatched candidate observations; target events always admitted"
+        },
+        "debounce_ms": 0
+      },
+      "before": {
+        "events": 32,
+        "all_events_completed": true,
+        "actual_executor_control": true,
+        "root_prediction_fixture": true,
+        "ha_network": false,
+        "decisions_sha256": "5bd2ed0559d3238b0002598a405b6556e322adcb4c4148ca6a2bef418a4f11f8",
+        "event_to_executor_median_ms": 24.096423000003142,
+        "event_to_executor_p95_ms": 29.40576299999975,
+        "event_to_service_dispatch_ms": 29.166910999997242,
+        "service_calls": 1,
+        "process_cpu_seconds": 0.354542593,
+        "elapsed_seconds": 0.8367641119999973,
+        "observation_scheduler": null,
+        "debounce_ms": 25
+      },
+      "reaction_median_speedup": 3.616243545886193,
+      "service_dispatch_speedup": 2.5648232542328695
+    },
+    {
+      "before": {
+        "events": 32,
+        "all_events_completed": true,
+        "actual_executor_control": true,
+        "root_prediction_fixture": true,
+        "ha_network": false,
+        "decisions_sha256": "5bd2ed0559d3238b0002598a405b6556e322adcb4c4148ca6a2bef418a4f11f8",
+        "event_to_executor_median_ms": 24.062618500000355,
+        "event_to_executor_p95_ms": 30.094346999995025,
+        "event_to_service_dispatch_ms": 29.834922999995683,
+        "service_calls": 1,
+        "process_cpu_seconds": 0.34948910899999996,
+        "elapsed_seconds": 0.8357041760000001,
+        "observation_scheduler": null,
+        "debounce_ms": 25
+      },
+      "after": {
+        "events": 32,
+        "all_events_completed": true,
+        "actual_executor_control": true,
+        "root_prediction_fixture": true,
+        "ha_network": false,
+        "decisions_sha256": "5bd2ed0559d3238b0002598a405b6556e322adcb4c4148ca6a2bef418a4f11f8",
+        "event_to_executor_median_ms": 6.556272000000973,
+        "event_to_executor_p95_ms": 7.908487000001685,
+        "event_to_service_dispatch_ms": 10.7906249999985,
+        "service_calls": 1,
+        "process_cpu_seconds": 0.22275531699999998,
+        "elapsed_seconds": 0.222291110999997,
+        "observation_scheduler": {
+          "interval_ms": 1000.0,
+          "executed": 1,
+          "skipped": 31,
+          "target_forced": 0,
+          "errors": 0,
+          "tracked_agents": 1,
+          "max_agents": 256,
+          "scope": "Engine-dispatched candidate observations; target events always admitted"
+        },
+        "debounce_ms": 0
+      },
+      "reaction_median_speedup": 3.670167817930187,
+      "service_dispatch_speedup": 2.7648929510570364
+    }
+  ],
+  "median_reaction_speedup": 3.670167817930187,
+  "median_service_dispatch_speedup": 2.5871435563823173,
+  "limit": "Real Engine.run, event receipt/backpressure, Root features, four real Tournament candidates and guarded Control Executor to an HA stub. Root action/confidence is deterministic. Excludes shipped outer observers, HA network, physical ACK, Pi microSD and concurrent checkpoint I/O; not a device latency forecast."
+}

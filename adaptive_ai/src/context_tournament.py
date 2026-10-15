@@ -34,6 +34,7 @@ from context_row_buffer import ContextRowBuffer
 from storage_budget import StorageRetry
 from shadow_model_json import shadow_model_json
 from shadow_model_snapshot import freeze_shadow_model, snapshot_json, ShadowModelSnapshot
+from shadow_observation_scheduler import ShadowObservationScheduler
 
 
 SHADOW_MODEL_VERSION = 1
@@ -58,6 +59,7 @@ class ContextTournament:
         self._shadow_storage_retry = StorageRetry()
         self._shadow_persistence_stats = {"queued": 0, "flushed": 0, "flushes": 0, "errors": 0, "shared_source_snapshots": 0}
         self._last_error_ts = 0.0
+        self._observation_scheduler = ShadowObservationScheduler()
         with self.store.lock, self.store.conn() as c:
             c.executescript(
                 """
@@ -467,6 +469,7 @@ class ContextTournament:
         getter = getattr(self, "observation_pool_cache_snapshot", None)
         if callable(getter):
             result["observation_pool_cache"] = getter()
+        result['observation_scheduler'] = self._observation_scheduler.snapshot()
         return result
 
     def _save_shadow_model(self, agent_id, challenger, model):
@@ -726,6 +729,17 @@ def install(store, engine):
         # Production inference/control runs first and remains entirely authoritative.
         # Shadow evaluation only reads its resulting champion prediction afterwards.
         result = original_process_agent(agent, state_map, changed_entities)
+        ticket = None
+        # Direct observer/API calls retain their explicit, immediate behavior.
+        # Engine target workers own this revision binding for realtime and timers.
+        dispatched = getattr(getattr(engine, '_inference_tls', None), 'state_revision', None) is not None
+        if dispatched:
+            ticket = service._observation_scheduler.admit(
+                agent, state_map, changed_entities, (getattr(engine, 'models', {}) or {}).get(str(agent['id'])),
+            )
+            if ticket is None:
+                TELEMETRY.inc('context_shadow_interval_skips')
+                return result
         started = time.perf_counter()
         trace = (RUNTIME_DEBUG.begin(
             "context_shadow_observation", agent_id=str(agent["id"])
@@ -746,6 +760,7 @@ def install(store, engine):
             status = "error"
             service.report_runtime_error(exc)
         finally:
+            service._observation_scheduler.finish(ticket, success=status == 'ok')
             TELEMETRY.observe("context_shadow_observation", (time.perf_counter() - started) * 1000)
             RUNTIME_DEBUG.end(trace, status=status)
         return result

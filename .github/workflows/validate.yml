@@ -65,6 +65,9 @@ jobs:
       - name: 0.14.202 causal observation handoff smoke
         if: matrix.python == '3.11'
         run: python tools/benchmark_reaction_observation.py --one --passes 8
+      - name: 0.14.205 guarded Control dispatch after a sensor burst
+        if: matrix.python == '3.11'
+        run: python tools/benchmark_control_priority.py --one --events 8
       - name: 0.14.203 real event scheduler under episode UI load
         if: matrix.python == '3.11'
         run: python tools/benchmark_episode_reaction.py --one --episodes 128 --events 16
@@ -287,6 +290,7 @@ jobs:
                       prefix+'src/runtime_sqlite_cache.py',
                       prefix+'src/runtime_threading.py',
                       prefix+'src/shared_observation_features.py',
+                      prefix+'src/shadow_observation_scheduler.py',
                   ):
                       assert required in names, (archive, required)
           print('verified package version/layout/runtime files:', expected)

@@ -24,7 +24,7 @@ Wartości są w `adaptive_ai/config.yaml`. Domyślne ustawienia są dobrane jako
 
 | Parametr | Domyślnie | Znaczenie |
 |---|---:|---|
-| `realtime_inference_debounce_ms` | 25 ms | opóźnienie grupujące bardzo bliskie zdarzenia realtime |
+| `realtime_inference_debounce_ms` | 0 ms | natychmiastowe pierwsze zdarzenie; zajęty target nadal grupuje oczekujące zmiany |
 | `prediction_horizons_seconds` | `1` | reaktywny head polityki |
 | `feature_dimensions` | 128 | wymiar reprezentacji |
 | `max_context_entities` | 28 | limit zwykłego kontekstu |
@@ -76,3 +76,11 @@ Najpierw oceń jakość `Selected context` i benchmark. Złe wejścia częściej
 ## Cache porównań epizodów od 0.14.203
 
 `runtime_episode_comparison_cache_mb`: domyślnie 64 MiB, zakres 0–256 MiB. Wartość 0 wyłącza przechowywanie wyników. Maksymalnie 32 wyniki i 16 MiB na jeden wynik. Zajętość rośnie wyłącznie do faktycznie użytych wyników; limit nie jest rezerwacją RAM. Każde odwołanie sprawdza rewizję SQLite, a zmiany epizodów i wyników unieważniają cache w tej samej transakcji co dane.
+
+## Priorytet sterowania od 0.14.205
+
+`realtime_inference_debounce_ms`: domyślnie 0, zakres 0–2000 ms. Dawne wartości domyślne 25 i 75 są migrowane do 0; pozostałe ustawienia pozostają zachowane. Wartość 0 usuwa zwłokę pierwszego zdarzenia. Zajęty target nadal zbiera zmiany do jednego kolejnego przebiegu.
+
+`runtime_shadow_observation_interval_ms`: domyślnie 1000, zakres 0–5000 ms. Dotyczy kosztownej oceny kandydatów Tournament po decyzji. Polityka sterująca i Executor pracują dla każdego dopuszczonego zdarzenia. Wszystkie zdarzenia targetu, zmiany jego wartości/dostępności, zmiany polityki/schematu i ponowienie po błędzie wymagają pełnej obserwacji także przed upływem interwału. Interwał jest liczony od początku ostatniej udanej obserwacji; nie dodaje pauzy do sterowania.
+
+Wartość 0 przywraca ocenę kandydatów przy każdym przebiegu. Rzadsze próbkowanie kontekstu kandydatów zmienia ich historię i późniejsze uczenie; model sterujący nadal otrzymuje bieżące wejścia. Etykiety targetu i filtrowanie własnych potwierdzeń nie są celowo pomijane. Pominięte obserwacje i pełne wykonania są widoczne w `engine.context_persistence.observation_scheduler` w eksporcie diagnostycznym. Bez Full Rebuild.

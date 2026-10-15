@@ -1,3 +1,10 @@
+## 0.14.205
+
+- Admit the first sensor event without the former default 25 ms debounce. Preserve target-local coalescing and backpressure; custom delays remain configurable.
+- Sample optional Tournament candidate observations at a configurable 1000 ms interval. Always admit target events/value/availability changes, new policies/schemas and failed-observation retries. Foreground policy/Executor runs on every admitted event. Candidate context sampling changes; target labels and own-command filtering remain covered.
+- Fix entity descriptor sharing when cached candidates retain an older agent configuration object with identical feature semantics. Keep target/property/profile, exact state/history/time, semantic contract, lags and exclusions isolated. Retain full checksum verification on each candidate use.
+- Export candidate scheduling counters and per-observation cached descriptor counts. Setting runtime_shadow_observation_interval_ms to 0 restores full candidate cadence.
+
 ## 0.14.204
 
 - Share schema-position-independent entity descriptors across candidate policies during one synchronous Shadow observation. Each policy still receives owned vectors, labels and nested metadata.
