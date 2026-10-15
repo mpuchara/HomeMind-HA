@@ -131,6 +131,7 @@ def initialize_runtime():
         from storage import STORE as runtime_store
         STORE = runtime_store
         STORE.start_wal_keeper()
+        STORE.start_runtime_cache()
         STORE.start_wal_checkpoint()
         prepare_runtime_extensions()
         from ha import AUTOMATION_KNOWLEDGE as automation_knowledge
@@ -830,6 +831,12 @@ def shutdown_runtime():
     except Exception:
         traceback.print_exc()
     finally:
+        stop_cache = getattr(STORE, 'stop_runtime_cache', None)
+        if callable(stop_cache):
+            try:
+                stop_cache()
+            except Exception:
+                traceback.print_exc()
         stop_retention = getattr(STORE, 'stop_storage_retention', None)
         if callable(stop_retention):
             stop_retention()

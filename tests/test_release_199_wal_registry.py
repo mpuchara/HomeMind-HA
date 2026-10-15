@@ -125,12 +125,14 @@ class Runtime199Tests(unittest.TestCase):
         self.addCleanup(connection.close)
         connection.execute('INSERT INTO recovery VALUES(0)')
         held = threading.Event()
+        release = threading.Event()
         def writer():
             c = sqlite3.connect(self.store.path)
             try:
                 c.execute('INSERT INTO recovery VALUES(1)')
                 held.set()
-                time.sleep(.04)
+                if not release.wait(5):
+                    raise RuntimeError('test did not open the quiet window')
                 c.execute('INSERT INTO recovery VALUES(2)')
                 c.commit()
             finally:
@@ -138,9 +140,20 @@ class Runtime199Tests(unittest.TestCase):
         thread = threading.Thread(target=writer)
         thread.start()
         self.assertTrue(held.wait(2))
+        def quiet_window(seconds):
+            self.assertEqual(seconds, .1)
+            self.assertTrue(self.store._wal_reclaiming.is_set())
+            release.set()
+            thread.join(5)
+            self.assertFalse(thread.is_alive())
+            return False
         try:
-            self.assertTrue(worker.reclaim(connection, dict(busy=0, remaining_frames=0), now=100))
+            # Coordinate the writer at the actual quiet-window boundary. A
+            # loaded CI runner need not schedule its commit inside 100 wall ms.
+            with patch.object(worker.stop_event, 'wait', side_effect=quiet_window):
+                self.assertTrue(worker.reclaim(connection, dict(busy=0, remaining_frames=0), now=100))
         finally:
+            release.set()
             thread.join(2)
         self.assertFalse(self.store._wal_reclaiming.is_set())
         self.assertEqual(worker.snapshot()['reclaim_successes'], 1)

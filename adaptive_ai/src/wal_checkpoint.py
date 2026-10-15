@@ -100,6 +100,9 @@ class WALCheckpointWorker:
 
     def sample_storage(self):
         """Worker-only filesystem sampling; debug export still reads RAM only."""
+        trim_cache = getattr(self.store, 'trim_runtime_cache', None)
+        if callable(trim_cache):
+            trim_cache()
         path = Path(self.store.path)
         wal = Path(self.store.path + "-wal")
         try:

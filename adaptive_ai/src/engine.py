@@ -1614,7 +1614,8 @@ class Engine(threading.Thread):
                     # One connection for the complete registered pipeline. Individual
                     # Store.conn() blocks still read fresh data and commit independently;
                     # the nested Shadow session retains its bounded background timeout.
-                    session = getattr(STORE, "connection_session", None)
+                    session = getattr(STORE, "inference_connection_session",
+                                      getattr(STORE, "connection_session", None))
                     with session() if callable(session) else nullcontext():
                         self.process_agent(agent, states, changed_entities if changed_entities else None)
                     TELEMETRY.observe("wrapped_inference", (time.perf_counter() - wrapped_started) * 1000)
