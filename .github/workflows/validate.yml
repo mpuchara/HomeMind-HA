@@ -65,6 +65,9 @@ jobs:
       - name: 0.14.202 causal observation handoff smoke
         if: matrix.python == '3.11'
         run: python tools/benchmark_reaction_observation.py --one --passes 8
+      - name: 0.14.203 real event scheduler under episode UI load
+        if: matrix.python == '3.11'
+        run: python tools/benchmark_episode_reaction.py --one --episodes 128 --events 16
       - name: 0.14.172 targeted retries terminate without peer replay
         if: matrix.python == '3.11'
         run: python tools/benchmark_target_retries.py --targets 4 --completions 32 --compact

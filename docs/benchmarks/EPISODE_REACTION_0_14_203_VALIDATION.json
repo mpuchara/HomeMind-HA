@@ -1,0 +1,586 @@
+{
+  "runtime_before": [
+    {
+      "file": "adaptive-ai-runtime-debug-20261015-142834.json",
+      "sha256": "3a427849e6087b7e4b665d5b64158900e7057c0356656c70e301bf3ecd309e97",
+      "version": "0.14.202",
+      "generated_at": "2026-10-15T12:28:34.650707+00:00",
+      "metrics": {
+        "event_to_target_start": {
+          "avg_ms": 316.25126291365893,
+          "count": 5135,
+          "p95_ms": 393.56529898941517,
+          "recent_count": 179,
+          "recent_p95_ms": 450.72315697325394
+        },
+        "event_to_decision": {
+          "avg_ms": 403.95287540233437,
+          "count": 5135,
+          "p95_ms": 468.200188013725,
+          "recent_count": 179,
+          "recent_p95_ms": 555.7188930106349
+        },
+        "inference": {
+          "avg_ms": 74.35496312667719,
+          "count": 5153,
+          "p95_ms": 139.90657404065132,
+          "recent_count": 179,
+          "recent_p95_ms": 134.89232899155468
+        },
+        "wrapped_inference": {
+          "avg_ms": 366.5393097234437,
+          "count": 5153,
+          "p95_ms": 512.8212259733118,
+          "recent_count": 179,
+          "recent_p95_ms": 512.8212259733118
+        },
+        "context_shadow_observation": {
+          "avg_ms": 253.47576628016392,
+          "count": 5153,
+          "p95_ms": 358.94919699057937,
+          "recent_count": 179,
+          "recent_p95_ms": 359.59987598471344
+        },
+        "decision_to_executor": {
+          "avg_ms": 0.8567109760587398,
+          "count": 5153,
+          "p95_ms": 3.0831730109639466,
+          "recent_count": 179,
+          "recent_p95_ms": 2.6168260374106467
+        },
+        "event_to_service_dispatch": null
+      },
+      "intents": {
+        "intent_rejected": 1431,
+        "intent_shadow": 3722
+      },
+      "sql_comparison_calls": 6,
+      "sql_comparison_wall_ms": 1509.952,
+      "sql_comparison_max_ms": 634.892,
+      "sql_comparison_thread_cpu_ms": 791.0199999999999,
+      "sql_comparison_threads": [
+        "HTTP handler"
+      ]
+    },
+    {
+      "file": "adaptive-ai-runtime-debug-20261015-142932.json",
+      "sha256": "17dd76beb5ad7fbd70674132e626721bdd1f2d426d5e408c2ae7385580181d7d",
+      "version": "0.14.202",
+      "generated_at": "2026-10-15T12:29:32.634849+00:00",
+      "metrics": {
+        "event_to_target_start": {
+          "avg_ms": 308.6178022667055,
+          "count": 5293,
+          "p95_ms": 367.0562280458398,
+          "recent_count": 161,
+          "recent_p95_ms": 205.56423801463097
+        },
+        "event_to_decision": {
+          "avg_ms": 396.4231704600286,
+          "count": 5293,
+          "p95_ms": 459.30334995500743,
+          "recent_count": 161,
+          "recent_p95_ms": 333.0922510358505
+        },
+        "inference": {
+          "avg_ms": 74.61696197919291,
+          "count": 5311,
+          "p95_ms": 143.51283601718023,
+          "recent_count": 161,
+          "recent_p95_ms": 172.55669500445947
+        },
+        "wrapped_inference": {
+          "avg_ms": 365.7644385478253,
+          "count": 5311,
+          "p95_ms": 512.4758589663543,
+          "recent_count": 161,
+          "recent_p95_ms": 526.2116669910029
+        },
+        "context_shadow_observation": {
+          "avg_ms": 252.6378913274242,
+          "count": 5311,
+          "p95_ms": 366.8514890014194,
+          "recent_count": 161,
+          "recent_p95_ms": 381.60832499852404
+        },
+        "decision_to_executor": {
+          "avg_ms": 0.8639633366471601,
+          "count": 5311,
+          "p95_ms": 2.985877974424511,
+          "recent_count": 161,
+          "recent_p95_ms": 3.1546539976261556
+        },
+        "event_to_service_dispatch": null
+      },
+      "intents": {
+        "intent_rejected": 1434,
+        "intent_shadow": 3877
+      },
+      "sql_comparison_calls": 10,
+      "sql_comparison_wall_ms": 2129.345,
+      "sql_comparison_max_ms": 666.31,
+      "sql_comparison_thread_cpu_ms": 1278.056,
+      "sql_comparison_threads": [
+        "HTTP handler"
+      ]
+    },
+    {
+      "file": "adaptive-ai-runtime-debug-20261015-142953.json",
+      "sha256": "aa4d92de10636682532d4f37852198eda5632ff9ad622724e5d464d9dbade4b8",
+      "version": "0.14.202",
+      "generated_at": "2026-10-15T12:29:53.033540+00:00",
+      "metrics": {
+        "event_to_target_start": {
+          "avg_ms": 306.69296290934227,
+          "count": 5348,
+          "p95_ms": 393.56529898941517,
+          "recent_count": 162,
+          "recent_p95_ms": 426.34746595285833
+        },
+        "event_to_decision": {
+          "avg_ms": 394.4959533295585,
+          "count": 5348,
+          "p95_ms": 474.8545290203765,
+          "recent_count": 162,
+          "recent_p95_ms": 518.5213109944016
+        },
+        "inference": {
+          "avg_ms": 74.67053816068457,
+          "count": 5366,
+          "p95_ms": 141.93351805442944,
+          "recent_count": 162,
+          "recent_p95_ms": 165.00925098080188
+        },
+        "wrapped_inference": {
+          "avg_ms": 365.6548780796627,
+          "count": 5364,
+          "p95_ms": 510.7820609700866,
+          "recent_count": 160,
+          "recent_p95_ms": 526.2116669910029
+        },
+        "context_shadow_observation": {
+          "avg_ms": 252.55164846212205,
+          "count": 5364,
+          "p95_ms": 375.3086280194111,
+          "recent_count": 160,
+          "recent_p95_ms": 392.7025059820153
+        },
+        "decision_to_executor": {
+          "avg_ms": 0.8626379387200148,
+          "count": 5366,
+          "p95_ms": 2.985877974424511,
+          "recent_count": 162,
+          "recent_p95_ms": 3.1546539976261556
+        },
+        "event_to_service_dispatch": null
+      },
+      "intents": {
+        "intent_rejected": 1441,
+        "intent_shadow": 3925
+      },
+      "sql_comparison_calls": 8,
+      "sql_comparison_wall_ms": 3494.754,
+      "sql_comparison_max_ms": 1463.587,
+      "sql_comparison_thread_cpu_ms": 1180.1319999999998,
+      "sql_comparison_threads": [
+        "HTTP handler"
+      ]
+    },
+    {
+      "file": "adaptive-ai-runtime-debug-20261015-143046.json",
+      "sha256": "3d653ff555124c94c1ae8aae07ed061500494de5d31cc60b0f26955222c14d2d",
+      "version": "0.14.202",
+      "generated_at": "2026-10-15T12:30:46.813592+00:00",
+      "metrics": {
+        "event_to_target_start": {
+          "avg_ms": 302.02394675680875,
+          "count": 5491,
+          "p95_ms": 426.34746595285833,
+          "recent_count": 163,
+          "recent_p95_ms": 380.05506503395736
+        },
+        "event_to_decision": {
+          "avg_ms": 390.26374643798243,
+          "count": 5491,
+          "p95_ms": 523.9721679827198,
+          "recent_count": 163,
+          "recent_p95_ms": 523.9721679827198
+        },
+        "inference": {
+          "avg_ms": 75.18010303166533,
+          "count": 5509,
+          "p95_ms": 156.30549803609028,
+          "recent_count": 163,
+          "recent_p95_ms": 176.57276702811942
+        },
+        "wrapped_inference": {
+          "avg_ms": 366.6765654676535,
+          "count": 5509,
+          "p95_ms": 535.7158510014415,
+          "recent_count": 165,
+          "recent_p95_ms": 664.2777840024792
+        },
+        "context_shadow_observation": {
+          "avg_ms": 253.05516041401225,
+          "count": 5509,
+          "p95_ms": 389.9620360461995,
+          "recent_count": 165,
+          "recent_p95_ms": 480.37048301193863
+        },
+        "decision_to_executor": {
+          "avg_ms": 0.8703587182701469,
+          "count": 5509,
+          "p95_ms": 3.262040961999446,
+          "recent_count": 163,
+          "recent_p95_ms": 3.662061004433781
+        },
+        "event_to_service_dispatch": null
+      },
+      "intents": {
+        "intent_rejected": 1450,
+        "intent_shadow": 4059
+      },
+      "sql_comparison_calls": 6,
+      "sql_comparison_wall_ms": 3840.683,
+      "sql_comparison_max_ms": 1051.774,
+      "sql_comparison_thread_cpu_ms": 1005.118,
+      "sql_comparison_threads": [
+        "HTTP handler"
+      ]
+    },
+    {
+      "file": "adaptive-ai-runtime-debug-20261015-143136.json",
+      "sha256": "3e5d32f11be6983440691ded61385e44813c7fffc426e7f63370836f95716c18",
+      "version": "0.14.202",
+      "generated_at": "2026-10-15T12:31:36.177487+00:00",
+      "metrics": {
+        "event_to_target_start": {
+          "avg_ms": 296.6699075436575,
+          "count": 5624,
+          "p95_ms": 407.4409049935639,
+          "recent_count": 167,
+          "recent_p95_ms": 375.8608839707449
+        },
+        "event_to_decision": {
+          "avg_ms": 385.1211722350057,
+          "count": 5624,
+          "p95_ms": 518.5213109944016,
+          "recent_count": 167,
+          "recent_p95_ms": 471.29451198270544
+        },
+        "inference": {
+          "avg_ms": 75.48829149144707,
+          "count": 5642,
+          "p95_ms": 166.34500201325864,
+          "recent_count": 167,
+          "recent_p95_ms": 162.43526001926512
+        },
+        "wrapped_inference": {
+          "avg_ms": 366.68858791121113,
+          "count": 5642,
+          "p95_ms": 554.08340098802,
+          "recent_count": 167,
+          "recent_p95_ms": 547.6954209734686
+        },
+        "context_shadow_observation": {
+          "avg_ms": 252.90734008485833,
+          "count": 5642,
+          "p95_ms": 393.30329501535743,
+          "recent_count": 167,
+          "recent_p95_ms": 389.83657298376784
+        },
+        "decision_to_executor": {
+          "avg_ms": 0.868260426031563,
+          "count": 5642,
+          "p95_ms": 3.1546539976261556,
+          "recent_count": 167,
+          "recent_p95_ms": 2.742754004430026
+        },
+        "event_to_service_dispatch": null
+      },
+      "intents": {
+        "intent_rejected": 1460,
+        "intent_shadow": 4182
+      },
+      "sql_comparison_calls": 10,
+      "sql_comparison_wall_ms": 3508.6629999999996,
+      "sql_comparison_max_ms": 942.705,
+      "sql_comparison_thread_cpu_ms": 1375.136,
+      "sql_comparison_threads": [
+        "HTTP handler"
+      ]
+    },
+    {
+      "file": "adaptive-ai-runtime-debug-20261015-143212.json",
+      "sha256": "f08fb78dc9dda88ee0b85931503cda36dbebb64ffcd32702b99550df0153b07d",
+      "version": "0.14.202",
+      "generated_at": "2026-10-15T12:32:12.847561+00:00",
+      "metrics": {
+        "event_to_target_start": {
+          "avg_ms": 293.0715699200366,
+          "count": 5721,
+          "p95_ms": 424.39554003067315,
+          "recent_count": 154,
+          "recent_p95_ms": 339.21474998351187
+        },
+        "event_to_decision": {
+          "avg_ms": 381.9569850651944,
+          "count": 5721,
+          "p95_ms": 523.9721679827198,
+          "recent_count": 154,
+          "recent_p95_ms": 435.8392489957623
+        },
+        "inference": {
+          "avg_ms": 75.8540452142574,
+          "count": 5739,
+          "p95_ms": 176.57276702811942,
+          "recent_count": 154,
+          "recent_p95_ms": 194.16991900652647
+        },
+        "wrapped_inference": {
+          "avg_ms": 367.5756706823593,
+          "count": 5739,
+          "p95_ms": 664.2777840024792,
+          "recent_count": 154,
+          "recent_p95_ms": 688.5000979527831
+        },
+        "context_shadow_observation": {
+          "avg_ms": 253.30566277315577,
+          "count": 5739,
+          "p95_ms": 429.15147996973246,
+          "recent_count": 154,
+          "recent_p95_ms": 470.1993790222332
+        },
+        "decision_to_executor": {
+          "avg_ms": 0.8799357129668869,
+          "count": 5739,
+          "p95_ms": 3.4182800445705652,
+          "recent_count": 154,
+          "recent_p95_ms": 3.4525429946370423
+        },
+        "event_to_service_dispatch": null
+      },
+      "intents": {
+        "intent_rejected": 1466,
+        "intent_shadow": 4273
+      },
+      "sql_comparison_calls": 11,
+      "sql_comparison_wall_ms": 10858.099,
+      "sql_comparison_max_ms": 2417.789,
+      "sql_comparison_thread_cpu_ms": 1995.7920000000001,
+      "sql_comparison_threads": [
+        "HTTP handler"
+      ]
+    }
+  ],
+  "interpretation": "All supplied sessions contain Shadow/rejections, with no HA service samples. Target-start latency includes event ingestion, coalescing and queued work. HTTP episode reads compete for CPU, GIL and SQLite I/O; the same-target Tournament pipeline remains serial.",
+  "validation": {
+    "tests_passed": 2422,
+    "regression_tests_added": 16,
+    "python": "3.12.3",
+    "platform": "Linux WSL Ubuntu",
+    "seconds": 264.977,
+    "compileall": true,
+    "javascript_syntax": true,
+    "full_test_log_sha256": "0f4b42d4b7d565004c42b19f3837e0136bcaaf8b06e376cadff8b71a1b0f70be",
+    "tested_source_sha256": {
+      ".github/workflows/validate.yml": "debfc668dc4fd1921eee2a780152f1d3221947f797ced20d866629f5b0e30429",
+      "adaptive_ai/src/episode_evaluator.py": "4dacb20fc4525320890ffd5683bf3d0c8dbae24f5d682908d49f67ffbff6e593",
+      "adaptive_ai/src/runtime_debug_log.py": "d395c796699364960f6c25ed028c412da2b3e2b27079f84705f75026f6b6b7aa",
+      "adaptive_ai/src/settings.py": "4c94e6a4779c137ce01f0de0a6169f4f5727d764a81727ec507aa2c4ffc21ed9",
+      "adaptive_ai/src/static/index.html": "bf9aa6bec81f09d324274a7977e68804dade307d8ab0b325a5789501abb48cec",
+      "tests/test_episode_evaluator_migration.py": "7d3fd8fe55f76cff90344bc114e2761d693bd92c64b64d61525953ff650e4c43",
+      "adaptive_ai/src/episode_comparison_cache.py": "efa8bb6a4f5db74921ccd02ed8d37e592357735f6db8b1a2d1a342d8cba160ea",
+      "tests/test_release_203_episode_comparison_cache.py": "5d3affc2866c3c7662935a9992c7f0c769afb1ed9b469cb8a39bf52c525d1d50",
+      "tools/benchmark_episode_reaction.py": "407ee17ec0feae5c5adb10eaf8dbf74b21bfd2d86c5bf30635edd40fb207835c"
+    }
+  },
+  "benchmark": {
+    "synthetic": true,
+    "independent_sources": true,
+    "series": [
+      {
+        "previous": {
+          "episodes": 1200,
+          "matched_episodes": 960,
+          "evidence_bytes_per_policy": 5750,
+          "comparison_sha256": "fbb4553f6ea65c4e9dd09a8aff375a0cc090d42c8b094d9908b6b7a757511907",
+          "comparison_cold_ms": 141.25654700001178,
+          "comparison_median_ms": 141.97874549998346,
+          "events": 64,
+          "event_to_shadow_executor_median_ms": 26.44603349997965,
+          "event_to_shadow_executor_p95_ms": 39.24486500000057,
+          "event_max_ms": 48.731000000032054,
+          "all_events_completed": true,
+          "ha_service_calls": 0,
+          "ui_read_requests": 11,
+          "process_cpu_seconds_per_second": 0.765397268425399,
+          "comparison_cache": {}
+        },
+        "current": {
+          "episodes": 1200,
+          "matched_episodes": 960,
+          "evidence_bytes_per_policy": 5750,
+          "comparison_sha256": "fbb4553f6ea65c4e9dd09a8aff375a0cc090d42c8b094d9908b6b7a757511907",
+          "comparison_cold_ms": 24.134999000011703,
+          "comparison_median_ms": 0.7071014999837644,
+          "events": 64,
+          "event_to_shadow_executor_median_ms": 25.212394499988022,
+          "event_to_shadow_executor_p95_ms": 26.3022890000002,
+          "event_max_ms": 27.279441000018778,
+          "all_events_completed": true,
+          "ha_service_calls": 0,
+          "ui_read_requests": 32,
+          "process_cpu_seconds_per_second": 0.0939275848577659,
+          "comparison_cache": {
+            "entries": 1,
+            "bytes": 18076,
+            "hits": 40,
+            "misses": 1,
+            "evictions": 0,
+            "bypasses": 0,
+            "max_entries": 32,
+            "max_bytes": 67108864,
+            "max_entry_bytes": 16777216,
+            "invalidation": "fresh SQLite agent revision; all episode/result INSERT, UPDATE, DELETE",
+            "sql_json_validation": true
+          }
+        },
+        "comparison_speedup": 200.78976710308692,
+        "reaction_p95_speedup": 1.4920703289360204
+      },
+      {
+        "current": {
+          "episodes": 1200,
+          "matched_episodes": 960,
+          "evidence_bytes_per_policy": 5750,
+          "comparison_sha256": "fbb4553f6ea65c4e9dd09a8aff375a0cc090d42c8b094d9908b6b7a757511907",
+          "comparison_cold_ms": 23.551349000001665,
+          "comparison_median_ms": 0.5782980000219595,
+          "events": 64,
+          "event_to_shadow_executor_median_ms": 25.338813500013657,
+          "event_to_shadow_executor_p95_ms": 26.124744000014744,
+          "event_max_ms": 27.933872999994946,
+          "all_events_completed": true,
+          "ha_service_calls": 0,
+          "ui_read_requests": 32,
+          "process_cpu_seconds_per_second": 0.08607259753369213,
+          "comparison_cache": {
+            "entries": 1,
+            "bytes": 18076,
+            "hits": 40,
+            "misses": 1,
+            "evictions": 0,
+            "bypasses": 0,
+            "max_entries": 32,
+            "max_bytes": 67108864,
+            "max_entry_bytes": 16777216,
+            "invalidation": "fresh SQLite agent revision; all episode/result INSERT, UPDATE, DELETE",
+            "sql_json_validation": true
+          }
+        },
+        "previous": {
+          "episodes": 1200,
+          "matched_episodes": 960,
+          "evidence_bytes_per_policy": 5750,
+          "comparison_sha256": "fbb4553f6ea65c4e9dd09a8aff375a0cc090d42c8b094d9908b6b7a757511907",
+          "comparison_cold_ms": 131.04238500000065,
+          "comparison_median_ms": 115.58239600000775,
+          "events": 64,
+          "event_to_shadow_executor_median_ms": 26.534088500000053,
+          "event_to_shadow_executor_p95_ms": 42.69370899999103,
+          "event_max_ms": 56.439718999968136,
+          "all_events_completed": true,
+          "ha_service_calls": 0,
+          "ui_read_requests": 12,
+          "process_cpu_seconds_per_second": 0.7402741856807279,
+          "comparison_cache": {}
+        },
+        "comparison_speedup": 199.8664978879726,
+        "reaction_p95_speedup": 1.6342249707773955
+      },
+      {
+        "previous": {
+          "episodes": 1200,
+          "matched_episodes": 960,
+          "evidence_bytes_per_policy": 5750,
+          "comparison_sha256": "fbb4553f6ea65c4e9dd09a8aff375a0cc090d42c8b094d9908b6b7a757511907",
+          "comparison_cold_ms": 138.0649989999938,
+          "comparison_median_ms": 123.03396600000838,
+          "events": 64,
+          "event_to_shadow_executor_median_ms": 27.05961050003225,
+          "event_to_shadow_executor_p95_ms": 40.28662700000041,
+          "event_max_ms": 50.15606099999559,
+          "all_events_completed": true,
+          "ha_service_calls": 0,
+          "ui_read_requests": 11,
+          "process_cpu_seconds_per_second": 0.747145836365801,
+          "comparison_cache": {}
+        },
+        "current": {
+          "episodes": 1200,
+          "matched_episodes": 960,
+          "evidence_bytes_per_policy": 5750,
+          "comparison_sha256": "fbb4553f6ea65c4e9dd09a8aff375a0cc090d42c8b094d9908b6b7a757511907",
+          "comparison_cold_ms": 21.696482999971067,
+          "comparison_median_ms": 0.5666795000252023,
+          "events": 64,
+          "event_to_shadow_executor_median_ms": 25.345833000017137,
+          "event_to_shadow_executor_p95_ms": 26.593265999963478,
+          "event_max_ms": 27.19107399997256,
+          "all_events_completed": true,
+          "ha_service_calls": 0,
+          "ui_read_requests": 32,
+          "process_cpu_seconds_per_second": 0.09445446554493188,
+          "comparison_cache": {
+            "entries": 1,
+            "bytes": 18076,
+            "hits": 40,
+            "misses": 1,
+            "evictions": 0,
+            "bypasses": 0,
+            "max_entries": 32,
+            "max_bytes": 67108864,
+            "max_entry_bytes": 16777216,
+            "invalidation": "fresh SQLite agent revision; all episode/result INSERT, UPDATE, DELETE",
+            "sql_json_validation": true
+          }
+        },
+        "comparison_speedup": 217.11384652971674,
+        "reaction_p95_speedup": 1.5149183631696737
+      }
+    ],
+    "comparison_speedup_median": 200.78976710308692,
+    "reaction_p95_speedup_median": 1.5149183631696737,
+    "limit": "Host Engine/scheduler and real Shadow Executor under a 50 ms UI comparison workload. No Tournament inference, HA network or device ACK. Episode result parity and delivery checked; not a Raspberry Pi latency guarantee."
+  },
+  "entrypoint_smoke": {
+    "entrypoint": "adaptive_ai/src/trial_queue_main.py",
+    "health": {
+      "ok": true,
+      "ready": true,
+      "startup": {
+        "current_state_seconds": 0.061220754000032684,
+        "elapsed_seconds": 0.28235316276550293,
+        "error": null,
+        "message": "Adaptive AI runtime is ready",
+        "ready": true,
+        "started_at": 1792068935.487432,
+        "state": "ready",
+        "step": 7,
+        "steps": 7,
+        "timings": {
+          "building_runtime": 0.125,
+          "http_ready": 0.0402,
+          "http_starting": 0.0111,
+          "loading_runtime": 0.0147,
+          "reconciling_control": 0.0001,
+          "starting_engine": 0.0003,
+          "starting_history": 0.0288,
+          "starting_realtime": 0.001
+        }
+      },
+      "version": "0.14.203"
+    }
+  }
+}

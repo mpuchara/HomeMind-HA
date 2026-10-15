@@ -18,6 +18,10 @@ import hashlib
 import json
 import math
 import time
+import sqlite3
+from episode_comparison_cache import ComparisonCache, install_revisions, revision
+from telemetry import TELEMETRY, RUNTIME_DEBUG
+from settings import OPTIONS
 from typing import Any, Iterable, Optional
 
 CONTRACT_VERSION = 1
@@ -181,6 +185,11 @@ class EpisodeEvaluator:
     def __init__(self, store=None, clock=time.time):
         self.store = store
         self.clock = clock
+        try:
+            cache_mb = max(0, min(256, int(OPTIONS.get('runtime_episode_comparison_cache_mb', 64))))
+        except (TypeError, ValueError):
+            cache_mb = 64
+        self._comparison_cache = ComparisonCache(max_bytes=cache_mb*1024*1024)
         if store is not None:
             self._migrate()
 
@@ -222,6 +231,14 @@ class EpisodeEvaluator:
                     ON episode_evaluator_policy_results(policy_key,episode_id);
                 """
             )
+            install_revisions(c)
+            try:
+                c.execute("SELECT json_valid('{}')").fetchone()
+                self._comparison_json_sql = True
+            except sqlite3.OperationalError as exc:
+                if 'no such function: json_valid' not in str(exc).lower():
+                    raise
+                self._comparison_json_sql = False
 
     @staticmethod
     def _timeline(start: float, end: float, observations: list[dict], decisions: list[dict],
@@ -581,12 +598,80 @@ class EpisodeEvaluator:
             out[row["episode_id"]] = row
         return out
 
+    def comparison_cache_snapshot(self):
+        return {**self._comparison_cache.snapshot(),
+                'sql_json_validation': getattr(self, '_comparison_json_sql', False)}
+
+    def _paired_policy_rows(self, connection, agent_id, parent_key, candidate_key):
+        # Fetch only paired evidence actually consumed by aggregation. In particular,
+        # large provenance/evidence and observability JSON do not enter Python here.
+        if not self._comparison_json_sql:
+            # Older SQLite builds retain the complete audit decoder and its errors.
+            p, c = self._policy_rows(agent_id, parent_key), self._policy_rows(agent_id, candidate_key)
+            ids = sorted(set(p) & set(c), key=lambda eid: (p[eid]['start_ts'], eid))
+            return p, c, ids
+        rows = connection.execute(
+            """SELECT e.episode_id,e.start_ts,e.labels_json,
+                      json_valid(COALESCE(NULLIF(e.observability_json,''),'{}')) AS observation_valid,
+                      json_valid(COALESCE(NULLIF(p.evidence_json,''),'{}')) AS parent_valid,
+                      json_valid(COALESCE(NULLIF(c.evidence_json,''),'{}')) AS candidate_valid,
+                      p.executed AS p_executed,p.counterfactual AS p_counterfactual,
+                      p.metrics_json AS p_metrics,c.executed AS c_executed,
+                      c.counterfactual AS c_counterfactual,c.metrics_json AS c_metrics
+               FROM episode_evaluator_episodes e
+               JOIN episode_evaluator_policy_results p ON p.episode_id=e.episode_id AND p.policy_key=?
+               JOIN episode_evaluator_policy_results c ON c.episode_id=e.episode_id AND c.policy_key=?
+               WHERE e.agent_id=? ORDER BY e.start_ts,e.episode_id""",
+            (str(parent_key), str(candidate_key), str(agent_id)),
+        ).fetchall()
+        parent, candidate, ids = {}, {}, []
+        for row in rows:
+            if not (row['observation_valid'] and row['parent_valid'] and row['candidate_valid']):
+                raise json.JSONDecodeError('Invalid episode audit JSON', '', 0)
+            eid = row['episode_id']
+            ids.append(eid)
+            labels = json.loads(row['labels_json'] or '{}')
+            for prefix, output in (('p', parent), ('c', candidate)):
+                output[eid] = dict(labels=labels, executed=row[prefix+'_executed'],
+                                   counterfactual=row[prefix+'_counterfactual'],
+                                   metrics=json.loads(row[prefix+'_metrics'] or '{}'))
+        return parent, candidate, ids
+
     def compare_policies(self, agent_id: str, parent_policy_key: str,
                          candidate_policy_key: str) -> dict:
-        """Compare two policies only on the exact intersection of finalized episodes."""
-        parent = self._policy_rows(agent_id, parent_policy_key)
-        candidate = self._policy_rows(agent_id, candidate_policy_key)
-        episode_ids = sorted(set(parent) & set(candidate), key=lambda eid: (parent[eid]["start_ts"], eid))
+        started = time.perf_counter()
+        trace = (RUNTIME_DEBUG.begin('episode_comparison', agent_id=str(agent_id))
+                 if RUNTIME_DEBUG.enabled else None)
+        status = 'error'
+        try:
+            result = self._compare_policies(agent_id, parent_policy_key, candidate_policy_key)
+            status = 'ok'
+            return result
+        finally:
+            TELEMETRY.observe('episode_comparison', (time.perf_counter()-started)*1000)
+            RUNTIME_DEBUG.end(trace, status=status)
+
+    def _compare_policies(self, agent_id: str, parent_policy_key: str,
+                         candidate_policy_key: str) -> dict:
+        """Fresh paired comparison; heavy results are reused only at a SQL revision."""
+        key = tuple(str(x) for x in (agent_id, parent_policy_key, candidate_policy_key))
+        token = after = None
+        cacheable = False
+        if self.store is None:
+            parent, candidate, episode_ids = {}, {}, []
+        else:
+            with self.store.conn() as connection:
+                # A caller may own an explicit write/read transaction. Such snapshots
+                # must never seed a cache later used by a different transaction.
+                cacheable = not connection.in_transaction
+                token = revision(connection, agent_id)
+                cached = self._comparison_cache.get(key, token) if cacheable else None
+                if cached is not None:
+                    return cached
+                parent, candidate, episode_ids = self._paired_policy_rows(
+                    connection, agent_id, parent_policy_key, candidate_policy_key)
+                after = revision(connection, agent_id)
+                cacheable = cacheable and not connection.in_transaction
 
         def aggregate(rows: dict[str, dict]):
             meaningful = harmful = proxy_meaningful = proxy_harmful = 0
@@ -642,7 +727,7 @@ class EpisodeEvaluator:
         c = aggregate(candidate)
         independently_observed = min(p["meaningful_episodes"], c["meaningful_episodes"])
         proxy_only = independently_observed == 0 and min(p["proxy_meaningful_episodes"], c["proxy_meaningful_episodes"]) > 0
-        return {
+        result = {
             "contract_version": CONTRACT_VERSION,
             "domain": DOMAIN_LIGHT_POWER,
             "agent_id": str(agent_id),
@@ -655,3 +740,6 @@ class EpisodeEvaluator:
             "parent": p,
             "candidate": c,
         }
+        if cacheable and token == after:
+            self._comparison_cache.put(key, token, result)
+        return result
