@@ -391,9 +391,17 @@ def install_promotion(service):
     def attempt_promotion(agent, challenger, model, actions, now):
         aid = str(agent["id"])
         with lock:
+            # Cooldown can only veto an otherwise eligible challenger. In the
+            # common no-new-evidence case, all remaining gates are RAM-only and
+            # already prove that promotion is impossible. A ready candidate still
+            # reads the durable cooldown immediately before schema mutation.
+            if not promotion_eligibility(model, actions, now)["ready"]:
+                TELEMETRY.inc('context_promotion_ineligible_ram_skips')
+                return False
             tournament = service.state(aid)
             if challenger not in set(tournament.get("challenger_features") or []):
                 return False
+            TELEMETRY.inc('context_promotion_cooldown_reads')
             promotion_state = _promotion_state(service, aid)
             eligibility = promotion_eligibility(
                 model, actions, now, promotion_state.get("last_promotion_ts")

@@ -734,11 +734,13 @@ def install(store, engine):
         try:
             session = getattr(store, "connection_session", None)
             census = getattr(service, "observation_pool_scope", None)
+            history_frame = getattr(service, 'schema_history_frame', None)
             # This observer is not a retained write batch. Keep the short native
             # timeout, but do not synthesize BUSY solely because reclaim is active.
             with (background_sqlite(store, retryable=False),
                   session() if callable(session) else nullcontext(),
-                  census() if callable(census) else nullcontext()):
+                  census() if callable(census) else nullcontext(),
+                  history_frame() if callable(history_frame) else nullcontext()):
                 service.observe_shadow(agent, state_map, changed_entities)
         except Exception as exc:
             status = "error"

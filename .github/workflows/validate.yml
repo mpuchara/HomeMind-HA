@@ -59,6 +59,9 @@ jobs:
       - name: 0.14.200 retained runtime SQLite cache result parity
         if: matrix.python == '3.11'
         run: python tools/benchmark_runtime_ram_cache.py --passes 64
+      - name: 0.14.201 contended runtime full candidate checksum smoke
+        if: matrix.python == '3.11'
+        run: python tools/benchmark_runtime_hot_path.py --one --passes 8 --contended
       - name: 0.14.172 targeted retries terminate without peer replay
         if: matrix.python == '3.11'
         run: python tools/benchmark_target_retries.py --targets 4 --completions 32 --compact
@@ -276,6 +279,7 @@ jobs:
                       prefix+'src/static/runtime_debug_ui.js',
                       prefix+'src/runtime_debug_log.py',
                       prefix+'src/runtime_sqlite_cache.py',
+                      prefix+'src/runtime_threading.py',
                   ):
                       assert required in names, (archive, required)
           print('verified package version/layout/runtime files:', expected)

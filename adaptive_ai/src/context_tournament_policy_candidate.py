@@ -737,15 +737,18 @@ def install_policy_candidates(service):
             candidate_cache.pop((aid, str(challenger)), None)
             raw = None
         key = (aid, str(challenger))
-        with getattr(service.engine, "lock", threading.RLock()):
-            states = dict(getattr(service.engine, "state_map", {}) or {})
-            registry = dict(getattr(service.engine, "entity_registry", {}) or {})
         if valid:
             cached = candidate_cache.get(key)
             source_version = _candidate_payload_version(raw)
             if cached is not None and source_version is not None and cached[1] == source_version:
                 RUNTIME_DEBUG.instant("context_candidate_cache", agent_id=aid, challenger=str(challenger), outcome="hit")
                 return cached[0]
+        # A warm, verified policy already owns its schema. Copying the whole HA
+        # state map and registry is only needed when constructing/restoring one.
+        with getattr(service.engine, "lock", threading.RLock()):
+            states = dict(getattr(service.engine, "state_map", {}) or {})
+            registry = dict(getattr(service.engine, "entity_registry", {}) or {})
+        if valid:
             RUNTIME_DEBUG.instant("context_candidate_cache", agent_id=aid, challenger=str(challenger), outcome="restore")
             candidate = MultiHorizonPolicy(
                 agent, states, registry, set(), model=copy.deepcopy(raw),
