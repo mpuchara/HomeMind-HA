@@ -1,0 +1,180 @@
+{
+  "synthetic": true,
+  "independent_sources": true,
+  "series": [
+    {
+      "before": {
+        "episodes": 96,
+        "audit_bytes_per_row": 131085,
+        "passes": 8,
+        "cold_comparison_median_ms": 8.82682099998533,
+        "cold_comparison_max_ms": 10.8523779999814,
+        "comparison_cpu_median_ms": 8.877347499999994,
+        "comparison_sha256": "d482c9cd846a8267c718502d3c3dc302a5732df0ffd9776c6cb3d444c1ed8376",
+        "index_initialization_ms": 1.2395300000207499,
+        "compact_indexes": 0,
+        "compact_index_bytes": null,
+        "all_results_identical": true,
+        "comparison_cache": {
+          "entries": 1,
+          "bytes": 3370,
+          "hits": 0,
+          "misses": 8,
+          "evictions": 0,
+          "bypasses": 0,
+          "max_entries": 32,
+          "max_bytes": 67108864,
+          "max_entry_bytes": 16777216,
+          "invalidation": "fresh SQLite agent revision; all episode/result INSERT, UPDATE, DELETE",
+          "sql_json_validation": true
+        }
+      },
+      "after": {
+        "episodes": 96,
+        "audit_bytes_per_row": 131085,
+        "passes": 8,
+        "cold_comparison_median_ms": 2.1923810000146204,
+        "cold_comparison_max_ms": 2.9167349999852377,
+        "comparison_cpu_median_ms": 2.208202999999992,
+        "comparison_sha256": "d482c9cd846a8267c718502d3c3dc302a5732df0ffd9776c6cb3d444c1ed8376",
+        "index_initialization_ms": 18.655223999985537,
+        "compact_indexes": 2,
+        "compact_index_bytes": 94208,
+        "all_results_identical": true,
+        "comparison_cache": {
+          "entries": 1,
+          "bytes": 3370,
+          "hits": 0,
+          "misses": 8,
+          "evictions": 0,
+          "bypasses": 0,
+          "max_entries": 32,
+          "max_bytes": 67108864,
+          "max_entry_bytes": 16777216,
+          "invalidation": "fresh SQLite agent revision; all episode/result INSERT, UPDATE, DELETE",
+          "sql_json_validation": true,
+          "compact_comparison_indexes": true,
+          "comparison_index_error": null
+        }
+      },
+      "cold_comparison_speedup": 4.026134599746333
+    },
+    {
+      "after": {
+        "episodes": 96,
+        "audit_bytes_per_row": 131085,
+        "passes": 8,
+        "cold_comparison_median_ms": 2.2242470000151116,
+        "cold_comparison_max_ms": 3.2223419999581893,
+        "comparison_cpu_median_ms": 2.2395185000000097,
+        "comparison_sha256": "d482c9cd846a8267c718502d3c3dc302a5732df0ffd9776c6cb3d444c1ed8376",
+        "index_initialization_ms": 26.290560000006735,
+        "compact_indexes": 2,
+        "compact_index_bytes": 94208,
+        "all_results_identical": true,
+        "comparison_cache": {
+          "entries": 1,
+          "bytes": 3370,
+          "hits": 0,
+          "misses": 8,
+          "evictions": 0,
+          "bypasses": 0,
+          "max_entries": 32,
+          "max_bytes": 67108864,
+          "max_entry_bytes": 16777216,
+          "invalidation": "fresh SQLite agent revision; all episode/result INSERT, UPDATE, DELETE",
+          "sql_json_validation": true,
+          "compact_comparison_indexes": true,
+          "comparison_index_error": null
+        }
+      },
+      "before": {
+        "episodes": 96,
+        "audit_bytes_per_row": 131085,
+        "passes": 8,
+        "cold_comparison_median_ms": 7.577543999985892,
+        "cold_comparison_max_ms": 10.528542000031393,
+        "comparison_cpu_median_ms": 7.623127499999994,
+        "comparison_sha256": "d482c9cd846a8267c718502d3c3dc302a5732df0ffd9776c6cb3d444c1ed8376",
+        "index_initialization_ms": 1.019833999976072,
+        "compact_indexes": 0,
+        "compact_index_bytes": null,
+        "all_results_identical": true,
+        "comparison_cache": {
+          "entries": 1,
+          "bytes": 3370,
+          "hits": 0,
+          "misses": 8,
+          "evictions": 0,
+          "bypasses": 0,
+          "max_entries": 32,
+          "max_bytes": 67108864,
+          "max_entry_bytes": 16777216,
+          "invalidation": "fresh SQLite agent revision; all episode/result INSERT, UPDATE, DELETE",
+          "sql_json_validation": true
+        }
+      },
+      "cold_comparison_speedup": 3.4067907026217905
+    },
+    {
+      "before": {
+        "episodes": 96,
+        "audit_bytes_per_row": 131085,
+        "passes": 8,
+        "cold_comparison_median_ms": 8.23061150001081,
+        "cold_comparison_max_ms": 10.43809399999418,
+        "comparison_cpu_median_ms": 8.28176650000001,
+        "comparison_sha256": "d482c9cd846a8267c718502d3c3dc302a5732df0ffd9776c6cb3d444c1ed8376",
+        "index_initialization_ms": 1.311387000043851,
+        "compact_indexes": 0,
+        "compact_index_bytes": null,
+        "all_results_identical": true,
+        "comparison_cache": {
+          "entries": 1,
+          "bytes": 3370,
+          "hits": 0,
+          "misses": 8,
+          "evictions": 0,
+          "bypasses": 0,
+          "max_entries": 32,
+          "max_bytes": 67108864,
+          "max_entry_bytes": 16777216,
+          "invalidation": "fresh SQLite agent revision; all episode/result INSERT, UPDATE, DELETE",
+          "sql_json_validation": true
+        }
+      },
+      "after": {
+        "episodes": 96,
+        "audit_bytes_per_row": 131085,
+        "passes": 8,
+        "cold_comparison_median_ms": 1.9634355000164305,
+        "cold_comparison_max_ms": 2.4339029999964623,
+        "comparison_cpu_median_ms": 1.9763499999999878,
+        "comparison_sha256": "d482c9cd846a8267c718502d3c3dc302a5732df0ffd9776c6cb3d444c1ed8376",
+        "index_initialization_ms": 12.750948999951106,
+        "compact_indexes": 2,
+        "compact_index_bytes": 94208,
+        "all_results_identical": true,
+        "comparison_cache": {
+          "entries": 1,
+          "bytes": 3370,
+          "hits": 0,
+          "misses": 8,
+          "evictions": 0,
+          "bypasses": 0,
+          "max_entries": 32,
+          "max_bytes": 67108864,
+          "max_entry_bytes": 16777216,
+          "invalidation": "fresh SQLite agent revision; all episode/result INSERT, UPDATE, DELETE",
+          "sql_json_validation": true,
+          "compact_comparison_indexes": true,
+          "comparison_index_error": null
+        }
+      },
+      "cold_comparison_speedup": 4.191943916640977
+    }
+  ],
+  "median_cold_comparison_speedup": 4.026134599746333,
+  "limit": "Large synthetic valid audits, real SQLite and production comparison. Cache cleared deliberately. Index build is reported separately. Host measurements exclude Pi storage, other workers, HA network and physical actuation.",
+  "environment": "WSL Ubuntu Python 3.12.3, NumPy 2.3.3, full tests no longer running"
+}

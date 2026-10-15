@@ -65,9 +65,12 @@ jobs:
       - name: 0.14.202 causal observation handoff smoke
         if: matrix.python == '3.11'
         run: python tools/benchmark_reaction_observation.py --one --passes 8
-      - name: 0.14.205 guarded Control dispatch after a sensor burst
+      - name: 0.14.206 compact cold comparison smoke
         if: matrix.python == '3.11'
-        run: python tools/benchmark_control_priority.py --one --events 8
+        run: python tools/benchmark_tail_latency.py --one --episodes 24 --audit-kib 32 --passes 2
+      - name: 0.14.206 guarded Control dispatch with continuous pending events
+        if: matrix.python == '3.11'
+        run: python tools/benchmark_control_priority.py --one --events 256 --continuous
       - name: 0.14.203 real event scheduler under episode UI load
         if: matrix.python == '3.11'
         run: python tools/benchmark_episode_reaction.py --one --episodes 128 --events 16

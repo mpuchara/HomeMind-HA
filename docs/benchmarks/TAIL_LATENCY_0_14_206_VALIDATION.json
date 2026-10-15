@@ -1,0 +1,62 @@
+{
+  "version": "0.14.206",
+  "base_commit": "d0b98210b49c34102d403350a943fbf21336191f",
+  "environment": "Linux Python 3.12.3 / NumPy 2.3.3",
+  "tests_passed": 2474,
+  "tests_skipped": 0,
+  "new_regression_tests": 19,
+  "full_suite_seconds": 323.126,
+  "compileall": true,
+  "all_shipped_js_syntax": true,
+  "production_entrypoint": {
+    "entrypoint": "adaptive_ai/src/trial_queue_main.py",
+    "health": {
+      "ok": true,
+      "ready": true,
+      "startup": {
+        "current_state_seconds": 0.040097829000004026,
+        "elapsed_seconds": 1.28196382522583,
+        "error": null,
+        "message": "Adaptive AI runtime is ready",
+        "ready": true,
+        "started_at": 1792091347.9545007,
+        "state": "ready",
+        "step": 7,
+        "steps": 7,
+        "timings": {
+          "building_runtime": 0.6353,
+          "http_ready": 0.3614,
+          "http_starting": 0.0614,
+          "loading_runtime": 0.1259,
+          "reconciling_control": 0.0001,
+          "starting_engine": 0.0011,
+          "starting_history": 0.0558,
+          "starting_realtime": 0.0009
+        }
+      },
+      "version": "0.14.206"
+    }
+  },
+  "normalized_lf_sha256": {
+    "adaptive_ai/config.yaml": "f1f54434309084e814246ed69856cbb5e102d2e9a57c4fba7d1d3143390ae2f4",
+    "adaptive_ai/Dockerfile": "76edf12763ae5c4cd97e345ba247af7da7d176632b5859a8179c19ab9e819f36",
+    "adaptive_ai/src/settings.py": "c545031afdedf550be42623ca434aa3c940c4baa994aa56fc07cbe2354e95139",
+    "adaptive_ai/src/static/index.html": "7a10eb405d1aaf2597be3af861a4039a5aa7ead93bec8cdb404b9e5c56d41477",
+    "adaptive_ai/src/episode_evaluator.py": "7311da9133f6182949249229e68595d48ac198fe63f63e1dbcf2f37200ae0b1c",
+    "adaptive_ai/src/shadow_observation_scheduler.py": "a4a786eca860f7fd9d183cc9e6da4d1931e2cc23bb1f1ea133889faf1eb45c40",
+    "adaptive_ai/src/context_tournament.py": "1b394f1f7ea1a72870b25c685768054f2b0a052f082a6da59d06359ff92cba66",
+    "tests/test_release_206_tail_latency.py": "e56df548bd6f01bbf60d6750e4af71f4223cbadb42cca49c45c651a310bc2d9b",
+    "tools/benchmark_control_priority.py": "7d356bb171600de436f77ac2ccdc820ddca89c053ae2833db7a7cc8da8cc154a",
+    "tools/benchmark_tail_latency.py": "2e787267ed30735a154a950e45efe35d0052a6a07e88417205bbff1889f4c723",
+    ".github/workflows/validate.yml": "9dabc0da94daa4bff315a9878331e39597d7529ab447d519653c57525c7d8939"
+  },
+  "comparison_parity": "full result SHA identical between independent 0.14.205 and 0.14.206 sources in three pairs",
+  "control_parity": "all events completed; exact decision/status SHA parity and one guarded service dispatch to HA stub in every independent-source run",
+  "archive_verification": "package_install_release.py checks CRC, manifest and every archive byte against tracked source; separate receipt records archive hashes",
+  "not_verified": [
+    "Raspberry Pi CPU/microSD",
+    "physical actuation latency",
+    "HA network/ACK",
+    "complete shipped composition under actual household load"
+  ]
+}

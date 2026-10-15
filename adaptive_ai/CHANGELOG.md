@@ -1,3 +1,10 @@
+## 0.14.206
+
+- Read cold episode comparisons through compact covering SQLite expression indexes instead of rereading large audit JSON. Preserve complete results, audit validity checks, revision invalidation, transactions and fresh-query fallback if optional indexes are unavailable.
+- Give pending routed sensor events priority over due optional Tournament observations, with a configurable maximum of 5000 ms since the last successful observation. Target events, availability/value edges, new policy/schema and failed attempts bypass deferral. Keep foreground control and all Executor guards unchanged.
+- Export deferred-for-realtime and retry counters. Keep bounded schedules, storage admission, WAL limits and retention. Initial index creation is a one-time startup cost; Full Rebuild is not needed.
+- Add independent-source cold comparison benchmark and regressions for external mutations, rollback, low-space fallback, queued events and complete target labels. Host benchmark results do not establish Pi or physical actuation latency.
+
 ## 0.14.205
 
 - Admit the first sensor event without the former default 25 ms debounce. Preserve target-local coalescing and backpressure; custom delays remain configurable.
