@@ -1,9 +1,9 @@
 {
-  "version": "0.14.203",
+  "version": "0.14.204",
   "release_date": "2026-10-15",
-  "base_version": "0.14.200",
-  "base_commit": "aa79300971b369b1815b128cb895f89f032b3883",
-  "release_status": "runtime-hot-path-local-validation-complete",
+  "base_version": "0.14.203",
+  "base_commit": "058f3a32ff55474d516fcd564ccd1f1bf0fbfbd4",
+  "release_status": "shadow-feature-performance-local-validation-complete",
   "release_014140": {
     "scope": "inventory_and_remove_remaining_shipped_feature_Handler_fallbacks_for_Candidate_Live_and_manual_feedback_transport",
     "explicit_routes": "manual_feedback.js, candidate_ui.js, candidate_preference_ui.js, /api/candidates, Candidate Teach-RL status/train, generation history/comparison, /api/candidate-live, /api/live and Candidate discard",
@@ -249,7 +249,7 @@
   "pi4_release_gate_contract": "pi4_release_gate_v1",
   "pi4_real_hardware_required": true,
   "stage7_offline_rl_control_unlock": false,
-  "tests_passed": 2396,
+  "tests_passed": 2437,
   "profile": "rpi4-ram-first-complete-discovery-manual-agent-selection",
   "manual_agent_training": true,
   "max_concurrent_training_jobs": 1,
@@ -2759,7 +2759,7 @@
     "benchmark": "docs/benchmarks/CONTEXT_BUFFER_0_14_195_VALIDATION.json",
     "median_observer_speedup": 1.018396920512725
   },
-  "release_validation_tests_passed": 2396,
+  "release_validation_tests_passed": 2437,
   "release_014196": {
     "scope": "typed_deferred_batch_busy_retry_and_cooperative_wal_reclaim_write_admission",
     "learning_semantics_changed": false,
@@ -2874,5 +2874,21 @@
     "warm_comparison_speedup_median": 200.78976710308692,
     "synthetic_reaction_p95_speedup_median": 1.5149183631696737,
     "audit_validation": "native SQLite JSON validity for paired audits; complete Python reader fallback without JSON extension"
+  },
+  "release_014204": {
+    "scope": "one Shadow observation shares causal per-entity descriptors between independent candidate schemas",
+    "maximum_cached_descriptors": 256,
+    "cache_scope": "one synchronous thread-local observation; exact agent, state map, temporal proxy and timestamp identity",
+    "semantic_key": "entity, schema type, feature contract, target/property, fast profile, exact lags, exclusion",
+    "full_sha_per_candidate": true,
+    "learning_semantics_changed": false,
+    "storage_limits_changed": false,
+    "regression_tests_added": 15,
+    "validation": "2437 Linux Python 3.12.3 tests with NumPy 2.3.3; no skips; independent-source feature/metadata/prediction/learned-head parity; shipped entrypoint ready; compileall and all shipped JavaScript syntax passed",
+    "tests_passed": 2437,
+    "validation_report": "docs/benchmarks/SHADOW_FEATURES_0_14_204_VALIDATION.json",
+    "feature_speedup_uncontended_median": 1.3544956656208456,
+    "observation_speedup_uncontended_median": 1.1966818289935026,
+    "contended_total_time": "variable; no stable overall gain established"
   }
 }
