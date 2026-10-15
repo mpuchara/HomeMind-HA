@@ -141,6 +141,7 @@ class RuntimeDebugLogService:
                 if callable(history_cache):
                     context_persistence['schema_history_reads'] = history_cache()
             for name, owner, method in (
+                ("episode_comparisons", getattr(engine, "episode_evaluator", None), "comparison_cache_snapshot"),
                 ("provenance", engine, "provenance_deferred_snapshot"),
                 ("feature_journal", engine, "feature_observation_deferred_snapshot"),
                 ("fast_light", tournament, "fast_light_persistence_snapshot"),

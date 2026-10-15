@@ -1,5 +1,5 @@
 {
-  "version": "0.14.202",
+  "version": "0.14.203",
   "release_date": "2026-10-15",
   "base_version": "0.14.200",
   "base_commit": "aa79300971b369b1815b128cb895f89f032b3883",
@@ -2862,5 +2862,17 @@
     "validation": "2406 Linux Python 3.12.3 tests; three source-paired comparisons with full result parity; shipped entrypoint ready; compileall; JavaScript syntax; normalized tested-source hashes",
     "explicit_feedback_component_speedup_median": 1.883772784589349,
     "candidate_observation_component_speedup_median": 1.1375396032476166
+  },
+  "release_014203": {
+    "scope": "remove repeated full episode evidence reads competing with realtime sensor decisions",
+    "paired_query": "one joined SQL snapshot; only fields consumed by aggregation",
+    "comparison_cache": "32 immutable JSON results, configurable 0..256 MiB, default 64 MiB, maximum 16 MiB per result",
+    "invalidation": "transactional SQLite triggers on episode and result INSERT UPDATE DELETE, including direct SQL, retention and rollback",
+    "validation": "2422 Linux Python 3.12.3 tests; independent-source comparison output parity; actual event scheduler + Shadow Executor under UI load; shipped entrypoint ready; compileall; JavaScript syntax",
+    "tests_passed": 2422,
+    "regression_tests_added": 16,
+    "warm_comparison_speedup_median": 200.78976710308692,
+    "synthetic_reaction_p95_speedup_median": 1.5149183631696737,
+    "audit_validation": "native SQLite JSON validity for paired audits; complete Python reader fallback without JSON extension"
   }
 }

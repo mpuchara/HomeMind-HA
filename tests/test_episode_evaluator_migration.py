@@ -38,7 +38,7 @@ class EpisodeEvaluatorMigrationTests(unittest.TestCase):
         self.assertTrue(before.issubset(after))
         self.assertEqual(
             after - before,
-            {"episode_evaluator_episodes", "episode_evaluator_policy_results"},
+            {"episode_evaluator_episodes", "episode_evaluator_policy_results", "episode_comparison_revisions"},
         )
         self.assertEqual(sentinel, "keep-me")
 

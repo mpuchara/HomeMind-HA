@@ -72,3 +72,7 @@ Po zmianie listy wykonaj pełne ponowne uczenie danego agenta.
 - support/novelty thresholds.
 
 Najpierw oceń jakość `Selected context` i benchmark. Złe wejścia częściej są przyczyną problemu niż sam parametr algorytmu RL.
+
+## Cache porównań epizodów od 0.14.203
+
+`runtime_episode_comparison_cache_mb`: domyślnie 64 MiB, zakres 0–256 MiB. Wartość 0 wyłącza przechowywanie wyników. Maksymalnie 32 wyniki i 16 MiB na jeden wynik. Zajętość rośnie wyłącznie do faktycznie użytych wyników; limit nie jest rezerwacją RAM. Każde odwołanie sprawdza rewizję SQLite, a zmiany epizodów i wyników unieważniają cache w tej samej transakcji co dane.
