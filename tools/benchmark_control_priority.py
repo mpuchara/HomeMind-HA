@@ -17,7 +17,7 @@ from unittest.mock import patch
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def one(source, events=24):
+def one(source, events=24, continuous=False):
     scratch = tempfile.TemporaryDirectory(prefix='control-priority-global-')
     os.environ['ADAPTIVE_AI_DATA'] = scratch.name
     sys.path[:0] = [str(source / 'adaptive_ai/src'), str(source / 'tests'), str(source / 'tools'), str(source)]
@@ -76,7 +76,7 @@ def one(source, events=24):
             chosen = dict(next(row for row in arms if row['index'] == desired[0]), value=float(desired[0]))
             return chosen, .99, arms, horizon, 1., 0.
         stack.enter_context(patch.object(fixture.live, 'predict', side_effect=root_predict))
-        completed, dispatched = threading.Event(), threading.Event()
+        completed, dispatched, all_decided = threading.Event(), threading.Event(), threading.Event()
         received = [0.]
         decisions, latencies, calls = [], [], []
         original_submit = runtime.executor.submit
@@ -84,6 +84,12 @@ def one(source, events=24):
             result = original_submit(*args, **kwargs)
             decisions.append((float(args[0].desired_value), result['status'], result['reason'].split(':')[0]))
             latencies.append((time.perf_counter() - received[0]) * 1000)
+            if continuous and len(decisions) < events:
+                # A real next event arrives after this Root decision, before its
+                # optional observer. No artificial sleeps or application clock.
+                inject(len(decisions))
+            elif len(decisions) == events:
+                all_decided.set()
             completed.set()
             return result
         runtime.executor.submit = submit
@@ -93,20 +99,26 @@ def one(source, events=24):
             dispatched.set()
             return []
         stack.enter_context(patch.object(executor_module.HA, 'service', side_effect=ha_service))
+        def inject(i):
+            desired[0] = int(i == events - 1)
+            stamp = datetime.now(timezone.utc).isoformat()
+            received[0] = time.perf_counter()
+            runtime.on_state_changed({'entity_id': 'binary_sensor.room_1', 'new_state': {
+                'entity_id': 'binary_sensor.room_1', 'state': 'on' if i % 2 == 0 else 'off',
+                'attributes': {'device_class': 'occupancy'}, 'last_changed': stamp,
+                'last_updated': stamp, 'context': {}}})
         loop = threading.Thread(target=runtime.run, daemon=True)
         loop.start()
         started, cpu = time.perf_counter(), time.process_time()
         try:
-            for i in range(events):
-                completed.clear()
-                desired[0] = int(i == events - 1)
-                stamp = datetime.now(timezone.utc).isoformat()
-                received[0] = time.perf_counter()
-                runtime.on_state_changed({'entity_id': 'binary_sensor.room_1', 'new_state': {
-                    'entity_id': 'binary_sensor.room_1', 'state': 'on' if i % 2 == 0 else 'off',
-                    'attributes': {'device_class': 'occupancy'}, 'last_changed': stamp,
-                    'last_updated': stamp, 'context': {}}})
-                assert completed.wait(10), (i, runtime.error)
+            if continuous:
+                inject(0)
+                assert all_decided.wait(max(30, events / 4)), (len(decisions), runtime.error)
+            else:
+                for i in range(events):
+                    completed.clear()
+                    inject(i)
+                    assert completed.wait(10), (i, runtime.error)
             assert dispatched.wait(10), decisions
         finally:
             elapsed, used_cpu = time.perf_counter() - started, time.process_time() - cpu
@@ -122,7 +134,7 @@ def one(source, events=24):
         assert decisions[-1][1] == 'ACCEPTED', decisions[-1]
         times = sorted(latencies)
         q = getattr(fixture.service, '_observation_scheduler', None)
-        return dict(events=events, all_events_completed=True, actual_executor_control=True,
+        return dict(events=events, continuous_next_event=continuous, all_events_completed=True, actual_executor_control=True,
             root_prediction_fixture=True, ha_network=False, decisions_sha256=hashlib.sha256(json.dumps(decisions).encode()).hexdigest(),
             event_to_executor_median_ms=statistics.median(times), event_to_executor_p95_ms=times[int((len(times)-1)*.95)],
             event_to_service_dispatch_ms=calls[0]['event_to_service_ms'], service_calls=len(calls),
@@ -131,14 +143,14 @@ def one(source, events=24):
             debounce_ms=engine_module.OPTIONS['realtime_inference_debounce_ms'])
 
 
-def paired(baseline, events):
+def paired(baseline, events, continuous=False):
     series = []
     for repeat in range(3):
         pair = {}
         for name in (('before', 'after') if repeat % 2 == 0 else ('after', 'before')):
             source = baseline if name == 'before' else ROOT
             output = subprocess.check_output([sys.executable, str(Path(__file__).resolve()), '--one',
-                '--source-root', str(source), '--events', str(events)], text=True)
+                '--source-root', str(source), '--events', str(events)] + (['--continuous'] if continuous else []), text=True)
             pair[name] = json.loads(output.strip().splitlines()[-1])
         assert pair['before']['decisions_sha256'] == pair['after']['decisions_sha256']
         pair['reaction_median_speedup'] = pair['before']['event_to_executor_median_ms'] / pair['after']['event_to_executor_median_ms']
@@ -156,7 +168,8 @@ if __name__ == '__main__':
     parser.add_argument('--source-root', type=Path, default=ROOT)
     parser.add_argument('--baseline-root', type=Path)
     parser.add_argument('--events', type=int, default=24)
+    parser.add_argument('--continuous', action='store_true', help='inject each next real event at the preceding Executor return')
     args = parser.parse_args()
     if args.events < 4 or (not args.one and args.baseline_root is None):
         parser.error('at least four events and baseline-root required (except --one)')
-    print(json.dumps(one(args.source_root.resolve(), args.events) if args.one else paired(args.baseline_root.resolve(), args.events), indent=None if args.one else 2))
+    print(json.dumps(one(args.source_root.resolve(), args.events, args.continuous) if args.one else paired(args.baseline_root.resolve(), args.events, args.continuous), indent=None if args.one else 2))

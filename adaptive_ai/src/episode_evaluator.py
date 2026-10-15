@@ -23,6 +23,7 @@ from episode_comparison_cache import ComparisonCache, install_revisions, revisio
 from telemetry import TELEMETRY, RUNTIME_DEBUG
 from settings import OPTIONS
 from typing import Any, Iterable, Optional
+from storage_budget import StoragePressure
 
 CONTRACT_VERSION = 1
 DOMAIN_LIGHT_POWER = "light_power"
@@ -190,6 +191,8 @@ class EpisodeEvaluator:
         except (TypeError, ValueError):
             cache_mb = 64
         self._comparison_cache = ComparisonCache(max_bytes=cache_mb*1024*1024)
+        self._comparison_compact_sql = False
+        self._comparison_index_error = None
         if store is not None:
             self._migrate()
 
@@ -239,6 +242,25 @@ class EpisodeEvaluator:
                 if 'no such function: json_valid' not in str(exc).lower():
                     raise
                 self._comparison_json_sql = False
+            if self._comparison_json_sql:
+                try:
+                    # Cover every comparison input, including audit validity, in
+                    # compact native indexes. The large audit strings are parsed
+                    # when written/indexed, not reread on every cold UI request.
+                    c.execute("""CREATE INDEX IF NOT EXISTS idx_episode_compare_meta_206
+                        ON episode_evaluator_episodes(agent_id,start_ts,episode_id,labels_json,
+                        json_valid(COALESCE(NULLIF(observability_json,''),'{}')))""")
+                    c.execute("""CREATE INDEX IF NOT EXISTS idx_episode_compare_pair_206
+                        ON episode_evaluator_policy_results(episode_id,policy_key,executed,
+                        counterfactual,metrics_json,
+                        json_valid(COALESCE(NULLIF(evidence_json,''),'{}')))""")
+                    self._comparison_compact_sql = True
+                except StoragePressure as exc:
+                    self._comparison_index_error = str(exc)
+                except sqlite3.OperationalError as exc:
+                    if not any(word in str(exc).lower() for word in ('locked', 'busy', 'interrupt', 'full')):
+                        raise
+                    self._comparison_index_error = str(exc)
 
     @staticmethod
     def _timeline(start: float, end: float, observations: list[dict], decisions: list[dict],
@@ -600,7 +622,9 @@ class EpisodeEvaluator:
 
     def comparison_cache_snapshot(self):
         return {**self._comparison_cache.snapshot(),
-                'sql_json_validation': getattr(self, '_comparison_json_sql', False)}
+                'sql_json_validation': getattr(self, '_comparison_json_sql', False),
+                'compact_comparison_indexes': self._comparison_compact_sql,
+                'comparison_index_error': self._comparison_index_error}
 
     def _paired_policy_rows(self, connection, agent_id, parent_key, candidate_key):
         # Fetch only paired evidence actually consumed by aggregation. In particular,
@@ -610,20 +634,31 @@ class EpisodeEvaluator:
             p, c = self._policy_rows(agent_id, parent_key), self._policy_rows(agent_id, candidate_key)
             ids = sorted(set(p) & set(c), key=lambda eid: (p[eid]['start_ts'], eid))
             return p, c, ids
-        rows = connection.execute(
-            """SELECT e.episode_id,e.start_ts,e.labels_json,
-                      json_valid(COALESCE(NULLIF(e.observability_json,''),'{}')) AS observation_valid,
-                      json_valid(COALESCE(NULLIF(p.evidence_json,''),'{}')) AS parent_valid,
-                      json_valid(COALESCE(NULLIF(c.evidence_json,''),'{}')) AS candidate_valid,
+        compact = self._comparison_compact_sql
+        meta_index = 'INDEXED BY idx_episode_compare_meta_206' if compact else ''
+        pair_index = 'INDEXED BY idx_episode_compare_pair_206' if compact else ''
+        query = f"""SELECT e.episode_id,e.start_ts,e.labels_json,
+                      json_valid(COALESCE(NULLIF(e.observability_json,''),'{{}}')) AS observation_valid,
+                      json_valid(COALESCE(NULLIF(p.evidence_json,''),'{{}}')) AS parent_valid,
+                      json_valid(COALESCE(NULLIF(c.evidence_json,''),'{{}}')) AS candidate_valid,
                       p.executed AS p_executed,p.counterfactual AS p_counterfactual,
                       p.metrics_json AS p_metrics,c.executed AS c_executed,
                       c.counterfactual AS c_counterfactual,c.metrics_json AS c_metrics
-               FROM episode_evaluator_episodes e
-               JOIN episode_evaluator_policy_results p ON p.episode_id=e.episode_id AND p.policy_key=?
-               JOIN episode_evaluator_policy_results c ON c.episode_id=e.episode_id AND c.policy_key=?
-               WHERE e.agent_id=? ORDER BY e.start_ts,e.episode_id""",
-            (str(parent_key), str(candidate_key), str(agent_id)),
-        ).fetchall()
+               FROM episode_evaluator_episodes e {meta_index}
+               JOIN episode_evaluator_policy_results p {pair_index} ON p.episode_id=e.episode_id AND p.policy_key=?
+               JOIN episode_evaluator_policy_results c {pair_index} ON c.episode_id=e.episode_id AND c.policy_key=?
+               WHERE e.agent_id=? ORDER BY e.start_ts,e.episode_id"""
+        args = (str(parent_key), str(candidate_key), str(agent_id))
+        try:
+            rows = connection.execute(query, args).fetchall()
+        except sqlite3.OperationalError as exc:
+            if not compact or 'no such index' not in str(exc).lower():
+                raise
+            # An external maintenance tool may have removed the optional index.
+            # Keep the fresh full reader available without changing any verdict.
+            self._comparison_compact_sql = False
+            self._comparison_index_error = str(exc)
+            return self._paired_policy_rows(connection, agent_id, parent_key, candidate_key)
         parent, candidate, ids = {}, {}, []
         for row in rows:
             if not (row['observation_valid'] and row['parent_valid'] and row['candidate_valid']):

@@ -34,7 +34,7 @@ from context_row_buffer import ContextRowBuffer
 from storage_budget import StorageRetry
 from shadow_model_json import shadow_model_json
 from shadow_model_snapshot import freeze_shadow_model, snapshot_json, ShadowModelSnapshot
-from shadow_observation_scheduler import ShadowObservationScheduler
+from shadow_observation_scheduler import ShadowObservationScheduler, realtime_pending
 
 
 SHADOW_MODEL_VERSION = 1
@@ -736,6 +736,7 @@ def install(store, engine):
         if dispatched:
             ticket = service._observation_scheduler.admit(
                 agent, state_map, changed_entities, (getattr(engine, 'models', {}) or {}).get(str(agent['id'])),
+                pending_realtime=realtime_pending(engine),
             )
             if ticket is None:
                 TELEMETRY.inc('context_shadow_interval_skips')

@@ -15,7 +15,7 @@ try:
 except Exception:
     ws_connect = None
 
-APP_VERSION = "0.14.205"
+APP_VERSION = "0.14.206"
 HISTORY_BOOTSTRAP_REVISION = "target-attrs-v2"
 TRAINING_REVISION = "shared-home-intents-v26"
 DATA_DIR = Path(os.environ.get("ADAPTIVE_AI_DATA", "/data"))
@@ -121,6 +121,7 @@ DEFAULT_OPTIONS = {
     "runtime_episode_comparison_cache_mb": 64,
     "runtime_thread_switch_ms": 1,
     "runtime_shadow_observation_interval_ms": 1000,
+    "runtime_shadow_max_deferral_ms": 5000,
     "storage_min_free_mb": 2048,
     "archive_context_interval_seconds": 30,
     "auto_agent_min_changes": 2,
