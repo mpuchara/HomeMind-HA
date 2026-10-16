@@ -1,0 +1,1781 @@
+{
+  "scope": "isolated HistoryManager and persisted policy, synthetic data, no HA dispatch",
+  "predictions": [
+    {
+      "phase": "empty_dark",
+      "expected": 0,
+      "predicted": 0.0,
+      "raw_prediction": 0.0,
+      "means": [
+        0.9951806494212017,
+        -0.9951806494212017
+      ],
+      "values": {
+        "5": 0.07982976911113136,
+        "17": -1.0,
+        "29": 0.5490396778473451
+      }
+    },
+    {
+      "phase": "occupied_dark_entry",
+      "expected": 1,
+      "predicted": 1.0,
+      "raw_prediction": 1.0,
+      "means": [
+        -0.6774944558358436,
+        0.6774944558358436
+      ],
+      "values": {
+        "5": 0.23549574953849794,
+        "17": 1.0,
+        "29": 0.5490396778473451
+      }
+    },
+    {
+      "phase": "empty_bright",
+      "expected": 0,
+      "predicted": 0.0,
+      "raw_prediction": 0.0,
+      "means": [
+        0.9999746568514047,
+        -0.9999746568514047
+      ],
+      "values": {
+        "5": 0.07982976911113136,
+        "17": -1.0,
+        "29": 0.9048005924156349
+      }
+    },
+    {
+      "phase": "occupied_daylight",
+      "expected": 0,
+      "predicted": 0.0,
+      "raw_prediction": 0.0,
+      "means": [
+        0.9468757090899221,
+        -0.9468757090899221
+      ],
+      "values": {
+        "5": 0.23549574953849794,
+        "17": 1.0,
+        "29": 0.9048005924156349
+      }
+    },
+    {
+      "phase": "stationary_with_emitted_light",
+      "expected": 1,
+      "predicted": 1.0,
+      "raw_prediction": 1.0,
+      "means": [
+        -0.6752057098448414,
+        0.6752057098448414
+      ],
+      "values": {
+        "5": 0.23549574953849794,
+        "17": 1.0,
+        "29": 0.5490396778473451
+      }
+    }
+  ],
+  "training_quality": {
+    "patterns": {
+      "contract": "conditional_light_training_quality_v1",
+      "contexts": 2,
+      "queries": 120,
+      "downweighted": 0,
+      "manual_preserved": 0,
+      "minimum_independent_days": 3,
+      "minority_weight_floor": 0.2
+    },
+    "outcomes": {
+      "unknown_outcome": 60,
+      "confirmed_use": 60
+    },
+    "historical_accuracy_is_superiority_proof": false
+  },
+  "additional_signal_objective": null,
+  "persisted_feature_contract": 4,
+  "context_assessment": null,
+  "updates": 59.583333333333634,
+  "worker_seconds": 7.895515919000019,
+  "classifier": {
+    "ready": true,
+    "fits": 9,
+    "seen": [
+      237,
+      240
+    ]
+  },
+  "long_stay": {
+    "seconds": 600,
+    "raw_history_limit": 24,
+    "observations": 571,
+    "off_predictions": 0,
+    "invalid_illumination": 0,
+    "diagnostics": [
+      {
+        "offset": 30,
+        "desired": 1.0,
+        "means": [
+          -0.6722664998958464,
+          0.6722664998958464
+        ],
+        "features": {
+          "0:bias": 1.0,
+          "1:time:hour_sin": -0.09363299577077165,
+          "2:time:hour_cos": 0.11718729497258079,
+          "3:time:dow_sin": -0.0650825608676337,
+          "4:time:dow_cos": -0.13514533018536287,
+          "5:sensor.kitchen_stationary_energy:value": 0.23549574953849794,
+          "7:sensor.kitchen_stationary_energy:communication_age": 0.001215088737874605,
+          "8:sensor.kitchen_stationary_energy:event_age": 0.001215088737874605,
+          "9:sensor.kitchen_stationary_energy:quality": -0.050000000000000044,
+          "13:sensor.kitchen_stationary_energy:time_since_edge": 0.388140587544115,
+          "17:binary_sensor.kitchen_has_target:value": 1.0,
+          "19:binary_sensor.kitchen_has_target:communication_age": 0.001215088737874605,
+          "20:binary_sensor.kitchen_has_target:event_age": 0.001215088737874605,
+          "21:binary_sensor.kitchen_has_target:quality": -0.050000000000000044,
+          "25:binary_sensor.kitchen_has_target:time_since_edge": 0.388140587544115,
+          "29:sensor.kitchen_light:value": 0.5490396778473451,
+          "31:sensor.kitchen_light:communication_age": 0.001215088737874605,
+          "32:sensor.kitchen_light:event_age": 0.001215088737874605,
+          "33:sensor.kitchen_light:quality": -0.050000000000000044,
+          "120:home:occupancy_now": 1.0,
+          "121:home:occupancy_in_1s": 1.0,
+          "122:home:occupancy_in_3s": 1.0,
+          "123:home:occupancy_in_5s": 1.0,
+          "124:home:arrival_probability": 0.0,
+          "125:home:departure_probability": 0.0,
+          "126:home:trajectory_confidence": 0.0,
+          "127:home:known": 1.0
+        },
+        "home": {
+          "occupancy_now": 1.0,
+          "occupancy_in_1s": 1.0,
+          "occupancy_in_3s": 1.0,
+          "occupancy_in_5s": 1.0,
+          "arrival_probability": 0.0,
+          "departure_probability": 0.0,
+          "trajectory_confidence": 0.0,
+          "area_id": "kitchen",
+          "known": true,
+          "support": 0.0,
+          "uncertainty": 0.026000000000000023,
+          "observability": 0.974,
+          "evidence_sources": [
+            {
+              "entity_id": "binary_sensor.kitchen_has_target",
+              "role": "radar_occupancy",
+              "value_semantics": "stationary_occupancy",
+              "available": true,
+              "communication_reliability": 1.0,
+              "communication_age_seconds": 0.009999990463256836,
+              "event_age_seconds": 0.009999990463256836,
+              "semantic_reliability": 1.0,
+              "semantic_reliability_detail": {
+                "factor": 1.0,
+                "calibrated": false,
+                "reason": "no_correct_driven_profile",
+                "source_id": "binary_sensor.kitchen_has_target",
+                "area_id": "kitchen"
+              },
+              "evidence_age_seconds": 32.00999999046326,
+              "evidence_freshness": 1.0,
+              "contribution": 1.0
+            },
+            {
+              "entity_id": "sensor.kitchen_stationary_energy",
+              "role": "radar_activity",
+              "value_semantics": "activity_likelihood",
+              "available": true,
+              "communication_reliability": 1.0,
+              "communication_age_seconds": 0.009999990463256836,
+              "event_age_seconds": 0.009999990463256836,
+              "semantic_reliability": 1.0,
+              "semantic_reliability_detail": {
+                "factor": 1.0,
+                "calibrated": false,
+                "reason": "no_correct_driven_profile",
+                "source_id": "sensor.kitchen_stationary_energy",
+                "area_id": "kitchen"
+              },
+              "evidence_age_seconds": 32.00999999046326,
+              "evidence_freshness": 1.0,
+              "contribution": 0.072
+            }
+          ],
+          "arrival_probability_by_horizon": {
+            "1s": 0.0,
+            "3s": 0.0,
+            "5s": 0.0
+          },
+          "learned_arrival_probability_by_horizon": {
+            "1s": 0.0,
+            "3s": 0.0,
+            "5s": 0.0
+          },
+          "boundary_arrival_probability_by_horizon": {
+            "1s": 0.0,
+            "3s": 0.0,
+            "5s": 0.0
+          },
+          "boundary_evidence": [],
+          "arrival_evidence_confidence": 0.0,
+          "movement_hypotheses": [],
+          "arrival_prior_sources": [],
+          "arrival_prior_devices": [],
+          "model_version": 2,
+          "adaptive_presence": {
+            "version": 2,
+            "mode": "virtual_threshold",
+            "posterior": 0.00118870310374287,
+            "virtual_presence_active": false,
+            "arrival_prior": 0.0,
+            "effective_arrival_prior": 0.001,
+            "trajectory_confidence": 0.0,
+            "room_calibration_quality": 0.5,
+            "selected_raw_source": "sensor.kitchen_stationary_energy",
+            "raw_signal": 0.24,
+            "raw_signal_quality": 1.0,
+            "raw_semantic_reliability": 1.0,
+            "raw_semantic_reliability_detail": {
+              "factor": 1.0,
+              "calibrated": false,
+              "reason": "no_correct_driven_profile",
+              "source_id": "sensor.kitchen_stationary_energy",
+              "area_id": "kitchen"
+            },
+            "raw_signal_semantics": "non_probability_score",
+            "raw_calibrated_likelihood": 0.246,
+            "raw_calibration_confidence": 0.0,
+            "raw_independent_labels": 0,
+            "likelihood_ratio": 1.3050397877984086,
+            "alternative_raw_sources_not_multiplied": [],
+            "excluded_raw_sources": [],
+            "prior_source_ids": [],
+            "prior_device_ids": [],
+            "fixed_boundary": 0.6,
+            "fixed_boundary_active": false,
+            "enter_threshold": 0.58,
+            "exit_threshold": 0.34,
+            "suppressed_by_false_on_budget": false,
+            "false_on_budget": {
+              "window_seconds": 900.0,
+              "limit": 3,
+              "recent_false_on": 0
+            },
+            "capability": {
+              "version": 2,
+              "area_id": "kitchen",
+              "mode": "virtual_threshold",
+              "virtual_threshold_available": true,
+              "arrival_anticipation_available": true,
+              "local_threshold_distance_available": true,
+              "raw_sources": [
+                "sensor.kitchen_stationary_energy"
+              ],
+              "excluded_raw_sources": [],
+              "binary_sources": [
+                "binary_sensor.kitchen_has_target"
+              ],
+              "reason": "independent_local_raw_signal_available",
+              "binary_only_limitation": null,
+              "hardware_threshold_adapter": {
+                "version": 1,
+                "enabled": false,
+                "default_active": false,
+                "sensor_id": null,
+                "whitelisted": false,
+                "range": null,
+                "step": null,
+                "max_changes": 4,
+                "change_window_seconds": 3600.0,
+                "lease_ttl_seconds": 300.0,
+                "requires_snapshot": true,
+                "restore_required": true,
+                "physical_io": false,
+                "resource_ownership": "DeviceAgentService.perception_resource_leases",
+                "local_lease_role": "planning_token_only_not_resource_ownership",
+                "requires_authoritative_perception_lease": true,
+                "evidence_rule": "sensor output after an own threshold change is not independent validation evidence"
+              }
+            },
+            "timing": {
+              "confirmed_early": 0,
+              "mean_lead_seconds": null,
+              "false_on_count": 0,
+              "false_on_cost": 0.0,
+              "adaptive_on_edges": 0,
+              "suppressed_false_budget": 0
+            },
+            "evidence_independence": "arrival prior comes from anonymous room trajectory; selected raw role cannot create movement hypotheses; only one local raw channel is fused"
+          },
+          "virtual_presence_probability": 0.00118870310374287,
+          "virtual_presence_active": false,
+          "presence_capability": {
+            "version": 2,
+            "area_id": "kitchen",
+            "mode": "virtual_threshold",
+            "virtual_threshold_available": true,
+            "arrival_anticipation_available": true,
+            "local_threshold_distance_available": true,
+            "raw_sources": [
+              "sensor.kitchen_stationary_energy"
+            ],
+            "excluded_raw_sources": [],
+            "binary_sources": [
+              "binary_sensor.kitchen_has_target"
+            ],
+            "reason": "independent_local_raw_signal_available",
+            "binary_only_limitation": null,
+            "hardware_threshold_adapter": {
+              "version": 1,
+              "enabled": false,
+              "default_active": false,
+              "sensor_id": null,
+              "whitelisted": false,
+              "range": null,
+              "step": null,
+              "max_changes": 4,
+              "change_window_seconds": 3600.0,
+              "lease_ttl_seconds": 300.0,
+              "requires_snapshot": true,
+              "restore_required": true,
+              "physical_io": false,
+              "resource_ownership": "DeviceAgentService.perception_resource_leases",
+              "local_lease_role": "planning_token_only_not_resource_ownership",
+              "requires_authoritative_perception_lease": true,
+              "evidence_rule": "sensor output after an own threshold change is not independent validation evidence"
+            }
+          }
+        }
+      },
+      {
+        "offset": 120,
+        "desired": 1.0,
+        "means": [
+          -0.6718820025130077,
+          0.6718820025130077
+        ],
+        "features": {
+          "0:bias": 1.0,
+          "1:time:hour_sin": -0.09286400673166244,
+          "2:time:hour_cos": 0.11779760716475421,
+          "3:time:dow_sin": -0.0650825608676337,
+          "4:time:dow_cos": -0.13514533018536287,
+          "5:sensor.kitchen_stationary_energy:value": 0.23549574953849794,
+          "7:sensor.kitchen_stationary_energy:communication_age": 0.001215088737874605,
+          "8:sensor.kitchen_stationary_energy:event_age": 0.001215088737874605,
+          "9:sensor.kitchen_stationary_energy:quality": -0.050000000000000044,
+          "13:sensor.kitchen_stationary_energy:time_since_edge": 0.388140587544115,
+          "17:binary_sensor.kitchen_has_target:value": 1.0,
+          "19:binary_sensor.kitchen_has_target:communication_age": 0.001215088737874605,
+          "20:binary_sensor.kitchen_has_target:event_age": 0.001215088737874605,
+          "21:binary_sensor.kitchen_has_target:quality": -0.050000000000000044,
+          "25:binary_sensor.kitchen_has_target:time_since_edge": 0.388140587544115,
+          "29:sensor.kitchen_light:value": 0.5490396778473451,
+          "31:sensor.kitchen_light:communication_age": 0.001215088737874605,
+          "32:sensor.kitchen_light:event_age": 0.001215088737874605,
+          "33:sensor.kitchen_light:quality": -0.050000000000000044,
+          "120:home:occupancy_now": 1.0,
+          "121:home:occupancy_in_1s": 1.0,
+          "122:home:occupancy_in_3s": 1.0,
+          "123:home:occupancy_in_5s": 1.0,
+          "124:home:arrival_probability": 0.0,
+          "125:home:departure_probability": 0.0,
+          "126:home:trajectory_confidence": 0.0,
+          "127:home:known": 1.0
+        },
+        "home": {
+          "occupancy_now": 1.0,
+          "occupancy_in_1s": 1.0,
+          "occupancy_in_3s": 1.0,
+          "occupancy_in_5s": 1.0,
+          "arrival_probability": 0.0,
+          "departure_probability": 0.0,
+          "trajectory_confidence": 0.0,
+          "area_id": "kitchen",
+          "known": true,
+          "support": 0.0,
+          "uncertainty": 0.026000000000000023,
+          "observability": 0.974,
+          "evidence_sources": [
+            {
+              "entity_id": "binary_sensor.kitchen_has_target",
+              "role": "radar_occupancy",
+              "value_semantics": "stationary_occupancy",
+              "available": true,
+              "communication_reliability": 1.0,
+              "communication_age_seconds": 0.009999990463256836,
+              "event_age_seconds": 0.009999990463256836,
+              "semantic_reliability": 1.0,
+              "semantic_reliability_detail": {
+                "factor": 1.0,
+                "calibrated": false,
+                "reason": "no_correct_driven_profile",
+                "source_id": "binary_sensor.kitchen_has_target",
+                "area_id": "kitchen"
+              },
+              "evidence_age_seconds": 122.00999999046326,
+              "evidence_freshness": 1.0,
+              "contribution": 1.0
+            },
+            {
+              "entity_id": "sensor.kitchen_stationary_energy",
+              "role": "radar_activity",
+              "value_semantics": "activity_likelihood",
+              "available": true,
+              "communication_reliability": 1.0,
+              "communication_age_seconds": 0.009999990463256836,
+              "event_age_seconds": 0.009999990463256836,
+              "semantic_reliability": 1.0,
+              "semantic_reliability_detail": {
+                "factor": 1.0,
+                "calibrated": false,
+                "reason": "no_correct_driven_profile",
+                "source_id": "sensor.kitchen_stationary_energy",
+                "area_id": "kitchen"
+              },
+              "evidence_age_seconds": 122.00999999046326,
+              "evidence_freshness": 1.0,
+              "contribution": 0.072
+            }
+          ],
+          "arrival_probability_by_horizon": {
+            "1s": 0.0,
+            "3s": 0.0,
+            "5s": 0.0
+          },
+          "learned_arrival_probability_by_horizon": {
+            "1s": 0.0,
+            "3s": 0.0,
+            "5s": 0.0
+          },
+          "boundary_arrival_probability_by_horizon": {
+            "1s": 0.0,
+            "3s": 0.0,
+            "5s": 0.0
+          },
+          "boundary_evidence": [],
+          "arrival_evidence_confidence": 0.0,
+          "movement_hypotheses": [],
+          "arrival_prior_sources": [],
+          "arrival_prior_devices": [],
+          "model_version": 2,
+          "adaptive_presence": {
+            "version": 2,
+            "mode": "virtual_threshold",
+            "posterior": 0.00118870310374287,
+            "virtual_presence_active": false,
+            "arrival_prior": 0.0,
+            "effective_arrival_prior": 0.001,
+            "trajectory_confidence": 0.0,
+            "room_calibration_quality": 0.5,
+            "selected_raw_source": "sensor.kitchen_stationary_energy",
+            "raw_signal": 0.24,
+            "raw_signal_quality": 1.0,
+            "raw_semantic_reliability": 1.0,
+            "raw_semantic_reliability_detail": {
+              "factor": 1.0,
+              "calibrated": false,
+              "reason": "no_correct_driven_profile",
+              "source_id": "sensor.kitchen_stationary_energy",
+              "area_id": "kitchen"
+            },
+            "raw_signal_semantics": "non_probability_score",
+            "raw_calibrated_likelihood": 0.246,
+            "raw_calibration_confidence": 0.0,
+            "raw_independent_labels": 0,
+            "likelihood_ratio": 1.3050397877984086,
+            "alternative_raw_sources_not_multiplied": [],
+            "excluded_raw_sources": [],
+            "prior_source_ids": [],
+            "prior_device_ids": [],
+            "fixed_boundary": 0.6,
+            "fixed_boundary_active": false,
+            "enter_threshold": 0.58,
+            "exit_threshold": 0.34,
+            "suppressed_by_false_on_budget": false,
+            "false_on_budget": {
+              "window_seconds": 900.0,
+              "limit": 3,
+              "recent_false_on": 0
+            },
+            "capability": {
+              "version": 2,
+              "area_id": "kitchen",
+              "mode": "virtual_threshold",
+              "virtual_threshold_available": true,
+              "arrival_anticipation_available": true,
+              "local_threshold_distance_available": true,
+              "raw_sources": [
+                "sensor.kitchen_stationary_energy"
+              ],
+              "excluded_raw_sources": [],
+              "binary_sources": [
+                "binary_sensor.kitchen_has_target"
+              ],
+              "reason": "independent_local_raw_signal_available",
+              "binary_only_limitation": null,
+              "hardware_threshold_adapter": {
+                "version": 1,
+                "enabled": false,
+                "default_active": false,
+                "sensor_id": null,
+                "whitelisted": false,
+                "range": null,
+                "step": null,
+                "max_changes": 4,
+                "change_window_seconds": 3600.0,
+                "lease_ttl_seconds": 300.0,
+                "requires_snapshot": true,
+                "restore_required": true,
+                "physical_io": false,
+                "resource_ownership": "DeviceAgentService.perception_resource_leases",
+                "local_lease_role": "planning_token_only_not_resource_ownership",
+                "requires_authoritative_perception_lease": true,
+                "evidence_rule": "sensor output after an own threshold change is not independent validation evidence"
+              }
+            },
+            "timing": {
+              "confirmed_early": 0,
+              "mean_lead_seconds": null,
+              "false_on_count": 0,
+              "false_on_cost": 0.0,
+              "adaptive_on_edges": 0,
+              "suppressed_false_budget": 0
+            },
+            "evidence_independence": "arrival prior comes from anonymous room trajectory; selected raw role cannot create movement hypotheses; only one local raw channel is fused"
+          },
+          "virtual_presence_probability": 0.00118870310374287,
+          "virtual_presence_active": false,
+          "presence_capability": {
+            "version": 2,
+            "area_id": "kitchen",
+            "mode": "virtual_threshold",
+            "virtual_threshold_available": true,
+            "arrival_anticipation_available": true,
+            "local_threshold_distance_available": true,
+            "raw_sources": [
+              "sensor.kitchen_stationary_energy"
+            ],
+            "excluded_raw_sources": [],
+            "binary_sources": [
+              "binary_sensor.kitchen_has_target"
+            ],
+            "reason": "independent_local_raw_signal_available",
+            "binary_only_limitation": null,
+            "hardware_threshold_adapter": {
+              "version": 1,
+              "enabled": false,
+              "default_active": false,
+              "sensor_id": null,
+              "whitelisted": false,
+              "range": null,
+              "step": null,
+              "max_changes": 4,
+              "change_window_seconds": 3600.0,
+              "lease_ttl_seconds": 300.0,
+              "requires_snapshot": true,
+              "restore_required": true,
+              "physical_io": false,
+              "resource_ownership": "DeviceAgentService.perception_resource_leases",
+              "local_lease_role": "planning_token_only_not_resource_ownership",
+              "requires_authoritative_perception_lease": true,
+              "evidence_rule": "sensor output after an own threshold change is not independent validation evidence"
+            }
+          }
+        }
+      },
+      {
+        "offset": 180,
+        "desired": 1.0,
+        "means": [
+          -0.6716255989604736,
+          0.6716255989604736
+        ],
+        "features": {
+          "0:bias": 1.0,
+          "1:time:hour_sin": -0.09234913534018567,
+          "2:time:hour_cos": 0.11820168019922589,
+          "3:time:dow_sin": -0.0650825608676337,
+          "4:time:dow_cos": -0.13514533018536287,
+          "5:sensor.kitchen_stationary_energy:value": 0.23549574953849794,
+          "7:sensor.kitchen_stationary_energy:communication_age": 0.001215088737874605,
+          "8:sensor.kitchen_stationary_energy:event_age": 0.001215088737874605,
+          "9:sensor.kitchen_stationary_energy:quality": -0.050000000000000044,
+          "13:sensor.kitchen_stationary_energy:time_since_edge": 0.388140587544115,
+          "17:binary_sensor.kitchen_has_target:value": 1.0,
+          "19:binary_sensor.kitchen_has_target:communication_age": 0.001215088737874605,
+          "20:binary_sensor.kitchen_has_target:event_age": 0.001215088737874605,
+          "21:binary_sensor.kitchen_has_target:quality": -0.050000000000000044,
+          "25:binary_sensor.kitchen_has_target:time_since_edge": 0.388140587544115,
+          "29:sensor.kitchen_light:value": 0.5490396778473451,
+          "31:sensor.kitchen_light:communication_age": 0.001215088737874605,
+          "32:sensor.kitchen_light:event_age": 0.001215088737874605,
+          "33:sensor.kitchen_light:quality": -0.050000000000000044,
+          "120:home:occupancy_now": 1.0,
+          "121:home:occupancy_in_1s": 1.0,
+          "122:home:occupancy_in_3s": 1.0,
+          "123:home:occupancy_in_5s": 1.0,
+          "124:home:arrival_probability": 0.0,
+          "125:home:departure_probability": 0.0,
+          "126:home:trajectory_confidence": 0.0,
+          "127:home:known": 1.0
+        },
+        "home": {
+          "occupancy_now": 1.0,
+          "occupancy_in_1s": 1.0,
+          "occupancy_in_3s": 1.0,
+          "occupancy_in_5s": 1.0,
+          "arrival_probability": 0.0,
+          "departure_probability": 0.0,
+          "trajectory_confidence": 0.0,
+          "area_id": "kitchen",
+          "known": true,
+          "support": 0.0,
+          "uncertainty": 0.026000000000000023,
+          "observability": 0.974,
+          "evidence_sources": [
+            {
+              "entity_id": "binary_sensor.kitchen_has_target",
+              "role": "radar_occupancy",
+              "value_semantics": "stationary_occupancy",
+              "available": true,
+              "communication_reliability": 1.0,
+              "communication_age_seconds": 0.009999990463256836,
+              "event_age_seconds": 0.009999990463256836,
+              "semantic_reliability": 1.0,
+              "semantic_reliability_detail": {
+                "factor": 1.0,
+                "calibrated": false,
+                "reason": "no_correct_driven_profile",
+                "source_id": "binary_sensor.kitchen_has_target",
+                "area_id": "kitchen"
+              },
+              "evidence_age_seconds": 182.00999999046326,
+              "evidence_freshness": 1.0,
+              "contribution": 1.0
+            },
+            {
+              "entity_id": "sensor.kitchen_stationary_energy",
+              "role": "radar_activity",
+              "value_semantics": "activity_likelihood",
+              "available": true,
+              "communication_reliability": 1.0,
+              "communication_age_seconds": 0.009999990463256836,
+              "event_age_seconds": 0.009999990463256836,
+              "semantic_reliability": 1.0,
+              "semantic_reliability_detail": {
+                "factor": 1.0,
+                "calibrated": false,
+                "reason": "no_correct_driven_profile",
+                "source_id": "sensor.kitchen_stationary_energy",
+                "area_id": "kitchen"
+              },
+              "evidence_age_seconds": 182.00999999046326,
+              "evidence_freshness": 1.0,
+              "contribution": 0.072
+            }
+          ],
+          "arrival_probability_by_horizon": {
+            "1s": 0.0,
+            "3s": 0.0,
+            "5s": 0.0
+          },
+          "learned_arrival_probability_by_horizon": {
+            "1s": 0.0,
+            "3s": 0.0,
+            "5s": 0.0
+          },
+          "boundary_arrival_probability_by_horizon": {
+            "1s": 0.0,
+            "3s": 0.0,
+            "5s": 0.0
+          },
+          "boundary_evidence": [],
+          "arrival_evidence_confidence": 0.0,
+          "movement_hypotheses": [],
+          "arrival_prior_sources": [],
+          "arrival_prior_devices": [],
+          "model_version": 2,
+          "adaptive_presence": {
+            "version": 2,
+            "mode": "virtual_threshold",
+            "posterior": 0.00118870310374287,
+            "virtual_presence_active": false,
+            "arrival_prior": 0.0,
+            "effective_arrival_prior": 0.001,
+            "trajectory_confidence": 0.0,
+            "room_calibration_quality": 0.5,
+            "selected_raw_source": "sensor.kitchen_stationary_energy",
+            "raw_signal": 0.24,
+            "raw_signal_quality": 1.0,
+            "raw_semantic_reliability": 1.0,
+            "raw_semantic_reliability_detail": {
+              "factor": 1.0,
+              "calibrated": false,
+              "reason": "no_correct_driven_profile",
+              "source_id": "sensor.kitchen_stationary_energy",
+              "area_id": "kitchen"
+            },
+            "raw_signal_semantics": "non_probability_score",
+            "raw_calibrated_likelihood": 0.246,
+            "raw_calibration_confidence": 0.0,
+            "raw_independent_labels": 0,
+            "likelihood_ratio": 1.3050397877984086,
+            "alternative_raw_sources_not_multiplied": [],
+            "excluded_raw_sources": [],
+            "prior_source_ids": [],
+            "prior_device_ids": [],
+            "fixed_boundary": 0.6,
+            "fixed_boundary_active": false,
+            "enter_threshold": 0.58,
+            "exit_threshold": 0.34,
+            "suppressed_by_false_on_budget": false,
+            "false_on_budget": {
+              "window_seconds": 900.0,
+              "limit": 3,
+              "recent_false_on": 0
+            },
+            "capability": {
+              "version": 2,
+              "area_id": "kitchen",
+              "mode": "virtual_threshold",
+              "virtual_threshold_available": true,
+              "arrival_anticipation_available": true,
+              "local_threshold_distance_available": true,
+              "raw_sources": [
+                "sensor.kitchen_stationary_energy"
+              ],
+              "excluded_raw_sources": [],
+              "binary_sources": [
+                "binary_sensor.kitchen_has_target"
+              ],
+              "reason": "independent_local_raw_signal_available",
+              "binary_only_limitation": null,
+              "hardware_threshold_adapter": {
+                "version": 1,
+                "enabled": false,
+                "default_active": false,
+                "sensor_id": null,
+                "whitelisted": false,
+                "range": null,
+                "step": null,
+                "max_changes": 4,
+                "change_window_seconds": 3600.0,
+                "lease_ttl_seconds": 300.0,
+                "requires_snapshot": true,
+                "restore_required": true,
+                "physical_io": false,
+                "resource_ownership": "DeviceAgentService.perception_resource_leases",
+                "local_lease_role": "planning_token_only_not_resource_ownership",
+                "requires_authoritative_perception_lease": true,
+                "evidence_rule": "sensor output after an own threshold change is not independent validation evidence"
+              }
+            },
+            "timing": {
+              "confirmed_early": 0,
+              "mean_lead_seconds": null,
+              "false_on_count": 0,
+              "false_on_cost": 0.0,
+              "adaptive_on_edges": 0,
+              "suppressed_false_budget": 0
+            },
+            "evidence_independence": "arrival prior comes from anonymous room trajectory; selected raw role cannot create movement hypotheses; only one local raw channel is fused"
+          },
+          "virtual_presence_probability": 0.00118870310374287,
+          "virtual_presence_active": false,
+          "presence_capability": {
+            "version": 2,
+            "area_id": "kitchen",
+            "mode": "virtual_threshold",
+            "virtual_threshold_available": true,
+            "arrival_anticipation_available": true,
+            "local_threshold_distance_available": true,
+            "raw_sources": [
+              "sensor.kitchen_stationary_energy"
+            ],
+            "excluded_raw_sources": [],
+            "binary_sources": [
+              "binary_sensor.kitchen_has_target"
+            ],
+            "reason": "independent_local_raw_signal_available",
+            "binary_only_limitation": null,
+            "hardware_threshold_adapter": {
+              "version": 1,
+              "enabled": false,
+              "default_active": false,
+              "sensor_id": null,
+              "whitelisted": false,
+              "range": null,
+              "step": null,
+              "max_changes": 4,
+              "change_window_seconds": 3600.0,
+              "lease_ttl_seconds": 300.0,
+              "requires_snapshot": true,
+              "restore_required": true,
+              "physical_io": false,
+              "resource_ownership": "DeviceAgentService.perception_resource_leases",
+              "local_lease_role": "planning_token_only_not_resource_ownership",
+              "requires_authoritative_perception_lease": true,
+              "evidence_rule": "sensor output after an own threshold change is not independent validation evidence"
+            }
+          }
+        }
+      },
+      {
+        "offset": 200,
+        "desired": 1.0,
+        "means": [
+          -0.671540119373803,
+          0.671540119373803
+        ],
+        "features": {
+          "0:bias": 1.0,
+          "1:time:hour_sin": -0.09217712034812034,
+          "2:time:hour_cos": 0.11833587150280399,
+          "3:time:dow_sin": -0.0650825608676337,
+          "4:time:dow_cos": -0.13514533018536287,
+          "5:sensor.kitchen_stationary_energy:value": 0.23549574953849794,
+          "7:sensor.kitchen_stationary_energy:communication_age": 0.001215088737874605,
+          "8:sensor.kitchen_stationary_energy:event_age": 0.001215088737874605,
+          "9:sensor.kitchen_stationary_energy:quality": -0.050000000000000044,
+          "13:sensor.kitchen_stationary_energy:time_since_edge": 0.388140587544115,
+          "17:binary_sensor.kitchen_has_target:value": 1.0,
+          "19:binary_sensor.kitchen_has_target:communication_age": 0.001215088737874605,
+          "20:binary_sensor.kitchen_has_target:event_age": 0.001215088737874605,
+          "21:binary_sensor.kitchen_has_target:quality": -0.050000000000000044,
+          "25:binary_sensor.kitchen_has_target:time_since_edge": 0.388140587544115,
+          "29:sensor.kitchen_light:value": 0.5490396778473451,
+          "31:sensor.kitchen_light:communication_age": 0.001215088737874605,
+          "32:sensor.kitchen_light:event_age": 0.001215088737874605,
+          "33:sensor.kitchen_light:quality": -0.050000000000000044,
+          "120:home:occupancy_now": 1.0,
+          "121:home:occupancy_in_1s": 1.0,
+          "122:home:occupancy_in_3s": 1.0,
+          "123:home:occupancy_in_5s": 1.0,
+          "124:home:arrival_probability": 0.0,
+          "125:home:departure_probability": 0.0,
+          "126:home:trajectory_confidence": 0.0,
+          "127:home:known": 1.0
+        },
+        "home": {
+          "occupancy_now": 1.0,
+          "occupancy_in_1s": 1.0,
+          "occupancy_in_3s": 1.0,
+          "occupancy_in_5s": 1.0,
+          "arrival_probability": 0.0,
+          "departure_probability": 0.0,
+          "trajectory_confidence": 0.0,
+          "area_id": "kitchen",
+          "known": true,
+          "support": 0.0,
+          "uncertainty": 0.026000000000000023,
+          "observability": 0.974,
+          "evidence_sources": [
+            {
+              "entity_id": "binary_sensor.kitchen_has_target",
+              "role": "radar_occupancy",
+              "value_semantics": "stationary_occupancy",
+              "available": true,
+              "communication_reliability": 1.0,
+              "communication_age_seconds": 0.009999990463256836,
+              "event_age_seconds": 0.009999990463256836,
+              "semantic_reliability": 1.0,
+              "semantic_reliability_detail": {
+                "factor": 1.0,
+                "calibrated": false,
+                "reason": "no_correct_driven_profile",
+                "source_id": "binary_sensor.kitchen_has_target",
+                "area_id": "kitchen"
+              },
+              "evidence_age_seconds": 202.00999999046326,
+              "evidence_freshness": 1.0,
+              "contribution": 1.0
+            },
+            {
+              "entity_id": "sensor.kitchen_stationary_energy",
+              "role": "radar_activity",
+              "value_semantics": "activity_likelihood",
+              "available": true,
+              "communication_reliability": 1.0,
+              "communication_age_seconds": 0.009999990463256836,
+              "event_age_seconds": 0.009999990463256836,
+              "semantic_reliability": 1.0,
+              "semantic_reliability_detail": {
+                "factor": 1.0,
+                "calibrated": false,
+                "reason": "no_correct_driven_profile",
+                "source_id": "sensor.kitchen_stationary_energy",
+                "area_id": "kitchen"
+              },
+              "evidence_age_seconds": 202.00999999046326,
+              "evidence_freshness": 1.0,
+              "contribution": 0.072
+            }
+          ],
+          "arrival_probability_by_horizon": {
+            "1s": 0.0,
+            "3s": 0.0,
+            "5s": 0.0
+          },
+          "learned_arrival_probability_by_horizon": {
+            "1s": 0.0,
+            "3s": 0.0,
+            "5s": 0.0
+          },
+          "boundary_arrival_probability_by_horizon": {
+            "1s": 0.0,
+            "3s": 0.0,
+            "5s": 0.0
+          },
+          "boundary_evidence": [],
+          "arrival_evidence_confidence": 0.0,
+          "movement_hypotheses": [],
+          "arrival_prior_sources": [],
+          "arrival_prior_devices": [],
+          "model_version": 2,
+          "adaptive_presence": {
+            "version": 2,
+            "mode": "virtual_threshold",
+            "posterior": 0.00118870310374287,
+            "virtual_presence_active": false,
+            "arrival_prior": 0.0,
+            "effective_arrival_prior": 0.001,
+            "trajectory_confidence": 0.0,
+            "room_calibration_quality": 0.5,
+            "selected_raw_source": "sensor.kitchen_stationary_energy",
+            "raw_signal": 0.24,
+            "raw_signal_quality": 1.0,
+            "raw_semantic_reliability": 1.0,
+            "raw_semantic_reliability_detail": {
+              "factor": 1.0,
+              "calibrated": false,
+              "reason": "no_correct_driven_profile",
+              "source_id": "sensor.kitchen_stationary_energy",
+              "area_id": "kitchen"
+            },
+            "raw_signal_semantics": "non_probability_score",
+            "raw_calibrated_likelihood": 0.246,
+            "raw_calibration_confidence": 0.0,
+            "raw_independent_labels": 0,
+            "likelihood_ratio": 1.3050397877984086,
+            "alternative_raw_sources_not_multiplied": [],
+            "excluded_raw_sources": [],
+            "prior_source_ids": [],
+            "prior_device_ids": [],
+            "fixed_boundary": 0.6,
+            "fixed_boundary_active": false,
+            "enter_threshold": 0.58,
+            "exit_threshold": 0.34,
+            "suppressed_by_false_on_budget": false,
+            "false_on_budget": {
+              "window_seconds": 900.0,
+              "limit": 3,
+              "recent_false_on": 0
+            },
+            "capability": {
+              "version": 2,
+              "area_id": "kitchen",
+              "mode": "virtual_threshold",
+              "virtual_threshold_available": true,
+              "arrival_anticipation_available": true,
+              "local_threshold_distance_available": true,
+              "raw_sources": [
+                "sensor.kitchen_stationary_energy"
+              ],
+              "excluded_raw_sources": [],
+              "binary_sources": [
+                "binary_sensor.kitchen_has_target"
+              ],
+              "reason": "independent_local_raw_signal_available",
+              "binary_only_limitation": null,
+              "hardware_threshold_adapter": {
+                "version": 1,
+                "enabled": false,
+                "default_active": false,
+                "sensor_id": null,
+                "whitelisted": false,
+                "range": null,
+                "step": null,
+                "max_changes": 4,
+                "change_window_seconds": 3600.0,
+                "lease_ttl_seconds": 300.0,
+                "requires_snapshot": true,
+                "restore_required": true,
+                "physical_io": false,
+                "resource_ownership": "DeviceAgentService.perception_resource_leases",
+                "local_lease_role": "planning_token_only_not_resource_ownership",
+                "requires_authoritative_perception_lease": true,
+                "evidence_rule": "sensor output after an own threshold change is not independent validation evidence"
+              }
+            },
+            "timing": {
+              "confirmed_early": 0,
+              "mean_lead_seconds": null,
+              "false_on_count": 0,
+              "false_on_cost": 0.0,
+              "adaptive_on_edges": 0,
+              "suppressed_false_budget": 0
+            },
+            "evidence_independence": "arrival prior comes from anonymous room trajectory; selected raw role cannot create movement hypotheses; only one local raw channel is fused"
+          },
+          "virtual_presence_probability": 0.00118870310374287,
+          "virtual_presence_active": false,
+          "presence_capability": {
+            "version": 2,
+            "area_id": "kitchen",
+            "mode": "virtual_threshold",
+            "virtual_threshold_available": true,
+            "arrival_anticipation_available": true,
+            "local_threshold_distance_available": true,
+            "raw_sources": [
+              "sensor.kitchen_stationary_energy"
+            ],
+            "excluded_raw_sources": [],
+            "binary_sources": [
+              "binary_sensor.kitchen_has_target"
+            ],
+            "reason": "independent_local_raw_signal_available",
+            "binary_only_limitation": null,
+            "hardware_threshold_adapter": {
+              "version": 1,
+              "enabled": false,
+              "default_active": false,
+              "sensor_id": null,
+              "whitelisted": false,
+              "range": null,
+              "step": null,
+              "max_changes": 4,
+              "change_window_seconds": 3600.0,
+              "lease_ttl_seconds": 300.0,
+              "requires_snapshot": true,
+              "restore_required": true,
+              "physical_io": false,
+              "resource_ownership": "DeviceAgentService.perception_resource_leases",
+              "local_lease_role": "planning_token_only_not_resource_ownership",
+              "requires_authoritative_perception_lease": true,
+              "evidence_rule": "sensor output after an own threshold change is not independent validation evidence"
+            }
+          }
+        }
+      },
+      {
+        "offset": 240,
+        "desired": 1.0,
+        "means": [
+          -0.6713691437187227,
+          0.6713691437187227
+        ],
+        "features": {
+          "0:bias": 1.0,
+          "1:time:hour_sin": -0.09183250575429043,
+          "2:time:hour_cos": 0.11860350284409063,
+          "3:time:dow_sin": -0.0650825608676337,
+          "4:time:dow_cos": -0.13514533018536287,
+          "5:sensor.kitchen_stationary_energy:value": 0.23549574953849794,
+          "7:sensor.kitchen_stationary_energy:communication_age": 0.001215088737874605,
+          "8:sensor.kitchen_stationary_energy:event_age": 0.001215088737874605,
+          "9:sensor.kitchen_stationary_energy:quality": -0.050000000000000044,
+          "13:sensor.kitchen_stationary_energy:time_since_edge": 0.388140587544115,
+          "17:binary_sensor.kitchen_has_target:value": 1.0,
+          "19:binary_sensor.kitchen_has_target:communication_age": 0.001215088737874605,
+          "20:binary_sensor.kitchen_has_target:event_age": 0.001215088737874605,
+          "21:binary_sensor.kitchen_has_target:quality": -0.050000000000000044,
+          "25:binary_sensor.kitchen_has_target:time_since_edge": 0.388140587544115,
+          "29:sensor.kitchen_light:value": 0.5490396778473451,
+          "31:sensor.kitchen_light:communication_age": 0.001215088737874605,
+          "32:sensor.kitchen_light:event_age": 0.001215088737874605,
+          "33:sensor.kitchen_light:quality": -0.050000000000000044,
+          "120:home:occupancy_now": 1.0,
+          "121:home:occupancy_in_1s": 1.0,
+          "122:home:occupancy_in_3s": 1.0,
+          "123:home:occupancy_in_5s": 1.0,
+          "124:home:arrival_probability": 0.0,
+          "125:home:departure_probability": 0.0,
+          "126:home:trajectory_confidence": 0.0,
+          "127:home:known": 1.0
+        },
+        "home": {
+          "occupancy_now": 1.0,
+          "occupancy_in_1s": 1.0,
+          "occupancy_in_3s": 1.0,
+          "occupancy_in_5s": 1.0,
+          "arrival_probability": 0.0,
+          "departure_probability": 0.0,
+          "trajectory_confidence": 0.0,
+          "area_id": "kitchen",
+          "known": true,
+          "support": 0.0,
+          "uncertainty": 0.026000000000000023,
+          "observability": 0.974,
+          "evidence_sources": [
+            {
+              "entity_id": "binary_sensor.kitchen_has_target",
+              "role": "radar_occupancy",
+              "value_semantics": "stationary_occupancy",
+              "available": true,
+              "communication_reliability": 1.0,
+              "communication_age_seconds": 0.009999990463256836,
+              "event_age_seconds": 0.009999990463256836,
+              "semantic_reliability": 1.0,
+              "semantic_reliability_detail": {
+                "factor": 1.0,
+                "calibrated": false,
+                "reason": "no_correct_driven_profile",
+                "source_id": "binary_sensor.kitchen_has_target",
+                "area_id": "kitchen"
+              },
+              "evidence_age_seconds": 242.00999999046326,
+              "evidence_freshness": 1.0,
+              "contribution": 1.0
+            },
+            {
+              "entity_id": "sensor.kitchen_stationary_energy",
+              "role": "radar_activity",
+              "value_semantics": "activity_likelihood",
+              "available": true,
+              "communication_reliability": 1.0,
+              "communication_age_seconds": 0.009999990463256836,
+              "event_age_seconds": 0.009999990463256836,
+              "semantic_reliability": 1.0,
+              "semantic_reliability_detail": {
+                "factor": 1.0,
+                "calibrated": false,
+                "reason": "no_correct_driven_profile",
+                "source_id": "sensor.kitchen_stationary_energy",
+                "area_id": "kitchen"
+              },
+              "evidence_age_seconds": 242.00999999046326,
+              "evidence_freshness": 1.0,
+              "contribution": 0.072
+            }
+          ],
+          "arrival_probability_by_horizon": {
+            "1s": 0.0,
+            "3s": 0.0,
+            "5s": 0.0
+          },
+          "learned_arrival_probability_by_horizon": {
+            "1s": 0.0,
+            "3s": 0.0,
+            "5s": 0.0
+          },
+          "boundary_arrival_probability_by_horizon": {
+            "1s": 0.0,
+            "3s": 0.0,
+            "5s": 0.0
+          },
+          "boundary_evidence": [],
+          "arrival_evidence_confidence": 0.0,
+          "movement_hypotheses": [],
+          "arrival_prior_sources": [],
+          "arrival_prior_devices": [],
+          "model_version": 2,
+          "adaptive_presence": {
+            "version": 2,
+            "mode": "virtual_threshold",
+            "posterior": 0.00118870310374287,
+            "virtual_presence_active": false,
+            "arrival_prior": 0.0,
+            "effective_arrival_prior": 0.001,
+            "trajectory_confidence": 0.0,
+            "room_calibration_quality": 0.5,
+            "selected_raw_source": "sensor.kitchen_stationary_energy",
+            "raw_signal": 0.24,
+            "raw_signal_quality": 1.0,
+            "raw_semantic_reliability": 1.0,
+            "raw_semantic_reliability_detail": {
+              "factor": 1.0,
+              "calibrated": false,
+              "reason": "no_correct_driven_profile",
+              "source_id": "sensor.kitchen_stationary_energy",
+              "area_id": "kitchen"
+            },
+            "raw_signal_semantics": "non_probability_score",
+            "raw_calibrated_likelihood": 0.246,
+            "raw_calibration_confidence": 0.0,
+            "raw_independent_labels": 0,
+            "likelihood_ratio": 1.3050397877984086,
+            "alternative_raw_sources_not_multiplied": [],
+            "excluded_raw_sources": [],
+            "prior_source_ids": [],
+            "prior_device_ids": [],
+            "fixed_boundary": 0.6,
+            "fixed_boundary_active": false,
+            "enter_threshold": 0.58,
+            "exit_threshold": 0.34,
+            "suppressed_by_false_on_budget": false,
+            "false_on_budget": {
+              "window_seconds": 900.0,
+              "limit": 3,
+              "recent_false_on": 0
+            },
+            "capability": {
+              "version": 2,
+              "area_id": "kitchen",
+              "mode": "virtual_threshold",
+              "virtual_threshold_available": true,
+              "arrival_anticipation_available": true,
+              "local_threshold_distance_available": true,
+              "raw_sources": [
+                "sensor.kitchen_stationary_energy"
+              ],
+              "excluded_raw_sources": [],
+              "binary_sources": [
+                "binary_sensor.kitchen_has_target"
+              ],
+              "reason": "independent_local_raw_signal_available",
+              "binary_only_limitation": null,
+              "hardware_threshold_adapter": {
+                "version": 1,
+                "enabled": false,
+                "default_active": false,
+                "sensor_id": null,
+                "whitelisted": false,
+                "range": null,
+                "step": null,
+                "max_changes": 4,
+                "change_window_seconds": 3600.0,
+                "lease_ttl_seconds": 300.0,
+                "requires_snapshot": true,
+                "restore_required": true,
+                "physical_io": false,
+                "resource_ownership": "DeviceAgentService.perception_resource_leases",
+                "local_lease_role": "planning_token_only_not_resource_ownership",
+                "requires_authoritative_perception_lease": true,
+                "evidence_rule": "sensor output after an own threshold change is not independent validation evidence"
+              }
+            },
+            "timing": {
+              "confirmed_early": 0,
+              "mean_lead_seconds": null,
+              "false_on_count": 0,
+              "false_on_cost": 0.0,
+              "adaptive_on_edges": 0,
+              "suppressed_false_budget": 0
+            },
+            "evidence_independence": "arrival prior comes from anonymous room trajectory; selected raw role cannot create movement hypotheses; only one local raw channel is fused"
+          },
+          "virtual_presence_probability": 0.00118870310374287,
+          "virtual_presence_active": false,
+          "presence_capability": {
+            "version": 2,
+            "area_id": "kitchen",
+            "mode": "virtual_threshold",
+            "virtual_threshold_available": true,
+            "arrival_anticipation_available": true,
+            "local_threshold_distance_available": true,
+            "raw_sources": [
+              "sensor.kitchen_stationary_energy"
+            ],
+            "excluded_raw_sources": [],
+            "binary_sources": [
+              "binary_sensor.kitchen_has_target"
+            ],
+            "reason": "independent_local_raw_signal_available",
+            "binary_only_limitation": null,
+            "hardware_threshold_adapter": {
+              "version": 1,
+              "enabled": false,
+              "default_active": false,
+              "sensor_id": null,
+              "whitelisted": false,
+              "range": null,
+              "step": null,
+              "max_changes": 4,
+              "change_window_seconds": 3600.0,
+              "lease_ttl_seconds": 300.0,
+              "requires_snapshot": true,
+              "restore_required": true,
+              "physical_io": false,
+              "resource_ownership": "DeviceAgentService.perception_resource_leases",
+              "local_lease_role": "planning_token_only_not_resource_ownership",
+              "requires_authoritative_perception_lease": true,
+              "evidence_rule": "sensor output after an own threshold change is not independent validation evidence"
+            }
+          }
+        }
+      },
+      {
+        "offset": 300,
+        "desired": 1.0,
+        "means": [
+          -0.6711126418410138,
+          0.6711126418410138
+        ],
+        "features": {
+          "0:bias": 1.0,
+          "1:time:hour_sin": -0.09131412780985955,
+          "2:time:hour_cos": 0.11900306744922431,
+          "3:time:dow_sin": -0.0650825608676337,
+          "4:time:dow_cos": -0.13514533018536287,
+          "5:sensor.kitchen_stationary_energy:value": 0.23549574953849794,
+          "7:sensor.kitchen_stationary_energy:communication_age": 0.001215088737874605,
+          "8:sensor.kitchen_stationary_energy:event_age": 0.001215088737874605,
+          "9:sensor.kitchen_stationary_energy:quality": -0.050000000000000044,
+          "13:sensor.kitchen_stationary_energy:time_since_edge": 0.388140587544115,
+          "17:binary_sensor.kitchen_has_target:value": 1.0,
+          "19:binary_sensor.kitchen_has_target:communication_age": 0.001215088737874605,
+          "20:binary_sensor.kitchen_has_target:event_age": 0.001215088737874605,
+          "21:binary_sensor.kitchen_has_target:quality": -0.050000000000000044,
+          "25:binary_sensor.kitchen_has_target:time_since_edge": 0.388140587544115,
+          "29:sensor.kitchen_light:value": 0.5490396778473451,
+          "31:sensor.kitchen_light:communication_age": 0.001215088737874605,
+          "32:sensor.kitchen_light:event_age": 0.001215088737874605,
+          "33:sensor.kitchen_light:quality": -0.050000000000000044,
+          "120:home:occupancy_now": 1.0,
+          "121:home:occupancy_in_1s": 1.0,
+          "122:home:occupancy_in_3s": 1.0,
+          "123:home:occupancy_in_5s": 1.0,
+          "124:home:arrival_probability": 0.0,
+          "125:home:departure_probability": 0.0,
+          "126:home:trajectory_confidence": 0.0,
+          "127:home:known": 1.0
+        },
+        "home": {
+          "occupancy_now": 1.0,
+          "occupancy_in_1s": 1.0,
+          "occupancy_in_3s": 1.0,
+          "occupancy_in_5s": 1.0,
+          "arrival_probability": 0.0,
+          "departure_probability": 0.0,
+          "trajectory_confidence": 0.0,
+          "area_id": "kitchen",
+          "known": true,
+          "support": 0.0,
+          "uncertainty": 0.026000000000000023,
+          "observability": 0.974,
+          "evidence_sources": [
+            {
+              "entity_id": "binary_sensor.kitchen_has_target",
+              "role": "radar_occupancy",
+              "value_semantics": "stationary_occupancy",
+              "available": true,
+              "communication_reliability": 1.0,
+              "communication_age_seconds": 0.009999990463256836,
+              "event_age_seconds": 0.009999990463256836,
+              "semantic_reliability": 1.0,
+              "semantic_reliability_detail": {
+                "factor": 1.0,
+                "calibrated": false,
+                "reason": "no_correct_driven_profile",
+                "source_id": "binary_sensor.kitchen_has_target",
+                "area_id": "kitchen"
+              },
+              "evidence_age_seconds": 302.00999999046326,
+              "evidence_freshness": 1.0,
+              "contribution": 1.0
+            },
+            {
+              "entity_id": "sensor.kitchen_stationary_energy",
+              "role": "radar_activity",
+              "value_semantics": "activity_likelihood",
+              "available": true,
+              "communication_reliability": 1.0,
+              "communication_age_seconds": 0.009999990463256836,
+              "event_age_seconds": 0.009999990463256836,
+              "semantic_reliability": 1.0,
+              "semantic_reliability_detail": {
+                "factor": 1.0,
+                "calibrated": false,
+                "reason": "no_correct_driven_profile",
+                "source_id": "sensor.kitchen_stationary_energy",
+                "area_id": "kitchen"
+              },
+              "evidence_age_seconds": 302.00999999046326,
+              "evidence_freshness": 1.0,
+              "contribution": 0.072
+            }
+          ],
+          "arrival_probability_by_horizon": {
+            "1s": 0.0,
+            "3s": 0.0,
+            "5s": 0.0
+          },
+          "learned_arrival_probability_by_horizon": {
+            "1s": 0.0,
+            "3s": 0.0,
+            "5s": 0.0
+          },
+          "boundary_arrival_probability_by_horizon": {
+            "1s": 0.0,
+            "3s": 0.0,
+            "5s": 0.0
+          },
+          "boundary_evidence": [],
+          "arrival_evidence_confidence": 0.0,
+          "movement_hypotheses": [],
+          "arrival_prior_sources": [],
+          "arrival_prior_devices": [],
+          "model_version": 2,
+          "adaptive_presence": {
+            "version": 2,
+            "mode": "virtual_threshold",
+            "posterior": 0.00118870310374287,
+            "virtual_presence_active": false,
+            "arrival_prior": 0.0,
+            "effective_arrival_prior": 0.001,
+            "trajectory_confidence": 0.0,
+            "room_calibration_quality": 0.5,
+            "selected_raw_source": "sensor.kitchen_stationary_energy",
+            "raw_signal": 0.24,
+            "raw_signal_quality": 1.0,
+            "raw_semantic_reliability": 1.0,
+            "raw_semantic_reliability_detail": {
+              "factor": 1.0,
+              "calibrated": false,
+              "reason": "no_correct_driven_profile",
+              "source_id": "sensor.kitchen_stationary_energy",
+              "area_id": "kitchen"
+            },
+            "raw_signal_semantics": "non_probability_score",
+            "raw_calibrated_likelihood": 0.246,
+            "raw_calibration_confidence": 0.0,
+            "raw_independent_labels": 0,
+            "likelihood_ratio": 1.3050397877984086,
+            "alternative_raw_sources_not_multiplied": [],
+            "excluded_raw_sources": [],
+            "prior_source_ids": [],
+            "prior_device_ids": [],
+            "fixed_boundary": 0.6,
+            "fixed_boundary_active": false,
+            "enter_threshold": 0.58,
+            "exit_threshold": 0.34,
+            "suppressed_by_false_on_budget": false,
+            "false_on_budget": {
+              "window_seconds": 900.0,
+              "limit": 3,
+              "recent_false_on": 0
+            },
+            "capability": {
+              "version": 2,
+              "area_id": "kitchen",
+              "mode": "virtual_threshold",
+              "virtual_threshold_available": true,
+              "arrival_anticipation_available": true,
+              "local_threshold_distance_available": true,
+              "raw_sources": [
+                "sensor.kitchen_stationary_energy"
+              ],
+              "excluded_raw_sources": [],
+              "binary_sources": [
+                "binary_sensor.kitchen_has_target"
+              ],
+              "reason": "independent_local_raw_signal_available",
+              "binary_only_limitation": null,
+              "hardware_threshold_adapter": {
+                "version": 1,
+                "enabled": false,
+                "default_active": false,
+                "sensor_id": null,
+                "whitelisted": false,
+                "range": null,
+                "step": null,
+                "max_changes": 4,
+                "change_window_seconds": 3600.0,
+                "lease_ttl_seconds": 300.0,
+                "requires_snapshot": true,
+                "restore_required": true,
+                "physical_io": false,
+                "resource_ownership": "DeviceAgentService.perception_resource_leases",
+                "local_lease_role": "planning_token_only_not_resource_ownership",
+                "requires_authoritative_perception_lease": true,
+                "evidence_rule": "sensor output after an own threshold change is not independent validation evidence"
+              }
+            },
+            "timing": {
+              "confirmed_early": 0,
+              "mean_lead_seconds": null,
+              "false_on_count": 0,
+              "false_on_cost": 0.0,
+              "adaptive_on_edges": 0,
+              "suppressed_false_budget": 0
+            },
+            "evidence_independence": "arrival prior comes from anonymous room trajectory; selected raw role cannot create movement hypotheses; only one local raw channel is fused"
+          },
+          "virtual_presence_probability": 0.00118870310374287,
+          "virtual_presence_active": false,
+          "presence_capability": {
+            "version": 2,
+            "area_id": "kitchen",
+            "mode": "virtual_threshold",
+            "virtual_threshold_available": true,
+            "arrival_anticipation_available": true,
+            "local_threshold_distance_available": true,
+            "raw_sources": [
+              "sensor.kitchen_stationary_energy"
+            ],
+            "excluded_raw_sources": [],
+            "binary_sources": [
+              "binary_sensor.kitchen_has_target"
+            ],
+            "reason": "independent_local_raw_signal_available",
+            "binary_only_limitation": null,
+            "hardware_threshold_adapter": {
+              "version": 1,
+              "enabled": false,
+              "default_active": false,
+              "sensor_id": null,
+              "whitelisted": false,
+              "range": null,
+              "step": null,
+              "max_changes": 4,
+              "change_window_seconds": 3600.0,
+              "lease_ttl_seconds": 300.0,
+              "requires_snapshot": true,
+              "restore_required": true,
+              "physical_io": false,
+              "resource_ownership": "DeviceAgentService.perception_resource_leases",
+              "local_lease_role": "planning_token_only_not_resource_ownership",
+              "requires_authoritative_perception_lease": true,
+              "evidence_rule": "sensor output after an own threshold change is not independent validation evidence"
+            }
+          }
+        }
+      },
+      {
+        "offset": 600,
+        "desired": 1.0,
+        "means": [
+          -0.6698296104832528,
+          0.6698296104832528
+        ],
+        "features": {
+          "0:bias": 1.0,
+          "1:time:hour_sin": -0.0886963592850542,
+          "2:time:hour_cos": 0.1209667551419669,
+          "3:time:dow_sin": -0.0650825608676337,
+          "4:time:dow_cos": -0.13514533018536287,
+          "5:sensor.kitchen_stationary_energy:value": 0.23549574953849794,
+          "7:sensor.kitchen_stationary_energy:communication_age": 0.001215088737874605,
+          "8:sensor.kitchen_stationary_energy:event_age": 0.001215088737874605,
+          "9:sensor.kitchen_stationary_energy:quality": -0.050000000000000044,
+          "13:sensor.kitchen_stationary_energy:time_since_edge": 0.388140587544115,
+          "17:binary_sensor.kitchen_has_target:value": 1.0,
+          "19:binary_sensor.kitchen_has_target:communication_age": 0.001215088737874605,
+          "20:binary_sensor.kitchen_has_target:event_age": 0.001215088737874605,
+          "21:binary_sensor.kitchen_has_target:quality": -0.050000000000000044,
+          "25:binary_sensor.kitchen_has_target:time_since_edge": 0.388140587544115,
+          "29:sensor.kitchen_light:value": 0.5490396778473451,
+          "31:sensor.kitchen_light:communication_age": 0.001215088737874605,
+          "32:sensor.kitchen_light:event_age": 0.001215088737874605,
+          "33:sensor.kitchen_light:quality": -0.050000000000000044,
+          "120:home:occupancy_now": 1.0,
+          "121:home:occupancy_in_1s": 1.0,
+          "122:home:occupancy_in_3s": 1.0,
+          "123:home:occupancy_in_5s": 1.0,
+          "124:home:arrival_probability": 0.0,
+          "125:home:departure_probability": 0.0,
+          "126:home:trajectory_confidence": 0.0,
+          "127:home:known": 1.0
+        },
+        "home": {
+          "occupancy_now": 1.0,
+          "occupancy_in_1s": 1.0,
+          "occupancy_in_3s": 1.0,
+          "occupancy_in_5s": 1.0,
+          "arrival_probability": 0.0,
+          "departure_probability": 0.0,
+          "trajectory_confidence": 0.0,
+          "area_id": "kitchen",
+          "known": true,
+          "support": 0.0,
+          "uncertainty": 0.026000000000000023,
+          "observability": 0.974,
+          "evidence_sources": [
+            {
+              "entity_id": "binary_sensor.kitchen_has_target",
+              "role": "radar_occupancy",
+              "value_semantics": "stationary_occupancy",
+              "available": true,
+              "communication_reliability": 1.0,
+              "communication_age_seconds": 0.009999990463256836,
+              "event_age_seconds": 0.009999990463256836,
+              "semantic_reliability": 1.0,
+              "semantic_reliability_detail": {
+                "factor": 1.0,
+                "calibrated": false,
+                "reason": "no_correct_driven_profile",
+                "source_id": "binary_sensor.kitchen_has_target",
+                "area_id": "kitchen"
+              },
+              "evidence_age_seconds": 602.0099999904633,
+              "evidence_freshness": 1.0,
+              "contribution": 1.0
+            },
+            {
+              "entity_id": "sensor.kitchen_stationary_energy",
+              "role": "radar_activity",
+              "value_semantics": "activity_likelihood",
+              "available": true,
+              "communication_reliability": 1.0,
+              "communication_age_seconds": 0.009999990463256836,
+              "event_age_seconds": 0.009999990463256836,
+              "semantic_reliability": 1.0,
+              "semantic_reliability_detail": {
+                "factor": 1.0,
+                "calibrated": false,
+                "reason": "no_correct_driven_profile",
+                "source_id": "sensor.kitchen_stationary_energy",
+                "area_id": "kitchen"
+              },
+              "evidence_age_seconds": 602.0099999904633,
+              "evidence_freshness": 1.0,
+              "contribution": 0.072
+            }
+          ],
+          "arrival_probability_by_horizon": {
+            "1s": 0.0,
+            "3s": 0.0,
+            "5s": 0.0
+          },
+          "learned_arrival_probability_by_horizon": {
+            "1s": 0.0,
+            "3s": 0.0,
+            "5s": 0.0
+          },
+          "boundary_arrival_probability_by_horizon": {
+            "1s": 0.0,
+            "3s": 0.0,
+            "5s": 0.0
+          },
+          "boundary_evidence": [],
+          "arrival_evidence_confidence": 0.0,
+          "movement_hypotheses": [],
+          "arrival_prior_sources": [],
+          "arrival_prior_devices": [],
+          "model_version": 2,
+          "adaptive_presence": {
+            "version": 2,
+            "mode": "virtual_threshold",
+            "posterior": 0.00118870310374287,
+            "virtual_presence_active": false,
+            "arrival_prior": 0.0,
+            "effective_arrival_prior": 0.001,
+            "trajectory_confidence": 0.0,
+            "room_calibration_quality": 0.5,
+            "selected_raw_source": "sensor.kitchen_stationary_energy",
+            "raw_signal": 0.24,
+            "raw_signal_quality": 1.0,
+            "raw_semantic_reliability": 1.0,
+            "raw_semantic_reliability_detail": {
+              "factor": 1.0,
+              "calibrated": false,
+              "reason": "no_correct_driven_profile",
+              "source_id": "sensor.kitchen_stationary_energy",
+              "area_id": "kitchen"
+            },
+            "raw_signal_semantics": "non_probability_score",
+            "raw_calibrated_likelihood": 0.246,
+            "raw_calibration_confidence": 0.0,
+            "raw_independent_labels": 0,
+            "likelihood_ratio": 1.3050397877984086,
+            "alternative_raw_sources_not_multiplied": [],
+            "excluded_raw_sources": [],
+            "prior_source_ids": [],
+            "prior_device_ids": [],
+            "fixed_boundary": 0.6,
+            "fixed_boundary_active": false,
+            "enter_threshold": 0.58,
+            "exit_threshold": 0.34,
+            "suppressed_by_false_on_budget": false,
+            "false_on_budget": {
+              "window_seconds": 900.0,
+              "limit": 3,
+              "recent_false_on": 0
+            },
+            "capability": {
+              "version": 2,
+              "area_id": "kitchen",
+              "mode": "virtual_threshold",
+              "virtual_threshold_available": true,
+              "arrival_anticipation_available": true,
+              "local_threshold_distance_available": true,
+              "raw_sources": [
+                "sensor.kitchen_stationary_energy"
+              ],
+              "excluded_raw_sources": [],
+              "binary_sources": [
+                "binary_sensor.kitchen_has_target"
+              ],
+              "reason": "independent_local_raw_signal_available",
+              "binary_only_limitation": null,
+              "hardware_threshold_adapter": {
+                "version": 1,
+                "enabled": false,
+                "default_active": false,
+                "sensor_id": null,
+                "whitelisted": false,
+                "range": null,
+                "step": null,
+                "max_changes": 4,
+                "change_window_seconds": 3600.0,
+                "lease_ttl_seconds": 300.0,
+                "requires_snapshot": true,
+                "restore_required": true,
+                "physical_io": false,
+                "resource_ownership": "DeviceAgentService.perception_resource_leases",
+                "local_lease_role": "planning_token_only_not_resource_ownership",
+                "requires_authoritative_perception_lease": true,
+                "evidence_rule": "sensor output after an own threshold change is not independent validation evidence"
+              }
+            },
+            "timing": {
+              "confirmed_early": 0,
+              "mean_lead_seconds": null,
+              "false_on_count": 0,
+              "false_on_cost": 0.0,
+              "adaptive_on_edges": 0,
+              "suppressed_false_budget": 0
+            },
+            "evidence_independence": "arrival prior comes from anonymous room trajectory; selected raw role cannot create movement hypotheses; only one local raw channel is fused"
+          },
+          "virtual_presence_probability": 0.00118870310374287,
+          "virtual_presence_active": false,
+          "presence_capability": {
+            "version": 2,
+            "area_id": "kitchen",
+            "mode": "virtual_threshold",
+            "virtual_threshold_available": true,
+            "arrival_anticipation_available": true,
+            "local_threshold_distance_available": true,
+            "raw_sources": [
+              "sensor.kitchen_stationary_energy"
+            ],
+            "excluded_raw_sources": [],
+            "binary_sources": [
+              "binary_sensor.kitchen_has_target"
+            ],
+            "reason": "independent_local_raw_signal_available",
+            "binary_only_limitation": null,
+            "hardware_threshold_adapter": {
+              "version": 1,
+              "enabled": false,
+              "default_active": false,
+              "sensor_id": null,
+              "whitelisted": false,
+              "range": null,
+              "step": null,
+              "max_changes": 4,
+              "change_window_seconds": 3600.0,
+              "lease_ttl_seconds": 300.0,
+              "requires_snapshot": true,
+              "restore_required": true,
+              "physical_io": false,
+              "resource_ownership": "DeviceAgentService.perception_resource_leases",
+              "local_lease_role": "planning_token_only_not_resource_ownership",
+              "requires_authoritative_perception_lease": true,
+              "evidence_rule": "sensor output after an own threshold change is not independent validation evidence"
+            }
+          }
+        }
+      }
+    ],
+    "pass_all": true
+  },
+  "pass": true,
+  "environment": "Linux Python 3.12.3 / NumPy 2.3.3",
+  "deployed_user_model_verified": false
+}

@@ -6,6 +6,7 @@ import hashlib
 import json
 import math
 import re
+import threading
 from settings import (OPTIONS, SENSOR_NEEDS, SUPPORTED_TARGETS, clamp, iso_from_ts, now_ts, parse_ts)
 
 def target_value(state, property_name):
@@ -898,9 +899,21 @@ class ExplicitFeatureSchema:
 
 class TemporalHistory:
     """Small in-memory timeline used by live inference and historical replay."""
+    _photometric_init_lock = threading.Lock()
     def __init__(self, maxlen=96):
         self.samples = {}
         self.maxlen = maxlen
+        self._photometric_baselines = None
+
+    def photometric_baselines(self):
+        # Own the small anchors independently of rolling raw sensor samples.
+        # SharedInferenceTemporal delegates here; no cache survives a new history.
+        if self._photometric_baselines is None:
+            with self._photometric_init_lock:
+                if self._photometric_baselines is None:
+                    from photometric_baseline import PhotometricBaselines
+                    self._photometric_baselines = PhotometricBaselines()
+        return self._photometric_baselines
 
     def add(self, entity_id, ts, state):
         if not entity_id or state is None: return

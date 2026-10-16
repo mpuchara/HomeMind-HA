@@ -1,0 +1,106 @@
+{
+  "version": "0.14.207",
+  "base_commit": "bf9bce389a6a15601d48f933d493b43bbbe8ff34",
+  "environment": "Linux Python 3.12.3 / NumPy 2.3.3",
+  "tests_passed": 2502,
+  "tests_skipped": 0,
+  "new_regression_tests": 28,
+  "full_suite_seconds": 322.442,
+  "compileall": true,
+  "all_shipped_js_syntax": true,
+  "production_entrypoint": {
+    "entrypoint": "adaptive_ai/src/trial_queue_main.py",
+    "health": {
+      "ok": true,
+      "ready": true,
+      "startup": {
+        "current_state_seconds": 0.11402972100000852,
+        "elapsed_seconds": 1.5473051071166992,
+        "error": null,
+        "message": "Adaptive AI runtime is ready",
+        "ready": true,
+        "started_at": 1792120315.526606,
+        "state": "ready",
+        "step": 7,
+        "steps": 7,
+        "timings": {
+          "building_runtime": 0.8915,
+          "http_ready": 0.1931,
+          "http_starting": 0.0964,
+          "loading_runtime": 0.1754,
+          "reconciling_control": 0.0002,
+          "starting_engine": 0.0005,
+          "starting_history": 0.075,
+          "starting_realtime": 0.0013
+        }
+      },
+      "version": "0.14.207"
+    }
+  },
+  "guarded_control_to_ha_stub": {
+    "events": 32,
+    "continuous_next_event": false,
+    "all_events_completed": true,
+    "actual_executor_control": true,
+    "root_prediction_fixture": true,
+    "ha_network": false,
+    "decisions_sha256": "5bd2ed0559d3238b0002598a405b6556e322adcb4c4148ca6a2bef418a4f11f8",
+    "event_to_executor_median_ms": 10.434958499985214,
+    "event_to_executor_p95_ms": 15.004435000008698,
+    "event_to_service_dispatch_ms": 16.927411000011716,
+    "service_calls": 1,
+    "process_cpu_seconds": 0.37295214599999993,
+    "elapsed_seconds": 0.3748393349999901,
+    "observation_scheduler": {
+      "interval_ms": 1000.0,
+      "executed": 1,
+      "skipped": 31,
+      "target_forced": 0,
+      "errors": 0,
+      "tracked_agents": 1,
+      "max_agents": 256,
+      "deferred_for_realtime": 0,
+      "max_deferral_ms": 5000.0,
+      "retry_agents": 0,
+      "scope": "Engine-dispatched candidate observations; target events always admitted"
+    },
+    "debounce_ms": 0
+  },
+  "browser_ui": {
+    "actual_production_reader_and_assets": true,
+    "synthetic_data": true,
+    "continuous_current_on_between_real_off_observations": true,
+    "desired_flips_remain_in_history": true,
+    "point_inspector_current": "ON",
+    "axis_labels": [
+      "OFF",
+      "ON"
+    ],
+    "console_errors": 0
+  },
+  "normalized_lf_sha256": {
+    "adaptive_ai/config.yaml": "91b629d022d68b009b346fd93bff7f561973672f33c029726dfe0f596d9b7d3a",
+    "adaptive_ai/Dockerfile": "2cb457d5de76b325053005bec9f14110205bf5d474d56f443e8cfd5c8f7e5a9d",
+    "adaptive_ai/src/settings.py": "a0420c8f2f539b8f77811c6930add5d6ce579433d6ac2482daa373deedf6aeb8",
+    "adaptive_ai/src/context.py": "85398dddd260b72a4fa7731873f5eeee73f61c794b0d3881528f372e45919f3c",
+    "adaptive_ai/src/home_state.py": "4caf925ad9295bee271f5cb56d0dd4066c53c1a6e9ff12d47b1192e550989ab8",
+    "adaptive_ai/src/photometric_baseline.py": "53c276b294ee4982d03d048a648b65fa56f645f73a74da2e2ed5778005f74d8d",
+    "adaptive_ai/src/observation_contract.py": "bd5e6105d94f74999ee811620ea2912213ab92f2f4957576e3f177187b87126c",
+    "adaptive_ai/src/agent_correct_generation_history.py": "13b5cb7d9671c2e6feee20680d81273028d8165653e892bfd82f27f7787f0984",
+    "adaptive_ai/src/fast_runtime.py": "b72953b8e92722030ecd5c0df26b14f8bc0703b473164013dfee079fd609ebcb",
+    "adaptive_ai/src/runtime_debug_log.py": "9a0c2008cbff7816abbc7b738f417d3a0aaa16a395c912bc9846b0c81e94291c",
+    "adaptive_ai/src/static/agent_workflow_ui.js": "fefaf66f403d5aa5a88be3ff6ec78f3d688ae75a4932c9b407695740cd69e783",
+    "adaptive_ai/src/static/index.html": "f0919c9adfbb6928dcb3944d0750af36c7b77b230e07c6e297c8f7e80e90ec79",
+    "tests/test_release_207_correct_lighting.py": "767e718f5898078de8c0e55bcfae68b8119ab7c1b43960b7f6b3c7804afa69fa",
+    "tests/test_release_047_training_correct_events.py": "2301cd5ea7f10043da4ab9fae22dbef09b68827f5419d8da9c3ee559139f0569",
+    "tools/verify_correct_lighting.py": "488ab7e5005b1ba30cf2983f42b41d0f71562d7061c2e75941bca56ad2466459",
+    "tools/benchmark_kitchen_lighting.py": "1ec0023c3f42895e40036dfdefb79945c3d78d2e6b07bb1ed4cdc12b1096318c",
+    ".github/workflows/validate.yml": "9def87862799cf2da5cd44458847fd009559112dcc112fc14e1b359ad88daa6d"
+  },
+  "limitations": [
+    "No user database or deployed fitted model available",
+    "No physical HA service or Raspberry Pi deployment verified",
+    "Retained photometry needs a proven pre-ON observation",
+    "Continued presence renewal needs a genuinely new HA event; old-event polls still decay"
+  ]
+}

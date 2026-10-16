@@ -68,6 +68,9 @@ jobs:
       - name: 0.14.206 compact cold comparison smoke
         if: matrix.python == '3.11'
         run: python tools/benchmark_tail_latency.py --one --episodes 24 --audit-kib 32 --passes 2
+      - name: 0.14.207 observed Current and long-ON lighting regressions
+        if: matrix.python == '3.11'
+        run: python tools/verify_correct_lighting.py --one --check
       - name: 0.14.206 guarded Control dispatch with continuous pending events
         if: matrix.python == '3.11'
         run: python tools/benchmark_control_priority.py --one --events 256 --continuous
@@ -294,6 +297,7 @@ jobs:
                       prefix+'src/runtime_threading.py',
                       prefix+'src/shared_observation_features.py',
                       prefix+'src/shadow_observation_scheduler.py',
+                      prefix+'src/photometric_baseline.py',
                   ):
                       assert required in names, (archive, required)
           print('verified package version/layout/runtime files:', expected)

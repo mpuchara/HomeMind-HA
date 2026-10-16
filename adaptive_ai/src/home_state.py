@@ -222,7 +222,12 @@ class RoomBeliefModel:
             return 0.0
         params = self._params(source.get('role'))
         state_since = self._source_timestamp(source, 'state_since_ts', event_ts)
-        age = max(0.0, float(ts) - state_since)
+        # A new report from a stateful presence source confirms the continued
+        # state. Re-receiving the same HA event advances only received_ts, so a
+        # stale poll cannot renew evidence. PIR remains an edge/activity source.
+        evidence_ts = (event_ts if source.get('role') in {'radar_occupancy', 'occupancy_binary'}
+                       else state_since)
+        age = max(0.0, float(ts) - evidence_ts)
         try:
             active = float(source.get('value')) >= .5
         except (TypeError, ValueError):
