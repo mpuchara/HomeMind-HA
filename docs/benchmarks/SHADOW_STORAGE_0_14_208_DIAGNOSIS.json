@@ -1,0 +1,126 @@
+{
+  "snapshots": [
+    {
+      "source_file": "adaptive-ai-runtime-debug-20261016-113832.json",
+      "app_version": "0.14.207",
+      "generated_at": "2026-10-16T09:38:32.047502+00:00",
+      "candidate_worker": {
+        "alive": true,
+        "error_count": 60,
+        "heartbeat_age_seconds": 1.979478120803833,
+        "heartbeat_ts": 1792143510.1051915,
+        "last_error": "BufferError: Deferred evidence RAM budget exhausted; observation remains a gap",
+        "restart_count": 0
+      },
+      "candidate_evidence": {
+        "bytes": 76981,
+        "errors": 0,
+        "flushed": 36,
+        "max_bytes": 4194304,
+        "max_items": 128,
+        "pending": 128,
+        "rejected": 9165,
+        "storage_retry": {
+          "busy_retries": 0,
+          "pauses": 326,
+          "reason": "Storage protection: database_budget; database used=9027993600 bytes, WAL=18614192 bytes, free=12074881024 bytes; recording/training paused",
+          "retry_in_seconds": 0.0
+        }
+      },
+      "storage_budget": {
+        "auto_pool_bytes": 21118049040,
+        "auto_use_percent": 50,
+        "batch_sample_interval_seconds": 0.05,
+        "batch_sample_payload_bytes": 1048576,
+        "blocked_writes": 14306,
+        "budget_mode": "auto",
+        "database_max_bytes": 10031073294,
+        "database_used_bytes": 9027997696,
+        "db_bytes": 9028292608,
+        "disk_samples": 123333,
+        "free_bytes": 12076609536,
+        "level": "paused",
+        "max_statement_payload_bytes": 16777216,
+        "minimum_free_bytes": 10559024520,
+        "page_observations": 160681,
+        "readonly_page_observations_skipped": 869616,
+        "reason": "database_budget",
+        "sample_error": null,
+        "wal_bytes": 16777216,
+        "wal_max_bytes": 527951226
+      },
+      "retention": {
+        "alive": true,
+        "batch_rows": 128,
+        "deleted": 247380,
+        "errors": 0,
+        "history_days": 14,
+        "last_error": null,
+        "reclaimed_pages": 11419,
+        "runs": 356
+      }
+    },
+    {
+      "source_file": "adaptive-ai-runtime-debug-20261016-113901.json",
+      "app_version": "0.14.207",
+      "generated_at": "2026-10-16T09:39:01.139639+00:00",
+      "candidate_worker": {
+        "alive": true,
+        "error_count": 60,
+        "heartbeat_age_seconds": 1.7031598091125488,
+        "heartbeat_ts": 1792143539.5558667,
+        "last_error": "BufferError: Deferred evidence RAM budget exhausted; observation remains a gap",
+        "restart_count": 0
+      },
+      "candidate_evidence": {
+        "bytes": 76981,
+        "errors": 0,
+        "flushed": 36,
+        "max_bytes": 4194304,
+        "max_items": 128,
+        "pending": 128,
+        "rejected": 9170,
+        "storage_retry": {
+          "busy_retries": 0,
+          "pauses": 327,
+          "reason": "Storage protection: database_budget; database used=9028026368 bytes, WAL=16777216 bytes, free=12076744704 bytes; recording/training paused",
+          "retry_in_seconds": 3.4027864359668456
+        }
+      },
+      "storage_budget": {
+        "auto_pool_bytes": 21118049040,
+        "auto_use_percent": 50,
+        "batch_sample_interval_seconds": 0.05,
+        "batch_sample_payload_bytes": 1048576,
+        "blocked_writes": 14315,
+        "budget_mode": "auto",
+        "database_max_bytes": 10031073294,
+        "database_used_bytes": 9028026368,
+        "db_bytes": 9028157440,
+        "disk_samples": 124032,
+        "free_bytes": 12057206784,
+        "level": "paused",
+        "max_statement_payload_bytes": 16777216,
+        "minimum_free_bytes": 10559024520,
+        "page_observations": 161182,
+        "readonly_page_observations_skipped": 871425,
+        "reason": "database_budget",
+        "sample_error": null,
+        "wal_bytes": 16777216,
+        "wal_max_bytes": 527951226
+      },
+      "retention": {
+        "alive": true,
+        "batch_rows": 128,
+        "deleted": 248483,
+        "errors": 0,
+        "history_days": 14,
+        "last_error": null,
+        "reclaimed_pages": 11452,
+        "runs": 357
+      }
+    }
+  ],
+  "conclusion": "Storage admission paused bulk writes at the configured database watermark; bounded Candidate evidence saturated at 128 items. Capacity rejection was misreported as inference failure, also escaping passive observations into worker health. Physical disk is not full; automatic 50 percent allocation and 90 percent database soft watermark apply.",
+  "safety": "No storage limits raised, evidence erased, or policy replay introduced."
+}

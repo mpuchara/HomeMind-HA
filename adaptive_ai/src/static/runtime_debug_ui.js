@@ -29,6 +29,9 @@
     const enabled=Boolean(dbg.enabled);
     const active=Array.isArray(dbg.active)?dbg.active:[];
     const heavy=status.heavy_job||dbg.heavy_job||null;
+    const evidence=(status.candidate_worker||dbg.candidate_worker)?.shadow_observations||{};
+    const storageNotice=evidence.paused
+      ?`<div class="notice" role="status">Candidate Shadow observations paused: ${escLocal(evidence.storage_reason||evidence.reason||'evidence buffer full')}. Retained observations: ${Number(evidence.pending||0)}/${Number(evidence.max_items||0)}. New observations remain gaps until storage recovers. Check the add-on storage budget configuration.</div>`:'';
     const activity=active.length
       ?active.map(item=>`<div class="runtime-debug-active"><b>${escLocal(item.operation||'work')}</b><span>${escLocal(item.thread||'')} · ${ms(item.age_ms)}${fieldSummary(item.fields)?' · '+fieldSummary(item.fields):''}</span></div>`).join('')
       :`<div class="empty">${heavy?`Heavy job: ${escLocal(heavy)}`:'No traced operation is active right now.'}</div>`;
@@ -43,6 +46,7 @@
           <button class="ghost" id="runtimeDebugDownload" ${Number(dbg.entries||0)<=0&&!active.length?'disabled':''}>Download log</button>
         </div>
       </div>
+      ${storageNotice}
       <div class="history-grid runtime-debug-grid">
         <div><b>${ms(metric.recent_p95_ms)}</b><span>event → intent p95 · last 60 s</span></div>
         <div><b>${ms(metric.p95_ms)}</b><span>event → intent p95 · retained telemetry</span></div>

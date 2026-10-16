@@ -179,7 +179,7 @@ def install(manager):
         if not agent:
             return None
         bundle = original_after(agent, job.get("state_map"))
-        if not bundle:
+        if not bundle or bundle.get('observation_gap'):
             return bundle
 
         # Shadow runtime creates the event on the deferred worker. Re-anchor it to the

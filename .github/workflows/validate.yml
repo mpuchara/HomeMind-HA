@@ -68,6 +68,9 @@ jobs:
       - name: 0.14.206 compact cold comparison smoke
         if: matrix.python == '3.11'
         run: python tools/benchmark_tail_latency.py --one --episodes 24 --audit-kib 32 --passes 2
+      - name: 0.14.208 bounded Shadow evidence backpressure and exact recovery
+        if: matrix.python == '3.11'
+        run: python tools/verify_shadow_backpressure.py --one --check
       - name: 0.14.207 observed Current and long-ON lighting regressions
         if: matrix.python == '3.11'
         run: python tools/verify_correct_lighting.py --one --check

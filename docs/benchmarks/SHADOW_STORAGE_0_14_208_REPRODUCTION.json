@@ -1,0 +1,47 @@
+{
+  "after": {
+    "blocked_observations": 64,
+    "blocked_policy_calls": 0,
+    "bytes": 39280,
+    "elapsed_blocked_ms": 63.84554299999934,
+    "error_events": 0,
+    "exact_flush_count": 128,
+    "exact_retained_rows": true,
+    "ha_service_calls": 0,
+    "inference_errors": 0,
+    "observation_gaps": 64,
+    "pass_all": true,
+    "pending": 128,
+    "pending_bytes_unchanged": true,
+    "recovery": {
+      "last_gap_ts": 1792143936.4523473,
+      "last_root_agent_id": "7e7347e6",
+      "paused": false,
+      "persistence_gaps": 0,
+      "reason": null,
+      "recoveries": 1,
+      "skipped": 64
+    },
+    "retained_rows_sha256": "acc08c0563bab701d64cdf03cfd39bd562b997f957ac1eca4459369a26fd9008"
+  },
+  "before": {
+    "blocked_observations": 64,
+    "blocked_policy_calls": 64,
+    "bytes": 39280,
+    "elapsed_blocked_ms": 283.06567299999585,
+    "error_events": 32,
+    "exact_flush_count": 128,
+    "exact_retained_rows": true,
+    "ha_service_calls": 0,
+    "inference_errors": 32,
+    "observation_gaps": 0,
+    "pass_all": false,
+    "pending": 128,
+    "pending_bytes_unchanged": true,
+    "recovery": {},
+    "retained_rows_sha256": "acc08c0563bab701d64cdf03cfd39bd562b997f957ac1eca4459369a26fd9008"
+  },
+  "independent_sources": true,
+  "limitation": "Host reproduction with real SQLite page accounting and production Candidate pipeline. No user database, HA device or Raspberry Pi latency measured.",
+  "synthetic": true
+}
