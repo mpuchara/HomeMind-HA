@@ -66,6 +66,7 @@ class DeferredCandidateShadowQueue:
             "processed": 0,
             "stale_generation_dropped": 0,
             "errors": 0,
+            "observation_gaps": 0,
             "max_depth": 0,
             "last_error": None,
             "last_root_agent_id": None,
@@ -235,7 +236,11 @@ class DeferredCandidateShadowQueue:
                 metrics.observe("candidate_shadow_queue_lag", lag_ms)
             started = time.perf_counter_ns()
             try:
-                self._execute(job)
+                result = self._execute(job)
+                if isinstance(result, dict) and result.get('observation_gap'):
+                    self.stats['observation_gaps'] += 1
+                    increment_counter(self.engine, 'candidate_shadow_observation_gaps')
+                    continue
                 self.stats["processed"] += 1
                 increment_counter(self.engine, "candidate_shadow_processed")
                 completed += 1

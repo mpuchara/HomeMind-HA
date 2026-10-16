@@ -12,6 +12,10 @@ from sqlite_background import background_sqlite, is_sqlite_busy
 from storage_budget import StoragePressure, StorageRetry
 
 
+class EvidenceBufferFull(BufferError):
+    """No room for a new observation; retained evidence is still intact."""
+
+
 class DeferredEvidence:
     def __init__(self, store, writer, *, max_items=128, max_bytes=4 * 1024 * 1024):
         self.store, self.writer = store, writer
@@ -33,10 +37,15 @@ class DeferredEvidence:
                 return False
             if len(self.pending) >= self.max_items or self.bytes + len(raw) > self.max_bytes:
                 self.rejected += 1
-                raise BufferError('Deferred evidence RAM budget exhausted; observation remains a gap')
+                raise EvidenceBufferFull('Deferred evidence RAM budget exhausted; observation remains a gap')
             self.pending[key] = raw
             self.bytes += len(raw)
         return True
+
+    def full(self):
+        """RAM-only admission hint; submit still checks the exact encoded size."""
+        with self.lock:
+            return len(self.pending) >= self.max_items or self.bytes >= self.max_bytes
 
     def flush(self, *, force=False, limit=4):
         with self.flush_lock:

@@ -1,3 +1,9 @@
+## 0.14.208
+
+- Pause optional Candidate Shadow inference when its bounded evidence buffer is full; retain exact queued observations and resume from fresh contexts after persistence recovers.
+- Distinguish capacity/storage gaps from genuine model failures, including passive observations and paired-outcome persistence. Break comparison lead continuity across gaps.
+- Expose pause reason, skipped observations and recovery counters in runtime diagnostics. Preserve configured database/WAL/free-space limits and 14-day retention.
+
 ## 0.14.207
 
 - Restore Current from observed physical values in decision history when raw target archive acquisition lags. Merge by observation time, prefer exact HA events on a tie, and apply the same sources to point inspection and Candidate/direct-parent charts. Never replace Current with Desired or replay a model into history.

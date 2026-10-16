@@ -19,7 +19,8 @@ from urllib.parse import parse_qs, unquote, urlsplit
 
 from context import target_value
 from candidate_shadow_deferred import DeferredCandidateShadowQueue
-from deferred_evidence import DeferredEvidence
+from deferred_evidence import DeferredEvidence, EvidenceBufferFull
+from storage_budget import StoragePressure, storage_status
 from fast_runtime import is_fast_target
 from settings import parse_ts
 from inference_hot_path_metrics import observe_elapsed
@@ -787,6 +788,43 @@ def install(manager):
         root_rt["last_persist"] = float(bundle["ts"])
 
     decision_writes = DeferredEvidence(manager.store, _write_bundle)
+    admission = dict(skipped=0, persistence_gaps=0, paused=False, reason=None,
+                     last_gap_ts=None, last_root_agent_id=None, recoveries=0)
+
+    def _evidence_gap(root_id, *, persistence=False, reason=None):
+        # Do not extend a paired lead time/false-early comparison across a gap.
+        # Already queued immutable observations remain available for exact retry.
+        rt = _root_runtime(root_id)
+        rt['bundle'] = None
+        rt['generation_state'] = {}
+        rt['last_candidate_attempt_monotonic'] = time.monotonic()
+        with manager.lock:
+            admission['persistence_gaps' if persistence else 'skipped'] += 1
+            admission.update(paused=True, reason=reason or storage_status(manager.store).get('reason')
+                             or 'evidence_buffer_full', last_gap_ts=time.time(),
+                             last_root_agent_id=str(root_id))
+        # The RAM diagnostic carries the aggregate; never enqueue an error event
+        # for every rejected observation into the same saturated storage path.
+        return dict(observation_gap=True, reason=admission['reason'])
+
+    def _admit_observation(root_id):
+        if decision_writes.full():
+            # Worker-owned, bounded and subject to the existing retry cooldown.
+            decision_writes.flush()
+            if decision_writes.full():
+                return _evidence_gap(root_id)
+        with manager.lock:
+            if admission['paused']:
+                admission['recoveries'] += 1
+            admission.update(paused=False, reason=None)
+        return None
+
+    def persistence_snapshot():
+        result = decision_writes.snapshot()
+        with manager.lock:
+            result['admission'] = dict(admission)
+        result['storage'] = storage_status(manager.store)
+        return result
 
     def _persist_bundle(bundle, force=False):
         if not bundle:
@@ -862,6 +900,9 @@ def install(manager):
         # duplicate A/B samples. Deferred execution supplies the exact parent observation
         # captured before a newer Live inference can overwrite Engine.runtime.
         root_rt = _root_runtime(agent["id"])
+        gap = _admit_observation(agent['id'])
+        if gap:
+            return gap
         previous_bundle = root_rt.get("bundle")
         current_job = getattr(manager, "candidate_shadow_current_job", None)
         current_job = current_job() if callable(current_job) else None
@@ -880,8 +921,11 @@ def install(manager):
             observed_revision = int(getattr(manager.engine, "state_revision", 0) or 0)
         root_rt["last_candidate_observed_revision"] = observed_revision
         root_rt["last_candidate_observed_monotonic"] = time.monotonic()
-        _persist_bundle(bundle, force=False)
-        _increment_false_early(agent["id"], previous_bundle, bundle)
+        try:
+            _persist_bundle(bundle, force=False)
+            _increment_false_early(agent["id"], previous_bundle, bundle)
+        except (EvidenceBufferFull, StoragePressure) as exc:
+            return _evidence_gap(agent['id'], persistence=True, reason=getattr(exc, 'reason', None))
         return bundle
 
     def _cached_active_edge(root_id):
@@ -895,7 +939,7 @@ def install(manager):
             active_edge_cache[root_id] = dict(value) if value else None
         return dict(value) if value else None
 
-    def before_live_process(agent, state_map):
+    def _before_live_process(agent, state_map):
         root_rt = _root_runtime(agent["id"])
         previous_current = root_rt.get("previous_current")
         if previous_current is None:
@@ -997,6 +1041,13 @@ def install(manager):
                 },
             )
         return inserted
+
+    def before_live_process(agent, state_map):
+        try:
+            return _before_live_process(agent, state_map)
+        except (EvidenceBufferFull, StoragePressure) as exc:
+            _evidence_gap(agent['id'], persistence=True, reason=getattr(exc, 'reason', None))
+            return None
 
     def generation_history(ref, start, end):
         generation = _generation(manager.store, generation_id=ref) or _generation(manager.store, agent_id=ref)
@@ -1262,6 +1313,8 @@ def install(manager):
         ):
             return False
         root_rt["last_candidate_attempt_monotonic"] = time.monotonic()
+        if _admit_observation(root_id):
+            return False
         root = _root_config(root_id)
         if not root:
             return False
@@ -1290,7 +1343,11 @@ def install(manager):
                 "candidate_event_to_decision",
                 max(0.0, (completed_perf - event_received_perf) * 1000.0),
             )
-        _persist_bundle(bundle, force=True)
+        try:
+            _persist_bundle(bundle, force=True)
+        except (EvidenceBufferFull, StoragePressure) as exc:
+            _evidence_gap(root_id, persistence=True, reason=getattr(exc, 'reason', None))
+            return False
         root_rt["last_candidate_observed_revision"] = max(int(revision or 0), current_revision)
         root_rt["last_candidate_observed_monotonic"] = time.monotonic()
         root_rt["last_passive_bundle"] = bundle
@@ -1445,7 +1502,7 @@ def install(manager):
     manager.candidate_shadow_async_diagnostics = deferred_shadow.diagnostics
     manager.candidate_shadow_async = deferred_shadow
     manager.flush_candidate_shadow_decisions = decision_writes.flush
-    manager.candidate_shadow_persistence_snapshot = decision_writes.snapshot
+    manager.candidate_shadow_persistence_snapshot = persistence_snapshot
     manager.drain_candidate_shadow_events = drain_candidate_shadow_events
     manager.candidate_live_runtime_snapshots = candidate_live_runtime_snapshots
     manager.candidate_latest_runtime = lambda generation_id: _latest_shadow(generation_id)

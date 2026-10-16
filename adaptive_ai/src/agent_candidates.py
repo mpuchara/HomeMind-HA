@@ -267,6 +267,8 @@ class AgentCandidateManager(threading.Thread):
         alive = bool(self.is_alive() or (recovery is not None and recovery.is_alive()))
         heartbeat = float(getattr(self, "_worker_heartbeat_ts", 0.0) or 0.0)
         now = time.time()
+        persistence = getattr(self, 'candidate_shadow_persistence_snapshot', None)
+        evidence = persistence() if callable(persistence) else {}
         return {
             "alive": alive,
             "heartbeat_ts": heartbeat or None,
@@ -274,6 +276,12 @@ class AgentCandidateManager(threading.Thread):
             "last_error": getattr(self, "_worker_last_error", None),
             "error_count": int(getattr(self, "_worker_error_count", 0) or 0),
             "restart_count": int(getattr(self, "_worker_restart_count", 0) or 0),
+            "shadow_observations": {
+                **evidence.get('admission', {}),
+                'pending': evidence.get('pending', 0),
+                'max_items': evidence.get('max_items'),
+                'storage_reason': evidence.get('storage', {}).get('reason'),
+            },
         }
 
     def _record_worker_error(self, phase, exc, row=None):
