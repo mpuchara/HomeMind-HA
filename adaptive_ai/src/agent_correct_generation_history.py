@@ -6,6 +6,7 @@ the current policy into historical state.
 """
 from bisect import bisect_right
 import json
+import math
 import time
 from urllib.parse import parse_qs, unquote, urlsplit
 
@@ -88,7 +89,7 @@ def _pending_current_rows(engine, entity_id, end):
     return rows
 
 
-def _current_rows(manager, agent, start, end):
+def _current_rows(manager, agent, start, end, recorded=()):
     """Observed physical target-state curve projected across the selected chart range.
 
     Recorder stores state changes, not a sample for every second. A seed row can therefore
@@ -124,22 +125,29 @@ def _current_rows(manager, agent, start, end):
     seed = merged[max(before)] if before else None
     rows = [merged[ts] for ts in sorted(merged) if start < ts <= end]
 
-    out = []
-    last_value = None
-    if seed:
-        last_value = target_value(archived_state(dict(seed)), agent["target_property"])
-        if last_value is not None:
-            out.append({"ts": start, "current": last_value, "projected": True})
-    for row in rows:
-        value = target_value(archived_state(row), agent["target_property"])
-        if value is None:
+    # decision_history.current is the physical value read by Engine, including in
+    # Shadow. Raw archive acquisition can lag or pause independently. Merge that
+    # already-observed stream; never use Desired or replay a policy as Current.
+    values = {}
+    for row in recorded:
+        try:
+            ts, value = float(row['ts']), float(row['current'])
+        except (KeyError, TypeError, ValueError):
             continue
-        last_value = value
-        point = {"ts": float(row["ts"]), "current": value}
-        if out and abs(float(out[-1]["ts"]) - float(point["ts"])) < 1e-6:
-            out[-1] = point
-        else:
-            out.append(point)
+        if ts <= end and math.isfinite(ts) and math.isfinite(value):
+            values[ts] = value
+    # Exact HA event rows win a tie with a decision snapshot.
+    for row in ([seed] if seed else []) + rows:
+        value = target_value(archived_state(row), agent["target_property"])
+        if value is not None and math.isfinite(value):
+            values[float(row['ts'])] = value
+    before = [ts for ts in values if ts <= start]
+    last_value = values[max(before)] if before else None
+    out = ([dict(ts=start, current=last_value, projected=True)]
+           if last_value is not None else [])
+    for ts in sorted(ts for ts in values if start < ts <= end):
+        last_value = values[ts]
+        out.append(dict(ts=ts, current=last_value))
     if last_value is not None and end >= start:
         if not out or abs(float(out[-1]["ts"]) - end) > 1e-6:
             out.append({"ts": end, "current": last_value, "projected": True})
@@ -226,7 +234,7 @@ def _live_observed_history(manager, generation, agent, start, end):
     decisions = _recorded_rows(
         manager.store, manager.engine, agent["id"], float(start), float(end)
     )
-    currents = _current_rows(manager, agent, start, end)
+    currents = _current_rows(manager, agent, start, end, recorded=decisions)
     points, gaps = _live_observed_points(decisions, currents, start, end)
 
     return {
@@ -271,6 +279,7 @@ def _base_payload(generation, agent, start, end):
         "chart_contract": CHART_CONTRACT,
         "policy_replay_used": False,
         "direct_parent_only": True,
+        "current_source": "observed_physical_archive_and_runtime_current",
     }
 
 
@@ -375,7 +384,8 @@ def build_correct_history(manager, ref, start, end, legacy_history, compact=Fals
         # inference may legitimately have gaps; the real device state must remain visible
         # across those gaps so Correct can still anchor the user's correction in time.
         stage_started = time.perf_counter()
-        current_points = _current_rows(manager, agent, start, end)
+        current_points = _current_rows(manager, agent, start, end,
+                                       recorded=parent_points + child_points)
         stage("current_history", stage_started, point_count=len(current_points))
 
         payload.update({
@@ -420,15 +430,25 @@ def build_correct_point(manager, ref, timestamp, legacy_point):
     TRAINING_BUDGET.request_interactive_window(1.0, reason="correct_point")
     generation, agent = _resolve_generation(manager, ref)
     timestamp = float(timestamp)
-    current_rows = _current_rows(manager, agent, timestamp, timestamp)
-    current = _current_at(current_rows, timestamp)
     observed = _observed_generation_at(manager, generation, timestamp)
+    parent = observed_parent = None
+    recorded = _recorded_rows(manager.store, manager.engine, agent['id'], timestamp, timestamp) if generation.get('generation_type') == 'live' else ()
+    if generation.get('generation_type') != 'live':
+        parent_id = generation.get('parent_generation_id')
+        parent = lineage_row(manager.store, generation_id=parent_id) if parent_id else None
+        if not parent:
+            raise ValueError('Candidate direct parent generation not found')
+        observed_parent = _observed_generation_at(manager, parent, timestamp)
+        recorded = [row for row in (observed_parent, observed) if row is not None]
+    current_rows = _current_rows(manager, agent, timestamp, timestamp, recorded=recorded)
+    current = _current_at(current_rows, timestamp)
     desired = None if observed is None else observed.get("desired")
     confidence = None if observed is None else observed.get("confidence")
 
     point = {
         "ts": timestamp,
         "current": current,
+        "current_source": "observed_physical_archive_and_runtime_current",
         "desired": desired,
         "confidence": confidence,
         "context_complete": bool(current is not None and desired is not None),
@@ -446,11 +466,6 @@ def build_correct_point(manager, ref, timestamp, legacy_point):
         point["parent_generation_id"] = None
         return point
 
-    parent_id = generation.get("parent_generation_id")
-    parent = lineage_row(manager.store, generation_id=parent_id) if parent_id else None
-    if not parent:
-        raise ValueError("Candidate direct parent generation not found")
-    observed_parent = _observed_generation_at(manager, parent, timestamp)
     point["parent_generation_id"] = parent["generation_id"]
     point["parent_generation_number"] = int(parent["generation_number"])
     point["parent_generation_type"] = parent["generation_type"]

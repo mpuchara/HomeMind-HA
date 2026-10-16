@@ -141,6 +141,8 @@ class RuntimeDebugLogService:
                 if callable(history_cache):
                     context_persistence['schema_history_reads'] = history_cache()
             for name, owner, method in (
+                ("photometric_baselines", getattr(getattr(engine, "temporal_history", None),
+                                                   "_photometric_baselines", None), "snapshot"),
                 ("episode_comparisons", getattr(engine, "episode_evaluator", None), "comparison_cache_snapshot"),
                 ("provenance", engine, "provenance_deferred_snapshot"),
                 ("feature_journal", engine, "feature_observation_deferred_snapshot"),

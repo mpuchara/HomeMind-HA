@@ -351,6 +351,9 @@ Parent pozostaje bez zmian. Wynik przejdzie offline gate i Shadow A/B; nie dosta
     const hi=Math.max(Number(subject.max_value),...(values.length?values:[Number(subject.max_value)]));
     const span=Math.max(1e-6,hi-lo),start=Number(data.start??range.start),end=Number(data.end??range.end),width=Math.max(1,end-start),stale=Number(data.stale_after_seconds||95);
     const x=t=>50+930*(Number(t)-start)/width,y=v=>300-255*(Number(v)-lo)/span;
+    const tick=v=>subject.target_property==='power'?(v>=.5?'ON':'OFF'):Number(v).toFixed(2).replace(/\.00$/,'');
+    const axis=[lo,hi].map(v=>`<line x1="50" x2="980" y1="${y(v)}" y2="${y(v)}" stroke="#9aa0a6" opacity=".15"/><text x="42" y="${y(v)+7}" text-anchor="end" fill="#c6cdd4" font-size="22">${html(tick(v))}</text>`).join('');
+    const times=[start,(start+end)/2,end].map((t,i)=>`<text x="${x(t)}" y="335" text-anchor="${i===0?'start':i===2?'end':'middle'}" fill="#9da7b0" font-size="20">${html(new Date(t*1000).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}))}</text>`).join('');
     const path=(points,expire=true)=>{let d='',active=false,last=0;for(const p of (points||[]).slice().sort((a,b)=>Number(a.ts)-Number(b.ts))){const v=p.value,ts=Number(p.ts),valid=v!=null&&Number.isFinite(Number(v));if(!valid){active=false;continue;}if(expire&&active&&last&&ts-last>stale){const cutoff=Math.min(end,last+stale);if(cutoff>last)d+=` H${x(cutoff)}`;active=false;}d+=active?` H${x(ts)} V${y(v)}`:` M${x(ts)},${y(v)}`;active=true;last=ts;}if(expire&&active&&last){const cutoff=Math.min(end,last+stale);if(cutoff>last)d+=` H${x(cutoff)}`;}return d;};
     const rendered=[];
     if(series.live_desired)rendered.push(`<path data-series="live_desired" d="${path(series.live_desired.points)}" fill="none" stroke="${COLORS.candidate}" stroke-width="2" stroke-dasharray="8 6" stroke-linecap="round" opacity="0.95"/>`);
@@ -363,7 +366,7 @@ Parent pozostaje bez zmian. Wynik przejdzie offline gate i Shadow A/B; nie dosta
     }
     const labels=(data.labels||[]).filter(r=>Number(r.sample_ts)>=start&&Number(r.sample_ts)<=end).map(r=>`<circle data-series="correct" cx="${x(r.sample_ts)}" cy="${y(r.desired)}" r="5" fill="${COLORS.correct}"><title>Correct ${html(r.desired)}</title></circle>`).join('');
     const chosen=selected&&selected.ts>=start&&selected.ts<=end?`<line x1="${x(selected.ts)}" x2="${x(selected.ts)}" y1="35" y2="305" stroke="#fff" opacity=".35"/>`:'';
-    box.innerHTML=`<svg viewBox="0 0 1030 350" role="img" aria-label="Correct direct-parent generation history chart" tabindex="0">${rendered.join('')}${labels}${chosen}<rect data-selection x="50" y="25" width="0" height="285" fill="#9aa0a6" fill-opacity="0.28" stroke="#d4d7da" stroke-opacity="0.75" visibility="hidden"/><rect data-hit x="50" y="25" width="930" height="285" fill="transparent" style="cursor:crosshair;touch-action:none"/></svg>`;
+    box.innerHTML=`<svg viewBox="0 0 1030 350" role="img" aria-label="Correct direct-parent generation history chart" tabindex="0">${axis}${times}${rendered.join('')}${labels}${chosen}<rect data-selection x="50" y="25" width="0" height="285" fill="#9aa0a6" fill-opacity="0.28" stroke="#d4d7da" stroke-opacity="0.75" visibility="hidden"/><rect data-hit x="50" y="25" width="930" height="285" fill="transparent" style="cursor:crosshair;touch-action:none"/></svg>`;
     const svg=box.querySelector('svg'),hit=box.querySelector('[data-hit]'),selection=box.querySelector('[data-selection]');let down=null;
     const fraction=ev=>{const r=svg.getBoundingClientRect(),px=(ev.clientX-r.left)*1030/r.width;return Math.max(0,Math.min(1,(px-50)/930));};
     const hideSelection=()=>selection.setAttribute('visibility','hidden');

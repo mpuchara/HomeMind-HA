@@ -13,7 +13,7 @@ from context_engine import ContextEngine
 from lighting_conditions import condition_tree
 from observation_contract import FeatureSchemaV12, install_training_contract
 from policy import MultiHorizonPolicy
-from settings import OPTIONS
+from settings import OPTIONS, iso_from_ts
 from training_process import descriptor_checksum
 
 TARGET = "light.kitchen"
@@ -22,15 +22,15 @@ PRESENCE = "binary_sensor.kitchen_has_target"
 LIGHT = "sensor.kitchen_light"
 
 
-def run(*, additional_signal=None, motion_only=False, wildcard=False):
+def run(*, additional_signal=None, motion_only=False, wildcard=False, long_stay=False):
     contract = install_training_contract()
     try:
-        return _run(additional_signal=additional_signal, motion_only=motion_only, wildcard=wildcard)
+        return _run(additional_signal=additional_signal, motion_only=motion_only, wildcard=wildcard, long_stay=long_stay)
     finally:
         contract["restore"]()
 
 
-def _run(*, additional_signal=None, motion_only=False, wildcard=False):
+def _run(*, additional_signal=None, motion_only=False, wildcard=False, long_stay=False):
     with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
         root = Path(tmp)
         db, aid, base, _, _, _ = fixture.seed_database(root)
@@ -150,6 +150,38 @@ def _run(*, additional_signal=None, motion_only=False, wildcard=False):
                                 "means": [arm["mean"] for arm in arms],
                                 "values": {str(i): features.get(i) for i in (5, 17, 29)}})
             at += 180
+        long_probe = None
+        if long_stay:
+            temporal = TemporalHistory(maxlen=24)
+            home = ContextEngine(OPTIONS); home.configure(states, registry)
+            temporal.home_context = home
+            probe = dict(states); observed = []; diagnostics = []
+            for offset in range(-2, 601):
+                stamp = at + offset
+                values = [(TARGET, 'on' if offset >= 0 else 'off'), (ENERGY, 24),
+                          (PRESENCE, 'on'), (LIGHT, 180+offset%30 if offset >= 1 else 20)]
+                for eid, value in values:
+                    st = dict(entity_id=eid, state=str(value), last_changed=iso_from_ts(at if eid==TARGET and offset>=0 else stamp),
+                              last_updated=iso_from_ts(stamp), attributes={**attrs.get(eid, {}),
+                              '__hm_received_time': stamp, '__hm_event_time': stamp, '__hm_quality': 1})
+                    temporal.add(eid, stamp, st)
+                    home.observe(eid, st, stamp, learn=False, event_ts=stamp, received_ts=stamp)
+                    probe[eid] = st
+                features, labels, meta = policy.features(probe, temporal, stamp+.01)
+                chosen, _, arms, *_ = policy.predict(features)
+                if offset in (30,120,180,200,240,300,600):
+                    diagnostics.append(dict(offset=offset, desired=chosen['value'],
+                        means=[arm['mean'] for arm in arms],
+                        features={str(i)+':'+','.join(labels.get(i,[])):v for i,v in features.items()},
+                        home=meta.get('home_forecast')))
+                if offset >= 30:
+                    observed.append(dict(offset=offset, desired=chosen['value'],
+                        illumination_valid=meta['entity_observations'][LIGHT]['valid']))
+            long_probe = dict(seconds=600, raw_history_limit=24, observations=len(observed),
+                off_predictions=sum(r['desired'] < .5 for r in observed),
+                invalid_illumination=sum(not r['illumination_valid'] for r in observed),
+                diagnostics=diagnostics,
+                pass_all=all(r['desired'] >= .5 and r['illumination_valid'] for r in observed))
         return {"scope": "isolated HistoryManager and persisted policy, synthetic data, no HA dispatch",
                 "predictions": predictions, "training_quality": raw.get("_training_quality"),
                 "additional_signal_objective": raw.get("_benchmark_counts",{}).get("additional_signal_objective"),
@@ -157,10 +189,14 @@ def _run(*, additional_signal=None, motion_only=False, wildcard=False):
                 "context_assessment": raw.get("selection_meta", {}).get("training_context_assessment"),
                 "updates": policy.total_updates, "worker_seconds": result["wall_seconds"],
                 "classifier": {k: v for k, v in raw["heads"]["1"].get("binary_state_classifier", {}).items() if k in ("ready", "fits", "seen")},
-                "pass": all(p["expected"] == p["predicted"] for p in predictions)}
+                "long_stay": long_probe,
+                "pass": all(p["expected"] == p["predicted"] for p in predictions) and (long_probe is None or long_probe['pass_all'])}
 
 
 if __name__ == "__main__":
-    report = run()
+    import argparse
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--long-stay', action='store_true')
+    report = run(long_stay=parser.parse_args().long_stay)
     print(json.dumps(report, indent=2))
     raise SystemExit(0 if report["pass"] else 1)

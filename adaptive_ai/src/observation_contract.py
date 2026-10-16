@@ -449,7 +449,7 @@ def _is_illuminance_state(state, raw_light=False):
     return unit in ("lx", "lux") or dc == "illuminance" or "illuminance" in eid or "lux" in eid or (raw_light and illumination_sensor(eid, state))
 
 
-def _target_power_at(agent, state_map, temporal, query_ts, knowledge_ts):
+def _target_state_at(agent, state_map, temporal, query_ts, knowledge_ts):
     if not agent:
         return None
     target = str(agent.get("target_entity") or "")
@@ -458,6 +458,14 @@ def _target_power_at(agent, state_map, temporal, query_ts, knowledge_ts):
     _, target_state = _sample_before(temporal, target, query_ts, knowledge_ts)
     if target_state is None and abs(float(query_ts) - float(knowledge_ts)) <= 1e-9:
         target_state = (state_map or {}).get(target)
+        if target_state is not None and not _eligible_sample(
+                target_state, _sample_event_time(target_state, fallback=query_ts), query_ts, knowledge_ts):
+            target_state = None
+    return target_state
+
+
+def _target_power_at(agent, state_map, temporal, query_ts, knowledge_ts):
+    target_state = _target_state_at(agent, state_map, temporal, query_ts, knowledge_ts)
     try:
         value = context_module.target_value(target_state, "power")
     except Exception:
@@ -540,7 +548,8 @@ def _feature_observation(schema, entity_id, state, agent, state_map, temporal,
     if feature_contract < PHOTOMETRIC_FEATURE_CONTRACT_VERSION or not fast_light or not _is_illuminance_state(state, raw_light):
         return legacy, None
 
-    target_power = _target_power_at(agent, state_map, temporal, query_ts, knowledge_ts)
+    target_state = _target_state_at(agent, state_map, temporal, query_ts, knowledge_ts)
+    target_power = context_module.target_value(target_state, 'power')
     if target_power is None:
         return _darkness_observation(None, raw_light), {
             "mode": "ambient_pre_action_v2", "source": "target_power_unknown"
@@ -550,12 +559,24 @@ def _feature_observation(schema, entity_id, state, agent, state_map, temporal,
             "mode": "ambient_pre_action_v2", "source": "current_light_off"
         }
 
+    owner = getattr(temporal, 'photometric_baselines', None)
+    retained = owner() if callable(owner) else None
+    changed = _state_ts(target_state, 'last_changed')
+    key = (str(agent.get('target_entity') or ''), str(entity_id), raw_light)
+    cached = retained.get(key, changed, query_ts, knowledge_ts) if retained is not None else None
+    if cached is not None:
+        observation, on_start = cached
+        return observation, {
+            'mode': 'ambient_pre_action_v2', 'source': 'pre_action_baseline',
+            'on_start': on_start,
+        }
+
     on_start = _current_on_run_start(agent, temporal, query_ts, knowledge_ts)
     if on_start is None:
         return _darkness_observation(None, raw_light), {
             "mode": "ambient_pre_action_v2", "source": "unresolved_light_on"
         }
-    _, baseline = _last_valid_illuminance_before(
+    baseline_ts, baseline = _last_valid_illuminance_before(
         entity_id, temporal, float(on_start) - 1e-6, knowledge_ts, raw_light
     )
     if baseline is None:
@@ -563,7 +584,10 @@ def _feature_observation(schema, entity_id, state, agent, state_map, temporal,
             "mode": "ambient_pre_action_v2", "source": "pre_action_baseline_missing",
             "on_start": float(on_start),
         }
-    return _darkness_observation(baseline, raw_light), {
+    observation = _darkness_observation(baseline, raw_light)
+    if retained is not None:
+        retained.put(key, changed, float(on_start), baseline_ts, knowledge_ts, observation)
+    return observation, {
         "mode": "ambient_pre_action_v2", "source": "pre_action_baseline",
         "on_start": float(on_start),
     }

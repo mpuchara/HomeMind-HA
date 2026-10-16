@@ -1,3 +1,11 @@
+## 0.14.207
+
+- Restore Current from observed physical values in decision history when raw target archive acquisition lags. Merge by observation time, prefer exact HA events on a tie, and apply the same sources to point inspection and Candidate/direct-parent charts. Never replace Current with Desired or replay a model into history.
+- Retain a proven pre-ON illumination observation after the 24-sample live deque rolls over. Bound the cache to 256 target/sensor pairs and require the same HA state-change epoch and causal query/knowledge times. A new visit, missing marker, startup already ON or absent observation cannot borrow an old baseline.
+- Renew stateful presence evidence on a genuinely new HA event even when the value remains ON. Keep original state duration, stale-event poll decay, PIR decay, OFF/unavailable handling and causal cutoffs.
+- Apply the existing six-second learned OFF confirmation to the hybrid Tiny MLP decision path as well. Sustained OFF and explicit user/preference/experiment paths keep their prior behavior; ON remains immediate.
+- Label chart axes, export retained photometry counters, and add source-paired reproductions plus long-stay regression coverage. These checks do not prove the exact contents of the user's HA history or fitted model.
+
 ## 0.14.206
 
 - Read cold episode comparisons through compact covering SQLite expression indexes instead of rereading large audit JSON. Preserve complete results, audit validity checks, revision invalidation, transactions and fresh-query fallback if optional indexes are unavailable.

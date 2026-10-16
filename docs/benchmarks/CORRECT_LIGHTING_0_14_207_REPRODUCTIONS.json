@@ -1,0 +1,33 @@
+{
+  "synthetic": true,
+  "independent_sources": true,
+  "limit": "Production history reader, feature extractor and OFF confirmation with constructed observed inputs. Does not establish the exact state of the user database or their fitted model, and never sends HA commands.",
+  "before": {
+    "current_physical_on_with_archive_lag": 0.0,
+    "desired_contains_actual_shadow_flips": true,
+    "policy_replay_used": false,
+    "raw_history_samples": 24,
+    "initial_ambient": 20.0,
+    "final_ambient": null,
+    "final_ambient_valid": false,
+    "neural_short_off_value": 0.0,
+    "neural_off_confirmation": false,
+    "continued_presence_after_600_seconds": 0.25,
+    "pass_all": false
+  },
+  "after": {
+    "current_physical_on_with_archive_lag": 1.0,
+    "desired_contains_actual_shadow_flips": true,
+    "policy_replay_used": false,
+    "raw_history_samples": 24,
+    "initial_ambient": 20.0,
+    "final_ambient": 20.0,
+    "final_ambient_valid": true,
+    "neural_short_off_value": 1.0,
+    "neural_off_confirmation": true,
+    "continued_presence_after_600_seconds": 1.0,
+    "pass_all": true
+  },
+  "environment": "Linux Python 3.12.3 / NumPy 2.3.3",
+  "deployed_user_model_verified": false
+}

@@ -27,7 +27,7 @@ class Release047TrainingCorrectEventsTests(unittest.TestCase):
     def test_correct_candidate_current_uses_physical_history(self):
         source = inspect.getsource(build_correct_history)
         candidate = source.split('child_history =', 1)[1]
-        self.assertIn('current_points = _current_rows(manager, agent, start, end)', candidate)
+        self.assertIn('current_points = _current_rows(manager, agent, start, end,', candidate)
         self.assertIn('_series("Current", current_points, "current", compact=compact)', candidate)
 
     def test_candidate_active_roots_use_lineage_root_id(self):

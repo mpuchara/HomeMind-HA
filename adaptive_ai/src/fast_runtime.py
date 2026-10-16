@@ -107,7 +107,9 @@ def stabilize_fast_light_power_decision(agent, rt, current, desired, decision_so
     target = str((agent or {}).get("target_entity") or "")
     prop = str((agent or {}).get("target_property") or "")
     applies = target.split(".", 1)[0] == "light" and prop == "power"
-    statistical = str(decision_source or "") == "historical_policy_bootstrap"
+    statistical = str(decision_source or "") in (
+        "historical_policy_bootstrap", "hybrid_tiny_mlp_ridge_guard",
+    )
     try:
         current_value = float(current)
         desired_value = float(desired)
