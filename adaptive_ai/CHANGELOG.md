@@ -1,3 +1,9 @@
+## 0.14.210
+
+- Reduce synchronous Sensor Tournament screening work after each authoritative decision: validate each label once and each feature pair once, retaining the exact statistical result and summation order.
+- Preserve every independent target label, candidate checksum and learned policy; no observation interval, HA guard, memory/storage budget or 14-day retention change.
+- Add randomized statistical parity checks and an independent-source benchmark with 96 sensors, 96 examples and four trained challenger policies.
+
 ## 0.14.208
 
 - Pause optional Candidate Shadow inference when its bounded evidence buffer is full; retain exact queued observations and resume from fresh contexts after persistence recovers.

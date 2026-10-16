@@ -1,9 +1,9 @@
 {
-  "version": "0.14.208",
+  "version": "0.14.210",
   "release_date": "2026-10-16",
-  "base_version": "0.14.207",
-  "base_commit": "6abe0f95c946d33839e26eff5f483682b4316d36",
-  "release_status": "shadow-storage-local-validation-complete",
+  "base_version": "0.14.208",
+  "base_commit": "0601094c2136e8db754f2684c4071b1de634412f",
+  "release_status": "screening-performance-local-validation",
   "release_014140": {
     "scope": "inventory_and_remove_remaining_shipped_feature_Handler_fallbacks_for_Candidate_Live_and_manual_feedback_transport",
     "explicit_routes": "manual_feedback.js, candidate_ui.js, candidate_preference_ui.js, /api/candidates, Candidate Teach-RL status/train, generation history/comparison, /api/candidate-live, /api/live and Candidate discard",
@@ -249,7 +249,7 @@
   "pi4_release_gate_contract": "pi4_release_gate_v1",
   "pi4_real_hardware_required": true,
   "stage7_offline_rl_control_unlock": false,
-  "tests_passed": 2502,
+  "tests_passed": 2519,
   "profile": "rpi4-ram-first-complete-discovery-manual-agent-selection",
   "manual_agent_training": true,
   "max_concurrent_training_jobs": 1,
@@ -2945,5 +2945,18 @@
     "limitations": "host SQLite/Candidate reproduction; no physical HA or Raspberry Pi latency claim",
     "tests_passed": 2512,
     "validation": "2512 Linux tests, 10 new regressions, source-paired real SQLite quota reproduction and exact replay-free recovery, entrypoint ready, compileall, all JS syntax and DOM pause/recovery render"
+  },
+  "release_014210": {
+    "scope": "reduce synchronous Sensor Tournament screening CPU occupancy between sensor decisions",
+    "statistics": "finite labels once per sample and finite feature pairs once per group; retain reference summation order",
+    "guards": "fresh independent-label screening, full model checksums, existing promotion/HA/retention/storage safeguards",
+    "new_regression_tests": 7,
+    "tests_expected": 2519,
+    "limitations": "synthetic source-paired observer and HA-stub checks; no physical-device latency claim",
+    "tests_passed": 2519,
+    "validation": "Linux Python 3.12.3 / NumPy 2.3.3: 2519 tests checked, missing root benchmark document corrected in WSL copy and affected module rerun; compileall, all JS syntax, entrypoint ready, guarded Control to HA stub and source-paired statistical/observer/learning parity",
+    "screening_speedup": 1.4655892965480257,
+    "observer_speedup": 1.0858272951061534,
+    "validation_report": "docs/benchmarks/SCREENING_REACTION_0_14_210_VALIDATION.json"
   }
 }
