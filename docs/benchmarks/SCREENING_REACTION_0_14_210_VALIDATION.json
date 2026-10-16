@@ -1,0 +1,51 @@
+{
+  "version": "0.14.210",
+  "base_commit": "0601094c2136e8db754f2684c4071b1de634412f",
+  "platform": "Ubuntu WSL, Python 3.12.3, NumPy 2.3.3",
+  "full_suite": {
+    "tests": 2519,
+    "seconds": 452.398,
+    "application_failures": 0,
+    "initial_result": "2518 passed; one FileNotFoundError for BENCHMARK_PRODUCT_F24.md omitted from WSL test copy",
+    "environment_fix": "copy all repository root Markdown files into WSL test tree",
+    "affected_module_rerun": {
+      "tests": 10,
+      "seconds": 14.685,
+      "result": "OK"
+    },
+    "final_result": "All 2519 tests have passed, including the affected ten-test module after correcting the test copy"
+  },
+  "new_tests": 7,
+  "compileall": "PASS adaptive_ai/src and benchmark tool",
+  "javascript": "PASS all shipped JavaScript via node --check",
+  "entrypoint": {
+    "path": "adaptive_ai/src/trial_queue_main.py",
+    "version": "0.14.210",
+    "ready": true,
+    "startup_seconds": 0.9153707027435303
+  },
+  "guarded_control": {
+    "events": 32,
+    "all_events_completed": true,
+    "service_calls": 1,
+    "service": "light.turn_on",
+    "actual_control_executor": true,
+    "ha_network": false,
+    "physical_ack": false,
+    "decisions_sha256": "5bd2ed0559d3238b0002598a405b6556e322adcb4c4148ca6a2bef418a4f11f8"
+  },
+  "benchmark": {
+    "median_screening_speedup": 1.4655892965480257,
+    "median_observer_speedup": 1.0858272951061534,
+    "pairs": 3,
+    "fresh_labels_per_candidate": 12,
+    "challengers": 4,
+    "exact_pool_predictions_and_trained_heads": true
+  },
+  "tested_source": {
+    "files": 577,
+    "normalization": "CRLF to LF",
+    "receipt": "SCREENING_REACTION_0_14_210_TESTED_SOURCE.json"
+  },
+  "limitations": "Host component measurements, not a real HA network, physical device, or Raspberry Pi latency measurement. Synchronous candidate work, checkpoint contention and I/O tails remain."
+}

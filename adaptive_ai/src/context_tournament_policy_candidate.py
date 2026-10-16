@@ -115,8 +115,16 @@ def _pool_json_payload(row, previous=None, *, samples_changed):
 
 
 def _corr(xs, ys):
-    pairs = [(float(x), float(y)) for x, y in zip(xs, ys)
-             if _finite(x) is not None and _finite(y) is not None]
+    pairs = []
+    for x, y in zip(xs, ys):
+        x, y = _finite(x), _finite(y)
+        if x is not None and y is not None:
+            pairs.append((x, y))
+    return _finite_pair_correlation(pairs)
+
+
+def _finite_pair_correlation(pairs):
+    """Correlation of validated floats, retaining the reference summation order."""
     if len(pairs) < 3:
         return 0.0
     ax = [x for x, _ in pairs]
@@ -136,7 +144,10 @@ def semantic_predictive_score(samples, min_samples=MIN_SCREENING_SAMPLES):
     if len(rows) < int(min_samples):
         return {"score": 0.0, "best_group": None, "samples": len(rows),
                 "groups": {}, "status": "needs_more_data"}
-    labels = [row.get("label") for row in rows]
+    # A label is shared by every group. Validate it once, then calculate each
+    # correlation directly from finite pairs instead of validating/copying the
+    # same values again in _corr. No cached score survives an independent label.
+    labels = [_finite(row.get("label")) for row in rows]
     groups = defaultdict(list)
     for row in rows:
         for key in ("value", "quality", "lag_1", "lag_3", "lag_10", "trend", "time_since_edge"):
@@ -145,11 +156,15 @@ def semantic_predictive_score(samples, min_samples=MIN_SCREENING_SAMPLES):
             groups[f"interaction:{key}"].append(value)
     scores = {}
     for key, values in groups.items():
-        paired = [(x, y) for x, y in zip(values, labels)
-                  if _finite(x) is not None and _finite(y) is not None]
+        paired = []
+        for value, label in zip(values, labels):
+            if label is not None:
+                value = _finite(value)
+                if value is not None:
+                    paired.append((value, label))
         if len(paired) < int(min_samples):
             continue
-        raw = abs(_corr([x for x, _ in paired], [y for _, y in paired]))
+        raw = abs(_finite_pair_correlation(paired))
         coverage = min(1.0, len(paired) / max(1.0, float(min_samples * 2)))
         scores[key] = raw * coverage
     if not scores:
