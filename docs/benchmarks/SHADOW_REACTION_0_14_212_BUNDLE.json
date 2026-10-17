@@ -1,0 +1,73 @@
+{
+  "synthetic": true,
+  "independent_sources": true,
+  "worker_scheduling_fixture": false,
+  "baseline": "0.14.211",
+  "series": [
+    {
+      "before": {
+        "passes": 64,
+        "candidates": 4,
+        "median_ms": 4.776336499958234,
+        "total_ms": 326.97720999919966,
+        "feature_descriptor_computations": 8192,
+        "features_labels_metadata_predictions_sha256": "2198384d1f484fb9e98bc047531dc2f6117cb7198880ab23c5aa9c2edbceb62a",
+        "ha_calls": 0
+      },
+      "after": {
+        "passes": 64,
+        "candidates": 4,
+        "median_ms": 3.7509039999577,
+        "total_ms": 259.7989360003794,
+        "feature_descriptor_computations": 2048,
+        "features_labels_metadata_predictions_sha256": "2198384d1f484fb9e98bc047531dc2f6117cb7198880ab23c5aa9c2edbceb62a",
+        "ha_calls": 0
+      },
+      "speedup": 1.2733827631984445
+    },
+    {
+      "after": {
+        "passes": 64,
+        "candidates": 4,
+        "median_ms": 3.625526500002252,
+        "total_ms": 247.17650100012634,
+        "feature_descriptor_computations": 2048,
+        "features_labels_metadata_predictions_sha256": "2198384d1f484fb9e98bc047531dc2f6117cb7198880ab23c5aa9c2edbceb62a",
+        "ha_calls": 0
+      },
+      "before": {
+        "passes": 64,
+        "candidates": 4,
+        "median_ms": 4.625361000023531,
+        "total_ms": 312.5511109999479,
+        "feature_descriptor_computations": 8192,
+        "features_labels_metadata_predictions_sha256": "2198384d1f484fb9e98bc047531dc2f6117cb7198880ab23c5aa9c2edbceb62a",
+        "ha_calls": 0
+      },
+      "speedup": 1.275776359659944
+    },
+    {
+      "before": {
+        "passes": 64,
+        "candidates": 4,
+        "median_ms": 5.022523499974341,
+        "total_ms": 339.91770599982374,
+        "feature_descriptor_computations": 8192,
+        "features_labels_metadata_predictions_sha256": "2198384d1f484fb9e98bc047531dc2f6117cb7198880ab23c5aa9c2edbceb62a",
+        "ha_calls": 0
+      },
+      "after": {
+        "passes": 64,
+        "candidates": 4,
+        "median_ms": 4.085374499993577,
+        "total_ms": 273.19279099992855,
+        "feature_descriptor_computations": 2048,
+        "features_labels_metadata_predictions_sha256": "2198384d1f484fb9e98bc047531dc2f6117cb7198880ab23c5aa9c2edbceb62a",
+        "ha_calls": 0
+      },
+      "speedup": 1.2293912100303748
+    }
+  ],
+  "median_speedup": 1.2733827631984445,
+  "limit": "Host Candidate Shadow only. Worker uses deterministic policy; bundle uses four real policies. No HA ingress/network, physical actuation/ACK or Raspberry Pi result."
+}

@@ -155,6 +155,11 @@ def semantic_predictive_score(samples, min_samples=MIN_SCREENING_SAMPLES):
         for key, value in sorted((row.get("interactions") or {}).items()):
             groups[f"interaction:{key}"].append(value)
     scores = {}
+    # Every complete group has the same label distribution. Reuse its exact
+    # ordered moments within this call only; missing feature values still use
+    # the pairwise reference path. A fresh label always recomputes these moments.
+    label_moments = None
+    complete_labels = all(label is not None for label in labels)
     for key, values in groups.items():
         paired = []
         for value, label in zip(values, labels):
@@ -164,7 +169,19 @@ def semantic_predictive_score(samples, min_samples=MIN_SCREENING_SAMPLES):
                     paired.append((value, label))
         if len(paired) < int(min_samples):
             continue
-        raw = abs(_finite_pair_correlation(paired))
+        if complete_labels and len(paired) == len(labels) and len(paired) >= 3:
+            if label_moments is None:
+                my = sum(labels) / len(labels)
+                label_moments = (my, sum((y - my) ** 2 for y in labels))
+            my, vy = label_moments
+            ax = [x for x, _ in paired]
+            mx = sum(ax) / len(ax)
+            vx = sum((x - mx) ** 2 for x in ax)
+            raw = (0.0 if vx <= 1e-12 or vy <= 1e-12 else
+                   abs(max(-1.0, min(1.0, sum((x - mx) * (y - my) for x, y in paired)
+                                        / math.sqrt(vx * vy)))))
+        else:
+            raw = abs(_finite_pair_correlation(paired))
         coverage = min(1.0, len(paired) / max(1.0, float(min_samples * 2)))
         scores[key] = raw * coverage
     if not scores:

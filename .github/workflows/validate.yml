@@ -74,6 +74,11 @@ jobs:
       - name: 0.14.210 populated screening and post-label learning smoke
         if: matrix.python == '3.11'
         run: python tools/benchmark_screening_reaction.py --one --passes 2
+      - name: 0.14.212 Candidate bundle parity and deadline wake smoke
+        if: matrix.python == '3.11'
+        run: |
+          python tools/benchmark_candidate_shadow_reaction.py --one --passes 8
+          python tools/benchmark_candidate_shadow_reaction.py --one --worker
       - name: 0.14.211 automatic quota recovery and foreground Control priority
         if: matrix.python == '3.11'
         run: |

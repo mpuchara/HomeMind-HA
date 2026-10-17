@@ -1,0 +1,179 @@
+{
+  "version": "0.14.212",
+  "base_commit": "5efd9327456a3b054e09db9e908a240148ae55c4",
+  "full_suite": {
+    "tests": 2557,
+    "seconds": 289.144,
+    "result": "OK",
+    "skips": 0,
+    "platform": "Ubuntu WSL Python 3.12.3 / NumPy 2.3.3",
+    "log_sha256": "ebbeb23bc4e4fed2c5feb978d0d6cc49e7147d10436a99e2675caf75c80637d5"
+  },
+  "new_tests": 6,
+  "limitations": "Host component fixtures. Bundle timing excludes full outer runtime overlays; passive worker uses a deterministic policy. No user deployed DB, HA network, device ACK or Raspberry Pi result.",
+  "entrypoint": {
+    "entrypoint": "adaptive_ai/src/trial_queue_main.py",
+    "health": {
+      "ok": true,
+      "ready": true,
+      "startup": {
+        "current_state_seconds": 0.0037510369999154136,
+        "elapsed_seconds": 0.278369665145874,
+        "error": null,
+        "message": "Adaptive AI runtime is ready",
+        "ready": true,
+        "started_at": 1792242294.9246645,
+        "state": "ready",
+        "step": 7,
+        "steps": 7,
+        "timings": {
+          "building_runtime": 0.1288,
+          "http_ready": 0.0959,
+          "http_starting": 0.0111,
+          "loading_runtime": 0.0135,
+          "reconciling_control": 0.0001,
+          "starting_engine": 0.0012,
+          "starting_history": 0.0234,
+          "starting_realtime": 0.0006
+        }
+      },
+      "version": "0.14.212"
+    }
+  },
+  "compileall": "PASS src, tools, tests",
+  "javascript": {
+    "result": "PASS",
+    "scripts": 21
+  },
+  "source_files": 585,
+  "source_hashes": "SHADOW_REACTION_0_14_212_SOURCE_HASHES.json",
+  "worker": {
+    "before_ms": 3004.4236080000246,
+    "after_ms": 502.6087190000226,
+    "speedup": 5.977659149999524,
+    "coalescing_seconds": 0.35,
+    "realtime_quiet_seconds": 0.5,
+    "idle_poll_seconds": 3,
+    "deterministic_policy": true,
+    "ha_calls": 0
+  },
+  "bundle": {
+    "speedup": 1.2733827631984445,
+    "shorter_time_percent": 21.469017101485644,
+    "exact_features_labels_metadata_predictions": true,
+    "descriptor_reconstruction_reduction": 4,
+    "ha_calls": 0
+  },
+  "screening": {
+    "speedup": 1.2514745548387023,
+    "observer_speedup": 1.0157945582639758,
+    "observer_speedups": [
+      1.0340365301344343,
+      1.0022896369565533,
+      1.0157945582639758
+    ],
+    "exact_pool_predictions_learned_heads": true
+  },
+  "root_shadow": {
+    "episodes": 128,
+    "matched_episodes": 102,
+    "evidence_bytes_per_policy": 5750,
+    "comparison_sha256": "3e1c509e7e79ac2175def53c6c2a1086b21361bee3dd7c9068efefdd3bee3df3",
+    "comparison_cold_ms": 3.049028999953407,
+    "comparison_median_ms": 0.46957050000173695,
+    "events": 32,
+    "event_to_shadow_executor_median_ms": 25.17046999997774,
+    "event_to_shadow_executor_p95_ms": 26.77892899998824,
+    "event_max_ms": 27.18099199989865,
+    "all_events_completed": true,
+    "ha_service_calls": 0,
+    "ui_read_requests": 16,
+    "process_cpu_seconds_per_second": 0.08152392038622212,
+    "comparison_cache": {
+      "entries": 1,
+      "bytes": 3486,
+      "hits": 24,
+      "misses": 1,
+      "evictions": 0,
+      "bypasses": 0,
+      "max_entries": 32,
+      "max_bytes": 67108864,
+      "max_entry_bytes": 16777216,
+      "invalidation": "fresh SQLite agent revision; all episode/result INSERT, UPDATE, DELETE",
+      "sql_json_validation": true,
+      "compact_comparison_indexes": true,
+      "comparison_index_error": null
+    }
+  },
+  "control_with_gc": {
+    "events": 64,
+    "continuous_next_event": false,
+    "all_events_completed": true,
+    "actual_executor_control": true,
+    "root_prediction_fixture": true,
+    "ha_network": false,
+    "decisions_sha256": "6b2ccc490451879358077d460e5db33265561bf5c41f901e13099844c9267fa9",
+    "event_to_executor_median_ms": 7.761299500032237,
+    "event_to_executor_p95_ms": 11.233486000037374,
+    "event_to_service_dispatch_ms": 11.252082000055452,
+    "service_calls": 1,
+    "process_cpu_seconds": 0.611525782,
+    "elapsed_seconds": 0.5959082619999663,
+    "observation_scheduler": {
+      "interval_ms": 1000.0,
+      "executed": 1,
+      "skipped": 63,
+      "target_forced": 0,
+      "errors": 0,
+      "tracked_agents": 1,
+      "max_agents": 256,
+      "deferred_for_realtime": 0,
+      "max_deferral_ms": 5000.0,
+      "retry_agents": 0,
+      "scope": "Engine-dispatched candidate observations; target events always admitted"
+    },
+    "storage_pressure": true,
+    "storage_admission": {
+      "skipped": 0,
+      "recoveries": 0,
+      "reason": null,
+      "paused_agents": 0,
+      "max_agents": 256
+    },
+    "automatic_recovery": {
+      "runs": 1,
+      "deleted": 0,
+      "errors": 0,
+      "last_error": null,
+      "reclaimed_pages": 32,
+      "history_days": 14,
+      "batch_rows": 128,
+      "alive": true,
+      "recovery": {
+        "slices": 1,
+        "deleted": 128,
+        "scanned": 128,
+        "busy": 0,
+        "errors": 0,
+        "last_error": null,
+        "by_table": {
+          "feature_observation_events": 128
+        },
+        "last_duration_ms": 39.32859899998675,
+        "reason": null,
+        "used_before_bytes": 4792320,
+        "used_after_bytes": 3686400,
+        "active": false,
+        "follow_up": true,
+        "start_fraction": 0.85,
+        "target_fraction": 0.8,
+        "batch_rows": 128,
+        "slice_budget_ms": 80.0,
+        "diagnostic_hours": 24.0,
+        "pressure_hours": 1.0,
+        "protected_history_days": 14
+      }
+    },
+    "debounce_ms": 0
+  }
+}

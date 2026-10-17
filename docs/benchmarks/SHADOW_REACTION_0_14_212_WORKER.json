@@ -1,0 +1,67 @@
+{
+  "synthetic": true,
+  "independent_sources": true,
+  "worker_scheduling_fixture": true,
+  "baseline": "0.14.211",
+  "series": [
+    {
+      "before": {
+        "event_to_candidate_ms": 3004.393567000079,
+        "worker_elapsed_ms": 3004.6505429999115,
+        "desired": 1.0,
+        "ha_calls": 0,
+        "idle_poll_seconds": 3,
+        "coalescing_and_realtime_quiet_preserved": true
+      },
+      "after": {
+        "event_to_candidate_ms": 502.0300830000224,
+        "worker_elapsed_ms": 502.66552199991565,
+        "desired": 1.0,
+        "ha_calls": 0,
+        "idle_poll_seconds": 3,
+        "coalescing_and_realtime_quiet_preserved": true
+      },
+      "speedup": 5.984489114768737
+    },
+    {
+      "after": {
+        "event_to_candidate_ms": 502.6087190000226,
+        "worker_elapsed_ms": 502.8041179999718,
+        "desired": 1.0,
+        "ha_calls": 0,
+        "idle_poll_seconds": 3,
+        "coalescing_and_realtime_quiet_preserved": true
+      },
+      "before": {
+        "event_to_candidate_ms": 3004.4236080000246,
+        "worker_elapsed_ms": 3004.6215150000535,
+        "desired": 1.0,
+        "ha_calls": 0,
+        "idle_poll_seconds": 3,
+        "coalescing_and_realtime_quiet_preserved": true
+      },
+      "speedup": 5.977659149999524
+    },
+    {
+      "before": {
+        "event_to_candidate_ms": 3004.46824200003,
+        "worker_elapsed_ms": 3004.6598970000105,
+        "desired": 1.0,
+        "ha_calls": 0,
+        "idle_poll_seconds": 3,
+        "coalescing_and_realtime_quiet_preserved": true
+      },
+      "after": {
+        "event_to_candidate_ms": 503.25204799992207,
+        "worker_elapsed_ms": 503.37558100000024,
+        "desired": 1.0,
+        "ha_calls": 0,
+        "idle_poll_seconds": 3,
+        "coalescing_and_realtime_quiet_preserved": true
+      },
+      "speedup": 5.970106339240362
+    }
+  ],
+  "median_speedup": 5.977659149999524,
+  "limit": "Host Candidate Shadow only. Worker uses deterministic policy; bundle uses four real policies. No HA ingress/network, physical actuation/ACK or Raspberry Pi result."
+}

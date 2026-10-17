@@ -1,0 +1,31 @@
+{
+  "episodes": 128,
+  "matched_episodes": 102,
+  "evidence_bytes_per_policy": 5750,
+  "comparison_sha256": "3e1c509e7e79ac2175def53c6c2a1086b21361bee3dd7c9068efefdd3bee3df3",
+  "comparison_cold_ms": 3.049028999953407,
+  "comparison_median_ms": 0.46957050000173695,
+  "events": 32,
+  "event_to_shadow_executor_median_ms": 25.17046999997774,
+  "event_to_shadow_executor_p95_ms": 26.77892899998824,
+  "event_max_ms": 27.18099199989865,
+  "all_events_completed": true,
+  "ha_service_calls": 0,
+  "ui_read_requests": 16,
+  "process_cpu_seconds_per_second": 0.08152392038622212,
+  "comparison_cache": {
+    "entries": 1,
+    "bytes": 3486,
+    "hits": 24,
+    "misses": 1,
+    "evictions": 0,
+    "bypasses": 0,
+    "max_entries": 32,
+    "max_bytes": 67108864,
+    "max_entry_bytes": 16777216,
+    "invalidation": "fresh SQLite agent revision; all episode/result INSERT, UPDATE, DELETE",
+    "sql_json_validation": true,
+    "compact_comparison_indexes": true,
+    "comparison_index_error": null
+  }
+}

@@ -26,6 +26,8 @@ from settings import parse_ts
 from inference_hot_path_metrics import observe_elapsed
 from telemetry import TELEMETRY
 from state_event_pipeline import install_state_event_wrapper
+from shared_inference_context import shared_inference_temporal
+from shared_observation_features import shared_entity_observations
 
 
 DECISION_STALE_SECONDS = 95.0
@@ -215,17 +217,19 @@ def _candidate_temporal(manager):
     return manager.engine.temporal_history
 
 
-def _predict_candidate(manager, generation, state_map, event_ts):
+def _predict_candidate(manager, generation, state_map, event_ts, *, temporal=None):
     agent_id = generation.get("agent_id")
     if not agent_id:
         return None
     try:
+        if temporal is None:
+            temporal = _candidate_temporal(manager)
         backend_predictor = getattr(manager, "candidate_backend_predictor", None)
         if callable(backend_predictor):
             selected = backend_predictor(generation, state_map, event_ts)
             if selected is not None:
                 from additional_signal import shadow_prediction
-                return shadow_prediction(manager, generation, state_map, event_ts, selected, _candidate_temporal(manager))
+                return shadow_prediction(manager, generation, state_map, event_ts, selected, temporal)
 
         policy = manager.engine.models.get(str(agent_id))
         if policy is None:
@@ -234,7 +238,6 @@ def _predict_candidate(manager, generation, state_map, event_ts):
                 return None
             policy = manager.engine.policy(agent)
         stage_started_ns = time.perf_counter_ns()
-        temporal = _candidate_temporal(manager)
         features, _, _ = policy.features(state_map, temporal, at_ts=event_ts)
         observe_elapsed(manager.engine, "candidate_feature_construction", stage_started_ns)
         stage_started_ns = time.perf_counter_ns()
@@ -747,10 +750,12 @@ def install(manager):
             )
             if observed_root is not None:
                 results[root_gen["generation_id"]] = _decorate_result(root_rt, observed_root, event_ts, current)
-        for generation in shadow_generations:
-            observed = _predict_candidate(manager, generation, state_map, event_ts)
-            if observed is not None:
-                results[generation["generation_id"]] = _decorate_result(root_rt, observed, event_ts, current)
+        temporal = shared_inference_temporal(_candidate_temporal(manager), event_ts)
+        with shared_entity_observations(root_agent, state_map, temporal, event_ts):
+            for generation in shadow_generations:
+                observed = _predict_candidate(manager, generation, state_map, event_ts, temporal=temporal)
+                if observed is not None:
+                    results[generation["generation_id"]] = _decorate_result(root_rt, observed, event_ts, current)
         bundle = {
             "root_agent_id": str(root_agent["id"]), "event_id": event_id, "ts": event_ts,
             "current": current, "results": results,
@@ -1359,6 +1364,21 @@ def install(manager):
         root_rt["last_passive_generation_count"] = len(bundle.get("results") or {})
         return True
 
+    def candidate_shadow_wait_seconds(maximum):
+        # An event wake can arrive before the 350 ms coalescing/500 ms realtime
+        # quiet period ends. Wake again at that deadline, not the idle 3 s poll.
+        # This only reads bounded RAM queues; heartbeat and storage admission
+        # remain in the normal worker drain.
+        now = time.monotonic()
+        with manager.lock:
+            due = min((float(row.get("due") or now) for row in passive_pending.values()),
+                      default=None)
+        if due is None:
+            return maximum
+        last_event = float(getattr(manager.engine, "last_event_monotonic", 0.0) or 0.0)
+        quiet_until = last_event + 0.50 if last_event else now
+        return min(float(maximum), max(0.001, max(due, quiet_until) - now))
+
     def drain_candidate_shadow_events(*, force=False, max_roots=2):
         now = time.monotonic()
         # Candidate heartbeat is low-priority evidence work, so a fresh realtime event may
@@ -1504,6 +1524,7 @@ def install(manager):
     manager.flush_candidate_shadow_decisions = decision_writes.flush
     manager.candidate_shadow_persistence_snapshot = persistence_snapshot
     manager.drain_candidate_shadow_events = drain_candidate_shadow_events
+    manager.candidate_shadow_wait_seconds = candidate_shadow_wait_seconds
     manager.candidate_live_runtime_snapshots = candidate_live_runtime_snapshots
     manager.candidate_latest_runtime = lambda generation_id: _latest_shadow(generation_id)
     manager.align_candidate_shadow_event_timestamp = align_candidate_shadow_event_timestamp
