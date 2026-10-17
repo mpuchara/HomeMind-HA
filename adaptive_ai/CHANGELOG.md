@@ -1,3 +1,10 @@
+## 0.14.211
+
+- Automatically reclaim disposable diagnostics in bounded background transactions. Start proactively at 85% database use, reclaim toward 80%, and preserve the existing 90% recording pause and configured storage allocation.
+- Keep referenced feature windows/events, manual/command/experience decisions, models, preferences, calibration evidence and 14-day replay history. Collect orphaned journal deadlines after their windows disappear.
+- Skip optional Tournament work during storage pauses and invalidate transient paired predictions at gaps. Yield optional observations to other active foreground decisions while retaining target-edge and anti-starvation behavior.
+- Show automatic cleanup progress in Runtime debug.
+
 ## 0.14.210
 
 - Reduce synchronous Sensor Tournament screening work after each authoritative decision: validate each label once and each feature pair once, retaining the exact statistical result and summation order.

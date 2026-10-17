@@ -17,7 +17,7 @@ from unittest.mock import patch
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def one(source, events=24, continuous=False):
+def one(source, events=24, continuous=False, pressure=False, recovery=False):
     scratch = tempfile.TemporaryDirectory(prefix='control-priority-global-')
     os.environ['ADAPTIVE_AI_DATA'] = scratch.name
     sys.path[:0] = [str(source / 'adaptive_ai/src'), str(source / 'tests'), str(source / 'tools'), str(source)]
@@ -66,6 +66,24 @@ def one(source, events=24, continuous=False):
         runtime.startup_inference_not_before = 0.
         runtime.initial_inference_pending = False
         runtime.inference_enabled.set()
+        if recovery:
+            from observation_contract import FeatureJournal
+            FeatureJournal(store)
+            stamp = time.time()
+            with store.conn() as connection:
+                connection.executemany('INSERT INTO feature_observation_events '
+                    '(event_key,contract_version,entity_id,event_time,received_time,attributes_json,source,quality,protected_until) '
+                    'VALUES(?,1,?,?,?,?,?,1,?)', [(f'gc-{i}','sensor.extra',stamp-7200,stamp-7200,
+                    json.dumps({'trace':'x'*8192}),'ha',stamp+86400) for i in range(512)])
+        if pressure:
+            budget = store.storage_budget
+            with store.conn() as connection:
+                budget.observe_pages(connection)
+            budget.db_limit = int(budget.snapshot()['database_used_bytes'] / .91)
+            assert budget.sample()['reason'] == 'database_budget'
+        if recovery:
+            store.start_storage_retention()
+            stack.callback(store.stop_storage_retention)
         stack.enter_context(patch.object(executor_module.AUTOMATION_KNOWLEDGE, 'hints_for_target', return_value=(set(), [])))
         # Deterministic Root action/confidence fixture; feature extraction, candidate
         # predictions, scoring, scheduler and all Executor guards remain production.
@@ -132,6 +150,12 @@ def one(source, events=24, continuous=False):
         assert len(decisions) == events, decisions
         assert len(calls) == 1 and calls[0]['service'] == 'turn_on', calls
         assert decisions[-1][1] == 'ACCEPTED', decisions[-1]
+        if recovery and getattr(store._retention_worker, 'recovery', None) is not None:
+            deadline = time.monotonic() + 10
+            while store._retention_worker.recovery.snapshot()['deleted'] == 0 and time.monotonic() < deadline:
+                threading.Event().wait(.01)
+            assert store._retention_worker.recovery.snapshot()['deleted'] > 0
+            assert store.storage_budget.snapshot()['level'] == 'normal'
         times = sorted(latencies)
         q = getattr(fixture.service, '_observation_scheduler', None)
         return dict(events=events, continuous_next_event=continuous, all_events_completed=True, actual_executor_control=True,
@@ -140,17 +164,21 @@ def one(source, events=24, continuous=False):
             event_to_service_dispatch_ms=calls[0]['event_to_service_ms'], service_calls=len(calls),
             process_cpu_seconds=used_cpu, elapsed_seconds=elapsed,
             observation_scheduler=q.snapshot() if q else None,
+            storage_pressure=pressure,
+            storage_admission=fixture.service.shadow_persistence_snapshot().get('storage_admission'),
+            automatic_recovery=store._retention_worker.snapshot() if recovery else None,
             debounce_ms=engine_module.OPTIONS['realtime_inference_debounce_ms'])
 
 
-def paired(baseline, events, continuous=False):
+def paired(baseline, events, continuous=False, pressure=False):
     series = []
     for repeat in range(3):
         pair = {}
         for name in (('before', 'after') if repeat % 2 == 0 else ('after', 'before')):
             source = baseline if name == 'before' else ROOT
             output = subprocess.check_output([sys.executable, str(Path(__file__).resolve()), '--one',
-                '--source-root', str(source), '--events', str(events)] + (['--continuous'] if continuous else []), text=True)
+                '--source-root', str(source), '--events', str(events)] + (['--continuous'] if continuous else [])
+                + (['--pressure'] if pressure else []), text=True)
             pair[name] = json.loads(output.strip().splitlines()[-1])
         assert pair['before']['decisions_sha256'] == pair['after']['decisions_sha256']
         pair['reaction_median_speedup'] = pair['before']['event_to_executor_median_ms'] / pair['after']['event_to_executor_median_ms']
@@ -169,7 +197,11 @@ if __name__ == '__main__':
     parser.add_argument('--baseline-root', type=Path)
     parser.add_argument('--events', type=int, default=24)
     parser.add_argument('--continuous', action='store_true', help='inject each next real event at the preceding Executor return')
+    parser.add_argument('--pressure', action='store_true', help='real SQLite quota pause before dispatched sensor events')
+    parser.add_argument('--recovery', action='store_true', help='run actual background cleanup concurrently with sensor decisions; requires --one --pressure')
     args = parser.parse_args()
     if args.events < 4 or (not args.one and args.baseline_root is None):
         parser.error('at least four events and baseline-root required (except --one)')
-    print(json.dumps(one(args.source_root.resolve(), args.events, args.continuous) if args.one else paired(args.baseline_root.resolve(), args.events, args.continuous), indent=None if args.one else 2))
+    if args.recovery and (not args.one or not args.pressure):
+        parser.error('--recovery requires --one --pressure')
+    print(json.dumps(one(args.source_root.resolve(), args.events, args.continuous, args.pressure, args.recovery) if args.one else paired(args.baseline_root.resolve(), args.events, args.continuous, args.pressure), indent=None if args.one else 2))

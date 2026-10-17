@@ -81,6 +81,7 @@ class StorageBudget:
         self.hard_reserve = min(256 * MIB, self.reserve // 2)
         self.lock = threading.Lock()
         self.local = threading.local()
+        self.recovery_event = None
         self._last_sample_at = float('-inf')
         self._unchecked_payload_bytes = 0
         self.training_process = os.environ.get('ADAPTIVE_AI_TRAINING_WORKER') == '1'
@@ -188,7 +189,11 @@ class StorageBudget:
             self._last_sample_at = time.monotonic()
             self._unchecked_payload_bytes = 0
             self.stats['disk_samples'] = self.stats.get('disk_samples', 0) + 1
-            return dict(self.stats)
+            result = dict(self.stats)
+        if self.recovery_event is not None and (
+                result['level'] != 'normal' or result['database_used_bytes'] >= self.db_limit * .85):
+            self.recovery_event.set()
+        return result
 
     def snapshot(self):
         with self.lock:

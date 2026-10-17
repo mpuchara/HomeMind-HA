@@ -2,6 +2,7 @@
 import threading
 import time
 from datetime import datetime, timezone
+from storage_recovery import StorageRecovery
 
 # Explicit allowlist. A timestamp column alone is not permission to erase a table.
 RETENTION = {
@@ -32,22 +33,27 @@ class StorageRetention:
         self.lock = threading.Lock()
         self.stats = dict(runs=0, deleted=0, errors=0, last_error=None, reclaimed_pages=0)
         self._known_tables = set()
+        self.wake_event = threading.Event()
+        self.recovery = StorageRecovery(store, self.stop_event)
 
     def snapshot(self):
         with self.lock:
             return {**self.stats, 'history_days': self.days,
                     'batch_rows': self.BATCH_ROWS,
-                    'alive': bool(self.thread and self.thread.is_alive())}
+                    'alive': bool(self.thread and self.thread.is_alive()),
+                    'recovery': self.recovery.snapshot()}
 
     def start(self):
         if self.thread and self.thread.is_alive():
             return
         self.stop_event.clear()
+        self.store.storage_budget.recovery_event = self.wake_event
         self.thread = threading.Thread(target=self._run, daemon=True, name='adaptive-ai-storage-retention')
         self.thread.start()
 
     def stop(self):
         self.stop_event.set()
+        self.wake_event.set()
         if self.thread and self.thread.ident is not None and self.thread is not threading.current_thread():
             self.thread.join()
 
@@ -154,11 +160,23 @@ class StorageRetention:
         return deleted
 
     def _run(self):
+        next_retention = 0.
         while not self.stop_event.is_set():
+            self.wake_event.clear()
             try:
-                self.run_once()
+                self.recovery.step()
+                if time.monotonic() >= next_retention:
+                    self.run_once()
+                    next_retention = time.monotonic() + self.POLL_SECONDS
             except Exception as exc:
                 with self.lock:
                     self.stats['errors'] += 1
                     self.stats['last_error'] = f'{type(exc).__name__}: {exc}'
-            self.stop_event.wait(self.POLL_SECONDS)
+            snapshot = self.recovery.snapshot()
+            if snapshot['active']:
+                # Failed producer writes cannot bypass this cleanup cooldown.
+                self.stop_event.wait(1. if snapshot['follow_up'] else 30.)
+            elif snapshot['follow_up']:
+                self.stop_event.wait(5.)
+            else:
+                self.wake_event.wait(self.POLL_SECONDS)

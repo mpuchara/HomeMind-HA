@@ -1,0 +1,35 @@
+{
+  "after": {
+    "ha_service_calls": 0,
+    "live_results_ok": true,
+    "no_cross_gap_score": true,
+    "normal_signature_sha256": "c1c356c566ef8138d09bad63078b445efe7ca3d85c78d0a2fde107d8c87896dc",
+    "optional_observer_calls_while_paused": 0,
+    "pass_all": true,
+    "paused_loop_ms": 0.19544600002063817,
+    "preserved_samples": 2,
+    "steps": 24,
+    "storage_admission": {
+      "max_agents": 256,
+      "paused_agents": 1,
+      "reason": "database_budget",
+      "recoveries": 0,
+      "skipped": 24
+    }
+  },
+  "before": {
+    "ha_service_calls": 0,
+    "live_results_ok": true,
+    "no_cross_gap_score": false,
+    "normal_signature_sha256": "c1c356c566ef8138d09bad63078b445efe7ca3d85c78d0a2fde107d8c87896dc",
+    "optional_observer_calls_while_paused": 24,
+    "pass_all": false,
+    "paused_loop_ms": 468.6053020000145,
+    "preserved_samples": 2,
+    "steps": 24,
+    "storage_admission": {}
+  },
+  "independent_sources": true,
+  "limit": "Production dispatched Tournament wrapper and real SQLite quota with fake Live/Executor fixture. Demonstrates optional-work admission, not physical HA/Pi latency. Normal observation math is unchanged.",
+  "synthetic": true
+}

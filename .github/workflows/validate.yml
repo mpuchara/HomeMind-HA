@@ -74,6 +74,14 @@ jobs:
       - name: 0.14.210 populated screening and post-label learning smoke
         if: matrix.python == '3.11'
         run: python tools/benchmark_screening_reaction.py --one --passes 2
+      - name: 0.14.211 automatic quota recovery and foreground Control priority
+        if: matrix.python == '3.11'
+        run: |
+          python tools/verify_storage_recovery.py
+          python tools/verify_tournament_storage.py --one --check
+          python tools/benchmark_control_priority.py --one --pressure --events 32
+          python tools/benchmark_control_priority.py --one --pressure --recovery --events 64
+          node tools/verify_storage_recovery_ui.js
       - name: 0.14.207 observed Current and long-ON lighting regressions
         if: matrix.python == '3.11'
         run: python tools/verify_correct_lighting.py --one --check
