@@ -78,6 +78,12 @@ class RuntimeDebugLogService:
             "training_queue": self._queue_status(),
             "candidate_worker": self._candidate_worker_status(),
         })
+        getter = getattr(getattr(self.core, 'STORE', None), 'sqlite_snapshot', None)
+        if callable(getter):
+            try:
+                result['sqlite'] = getter()  # RAM-only cleanup progress for the live panel.
+            except Exception as exc:
+                result['sqlite'] = {'error': f'{type(exc).__name__}: {exc}'}
         return result
 
     def configure(self, enabled, *, clear=False):

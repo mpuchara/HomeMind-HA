@@ -388,6 +388,24 @@ def install_policy_candidates(service):
     tls = threading.local()
     pool_read_stats = {"hits": 0, "reads": 0}
 
+    def observation_gap(aid, phase):
+        with lock:
+            last_target.pop(aid, None)
+            last_own_action.pop(aid, None)
+            for key in list(pending_training):
+                if key[0] == aid:
+                    pending_training.pop(key, None)
+            for (owner, _), row in pool_cache.items():
+                if owner == aid:
+                    # Preserve accepted samples and trained models; a skipped
+                    # interval cannot supply lags or a target-transition label.
+                    row['history'] = []
+                    row['last_value'] = row['last_change_ts'] = None
+
+    register_gap = getattr(service, 'register_observation_gap_handler', None)
+    if callable(register_gap):
+        register_gap('candidate_policy_pool', observation_gap)
+
     original_state = service.state
     original_sync = service.sync_agent
     original_observe = service.observe_shadow

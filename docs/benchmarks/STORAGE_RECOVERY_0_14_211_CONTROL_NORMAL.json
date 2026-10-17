@@ -1,0 +1,37 @@
+{
+  "events": 32,
+  "continuous_next_event": false,
+  "all_events_completed": true,
+  "actual_executor_control": true,
+  "root_prediction_fixture": true,
+  "ha_network": false,
+  "decisions_sha256": "5bd2ed0559d3238b0002598a405b6556e322adcb4c4148ca6a2bef418a4f11f8",
+  "event_to_executor_median_ms": 6.572712500030775,
+  "event_to_executor_p95_ms": 8.70516800000587,
+  "event_to_service_dispatch_ms": 10.765707000018665,
+  "service_calls": 1,
+  "process_cpu_seconds": 0.21742316200000003,
+  "elapsed_seconds": 0.22594236899999487,
+  "observation_scheduler": {
+    "interval_ms": 1000.0,
+    "executed": 1,
+    "skipped": 31,
+    "target_forced": 0,
+    "errors": 0,
+    "tracked_agents": 1,
+    "max_agents": 256,
+    "deferred_for_realtime": 0,
+    "max_deferral_ms": 5000.0,
+    "retry_agents": 0,
+    "scope": "Engine-dispatched candidate observations; target events always admitted"
+  },
+  "storage_pressure": false,
+  "storage_admission": {
+    "skipped": 0,
+    "recoveries": 0,
+    "reason": null,
+    "paused_agents": 0,
+    "max_agents": 256
+  },
+  "debounce_ms": 0
+}

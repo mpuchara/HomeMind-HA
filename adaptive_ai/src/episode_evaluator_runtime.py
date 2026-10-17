@@ -230,6 +230,9 @@ def install_tournament(service, evaluator: EpisodeEvaluator):
     episode_writes = DeferredEvidence(service.store, evaluator._persist)
     service.flush_tournament_episodes = episode_writes.flush
     service.tournament_episode_persistence_snapshot = episode_writes.snapshot
+    register_gap = getattr(service, 'register_observation_gap_handler', None)
+    if callable(register_gap):
+        register_gap('episode_evaluator', lambda aid, phase: state.pop(aid, None))
 
     def finish_pending(aid, challenger, pending, now, current, reason):
         active_key, shadow_key = _tournament_keys(aid, challenger)

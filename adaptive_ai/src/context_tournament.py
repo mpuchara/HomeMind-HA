@@ -18,6 +18,7 @@ import math
 import threading
 import time
 from contextlib import nullcontext
+from collections import OrderedDict
 
 from context import (
     action_values,
@@ -31,7 +32,7 @@ from settings import OPTIONS
 from process_agent_pipeline import install_process_agent_wrapper
 from telemetry import RUNTIME_DEBUG, TELEMETRY
 from context_row_buffer import ContextRowBuffer
-from storage_budget import StorageRetry
+from storage_budget import StorageRetry, storage_status
 from shadow_model_json import shadow_model_json
 from shadow_model_snapshot import freeze_shadow_model, snapshot_json, ShadowModelSnapshot
 from shadow_observation_scheduler import ShadowObservationScheduler, realtime_pending
@@ -60,6 +61,11 @@ class ContextTournament:
         self._shadow_persistence_stats = {"queued": 0, "flushed": 0, "flushes": 0, "errors": 0, "shared_source_snapshots": 0}
         self._last_error_ts = 0.0
         self._observation_scheduler = ShadowObservationScheduler()
+        self._storage_paused_agents = OrderedDict()
+        self._observation_gap_handlers = {}
+        self._storage_admission = dict(skipped=0, recoveries=0, reason=None)
+        self._foreground_threads = set()
+        self._foreground_lock = threading.Lock()
         with self.store.lock, self.store.conn() as c:
             c.executescript(
                 """
@@ -92,6 +98,47 @@ class ContextTournament:
     def background_persistence_available(self):
         stop = getattr(self.engine, 'stop_event', None)
         return bool(stop is not None and not stop.is_set() and self._shadow_writer_thread.is_alive())
+
+    def register_observation_gap_handler(self, name, callback):
+        self._observation_gap_handlers[str(name)] = callback
+
+    def storage_observation_gate(self, agent):
+        """RAM-only guard for optional work after the authoritative Live decision."""
+        aid = str(agent['id'])
+        status = storage_status(self.store)
+        paused = status.get('level', 'normal') != 'normal'
+        with self.lock:
+            was_paused = aid in self._storage_paused_agents
+            if paused:
+                self._storage_admission['skipped'] += 1
+                self._storage_admission['reason'] = status.get('reason')
+                self._storage_paused_agents[aid] = True
+                self._storage_paused_agents.move_to_end(aid)
+                while len(self._storage_paused_agents) > 256:
+                    self._storage_paused_agents.popitem(last=False)
+                if was_paused:
+                    return True
+                runtime = self._shadow_runtime.get(aid)
+                if runtime is not None:
+                    runtime['pending'] = {}
+                    runtime['last_target'] = None
+            elif not was_paused:
+                return False
+            handlers = tuple(self._observation_gap_handlers.values())
+        # Small invalidations only: no SQLite, model serialization, replay or fit.
+        # Clear future-label buffers before any recovered observation may score.
+        for callback in handlers:
+            callback(aid, 'pause' if paused else 'resume')
+        if not paused:
+            with self.lock:
+                self._storage_paused_agents.pop(aid, None)
+                self._storage_admission['recoveries'] += 1
+                if not self._storage_paused_agents:
+                    self._storage_admission['reason'] = None
+            with self._observation_scheduler.lock:
+                self._observation_scheduler.completed.pop(aid, None)
+                self._observation_scheduler.retry_due.pop(aid, None)
+        return paused
 
     def register_context_rows(self, name, statement):
         with self.lock:
@@ -465,6 +512,8 @@ class ContextTournament:
                 "pending": len(self._shadow_dirty),
                 "storage_retry": self._shadow_storage_retry.snapshot(),
                 "context_rows": {name: buffer.snapshot() for name, buffer in self._context_row_buffers.items()},
+                "storage_admission": {**self._storage_admission,
+                    'paused_agents': len(self._storage_paused_agents), 'max_agents': 256},
             }
         getter = getattr(self, "observation_pool_cache_snapshot", None)
         if callable(getter):
@@ -728,15 +777,31 @@ def install(store, engine):
     def process_agent_with_tournament(agent, state_map, changed_entities=None):
         # Production inference/control runs first and remains entirely authoritative.
         # Shadow evaluation only reads its resulting champion prediction afterwards.
-        result = original_process_agent(agent, state_map, changed_entities)
+        tid = threading.get_ident()
+        with service._foreground_lock:
+            service._foreground_threads.add(tid)
+        try:
+            result = original_process_agent(agent, state_map, changed_entities)
+        finally:
+            with service._foreground_lock:
+                service._foreground_threads.discard(tid)
         ticket = None
         # Direct observer/API calls retain their explicit, immediate behavior.
         # Engine target workers own this revision binding for realtime and timers.
         dispatched = getattr(getattr(engine, '_inference_tls', None), 'state_revision', None) is not None
         if dispatched:
+            try:
+                if service.storage_observation_gate(agent):
+                    TELEMETRY.inc('context_shadow_storage_skips')
+                    return result
+            except Exception as exc:
+                service.report_runtime_error(exc)
+                return result
+            with service._foreground_lock:
+                another_decision = bool(service._foreground_threads)
             ticket = service._observation_scheduler.admit(
                 agent, state_map, changed_entities, (getattr(engine, 'models', {}) or {}).get(str(agent['id'])),
-                pending_realtime=realtime_pending(engine),
+                pending_realtime=another_decision or realtime_pending(engine),
             )
             if ticket is None:
                 TELEMETRY.inc('context_shadow_interval_skips')

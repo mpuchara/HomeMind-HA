@@ -1,0 +1,269 @@
+{
+  "inputs": [
+    {
+      "file": "adaptive-ai-runtime-debug-20261017-133524.json",
+      "sha256": "3dbde6219a190aeab6cf7c8e2b2c48a7ed854bce22897de02b4a99ce944bf9c5",
+      "version": "0.14.210",
+      "generated_at": "2026-10-17T11:35:24.430860+00:00",
+      "budget": {
+        "auto_pool_bytes": 20913830080,
+        "auto_use_percent": 60,
+        "batch_sample_interval_seconds": 0.05,
+        "batch_sample_payload_bytes": 1048576,
+        "blocked_writes": 5043,
+        "budget_mode": "auto",
+        "database_max_bytes": 11920883146,
+        "database_used_bytes": 10728722432,
+        "db_bytes": 10729066496,
+        "disk_samples": 1954253,
+        "free_bytes": 10149060608,
+        "level": "normal",
+        "max_statement_payload_bytes": 16777216,
+        "minimum_free_bytes": 8365532032,
+        "page_observations": 694522,
+        "readonly_page_observations_skipped": 2347764,
+        "reason": null,
+        "sample_error": null,
+        "wal_bytes": 16777216,
+        "wal_max_bytes": 627414902
+      },
+      "retention": {
+        "alive": true,
+        "batch_rows": 128,
+        "deleted": 586957,
+        "errors": 11,
+        "history_days": 14,
+        "last_error": null,
+        "reclaimed_pages": 25932,
+        "runs": 890
+      },
+      "candidate": {
+        "last_gap_ts": 1792236915.1274753,
+        "last_root_agent_id": "5adfe0d6",
+        "max_items": 128,
+        "paused": false,
+        "pending": 118,
+        "persistence_gaps": 6,
+        "reason": null,
+        "recoveries": 55,
+        "skipped": 2651,
+        "storage_reason": null
+      },
+      "metrics": {
+        "context_shadow_observation": {
+          "avg_ms": 202.45100882729548,
+          "count": 85713,
+          "p95_ms": 342.7961190463975,
+          "recent_count": 92,
+          "recent_p95_ms": 348.6217549070716
+        },
+        "event_to_decision": {
+          "avg_ms": 141.0238616427887,
+          "count": 187001,
+          "p95_ms": 333.141872077249,
+          "recent_count": 194,
+          "recent_p95_ms": 338.0165429553017
+        },
+        "event_to_target_start": {
+          "avg_ms": 53.14471120493609,
+          "count": 187002,
+          "p95_ms": 190.1069750310853,
+          "recent_count": 194,
+          "recent_p95_ms": 228.64590701647103
+        },
+        "inference": {
+          "avg_ms": 79.98551904747053,
+          "count": 187353,
+          "p95_ms": 152.8116250410676,
+          "recent_count": 194,
+          "recent_p95_ms": 148.5475009540096
+        },
+        "wrapped_inference": {
+          "avg_ms": 204.59608589860633,
+          "count": 187353,
+          "p95_ms": 459.84397700522095,
+          "recent_count": 194,
+          "recent_p95_ms": 432.90600494947284
+        }
+      },
+      "ha_dispatch_metrics": {}
+    },
+    {
+      "file": "adaptive-ai-runtime-debug-20261017-133708.json",
+      "sha256": "d4519d23cb395fd18105b3008d850e73894a2be48019a9afe33d74e55d1adb6a",
+      "version": "0.14.210",
+      "generated_at": "2026-10-17T11:37:07.989571+00:00",
+      "budget": {
+        "auto_pool_bytes": 20913830080,
+        "auto_use_percent": 60,
+        "batch_sample_interval_seconds": 0.05,
+        "batch_sample_payload_bytes": 1048576,
+        "blocked_writes": 5088,
+        "budget_mode": "auto",
+        "database_max_bytes": 11920883146,
+        "database_used_bytes": 10728796160,
+        "db_bytes": 10728992768,
+        "disk_samples": 1954971,
+        "free_bytes": 10116583424,
+        "level": "paused",
+        "max_statement_payload_bytes": 16777216,
+        "minimum_free_bytes": 8365532032,
+        "page_observations": 696522,
+        "readonly_page_observations_skipped": 2353010,
+        "reason": "database_budget",
+        "sample_error": null,
+        "wal_bytes": 16777216,
+        "wal_max_bytes": 627414902
+      },
+      "retention": {
+        "alive": true,
+        "batch_rows": 128,
+        "deleted": 587747,
+        "errors": 11,
+        "history_days": 14,
+        "last_error": null,
+        "reclaimed_pages": 25964,
+        "runs": 891
+      },
+      "candidate": {
+        "last_gap_ts": 1792236915.1274753,
+        "last_root_agent_id": "5adfe0d6",
+        "max_items": 128,
+        "paused": false,
+        "pending": 123,
+        "persistence_gaps": 6,
+        "reason": null,
+        "recoveries": 55,
+        "skipped": 2651,
+        "storage_reason": "database_budget"
+      },
+      "metrics": {
+        "context_shadow_observation": {
+          "avg_ms": 202.45285862084236,
+          "count": 85882,
+          "p95_ms": 348.6217549070716,
+          "recent_count": 102,
+          "recent_p95_ms": 290.2186430292204
+        },
+        "event_to_decision": {
+          "avg_ms": 141.00982309035956,
+          "count": 187319,
+          "p95_ms": 325.64743398688734,
+          "recent_count": 185,
+          "recent_p95_ms": 267.43675908073783
+        },
+        "event_to_target_start": {
+          "avg_ms": 53.115799315018535,
+          "count": 187320,
+          "p95_ms": 202.7102339779958,
+          "recent_count": 185,
+          "recent_p95_ms": 153.07231107726693
+        },
+        "inference": {
+          "avg_ms": 80.00103785340323,
+          "count": 187673,
+          "p95_ms": 147.30158599559218,
+          "recent_count": 187,
+          "recent_p95_ms": 135.66454697865993
+        },
+        "wrapped_inference": {
+          "avg_ms": 204.63924734317305,
+          "count": 187673,
+          "p95_ms": 437.3342259787023,
+          "recent_count": 189,
+          "recent_p95_ms": 440.79761602915823
+        }
+      },
+      "ha_dispatch_metrics": {}
+    },
+    {
+      "file": "adaptive-ai-runtime-debug-20261017-133747.json",
+      "sha256": "a48467bf69a4f360d82ad7513c899fbd8bfb2051acc54c7577c4a111519f04e1",
+      "version": "0.14.210",
+      "generated_at": "2026-10-17T11:37:47.209365+00:00",
+      "budget": {
+        "auto_pool_bytes": 20913830080,
+        "auto_use_percent": 60,
+        "batch_sample_interval_seconds": 0.05,
+        "batch_sample_payload_bytes": 1048576,
+        "blocked_writes": 5101,
+        "budget_mode": "auto",
+        "database_max_bytes": 11920883146,
+        "database_used_bytes": 10728808448,
+        "db_bytes": 10729005056,
+        "disk_samples": 1955488,
+        "free_bytes": 10140733440,
+        "level": "paused",
+        "max_statement_payload_bytes": 16777216,
+        "minimum_free_bytes": 8365532032,
+        "page_observations": 697401,
+        "readonly_page_observations_skipped": 2354840,
+        "reason": "database_budget",
+        "sample_error": null,
+        "wal_bytes": 16777216,
+        "wal_max_bytes": 627414902
+      },
+      "retention": {
+        "alive": true,
+        "batch_rows": 128,
+        "deleted": 588454,
+        "errors": 11,
+        "history_days": 14,
+        "last_error": null,
+        "reclaimed_pages": 25996,
+        "runs": 892
+      },
+      "candidate": {
+        "last_gap_ts": 1792236915.1274753,
+        "last_root_agent_id": "5adfe0d6",
+        "max_items": 128,
+        "paused": false,
+        "pending": 120,
+        "persistence_gaps": 6,
+        "reason": null,
+        "recoveries": 55,
+        "skipped": 2651,
+        "storage_reason": "database_budget"
+      },
+      "metrics": {
+        "context_shadow_observation": {
+          "avg_ms": 202.41789320900006,
+          "count": 85941,
+          "p95_ms": 340.1943480130285,
+          "recent_count": 92,
+          "recent_p95_ms": 340.3676049783826
+        },
+        "event_to_decision": {
+          "avg_ms": 140.9867476878186,
+          "count": 187416,
+          "p95_ms": 304.17865002527833,
+          "recent_count": 159,
+          "recent_p95_ms": 267.0716600259766
+        },
+        "event_to_target_start": {
+          "avg_ms": 53.098036572956815,
+          "count": 187417,
+          "p95_ms": 183.8620339985937,
+          "recent_count": 158,
+          "recent_p95_ms": 174.42093195859343
+        },
+        "inference": {
+          "avg_ms": 79.99671971190148,
+          "count": 187770,
+          "p95_ms": 143.00550101324916,
+          "recent_count": 159,
+          "recent_p95_ms": 138.8178199995309
+        },
+        "wrapped_inference": {
+          "avg_ms": 204.6314455810756,
+          "count": 187769,
+          "p95_ms": 437.3342259787023,
+          "recent_count": 159,
+          "recent_p95_ms": 469.37527891714126
+        }
+      },
+      "ha_dispatch_metrics": {}
+    }
+  ],
+  "interpretation": "60% allocation is active. The database crosses its 90% used-page pause at 10,728,794,831 bytes; it is not an exhausted filesystem. Existing 14-day cleanup has removed 588454 rows but current use oscillates at the pause boundary. Synchronous optional Tournament work remains on device-control workers; no real HA service/ACK samples."
+}

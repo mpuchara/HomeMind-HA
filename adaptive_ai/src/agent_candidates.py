@@ -281,6 +281,8 @@ class AgentCandidateManager(threading.Thread):
                 'pending': evidence.get('pending', 0),
                 'max_items': evidence.get('max_items'),
                 'storage_reason': evidence.get('storage', {}).get('reason'),
+                'budget_mode': evidence.get('storage', {}).get('budget_mode'),
+                'auto_use_percent': evidence.get('storage', {}).get('auto_use_percent'),
             },
         }
 

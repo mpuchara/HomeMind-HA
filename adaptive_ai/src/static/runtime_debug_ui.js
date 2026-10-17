@@ -30,8 +30,15 @@
     const active=Array.isArray(dbg.active)?dbg.active:[];
     const heavy=status.heavy_job||dbg.heavy_job||null;
     const evidence=(status.candidate_worker||dbg.candidate_worker)?.shadow_observations||{};
+    const sqlite=status.sqlite||dbg.sqlite||{};
+    const recovery=sqlite.storage_retention?.recovery||{};
+    const budget=sqlite.storage_budget||{};
+    const allocation=budget.budget_mode==='auto'&&Number.isFinite(Number(budget.auto_use_percent))
+      ?` Configured disk allocation: ${Number(budget.auto_use_percent)}%.`:'';
+    const cleanupNotice=recovery.active||Number(recovery.deleted)>0
+      ?`<div class="${recovery.active?'notice':'history-meta'}" role="status">Automatic diagnostic cleanup: ${!recovery.active?'up to date':recovery.reason==='protected_or_no_disposable_data'?'remaining data are protected':recovery.reason==='waiting_for_checkpoint'?'waiting for disk checkpoint':escLocal(recovery.reason||'working')}. Removed ${Number(recovery.deleted||0)} rows. Database used: ${(Number(budget.database_used_bytes||0)/1073741824).toFixed(2)} GiB / ${(Number(budget.database_max_bytes||0)/1073741824).toFixed(2)} GiB.${allocation} Models, preferences and replay history stay protected.</div>`:'';
     const storageNotice=evidence.paused
-      ?`<div class="notice" role="status">Candidate Shadow observations paused: ${escLocal(evidence.storage_reason||evidence.reason||'evidence buffer full')}. Retained observations: ${Number(evidence.pending||0)}/${Number(evidence.max_items||0)}. New observations remain gaps until storage recovers. Check the add-on storage budget configuration.</div>`:'';
+      ?`<div class="notice" role="status">Candidate Shadow observations paused: ${escLocal(evidence.storage_reason||evidence.reason||'evidence buffer full')}. Retained observations: ${Number(evidence.pending||0)}/${Number(evidence.max_items||0)}. New observations remain gaps until storage recovers. Automatic background cleanup will reclaim eligible diagnostics.</div>`:'';
     const activity=active.length
       ?active.map(item=>`<div class="runtime-debug-active"><b>${escLocal(item.operation||'work')}</b><span>${escLocal(item.thread||'')} · ${ms(item.age_ms)}${fieldSummary(item.fields)?' · '+fieldSummary(item.fields):''}</span></div>`).join('')
       :`<div class="empty">${heavy?`Heavy job: ${escLocal(heavy)}`:'No traced operation is active right now.'}</div>`;
@@ -47,6 +54,7 @@
         </div>
       </div>
       ${storageNotice}
+      ${cleanupNotice}
       <div class="history-grid runtime-debug-grid">
         <div><b>${ms(metric.recent_p95_ms)}</b><span>event → intent p95 · last 60 s</span></div>
         <div><b>${ms(metric.p95_ms)}</b><span>event → intent p95 · retained telemetry</span></div>
