@@ -45,7 +45,8 @@ class UnsupportedPolicyBackendError(ValueError):
 
 
 def _canonical(value):
-    return json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False, default=str)
+    from runtime_background_compute import dumps
+    return dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False, default=str)
 
 
 def model_checksum(raw):

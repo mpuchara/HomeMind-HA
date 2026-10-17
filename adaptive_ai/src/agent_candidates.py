@@ -1274,7 +1274,8 @@ class AgentCandidateManager(threading.Thread):
                 # Reuse the existing bounded page-cache budget for worker reads.
                 # Every nested conn() still commits/rolls back independently;
                 # the lease is returned before the worker waits for more events.
-                with self.store.inference_connection_session():
+                from runtime_background_compute import background_compute_scope
+                with self.store.inference_connection_session(), background_compute_scope():
                     changed = self._worker_maintenance_pass()
             except Exception as exc:
                 self._record_worker_error("candidate_worker_session", exc)

@@ -1,0 +1,8 @@
+{
+  "event_to_candidate_ms": 501.72013100007007,
+  "worker_elapsed_ms": 501.9003499999144,
+  "desired": 1.0,
+  "ha_calls": 0,
+  "idle_poll_seconds": 3,
+  "coalescing_and_realtime_quiet_preserved": true
+}

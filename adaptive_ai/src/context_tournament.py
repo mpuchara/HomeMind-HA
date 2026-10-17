@@ -37,6 +37,7 @@ from shadow_model_json import shadow_model_json
 from shadow_model_snapshot import freeze_shadow_model, snapshot_json, ShadowModelSnapshot
 from shadow_observation_scheduler import ShadowObservationScheduler, realtime_pending
 from tournament_observation_queue import EngineObservationView, DeferredTournamentObservations
+from runtime_background_compute import background_compute_scope
 
 
 SHADOW_MODEL_VERSION = 1
@@ -496,7 +497,7 @@ class ContextTournament:
                 if quiet_for < 0.75 and not stop_event.is_set():
                     stop_event.wait(max(0.0, 0.75 - quiet_for))
             try:
-                with background_sqlite(self.store):
+                with background_sqlite(self.store), background_compute_scope():
                     self._flush_background_context(force=False)
                 self._shadow_storage_retry.recovered()
             except Exception as exc:

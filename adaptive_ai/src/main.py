@@ -807,6 +807,8 @@ def shutdown_runtime():
                 tournament._shadow_flush_event.set()
                 shutdown_step("context_tournament", tournament._flush_background_context)
             shutdown_step("teaching", lambda: ENGINE.teaching.flush(force=True))
+            from runtime_background_compute import COMPUTE
+            shutdown_step("isolated_compute", COMPUTE.close)
             shutdown_step("archive", lambda: ENGINE.flush_archive(force=True))
 
             flush_all_provenance = getattr(STORE, "_flush_all_provenance", None)

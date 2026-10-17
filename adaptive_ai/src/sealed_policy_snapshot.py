@@ -13,6 +13,7 @@ import threading
 import weakref
 
 from policy_backend import _canonical
+from model_encoding_cache import MODEL_ENCODING_CACHE
 
 
 class _ReadOnly:
@@ -170,7 +171,7 @@ def seal_policy(raw):
     detached = copy.deepcopy(raw)
     clean = {key: value for key, value in detached.items()
              if key != 'model_checksum' and not str(key).startswith('_')}
-    canonical = _canonical(clean).encode('utf-8')
+    canonical = MODEL_ENCODING_CACHE.encode(clean, _canonical)
     if hashlib.sha256(canonical).hexdigest() != str(detached['model_checksum']):
         raise ValueError('Candidate source changed or failed checksum during RAM admission')
     if len(canonical) > _BUDGET.max_policy_bytes:

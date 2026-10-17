@@ -483,10 +483,14 @@ class ContextEngine:
                 now = time.time()
                 if not self.store or (not force and now - self.last_save < 60):
                     return False
-                room_raw = json.dumps(self.home.export(), separators=(',', ':'), sort_keys=True)
-                adaptive_raw = json.dumps(self.adaptive_presence.export(), separators=(',', ':'), sort_keys=True)
-                room_changed = room_raw != self._last_saved_room_model_raw
-                adaptive_changed = adaptive_raw != self._last_saved_adaptive_model_raw
+                room_snapshot = self.home.export()
+                adaptive_snapshot = self.adaptive_presence.export()
+            # Snapshots are detached. Encoding must never hold live belief locks.
+            from runtime_background_compute import dumps
+            room_raw = dumps(room_snapshot, separators=(',', ':'), sort_keys=True)
+            adaptive_raw = dumps(adaptive_snapshot, separators=(',', ':'), sort_keys=True)
+            room_changed = room_raw != self._last_saved_room_model_raw
+            adaptive_changed = adaptive_raw != self._last_saved_adaptive_model_raw
             if room_changed:
                 self.store.meta_set(self.ROOM_MODEL_KEY, room_raw)
                 with self.lock:

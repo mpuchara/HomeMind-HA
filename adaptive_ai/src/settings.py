@@ -5,6 +5,7 @@ import math
 import os
 
 import time
+from functools import lru_cache
 
 from datetime import datetime
 
@@ -15,7 +16,7 @@ try:
 except Exception:
     ws_connect = None
 
-APP_VERSION = "0.14.214"
+APP_VERSION = "0.14.215"
 HISTORY_BOOTSTRAP_REVISION = "target-attrs-v2"
 TRAINING_REVISION = "shared-home-intents-v26"
 DATA_DIR = Path(os.environ.get("ADAPTIVE_AI_DATA", "/data"))
@@ -122,6 +123,7 @@ DEFAULT_OPTIONS = {
     "runtime_sqlite_cache_mb": 256,
     "runtime_episode_comparison_cache_mb": 64,
     "runtime_thread_switch_ms": 1,
+    "runtime_compute_ram_mb": 256,
     "runtime_tournament_ram_mb": 64,
     "runtime_shadow_observation_interval_ms": 1000,
     "runtime_shadow_max_deferral_ms": 5000,
@@ -413,8 +415,22 @@ def parse_ts(value):
     if isinstance(value, (int, float)):
         return float(value)
     text = str(value).strip().replace("Z", "+00:00")
+    # HA emits timezone-aware immutable timestamps, repeatedly read for current,
+    # lag, edge and lighting features. Naive strings retain local-TZ semantics.
+    if len(text) <= 96 and (text.endswith('+00:00') or '+' in text[10:] or '-' in text[10:]):
+        parsed = _parse_aware_ts(text)
+        return parsed.timestamp() if isinstance(parsed, datetime) else parsed
     try:
         return datetime.fromisoformat(text).timestamp()
+    except Exception:
+        return None
+
+
+@lru_cache(maxsize=32768)
+def _parse_aware_ts(text):
+    try:
+        parsed = datetime.fromisoformat(text)
+        return parsed if parsed.tzinfo is None else parsed.timestamp()
     except Exception:
         return None
 

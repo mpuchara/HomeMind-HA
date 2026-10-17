@@ -33,6 +33,7 @@ from shared_inference_context import shared_inference_temporal
 from shared_observation_features import shared_entity_observations
 from telemetry import RUNTIME_DEBUG, TELEMETRY
 from training_phase_metrics import measure_training_phase
+from runtime_background_compute import dumps as background_dumps
 
 
 CONTRACT_VERSION = 2
@@ -106,11 +107,11 @@ def _pool_json_payload(row, previous=None, *, samples_changed):
     if screening_changed:
         row["screening"] = semantic_predictive_score(row.get("samples") or [])
     return (
-        json.dumps(row.get("history") or [], separators=(",", ":"), sort_keys=True),
+        background_dumps(row.get("history") or [], separators=(",", ":"), sort_keys=True),
         previous[1] if previous is not None and not samples_changed else
-            json.dumps(row.get("samples") or [], separators=(",", ":"), sort_keys=True),
+            background_dumps(row.get("samples") or [], separators=(",", ":"), sort_keys=True),
         previous[2] if previous is not None and not screening_changed else
-            json.dumps(row.get("screening") or {}, separators=(",", ":"), sort_keys=True),
+            background_dumps(row.get("screening") or {}, separators=(",", ":"), sort_keys=True),
     )
 
 
