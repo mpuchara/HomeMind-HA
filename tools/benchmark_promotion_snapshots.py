@@ -87,7 +87,9 @@ def run_mode(mode, payloads, passes, label_every):
         times, state_history = [], []
         checkpoint_count = 0
         for step in range(passes):
-            with patch('context_tournament_promotion.time.time', return_value=1000. + step):
+            # Both the frozen reference and the current observer see one event
+            # clock, independently of the current observer's thread-local proxy.
+            with patch('time.time', return_value=1000. + step):
                 started = time.perf_counter()
                 result = observer(agent, {}, set())
                 if step % 5 == 4:

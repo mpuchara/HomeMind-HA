@@ -801,6 +801,9 @@ def shutdown_runtime():
                 shutdown_step("candidate_shadow_decisions", lambda: flush_candidates(force=True))
             tournament = getattr(ENGINE, "context_tournament", None)
             if tournament is not None:
+                deferred = getattr(tournament, '_deferred_observations', None)
+                if deferred is not None:
+                    shutdown_step("tournament_observer", lambda: deferred.close(timeout=None))
                 tournament._shadow_flush_event.set()
                 shutdown_step("context_tournament", tournament._flush_background_context)
             shutdown_step("teaching", lambda: ENGINE.teaching.flush(force=True))

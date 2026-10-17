@@ -15,7 +15,7 @@ try:
 except Exception:
     ws_connect = None
 
-APP_VERSION = "0.14.213"
+APP_VERSION = "0.14.214"
 HISTORY_BOOTSTRAP_REVISION = "target-attrs-v2"
 TRAINING_REVISION = "shared-home-intents-v26"
 DATA_DIR = Path(os.environ.get("ADAPTIVE_AI_DATA", "/data"))
@@ -122,6 +122,7 @@ DEFAULT_OPTIONS = {
     "runtime_sqlite_cache_mb": 256,
     "runtime_episode_comparison_cache_mb": 64,
     "runtime_thread_switch_ms": 1,
+    "runtime_tournament_ram_mb": 64,
     "runtime_shadow_observation_interval_ms": 1000,
     "runtime_shadow_max_deferral_ms": 5000,
     "storage_min_free_mb": 2048,
@@ -400,7 +401,8 @@ NUMERIC_ATTRS = {
 }
 
 def now_ts():
-    return time.time()
+    from tournament_observation_clock import time as observation_time
+    return observation_time.time()
 
 def iso_now():
     return datetime.now().astimezone().isoformat(timespec="seconds")

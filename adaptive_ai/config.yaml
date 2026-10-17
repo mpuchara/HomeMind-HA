@@ -1,5 +1,5 @@
 name: "Adaptive AI"
-version: "0.14.213"
+version: "0.14.214"
 slug: "adaptive_ai"
 description: >-
   History-first local reinforcement-learning policies for Home Assistant. Imports
@@ -98,6 +98,7 @@ options:
   runtime_sqlite_cache_mb: 256
   runtime_episode_comparison_cache_mb: 64
   runtime_thread_switch_ms: 1
+  runtime_tournament_ram_mb: 64
   runtime_shadow_observation_interval_ms: 1000
   runtime_shadow_max_deferral_ms: 5000
   storage_min_free_mb: 2048
@@ -325,6 +326,7 @@ schema:
   runtime_sqlite_cache_mb: "int(0,512)"
   runtime_episode_comparison_cache_mb: "int(0,256)"
   runtime_thread_switch_ms: "int(0,10)"
+  runtime_tournament_ram_mb: "int(1,256)"
   runtime_shadow_observation_interval_ms: "int(0,5000)"
   runtime_shadow_max_deferral_ms: "int(0,30000)"
   storage_min_free_mb: "int(256,65536)"

@@ -9,7 +9,7 @@ legacy transition metrics remain an explicit compatibility fallback for older da
 from __future__ import annotations
 
 import hashlib
-import time
+from tournament_observation_clock import time
 
 from context import target_value
 from deferred_evidence import DeferredEvidence

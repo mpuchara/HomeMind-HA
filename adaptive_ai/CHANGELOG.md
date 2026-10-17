@@ -1,3 +1,11 @@
+## 0.14.214
+
+- Move Engine-dispatched Sensor Tournament observation, candidate fitting and persistence off target workers. Root Control and Root Shadow return after queuing a detached event-time frame, so optional work cannot occupy the target until the next sensor event.
+- Add a bounded FIFO RAM budget (`runtime_tournament_ram_mb`, default 64 MiB), with container/host headroom admission, active-frame accounting and explicit future-evidence gaps on overflow, storage pause, errors or model replacement. Preserve accepted samples and trained models.
+- Coalesce redundant sensor refreshes at the same target value while retaining observed target transitions in FIFO order. Preserve future labels when manual/held Root keeps its previous decision, using the new observation time.
+- Freeze Root decision, policy weights, temporal samples, Home forecast and event time. Keep fresh checksum verification, candidate fitting and label order; retain synchronous original promotion/probation and Control-to-Shadow requalification.
+- Export queue depth, memory charge, capture cost, lag and gaps. Reuse bounded SQLite pages on the observer worker and complete it before shutdown persistence flushes.
+
 ## 0.14.213
 
 - Deliver main Current/Desired tiles with bounded RAM revision waits instead of adding the next 500ms poll interval after a ready decision. Publish one completed prediction record before optional observers; keep Current physical and independent.

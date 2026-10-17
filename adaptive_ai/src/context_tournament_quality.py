@@ -22,7 +22,7 @@ Assistant services.
 import json
 import math
 import threading
-import time
+from tournament_observation_clock import time
 
 import context_tournament_promotion as promotion
 from context import action_values

@@ -17,7 +17,7 @@ from unittest.mock import patch
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def one(source, events=24, continuous=False, pressure=False, recovery=False):
+def one(source, events=24, continuous=False, pressure=False, recovery=False, observer_delay_ms=0, mode="control"):
     scratch = tempfile.TemporaryDirectory(prefix='control-priority-global-')
     os.environ['ADAPTIVE_AI_DATA'] = scratch.name
     sys.path[:0] = [str(source / 'adaptive_ai/src'), str(source / 'tests'), str(source / 'tools'), str(source)]
@@ -46,7 +46,7 @@ def one(source, events=24, continuous=False, pressure=False, recovery=False):
         detail = {'balanced': True, 'counts': {'samples': 80, 'correct': 80, 'per_action': {
             '0': {'samples': 40, 'correct': 40}, '1': {'samples': 40, 'correct': 40}}}}
         store.set_training_state(agent['id'], 'qualified', score=1., samples=80, detail=detail)
-        store.update_agent(agent['id'], {'mode': 'control'})
+        store.update_agent(agent['id'], {'mode': mode})
         agent = store.get_agent_config(agent['id'])
         def reuse_engine(**kwargs):
             runtime.__dict__.update(kwargs)
@@ -57,6 +57,13 @@ def one(source, events=24, continuous=False, pressure=False, recovery=False):
         fixture.service.background_persistence_available = lambda: True
         fixture.agent = agent
         fixture.observe(); fixture.observe()
+        if observer_delay_ms:
+            stack.enter_context(patch.dict(engine_module.OPTIONS, runtime_shadow_observation_interval_ms=0))
+            original_observe = fixture.service.observe_shadow
+            def slow_observe(*args, **kwargs):
+                time.sleep(observer_delay_ms / 1000.)
+                return original_observe(*args, **kwargs)
+            fixture.service.observe_shadow = slow_observe
         runtime._refresh_agent_index(force=True)
         runtime.refresh_states = lambda: None
         runtime._startup_warmup_step = lambda _: 0
@@ -93,7 +100,13 @@ def one(source, events=24, continuous=False, pressure=False, recovery=False):
             _, _, arms, horizon, _, _ = original_predict(features)
             chosen = dict(next(row for row in arms if row['index'] == desired[0]), value=float(desired[0]))
             return chosen, .99, arms, horizon, 1., 0.
-        stack.enter_context(patch.object(fixture.live, 'predict', side_effect=root_predict))
+        # Patch the class call rather than storing a Mock in the model instance:
+        # deferred observers snapshot numeric policy state, never test callbacks.
+        def predict_fixture(policy, features):
+            if policy is fixture.live:
+                return root_predict(features)
+            return original_predict.__func__(policy, features)
+        stack.enter_context(patch.object(type(fixture.live), 'predict', new=predict_fixture))
         completed, dispatched, all_decided = threading.Event(), threading.Event(), threading.Event()
         received = [0.]
         decisions, latencies, calls = [], [], []
@@ -137,19 +150,36 @@ def one(source, events=24, continuous=False, pressure=False, recovery=False):
                     completed.clear()
                     inject(i)
                     assert completed.wait(10), (i, runtime.error)
-            assert dispatched.wait(10), decisions
+            if mode == 'control':
+                assert dispatched.wait(10), decisions
         finally:
             elapsed, used_cpu = time.perf_counter() - started, time.process_time() - cpu
+            deferred = getattr(fixture.service, '_deferred_observations', None)
+            if deferred is not None and observer_delay_ms:
+                deadline = time.monotonic() + max(30, events * observer_delay_ms/500.)
+                while time.monotonic() < deadline:
+                    status = deferred.snapshot()
+                    if not status['active'] and not status['pending']:
+                        break
+                    time.sleep(.005)
+                assert not deferred.snapshot()['pending'], deferred.snapshot()
             runtime.stop_event.set(); runtime.wake_event.set(); loop.join(10)
             assert not loop.is_alive()
             for future in list(runtime.in_flight.values()):
                 future.result(10)
+            deferred = getattr(fixture.service, '_deferred_observations', None)
+            if deferred is not None:
+                assert deferred.close(10)
             fixture.service._shadow_flush_event.set()
             fixture.service._shadow_writer_thread.join(10)
             assert not fixture.service._shadow_writer_thread.is_alive()
         assert len(decisions) == events, decisions
-        assert len(calls) == 1 and calls[0]['service'] == 'turn_on', calls
-        assert decisions[-1][1] == 'ACCEPTED', decisions[-1]
+        if mode == 'control':
+            assert len(calls) == 1 and calls[0]['service'] == 'turn_on', calls
+            assert decisions[-1][1] == 'ACCEPTED', decisions[-1]
+        else:
+            assert calls == [], calls
+            assert decisions[-1][1] == 'SHADOW', decisions[-1]
         if recovery and getattr(store._retention_worker, 'recovery', None) is not None:
             deadline = time.monotonic() + 10
             while store._retention_worker.recovery.snapshot()['deleted'] == 0 and time.monotonic() < deadline:
@@ -158,11 +188,15 @@ def one(source, events=24, continuous=False, pressure=False, recovery=False):
             assert store.storage_budget.snapshot()['level'] == 'normal'
         times = sorted(latencies)
         q = getattr(fixture.service, '_observation_scheduler', None)
-        return dict(events=events, continuous_next_event=continuous, all_events_completed=True, actual_executor_control=True,
+        deferred = getattr(fixture.service, '_deferred_observations', None)
+        deferred_stats = deferred.snapshot() if deferred is not None else None
+        if deferred_stats is not None:
+            assert deferred_stats['errors'] == 0, deferred_stats
+        return dict(events=events, continuous_next_event=continuous, all_events_completed=True, actual_executor_control=mode == "control", agent_mode=mode, injected_observer_delay_ms=observer_delay_ms,
             root_prediction_fixture=True, ha_network=False, decisions_sha256=hashlib.sha256(json.dumps(decisions).encode()).hexdigest(),
             event_to_executor_median_ms=statistics.median(times), event_to_executor_p95_ms=times[int((len(times)-1)*.95)],
-            event_to_service_dispatch_ms=calls[0]['event_to_service_ms'], service_calls=len(calls),
-            process_cpu_seconds=used_cpu, elapsed_seconds=elapsed,
+            event_to_service_dispatch_ms=calls[0]['event_to_service_ms'] if calls else None, service_calls=len(calls),
+            process_cpu_seconds=used_cpu, elapsed_seconds=elapsed, deferred_observations=deferred_stats,
             observation_scheduler=q.snapshot() if q else None,
             storage_pressure=pressure,
             storage_admission=fixture.service.shadow_persistence_snapshot().get('storage_admission'),
@@ -170,7 +204,7 @@ def one(source, events=24, continuous=False, pressure=False, recovery=False):
             debounce_ms=engine_module.OPTIONS['realtime_inference_debounce_ms'])
 
 
-def paired(baseline, events, continuous=False, pressure=False):
+def paired(baseline, events, continuous=False, pressure=False, observer_delay_ms=0, mode="control"):
     series = []
     for repeat in range(3):
         pair = {}
@@ -178,15 +212,15 @@ def paired(baseline, events, continuous=False, pressure=False):
             source = baseline if name == 'before' else ROOT
             output = subprocess.check_output([sys.executable, str(Path(__file__).resolve()), '--one',
                 '--source-root', str(source), '--events', str(events)] + (['--continuous'] if continuous else [])
-                + (['--pressure'] if pressure else []), text=True)
+                + (['--pressure'] if pressure else []) + ['--observer-delay-ms', str(observer_delay_ms), '--mode', mode], text=True)
             pair[name] = json.loads(output.strip().splitlines()[-1])
         assert pair['before']['decisions_sha256'] == pair['after']['decisions_sha256']
         pair['reaction_median_speedup'] = pair['before']['event_to_executor_median_ms'] / pair['after']['event_to_executor_median_ms']
-        pair['service_dispatch_speedup'] = pair['before']['event_to_service_dispatch_ms'] / pair['after']['event_to_service_dispatch_ms']
+        pair['service_dispatch_speedup'] = (pair['before']['event_to_service_dispatch_ms'] / pair['after']['event_to_service_dispatch_ms']) if mode == 'control' else None
         series.append(pair)
     return dict(synthetic=True, independent_sources=True, series=series,
         median_reaction_speedup=statistics.median(row['reaction_median_speedup'] for row in series),
-        median_service_dispatch_speedup=statistics.median(row['service_dispatch_speedup'] for row in series),
+        median_service_dispatch_speedup=statistics.median(row['service_dispatch_speedup'] for row in series) if mode == 'control' else None,
         limit='Real Engine.run, event receipt/backpressure, Root features, four real Tournament candidates and guarded Control Executor to an HA stub. Root action/confidence is deterministic. Excludes shipped outer observers, HA network, physical ACK, Pi microSD and concurrent checkpoint I/O; not a device latency forecast.')
 
 
@@ -196,6 +230,8 @@ if __name__ == '__main__':
     parser.add_argument('--source-root', type=Path, default=ROOT)
     parser.add_argument('--baseline-root', type=Path)
     parser.add_argument('--events', type=int, default=24)
+    parser.add_argument('--observer-delay-ms', type=int, default=0, help='controlled optional observer I/O wait; force each observation when nonzero')
+    parser.add_argument('--mode', choices=('control','shadow'), default='control')
     parser.add_argument('--continuous', action='store_true', help='inject each next real event at the preceding Executor return')
     parser.add_argument('--pressure', action='store_true', help='real SQLite quota pause before dispatched sensor events')
     parser.add_argument('--recovery', action='store_true', help='run actual background cleanup concurrently with sensor decisions; requires --one --pressure')
@@ -204,4 +240,4 @@ if __name__ == '__main__':
         parser.error('at least four events and baseline-root required (except --one)')
     if args.recovery and (not args.one or not args.pressure):
         parser.error('--recovery requires --one --pressure')
-    print(json.dumps(one(args.source_root.resolve(), args.events, args.continuous, args.pressure, args.recovery) if args.one else paired(args.baseline_root.resolve(), args.events, args.continuous, args.pressure), indent=None if args.one else 2))
+    print(json.dumps(one(args.source_root.resolve(), args.events, args.continuous, args.pressure, args.recovery, args.observer_delay_ms, args.mode) if args.one else paired(args.baseline_root.resolve(), args.events, args.continuous, args.pressure, args.observer_delay_ms, args.mode), indent=None if args.one else 2))

@@ -16,7 +16,7 @@ import json
 import pickle
 import math
 import threading
-import time
+from tournament_observation_clock import time
 from contextlib import nullcontext
 from collections import OrderedDict
 
@@ -36,6 +36,7 @@ from storage_budget import StorageRetry, storage_status
 from shadow_model_json import shadow_model_json
 from shadow_model_snapshot import freeze_shadow_model, snapshot_json, ShadowModelSnapshot
 from shadow_observation_scheduler import ShadowObservationScheduler, realtime_pending
+from tournament_observation_queue import EngineObservationView, DeferredTournamentObservations
 
 
 SHADOW_MODEL_VERSION = 1
@@ -47,7 +48,8 @@ class ContextTournament:
 
     def __init__(self, store, engine):
         self.store = store
-        self.engine = engine
+        self.engine = EngineObservationView(engine)
+        self._deferred_observations = DeferredTournamentObservations(self)
         self.lock = threading.RLock()
         self._cache = {}
         self._runtime_fingerprints = {}
@@ -519,6 +521,7 @@ class ContextTournament:
         if callable(getter):
             result["observation_pool_cache"] = getter()
         result['observation_scheduler'] = self._observation_scheduler.snapshot()
+        result['deferred_observations'] = self._deferred_observations.snapshot()
         return result
 
     def _save_shadow_model(self, agent_id, challenger, model):
@@ -778,6 +781,7 @@ def install(store, engine):
         # Production inference/control runs first and remains entirely authoritative.
         # Shadow evaluation only reads its resulting champion prediction afterwards.
         tid = threading.get_ident()
+        previous_inference = ((getattr(engine, 'runtime', {}) or {}).get(str(agent['id'])) or {}).get('last_inference_ts')
         with service._foreground_lock:
             service._foreground_threads.add(tid)
         try:
@@ -789,14 +793,17 @@ def install(store, engine):
         # Direct observer/API calls retain their explicit, immediate behavior.
         # Engine target workers own this revision binding for realtime and timers.
         dispatched = getattr(getattr(engine, '_inference_tls', None), 'state_revision', None) is not None
+        deferred = dispatched and getattr(engine, 'stop_event', None) is not None
+        completed_inference = ((getattr(engine, 'runtime', {}) or {}).get(str(agent['id'])) or {}).get('last_inference_ts')
         if dispatched:
-            try:
-                if service.storage_observation_gate(agent):
-                    TELEMETRY.inc('context_shadow_storage_skips')
+            if not deferred:
+                try:
+                    if service.storage_observation_gate(agent):
+                        TELEMETRY.inc('context_shadow_storage_skips')
+                        return result
+                except Exception as exc:
+                    service.report_runtime_error(exc)
                     return result
-            except Exception as exc:
-                service.report_runtime_error(exc)
-                return result
             with service._foreground_lock:
                 another_decision = bool(service._foreground_threads)
             ticket = service._observation_scheduler.admit(
@@ -806,12 +813,32 @@ def install(store, engine):
             if ticket is None:
                 TELEMETRY.inc('context_shadow_interval_skips')
                 return result
+            # A manual/held target transition can supply a valid future label even
+            # when Root deliberately keeps its previous decision. Stamp that new
+            # observation now; never assign it the old Root inference timestamp.
+            observation_ts = time.time() if completed_inference == previous_inference else None
+            if deferred and service._deferred_observations.submit(
+                    agent, state_map, changed_entities, ticket, timestamp=observation_ts):
+                return result
+            if deferred:
+                service._deferred_observations.run_synchronous(agent, state_map, changed_entities, ticket)
+                return result
+        with service._deferred_observations.observation_lock:
+            execute_observation(agent, state_map, changed_entities, ticket)
+        return result
+
+    def execute_observation(agent, state_map, changed_entities=None, ticket=None):
         started = time.perf_counter()
         trace = (RUNTIME_DEBUG.begin(
             "context_shadow_observation", agent_id=str(agent["id"])
         ) if RUNTIME_DEBUG.enabled else None)
         status = "ok"
         try:
+            if (ticket is not None and getattr(engine, 'stop_event', None) is not None
+                    and service.storage_observation_gate(agent)):
+                TELEMETRY.inc('context_shadow_storage_skips')
+                status = 'storage_gap'
+                return False
             session = getattr(store, "connection_session", None)
             census = getattr(service, "observation_pool_scope", None)
             history_frame = getattr(service, 'schema_history_frame', None)
@@ -829,7 +856,9 @@ def install(store, engine):
             service._observation_scheduler.finish(ticket, success=status == 'ok')
             TELEMETRY.observe("context_shadow_observation", (time.perf_counter() - started) * 1000)
             RUNTIME_DEBUG.end(trace, status=status)
-        return result
+        return status == 'ok'
+
+    service._execute_observation = execute_observation
 
     engine.policy = policy_with_tournament
     engine.runtime_for = runtime_with_tournament

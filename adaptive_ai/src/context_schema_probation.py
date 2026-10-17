@@ -21,7 +21,7 @@ Shadow, marks the schema-history row ``rolled_back`` and emits
 import json
 import math
 import threading
-import time
+from tournament_observation_clock import time
 
 from context import action_values, target_value
 from context_tournament_metrics import metric_row

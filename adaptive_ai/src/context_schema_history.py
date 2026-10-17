@@ -12,7 +12,7 @@ calls Executor, or invokes Home Assistant services.
 """
 import json
 import math
-import time
+from tournament_observation_clock import time
 import copy
 import threading
 from contextlib import contextmanager
