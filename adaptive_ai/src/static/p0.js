@@ -100,7 +100,11 @@
     if(training==='needs_retrain') return ['waiting','Needs training','Policy/model contract changed. Press Train to rebuild; Shadow resumes automatically when training completes.'];
     if(training==='waiting') return ['waiting','Ready to train','Training has not started yet.'];
     if(training==='paused'&&a.mode==='paused') return ['paused','Paused','This agent is not making decisions.'];
-    if(a.mode==='shadow') return ['shadow','Observing','Shadow calculates decisions but sends no Home Assistant services.'];
+    if(a.mode==='shadow') {
+      if(r.current_newer_than_decision)return ['waiting','Updating decision','Current changed; showing the last completed Shadow decision.'];
+      if(r.fast_off_confirmation_active)return ['shadow','Confirming OFF',`The policy proposed OFF; confirming ${Number(r.fast_off_confirmation_elapsed||0).toFixed(1)} / ${Number(r.fast_off_confirmation_required||0).toFixed(1)} s.`];
+      return ['shadow','Observing','Shadow calculates decisions but sends no Home Assistant services.'];
+    }
     if(a.control_review && !a.control_review.ready) return ['waiting','Control review required',controlBlockReason(a)];
     if(a.control_qualification && !a.control_qualification.passed) return ['waiting','More validation required',controlBlockReason(a)];
     if(state==='error'||/^(service|takeover|unavailable|limits):/.test(reason)) return ['error','Problem',reason.replace(/^[^:]+:\s*/, '')||'Control path failed.'];

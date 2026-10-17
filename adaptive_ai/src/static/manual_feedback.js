@@ -2,7 +2,7 @@
 (()=>{
   const dialog=document.createElement('dialog');dialog.id='teachDialog';document.body.append(dialog);
   const busy=new Set(),liveValues=new Map();
-  let selectedAgent=null,range=null,chartData=null,selectedPoint=null,chartRequest=0,pointRequest=0,liveBusy=false,chartLoading=false,chartPending=false,teachPoll=0;
+  let selectedAgent=null,range=null,chartData=null,selectedPoint=null,chartRequest=0,pointRequest=0,liveBusy=false,chartLoading=false,chartPending=false,teachPoll=0,liveRevision=null,liveReactive=false;
   const api=async(path,opts={})=>{
     const response=await fetch(path,{headers:{'Content-Type':'application/json'},...opts});
     const body=await response.json();if(!response.ok)throw Error(body.error||`HTTP ${response.status}`);return body;
@@ -23,7 +23,10 @@
     if(window.__adaptiveAiUiReady===false||liveBusy||document.hidden||window.__adaptiveAiRuntimeReady===false)return;
     liveBusy=true;const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),2500);
     try{
-      const data=await api('api/live'+(!lastAgents.length?'?bootstrap=1':''),{signal:controller.signal});
+      const path='api/live'+(!lastAgents.length?'?bootstrap=1':liveRevision?'?after='+encodeURIComponent(liveRevision)+'&wait_ms=1500':'');
+      const data=await api(path,{signal:controller.signal});
+      liveRevision=typeof data.revision==='string'?data.revision:null;
+      liveReactive=liveRevision!==null&&data.reactive!==false;
       liveValues.clear();
       // Keep the complete runtime snapshot. Current, Desired, categorical Desired label
       // and Confidence are all live card values; none should fall back to the heavy status poll.
@@ -44,11 +47,13 @@
         tileText(card,'current',currentValue(a));
         tileText(card,'desired',prediction(a));
         tileText(card,'confidence',liveConfidence(a));
+        // Refresh the explanation alongside Desired, without rebuilding the card.
+        if(typeof window.updateAgentLive==='function')window.updateAgentLive(card,a);
       });
-    }catch(_){/* Heavy diagnostics keep their own connection indicator; next lightweight poll retries. */}
+    }catch(_){liveReactive=false;/* Heavy diagnostics keep their own connection indicator; next lightweight poll retries. */}
     finally{clearTimeout(timer);liveBusy=false;}
   }
-  async function liveLoop(){const started=performance.now();await refreshLive();setTimeout(liveLoop,Math.max(100,500-(performance.now()-started)));}
+  async function liveLoop(){const started=performance.now();await refreshLive();if(liveReactive&&!document.hidden)setTimeout(liveLoop,100);else setTimeout(liveLoop,Math.max(100,500-(performance.now()-started)));}
   document.addEventListener('visibilitychange',()=>{if(!document.hidden)refreshLive();});
   if(window.whenAdaptiveUiReady)window.whenAdaptiveUiReady(liveLoop);
   else liveLoop();

@@ -237,6 +237,8 @@ class Engine(threading.Thread):
         super().__init__(name="adaptive-ai-engine")
         self.stop_event = threading.Event()
         self.wake_event = threading.Event()
+        from live_card_updates import LiveCardUpdates
+        self.live_card_updates = LiveCardUpdates()
         # Startup gate: initial HA snapshot/registry work may touch thousands of states.
         # Do not let the first all-agent inference burst compete with Ingress before the
         # runtime has finished composing and the UI readiness endpoint is available.
@@ -281,6 +283,7 @@ class Engine(threading.Thread):
         # subset. UI/status needs paused/waiting agents too; event dispatch must only see
         # policies that are currently eligible to infer.
         self.all_agent_configs = {}
+        self.live_card_targets = frozenset()
         self.agent_configs = {}
         self.active_agents_by_target = {}
         self.dependency_agents = {}
@@ -646,6 +649,9 @@ class Engine(threading.Thread):
         # A state transition can be the precursor to an action; wake inference now instead
         # of waiting for a whole-state REST poll.
         self.wake_event.set()
+        updates = getattr(self, 'live_card_updates', None)
+        if updates is not None and entity_id in getattr(self, 'live_card_targets', ()):
+            updates.publish()
 
     def _compact_attrs(self, st):
         attrs = st.get("attributes") or {}
@@ -1387,6 +1393,7 @@ class Engine(threading.Thread):
         removed = previous_active - set(active)
         with self.lock:
             self.all_agent_configs = all_configs
+            self.live_card_targets = frozenset(str(a.get('target_entity') or '') for a in all_configs.values())
             self.agent_configs = active
             self.active_agents_by_target = by_target
             self.dependency_agents = dependency_agents
@@ -2220,6 +2227,20 @@ class Engine(threading.Thread):
             ))
         rt['last_intent'] = intent.export()
         rt['behavior_summary'] = self.behavior_summary(agent, rt)
+        # Publish one complete, detached decision record before optional observers.
+        # Current remains the independently observed physical state in /api/live.
+        live_decision = {
+            key: rt.get(key) for key in (
+                'last_prediction', 'last_confidence', 'last_inference_ts', 'teaching_id',
+                'decision_source', 'fast_off_confirmation_active',
+                'fast_off_confirmation_elapsed', 'fast_off_confirmation_required',
+            )
+        }
+        live_decision.update(decision_ready_ts=now_ts(), decision_target_revision=target_revision)
+        rt['_live_decision'] = live_decision
+        updates = getattr(self, 'live_card_updates', None)
+        if updates is not None:
+            updates.publish()
         trace_stage("post_predict", post_predict_started, decision_source=str(decision_source))
         observe_elapsed(self, "live_inference_total", inference_started_ns)
         TELEMETRY.observe('inference', (time.perf_counter()-inference_started)*1000)

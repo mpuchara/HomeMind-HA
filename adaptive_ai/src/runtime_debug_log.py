@@ -188,6 +188,8 @@ class RuntimeDebugLogService:
                 "registry_refresh": registry_refresh,
                 "context_persistence": context_persistence,
                 "deferred_persistence": deferred_persistence,
+                "live_cards": (engine.live_card_updates.snapshot()
+                               if getattr(engine, 'live_card_updates', None) is not None else {}),
             },
             "history": self._history_status(),
             "sqlite": sqlite_status,
@@ -256,6 +258,7 @@ class RuntimeDebugLogService:
                 "correct_history_stage_trace": True,
                 "training_queue_recent_transition_limit": 50,
                 "api_live_snapshot_timing": True,
+                "live_card_delivery": "bounded RAM revision wait; live_card_snapshot separates idle wait from snapshot cost",
                 "ha_state_subscription_confirmation_required": True,
                 "generation_correct_history_installed": bool(
                     getattr(self.manager, "_correct_generation_history_installed", False)

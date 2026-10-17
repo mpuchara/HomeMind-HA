@@ -1,0 +1,165 @@
+{
+  "synthetic": true,
+  "independent_sources": true,
+  "series": [
+    {
+      "before": {
+        "events": 6,
+        "publication_to_http_median_ms": 451.0115705000146,
+        "publication_to_http_p95_ms": 451.19754899997133,
+        "decision_values_sha256": "30a275477d20eff2c21a5122742ebcccb8556505fccf2ba10fe2fd484b46ad0a",
+        "root_policy_calls": 24,
+        "generation_reads": 24,
+        "worker_passes": 24,
+        "sqlite_page_cache": {
+          "active": true,
+          "configured_mb": 256,
+          "effective_mb": 256,
+          "cache_target_mb": 0,
+          "idle": 0,
+          "leased": 0,
+          "hits": 0,
+          "misses": 0,
+          "bypasses": 0,
+          "discards": 0,
+          "max_connections": 4,
+          "mmap_mb": 0
+        },
+        "ha_calls": 0,
+        "limit": "Localhost API response after deterministic ready-decision publication at a fixed 50ms phase. Excludes model computation, browser/Ingress/HA network and physical ACK. Existing bounded cache only."
+      },
+      "after": {
+        "events": 6,
+        "publication_to_http_median_ms": 0.7397850000074868,
+        "publication_to_http_p95_ms": 0.8629220000102578,
+        "decision_values_sha256": "30a275477d20eff2c21a5122742ebcccb8556505fccf2ba10fe2fd484b46ad0a",
+        "root_policy_calls": 24,
+        "generation_reads": 1,
+        "worker_passes": 24,
+        "sqlite_page_cache": {
+          "active": true,
+          "configured_mb": 256,
+          "effective_mb": 256,
+          "cache_target_mb": 64,
+          "idle": 1,
+          "leased": 0,
+          "hits": 23,
+          "misses": 1,
+          "bypasses": 0,
+          "discards": 0,
+          "max_connections": 4,
+          "mmap_mb": 0
+        },
+        "ha_calls": 0,
+        "limit": "Localhost API response after deterministic ready-decision publication at a fixed 50ms phase. Excludes model computation, browser/Ingress/HA network and physical ACK. Existing bounded cache only."
+      }
+    },
+    {
+      "after": {
+        "events": 6,
+        "publication_to_http_median_ms": 0.7895139999902767,
+        "publication_to_http_p95_ms": 0.9051399999862042,
+        "decision_values_sha256": "30a275477d20eff2c21a5122742ebcccb8556505fccf2ba10fe2fd484b46ad0a",
+        "root_policy_calls": 24,
+        "generation_reads": 1,
+        "worker_passes": 24,
+        "sqlite_page_cache": {
+          "active": true,
+          "configured_mb": 256,
+          "effective_mb": 256,
+          "cache_target_mb": 64,
+          "idle": 1,
+          "leased": 0,
+          "hits": 23,
+          "misses": 1,
+          "bypasses": 0,
+          "discards": 0,
+          "max_connections": 4,
+          "mmap_mb": 0
+        },
+        "ha_calls": 0,
+        "limit": "Localhost API response after deterministic ready-decision publication at a fixed 50ms phase. Excludes model computation, browser/Ingress/HA network and physical ACK. Existing bounded cache only."
+      },
+      "before": {
+        "events": 6,
+        "publication_to_http_median_ms": 451.0655830000019,
+        "publication_to_http_p95_ms": 451.070733999984,
+        "decision_values_sha256": "30a275477d20eff2c21a5122742ebcccb8556505fccf2ba10fe2fd484b46ad0a",
+        "root_policy_calls": 24,
+        "generation_reads": 24,
+        "worker_passes": 24,
+        "sqlite_page_cache": {
+          "active": true,
+          "configured_mb": 256,
+          "effective_mb": 256,
+          "cache_target_mb": 0,
+          "idle": 0,
+          "leased": 0,
+          "hits": 0,
+          "misses": 0,
+          "bypasses": 0,
+          "discards": 0,
+          "max_connections": 4,
+          "mmap_mb": 0
+        },
+        "ha_calls": 0,
+        "limit": "Localhost API response after deterministic ready-decision publication at a fixed 50ms phase. Excludes model computation, browser/Ingress/HA network and physical ACK. Existing bounded cache only."
+      }
+    },
+    {
+      "before": {
+        "events": 6,
+        "publication_to_http_median_ms": 451.0915139999838,
+        "publication_to_http_p95_ms": 451.2057989999789,
+        "decision_values_sha256": "30a275477d20eff2c21a5122742ebcccb8556505fccf2ba10fe2fd484b46ad0a",
+        "root_policy_calls": 24,
+        "generation_reads": 24,
+        "worker_passes": 24,
+        "sqlite_page_cache": {
+          "active": true,
+          "configured_mb": 256,
+          "effective_mb": 256,
+          "cache_target_mb": 0,
+          "idle": 0,
+          "leased": 0,
+          "hits": 0,
+          "misses": 0,
+          "bypasses": 0,
+          "discards": 0,
+          "max_connections": 4,
+          "mmap_mb": 0
+        },
+        "ha_calls": 0,
+        "limit": "Localhost API response after deterministic ready-decision publication at a fixed 50ms phase. Excludes model computation, browser/Ingress/HA network and physical ACK. Existing bounded cache only."
+      },
+      "after": {
+        "events": 6,
+        "publication_to_http_median_ms": 0.6346859999837307,
+        "publication_to_http_p95_ms": 0.6973960000209445,
+        "decision_values_sha256": "30a275477d20eff2c21a5122742ebcccb8556505fccf2ba10fe2fd484b46ad0a",
+        "root_policy_calls": 24,
+        "generation_reads": 1,
+        "worker_passes": 24,
+        "sqlite_page_cache": {
+          "active": true,
+          "configured_mb": 256,
+          "effective_mb": 256,
+          "cache_target_mb": 64,
+          "idle": 1,
+          "leased": 0,
+          "hits": 23,
+          "misses": 1,
+          "bypasses": 0,
+          "discards": 0,
+          "max_connections": 4,
+          "mmap_mb": 0
+        },
+        "ha_calls": 0,
+        "limit": "Localhost API response after deterministic ready-decision publication at a fixed 50ms phase. Excludes model computation, browser/Ingress/HA network and physical ACK. Existing bounded cache only."
+      }
+    }
+  ],
+  "median_before_ms": 451.0655830000019,
+  "median_after_ms": 0.7397850000074868,
+  "limit": "Localhost API response after deterministic ready-decision publication at a fixed 50ms phase. Excludes model computation, browser/Ingress/HA network and physical ACK. Existing bounded cache only."
+}

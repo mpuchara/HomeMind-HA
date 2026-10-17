@@ -1218,6 +1218,50 @@ class AgentCandidateManager(threading.Thread):
         with self.store.lock, self.store.conn() as c:
             c.execute("DELETE FROM agent_generation_backups WHERE expires_ts<?", (time.time(),))
 
+    def _worker_maintenance_pass(self):
+        changed = False
+        try:
+            rows = self._all_rows()
+        except Exception as exc:
+            self._record_worker_error("list_candidates", exc)
+            rows = []
+
+        for row in rows:
+            state = str(row.get("state") or "queued")
+            trace = (
+                RUNTIME_DEBUG.begin(
+                    "candidate_lifecycle",
+                    parent_agent_id=str(row.get("parent_agent_id") or ""),
+                    candidate_id=str(row.get("candidate_id") or ""),
+                    state=state,
+                    reason=str(row.get("reason") or ""),
+                )
+                if RUNTIME_DEBUG.enabled else None
+            )
+            try:
+                if state == "queued":
+                    changed = self._start_build(row) or changed
+                elif state == "building":
+                    changed = self._finish_build_if_ready(row) or changed
+                elif state == "discarding":
+                    changed = self._finish_build_if_ready(row) or changed
+                RUNTIME_DEBUG.end(trace, status="ok")
+            except Exception as exc:
+                RUNTIME_DEBUG.end(
+                    trace, status="error",
+                    error=f"{type(exc).__name__}: {exc}",
+                )
+                # One malformed/stale Candidate must never kill the scheduler for all
+                # remaining generations. The row stays durable and is retried.
+                self._record_worker_error("candidate_lifecycle", exc, row)
+
+        try:
+            self._maintenance()
+        except Exception as exc:
+            self._record_worker_error("maintenance", exc)
+
+        return changed
+
     def _worker_loop(self):
         while not self.stop_event.is_set():
             # Consume the previous wake before inspecting queues. Clearing after
@@ -1227,44 +1271,13 @@ class AgentCandidateManager(threading.Thread):
                 self._worker_heartbeat_ts = time.time()
             changed = False
             try:
-                rows = self._all_rows()
+                # Reuse the existing bounded page-cache budget for worker reads.
+                # Every nested conn() still commits/rolls back independently;
+                # the lease is returned before the worker waits for more events.
+                with self.store.inference_connection_session():
+                    changed = self._worker_maintenance_pass()
             except Exception as exc:
-                self._record_worker_error("list_candidates", exc)
-                rows = []
-
-            for row in rows:
-                state = str(row.get("state") or "queued")
-                trace = (
-                    RUNTIME_DEBUG.begin(
-                        "candidate_lifecycle",
-                        parent_agent_id=str(row.get("parent_agent_id") or ""),
-                        candidate_id=str(row.get("candidate_id") or ""),
-                        state=state,
-                        reason=str(row.get("reason") or ""),
-                    )
-                    if RUNTIME_DEBUG.enabled else None
-                )
-                try:
-                    if state == "queued":
-                        changed = self._start_build(row) or changed
-                    elif state == "building":
-                        changed = self._finish_build_if_ready(row) or changed
-                    elif state == "discarding":
-                        changed = self._finish_build_if_ready(row) or changed
-                    RUNTIME_DEBUG.end(trace, status="ok")
-                except Exception as exc:
-                    RUNTIME_DEBUG.end(
-                        trace, status="error",
-                        error=f"{type(exc).__name__}: {exc}",
-                    )
-                    # One malformed/stale Candidate must never kill the scheduler for all
-                    # remaining generations. The row stays durable and is retried.
-                    self._record_worker_error("candidate_lifecycle", exc, row)
-
-            try:
-                self._maintenance()
-            except Exception as exc:
-                self._record_worker_error("maintenance", exc)
+                self._record_worker_error("candidate_worker_session", exc)
 
             with self._worker_health_lock:
                 self._worker_heartbeat_ts = time.time()
