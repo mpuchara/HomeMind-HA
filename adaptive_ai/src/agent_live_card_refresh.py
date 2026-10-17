@@ -35,6 +35,10 @@ def live_agent_payload(core, *, include_configs=False):
     # never hit SQLite merely to refresh Current / Desired / Confidence tiles.
     core.ENGINE._refresh_agent_index()
     now = time.time()
+    updates = getattr(core.ENGINE, 'live_card_updates', None)
+    # Capture before the snapshot: a newer notification can cause a harmless
+    # duplicate read, but can never be acknowledged without its decision data.
+    revision = updates.token() if updates is not None else None
 
     # Snapshot configs and both maps under the same short lock. Building labels and JSON
     # happens afterwards so websocket state_changed handling is not delayed by HTTP clients.
@@ -48,9 +52,12 @@ def live_agent_payload(core, *, include_configs=False):
             for agent in agents
         }
         runtimes = {
-            str(agent["id"]): dict(core.ENGINE.runtime.get(agent["id"]) or {})
+            str(agent["id"]): dict((core.ENGINE.runtime.get(agent["id"]) or {}).get('_live_decision')
+                                  or core.ENGINE.runtime.get(agent["id"]) or {})
             for agent in agents
         }
+        target_revisions = {str(agent['id']): getattr(core.ENGINE, 'entity_revisions', {}).get(
+            agent['target_entity'], 0) for agent in agents}
 
     values = []
     for agent in agents:
@@ -78,12 +85,51 @@ def live_agent_payload(core, *, include_configs=False):
                 "last_inference_ts": _finite(runtime.get("last_inference_ts")),
                 "teaching_id": runtime.get("teaching_id"),
                 "live_snapshot_ts": now,
+                "decision_ready_ts": _finite(runtime.get('decision_ready_ts')),
+                "decision_source": runtime.get('decision_source'),
+                "current_newer_than_decision": (
+                    runtime.get('decision_target_revision') is not None
+                    and target_revisions[aid] != runtime['decision_target_revision']
+                ),
+                "fast_off_confirmation_active": bool(runtime.get('fast_off_confirmation_active')),
+                "fast_off_confirmation_elapsed": _finite(runtime.get('fast_off_confirmation_elapsed')),
+                "fast_off_confirmation_required": _finite(runtime.get('fast_off_confirmation_required')),
             }
         )
 
     payload = {"ts": now, "agents": values}
+    if revision is not None:
+        payload['revision'] = revision
     if include_configs:
         payload["configs"] = agents
+    return payload
+
+
+def live_request_payload(core, query):
+    from telemetry import RUNTIME_DEBUG
+    updates = getattr(getattr(core, 'ENGINE', None), 'live_card_updates', None)
+    started = time.perf_counter()
+    admitted = True
+    if updates is not None and query.get('after'):
+        try:
+            seconds = float((query.get('wait_ms') or ['1500'])[0]) / 1000.
+        except (ValueError, TypeError):
+            seconds = 0.
+        # No engine/Store lock or SQLite connection is held while waiting.
+        admitted = updates.wait(str(query['after'][0]), seconds)
+    ready = time.perf_counter()
+    include_configs = query.get('bootstrap') == ['1']
+    payload = core.live_agent_payload(include_configs=include_configs)
+    if not admitted:
+        payload['reactive'] = False
+    if RUNTIME_DEBUG.enabled:
+        RUNTIME_DEBUG.instant('live_card_snapshot',
+            wait_ms=round((ready-started)*1000, 3),
+            snapshot_ms=round((time.perf_counter()-ready)*1000, 3),
+            decisions=[{key: row.get(key) for key in (
+                'id', 'current_value', 'last_prediction', 'decision_ready_ts',
+                'current_newer_than_decision', 'fast_off_confirmation_active',
+            )} for row in (payload.get('agents') or [])[:16]])
     return payload
 
 
@@ -101,10 +147,9 @@ def install(core):
         if parsed.path == "/api/live":
             if not http.require_trusted_client() or not http.require_runtime():
                 return
-            include_configs = parse_qs(parsed.query).get("bootstrap") == ["1"]
             return http.send_json(
                 200,
-                live_agent_payload(core, include_configs=include_configs),
+                live_request_payload(core, parse_qs(parsed.query)),
             )
         return original_get(http)
 

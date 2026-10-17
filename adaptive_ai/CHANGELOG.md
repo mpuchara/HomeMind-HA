@@ -1,3 +1,10 @@
+## 0.14.213
+
+- Deliver main Current/Desired tiles with bounded RAM revision waits instead of adding the next 500ms poll interval after a ready decision. Publish one completed prediction record before optional observers; keep Current physical and independent.
+- Explain when Current changed after the displayed decision and when the existing statistical OFF confirmation is active. Preserve prediction values and confirmation safeguards.
+- Reuse the existing bounded SQLite page cache in Candidate worker passes, returning leases before idle waits and retaining independent fresh transactions. Avoid repeated generation lookups for already-instrumented Root policies.
+- Add separate live-card idle-wait/snapshot timing and notification diagnostics to runtime exports.
+
 ## 0.14.212
 
 - Wake passive Candidate Shadow at its pending observation deadline instead of waiting for the three-second idle poll. Preserve coalescing, realtime quiet time, heartbeat, storage admission and root deduplication.

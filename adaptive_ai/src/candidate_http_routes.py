@@ -84,9 +84,9 @@ def register_routes(registry, core, manager):
         return http.send_json(200, {"ts": time.time(), "candidates": values})
 
     def live(http, _params):
+        from agent_live_card_refresh import live_request_payload
         parsed = urlsplit(http.path)
-        include_configs = parse_qs(parsed.query).get("bootstrap") == ["1"]
-        payload = core.live_agent_payload(include_configs=include_configs)
+        payload = live_request_payload(core, parse_qs(parsed.query))
         return http.send_json(200, payload)
 
     def discard(http, params):

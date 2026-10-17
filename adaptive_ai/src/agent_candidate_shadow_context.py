@@ -37,9 +37,13 @@ def install(manager):
     def policy(agent):
         policy_obj = original_policy(agent)
         aid = str((agent or {}).get("id") or "")
-        if not aid or not _is_root_live(aid):
+        if not aid:
             return policy_obj
         if getattr(policy_obj, "_candidate_shadow_exact_context", False):
+            return policy_obj
+        # The installed feature wrapper belongs to this policy object. Warm Root
+        # calls need no second generation-table lookup merely to rediscover it.
+        if not _is_root_live(aid):
             return policy_obj
 
         original_features = policy_obj.features

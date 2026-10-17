@@ -1,0 +1,227 @@
+{
+  "exports": [
+    {
+      "file": "adaptive-ai-runtime-debug-20261017-161104.json",
+      "version": "0.14.212",
+      "generated_at": "2026-10-17T14:11:04.596261+00:00",
+      "rss_mb": 196.35546875,
+      "cpu_percent_recent": 59.627860891885135,
+      "storage_level": "normal",
+      "storage_percent": 70,
+      "event_to_decision": {
+        "avg_ms": 122.0129580289218,
+        "count": 5312,
+        "p95_ms": 259.874937008135,
+        "recent_count": 198,
+        "recent_p95_ms": 254.21105104032904
+      },
+      "candidate_event_to_decision": {
+        "avg_ms": 5770.251323435722,
+        "count": 7,
+        "p95_ms": 18925.458987010643,
+        "recent_count": 0,
+        "recent_p95_ms": null
+      },
+      "inference_stages": {
+        "policy_context": {
+          "count": 61,
+          "average_ms": 8.261459016393443,
+          "max_ms": 36.657
+        },
+        "feature_construction": {
+          "count": 61,
+          "average_ms": 36.66088524590164,
+          "max_ms": 125.16
+        },
+        "policy_predict": {
+          "count": 61,
+          "average_ms": 5.480852459016393,
+          "max_ms": 20.296
+        },
+        "post_predict": {
+          "count": 61,
+          "average_ms": 37.44455737704918,
+          "max_ms": 83.337
+        },
+        "executor_submit": {
+          "count": 61,
+          "average_ms": 0.026721311475409838,
+          "max_ms": 1.115
+        },
+        "executor_result": {
+          "count": 61,
+          "average_ms": 1.177327868852459,
+          "max_ms": 3.561
+        },
+        "pre_inference": {
+          "count": 60,
+          "average_ms": 0.74765,
+          "max_ms": 4.22
+        }
+      },
+      "sqlite_runtime_cache": {
+        "active": true,
+        "bypasses": 0,
+        "cache_target_mb": 128,
+        "configured_mb": 256,
+        "discards": 3,
+        "effective_mb": 256,
+        "hits": 5308,
+        "idle": 2,
+        "leased": 0,
+        "max_connections": 4,
+        "misses": 5,
+        "mmap_mb": 0
+      }
+    },
+    {
+      "file": "adaptive-ai-runtime-debug-20261017-161133.json",
+      "version": "0.14.212",
+      "generated_at": "2026-10-17T14:11:32.911358+00:00",
+      "rss_mb": 208.6328125,
+      "cpu_percent_recent": 64.3128309026336,
+      "storage_level": "normal",
+      "storage_percent": 70,
+      "event_to_decision": {
+        "avg_ms": 121.9607632843334,
+        "count": 5392,
+        "p95_ms": 235.65094103105366,
+        "recent_count": 188,
+        "recent_p95_ms": 269.38023196998984
+      },
+      "candidate_event_to_decision": {
+        "avg_ms": 5770.251323435722,
+        "count": 7,
+        "p95_ms": 18925.458987010643,
+        "recent_count": 0,
+        "recent_p95_ms": null
+      },
+      "inference_stages": {
+        "feature_construction": {
+          "count": 56,
+          "average_ms": 31.363214285714285,
+          "max_ms": 110.834
+        },
+        "policy_predict": {
+          "count": 56,
+          "average_ms": 4.638178571428571,
+          "max_ms": 13.068
+        },
+        "post_predict": {
+          "count": 56,
+          "average_ms": 41.964910714285715,
+          "max_ms": 276.108
+        },
+        "executor_submit": {
+          "count": 56,
+          "average_ms": 0.009053571428571428,
+          "max_ms": 0.123
+        },
+        "executor_result": {
+          "count": 56,
+          "average_ms": 1.1540178571428572,
+          "max_ms": 14.162
+        },
+        "pre_inference": {
+          "count": 55,
+          "average_ms": 0.5597818181818182,
+          "max_ms": 4.735
+        },
+        "policy_context": {
+          "count": 55,
+          "average_ms": 8.697109090909091,
+          "max_ms": 33.497
+        }
+      },
+      "sqlite_runtime_cache": {
+        "active": true,
+        "bypasses": 0,
+        "cache_target_mb": 128,
+        "configured_mb": 256,
+        "discards": 3,
+        "effective_mb": 256,
+        "hits": 5388,
+        "idle": 2,
+        "leased": 0,
+        "max_connections": 4,
+        "misses": 5,
+        "mmap_mb": 0
+      }
+    },
+    {
+      "file": "adaptive-ai-runtime-debug-20261017-161204.json",
+      "version": "0.14.212",
+      "generated_at": "2026-10-17T14:12:04.219629+00:00",
+      "rss_mb": 211.3359375,
+      "cpu_percent_recent": 81.41790573196947,
+      "storage_level": "normal",
+      "storage_percent": 70,
+      "event_to_decision": {
+        "avg_ms": 121.8145798234481,
+        "count": 5483,
+        "p95_ms": 236.05460405815393,
+        "recent_count": 173,
+        "recent_p95_ms": 237.72514308802783
+      },
+      "candidate_event_to_decision": {
+        "avg_ms": 5770.251323435722,
+        "count": 7,
+        "p95_ms": 18925.458987010643,
+        "recent_count": 0,
+        "recent_p95_ms": null
+      },
+      "inference_stages": {
+        "pre_inference": {
+          "count": 60,
+          "average_ms": 0.50445,
+          "max_ms": 2.977
+        },
+        "policy_context": {
+          "count": 60,
+          "average_ms": 8.2505,
+          "max_ms": 37.372
+        },
+        "feature_construction": {
+          "count": 59,
+          "average_ms": 31.92891525423729,
+          "max_ms": 76.992
+        },
+        "policy_predict": {
+          "count": 59,
+          "average_ms": 5.426915254237288,
+          "max_ms": 17.095
+        },
+        "post_predict": {
+          "count": 58,
+          "average_ms": 34.08886206896552,
+          "max_ms": 66.857
+        },
+        "executor_submit": {
+          "count": 58,
+          "average_ms": 0.0074482758620689656,
+          "max_ms": 0.015
+        },
+        "executor_result": {
+          "count": 58,
+          "average_ms": 1.0003620689655173,
+          "max_ms": 4.857
+        }
+      },
+      "sqlite_runtime_cache": {
+        "active": true,
+        "bypasses": 0,
+        "cache_target_mb": 128,
+        "configured_mb": 256,
+        "discards": 3,
+        "effective_mb": 256,
+        "hits": 5479,
+        "idle": 2,
+        "leased": 0,
+        "max_connections": 4,
+        "misses": 5,
+        "mmap_mb": 0
+      }
+    }
+  ],
+  "limitations": "No browser paint or ready-decision-to-tile measurement in these 0.14.212 exports. Historical Candidate samples are not recent; no fitted-model accuracy diagnosis."
+}
