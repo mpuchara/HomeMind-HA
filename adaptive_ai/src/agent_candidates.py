@@ -1220,6 +1220,9 @@ class AgentCandidateManager(threading.Thread):
 
     def _worker_loop(self):
         while not self.stop_event.is_set():
+            # Consume the previous wake before inspecting queues. Clearing after
+            # wait() loses a producer wake or a bounded drain's backlog signal.
+            self.wake_event.clear()
             with self._worker_health_lock:
                 self._worker_heartbeat_ts = time.time()
             changed = False
@@ -1265,8 +1268,16 @@ class AgentCandidateManager(threading.Thread):
 
             with self._worker_health_lock:
                 self._worker_heartbeat_ts = time.time()
-            self.wake_event.wait(self.poll_seconds if not changed else 0.05)
-            self.wake_event.clear()
+            wait_seconds = self.poll_seconds if not changed else 0.05
+            next_wake = getattr(self, "candidate_shadow_wait_seconds", None)
+            if callable(next_wake):
+                try:
+                    wait_seconds = min(wait_seconds, max(0.001, float(next_wake(wait_seconds))))
+                except Exception as exc:
+                    self._record_worker_error("candidate_shadow_deadline", exc)
+            if self.stop_event.is_set():
+                break
+            self.wake_event.wait(wait_seconds)
 
     def run(self):
         # The Candidate scheduler is product-critical. Keep the thread alive across

@@ -1,3 +1,10 @@
+## 0.14.212
+
+- Wake passive Candidate Shadow at its pending observation deadline instead of waiting for the three-second idle poll. Preserve coalescing, realtime quiet time, heartbeat, storage admission and root deduplication.
+- Preserve worker wake signals posted during maintenance, including bounded deferred-queue backlog.
+- Share bounded entity descriptors across Candidate generations within one causal observation. Retain separate policy predictions, semantic cache keys and frozen parent context; nothing is reused across events.
+- Reuse complete-label moments within each Sensor Tournament screening call with bit-exact statistical results and unchanged fresh-label learning.
+
 ## 0.14.211
 
 - Automatically reclaim disposable diagnostics in bounded background transactions. Start proactively at 85% database use, reclaim toward 80%, and preserve the existing 90% recording pause and configured storage allocation.

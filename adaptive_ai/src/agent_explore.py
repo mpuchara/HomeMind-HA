@@ -629,8 +629,8 @@ def _install_shadow_overlay():
         return
     base_predict = shadow_module._predict_candidate
 
-    def predict_candidate_with_targeted_explore(active_manager, generation, state_map, event_ts):
-        result = base_predict(active_manager, generation, state_map, event_ts)
+    def predict_candidate_with_targeted_explore(active_manager, generation, state_map, event_ts, **kwargs):
+        result = base_predict(active_manager, generation, state_map, event_ts, **kwargs)
         if not result:
             return result
         session = _session_for_child(active_manager.store, generation.get("generation_id"))

@@ -501,8 +501,8 @@ def _install_candidate_teaching_overlay(manager):
         return
     original = shadow_module._predict_candidate
 
-    def predict_with_teaching(active_manager, generation, state_map, event_ts):
-        result = original(active_manager, generation, state_map, event_ts)
+    def predict_with_teaching(active_manager, generation, state_map, event_ts, **kwargs):
+        result = original(active_manager, generation, state_map, event_ts, **kwargs)
         if not result:
             return result
         agent = active_manager.store.get_agent_config(str(generation.get("agent_id") or ""))

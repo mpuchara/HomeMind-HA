@@ -1,0 +1,29 @@
+{
+  "entrypoint": "adaptive_ai/src/trial_queue_main.py",
+  "health": {
+    "ok": true,
+    "ready": true,
+    "startup": {
+      "current_state_seconds": 0.0037510369999154136,
+      "elapsed_seconds": 0.278369665145874,
+      "error": null,
+      "message": "Adaptive AI runtime is ready",
+      "ready": true,
+      "started_at": 1792242294.9246645,
+      "state": "ready",
+      "step": 7,
+      "steps": 7,
+      "timings": {
+        "building_runtime": 0.1288,
+        "http_ready": 0.0959,
+        "http_starting": 0.0111,
+        "loading_runtime": 0.0135,
+        "reconciling_control": 0.0001,
+        "starting_engine": 0.0012,
+        "starting_history": 0.0234,
+        "starting_realtime": 0.0006
+      }
+    },
+    "version": "0.14.212"
+  }
+}

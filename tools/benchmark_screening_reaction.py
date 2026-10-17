@@ -116,7 +116,8 @@ def paired(baseline, passes):
         pair['screening_speedup'] = pair['before']['screening']['elapsed_ms'] / pair['after']['screening']['elapsed_ms']
         pair['observer_speedup'] = pair['before']['observer']['median_ms'] / pair['after']['observer']['median_ms']
         series.append(pair)
-    return dict(synthetic=True, source_paired=True, baseline='0.14.208', series=series,
+    return dict(synthetic=True, source_paired=True,
+        baseline=json.loads((baseline / 'adaptive_ai/BUILD_INFO.json').read_text(encoding='utf-8'))['version'], series=series,
         median_screening_speedup=statistics.median(x['screening_speedup'] for x in series),
         median_observer_speedup=statistics.median(x['observer_speedup'] for x in series),
         exact_screening_pool_predictions_and_learned_heads=True,

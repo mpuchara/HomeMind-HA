@@ -1,0 +1,179 @@
+{
+  "synthetic": true,
+  "source_paired": true,
+  "baseline": "0.14.211",
+  "series": [
+    {
+      "before": {
+        "screening": {
+          "elapsed_ms": 532.3799249999865,
+          "cpu_ms": 532.907951,
+          "evaluations": 1536,
+          "sha256": "5ae9d47936b096024ab102a2c85d23b91cbd51a7186ac545f2cfe75b45919610"
+        },
+        "observer": {
+          "median_ms": 110.66216550000263,
+          "total_ms": 1839.371048000089,
+          "cpu_ms": 3016.008605999999,
+          "observations": 16,
+          "pool_sensors": 96,
+          "examples_per_sensor": 96,
+          "challenger_policies": 4,
+          "fresh_labels_per_candidate": [
+            16,
+            16,
+            16,
+            16
+          ],
+          "pool_sha256": "c92892e4d8689e0bf702120b55034d53eb806f3c40cc4762a0e9a91eaddf1bc2",
+          "predictions_sha256": "664bbf5d1ce11119125cdc2aa8c6b5be237e03bdfc11a4e13f97957d34c684ca",
+          "learned_heads_sha256": "72ebd48b9d6e94f23cc71260b80f1142fb46d3c306aebd59678e480207fec57a"
+        }
+      },
+      "after": {
+        "screening": {
+          "elapsed_ms": 425.402116999976,
+          "cpu_ms": 425.773866,
+          "evaluations": 1536,
+          "sha256": "5ae9d47936b096024ab102a2c85d23b91cbd51a7186ac545f2cfe75b45919610"
+        },
+        "observer": {
+          "median_ms": 107.01958999999306,
+          "total_ms": 1808.443423999961,
+          "cpu_ms": 2886.417133,
+          "observations": 16,
+          "pool_sensors": 96,
+          "examples_per_sensor": 96,
+          "challenger_policies": 4,
+          "fresh_labels_per_candidate": [
+            16,
+            16,
+            16,
+            16
+          ],
+          "pool_sha256": "c92892e4d8689e0bf702120b55034d53eb806f3c40cc4762a0e9a91eaddf1bc2",
+          "predictions_sha256": "664bbf5d1ce11119125cdc2aa8c6b5be237e03bdfc11a4e13f97957d34c684ca",
+          "learned_heads_sha256": "72ebd48b9d6e94f23cc71260b80f1142fb46d3c306aebd59678e480207fec57a"
+        }
+      },
+      "screening_speedup": 1.2514745548387023,
+      "observer_speedup": 1.0340365301344343
+    },
+    {
+      "after": {
+        "screening": {
+          "elapsed_ms": 433.6401680000108,
+          "cpu_ms": 433.030106,
+          "evaluations": 1536,
+          "sha256": "5ae9d47936b096024ab102a2c85d23b91cbd51a7186ac545f2cfe75b45919610"
+        },
+        "observer": {
+          "median_ms": 103.63782750005157,
+          "total_ms": 1791.6399849999607,
+          "cpu_ms": 2999.562717999999,
+          "observations": 16,
+          "pool_sensors": 96,
+          "examples_per_sensor": 96,
+          "challenger_policies": 4,
+          "fresh_labels_per_candidate": [
+            16,
+            16,
+            16,
+            16
+          ],
+          "pool_sha256": "c92892e4d8689e0bf702120b55034d53eb806f3c40cc4762a0e9a91eaddf1bc2",
+          "predictions_sha256": "664bbf5d1ce11119125cdc2aa8c6b5be237e03bdfc11a4e13f97957d34c684ca",
+          "learned_heads_sha256": "72ebd48b9d6e94f23cc71260b80f1142fb46d3c306aebd59678e480207fec57a"
+        }
+      },
+      "before": {
+        "screening": {
+          "elapsed_ms": 520.8139979999942,
+          "cpu_ms": 520.2685899999999,
+          "evaluations": 1536,
+          "sha256": "5ae9d47936b096024ab102a2c85d23b91cbd51a7186ac545f2cfe75b45919610"
+        },
+        "observer": {
+          "median_ms": 103.87512049999259,
+          "total_ms": 1745.9076839996897,
+          "cpu_ms": 2859.9647219999997,
+          "observations": 16,
+          "pool_sensors": 96,
+          "examples_per_sensor": 96,
+          "challenger_policies": 4,
+          "fresh_labels_per_candidate": [
+            16,
+            16,
+            16,
+            16
+          ],
+          "pool_sha256": "c92892e4d8689e0bf702120b55034d53eb806f3c40cc4762a0e9a91eaddf1bc2",
+          "predictions_sha256": "664bbf5d1ce11119125cdc2aa8c6b5be237e03bdfc11a4e13f97957d34c684ca",
+          "learned_heads_sha256": "72ebd48b9d6e94f23cc71260b80f1142fb46d3c306aebd59678e480207fec57a"
+        }
+      },
+      "screening_speedup": 1.2010280329934315,
+      "observer_speedup": 1.0022896369565533
+    },
+    {
+      "before": {
+        "screening": {
+          "elapsed_ms": 527.8997269999763,
+          "cpu_ms": 527.986972,
+          "evaluations": 1536,
+          "sha256": "5ae9d47936b096024ab102a2c85d23b91cbd51a7186ac545f2cfe75b45919610"
+        },
+        "observer": {
+          "median_ms": 100.85761850001518,
+          "total_ms": 1743.3684270001777,
+          "cpu_ms": 2928.147952,
+          "observations": 16,
+          "pool_sensors": 96,
+          "examples_per_sensor": 96,
+          "challenger_policies": 4,
+          "fresh_labels_per_candidate": [
+            16,
+            16,
+            16,
+            16
+          ],
+          "pool_sha256": "c92892e4d8689e0bf702120b55034d53eb806f3c40cc4762a0e9a91eaddf1bc2",
+          "predictions_sha256": "664bbf5d1ce11119125cdc2aa8c6b5be237e03bdfc11a4e13f97957d34c684ca",
+          "learned_heads_sha256": "72ebd48b9d6e94f23cc71260b80f1142fb46d3c306aebd59678e480207fec57a"
+        }
+      },
+      "after": {
+        "screening": {
+          "elapsed_ms": 415.434919000063,
+          "cpu_ms": 415.00491500000004,
+          "evaluations": 1536,
+          "sha256": "5ae9d47936b096024ab102a2c85d23b91cbd51a7186ac545f2cfe75b45919610"
+        },
+        "observer": {
+          "median_ms": 99.28938649994734,
+          "total_ms": 1786.0252799997625,
+          "cpu_ms": 2930.1535310000004,
+          "observations": 16,
+          "pool_sensors": 96,
+          "examples_per_sensor": 96,
+          "challenger_policies": 4,
+          "fresh_labels_per_candidate": [
+            16,
+            16,
+            16,
+            16
+          ],
+          "pool_sha256": "c92892e4d8689e0bf702120b55034d53eb806f3c40cc4762a0e9a91eaddf1bc2",
+          "predictions_sha256": "664bbf5d1ce11119125cdc2aa8c6b5be237e03bdfc11a4e13f97957d34c684ca",
+          "learned_heads_sha256": "72ebd48b9d6e94f23cc71260b80f1142fb46d3c306aebd59678e480207fec57a"
+        }
+      },
+      "screening_speedup": 1.270715827813926,
+      "observer_speedup": 1.0157945582639758
+    }
+  ],
+  "median_screening_speedup": 1.2514745548387023,
+  "median_observer_speedup": 1.0157945582639758,
+  "exact_screening_pool_predictions_and_learned_heads": true,
+  "limit": "Real synchronous Tournament observer with 96 sensors, 96 retained examples and four candidate policies. Models, fresh target labels, full checksum checks and SQLite persistence use production code. Excludes HA ingress, the outer shipped observer composition, network, physical ACK and Pi SD I/O; measures worker occupancy after the authoritative decision, not physical-device latency."
+}
