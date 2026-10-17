@@ -1,9 +1,9 @@
 {
-  "version": "0.14.214",
+  "version": "0.14.215",
   "release_date": "2026-10-17",
-  "base_version": "0.14.213",
-  "base_commit": "b529bbd09aef665987db323aba9001e2d2c2762b",
-  "release_status": "tournament-background-reaction-local-validation-complete",
+  "base_version": "0.14.214",
+  "base_commit": "5e6fd19518ba09449c923714cd9b144dc137e1bb",
+  "release_status": "isolated-runtime-compute-validation-complete",
   "release_014140": {
     "scope": "inventory_and_remove_remaining_shipped_feature_Handler_fallbacks_for_Candidate_Live_and_manual_feedback_transport",
     "explicit_routes": "manual_feedback.js, candidate_ui.js, candidate_preference_ui.js, /api/candidates, Candidate Teach-RL status/train, generation history/comparison, /api/candidate-live, /api/live and Candidate discard",
@@ -3009,5 +3009,22 @@
       "shadow_after": 5.558
     },
     "controlled_wait_ms": 100
+  },
+  "release_014215": {
+    "scope": "separate optional JSON/classifier CPU from realtime Python; reusable causal history snapshots and shorter live locks",
+    "new_regression_tests": 10,
+    "tests_expected": 2589,
+    "validation_report": "docs/benchmarks/COMPUTE_ISOLATION_0_14_215_VALIDATION.json",
+    "limitations": "User reports deployed 0.14.214 latency; no fresh 0.14.214 trace available. Host contention and exact result tests are not Pi or HA physical ACK evidence.",
+    "tests_passed": 2589,
+    "tested_source_files": 597,
+    "validation": "2589 Linux tests OK without skips; three alternating independent-source Control/Shadow CPU-contention pairs with identical decisions; complete causal capture and learned-head parity; actual Candidate bundle/passive worker; low-RAM rejection; Control/GC; ready entrypoint; production JS VM; compileall and all 21 JS scripts",
+    "host_cpu_contention_p95_ms": {
+      "control_before": 100.704558,
+      "control_after": 14.426857,
+      "root_shadow_before": 36.786147,
+      "root_shadow_after": 6.92789
+    },
+    "warm_history_capture_speedup": 2.791678
   }
 }

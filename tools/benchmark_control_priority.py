@@ -1,6 +1,6 @@
 """Real Engine event queue, candidate observer and guarded Control dispatch to an HA stub."""
 import argparse
-from contextlib import ExitStack
+from contextlib import ExitStack, nullcontext
 from datetime import datetime, timezone
 import hashlib
 import json
@@ -17,7 +17,7 @@ from unittest.mock import patch
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def one(source, events=24, continuous=False, pressure=False, recovery=False, observer_delay_ms=0, mode="control"):
+def one(source, events=24, continuous=False, pressure=False, recovery=False, observer_delay_ms=0, mode="control", cpu_load=False):
     scratch = tempfile.TemporaryDirectory(prefix='control-priority-global-')
     os.environ['ADAPTIVE_AI_DATA'] = scratch.name
     sys.path[:0] = [str(source / 'adaptive_ai/src'), str(source / 'tests'), str(source / 'tools'), str(source)]
@@ -107,6 +107,47 @@ def one(source, events=24, continuous=False, pressure=False, recovery=False, obs
                 return root_predict(features)
             return original_predict.__func__(policy, features)
         stack.enter_context(patch.object(type(fixture.live), 'predict', new=predict_fixture))
+        load_stop, load_entered = threading.Event(), threading.Event()
+        load_stats = dict(passes=0, errors=[])
+        load_thread = None
+        try:
+            from runtime_background_compute import background_compute_scope, COMPUTE
+            stack.callback(COMPUTE.close)
+        except ImportError:
+            background_compute_scope = nullcontext
+        if cpu_load:
+            from benchmark_classifier_fit import fixture as classifier_fixture
+            policies = []
+            for _ in range(4):
+                model = type(fixture.live)(agent, fixture.states, runtime.entity_registry,
+                    set(), model=fixture.live.serialize(), context_engine=fixture.home)
+                model.heads[min(model.heads)].state_classifier = classifier_fixture(
+                    dims=model.dims, varying=76, rows=128)
+                policies.append(model)
+            # Load NumPy and the child before measuring the next-event burst.
+            with background_compute_scope():
+                for model in policies:
+                    model.heads[min(model.heads)].state_classifier.fit()
+                    model.serialize()
+            def busy():
+                from policy_backend import verify_model_checksum
+                try:
+                    with background_compute_scope():
+                        while not load_stop.is_set():
+                            for model in policies:
+                                load_entered.set()
+                                head = model.heads[min(model.heads)]
+                                head.state_classifier.fit()
+                                head.counts[0] += 1  # Force a new complete canonical body.
+                                raw = model.serialize()
+                                assert verify_model_checksum(raw)
+                            load_stats['passes'] += 1
+                except Exception as exc:
+                    load_stats['errors'].append(type(exc).__name__+': '+str(exc))
+                    load_entered.set()
+            load_thread = threading.Thread(target=busy, name='benchmark-optional-cpu', daemon=True)
+            load_thread.start()
+            assert load_entered.wait(10)
         completed, dispatched, all_decided = threading.Event(), threading.Event(), threading.Event()
         received = [0.]
         decisions, latencies, calls = [], [], []
@@ -154,6 +195,11 @@ def one(source, events=24, continuous=False, pressure=False, recovery=False, obs
                 assert dispatched.wait(10), decisions
         finally:
             elapsed, used_cpu = time.perf_counter() - started, time.process_time() - cpu
+            load_stop.set()
+            if load_thread is not None:
+                load_thread.join(30)
+                assert not load_thread.is_alive()
+                assert not load_stats['errors'], load_stats
             deferred = getattr(fixture.service, '_deferred_observations', None)
             if deferred is not None and observer_delay_ms:
                 deadline = time.monotonic() + max(30, events * observer_delay_ms/500.)
@@ -197,6 +243,7 @@ def one(source, events=24, continuous=False, pressure=False, recovery=False, obs
             event_to_executor_median_ms=statistics.median(times), event_to_executor_p95_ms=times[int((len(times)-1)*.95)],
             event_to_service_dispatch_ms=calls[0]['event_to_service_ms'] if calls else None, service_calls=len(calls),
             process_cpu_seconds=used_cpu, elapsed_seconds=elapsed, deferred_observations=deferred_stats,
+            cpu_load=cpu_load, cpu_load_stats=load_stats,
             observation_scheduler=q.snapshot() if q else None,
             storage_pressure=pressure,
             storage_admission=fixture.service.shadow_persistence_snapshot().get('storage_admission'),
@@ -204,21 +251,26 @@ def one(source, events=24, continuous=False, pressure=False, recovery=False, obs
             debounce_ms=engine_module.OPTIONS['realtime_inference_debounce_ms'])
 
 
-def paired(baseline, events, continuous=False, pressure=False, observer_delay_ms=0, mode="control"):
+def paired(baseline, events, continuous=False, pressure=False, observer_delay_ms=0, mode="control", cpu_load=False):
     series = []
+    # Keep native math concurrency equal in both sources. This comparison must
+    # isolate the runtime changes rather than reward an oversubscribed baseline.
+    env = dict(os.environ, OPENBLAS_NUM_THREADS='1', OMP_NUM_THREADS='1',
+               MKL_NUM_THREADS='1', NUMEXPR_NUM_THREADS='1')
     for repeat in range(3):
         pair = {}
         for name in (('before', 'after') if repeat % 2 == 0 else ('after', 'before')):
             source = baseline if name == 'before' else ROOT
             output = subprocess.check_output([sys.executable, str(Path(__file__).resolve()), '--one',
                 '--source-root', str(source), '--events', str(events)] + (['--continuous'] if continuous else [])
-                + (['--pressure'] if pressure else []) + ['--observer-delay-ms', str(observer_delay_ms), '--mode', mode], text=True)
+                + (['--pressure'] if pressure else []) + ['--observer-delay-ms', str(observer_delay_ms), '--mode', mode]
+                + (['--cpu-load'] if cpu_load else []), text=True, env=env)
             pair[name] = json.loads(output.strip().splitlines()[-1])
         assert pair['before']['decisions_sha256'] == pair['after']['decisions_sha256']
         pair['reaction_median_speedup'] = pair['before']['event_to_executor_median_ms'] / pair['after']['event_to_executor_median_ms']
         pair['service_dispatch_speedup'] = (pair['before']['event_to_service_dispatch_ms'] / pair['after']['event_to_service_dispatch_ms']) if mode == 'control' else None
         series.append(pair)
-    return dict(synthetic=True, independent_sources=True, series=series,
+    return dict(synthetic=True, independent_sources=True, native_math_threads=1, series=series,
         median_reaction_speedup=statistics.median(row['reaction_median_speedup'] for row in series),
         median_service_dispatch_speedup=statistics.median(row['service_dispatch_speedup'] for row in series) if mode == 'control' else None,
         limit='Real Engine.run, event receipt/backpressure, Root features, four real Tournament candidates and guarded Control Executor to an HA stub. Root action/confidence is deterministic. Excludes shipped outer observers, HA network, physical ACK, Pi microSD and concurrent checkpoint I/O; not a device latency forecast.')
@@ -230,6 +282,7 @@ if __name__ == '__main__':
     parser.add_argument('--source-root', type=Path, default=ROOT)
     parser.add_argument('--baseline-root', type=Path)
     parser.add_argument('--events', type=int, default=24)
+    parser.add_argument('--cpu-load', action='store_true', help='real repeated fitting/serialization of four populated independent policies; no injected sleep')
     parser.add_argument('--observer-delay-ms', type=int, default=0, help='controlled optional observer I/O wait; force each observation when nonzero')
     parser.add_argument('--mode', choices=('control','shadow'), default='control')
     parser.add_argument('--continuous', action='store_true', help='inject each next real event at the preceding Executor return')
@@ -240,4 +293,4 @@ if __name__ == '__main__':
         parser.error('at least four events and baseline-root required (except --one)')
     if args.recovery and (not args.one or not args.pressure):
         parser.error('--recovery requires --one --pressure')
-    print(json.dumps(one(args.source_root.resolve(), args.events, args.continuous, args.pressure, args.recovery, args.observer_delay_ms, args.mode) if args.one else paired(args.baseline_root.resolve(), args.events, args.continuous, args.pressure, args.observer_delay_ms, args.mode), indent=None if args.one else 2))
+    print(json.dumps(one(args.source_root.resolve(), args.events, args.continuous, args.pressure, args.recovery, args.observer_delay_ms, args.mode, args.cpu_load) if args.one else paired(args.baseline_root.resolve(), args.events, args.continuous, args.pressure, args.observer_delay_ms, args.mode, args.cpu_load), indent=None if args.one else 2))

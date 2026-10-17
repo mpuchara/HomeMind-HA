@@ -7,6 +7,7 @@ Their insertion order may differ; JSON data and the canonical model SHA do not.
 """
 import json
 import threading
+from runtime_background_compute import dumps as background_dumps
 
 from model_encoding_cache import MODEL_ENCODING_CACHE
 
@@ -16,7 +17,7 @@ _stats = dict(calls=0, hits=0, encodes=0, fallbacks=0)
 
 
 def _json(value):
-    return json.dumps(value, separators=(',', ':'), sort_keys=True)
+    return background_dumps(value, separators=(',', ':'), sort_keys=True)
 
 
 def snapshot():
@@ -47,7 +48,7 @@ def shadow_model_json(model):
         # For cacheable builtins this is byte-identical to policy_backend._canonical.
         # Custom objects bypass the cache and must retain legacy JSON's TypeError,
         # rather than checksum's default=str. NaN/Inf use the legacy fallback.
-        return json.dumps(value, separators=(',', ':'), sort_keys=True, allow_nan=False)
+        return background_dumps(value, separators=(',', ':'), sort_keys=True, allow_nan=False)
 
     try:
         policy_json = MODEL_ENCODING_CACHE.encode(body, strict_encoder).decode('utf-8')

@@ -24,6 +24,7 @@ import math
 import threading
 from contextlib import nullcontext
 from tournament_observation_clock import time
+from runtime_background_compute import background_compute_scope
 
 from context import action_values, is_fast_reactive_agent, target_value
 from settings import OPTIONS
@@ -454,7 +455,8 @@ def install(service):
             for aid, expected_identity in model_batch.items():
                 policy = engine.models.get(aid)
                 if policy is not None and id(policy) == expected_identity:
-                    model_rows.append((aid, policy.serialize()))
+                    with background_compute_scope():
+                        model_rows.append((aid, policy.serialize()))
             if model_rows:
                 store.save_models_batch(model_rows)
             with persistence_lock:
@@ -545,7 +547,10 @@ def install(service):
         # Do not call MultiHorizonPolicy.update(): this is a weight-only online update,
         # not a structural model change. Keeping model_revision stable prevents Sensor
         # Tournament future-only epochs from being reset after every timing sample.
-        with getattr(policy, 'lock', nullcontext()):
+        # Live online update retains its atomic lock contract. Do not put a child
+        # IPC wait inside that live critical section; isolated fits concern the
+        # independent Tournament/Candidate policies only.
+        with getattr(policy, 'lock', nullcontext()), background_compute_scope(False):
             policy.heads[horizon].update(action_idx, candidate["features"], reward)
         queue_model_checkpoint(agent, policy)
 

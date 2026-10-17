@@ -1,3 +1,10 @@
+## 0.14.215
+
+- Isolate large optional policy JSON/checksum preparation and independent Candidate/Tournament classifier fits in one private persistent compute process. Keep Control and HA exclusively in the main process. Limit native BLAS to one background thread, lower child CPU priority, bound pipe frames to 16 MiB and enforce a configurable 256-1024 MiB child virtual-memory limit on Linux. Break failed optional observations instead of retrying heavy CPU locally.
+- Reuse detached temporal history in a bounded RAM cache, invalidating only changed entities and late journal metadata. Remove full-history pickle encoding from each target-worker observation; retain event-time cutoffs and charge history retained by active/pending frames.
+- Detach live policy numeric state before JSON/checksum work; encode Home snapshots outside belief locks. Reuse verified canonical encodings during SealedPolicy admission without caching checksum verdicts.
+- Cache bounded timezone-aware HA timestamp parsing in RAM. Keep naive timestamps dependent on the current local timezone and preserve sensor/decision/HA timing semantics.
+
 ## 0.14.214
 
 - Move Engine-dispatched Sensor Tournament observation, candidate fitting and persistence off target workers. Root Control and Root Shadow return after queuing a detached event-time frame, so optional work cannot occupy the target until the next sensor event.

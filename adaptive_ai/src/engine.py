@@ -977,7 +977,8 @@ class Engine(threading.Thread):
         context_saved = False
         try:
             require_storage_available(STORE)
-            with background_sqlite(STORE):
+            from runtime_background_compute import background_compute_scope
+            with background_sqlite(STORE), background_compute_scope():
                 archive_rows = int(self.flush_archive(force=False) or 0)
                 decision_rows = int(self.teaching.flush(force=False) or 0)
                 context_saved = bool(self.context.save())

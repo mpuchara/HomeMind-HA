@@ -18,6 +18,8 @@ from settings import OPTIONS
 from storage_budget import storage_status
 from telemetry import TELEMETRY
 from tournament_observation_clock import observation_clock
+from runtime_background_compute import COMPUTE, background_compute_scope
+from temporal_observation_snapshots import TemporalObservationSnapshots
 
 
 class EngineObservationView:
@@ -79,6 +81,7 @@ class DeferredTournamentObservations:
                           sync_observations=0, storage_skips=0, last_error=None,
                           last_capture_ms=None, peak_bytes=0, coalesced=0, pending_interval_skips=0)
         self._sample_memory()
+        self.temporal_snapshots = TemporalObservationSnapshots(max_bytes=min(64*1024**2, self.max_bytes))
 
     def is_deferred(self):
         return bool(getattr(self.local, 'deferred', False))
@@ -152,11 +155,11 @@ class DeferredTournamentObservations:
             registry = dict(getattr(engine, 'entity_registry', {}) or {})
             relevance = dict((getattr(engine, 'context_relevance', {}) or {}).get(aid) or {})
             temporal = getattr(engine, 'temporal_history', None)
-            samples = {eid: tuple(row for row in rows if float(row[0]) <= stamp) for eid, rows in
-                       (getattr(temporal, 'samples', {}) or {}).items()}
             revision = getattr(getattr(engine, '_inference_tls', None), 'state_revision',
                                getattr(engine, 'state_revision', 0))
             generation = int(getattr(self.service.store, '_provenance_generation_revision', 0) or 0)
+        # No history traversal, deepcopy or encoding under the global Engine lock.
+        samples, history_charge = self.temporal_snapshots.capture(temporal, stamp)
         context = getattr(engine, 'context', None)
         provider = getattr(temporal, 'home_context', None) or context
         captured_forecast = ((observed.get('context_meta') or {}).get('home_forecast')
@@ -180,7 +183,7 @@ class DeferredTournamentObservations:
             attrs = {key: value for key, value in vars(policy).items()
                      if key not in excluded_attrs}
             blob = pickle.dumps(dict(agent=dict(agent), states=dict(states), changed=tuple(changed or ()),
-                runtime=observed, registry=registry, relevance=relevance, samples=samples,
+                runtime=observed, registry=registry, relevance=relevance,
                 anchors=anchors, revision=revision, generation=generation, forecast=forecast,
                 has_context=provider is not None or captured_forecast is not None,
                 excluded=set(getattr(context, 'excluded', ()) or ()),
@@ -189,7 +192,7 @@ class DeferredTournamentObservations:
                         tuple(getattr(getattr(policy, 'schema', None), 'entities', ()) or ()))
         # Budget includes conservative decoded working space as well as retained
         # bytes. One active frame remains charged until completion.
-        return dict(aid=aid, blob=blob, charge=len(blob)*8, identity=identity,
+        return dict(aid=aid, blob=blob, history=samples, charge=len(blob)*8+history_charge, identity=identity,
                     policy_type=type(policy), ticket=ticket, queued=time.monotonic(),
                     target=target_value(states.get(agent['target_entity']), agent['target_property']),
                     target_event=agent['target_entity'] in (changed or ()))
@@ -285,7 +288,7 @@ class DeferredTournamentObservations:
             return
         frozen = _FrozenContext(packet['forecast'], packet['excluded']) if packet['has_context'] else None
         temporal = TemporalHistory()
-        temporal.samples = packet['samples']
+        temporal.samples = job['history']
         temporal.home_context = frozen
         if packet['anchors'] is not None:
             temporal.photometric_baselines().entries.update(packet['anchors'])
@@ -332,7 +335,7 @@ class DeferredTournamentObservations:
                 self.stats['last_queue_lag_ms'] = max(0., (time.monotonic()-job['queued'])*1000)
                 with self.observation_lock:
                     session = getattr(self.service.store, 'inference_connection_session', None)
-                    with session() if callable(session) else nullcontext():
+                    with (session() if callable(session) else nullcontext(), background_compute_scope()):
                         self._execute(job)
             except Exception as exc:
                 self.stats['errors'] += 1
@@ -399,4 +402,6 @@ class DeferredTournamentObservations:
                         bytes=self.used_bytes, max_bytes=self.max_bytes,
                         configured_bytes=self.configured_bytes, max_jobs=self.max_jobs,
                         sync_required=len(self.sync_required), gap_agents=len(self.gaps),
+                        temporal_snapshots=self.temporal_snapshots.snapshot(),
+                        isolated_compute=COMPUTE.snapshot(),
                         semantics='FIFO causal frames; explicit evidence gaps on discard')

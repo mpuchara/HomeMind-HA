@@ -118,7 +118,13 @@ class BinaryStateClassifier:
         if min(map(len, self.rows)) < 4:
             return
         with measure_training_phase('binary_classifier_fit', dims=self.dims) as diagnostics:
-            self._fit(diagnostics)
+            from runtime_background_compute import COMPUTE, enabled
+            if enabled():
+                result, details = COMPUTE.call('fit', vars(self))
+                vars(self).update(result)
+                diagnostics.update(details)
+            else:
+                self._fit(diagnostics)
 
     def _fit(self, diagnostics):
         import numpy as np

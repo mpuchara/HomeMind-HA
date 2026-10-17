@@ -1,4 +1,5 @@
 import json
+import pickle
 import math
 import random
 import threading
@@ -463,12 +464,13 @@ class MultiHorizonPolicy(PolicyBackend):
 
     def serialize(self):
         with self.lock:
-            raw = json.loads(json.dumps(self.export()))
-            return serialize_backend_model(
-                raw,
-                policy_backend=self.BACKEND,
-                backend_version=self.VERSION,
-            )
+            # Detach numeric state once. JSON encoding/checksum may be slow or
+            # isolated; neither may retain the live prediction lock.
+            snapshot = pickle.loads(pickle.dumps(self.export(), protocol=5))
+        from runtime_background_compute import roundtrip
+        raw = roundtrip(snapshot)
+        return serialize_backend_model(raw, policy_backend=self.BACKEND,
+                                       backend_version=self.VERSION)
 
     @classmethod
     def deserialize(cls, raw, **kwargs):
