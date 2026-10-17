@@ -15,7 +15,7 @@ Therefore ``gain = challenger_score - baseline_score`` is exactly
 """
 import math
 import threading
-import time
+from tournament_observation_clock import time
 
 from context import action_values, context_scalar, target_value
 

@@ -18,7 +18,7 @@ that schema on subsequent inference passes.
 import json
 import math
 import threading
-import time
+from tournament_observation_clock import time
 
 from context import action_values, is_fast_reactive_agent
 from context_tournament_metrics import availability_stats, metric_row
@@ -397,6 +397,13 @@ def install_promotion(service):
             # reads the durable cooldown immediately before schema mutation.
             if not promotion_eligibility(model, actions, now)["ready"]:
                 TELEMETRY.inc('context_promotion_ineligible_ram_skips')
+                return False
+            deferred = getattr(service, '_deferred_observations', None)
+            if deferred is not None and deferred.is_deferred():
+                # A captured historical champion cannot mutate the current policy.
+                # Re-run every gate on the next fresh Root pass under the original
+                # probation/history/requalification lifecycle.
+                deferred.require_sync(aid)
                 return False
             tournament = service.state(aid)
             if challenger not in set(tournament.get("challenger_features") or []):

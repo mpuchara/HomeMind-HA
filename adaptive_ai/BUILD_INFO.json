@@ -1,9 +1,9 @@
 {
-  "version": "0.14.213",
+  "version": "0.14.214",
   "release_date": "2026-10-17",
-  "base_version": "0.14.212",
-  "base_commit": "fcd85455ce2f4d499ccbf18e3065c51d80aff8ea",
-  "release_status": "live-shadow-delivery-local-validation-complete",
+  "base_version": "0.14.213",
+  "base_commit": "b529bbd09aef665987db323aba9001e2d2c2762b",
+  "release_status": "tournament-background-reaction-local-validation-complete",
   "release_014140": {
     "scope": "inventory_and_remove_remaining_shipped_feature_Handler_fallbacks_for_Candidate_Live_and_manual_feedback_transport",
     "explicit_routes": "manual_feedback.js, candidate_ui.js, candidate_preference_ui.js, /api/candidates, Candidate Teach-RL status/train, generation history/comparison, /api/candidate-live, /api/live and Candidate discard",
@@ -2991,5 +2991,23 @@
     "limitations": "No deployed browser/Ingress or physical HA timing; no arbitrary RAM utilization target",
     "tests_passed": 2566,
     "validation": "2566 Linux tests, independent-source localhost delivery and fresh RAM-page reuse, production JS VM, Root Shadow/Control-GC delivery, entrypoint ready, compileall, all 21 JS scripts and 589 normalized source files"
+  },
+  "release_014214": {
+    "scope": "causal bounded Sensor Tournament observer queue outside Engine target workers",
+    "ram": "runtime_tournament_ram_mb=64; conservative decoded charge, 64 frames, host/container headroom cap",
+    "lifecycle": "fresh synchronous promotion/probation; original cooldown, rollback and Shadow requalification",
+    "limitations": "Host tests and HA stub only; optional learning throughput and physical ACK are separate from event-to-decision",
+    "new_regression_tests": 13,
+    "validation_report": "docs/benchmarks/TOURNAMENT_QUEUE_0_14_214_VALIDATION.json",
+    "tests_expected": 2579,
+    "tests_passed": 2579,
+    "validation": "2579 Linux tests OK without skips; three alternating independent-source pairs for Control and Shadow, controlled optional I/O wait, unthrottled comparison, Root Shadow, concurrent Control/GC, entrypoint 0.14.214 ready, JS VM, compileall, all 21 JS scripts, 592 normalized source hashes",
+    "controlled_host_p95_ms": {
+      "control_before": 111.857,
+      "control_after": 14.622,
+      "shadow_before": 107.115,
+      "shadow_after": 5.558
+    },
+    "controlled_wait_ms": 100
   }
 }

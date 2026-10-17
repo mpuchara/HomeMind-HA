@@ -16,7 +16,7 @@ import copy
 import json
 import math
 import threading
-import time
+from tournament_observation_clock import time
 from collections import defaultdict
 from contextlib import contextmanager
 

@@ -9,7 +9,7 @@ structured numeric evidence.  There is deliberately no generated explanatory tex
 """
 import math
 import threading
-import time
+from tournament_observation_clock import time
 from contextlib import contextmanager
 
 from context import action_values

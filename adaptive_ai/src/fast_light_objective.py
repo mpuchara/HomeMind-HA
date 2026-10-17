@@ -22,7 +22,8 @@ from storage_budget import StorageRetry
 import json
 import math
 import threading
-import time
+from contextlib import nullcontext
+from tournament_observation_clock import time
 
 from context import action_values, is_fast_reactive_agent, target_value
 from settings import OPTIONS
@@ -356,6 +357,17 @@ def install(service):
     storage_retry = StorageRetry()
     active_runtime = {}
     pair_runtime = {}
+    def observation_gap(aid, phase):
+        with lock:
+            pair_runtime.pop(aid, None)
+            current = active_runtime.get(aid)
+            if current is not None:
+                current['pending'] = None
+                current['last_target_idx'] = None
+                current['last_off_success'] = None
+    register_gap = getattr(service, 'register_observation_gap_handler', None)
+    if callable(register_gap):
+        register_gap('fast_light_timing', observation_gap)
     benchmark_cache = {}
     dirty_benchmarks = {}
     dirty_models = {}
@@ -516,6 +528,16 @@ def install(service):
         policy = engine.models.get(agent["id"])
         if policy is None:
             return
+        source = getattr(policy, '_tournament_source_identity', None)
+        if source is not None:
+            # Predictions use the frozen event frame. Accepted weight-only feedback
+            # must reach the still-identical live champion, not its detached clone.
+            live = engine._engine.models.get(agent['id'])
+            if (live is None or id(live) != source[0]
+                    or getattr(live, 'tournament_revision', None) != source[1]
+                    or tuple(live.schema.entities) != source[2]):
+                return
+            policy = live
         horizon = int(candidate.get("horizon") or min(policy.horizons))
         if horizon not in policy.heads:
             horizon = min(policy.horizons)
@@ -523,7 +545,8 @@ def install(service):
         # Do not call MultiHorizonPolicy.update(): this is a weight-only online update,
         # not a structural model change. Keeping model_revision stable prevents Sensor
         # Tournament future-only epochs from being reset after every timing sample.
-        policy.heads[horizon].update(action_idx, candidate["features"], reward)
+        with getattr(policy, 'lock', nullcontext()):
+            policy.heads[horizon].update(action_idx, candidate["features"], reward)
         queue_model_checkpoint(agent, policy)
 
     def reward_candidate(agent, state, candidate, *, success=False, false_timing=False,
@@ -568,6 +591,12 @@ def install(service):
         persist_active_metrics(agent["id"], state)
         learn_weight_only(agent, candidate, result.value)
         rt = engine.runtime.setdefault(agent["id"], {})
+        observed_policy = engine.models.get(agent['id'])
+        source = getattr(observed_policy, '_tournament_source_identity', None)
+        if source is not None:
+            current_policy = engine._engine.models.get(agent['id'])
+            if current_policy is not None and id(current_policy) == source[0]:
+                rt = engine._engine.runtime.setdefault(agent['id'], {})
         rt["fast_light_objective"] = benchmark_summary(metrics)
         rt["last_reward_components"] = dict(result.components)
         rt["last_reward"] = result.value

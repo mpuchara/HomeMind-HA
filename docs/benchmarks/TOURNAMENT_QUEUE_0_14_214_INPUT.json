@@ -1,0 +1,245 @@
+{
+  "scope": "Supplied 0.14.213 exports; observed stage windows, not paired end-to-end or HA ACK measurements",
+  "exports": [
+    {
+      "file": "adaptive-ai-runtime-debug-20261017-183455.json",
+      "sha256": "67eb538ae99bceba85b2a98a5739cf2122168dac0a5b80fdce3ba765a5087731",
+      "version": "0.14.213",
+      "generated_at": "2026-10-17T16:34:55.654637+00:00",
+      "cpu_percent_recent": 100.8975886438191,
+      "rss_mb": 224.65625,
+      "storage_level": "normal",
+      "storage_allocation_percent": 70,
+      "stages": {
+        "event_to_decision": {
+          "avg_ms": 171.93489026398876,
+          "p95_ms": 442.1298820525408,
+          "recent_count": 180,
+          "recent_p95_ms": 710.7417400693521
+        },
+        "event_to_target_start": {
+          "avg_ms": 79.11765555921083,
+          "p95_ms": 288.3133169962093,
+          "recent_count": 180,
+          "recent_p95_ms": 662.0815480127931
+        },
+        "inference": {
+          "avg_ms": 83.38334076591721,
+          "p95_ms": 126.56365905422717,
+          "recent_count": 181,
+          "recent_p95_ms": 142.4064829479903
+        },
+        "wrapped_inference": {
+          "avg_ms": 173.08749304414636,
+          "p95_ms": 395.870617008768,
+          "recent_count": 180,
+          "recent_p95_ms": 490.7691919943318
+        },
+        "context_shadow_observation": {
+          "avg_ms": 205.77677987319967,
+          "p95_ms": 564.3868779297918,
+          "recent_count": 55,
+          "recent_p95_ms": 9580.84781607613
+        },
+        "binary_classifier_fit": {
+          "avg_ms": 521.8764090710749,
+          "p95_ms": 926.2273029889911,
+          "recent_count": 12,
+          "recent_p95_ms": 1430.9764449717477
+        }
+      }
+    },
+    {
+      "file": "adaptive-ai-runtime-debug-20261017-183539.json",
+      "sha256": "c5b0d9ff6e12518b8abcfbc7aedf14648f4f32bafca5424b15633268ee98b3c0",
+      "version": "0.14.213",
+      "generated_at": "2026-10-17T16:35:38.903912+00:00",
+      "cpu_percent_recent": 93.50064417024983,
+      "rss_mb": 222.3203125,
+      "storage_level": "normal",
+      "storage_allocation_percent": 70,
+      "stages": {
+        "event_to_decision": {
+          "avg_ms": 174.76778010637506,
+          "p95_ms": 755.790789029561,
+          "recent_count": 198,
+          "recent_p95_ms": 2554.8523879842833
+        },
+        "event_to_target_start": {
+          "avg_ms": 81.88480001176207,
+          "p95_ms": 636.6829529870301,
+          "recent_count": 198,
+          "recent_p95_ms": 2473.649821942672
+        },
+        "inference": {
+          "avg_ms": 83.41854056220963,
+          "p95_ms": 148.46881001722068,
+          "recent_count": 199,
+          "recent_p95_ms": 158.0447880551219
+        },
+        "wrapped_inference": {
+          "avg_ms": 175.19584979476204,
+          "p95_ms": 459.06426501460373,
+          "recent_count": 200,
+          "recent_p95_ms": 621.4635929791257
+        },
+        "context_shadow_observation": {
+          "avg_ms": 212.67860484086754,
+          "p95_ms": 660.3194859344512,
+          "recent_count": 54,
+          "recent_p95_ms": 10196.491832961328
+        },
+        "binary_classifier_fit": {
+          "avg_ms": 547.9027196779967,
+          "p95_ms": 1052.2830209229141,
+          "recent_count": 19,
+          "recent_p95_ms": 1289.9245760636404
+        }
+      }
+    },
+    {
+      "file": "adaptive-ai-runtime-debug-20261017-183608.json",
+      "sha256": "70b5d3020f2016eab2ab97147536f9f60836be2815dfa84a22cacb7544253651",
+      "version": "0.14.213",
+      "generated_at": "2026-10-17T16:36:08.128303+00:00",
+      "cpu_percent_recent": 108.94115182394205,
+      "rss_mb": 221.22265625,
+      "storage_level": "normal",
+      "storage_allocation_percent": 70,
+      "stages": {
+        "event_to_decision": {
+          "avg_ms": 175.17121325698758,
+          "p95_ms": 640.1976470369846,
+          "recent_count": 304,
+          "recent_p95_ms": 635.1599749177694
+        },
+        "event_to_target_start": {
+          "avg_ms": 82.06192198003625,
+          "p95_ms": 469.04897305648774,
+          "recent_count": 306,
+          "recent_p95_ms": 369.7999600553885
+        },
+        "inference": {
+          "avg_ms": 83.59334736778474,
+          "p95_ms": 168.59301400836557,
+          "recent_count": 304,
+          "recent_p95_ms": 174.19558798428625
+        },
+        "wrapped_inference": {
+          "avg_ms": 175.45112188334795,
+          "p95_ms": 501.1977009708062,
+          "recent_count": 306,
+          "recent_p95_ms": 520.8002619910985
+        },
+        "context_shadow_observation": {
+          "avg_ms": 213.33463707923727,
+          "p95_ms": 940.0970179121941,
+          "recent_count": 61,
+          "recent_p95_ms": 9542.055965983309
+        },
+        "binary_classifier_fit": {
+          "avg_ms": 547.9027196779967,
+          "p95_ms": 1052.2830209229141,
+          "recent_count": 10,
+          "recent_p95_ms": 1289.9245760636404
+        }
+      }
+    },
+    {
+      "file": "adaptive-ai-runtime-debug-20261017-183640.json",
+      "sha256": "d50675bb913e97839c96bfe5eff262dfa4d37da4328fa31c3321a33bc098a2ff",
+      "version": "0.14.213",
+      "generated_at": "2026-10-17T16:36:40.678385+00:00",
+      "cpu_percent_recent": 119.84965340119473,
+      "rss_mb": 225.40625,
+      "storage_level": "normal",
+      "storage_allocation_percent": 70,
+      "stages": {
+        "event_to_decision": {
+          "avg_ms": 176.52494239138142,
+          "p95_ms": 643.638499896042,
+          "recent_count": 278,
+          "recent_p95_ms": 567.0562770683318
+        },
+        "event_to_target_start": {
+          "avg_ms": 83.8920560508718,
+          "p95_ms": 517.8867559880018,
+          "recent_count": 277,
+          "recent_p95_ms": 362.6020870869979
+        },
+        "inference": {
+          "avg_ms": 83.5754225924297,
+          "p95_ms": 173.87270100880414,
+          "recent_count": 279,
+          "recent_p95_ms": 213.28546991571784
+        },
+        "wrapped_inference": {
+          "avg_ms": 177.189728564297,
+          "p95_ms": 520.8002619910985,
+          "recent_count": 277,
+          "recent_p95_ms": 521.281684981659
+        },
+        "context_shadow_observation": {
+          "avg_ms": 219.40329417785313,
+          "p95_ms": 5558.856799034402,
+          "recent_count": 54,
+          "recent_p95_ms": 9253.905322984792
+        },
+        "binary_classifier_fit": {
+          "avg_ms": 558.7456187904589,
+          "p95_ms": 1038.0027999635786,
+          "recent_count": 16,
+          "recent_p95_ms": 954.7415220877156
+        }
+      }
+    },
+    {
+      "file": "adaptive-ai-runtime-debug-20261017-183724.json",
+      "sha256": "0002b1d26175a1d8d307dcd4ab0c1143c04d5cb147185319483304ce5b8ecfca",
+      "version": "0.14.213",
+      "generated_at": "2026-10-17T16:37:23.921981+00:00",
+      "cpu_percent_recent": 110.8747609212144,
+      "rss_mb": 222.84375,
+      "storage_level": "normal",
+      "storage_allocation_percent": 70,
+      "stages": {
+        "event_to_decision": {
+          "avg_ms": 179.09732611348855,
+          "p95_ms": 1414.4060410326347,
+          "recent_count": 86,
+          "recent_p95_ms": 7952.067330013961
+        },
+        "event_to_target_start": {
+          "avg_ms": 85.98989071584015,
+          "p95_ms": 1228.2670510467142,
+          "recent_count": 86,
+          "recent_p95_ms": 7751.964465016499
+        },
+        "inference": {
+          "avg_ms": 83.56187682204511,
+          "p95_ms": 174.19558798428625,
+          "recent_count": 86,
+          "recent_p95_ms": 166.4963699877262
+        },
+        "wrapped_inference": {
+          "avg_ms": 179.71890809575643,
+          "p95_ms": 618.5287770349532,
+          "recent_count": 88,
+          "recent_p95_ms": 9368.777383002453
+        },
+        "context_shadow_observation": {
+          "avg_ms": 227.71342572043352,
+          "p95_ms": 7134.535248042084,
+          "recent_count": 40,
+          "recent_p95_ms": 10172.835545963608
+        },
+        "binary_classifier_fit": {
+          "avg_ms": 555.950520618661,
+          "p95_ms": 1004.6911140671,
+          "recent_count": 34,
+          "recent_p95_ms": 920.4518540063873
+        }
+      }
+    }
+  ]
+}
