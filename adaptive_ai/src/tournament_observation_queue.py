@@ -20,6 +20,7 @@ from telemetry import TELEMETRY
 from tournament_observation_clock import observation_clock
 from runtime_background_compute import COMPUTE, background_compute_scope
 from temporal_observation_snapshots import TemporalObservationSnapshots
+from detached_mapping_snapshots import DetachedMappingSnapshots
 
 
 class EngineObservationView:
@@ -82,6 +83,8 @@ class DeferredTournamentObservations:
                           last_capture_ms=None, peak_bytes=0, coalesced=0, pending_interval_skips=0)
         self._sample_memory()
         self.temporal_snapshots = TemporalObservationSnapshots(max_bytes=min(64*1024**2, self.max_bytes))
+        self.state_snapshots = DetachedMappingSnapshots(max_bytes=min(16*1024**2, self.max_bytes))
+        self.registry_snapshots = DetachedMappingSnapshots(max_bytes=min(8*1024**2, self.max_bytes))
 
     def is_deferred(self):
         return bool(getattr(self.local, 'deferred', False))
@@ -159,7 +162,14 @@ class DeferredTournamentObservations:
                                getattr(engine, 'state_revision', 0))
             generation = int(getattr(self.service.store, '_provenance_generation_revision', 0) or 0)
         # No history traversal, deepcopy or encoding under the global Engine lock.
+        stage = time.perf_counter()
         samples, history_charge = self.temporal_snapshots.capture(temporal, stamp)
+        TELEMETRY.observe('context_capture_history', (time.perf_counter()-stage)*1000)
+        stage = time.perf_counter()
+        frozen_states, state_charge = self.state_snapshots.capture(states)
+        frozen_registry, registry_charge = self.registry_snapshots.capture(registry)
+        TELEMETRY.observe('context_capture_entities', (time.perf_counter()-stage)*1000)
+        stage = time.perf_counter()
         context = getattr(engine, 'context', None)
         provider = getattr(temporal, 'home_context', None) or context
         captured_forecast = ((observed.get('context_meta') or {}).get('home_forecast')
@@ -171,6 +181,8 @@ class DeferredTournamentObservations:
         if baselines is not None:
             with baselines.lock:
                 anchors = dict(baselines.entries)
+        TELEMETRY.observe('context_capture_forecast', (time.perf_counter()-stage)*1000)
+        stage = time.perf_counter()
         # Native arrays and Python numeric rows are copied without canonical JSON,
         # checksum encoding, policy construction or fitting on the reaction path.
         with getattr(policy, 'lock', nullcontext()):
@@ -182,17 +194,19 @@ class DeferredTournamentObservations:
                 excluded_attrs.update(('features', '_candidate_shadow_exact_context'))
             attrs = {key: value for key, value in vars(policy).items()
                      if key not in excluded_attrs}
-            blob = pickle.dumps(dict(agent=dict(agent), states=dict(states), changed=tuple(changed or ()),
-                runtime=observed, registry=registry, relevance=relevance,
+            blob = pickle.dumps(dict(agent=dict(agent), changed=tuple(changed or ()),
+                runtime=observed, relevance=relevance,
                 anchors=anchors, revision=revision, generation=generation, forecast=forecast,
                 has_context=provider is not None or captured_forecast is not None,
                 excluded=set(getattr(context, 'excluded', ()) or ()),
                 policy=attrs, timestamp=stamp), protocol=pickle.HIGHEST_PROTOCOL)
             identity = (id(policy), getattr(policy, 'tournament_revision', None),
                         tuple(getattr(getattr(policy, 'schema', None), 'entities', ()) or ()))
+        TELEMETRY.observe('context_capture_policy', (time.perf_counter()-stage)*1000)
         # Budget includes conservative decoded working space as well as retained
         # bytes. One active frame remains charged until completion.
-        return dict(aid=aid, blob=blob, history=samples, charge=len(blob)*8+history_charge, identity=identity,
+        return dict(aid=aid, blob=blob, history=samples, states=frozen_states, registry=frozen_registry,
+                    charge=len(blob)*8+history_charge+state_charge+registry_charge, identity=identity,
                     policy_type=type(policy), ticket=ticket, queued=time.monotonic(),
                     target=target_value(states.get(agent['target_entity']), agent['target_property']),
                     target_event=agent['target_entity'] in (changed or ()))
@@ -277,6 +291,7 @@ class DeferredTournamentObservations:
             return
         # This is the only loads call: bytes came from _capture, never external data.
         packet = pickle.loads(job['blob'])
+        packet['states'], packet['registry'] = job['states'], job['registry']
         if packet['generation'] != int(getattr(self.service.store, '_provenance_generation_revision', 0) or 0):
             self.stats['stale'] += 1
             self.invalidate(aid)
@@ -403,5 +418,7 @@ class DeferredTournamentObservations:
                         configured_bytes=self.configured_bytes, max_jobs=self.max_jobs,
                         sync_required=len(self.sync_required), gap_agents=len(self.gaps),
                         temporal_snapshots=self.temporal_snapshots.snapshot(),
+                        state_snapshots=self.state_snapshots.snapshot(),
+                        registry_snapshots=self.registry_snapshots.snapshot(),
                         isolated_compute=COMPUTE.snapshot(),
                         semantics='FIFO causal frames; explicit evidence gaps on discard')

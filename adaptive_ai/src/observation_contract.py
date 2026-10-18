@@ -20,6 +20,7 @@ import time
 import threading
 
 import context as context_module
+from functools import lru_cache
 import history as history_module
 import policy as policy_module
 import replay as replay_module
@@ -181,6 +182,39 @@ def _category_bits(text):
 
 
 def observation_value(state, radar_units=False):
+    # Values are pure functions of transport text and unit/role metadata. They
+    # recur in current/lag/edge reads across agents. Times, validity admission,
+    # photometric baselines and source quality are deliberately outside this cache.
+    if state is None:
+        return _uncached_observation_value(state, radar_units)
+    text = str(state.get('state') if state.get('state') is not None else '').strip().lower()
+    # Binary presence and unavailable samples already have a cheaper direct path
+    # than building a unit-aware cache key. Keep that path exactly as before.
+    if text in INVALID_STATES:
+        return {"valid": 0.0, "value": 0.0, "category": (0.0, 0.0, 0.0),
+                "kind": "missing", "canonical_unit": None}
+    if text in SEMANTIC_VALUES:
+        return {"valid": 1.0, "value": float(SEMANTIC_VALUES[text]),
+                "category": (0.0, 0.0, 0.0), "kind": "semantic", "canonical_unit": None}
+    attrs = _attrs(state)
+    fields = (state.get('state'), state.get('entity_id'), attrs.get('unit_of_measurement'),
+              attrs.get('device_class'), attrs.get('friendly_name'))
+    # Bound both entry count and key bytes; preserve unusual legacy input types
+    # through the original function instead of stringifying their semantics.
+    if all(v is None or isinstance(v, str) and len(v) <= 256 for v in fields):
+        return dict(_cached_observation_value(*fields, bool(radar_units)))
+    return _uncached_observation_value(state, radar_units)
+
+
+@lru_cache(maxsize=8192)
+def _cached_observation_value(text, entity_id, unit, device_class, name, radar_units):
+    state = dict(state=text, entity_id=entity_id,
+                 attributes=dict(unit_of_measurement=unit, device_class=device_class, friendly_name=name))
+    # Cache immutable items; callers may annotate their returned dictionary.
+    return tuple(_uncached_observation_value(state, radar_units).items())
+
+
+def _uncached_observation_value(state, radar_units=False):
     """Canonical observation: value/category are separate from validity."""
     if state is None:
         return {"valid": 0.0, "value": 0.0, "category": (0.0, 0.0, 0.0),

@@ -1,9 +1,9 @@
 {
-  "version": "0.14.215",
-  "release_date": "2026-10-17",
-  "base_version": "0.14.214",
-  "base_commit": "5e6fd19518ba09449c923714cd9b144dc137e1bb",
-  "release_status": "isolated-runtime-compute-validation-complete",
+  "version": "0.14.216",
+  "release_date": "2026-10-18",
+  "base_version": "0.14.215",
+  "base_commit": "7c52470a0889cb3d4cfbd240666ae4b658a27e39",
+  "release_status": "startup-and-runtime-scaling-validation-complete",
   "release_014140": {
     "scope": "inventory_and_remove_remaining_shipped_feature_Handler_fallbacks_for_Candidate_Live_and_manual_feedback_transport",
     "explicit_routes": "manual_feedback.js, candidate_ui.js, candidate_preference_ui.js, /api/candidates, Candidate Teach-RL status/train, generation history/comparison, /api/candidate-live, /api/live and Candidate discard",
@@ -3026,5 +3026,26 @@
       "root_shadow_after": 6.92789
     },
     "warm_history_capture_speedup": 2.791678
+  },
+  "release_014216": {
+    "scope": "indexed startup and training bounds; background paged diagnostic overview; bounded immutable entity/value reuse",
+    "new_regression_tests": 13,
+    "tests_expected": 2602,
+    "validation_report": "docs/benchmarks/RUNTIME_SCALING_0_14_216_VALIDATION.json",
+    "limitations": "Supplied deployed 0.14.215 trace confirms current latency; startup duration is operator-reported without startup phase trace. Host component tests do not establish deployed Pi or physical HA ACK latency.",
+    "tests_passed": 2602,
+    "tested_source_files": 601,
+    "validation": "2602 Linux tests OK without skips; exact causal frame and learned-head parity; 778-entity capture; 200k-row restart component; actual Candidate bundle/passive worker; Control/GC; entrypoint ready; production UI VM and overview states; compileall and 21 JS scripts",
+    "startup_component_speedup": 9.01423420612657,
+    "warm_capture_speedup": 1.1616340560647684,
+    "event_reaction_speedup_established": false,
+    "host_p95_ms": {
+      "control_cpu_before": 15.420236,
+      "control_cpu_after": 16.975632,
+      "root_shadow_cpu_before": 6.412808,
+      "root_shadow_cpu_after": 7.658947,
+      "control_unloaded_before": 8.19689,
+      "control_unloaded_after": 8.609473
+    }
   }
 }

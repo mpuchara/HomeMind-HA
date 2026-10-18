@@ -1,5 +1,13 @@
 ## 0.14.215
 
+## 0.14.216 (2026-10-18)
+
+- Remove full archive scans from restart/readiness and training-bound lookup; exact indexed seeks preserve legacy cursor seeding.
+- Refresh diagnostic archive totals in bounded, cancellable background pages; release readers between pages, preserve training/replay authoritative SQL.
+- Share bounded detached state/registry records across Tournament frames with deep correction detection and conservative active-frame RAM charging.
+- Reuse pure canonical observation values in a bounded immutable cache; keep event/receive cutoff, ages, source quality and photometric evidence fresh.
+- Export startup storage phases and capture substage timings, and mark cached/pending archive overview in diagnostics.
+
 - Isolate large optional policy JSON/checksum preparation and independent Candidate/Tournament classifier fits in one private persistent compute process. Keep Control and HA exclusively in the main process. Limit native BLAS to one background thread, lower child CPU priority, bound pipe frames to 16 MiB and enforce a configurable 256-1024 MiB child virtual-memory limit on Linux. Break failed optional observations instead of retrying heavy CPU locally.
 - Reuse detached temporal history in a bounded RAM cache, invalidating only changed entities and late journal metadata. Remove full-history pickle encoding from each target-worker observation; retain event-time cutoffs and charge history retained by active/pending frames.
 - Detach live policy numeric state before JSON/checksum work; encode Home snapshots outside belief locks. Reuse verified canonical encodings during SealedPolicy admission without caching checksum verdicts.

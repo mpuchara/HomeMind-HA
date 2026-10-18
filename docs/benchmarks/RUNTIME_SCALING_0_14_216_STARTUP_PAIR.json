@@ -1,0 +1,81 @@
+{
+  "series": [
+    {
+      "before": {
+        "rows": 200000,
+        "store_reopen_ms": 20.553125999981603,
+        "store_and_history_ms": 80.44503200005693,
+        "full_archive_aggregate_queries": [
+          "SELECT MIN(ts), MAX(ts) FROM entity_history",
+          "SELECT COUNT(*) n, MIN(ts) min_ts, MAX(ts) max_ts, COUNT(DISTINCT entity_id) entities FROM entity_history",
+          "SELECT source,COUNT(*) FROM entity_history GROUP BY source"
+        ],
+        "seeded_cursor": 1792400000.0,
+        "overview_rows_at_ready": 200000,
+        "overview_stale": false
+      },
+      "after": {
+        "rows": 200000,
+        "store_reopen_ms": 9.246075999953973,
+        "store_and_history_ms": 10.275589999992008,
+        "full_archive_aggregate_queries": [],
+        "seeded_cursor": 1792400000.0,
+        "overview_rows_at_ready": 0,
+        "overview_stale": true
+      },
+      "speedup": 7.828750660557642
+    },
+    {
+      "after": {
+        "rows": 200000,
+        "store_reopen_ms": 7.792926999968586,
+        "store_and_history_ms": 8.730377999995653,
+        "full_archive_aggregate_queries": [],
+        "seeded_cursor": 1792400000.0,
+        "overview_rows_at_ready": 0,
+        "overview_stale": true
+      },
+      "before": {
+        "rows": 200000,
+        "store_reopen_ms": 20.146538999938457,
+        "store_and_history_ms": 78.69767199997568,
+        "full_archive_aggregate_queries": [
+          "SELECT MIN(ts), MAX(ts) FROM entity_history",
+          "SELECT COUNT(*) n, MIN(ts) min_ts, MAX(ts) max_ts, COUNT(DISTINCT entity_id) entities FROM entity_history",
+          "SELECT source,COUNT(*) FROM entity_history GROUP BY source"
+        ],
+        "seeded_cursor": 1792400000.0,
+        "overview_rows_at_ready": 200000,
+        "overview_stale": false
+      },
+      "speedup": 9.01423420612657
+    },
+    {
+      "before": {
+        "rows": 200000,
+        "store_reopen_ms": 19.889837000050647,
+        "store_and_history_ms": 77.48165600003176,
+        "full_archive_aggregate_queries": [
+          "SELECT MIN(ts), MAX(ts) FROM entity_history",
+          "SELECT COUNT(*) n, MIN(ts) min_ts, MAX(ts) max_ts, COUNT(DISTINCT entity_id) entities FROM entity_history",
+          "SELECT source,COUNT(*) FROM entity_history GROUP BY source"
+        ],
+        "seeded_cursor": 1792400000.0,
+        "overview_rows_at_ready": 200000,
+        "overview_stale": false
+      },
+      "after": {
+        "rows": 200000,
+        "store_reopen_ms": 7.4414529999558,
+        "store_and_history_ms": 8.275742000023456,
+        "full_archive_aggregate_queries": [],
+        "seeded_cursor": 1792400000.0,
+        "overview_rows_at_ready": 0,
+        "overview_stale": true
+      },
+      "speedup": 9.362502600952537
+    }
+  ],
+  "median_speedup": 9.01423420612657,
+  "scope": "Indexed host archive, warm OS cache, Store reopen + HistoryManager only; not full deployed startup. New overview is deliberately pending at readiness, training bounds/cursor remain exact."
+}

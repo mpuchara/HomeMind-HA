@@ -138,10 +138,8 @@ class HistoryManager(threading.Thread):
                 "worker_bootstrap_skipped_global_scan": True,
             }
         else:
-            try:
-                self.archive_cache = STORE.archive_stats()
-            except Exception:
-                self.archive_cache = {"n": 0, "min_ts": None, "max_ts": None, "entities": 0, "days": 0.0, "by_source": {}}
+            from archive_overview import initial
+            self.archive_cache = initial(STORE)
         self.cycle_started_at = None
         self.phase_started_at = None
         self.eta_seconds = None
@@ -471,7 +469,8 @@ class HistoryManager(threading.Thread):
         return sorted(ids)
 
     def _training_bounds(self):
-        stats = STORE.archive_stats()
+        bounds = getattr(STORE, 'archive_bounds', None)
+        stats = bounds() if callable(bounds) else STORE.archive_stats()
         end_ts = max(float(stats.get("max_ts") or 0.0), now_ts())
         earliest = float(stats.get("min_ts") or end_ts)
         # Explicit agent training intentionally uses a recent rolling window rather than

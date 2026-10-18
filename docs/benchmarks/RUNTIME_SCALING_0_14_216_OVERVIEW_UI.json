@@ -1,0 +1,9 @@
+{
+  "overview_pending": true,
+  "overview_cached": true,
+  "revision_wait": true,
+  "latest_desired": true,
+  "physical_current": true,
+  "off_confirmation": true,
+  "pending_explanation": true
+}
