@@ -158,6 +158,7 @@ def initialize_runtime():
         if migrated:
             print(f"[startup] Fast-agent interval migration: {migrated}", flush=True)
 
+        set_startup('installing_extensions', 2, 'Installing runtime services and safety contracts')
         prepare_engine_extensions()
         STORE.start_storage_retention()
 
@@ -201,6 +202,12 @@ def initialize_runtime():
             inference_gate.set()
             ENGINE.wake_event.set()
         print("Adaptive AI runtime initialized", flush=True)
+        # Full archive totals are diagnostics, independent of readiness/inference.
+        from archive_overview import start as start_archive_overview
+        try:
+            start_archive_overview(HISTORY, STORE)
+        except Exception as exc:
+            print(f'[startup] Optional archive overview unavailable: {type(exc).__name__}', flush=True)
     except Exception as exc:
         traceback.print_exc()
         set_startup("error", STARTUP.get("step", 0), f"Startup failed: {type(exc).__name__}: {exc}", error=exc)

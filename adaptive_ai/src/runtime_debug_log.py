@@ -97,6 +97,7 @@ class RuntimeDebugLogService:
 
     def export_payload(self):
         from model_encoding_cache import MODEL_ENCODING_CACHE
+        from observation_contract import _cached_observation_value
         from sealed_policy_snapshot import snapshot as sealed_policy_snapshot
         from shadow_model_json import snapshot as shadow_json_snapshot
         engine = getattr(self.core, "ENGINE", None)
@@ -176,6 +177,8 @@ class RuntimeDebugLogService:
             "contract_version": CONTRACT_VERSION,
             "generated_at": _now_iso(),
             "app_version": APP_VERSION,
+            "startup": (self.core.startup_snapshot()
+                        if callable(getattr(self.core, 'startup_snapshot', None)) else None),
             "runtime_debug": RUNTIME_DEBUG.export(),
             "telemetry": TELEMETRY.snapshot(),
             "heavy_job": HEAVY_JOBS.owner,
@@ -195,6 +198,7 @@ class RuntimeDebugLogService:
             "sqlite": sqlite_status,
             "runtime_threads": runtime_threading_snapshot(),
             "model_encoding_cache": MODEL_ENCODING_CACHE.snapshot(),
+            "observation_value_cache": _cached_observation_value.cache_info()._asdict(),
             "sealed_policy_snapshots": sealed_policy_snapshot(),
             "shadow_json_encoding_cache": shadow_json_snapshot(),
             "threads": _thread_snapshot(),

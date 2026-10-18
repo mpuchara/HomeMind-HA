@@ -16,18 +16,17 @@ class TemporalObservationSnapshots:
         # HA appends/replaces records. Materialize membership/rows before copying;
         # never retain a live deque in a pending observation.
         sources = dict(getattr(temporal, 'samples', {}) or {})
-        for eid, source in sources.items():
-            rows = tuple(source or ())
-            if not rows:
-                continue
-            last = rows[-1]
-            attrs = last[1].get('attributes') or {}
-            # Journal metadata is amended after ingestion; include its late receipt
-            # fields rather than assuming that a state revision alone proves reuse.
-            signature = (id(source), len(rows), id(rows[0]), id(last),
-                         attrs.get('__hm_event_time'), attrs.get('__hm_received_time'),
-                         attrs.get('__hm_feature_source'), attrs.get('__hm_quality'))
-            with self.lock:
+        with self.lock:
+            for eid, source in sources.items():
+                if not source:
+                    continue
+                first, last = source[0], source[-1]
+                attrs = last[1].get('attributes') or {}
+                # Journal metadata is amended after ingestion; include its late receipt
+                # fields rather than assuming that a state revision alone proves reuse.
+                signature = (id(source), len(source), id(first), id(last),
+                             attrs.get('__hm_event_time'), attrs.get('__hm_received_time'),
+                             attrs.get('__hm_feature_source'), attrs.get('__hm_quality'))
                 old = self.entries.get(eid)
                 if old is not None and old[0] == signature:
                     frozen, size = old[1], old[2]
@@ -37,6 +36,7 @@ class TemporalObservationSnapshots:
                     # The live rows are private builtin observations. Native
                     # encode/decode detaches only the changed entity, avoiding a
                     # Python deepcopy walk across thousands of numeric leaves.
+                    rows = tuple(source)
                     encoded = pickle.dumps(rows, protocol=5)
                     frozen = pickle.loads(encoded)
                     size = len(encoded)*8
@@ -47,16 +47,16 @@ class TemporalObservationSnapshots:
                     if size <= self.max_bytes:
                         # Keep strong identity witnesses: a collected row/deque id
                         # must never be reused as proof of unchanged history.
-                        self.entries[eid] = (signature, frozen, size, source, rows[0], last)
+                        self.entries[eid] = (signature, frozen, size, source, first, last)
                         self.bytes += size
                         while self.bytes > self.max_bytes or len(self.entries) > self.max_entities:
                             _, evicted = self.entries.popitem(last=False)
                             self.bytes -= evicted[2]
-            # Cached rows remain private and are consumed only as read-only inputs
-            # by Tournament's feature builders. Pending jobs retain their own view.
-            result[eid] = frozen if float(frozen[-1][0]) <= timestamp else tuple(
-                row for row in frozen if float(row[0]) <= timestamp)
-            charge += size
+                # Cached rows remain private and are consumed only as read-only inputs
+                # by Tournament's feature builders. Pending jobs retain their own view.
+                result[eid] = frozen if float(frozen[-1][0]) <= timestamp else tuple(
+                    row for row in frozen if float(row[0]) <= timestamp)
+                charge += size
         return result, charge
 
     def snapshot(self):

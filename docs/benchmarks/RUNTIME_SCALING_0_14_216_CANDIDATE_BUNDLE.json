@@ -1,0 +1,9 @@
+{
+  "passes": 16,
+  "candidates": 4,
+  "median_ms": 4.347507499971925,
+  "total_ms": 70.02873999999792,
+  "feature_descriptor_computations": 512,
+  "features_labels_metadata_predictions_sha256": "ef179a2a2294e940cadbf46ba5bd4008cdf47ef3d63f7532d34b6595682ecc0d",
+  "ha_calls": 0
+}

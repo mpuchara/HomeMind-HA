@@ -60,14 +60,18 @@ class Store:
         self.training_worker_process = (
             str(os.environ.get("ADAPTIVE_AI_TRAINING_WORKER", "")).strip() == "1"
         )
+        self.startup_timings = {}
         if self.training_worker_process:
             self._load_meta_cache()
         else:
-            self.storage_budget.prepare_existing_wal()
-            self._init()
-            self._load_meta_cache()
-            self._load_recent_events()
-            self.migrate_models()
+            for name, operation in (
+                ('existing_wal', self.storage_budget.prepare_existing_wal),
+                ('schema_and_legacy', self._init), ('metadata', self._load_meta_cache),
+                ('recent_events', self._load_recent_events), ('models', self.migrate_models),
+            ):
+                started = time.perf_counter()
+                operation()
+                self.startup_timings[name] = round(time.perf_counter()-started, 4)
 
     def touch_agent_index(self):
         # Lightweight in-process invalidation for the realtime routing cache.
@@ -122,6 +126,7 @@ class Store:
         """RAM-only diagnostics, never run SQL from the debug export."""
         with self._wal_keeper_lock:
             return dict(version=sqlite3.sqlite_version,
+                        startup_seconds=dict(self.startup_timings),
                         runtime_cache=(self._runtime_sqlite_cache.snapshot()
                                        if self._runtime_sqlite_cache is not None else None),
                         storage_budget=self.storage_budget.snapshot(),
@@ -606,14 +611,24 @@ class Store:
             c.execute("UPDATE agents SET training_state='training', mode='paused' WHERE training_state='candidate'")
             # Completed v0.7.6 candidates already reached the end of the local archive.
             # Seed their cursor once so Resume can continue from there rather than rebuild.
-            bounds = c.execute("SELECT MIN(ts), MAX(ts) FROM entity_history").fetchone()
+            # SQLite cannot apply its single-extremum optimization to MIN + MAX
+            # together. Two index seeks avoid walking a multi-million-row archive
+            # on every restart. Only legacy rows missing a cursor need seeding.
+            needs_cursor = c.execute("SELECT 1 FROM agents WHERE training_state IN ('qualified','paused') "
+                                     "AND (training_window_start_ts IS NULL OR training_window_end_ts IS NULL "
+                                     "OR training_cursor_ts IS NULL) LIMIT 1").fetchone()
+            bounds = (c.execute("SELECT (SELECT MIN(ts) FROM entity_history), "
+                                "(SELECT MAX(ts) FROM entity_history)").fetchone()
+                      if needs_cursor else None)
             if bounds and bounds[1] is not None:
                 c.execute("""UPDATE agents SET training_window_start_ts=COALESCE(training_window_start_ts, ?),
                            training_window_end_ts=COALESCE(training_window_end_ts, ?),
                            training_cursor_ts=COALESCE(training_cursor_ts, ?),
                            training_progress=CASE WHEN training_state IN ('qualified','paused') THEN 1.0 ELSE training_progress END,
                            training_updated_at=COALESCE(training_updated_at, ?)
-                           WHERE training_state IN ('qualified','paused')""",
+                           WHERE training_state IN ('qualified','paused') AND
+                           (training_window_start_ts IS NULL OR training_window_end_ts IS NULL
+                            OR training_cursor_ts IS NULL)""",
                           (bounds[0], bounds[1], bounds[1], iso_now()))
 
     def _load_meta_cache(self):
@@ -1447,6 +1462,13 @@ class Store:
         if len(rows)>20000:
             raise ValueError('Use archive_iter for large histories')
         return rows
+
+    def archive_bounds(self):
+        """Exact indexed bounds for training, independent of diagnostic totals."""
+        with self.conn() as c:
+            row = c.execute('SELECT (SELECT MIN(ts) FROM entity_history), '
+                            '(SELECT MAX(ts) FROM entity_history)').fetchone()
+        return dict(min_ts=row[0], max_ts=row[1])
 
     def archive_stats(self):
         with self.conn() as c:
