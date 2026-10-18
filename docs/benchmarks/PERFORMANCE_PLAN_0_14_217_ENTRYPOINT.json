@@ -4,25 +4,25 @@
     "ok": true,
     "ready": true,
     "startup": {
-      "current_state_seconds": 0.0008597870000244257,
-      "elapsed_seconds": 0.28205180168151855,
+      "current_state_seconds": 0.06479421599999569,
+      "elapsed_seconds": 0.28183937072753906,
       "error": null,
       "message": "Adaptive AI runtime is ready",
       "ready": true,
-      "started_at": 1792342027.5661864,
+      "started_at": 1792344264.1091797,
       "state": "ready",
       "step": 7,
       "steps": 7,
       "timings": {
-        "building_runtime": 0.0045,
-        "http_ready": 0.1049,
-        "http_starting": 0.0091,
-        "installing_extensions": 0.1285,
-        "loading_runtime": 0.0147,
+        "building_runtime": 0.0044,
+        "http_ready": 0.0455,
+        "http_starting": 0.0101,
+        "installing_extensions": 0.1238,
+        "loading_runtime": 0.0132,
         "reconciling_control": 0.0001,
         "starting_engine": 0.0002,
-        "starting_history": 0.0182,
-        "starting_realtime": 0.0009
+        "starting_history": 0.0191,
+        "starting_realtime": 0.0007
       }
     },
     "version": "0.14.217"

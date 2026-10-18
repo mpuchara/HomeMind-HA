@@ -1,0 +1,70 @@
+{
+  "failed_full_run": {
+    "tests": 2651,
+    "seconds": 320.836,
+    "result": "FAILED: one writer thread exceeded a 3-second test join",
+    "test": "test_release_195_context_payload_sharing.ContextPayload195Tests.test_ten_mib_shared_payload_admits_new_metadata_while_writer_is_paused",
+    "raw_log_sha256": "ec722726bb0d658ed5c093d40d2bb0e71e5c91381ee16a7e5dee005fb41443b4",
+    "raw_local_path": "C:\\Users\\mpuch\\OneDrive\\Dokumenty\\HomeMind\\tmp\\plan217-tests-ui-first-failure.log"
+  },
+  "alternating_module_rechecks": [
+    {
+      "pair": 0,
+      "kind": "baseline",
+      "seconds": 1.3511611809999997,
+      "exit_code": 0
+    },
+    {
+      "pair": 0,
+      "kind": "current",
+      "seconds": 1.0080320780000003,
+      "exit_code": 0
+    },
+    {
+      "pair": 1,
+      "kind": "current",
+      "seconds": 0.9697522259999998,
+      "exit_code": 0
+    },
+    {
+      "pair": 1,
+      "kind": "baseline",
+      "seconds": 0.9645483289999994,
+      "exit_code": 0
+    },
+    {
+      "pair": 2,
+      "kind": "baseline",
+      "seconds": 1.012992478000001,
+      "exit_code": 0
+    },
+    {
+      "pair": 2,
+      "kind": "current",
+      "seconds": 0.9630666310000002,
+      "exit_code": 0
+    }
+  ],
+  "interpretation": "All six isolated baseline/current module runs pass, followed by a clean full 2651-test run and both CI full suites. Timing-related first-run failure suspected; root cause not proven. No assertion or timeout relaxed; failed-run evidence retained.",
+  "clean_full_rerun": {
+    "tests": 2651,
+    "seconds": 330.119,
+    "result": "OK",
+    "log_sha256": "95480484e85e09060b73f291c73df25447081030b0cdddcda77b7e3c28987092"
+  },
+  "github_actions": {
+    "runtime_commit": "67b24a11fa84412b4fc24cbf9c045246d85a4305",
+    "run_url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/39148328833",
+    "python_311": {
+      "tests": 2651,
+      "seconds": 268.624,
+      "result": "OK"
+    },
+    "python_313": {
+      "tests": 2651,
+      "seconds": 323.831,
+      "result": "OK"
+    },
+    "image_build_and_smoke": "PASS"
+  }
+}

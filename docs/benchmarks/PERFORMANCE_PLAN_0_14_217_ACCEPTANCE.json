@@ -1,0 +1,884 @@
+{
+  "validated_runtime_remote_commit": "67b24a11fa84412b4fc24cbf9c045246d85a4305",
+  "normalized_source_files": 618,
+  "validation": {
+    "tests": 2651,
+    "seconds": 330.119,
+    "result": "OK",
+    "log_sha256": "95480484e85e09060b73f291c73df25447081030b0cdddcda77b7e3c28987092"
+  },
+  "scenarios": {
+    "FINAL_SHADOW_3_UI": {
+      "summary": {
+        "event_to_decision": {
+          "baseline_p95_ms": 16.513184800101037,
+          "current_p95_ms": 13.736526500110813,
+          "relative_change_percent": -16.814795774424052,
+          "paired_run_bootstrap_95_percent": [
+            -21.495954067324963,
+            -10.659755053695543
+          ],
+          "baseline_count": 10707,
+          "current_count": 10696
+        },
+        "event_to_target_start": {
+          "baseline_p95_ms": 9.54374020002433,
+          "current_p95_ms": 8.439913000074739,
+          "relative_change_percent": -11.565981227640465,
+          "paired_run_bootstrap_95_percent": [
+            -16.01543862298394,
+            -3.4169857074165795
+          ],
+          "baseline_count": 10707,
+          "current_count": 10696
+        },
+        "inference": {
+          "baseline_p95_ms": 6.55848369999603,
+          "current_p95_ms": 5.834617000118669,
+          "relative_change_percent": -11.03710450447256,
+          "paired_run_bootstrap_95_percent": [
+            -12.393778098287234,
+            -9.320772264266509
+          ],
+          "baseline_count": 10707,
+          "current_count": 10696
+        },
+        "wrapped_inference": {
+          "baseline_p95_ms": 14.565306900021824,
+          "current_p95_ms": 10.403141750089162,
+          "relative_change_percent": -28.57588362883329,
+          "paired_run_bootstrap_95_percent": [
+            -33.16380019209605,
+            -24.48256544045876
+          ],
+          "baseline_count": 10707,
+          "current_count": 10696
+        }
+      },
+      "runs": [
+        {
+          "kind": "baseline",
+          "pair": 0,
+          "measured_decisions": 2127,
+          "measured_service_requests": 0,
+          "service_calls_including_warmup": 0,
+          "candidate_processed_including_warmup": 2092,
+          "candidate_queue_depth": 0,
+          "candidate_oldest_root_wait_ms": null,
+          "raw_observations_pending": 8,
+          "retention_windows_pending": 12,
+          "optional_retention_gaps": 0,
+          "ui_errors": 0,
+          "backlog": {
+            "inflight": 0,
+            "pending_targets": 0,
+            "ready_targets": 0,
+            "dirty_entities": 0
+          }
+        },
+        {
+          "kind": "current",
+          "pair": 0,
+          "measured_decisions": 2134,
+          "measured_service_requests": 0,
+          "service_calls_including_warmup": 0,
+          "candidate_processed_including_warmup": 2130,
+          "candidate_queue_depth": 0,
+          "candidate_oldest_root_wait_ms": 0.0,
+          "raw_observations_pending": 4,
+          "retention_windows_pending": 6,
+          "optional_retention_gaps": 0,
+          "ui_errors": 0,
+          "backlog": {
+            "inflight": 0,
+            "pending_targets": 0,
+            "ready_targets": 0,
+            "dirty_entities": 0
+          }
+        },
+        {
+          "kind": "current",
+          "pair": 1,
+          "measured_decisions": 2145,
+          "measured_service_requests": 0,
+          "service_calls_including_warmup": 0,
+          "candidate_processed_including_warmup": 2135,
+          "candidate_queue_depth": 0,
+          "candidate_oldest_root_wait_ms": 0.0,
+          "raw_observations_pending": 42,
+          "retention_windows_pending": 56,
+          "optional_retention_gaps": 0,
+          "ui_errors": 0,
+          "backlog": {
+            "inflight": 0,
+            "pending_targets": 0,
+            "ready_targets": 0,
+            "dirty_entities": 0
+          }
+        },
+        {
+          "kind": "baseline",
+          "pair": 1,
+          "measured_decisions": 2134,
+          "measured_service_requests": 0,
+          "service_calls_including_warmup": 0,
+          "candidate_processed_including_warmup": 2090,
+          "candidate_queue_depth": 0,
+          "candidate_oldest_root_wait_ms": null,
+          "raw_observations_pending": 32,
+          "retention_windows_pending": 48,
+          "optional_retention_gaps": 0,
+          "ui_errors": 0,
+          "backlog": {
+            "inflight": 0,
+            "pending_targets": 0,
+            "ready_targets": 0,
+            "dirty_entities": 0
+          }
+        },
+        {
+          "kind": "baseline",
+          "pair": 2,
+          "measured_decisions": 2144,
+          "measured_service_requests": 0,
+          "service_calls_including_warmup": 0,
+          "candidate_processed_including_warmup": 2127,
+          "candidate_queue_depth": 0,
+          "candidate_oldest_root_wait_ms": null,
+          "raw_observations_pending": 22,
+          "retention_windows_pending": 33,
+          "optional_retention_gaps": 0,
+          "ui_errors": 0,
+          "backlog": {
+            "inflight": 0,
+            "pending_targets": 0,
+            "ready_targets": 0,
+            "dirty_entities": 0
+          }
+        },
+        {
+          "kind": "current",
+          "pair": 2,
+          "measured_decisions": 2147,
+          "measured_service_requests": 0,
+          "service_calls_including_warmup": 0,
+          "candidate_processed_including_warmup": 2136,
+          "candidate_queue_depth": 0,
+          "candidate_oldest_root_wait_ms": 0.0,
+          "raw_observations_pending": 12,
+          "retention_windows_pending": 18,
+          "optional_retention_gaps": 0,
+          "ui_errors": 0,
+          "backlog": {
+            "inflight": 0,
+            "pending_targets": 0,
+            "ready_targets": 0,
+            "dirty_entities": 0
+          }
+        },
+        {
+          "kind": "current",
+          "pair": 3,
+          "measured_decisions": 2119,
+          "measured_service_requests": 0,
+          "service_calls_including_warmup": 0,
+          "candidate_processed_including_warmup": 2109,
+          "candidate_queue_depth": 0,
+          "candidate_oldest_root_wait_ms": 0.0,
+          "raw_observations_pending": 38,
+          "retention_windows_pending": 57,
+          "optional_retention_gaps": 0,
+          "ui_errors": 0,
+          "backlog": {
+            "inflight": 0,
+            "pending_targets": 0,
+            "ready_targets": 0,
+            "dirty_entities": 0
+          }
+        },
+        {
+          "kind": "baseline",
+          "pair": 3,
+          "measured_decisions": 2151,
+          "measured_service_requests": 0,
+          "service_calls_including_warmup": 0,
+          "candidate_processed_including_warmup": 2152,
+          "candidate_queue_depth": 0,
+          "candidate_oldest_root_wait_ms": null,
+          "raw_observations_pending": 8,
+          "retention_windows_pending": 12,
+          "optional_retention_gaps": 0,
+          "ui_errors": 0,
+          "backlog": {
+            "inflight": 0,
+            "pending_targets": 0,
+            "ready_targets": 0,
+            "dirty_entities": 0
+          }
+        },
+        {
+          "kind": "baseline",
+          "pair": 4,
+          "measured_decisions": 2151,
+          "measured_service_requests": 0,
+          "service_calls_including_warmup": 0,
+          "candidate_processed_including_warmup": 2154,
+          "candidate_queue_depth": 0,
+          "candidate_oldest_root_wait_ms": null,
+          "raw_observations_pending": 20,
+          "retention_windows_pending": 30,
+          "optional_retention_gaps": 0,
+          "ui_errors": 0,
+          "backlog": {
+            "inflight": 0,
+            "pending_targets": 0,
+            "ready_targets": 0,
+            "dirty_entities": 0
+          }
+        },
+        {
+          "kind": "current",
+          "pair": 4,
+          "measured_decisions": 2151,
+          "measured_service_requests": 0,
+          "service_calls_including_warmup": 0,
+          "candidate_processed_including_warmup": 2154,
+          "candidate_queue_depth": 0,
+          "candidate_oldest_root_wait_ms": 0.0,
+          "raw_observations_pending": 8,
+          "retention_windows_pending": 12,
+          "optional_retention_gaps": 0,
+          "ui_errors": 0,
+          "backlog": {
+            "inflight": 0,
+            "pending_targets": 0,
+            "ready_targets": 0,
+            "dirty_entities": 0
+          }
+        }
+      ]
+    },
+    "FINAL_SHADOW_20_UI": {
+      "summary": {
+        "event_to_decision": {
+          "baseline_p95_ms": 419.58136899996816,
+          "current_p95_ms": 109.35615824997153,
+          "relative_change_percent": -73.93684125903603,
+          "paired_run_bootstrap_95_percent": [
+            -80.235740341322,
+            -71.15856513538832
+          ],
+          "baseline_count": 22275,
+          "current_count": 34930
+        },
+        "event_to_target_start": {
+          "baseline_p95_ms": 406.63440374992217,
+          "current_p95_ms": 100.51624520003764,
+          "relative_change_percent": -75.28092943609992,
+          "paired_run_bootstrap_95_percent": [
+            -81.56877226215971,
+            -72.30548128257817
+          ],
+          "baseline_count": 22282,
+          "current_count": 34937
+        },
+        "inference": {
+          "baseline_p95_ms": 8.21165070005918,
+          "current_p95_ms": 6.402246799973453,
+          "relative_change_percent": -22.03459409291102,
+          "paired_run_bootstrap_95_percent": [
+            -25.266023428361507,
+            -18.352232520126854
+          ],
+          "baseline_count": 22275,
+          "current_count": 34930
+        },
+        "wrapped_inference": {
+          "baseline_p95_ms": 30.071542500019177,
+          "current_p95_ms": 14.305634649997499,
+          "relative_change_percent": -52.42799849728901,
+          "paired_run_bootstrap_95_percent": [
+            -54.1389406089887,
+            -49.817714051736864
+          ],
+          "baseline_count": 22272,
+          "current_count": 34930
+        }
+      },
+      "runs": [
+        {
+          "kind": "baseline",
+          "pair": 0,
+          "measured_decisions": 4549,
+          "measured_service_requests": 0,
+          "service_calls_including_warmup": 0,
+          "candidate_processed_including_warmup": 127,
+          "candidate_queue_depth": 20,
+          "candidate_oldest_root_wait_ms": null,
+          "raw_observations_pending": 58,
+          "retention_windows_pending": 2147,
+          "optional_retention_gaps": 0,
+          "ui_errors": 3,
+          "backlog": {
+            "inflight": 20,
+            "pending_targets": 14,
+            "ready_targets": 0,
+            "dirty_entities": 0
+          }
+        },
+        {
+          "kind": "current",
+          "pair": 0,
+          "measured_decisions": 7025,
+          "measured_service_requests": 0,
+          "service_calls_including_warmup": 0,
+          "candidate_processed_including_warmup": 746,
+          "candidate_queue_depth": 20,
+          "candidate_oldest_root_wait_ms": 5621.048083999995,
+          "raw_observations_pending": 92,
+          "retention_windows_pending": 2644,
+          "optional_retention_gaps": 0,
+          "ui_errors": 0,
+          "backlog": {
+            "inflight": 2,
+            "pending_targets": 0,
+            "ready_targets": 12,
+            "dirty_entities": 0
+          }
+        },
+        {
+          "kind": "current",
+          "pair": 1,
+          "measured_decisions": 6699,
+          "measured_service_requests": 0,
+          "service_calls_including_warmup": 0,
+          "candidate_processed_including_warmup": 1093,
+          "candidate_queue_depth": 20,
+          "candidate_oldest_root_wait_ms": 2029.7810079999863,
+          "raw_observations_pending": 20,
+          "retention_windows_pending": 62,
+          "optional_retention_gaps": 0,
+          "ui_errors": 0,
+          "backlog": {
+            "inflight": 2,
+            "pending_targets": 0,
+            "ready_targets": 11,
+            "dirty_entities": 0
+          }
+        },
+        {
+          "kind": "baseline",
+          "pair": 1,
+          "measured_decisions": 4388,
+          "measured_service_requests": 0,
+          "service_calls_including_warmup": 0,
+          "candidate_processed_including_warmup": 146,
+          "candidate_queue_depth": 20,
+          "candidate_oldest_root_wait_ms": null,
+          "raw_observations_pending": 104,
+          "retention_windows_pending": 1988,
+          "optional_retention_gaps": 0,
+          "ui_errors": 3,
+          "backlog": {
+            "inflight": 20,
+            "pending_targets": 16,
+            "ready_targets": 0,
+            "dirty_entities": 0
+          }
+        },
+        {
+          "kind": "baseline",
+          "pair": 2,
+          "measured_decisions": 4397,
+          "measured_service_requests": 0,
+          "service_calls_including_warmup": 0,
+          "candidate_processed_including_warmup": 138,
+          "candidate_queue_depth": 20,
+          "candidate_oldest_root_wait_ms": null,
+          "raw_observations_pending": 114,
+          "retention_windows_pending": 2128,
+          "optional_retention_gaps": 0,
+          "ui_errors": 3,
+          "backlog": {
+            "inflight": 20,
+            "pending_targets": 9,
+            "ready_targets": 0,
+            "dirty_entities": 0
+          }
+        },
+        {
+          "kind": "current",
+          "pair": 2,
+          "measured_decisions": 7143,
+          "measured_service_requests": 0,
+          "service_calls_including_warmup": 0,
+          "candidate_processed_including_warmup": 1125,
+          "candidate_queue_depth": 20,
+          "candidate_oldest_root_wait_ms": 8152.055755999982,
+          "raw_observations_pending": 64,
+          "retention_windows_pending": 1718,
+          "optional_retention_gaps": 0,
+          "ui_errors": 0,
+          "backlog": {
+            "inflight": 1,
+            "pending_targets": 0,
+            "ready_targets": 15,
+            "dirty_entities": 0
+          }
+        },
+        {
+          "kind": "current",
+          "pair": 3,
+          "measured_decisions": 7026,
+          "measured_service_requests": 0,
+          "service_calls_including_warmup": 0,
+          "candidate_processed_including_warmup": 913,
+          "candidate_queue_depth": 20,
+          "candidate_oldest_root_wait_ms": 7021.86549999999,
+          "raw_observations_pending": 70,
+          "retention_windows_pending": 2435,
+          "optional_retention_gaps": 0,
+          "ui_errors": 0,
+          "backlog": {
+            "inflight": 2,
+            "pending_targets": 0,
+            "ready_targets": 9,
+            "dirty_entities": 0
+          }
+        },
+        {
+          "kind": "baseline",
+          "pair": 3,
+          "measured_decisions": 4458,
+          "measured_service_requests": 0,
+          "service_calls_including_warmup": 0,
+          "candidate_processed_including_warmup": 140,
+          "candidate_queue_depth": 20,
+          "candidate_oldest_root_wait_ms": null,
+          "raw_observations_pending": 50,
+          "retention_windows_pending": 2336,
+          "optional_retention_gaps": 0,
+          "ui_errors": 3,
+          "backlog": {
+            "inflight": 19,
+            "pending_targets": 13,
+            "ready_targets": 1,
+            "dirty_entities": 0
+          }
+        },
+        {
+          "kind": "baseline",
+          "pair": 4,
+          "measured_decisions": 4483,
+          "measured_service_requests": 0,
+          "service_calls_including_warmup": 0,
+          "candidate_processed_including_warmup": 129,
+          "candidate_queue_depth": 20,
+          "candidate_oldest_root_wait_ms": null,
+          "raw_observations_pending": 104,
+          "retention_windows_pending": 2083,
+          "optional_retention_gaps": 0,
+          "ui_errors": 3,
+          "backlog": {
+            "inflight": 20,
+            "pending_targets": 9,
+            "ready_targets": 0,
+            "dirty_entities": 0
+          }
+        },
+        {
+          "kind": "current",
+          "pair": 4,
+          "measured_decisions": 7037,
+          "measured_service_requests": 0,
+          "service_calls_including_warmup": 0,
+          "candidate_processed_including_warmup": 1209,
+          "candidate_queue_depth": 14,
+          "candidate_oldest_root_wait_ms": 119.40761799996835,
+          "raw_observations_pending": 10,
+          "retention_windows_pending": 55,
+          "optional_retention_gaps": 0,
+          "ui_errors": 0,
+          "backlog": {
+            "inflight": 2,
+            "pending_targets": 0,
+            "ready_targets": 0,
+            "dirty_entities": 0
+          }
+        }
+      ]
+    },
+    "FINAL_CONTROL_3_UI": {
+      "summary": {
+        "event_to_decision": {
+          "baseline_p95_ms": 490.4908438001021,
+          "current_p95_ms": 75.92061420000393,
+          "relative_change_percent": -84.52150225439374,
+          "paired_run_bootstrap_95_percent": [
+            -96.04870789974734,
+            -56.63149512058592
+          ],
+          "baseline_count": 247,
+          "current_count": 8979
+        },
+        "event_to_target_start": {
+          "baseline_p95_ms": 480.6149680999615,
+          "current_p95_ms": 71.68281570016008,
+          "relative_change_percent": -85.08518867326433,
+          "paired_run_bootstrap_95_percent": [
+            -96.24550350678152,
+            -55.41047620778485
+          ],
+          "baseline_count": 247,
+          "current_count": 8979
+        },
+        "inference": {
+          "baseline_p95_ms": 8.703391199992435,
+          "current_p95_ms": 4.199206699991012,
+          "relative_change_percent": -51.75206303498501,
+          "paired_run_bootstrap_95_percent": [
+            -57.04011279003972,
+            -43.896181517440816
+          ],
+          "baseline_count": 247,
+          "current_count": 8979
+        },
+        "wrapped_inference": {
+          "baseline_p95_ms": 14597.268351199999,
+          "current_p95_ms": 69.47696800007179,
+          "relative_change_percent": -99.5240413046571,
+          "paired_run_bootstrap_95_percent": [
+            -99.61176893037523,
+            -99.45826217288044
+          ],
+          "baseline_count": 237,
+          "current_count": 8969
+        }
+      },
+      "runs": [
+        {
+          "kind": "baseline",
+          "pair": 0,
+          "measured_decisions": 78,
+          "measured_service_requests": 0,
+          "service_calls_including_warmup": 0,
+          "candidate_processed_including_warmup": 78,
+          "candidate_queue_depth": 0,
+          "candidate_oldest_root_wait_ms": null,
+          "raw_observations_pending": 24,
+          "retention_windows_pending": 4,
+          "optional_retention_gaps": 0,
+          "ui_errors": 0,
+          "backlog": {
+            "inflight": 3,
+            "pending_targets": 1,
+            "ready_targets": 0,
+            "dirty_entities": 0
+          }
+        },
+        {
+          "kind": "current",
+          "pair": 0,
+          "measured_decisions": 1944,
+          "measured_service_requests": 0,
+          "service_calls_including_warmup": 3,
+          "candidate_processed_including_warmup": 1948,
+          "candidate_queue_depth": 0,
+          "candidate_oldest_root_wait_ms": 0.0,
+          "raw_observations_pending": 30,
+          "retention_windows_pending": 41,
+          "optional_retention_gaps": 0,
+          "ui_errors": 0,
+          "backlog": {
+            "inflight": 2,
+            "pending_targets": 0,
+            "ready_targets": 1,
+            "dirty_entities": 0
+          }
+        },
+        {
+          "kind": "current",
+          "pair": 1,
+          "measured_decisions": 1934,
+          "measured_service_requests": 0,
+          "service_calls_including_warmup": 3,
+          "candidate_processed_including_warmup": 1937,
+          "candidate_queue_depth": 0,
+          "candidate_oldest_root_wait_ms": 0.0,
+          "raw_observations_pending": 16,
+          "retention_windows_pending": 24,
+          "optional_retention_gaps": 0,
+          "ui_errors": 0,
+          "backlog": {
+            "inflight": 2,
+            "pending_targets": 0,
+            "ready_targets": 0,
+            "dirty_entities": 0
+          }
+        },
+        {
+          "kind": "baseline",
+          "pair": 1,
+          "measured_decisions": 23,
+          "measured_service_requests": 0,
+          "service_calls_including_warmup": 0,
+          "candidate_processed_including_warmup": 24,
+          "candidate_queue_depth": 0,
+          "candidate_oldest_root_wait_ms": null,
+          "raw_observations_pending": 16,
+          "retention_windows_pending": 0,
+          "optional_retention_gaps": 0,
+          "ui_errors": 0,
+          "backlog": {
+            "inflight": 3,
+            "pending_targets": 3,
+            "ready_targets": 0,
+            "dirty_entities": 0
+          }
+        },
+        {
+          "kind": "baseline",
+          "pair": 2,
+          "measured_decisions": 36,
+          "measured_service_requests": 0,
+          "service_calls_including_warmup": 0,
+          "candidate_processed_including_warmup": 37,
+          "candidate_queue_depth": 0,
+          "candidate_oldest_root_wait_ms": null,
+          "raw_observations_pending": 56,
+          "retention_windows_pending": 0,
+          "optional_retention_gaps": 0,
+          "ui_errors": 0,
+          "backlog": {
+            "inflight": 3,
+            "pending_targets": 3,
+            "ready_targets": 0,
+            "dirty_entities": 0
+          }
+        },
+        {
+          "kind": "current",
+          "pair": 2,
+          "measured_decisions": 1443,
+          "measured_service_requests": 0,
+          "service_calls_including_warmup": 3,
+          "candidate_processed_including_warmup": 1447,
+          "candidate_queue_depth": 0,
+          "candidate_oldest_root_wait_ms": 0.0,
+          "raw_observations_pending": 0,
+          "retention_windows_pending": 2,
+          "optional_retention_gaps": 0,
+          "ui_errors": 0,
+          "backlog": {
+            "inflight": 2,
+            "pending_targets": 0,
+            "ready_targets": 1,
+            "dirty_entities": 0
+          }
+        },
+        {
+          "kind": "current",
+          "pair": 3,
+          "measured_decisions": 1895,
+          "measured_service_requests": 0,
+          "service_calls_including_warmup": 3,
+          "candidate_processed_including_warmup": 1898,
+          "candidate_queue_depth": 0,
+          "candidate_oldest_root_wait_ms": 0.0,
+          "raw_observations_pending": 36,
+          "retention_windows_pending": 53,
+          "optional_retention_gaps": 0,
+          "ui_errors": 0,
+          "backlog": {
+            "inflight": 2,
+            "pending_targets": 0,
+            "ready_targets": 0,
+            "dirty_entities": 0
+          }
+        },
+        {
+          "kind": "baseline",
+          "pair": 3,
+          "measured_decisions": 34,
+          "measured_service_requests": 0,
+          "service_calls_including_warmup": 0,
+          "candidate_processed_including_warmup": 35,
+          "candidate_queue_depth": 0,
+          "candidate_oldest_root_wait_ms": null,
+          "raw_observations_pending": 48,
+          "retention_windows_pending": 0,
+          "optional_retention_gaps": 0,
+          "ui_errors": 0,
+          "backlog": {
+            "inflight": 3,
+            "pending_targets": 3,
+            "ready_targets": 0,
+            "dirty_entities": 0
+          }
+        },
+        {
+          "kind": "baseline",
+          "pair": 4,
+          "measured_decisions": 76,
+          "measured_service_requests": 0,
+          "service_calls_including_warmup": 0,
+          "candidate_processed_including_warmup": 77,
+          "candidate_queue_depth": 0,
+          "candidate_oldest_root_wait_ms": null,
+          "raw_observations_pending": 4,
+          "retention_windows_pending": 0,
+          "optional_retention_gaps": 0,
+          "ui_errors": 0,
+          "backlog": {
+            "inflight": 3,
+            "pending_targets": 3,
+            "ready_targets": 0,
+            "dirty_entities": 0
+          }
+        },
+        {
+          "kind": "current",
+          "pair": 4,
+          "measured_decisions": 1763,
+          "measured_service_requests": 0,
+          "service_calls_including_warmup": 3,
+          "candidate_processed_including_warmup": 1766,
+          "candidate_queue_depth": 0,
+          "candidate_oldest_root_wait_ms": 0.0,
+          "raw_observations_pending": 36,
+          "retention_windows_pending": 52,
+          "optional_retention_gaps": 0,
+          "ui_errors": 0,
+          "backlog": {
+            "inflight": 2,
+            "pending_targets": 0,
+            "ready_targets": 0,
+            "dirty_entities": 0
+          }
+        }
+      ]
+    }
+  },
+  "long_20_root": {
+    "seconds": 120.005599878,
+    "root_decision": {
+      "count": 22409,
+      "p50": 84.62555799997062,
+      "p95": 144.20058460001428,
+      "p99": 183.4932322399936,
+      "max": 388.6014099999784
+    },
+    "candidate_at_input_stop": {
+      "contract_version": 1,
+      "execution": "existing_candidate_worker",
+      "queue_policy": "bounded_latest_per_root",
+      "root_admission_order": "fifo_preserved_on_coalesce",
+      "oldest_root_wait_ms": 20676.299571000072,
+      "queue_limit": 32,
+      "queue_depth": 20,
+      "pending_roots": [
+        "b2306448",
+        "8cb640a1",
+        "2bf42ca5",
+        "0cae8417",
+        "b49c7f4e",
+        "60474bda",
+        "c897e998",
+        "4d9b6347"
+      ],
+      "queued": 816,
+      "coalesced": 21613,
+      "deduplicated": 0,
+      "dropped": 0,
+      "processed": 794,
+      "stale_generation_dropped": 0,
+      "errors": 0,
+      "observation_gaps": 0,
+      "max_depth": 20,
+      "last_error": null,
+      "last_root_agent_id": "56a61572",
+      "last_queue_lag_ms": 2424.2445090000047
+    },
+    "journal_at_input_stop": {
+      "storage_retry": {
+        "reason": null,
+        "pauses": 0,
+        "busy_retries": 0,
+        "retry_in_seconds": 0.0
+      },
+      "observations": {
+        "queued": 4840,
+        "flushed": 3454,
+        "flushes": 86,
+        "max_queue": 1322,
+        "overflow_sync": 0,
+        "errors": 0,
+        "pending": 1322
+      },
+      "windows": {
+        "queued": 12770,
+        "flushed": 8674,
+        "flushes": 90,
+        "max_queue": 4096,
+        "overflow_sync": 0,
+        "overflow_gaps": 9659,
+        "errors": 0,
+        "last_gap_anchor_time": 1792344433.698735,
+        "last_gap_reason": "window_queue_capacity",
+        "pending": 4096
+      }
+    },
+    "ui_stats": {
+      "requests": 2207,
+      "errors": 0,
+      "routes": {
+        "api/status": {
+          "requests": 11,
+          "errors": 0
+        },
+        "api/live": {
+          "requests": 1081,
+          "errors": 0
+        },
+        "api/candidate-live": {
+          "requests": 1082,
+          "errors": 0
+        },
+        "api/events": {
+          "requests": 11,
+          "errors": 0
+        },
+        "api/agents": {
+          "requests": 11,
+          "errors": 0
+        },
+        "api/candidates": {
+          "requests": 11,
+          "errors": 0
+        }
+      }
+    }
+  },
+  "trace_overhead": {
+    "off": {
+      "p95_ms": 13.692599700243587,
+      "cpu_seconds": 34.361202993,
+      "samples": 5343
+    },
+    "on": {
+      "p95_ms": 16.13838674986709,
+      "cpu_seconds": 39.245982933,
+      "samples": 5334
+    },
+    "p95_relative_change_percent": 17.862108753387385,
+    "cpu_relative_change_percent": 14.215974746271609
+  },
+  "performance_gate": "OPEN: sustained 20-Root Candidate/retention backlog; Control measured window has zero service requests",
+  "limitations": [
+    "Host synthetic trained policies and local HA transport; no target Pi or physical ACK evidence",
+    "Root timing is not Candidate latency; Candidate processed counters include warmup, not strict throughput",
+    "Control baseline is heavily stalled and performs no dispatch; current dispatch occurs only during warmup",
+    "No large production-database cold/warm startup result; trace ON adds measurable overhead",
+    "All pair results retained, including baseline UI timeouts and current sustained retention gaps"
+  ]
+}

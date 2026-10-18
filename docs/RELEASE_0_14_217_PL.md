@@ -84,3 +84,28 @@ W 120-sekundowej próbie z 20 aktywnymi Root i otwartym UI końcowy wariant mia�
 Pakiet wykonuje E0/E1 oraz części E2/E3/E6. Cały plan E0–E7 nie jest zakończony. Pozostają: odłączone przyrostowe ramki i epoka mutacji modelu, pozostała praca po decyzji, zaakceptowana pomiarowo izolacja lifecycle Shadow, priorytety writerów i stabilność przy długim przeciążeniu, ocena IPC/CPU oraz start na dużej rzeczywistej bazie. E4 należy wdrażać warunkowo: bieżące pomiary nie wskazują blokady Home Context jako głównego ograniczenia. Większy limit RAM nie naprawia rosnącej stale kolejki; istniejące ograniczone kolejki i indeksy w RAM pozostają używane.
 
 Control, OFF confirmation, świeżość danych, future-only pairing, checksum modeli oraz ograniczenia dysku/WAL/payload/RAM pozostają wymagane. Ten pakiet nie dowodzi skrócenia fizycznej reakcji ani prawie dziesięciominutowego startu instalacji użytkownika. Nie wymaga Full Rebuild.
+
+
+## Końcowe wyniki pierwszego pakietu
+
+Kod wykonawczy zamrożono w commicie GitHub `67b24a11fa84412b4fc24cbf9c045246d85a4305`. Manifest `SOURCE_HASHES` potwierdza 618 plików źródłowych, testów i narzędzi; późniejsze zmiany dotyczą wyłącznie raportów i metadanych. Poniżej p95 Root `event_to_decision`, przy działającym Candidate i UI. Nie jest to p95 decyzji Candidate.
+
+| Scenariusz | 0.14.216 | 0.14.217 | Zmiana | Bootstrap 95% zmiany | Liczba decyzji 216 / 217 |
+| --- | ---: | ---: | ---: | --- | ---: |
+| 3 Root Shadow | 16,51 ms | 13,74 ms | -16,8% | -21,5% do -10,7% | 10707 / 10696 |
+| 20 Root Shadow | 419,58 ms | 109,36 ms | -73,9% | -80,2% do -71,2% | 22275 / 34930 |
+| 3 Root Control, ograniczona interpretacja | 490,49 ms | 75,92 ms | -84,5% | -96,0% do -56,6% | 247 / 8979 |
+
+Każdy scenariusz ma pięć naprzemiennych par po 36 sekund po rozgrzewce. Porównywane pary mają identyczne hashe wejść i narzędzia. Bootstrap losuje całe pary. Odczyt Candidate-live co 100 ms obciąża obie wersje. Wszystkie serie są zachowane. Przy 3 Root Shadow kolejka Candidate na końcu wejścia jest pusta we wszystkich seriach i nie ma luk retencji. Przy 20 Root p95 szybszego Root nie oznacza stabilnej obsługi wszystkich Candidate: kolejka nadal ma 14 do 20 oczekujących rootów. W pięciu seriach 217 nie było błędów HTTP; 216 miała po trzy timeouty ciężkiej listy Candidate. Wiek roota nie był instrumentowany w 216, więc brak tej metryki nie oznacza zerowego oczekiwania.
+
+Control wymaga osobnej interpretacji: 216 jest mocno zablokowana, kończy tylko 247 decyzji i nie wysyła usług. Każda seria 217 wysyła trzy usługi podczas rozgrzewki, lecz **właściwe okno pomiarowe obu wersji ma zero usług HA**. Wynik opisuje gotowość decyzji i blokowanie pipeline, bez dowodu poprawy ścieżki komenda → ACK. Nie jest odbiorem fizycznego sterowania.
+
+Próba 120 sekund / 20 Root: Root p95 144,20 ms, 22409 decyzji; Candidate na końcu wejścia ma 20 oczekujących rootów i najstarszy czeka 20676 ms. Pozostają 1322 surowe obserwacje oraz pełna kolejka 4096 okien; 9659 nowych opcjonalnych okien retencji nie przyjęto, z jawnymi lukami. Zero błędów na 2207 żądaniach UI nie znosi tego przeciążenia. Ten scenariusz nadal nie spełnia odbioru.
+
+Osobna próba tego samego źródła, pięć par po 18 sekund: debug trace OFF p95 13,69 ms, ON 16,14 ms (+17,9%); proces zużył o 14,2% więcej CPU. Dotyczy hosta i tego obciążenia. Szczegółowy trace ma mierzalny koszt, więc porównania wersji wykonano z trace OFF. CPU/RSS raportu dotyczą procesu runtime, bez pełnego rozliczenia jego procesów potomnych.
+
+Pełna lokalna regresja kończy się `Ran 2651 tests ... OK` w 330,119 s. CI tego samego kodu: Python 3.11 2651 testów w 268,624 s, Python 3.13 2651 w 323,831 s, budowa obrazu i smoke PASS: [przebieg CI](https://github.com/mpuchara/HomeMind-HA/actions/runs/39148328833). Entry point, oba testy VM interfejsu, compileall i składnia 21 plików JS przechodzą. Pierwszy lokalny przebieg miał jeden timeout trzysekundowego join writera w istniejącym teście 10 MiB. Zachowano jego log i hash; sześć naprzemiennych powtórzeń modułu i pełny ponowny przebieg przechodzą bez zmiany testu ani timeoutu. Przyczyna pierwszego timeoutu nie została dowiedziona. Szczegóły: `QA_RETRY`.
+
+`ACCEPTANCE` zestawia wyniki i otwarte bramki. Raporty `FINAL_*`, `LONG_CURRENT_20` i `TRACE_OVERHEAD` publikują wszystkie serie, rozkłady, liczniki i hashe. Wyłącznie duże tablice pojedynczych próbek są zachowane w pełnych lokalnych JSON w `tmp/performance217-final-raw`; każde opublikowane zestawienie zawiera ich ścieżkę, rozmiar i SHA-256. Próby pośrednie i stary profil 1 s są odrębne i nie stanowią podstawy tabeli.
+
+Status pozostaje draft. Następny priorytet to izolacja lifecycle/obserwatorów od oceny Candidate oraz wydajność writerów przy długim obciążeniu. Dopiero stabilna kolejka, brak luk i komendy w oknie pomiaru pozwolą zamknąć odpowiednie bramki; większy bufor RAM sam nie rozwiązuje stałego niedoboru przepustowości.

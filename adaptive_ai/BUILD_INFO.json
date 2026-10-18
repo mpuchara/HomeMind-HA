@@ -3,7 +3,7 @@
   "release_date": "2026-10-18",
   "base_version": "0.14.216",
   "base_commit": "cd8a0f817d360cf39351248db7a119f26ea4fca7",
-  "release_status": "draft-final-100ms-candidate-ui-validation-pending",
+  "release_status": "draft-functional-validation-passed-sustained-overload-open",
   "release_014140": {
     "scope": "inventory_and_remove_remaining_shipped_feature_Handler_fallbacks_for_Candidate_Live_and_manual_feedback_transport",
     "explicit_routes": "manual_feedback.js, candidate_ui.js, candidate_preference_ui.js, /api/candidates, Candidate Teach-RL status/train, generation history/comparison, /api/candidate-live, /api/live and Candidate discard",
@@ -249,7 +249,7 @@
   "pi4_release_gate_contract": "pi4_release_gate_v1",
   "pi4_real_hardware_required": true,
   "stage7_offline_rl_control_unlock": false,
-  "tests_passed": 2650,
+  "tests_passed": 2651,
   "tests_passed_version": "0.14.217",
   "profile": "rpi4-ram-first-complete-discovery-manual-agent-selection",
   "manual_agent_training": true,
@@ -2760,7 +2760,7 @@
     "benchmark": "docs/benchmarks/CONTEXT_BUFFER_0_14_195_VALIDATION.json",
     "median_observer_speedup": 1.018396920512725
   },
-  "release_validation_tests_passed": 2650,
+  "release_validation_tests_passed": 2651,
   "release_014196": {
     "scope": "typed_deferred_batch_busy_retry_and_cooperative_wal_reclaim_write_admission",
     "learning_semantics_changed": false,
@@ -3086,9 +3086,77 @@
       "Dedicated Candidate Shadow thread regressed loaded full runtime; removed from shipped composition"
     ],
     "optional_window_overload": "New decision retention window rejected explicitly at capacity; accepted windows/raw events retained; manual corrections keep durable fallback",
-    "validation_tests_passed": 2650,
-    "validation_seconds": 317.686,
-    "performance_gate": "pending alternating comparisons; 120-second 20-Root run has growing queues and explicit optional retention gaps",
-    "candidate_ui": "100ms visible loop/cache, shared inflight, no requests hidden or without cards; final validation pending"
+    "validation_tests_passed": 2651,
+    "validation_seconds": 330.119,
+    "performance_gate": "OPEN: sustained 20-Root Candidate/retention backlog; Control measured window has zero service requests",
+    "candidate_ui": "100ms visible loop/cache; shared inflight and hidden/no-card suppression verified in production script order VM",
+    "validated_runtime_remote_commit": "67b24a11fa84412b4fc24cbf9c045246d85a4305",
+    "normalized_source_files": 618,
+    "host_event_to_decision_p95_ms": {
+      "FINAL_SHADOW_3_UI": {
+        "baseline_p95_ms": 16.513184800101037,
+        "current_p95_ms": 13.736526500110813,
+        "relative_change_percent": -16.814795774424052,
+        "paired_run_bootstrap_95_percent": [
+          -21.495954067324963,
+          -10.659755053695543
+        ],
+        "baseline_count": 10707,
+        "current_count": 10696
+      },
+      "FINAL_SHADOW_20_UI": {
+        "baseline_p95_ms": 419.58136899996816,
+        "current_p95_ms": 109.35615824997153,
+        "relative_change_percent": -73.93684125903603,
+        "paired_run_bootstrap_95_percent": [
+          -80.235740341322,
+          -71.15856513538832
+        ],
+        "baseline_count": 22275,
+        "current_count": 34930
+      },
+      "FINAL_CONTROL_3_UI": {
+        "baseline_p95_ms": 490.4908438001021,
+        "current_p95_ms": 75.92061420000393,
+        "relative_change_percent": -84.52150225439374,
+        "paired_run_bootstrap_95_percent": [
+          -96.04870789974734,
+          -56.63149512058592
+        ],
+        "baseline_count": 247,
+        "current_count": 8979
+      }
+    },
+    "trace_overhead_host": {
+      "off": {
+        "p95_ms": 13.692599700243587,
+        "cpu_seconds": 34.361202993,
+        "samples": 5343
+      },
+      "on": {
+        "p95_ms": 16.13838674986709,
+        "cpu_seconds": 39.245982933,
+        "samples": 5334
+      },
+      "p95_relative_change_percent": 17.862108753387385,
+      "cpu_relative_change_percent": 14.215974746271609
+    },
+    "acceptance_report": "docs/benchmarks/PERFORMANCE_PLAN_0_14_217_ACCEPTANCE.json",
+    "ci_validation": {
+      "runtime_commit": "67b24a11fa84412b4fc24cbf9c045246d85a4305",
+      "run_url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/39148328833",
+      "python_311": {
+        "tests": 2651,
+        "seconds": 268.624,
+        "result": "OK"
+      },
+      "python_313": {
+        "tests": 2651,
+        "seconds": 323.831,
+        "result": "OK"
+      },
+      "image_build_and_smoke": "PASS"
+    },
+    "qa_retry_report": "docs/benchmarks/PERFORMANCE_PLAN_0_14_217_QA_RETRY.json"
   }
 }
