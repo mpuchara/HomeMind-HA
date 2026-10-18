@@ -143,7 +143,9 @@ class TargetRetries172Tests(unittest.TestCase):
             self.event(str(i))
         self.assertEqual(self.r.pending_target_changes, {A: {SHARED}, B: {SHARED}})
         for future, fn, args in self.r.control_workers.tasks[:2]:
-            self.assertEqual(len(future._done_callbacks), 1)
+            # One capacity-wake callback plus one owner retry callback, neither
+            # grows with the number of coalesced sensor events.
+            self.assertEqual(len(future._done_callbacks), 2)
         self.r.control_workers.complete_next()
         drain(self.r)
         args = self.r.control_workers.tasks[-1][2]

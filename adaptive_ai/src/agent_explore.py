@@ -17,6 +17,7 @@ Candidate Shadow never creates an ActionIntent and never calls Executor/HA servi
 from __future__ import annotations
 
 import json
+import sqlite3
 import time
 import uuid
 from urllib.parse import unquote, urlsplit
@@ -154,15 +155,20 @@ def _session_for_child_agent(store, agent_id, statuses=None, mode=None):
 
 
 def _active_free_for_live(store, root_agent_id):
-    if not _table_exists(store, "agent_explore_sessions"):
-        return None
-    with store.conn() as c:
-        row = c.execute(
-            """SELECT * FROM agent_explore_sessions
-               WHERE live_owner_agent_id=? AND mode=? AND status='collecting'
-               ORDER BY created_ts DESC LIMIT 1""",
-            (str(root_agent_id), FREE_MODE),
-        ).fetchone()
+    # The SELECT itself proves table availability. No cached negative result or
+    # sqlite_master roundtrip: raw SQL, rollback and other processes stay visible.
+    try:
+        with store.conn() as c:
+            row = c.execute(
+                """SELECT * FROM agent_explore_sessions
+                   WHERE live_owner_agent_id=? AND mode=? AND status='collecting'
+                   ORDER BY created_ts DESC LIMIT 1""",
+                (str(root_agent_id), FREE_MODE),
+            ).fetchone()
+    except sqlite3.OperationalError as exc:
+        if str(exc) == 'no such table: agent_explore_sessions':
+            return None
+        raise
     return dict(row) if row else None
 
 
@@ -754,11 +760,17 @@ def install(manager, *, legacy_get=True, legacy_post=True):
     _install_shadow_overlay()
 
     def experiment_finish(aid, reward, reason):
-        session = _active_free_for_live(manager.store, aid)
-        result = original_experiment_finish(aid, reward, reason)
-        if session:
-            _finish_free_outcome(manager, session, reward, reason)
-        return result
+        with experiments.lock:
+            data = experiments.cache.get(aid)
+            if data is not None and not data.get('active'):
+                # The base finish is a no-op in this exact RAM state. No trial
+                # means no Explore outcome to pair, even if a session is collecting.
+                return original_experiment_finish(aid, reward, reason)
+            session = _active_free_for_live(manager.store, aid)
+            result = original_experiment_finish(aid, reward, reason)
+            if session:
+                _finish_free_outcome(manager, session, reward, reason)
+            return result
 
     experiments._finish = experiment_finish
 

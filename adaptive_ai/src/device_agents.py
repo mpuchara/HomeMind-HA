@@ -173,6 +173,10 @@ class DeviceAgentService:
         entity_id = str(entity_id)
         explicit = self.explicit_mapping(entity_id)
         entities, devices = self._registry()
+        return self._identity_from_snapshot(entity_id, explicit, entities, devices)
+
+    @staticmethod
+    def _identity_from_snapshot(entity_id, explicit, entities, devices):
         reg = dict(entities.get(entity_id) or {})
         device_id = reg.get("device_id")
         device = dict(devices.get(device_id) or {}) if device_id else {}
@@ -209,17 +213,27 @@ class DeviceAgentService:
     def _entities_for_identity(self, identity):
         logical = identity["logical_device_id"]
         entities, _ = self._registry()
-        out = []
-        for eid, reg in entities.items():
-            mapped = self.explicit_mapping(eid)
-            if mapped and str(mapped.get("logical_device_id")) == logical:
-                out.append(eid)
-                continue
-            if not mapped and identity.get("device_id") and reg.get("device_id") == identity.get("device_id"):
-                out.append(eid)
-        if identity["entity_id"] not in out:
-            out.append(identity["entity_id"])
-        return sorted(set(out))
+        out = {eid for eid, reg in entities.items()
+               if identity.get("device_id") and reg.get("device_id") == identity.get("device_id")}
+        # This descriptor is a Control guard, so use fresh SQL rather than a TTL
+        # cache. Previously each descriptor opened/read once per HA entity, even
+        # with no explicit mappings; conflict checks multiply that by agent count.
+        # Bound SQL parameters and retained rows independently of registry size.
+        entity_ids = tuple(entities)
+        if entity_ids:
+            with self.store.conn() as c:
+                for start in range(0, len(entity_ids), 256):
+                    batch = entity_ids[start:start+256]
+                    rows = c.execute(
+                        'SELECT entity_id,logical_device_id FROM device_explicit_mappings '
+                        'WHERE entity_id IN (%s)' % ','.join('?' for _ in batch), batch)
+                    for eid, mapped_logical in rows:
+                        if str(mapped_logical) == logical:
+                            out.add(eid)
+                        else:
+                            out.discard(eid)
+        out.add(identity["entity_id"])
+        return sorted(out)
 
     def migrate_agent_identity(self, agent):
         """Persist additive logical metadata without changing physical target semantics."""
@@ -295,13 +309,6 @@ class DeviceAgentService:
             autonomy_allowed = True
             autonomy_reason = "manual agent or described domain contract"
 
-        resource_keys = ["device:" + identity["logical_device_id"]]
-        if explicit.get("resource_group"):
-            resource_keys.append("group:" + str(explicit["resource_group"]))
-        zone = identity.get("area_id")
-        if zone and domain in PROCESS_DOMAINS:
-            resource_keys.append(f"zone:{zone}:solar_shading" if domain == "cover" else f"zone:{zone}:thermal")
-
         return {
             "contract_version": CONTRACT_VERSION,
             **identity,
@@ -309,7 +316,7 @@ class DeviceAgentService:
             "physical_target_property": str(agent.get("target_property") or ""),
             "entities": entity_ids,
             "properties": properties,
-            "resource_keys": sorted(set(resource_keys)),
+            "resource_keys": self._resource_keys(agent, identity),
             "configuration_owner": PERCEPTION_OWNER if config_owned else None,
             "autonomy_allowed": autonomy_allowed,
             "autonomy_reason": autonomy_reason,
@@ -327,10 +334,45 @@ class DeviceAgentService:
                 "reason": None if desc["autonomy_allowed"] else desc["autonomy_reason"],
                 "descriptor": desc}
 
+    @staticmethod
+    def _resource_keys(agent, identity):
+        explicit = identity.get("explicit_mapping") or {}
+        keys = ["device:" + identity["logical_device_id"]]
+        if explicit.get("resource_group"):
+            keys.append("group:" + str(explicit["resource_group"]))
+        domain = str(agent["target_entity"]).split(".", 1)[0]
+        zone = identity.get("area_id")
+        if zone and domain in PROCESS_DOMAINS:
+            keys.append(f"zone:{zone}:solar_shading" if domain == "cover" else f"zone:{zone}:thermal")
+        return sorted(set(keys))
+
+    def resource_keys_for_agent(self, agent):
+        # Fresh authoritative mapping; enumerating capabilities of every related
+        # entity is unnecessary when only resource identity is required.
+        return self._resource_keys(agent, self.identity_for_entity(agent["target_entity"]))
+
+    def _resource_keys_for_agents(self, agents):
+        entities, devices = self._registry()
+        entity_ids = tuple(dict.fromkeys(str(a["target_entity"]) for a in agents))
+        mappings = {}
+        with self.store.conn() as c:
+            for start in range(0, len(entity_ids), 256):
+                batch = entity_ids[start:start+256]
+                rows = c.execute(
+                    'SELECT * FROM device_explicit_mappings WHERE entity_id IN (%s)'
+                    % ','.join('?' for _ in batch), batch)
+                for row in rows:
+                    mapping = dict(row)
+                    mapping["autonomy_enabled"] = bool(mapping.get("autonomy_enabled"))
+                    mappings[str(mapping["entity_id"])] = mapping
+        return {str(a["id"]): self._resource_keys(a, self._identity_from_snapshot(
+            str(a["target_entity"]), mappings.get(str(a["target_entity"])), entities, devices))
+            for a in agents}
+
     def conflicts(self, left, right):
         if not left or not right or str(left.get("id")) == str(right.get("id")):
             return False
-        return bool(set(self.descriptor(left)["resource_keys"]) & set(self.descriptor(right)["resource_keys"]))
+        return bool(set(self.resource_keys_for_agent(left)) & set(self.resource_keys_for_agent(right)))
 
     # ------------------------------------------------------------------
     # Locks / durable reservations
@@ -479,10 +521,14 @@ class DeviceAgentService:
 
     def _persist_runtime_manual_holds(self, agent, runtime_by_agent=None):
         now = time.time()
-        desc = self.descriptor(agent)
+        peers = [other for other in self.store.list_agent_configs()
+                 if str(other["id"]) != str(agent["id"])]
+        resources = self._resource_keys_for_agents([agent] + peers)
+        keys = resources[str(agent["id"])]
+        own_keys = set(keys)
         hold = 0.0
-        for other in self.store.list_agent_configs():
-            if not self.conflicts(agent, other):
+        for other in peers:
+            if not own_keys.intersection(resources[str(other["id"])]):
                 continue
             runtime = (runtime_by_agent or {}).get(other["id"], {}) if runtime_by_agent is not None else {}
             value = float(runtime.get("manual_override_until") or 0.0)
@@ -494,7 +540,7 @@ class DeviceAgentService:
             hold = max(hold, value)
         if hold > now:
             with self.store.lock, self.store.conn() as c:
-                for key in desc["resource_keys"]:
+                for key in keys:
                     c.execute(
                         """INSERT INTO device_resource_state(resource_key,manual_hold_until,updated_ts)
                            VALUES(?,?,?) ON CONFLICT(resource_key) DO UPDATE SET
@@ -506,7 +552,7 @@ class DeviceAgentService:
 
     def shared_manual_hold_until(self, agent, runtime_by_agent=None):
         observed = self._persist_runtime_manual_holds(agent, runtime_by_agent)
-        keys = self.descriptor(agent)["resource_keys"]
+        keys = self.resource_keys_for_agent(agent)
         rows = self._resource_rows(keys)
         durable = max([float((rows.get(key) or {}).get("manual_hold_until") or 0.0) for key in keys] or [0.0])
         return max(observed, durable)
@@ -517,7 +563,7 @@ class DeviceAgentService:
 
     def active_lease(self, agent, now=None):
         now = time.time() if now is None else float(now)
-        rows = self._resource_rows(self.descriptor(agent)["resource_keys"])
+        rows = self._resource_rows(self.resource_keys_for_agent(agent))
         return [row for row in rows.values() if float(row.get("lease_until") or 0.0) > now]
 
     def legal_action_mask(self, agent, state, values, *, runtime_by_agent=None, now=None):

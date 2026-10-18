@@ -2,13 +2,14 @@
 import threading
 import sys
 import time
+from itertools import islice
 from sqlite_background import admit_background_write
 
 from telemetry import RUNTIME_DEBUG, TELEMETRY
 
 
 class ContextRowBuffer:
-    def __init__(self, store, name, statement, *, flush_seconds=30., max_bytes=16 * 1024 * 1024, max_rows=4096, shared_columns=()):
+    def __init__(self, store, name, statement, *, flush_seconds=30., max_bytes=16 * 1024 * 1024, max_rows=4096, shared_columns=(), batch_rows=64):
         self.store, self.name, self.statement = store, str(name), statement
         self.lock = threading.Lock()
         self.flush_lock = threading.Lock()
@@ -21,6 +22,9 @@ class ContextRowBuffer:
         self.max_bytes, self.max_rows = max(1, int(max_bytes)), max(1, int(max_rows))
         self.bytes = self.inflight_count = self.overflow_flushes = 0
         self.first_pending_at = None
+        self.batch_rows = max(1, min(256, int(batch_rows)))
+        self.commits = 0
+        self.max_store_hold_ms = 0.
 
     @staticmethod
     def _row_bytes(row):
@@ -139,16 +143,30 @@ class ContextRowBuffer:
             trace = RUNTIME_DEBUG.begin('context_rows_persist', table=self.name,
                                         rows=len(batch)) if RUNTIME_DEBUG.enabled else None
             status = 'error'
+            committed = 0
             try:
-                with self.store.lock, self.store.conn() as connection:
-                    connection.executemany(self.statement, list(batch.values()))
-                with self.lock:
-                    self.flushed += len(batch)
-                    for key, row in batch.items():
-                        self._release_row(row, batch_sizes[key])
-                    self.inflight_count = 0
+                while batch:
+                    keys = tuple(islice(batch, self.batch_rows))
+                    queued = time.perf_counter()
+                    with self.store.lock:
+                        acquired = time.perf_counter()
+                        with self.store.conn() as connection, connection.storage_batch():
+                            connection.executemany(self.statement, [batch[key] for key in keys])
+                    finished = time.perf_counter()
+                    with self.lock:
+                        self.flushed += len(keys)
+                        self.commits += 1
+                        self.max_store_hold_ms = max(self.max_store_hold_ms, (finished-acquired)*1000)
+                        for key in keys:
+                            self._release_row(batch.pop(key), batch_sizes.pop(key))
+                        self.inflight_count -= len(keys)
+                    committed += len(keys)
+                    TELEMETRY.observe('context_rows_store_lock_wait', (acquired-queued)*1000)
+                    TELEMETRY.observe('context_rows_store_hold', (finished-acquired)*1000)
+                    if batch:
+                        time.sleep(0)  # Other owners can acquire Store before the next commit.
                 status = 'ok'
-                return len(batch)
+                return committed
             except Exception:
                 with self.lock:
                     for key, row in batch.items():
@@ -172,6 +190,8 @@ class ContextRowBuffer:
                         bytes=self.bytes, max_bytes=self.max_bytes, max_rows=self.max_rows,
                         inflight=self.inflight_count, flush_seconds=self.flush_seconds,
                         overflow_flushes=self.overflow_flushes,
+                        batch_rows=self.batch_rows, commits=self.commits,
+                        max_store_hold_ms=self.max_store_hold_ms,
                         shared_payload_columns=self.shared_columns,
                         shared_payloads=len(self._shared_refs),
                         shared_payload_references=sum(part[2] for part in self._shared_refs.values()),

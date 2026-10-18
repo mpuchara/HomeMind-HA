@@ -2,11 +2,11 @@
 (()=>{
   if(window.__runtimeActivityUiInstalled)return;
 
-  // candidate_preference_ui historically asks for Candidate Current/Desired four times
-  // per second even when no Candidate exists. Keep its UI contract while collapsing the
-  // backend traffic to <=1 request/s and zero requests when there is no Candidate card.
+  // Live decision tiles use the RAM-only endpoint at the same 100 ms cadence
+  // as Current tiles. Collapse duplicate callers for one display interval and
+  // avoid backend requests entirely while there is no Candidate card.
   const upstreamFetch=window.fetch.bind(window);
-  let candidateLiveCache={at:0,body:'{"candidates":[]}'};
+  let candidateLiveCache={at:Number.NEGATIVE_INFINITY,body:'{"candidates":[]}'};
   window.fetch=(input,init={})=>{
     const method=String(init?.method||'GET').toUpperCase();
     const raw=typeof input==='string'?input:(input?.url||'');
@@ -16,7 +16,7 @@
         return Promise.resolve(new Response('{"candidates":[]}',{status:200,headers:{'Content-Type':'application/json'}}));
       }
       const now=performance.now();
-      if(now-candidateLiveCache.at<1000){
+      if(now-candidateLiveCache.at<100){
         return Promise.resolve(new Response(candidateLiveCache.body,{status:200,headers:{'Content-Type':'application/json'}}));
       }
       return upstreamFetch(input,init).then(async response=>{

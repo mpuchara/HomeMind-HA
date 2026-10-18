@@ -59,6 +59,9 @@ def fixture(store, mode='current', targets=2):
     r.resubmit_targets = set()
     r.dirty_entities = set()
     r.control_workers = ControlledWorkers()
+    # This component compares retry ownership with all initial targets admitted.
+    # Production's bounded worker-capacity scheduling is exercised separately.
+    r.control_worker_count = targets
     r.context = SimpleNamespace(home=SimpleNamespace(revision=0))
     r.state_revision = 0
     r.state_map = {'binary_sensor.shared': {'state': 'off'}}

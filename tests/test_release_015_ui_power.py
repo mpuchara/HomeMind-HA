@@ -40,7 +40,7 @@ class Release015UiPowerTests(unittest.TestCase):
         source = (ROOT/'adaptive_ai/src/static/runtime_activity_ui.js').read_text(encoding='utf-8')
         self.assertIn("path.endsWith('api/candidate-live')", source)
         self.assertIn("if(!document.querySelector('.candidate-agent'))", source)
-        self.assertIn('now-candidateLiveCache.at<1000', source)
+        self.assertIn('now-candidateLiveCache.at<100', source)
 
     def test_archive_training_is_duty_cycled_and_candidate_idle_poll_is_relaxed(self):
         import rpi_low_power_runtime as low_power

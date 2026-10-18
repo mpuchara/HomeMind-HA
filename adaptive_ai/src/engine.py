@@ -26,6 +26,7 @@ from fast_runtime import fast_light_on_assist_action, is_fast_target, stabilize_
 from training_budget import TRAINING_BUDGET
 from inference_hot_path_metrics import InferenceHotPathMetrics, observe_elapsed
 from shared_inference_context import shared_inference_temporal
+from runtime_event_latency import EventReceipts
 
 class HAEventStream(threading.Thread):
     """Near-real-time state_changed stream plus Entity Registry metadata.
@@ -151,6 +152,7 @@ class HAEventStream(threading.Thread):
                                 raise RuntimeError("state_changed subscription confirmation timeout")
                             flush_registry_due()
                             continue
+                        websocket_received_perf = time.perf_counter()
                         msg = json.loads(raw)
                         with self.engine.lock:
                             self.engine.ws_messages_total += 1
@@ -192,7 +194,8 @@ class HAEventStream(threading.Thread):
                             flush_registry_due()
                             continue
                         event = msg.get("event") or {}
-                        data = event.get("data") or {}
+                        data = dict(event.get("data") or {})
+                        data['_hm_ws_received_perf'] = websocket_received_perf
                         with self.engine.lock:
                             self.engine.ws_state_events_total += 1
                             # Receiving a real event is definitive evidence even if a
@@ -335,6 +338,7 @@ class Engine(threading.Thread):
         # last_event_received this cannot be overwritten by an unrelated later event
         # before a coalesced inference pass reaches its worker.
         self.entity_event_received_perf = {}
+        self.entity_ws_received_perf = {}
         # Policy inference is predominantly Python CPU work. More worker threads increase
         # GIL contention and can starve Ingress on Raspberry Pi. Two workers retain limited
         # overlap for SQLite/I/O while bounding CPU contention; single-core hosts stay at 1.
@@ -368,6 +372,7 @@ class Engine(threading.Thread):
         # an arbitrarily old target timestamp. The bounded per-target set is RAM-only and
         # is drained when the current worker completes.
         self.pending_target_changes = {}
+        self._timer_capacity_pending = False
         # A completed worker's retry belongs only to that target. Returning its
         # old trigger to dirty_entities makes peers replay it and retry each other.
         self.ready_target_changes = {}
@@ -626,6 +631,15 @@ class Engine(threading.Thread):
             received_perf = time.perf_counter()
             self.last_event_received = received_perf
             self.entity_event_received_perf[entity_id] = received_perf
+            ingress = data.get('_hm_ws_received_perf')
+            if type(ingress) in (float, int) and math.isfinite(ingress) and 0 < ingress <= received_perf:
+                self.entity_ws_received_perf.pop(entity_id, None)
+                self.entity_ws_received_perf[entity_id] = float(ingress)
+                if len(self.entity_ws_received_perf) > 8192:
+                    self.entity_ws_received_perf.pop(next(iter(self.entity_ws_received_perf)))
+                TELEMETRY.observe('ws_receive_to_engine', (received_perf-ingress)*1000)
+            else:
+                self.entity_ws_received_perf.pop(entity_id, None)
             # Historical replay shares this process. Give fresh HA state changes a short
             # strict-priority window so Shadow/Control inference is never queued behind
             # cooperative offline work for seconds.
@@ -793,6 +807,7 @@ class Engine(threading.Thread):
                     # A REST reconciliation supersedes this entity's old WS receipt.
                     # It is fresh work, but is not a new websocket latency sample.
                     self.entity_event_received_perf.pop(eid, None)
+                    self.entity_ws_received_perf.pop(eid, None)
 
             self.state_map = state_map
             if initial:
@@ -1352,17 +1367,28 @@ class Engine(threading.Thread):
         context_signature = (self.context.registry_revision, self.context.home.routing_revision)
         store_revision = int(getattr(STORE, "_agent_index_revision", 0))
         with self.lock:
-            if (
-                not force
-                and float(self.agent_index_at or 0.0) > 0.0
+            # Home routing changes with occupancy/trajectory learning. They
+            # invalidate dependencies, not the durable agent configuration.
+            # Keep the original config revision/TTL guard independent from the
+            # routing rebuild so a busy home cannot perpetually postpone rereads.
+            config_at = float(getattr(self, '_agent_config_index_at', self.agent_index_at) or 0.)
+            config_valid = (
+                not force and float(self.agent_index_at or 0.) > 0.
+                and config_at > 0.
                 and int(self.agent_index_revision) == store_revision
+                and now - config_at < self.agent_index_ttl_seconds
+            )
+            if (
+                config_valid
                 and self.agent_index_context_signature == context_signature
-                and now - float(self.agent_index_at or 0.0) < self.agent_index_ttl_seconds
             ):
                 return
             previous_active = set(self.agent_configs)
+            configs = list(self.all_agent_configs.values()) if config_valid else None
 
-        if callable(getattr(STORE, "list_agent_configs", None)):
+        if configs is not None:
+            pass
+        elif callable(getattr(STORE, "list_agent_configs", None)):
             configs = STORE.list_agent_configs()
         else:
             with self.lock:
@@ -1399,6 +1425,7 @@ class Engine(threading.Thread):
             self.active_agents_by_target = by_target
             self.dependency_agents = dependency_agents
             self.agent_index_at = now
+            self._agent_config_index_at = config_at if config_valid else now
             self.agent_index_revision = store_revision
             self.agent_index_context_signature = context_signature
         for aid in removed:
@@ -1495,6 +1522,19 @@ class Engine(threading.Thread):
         groups = {}
         for agent in agents:
             groups.setdefault(agent["target_entity"], []).append(agent)
+        # Waiting targets retain FIFO admission priority, while their state is
+        # captured only when a worker is available. Do not put whole-house
+        # bursts into ThreadPoolExecutor's FIFO with already ageing snapshots.
+        order = [target for target in retries if target in groups]
+        order.extend(target for target in groups if target not in retries)
+        groups = {target: groups[target] for target in order}
+        bounded_dispatch = bool(changed or retries or not event_driven)
+        worker_limit = int(getattr(self, 'control_worker_count',
+                                  getattr(self.control_workers, '_max_workers', max(2, len(groups)))))
+        capacity = max(0, worker_limit -
+                       sum(not future.done() for future in self.in_flight.values()))
+        if not event_driven:
+            self._timer_capacity_pending = False
 
         # One atomically consistent state+revision snapshot per coalesced pass. Every
         # worker shares it; Executor rejects a Control intent if any dependency changes
@@ -1514,6 +1554,13 @@ class Engine(threading.Thread):
                 for eid in event_entities
                 if self.entity_event_received_perf.get(eid) is not None
             } if event_driven else {})
+            # Capture both clocks with the state revision. A later event must
+            # never lend its receipt timestamp to an earlier decision.
+            websocket_received_all = {
+                eid: self.entity_ws_received_perf[eid]
+                for eid in event_received_all
+                if eid in getattr(self, 'entity_ws_received_perf', {})
+            }
         snapshot = (pass_states, pass_revision, revision_snapshot, context_revision)
 
         for target, target_agents in groups.items():
@@ -1531,11 +1578,11 @@ class Engine(threading.Thread):
             # Preserve that hint for process_agent semantics but carry no event timestamp.
             if not target_changed and changed and not event_driven:
                 target_changed = set(changed)
-            target_event_received = {
+            target_event_received = EventReceipts({
                 eid: event_received_all[eid]
                 for eid in target_changed
                 if eid in event_received_all
-            }
+            }, websocket={eid: websocket_received_all[eid] for eid in target_changed if eid in websocket_received_all})
 
             active = self.in_flight.get(target)
             if active is not None and not active.done():
@@ -1560,6 +1607,15 @@ class Engine(threading.Thread):
                                 self.wake_event.set()
                         active.add_done_callback(retry_completed)
                 continue
+            if bounded_dispatch and capacity <= 0:
+                if event_driven and target_changed:
+                    with self.lock:
+                        self.ready_target_changes.setdefault(target, set()).update(target_changed)
+                        stats = getattr(self, 'inference_scheduler', {})
+                        stats['capacity_deferrals'] = stats.get('capacity_deferrals', 0) + 1
+                elif not event_driven:
+                    self._timer_capacity_pending = True
+                continue
             try:
                 self.in_flight[target] = self.control_workers.submit(
                     self.process_target,
@@ -1568,6 +1624,15 @@ class Engine(threading.Thread):
                     snapshot,
                     target_event_received,
                 )
+                capacity -= 1
+                def wake_waiting_targets(_future):
+                    with self.lock:
+                        waiting = bool(self.ready_target_changes or getattr(self, '_timer_capacity_pending', False))
+                    if waiting:
+                        self.wake_event.set()
+                completed = getattr(self.in_flight[target], 'add_done_callback', None)
+                if callable(completed):
+                    completed(wake_waiting_targets)
             except Exception:
                 # Keep retries whose workers were not submitted. Already dispatched
                 # owners must not replay merely because another submission failed.
@@ -1578,6 +1643,10 @@ class Engine(threading.Thread):
                 if target_retry or retries:
                     self.wake_event.set()
                 raise
+        with self.lock:
+            waiting = bool(self.ready_target_changes or getattr(self, '_timer_capacity_pending', False))
+        if waiting and sum(not f.done() for f in self.in_flight.values()) < worker_limit:
+            self.wake_event.set()
         for target in list(self.in_flight):
             if target not in groups and self.in_flight[target].done():
                 del self.in_flight[target]
@@ -1593,6 +1662,9 @@ class Engine(threading.Thread):
         )
         if oldest_event_age_ms is not None:
             TELEMETRY.observe('event_to_target_start', oldest_event_age_ms)
+        ingress_values = tuple(getattr(event_received_perf, 'websocket', {}).values())
+        if ingress_values:
+            TELEMETRY.observe('ws_receive_to_target_start', max(0., (time.perf_counter()-min(ingress_values))*1000))
         target_trace = (RUNTIME_DEBUG.begin(
             "inference_target",
             target_entity=str((agents[0] if agents else {}).get("target_entity") or "unknown"),
@@ -1614,6 +1686,7 @@ class Engine(threading.Thread):
         self._inference_tls.context_revision = context_revision
         self._inference_tls.state_revision = revision
         self._inference_tls.event_received_perf = dict(event_received_perf or {})
+        self._inference_tls.websocket_received_perf = dict(getattr(event_received_perf, 'websocket', {}) or {})
         try:
             for agent in agents:
                 if self.stop_event.is_set():
@@ -1643,7 +1716,11 @@ class Engine(threading.Thread):
                     RUNTIME_DEBUG.end(agent_trace, status="error", error=f"{type(exc).__name__}: {exc}")
                     STORE.event(agent["id"], "error", "agent_error", str(exc), {"trace": traceback.format_exc(limit=4)})
         finally:
-            for name in ("entity_revisions", "context_revision", "state_revision", "event_received_perf"):
+            if received_values:
+                TELEMETRY.observe('event_to_worker_release', max(0., (time.perf_counter()-min(received_values))*1000))
+            if ingress_values:
+                TELEMETRY.observe('ws_receive_to_worker_release', max(0., (time.perf_counter()-min(ingress_values))*1000))
+            for name in ("entity_revisions", "context_revision", "state_revision", "event_received_perf", "websocket_received_perf"):
                 try:
                     delattr(self._inference_tls, name)
                 except AttributeError:
@@ -2266,6 +2343,10 @@ class Engine(threading.Thread):
             # Keep the legacy key for one compatibility window; both carry the same sample.
             TELEMETRY.observe('event_to_decision', event_to_decision_ms)
             TELEMETRY.observe('event_to_intent', event_to_decision_ms)
+            ingress = getattr(self._inference_tls, 'websocket_received_perf', {})
+            starts = [ingress[eid] for eid in set(changed_entities or ()) if ingress.get(eid) is not None]
+            if starts:
+                TELEMETRY.observe('ws_receive_to_decision', max(0., (time.perf_counter()-min(starts))*1000))
             if RUNTIME_DEBUG.enabled:
                 RUNTIME_DEBUG.instant(
                     "event_to_intent_pass",

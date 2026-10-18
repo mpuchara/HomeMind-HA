@@ -37,5 +37,15 @@ const flush=()=>new Promise(resolve=>setImmediate(resolve));
   assert.deepEqual(requests,['api/live','api/live?after=epoch%3A1&wait_ms=1500','api/live?after=epoch%3A2&wait_ms=1500']);
   assert.equal(node('[data-p0="desired"]').textContent,'OFF');
   assert.equal(node('[data-p0="state"]').textContent,'Observing');
-  console.log(JSON.stringify({revision_wait:true,latest_desired:true,physical_current:true,off_confirmation:true,pending_explanation:true}));
+  const debugPanel={innerHTML:''};
+  const debug={document:{getElementById:id=>id==='runtimeDebugPanel'?debugPanel:null},
+    lastStatus:{telemetry:{metrics:{event_to_intent:{recent_p95_ms:5,p95_ms:7,recent_count:3},
+      ws_receive_to_decision:{recent_p95_ms:17,recent_count:2}}}},console};
+  debug.window=debug;vm.createContext(debug);
+  vm.runInContext(fs.readFileSync('adaptive_ai/src/static/runtime_debug_ui.js','utf8'),debug);
+  assert.match(debugPanel.innerHTML,/WS receive → decision p95 · last 60 s/);
+  assert.match(debugPanel.innerHTML,/<b>17 ms<\/b>/);
+  assert.match(debugPanel.innerHTML,/<b>5 ms<\/b>/);
+  assert.match(debugPanel.innerHTML,/2 WS→decision samples/);
+  console.log(JSON.stringify({revision_wait:true,latest_desired:true,physical_current:true,off_confirmation:true,pending_explanation:true,independent_ws_clock:true}));
 })().catch(error=>{console.error(error);process.exitCode=1;});

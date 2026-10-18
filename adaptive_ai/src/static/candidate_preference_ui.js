@@ -221,7 +221,7 @@
   }
 
   async function refreshLive(){
-    if(liveBusy||document.hidden)return;
+    if(liveBusy||document.hidden||!document.querySelector('.candidate-agent'))return;
     liveBusy=true;
     try{
       const response=await fetch('api/candidate-live',{cache:'no-store'});
@@ -236,7 +236,7 @@
 
   async function liveLoop(){
     await refreshLive();
-    setTimeout(liveLoop,1000);
+    setTimeout(liveLoop,document.hidden?1000:100);
   }
 
   function hydrateAddedNode(node){

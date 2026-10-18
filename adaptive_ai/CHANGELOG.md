@@ -1,4 +1,20 @@
-## 0.14.215
+## 0.14.217 (2026-10-18)
+
+- Start the staged performance plan with a shipped-entrypoint benchmark: real Root policies, passive blocked Candidate generations, 778 HA states, 3 or 20 eligible agents, optional UI and trace load. External HA transport is local and never reaches a real installation.
+- Remove the redundant User Promotion observation joins when the stable blocked-evidence contract is installed. Keep promotion and physical Control validation unchanged.
+- Batch fresh explicit device mappings instead of issuing one SELECT per HA entity for every resource descriptor. Preserve shared-device/manual-hold arbitration and immediate mapping visibility; use no permission cache.
+- Resolve resource conflicts/manual holds from fresh resource keys and one bulk target-mapping read, without repeated whole-home capability scans. Reuse one Candidate-list HTTP connection while keeping independent helper transactions and fresh cross-connection reads.
+- Skip Explore session SQL when RAM proves there is no active experiment; do not consume Explore outcome budget on an empty finish. Read active sessions in one statement instead of probing sqlite_master first, without a lifecycle TTL cache.
+- Rebuild changed Home Context routes from the existing revision-checked agent configuration rather than rereading all agents. Keep configuration expiry independent from routing churn and preserve forced/revision invalidation.
+- Skip Candidate episode-edge SQL for deferred queue receipts without observed prediction results; retain episode evaluation for real Parent/Candidate bundles.
+- Admit event/timer target snapshots only to available workers, coalescing waiting changes in RAM with FIFO fairness. Preserve Candidate root queue position on payload replacement and reject publication if the generation changes during prediction.
+- Split cumulative optional context writes into bounded commits and yield Store between them. Drain feature-journal background work in bounded turns, retaining explicit full flush barriers. Use guarded batch admission with fresh entry/exit/commit checks, payload/page/WAL limits and rollback.
+- Group overlapping evidence-window protection updates by entity set while preserving the exact pointwise maximum, inclusive boundaries, gaps, duplicate-ID semantics and retention. Bound statement parameters for older SQLite builds.
+- Bulk-insert journal records/links and reuse an exact common protection maximum when it covers the complete sample range. Preserve partial-window fallback, writer reservation, admission and atomic rollback. At a full queue, expose rejection of a new optional decision-retention window as a gap instead of blocking Executor; retain accepted evidence and manual-correction durability.
+- Refresh visible Candidate decision tiles at 100 ms, expire the extra UI cache after 100 ms and fetch the first card immediately. Keep hidden/no-card suppression and shared requests in flight. The benchmark uses this faster UI profile for both sources.
+- Final local regression: 2651 tests pass; full CI suites on Python 3.11 and 3.13, image build/smoke, entrypoint, frontend VMs, compileall and 21 JavaScript syntax checks pass. Five alternating host pairs with the 100 ms UI profile reduce Root decision p95 from 16.5 to 13.7 ms at 3 Shadow roots and 419.6 to 109.4 ms at 20. These are synthetic host results, not physical HA latency.
+- Performance acceptance remains open: a sustained 20-Root workload grows Candidate/retention queues and reports explicit optional retention gaps. Control comparisons have no service requests in the measured window. A dedicated Shadow-thread experiment was rejected and is not installed. Preserve the first local join-timeout failure and clean rerun evidence in QA_RETRY.
+- Add correlated ws.recv-to-Engine/worker/decision/release clocks beside existing latency keys, separate Home Context lock wait from locked work, and include hot-path stage metrics in runtime exports.
 
 ## 0.14.216 (2026-10-18)
 
@@ -7,6 +23,8 @@
 - Share bounded detached state/registry records across Tournament frames with deep correction detection and conservative active-frame RAM charging.
 - Reuse pure canonical observation values in a bounded immutable cache; keep event/receive cutoff, ages, source quality and photometric evidence fresh.
 - Export startup storage phases and capture substage timings, and mark cached/pending archive overview in diagnostics.
+
+## 0.14.215
 
 - Isolate large optional policy JSON/checksum preparation and independent Candidate/Tournament classifier fits in one private persistent compute process. Keep Control and HA exclusively in the main process. Limit native BLAS to one background thread, lower child CPU priority, bound pipe frames to 16 MiB and enforce a configurable 256-1024 MiB child virtual-memory limit on Linux. Break failed optional observations instead of retrying heavy CPU locally.
 - Reuse detached temporal history in a bounded RAM cache, invalidating only changed entities and late journal metadata. Remove full-history pickle encoding from each target-worker observation; retain event-time cutoffs and charge history retained by active/pending frames.

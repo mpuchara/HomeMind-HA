@@ -296,6 +296,12 @@ def install(manager):
         return out
 
     def _observation_call(fn, agent, state_map):
+        # The stable blocked-evidence adapter accepts passive observation directly;
+        # its observation gate is a no-op. Resolving a row just to enter that no-op
+        # adds two lifecycle joins per Root pass. Custom promotion still uses the
+        # original durable validation path below.
+        if getattr(manager, '_candidate_stable_blocked_shadow_installed', False):
+            return fn(agent, state_map)
         aid = str(agent.get("id") or "")
         hot_active = getattr(manager, "candidate_hot_active", None)
         if callable(hot_active) and not hot_active(aid):

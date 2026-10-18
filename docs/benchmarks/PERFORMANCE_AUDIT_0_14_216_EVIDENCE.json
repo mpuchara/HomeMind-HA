@@ -1,0 +1,100 @@
+{
+  "audited_version": "0.14.216",
+  "local_commit": "cd8a0f817d360cf39351248db7a119f26ea4fca7",
+  "local_tree": "abd44d645e0f5f9fd96ba982d00de587e2a5f769",
+  "deployed_trace_inputs": [
+    {
+      "name": "adaptive-ai-runtime-debug-20261018-111115.json",
+      "sha256": "5fea9d76018fe881705c024bd4d0c5726aa244891ffcd7590c7edf8177317e80",
+      "version": "0.14.215"
+    },
+    {
+      "name": "adaptive-ai-runtime-debug-20261018-111206.json",
+      "sha256": "098425c0f97a8702c7005acae6eb5538a0aa0b93db15290a9735d20a6dbf135b",
+      "version": "0.14.215"
+    },
+    {
+      "name": "adaptive-ai-runtime-debug-20261018-111228.json",
+      "sha256": "8c0a158aee04e382c4e2c702546477210897304242fccd53c8e31977bdfb8194",
+      "version": "0.14.215"
+    }
+  ],
+  "root_worker_sql": {
+    "agent_candidate_user_promotion._active_observation_row:191": {
+      "samples": 130,
+      "mean_ms": 17.93383076923077,
+      "p95_ms": 36.693,
+      "max_ms": 624.048,
+      "mean_thread_cpu_ms": 1.4234384615384614,
+      "mean_off_cpu_ms": 16.510369230769232,
+      "borrowed": 130
+    },
+    "agent_explore._table_exists:59": {
+      "samples": 197,
+      "mean_ms": 11.606040609137056,
+      "p95_ms": 26.279,
+      "max_ms": 496.815,
+      "mean_thread_cpu_ms": 1.1791675126903554,
+      "mean_off_cpu_ms": 10.426903553299493,
+      "borrowed": 197
+    },
+    "agent_explore._active_free_for_live:159": {
+      "samples": 197,
+      "mean_ms": 4.6528578680203045,
+      "p95_ms": 13.65,
+      "max_ms": 63.017,
+      "mean_thread_cpu_ms": 0.765248730964467,
+      "mean_off_cpu_ms": 3.8876192893401016,
+      "borrowed": 197
+    },
+    "agent_candidate_blocked_shadow_evidence._active_comparison_edge:62": {
+      "samples": 64,
+      "mean_ms": 22.11415625,
+      "p95_ms": 73.343,
+      "max_ms": 137.705,
+      "mean_thread_cpu_ms": 1.844609375,
+      "mean_off_cpu_ms": 20.269546875,
+      "borrowed": 64
+    }
+  },
+  "retained_spans": {
+    "context_shadow_observation": {
+      "samples": 65,
+      "mean_ms": 373.6752307692308,
+      "p95_ms": 844.61,
+      "max_ms": 1104.003,
+      "mean_thread_cpu_ms": 102.11173846153847,
+      "mean_off_cpu_ms": 271.56343076923076
+    },
+    "inference_agent": {
+      "samples": 197,
+      "mean_ms": 252.23913705583757,
+      "p95_ms": 572.922,
+      "max_ms": 1150.458,
+      "mean_thread_cpu_ms": 74.03388324873096,
+      "mean_off_cpu_ms": 178.205269035533
+    },
+    "inference_target": {
+      "samples": 197,
+      "mean_ms": 253.66389340101523,
+      "p95_ms": 573.218,
+      "max_ms": 1156.778,
+      "mean_thread_cpu_ms": 74.3257918781726,
+      "mean_off_cpu_ms": 179.33810152284263
+    }
+  },
+  "prior_validation": {
+    "tests": 2602,
+    "seconds": 297.463,
+    "result": "OK",
+    "skips": 0,
+    "platform": "Ubuntu WSL Python 3.12.3 / NumPy 2.3.3",
+    "log_sha256": "d79951f5a90e8b88586b816770ee8090b618d7be4e6b9bec4b623483b15a2911"
+  },
+  "limits": [
+    "Bounded trace slices can overlap; do not sum p95 or aggregate concurrent wall time into CPU shares.",
+    "Off-CPU includes GIL, I/O, locks and OS scheduling; it is not proof of a single cause.",
+    "No deployed 0.14.216 export or startup trace available.",
+    "Repository default branch config fetched this turn is 0.14.184; audit explicitly covers local 0.14.216 commit, not default branch."
+  ]
+}

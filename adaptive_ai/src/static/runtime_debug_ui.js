@@ -26,6 +26,7 @@
     const node=root();if(!node)return;
     const dbg=status.runtime_debug||{};
     const metric=dbg.event_to_intent||status.telemetry?.metrics?.event_to_intent||{};
+    const ingress=status.telemetry?.metrics?.ws_receive_to_decision||{};
     const enabled=Boolean(dbg.enabled);
     const active=Array.isArray(dbg.active)?dbg.active:[];
     const heavy=status.heavy_job||dbg.heavy_job||null;
@@ -58,6 +59,7 @@
       <div class="history-grid runtime-debug-grid">
         <div><b>${ms(metric.recent_p95_ms)}</b><span>event → intent p95 · last 60 s</span></div>
         <div><b>${ms(metric.p95_ms)}</b><span>event → intent p95 · retained telemetry</span></div>
+        <div><b>${ms(ingress.recent_p95_ms)}</b><span>WS receive → decision p95 · last 60 s</span></div>
         <div><b>${enabled?'ON':'OFF'}</b><span>debug logging</span></div>
         <div><b>${Number(dbg.entries||0).toLocaleString()}</b><span>trace rows in RAM · max ${Number(dbg.capacity||4096).toLocaleString()}</span></div>
       </div>
@@ -67,6 +69,7 @@
       </div>
       <div class="history-meta">
         <span>${Number(metric.recent_count||0)} event→intent samples in the recent window</span>
+        <span>${Number(ingress.recent_count||0)} WS→decision samples · includes parse and ingress waiting; existing event→intent starts inside Engine</span>
         <span>${Number(dbg.dropped_entries||0)} overwritten trace rows</span>
         <span>Logging is disabled by default and does not write to disk.</span>
       </div>`;

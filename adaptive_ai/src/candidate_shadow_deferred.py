@@ -105,13 +105,17 @@ class DeferredCandidateShadowQueue:
                     "queue_depth": len(self.pending),
                 }
             if previous is not None:
+                job['first_queued_monotonic'] = previous.get('first_queued_monotonic', previous['queued_monotonic'])
                 self.stats["coalesced"] += 1
                 increment_counter(self.engine, "candidate_shadow_coalesced")
             else:
+                job['first_queued_monotonic'] = job['queued_monotonic']
                 self.stats["queued"] += 1
                 increment_counter(self.engine, "candidate_shadow_queued")
             self.pending[root_id] = job
-            self.pending.move_to_end(root_id)
+            # Replacing a frame keeps this root's original admission position.
+            # Frequent sensors must not push their own root behind every peer
+            # forever. The payload and latest-event clock still remain newest.
             while len(self.pending) > self.limit:
                 self.pending.popitem(last=False)
                 self.stats["dropped"] += 1
@@ -123,9 +127,10 @@ class DeferredCandidateShadowQueue:
         # set() calls while the queue is already non-empty add hot-path traffic but cannot
         # make Event wake "more". If >max_roots are pending, the already-set event causes
         # the worker to loop immediately and drain the next bounded batch.
-        wake = getattr(self.manager, "wake_event", None)
-        if was_empty and wake is not None and callable(getattr(wake, "set", None)):
-            wake.set()
+        if was_empty:
+            wake = getattr(self.manager, 'wake_event', None)
+            if wake is not None:
+                wake.set()
         return {
             "deferred": True,
             "deduplicated": False,
@@ -268,8 +273,8 @@ class DeferredCandidateShadowQueue:
         with self.lock:
             backlog = bool(self.pending)
         if backlog:
-            wake = getattr(self.manager, "wake_event", None)
-            if wake is not None and callable(getattr(wake, "set", None)):
+            wake = getattr(self.manager, 'wake_event', None)
+            if wake is not None:
                 wake.set()
         return completed
 
@@ -278,10 +283,14 @@ class DeferredCandidateShadowQueue:
             depth = len(self.pending)
             roots = list(self.pending.keys())[:8]
             stats = dict(self.stats)
+            oldest_wait = max((time.monotonic()-job.get('first_queued_monotonic',job['queued_monotonic'])
+                               for job in self.pending.values()), default=0.)
         return {
             "contract_version": self.CONTRACT_VERSION,
             "execution": "existing_candidate_worker",
             "queue_policy": "bounded_latest_per_root",
+            "root_admission_order": "fifo_preserved_on_coalesce",
+            "oldest_root_wait_ms": max(0.,oldest_wait*1000),
             "queue_limit": self.limit,
             "queue_depth": depth,
             "pending_roots": roots,
