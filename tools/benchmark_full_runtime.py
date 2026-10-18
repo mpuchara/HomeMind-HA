@@ -201,7 +201,7 @@ def one(source, seconds=30, active=3, configured=20, mode='shadow', ui=False, tr
                     ui_stop.wait(.1)
             def poll_candidate_live():
                 while not ui_stop.is_set():
-                    read_ui('api/candidate-live',2.5);ui_stop.wait(1.)
+                    read_ui('api/candidate-live',2.5);ui_stop.wait(.1)
             if ui:
                 for fn in (poll_full,poll_live,poll_candidate_live):
                     thread=threading.Thread(target=fn,daemon=True);thread.start();ui_threads.append(thread)
@@ -288,7 +288,7 @@ def one(source, seconds=30, active=3, configured=20, mode='shadow', ui=False, tr
             return dict(version=core.APP_VERSION,seconds=elapsed,warmup_seconds=warmup,
                 active=active,configured=configured,entities=len(states),
                 mode=mode,ui=ui,trace=trace,ui_stats=ui_stats,server_diagnostics=server_diagnostics,sent_state_events=sent,ready_ms=ready_ms,
-                ui_profile='full status/agents/events/candidates 4s; reactive live 100ms + revision wait; candidate-live 1s',
+                ui_profile='full status/agents/events/candidates 4s; reactive live 100ms + revision wait; candidate-live 100ms',
                 control_dispatch_exercised=bool(services),warmup_pipelines_drained=warmup_pipelines_drained,
                 control_coverage=('guarded_no_dispatch' if mode=='control' and not services else 'dispatch' if services else 'shadow_only'),
                 root_executor_results={a['target_entity']:dict(runtime.runtime[a['id']].get('intent') or {}) for a in roots},

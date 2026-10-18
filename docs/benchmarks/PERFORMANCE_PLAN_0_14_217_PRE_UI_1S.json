@@ -1,0 +1,1519 @@
+[
+  {
+    "file": "PERFORMANCE_PLAN_0_14_217_FINAL_SHADOW_20_UI-candidate-ui-1s.json",
+    "sha256": "dab2e60c0c310c832a98c9dec3ef76b4023528672f27c7c0e66c67d37acfd253",
+    "raw_local_path": "C:\\Users\\mpuch\\OneDrive\\Dokumenty\\HomeMind\\tmp\\performance217-experiments\\PERFORMANCE_PLAN_0_14_217_FINAL_SHADOW_20_UI-candidate-ui-1s.json",
+    "status": "Pre-UI-change source/profile; not final acceptance. Twenty-Root matrix also overlapped local PR preparation.",
+    "runs": [
+      {
+        "kind": "baseline",
+        "pair": 0,
+        "source_sha256": "41cfb72cce03ef2ff73dea19d8e55a02fbb4a482de3ab46036d73f3de306389b",
+        "p95": {
+          "count": 4296,
+          "p50": 191.78332650002972,
+          "p95": 408.1454982500219,
+          "p99": 488.3193204500091,
+          "max": 610.6803450000484
+        },
+        "candidate": {
+          "contract_version": 1,
+          "execution": "existing_candidate_worker",
+          "queue_policy": "bounded_latest_per_root",
+          "queue_limit": 32,
+          "queue_depth": 20,
+          "pending_roots": [
+            "9d41a6ae",
+            "77b925a0",
+            "69401b74",
+            "9590e9dd",
+            "ed12b4bc",
+            "104da937",
+            "e0caef72",
+            "c7fa443e"
+          ],
+          "queued": 147,
+          "coalesced": 4168,
+          "deduplicated": 0,
+          "dropped": 0,
+          "processed": 124,
+          "stale_generation_dropped": 0,
+          "errors": 0,
+          "observation_gaps": 0,
+          "max_depth": 20,
+          "last_error": null,
+          "last_root_agent_id": "9590e9dd",
+          "last_queue_lag_ms": 2462.1234880000316
+        },
+        "journal": {
+          "storage_retry": {
+            "reason": null,
+            "pauses": 0,
+            "busy_retries": 0,
+            "retry_in_seconds": 0.0
+          },
+          "observations": {
+            "queued": 1480,
+            "flushed": 1320,
+            "flushes": 19,
+            "max_queue": 162,
+            "overflow_sync": 0,
+            "errors": 0,
+            "pending": 36
+          },
+          "windows": {
+            "queued": 4316,
+            "flushed": 2167,
+            "flushes": 24,
+            "max_queue": 2149,
+            "overflow_sync": 0,
+            "errors": 0,
+            "pending": 2149
+          }
+        },
+        "ui_stats": {
+          "requests": 377,
+          "errors": 3,
+          "routes": {
+            "api/live": {
+              "requests": 332,
+              "errors": 0
+            },
+            "api/status": {
+              "requests": 3,
+              "errors": 0
+            },
+            "api/candidate-live": {
+              "requests": 36,
+              "errors": 0
+            },
+            "api/agents": {
+              "requests": 3,
+              "errors": 0
+            },
+            "api/events": {
+              "requests": 3,
+              "errors": 0
+            },
+            "api/candidates": {
+              "requests": 0,
+              "errors": 3
+            }
+          }
+        }
+      },
+      {
+        "kind": "current",
+        "pair": 0,
+        "source_sha256": "edfa85970a88646ddb602270bc7acfdf46145440e63cbce46c39655869cc396f",
+        "p95": {
+          "count": 6960,
+          "p50": 65.7412049999948,
+          "p95": 132.12741069997656,
+          "p99": 159.98746720000952,
+          "max": 196.30988699998397
+        },
+        "candidate": {
+          "contract_version": 1,
+          "execution": "existing_candidate_worker",
+          "queue_policy": "bounded_latest_per_root",
+          "root_admission_order": "fifo_preserved_on_coalesce",
+          "oldest_root_wait_ms": 8258.696465000014,
+          "queue_limit": 32,
+          "queue_depth": 20,
+          "pending_roots": [
+            "681e1191",
+            "ffa18d51",
+            "23abf516",
+            "0d9f2886",
+            "c2f7bae5",
+            "69cba3be",
+            "807388b7",
+            "93b3b573"
+          ],
+          "queued": 803,
+          "coalesced": 6177,
+          "deduplicated": 0,
+          "dropped": 0,
+          "processed": 779,
+          "stale_generation_dropped": 0,
+          "errors": 0,
+          "observation_gaps": 0,
+          "max_depth": 20,
+          "last_error": null,
+          "last_root_agent_id": "d8feef2a",
+          "last_queue_lag_ms": 34.06835400005548
+        },
+        "journal": {
+          "storage_retry": {
+            "reason": null,
+            "pauses": 0,
+            "busy_retries": 0,
+            "retry_in_seconds": 0.0
+          },
+          "observations": {
+            "queued": 1480,
+            "flushed": 1374,
+            "flushes": 56,
+            "max_queue": 108,
+            "overflow_sync": 0,
+            "errors": 0,
+            "pending": 42
+          },
+          "windows": {
+            "queued": 6980,
+            "flushed": 4713,
+            "flushes": 60,
+            "max_queue": 2267,
+            "overflow_sync": 0,
+            "overflow_gaps": 0,
+            "errors": 0,
+            "pending": 2267
+          }
+        },
+        "ui_stats": {
+          "requests": 384,
+          "errors": 0,
+          "routes": {
+            "api/live": {
+              "requests": 328,
+              "errors": 0
+            },
+            "api/candidate-live": {
+              "requests": 36,
+              "errors": 0
+            },
+            "api/events": {
+              "requests": 5,
+              "errors": 0
+            },
+            "api/agents": {
+              "requests": 5,
+              "errors": 0
+            },
+            "api/status": {
+              "requests": 5,
+              "errors": 0
+            },
+            "api/candidates": {
+              "requests": 5,
+              "errors": 0
+            }
+          }
+        }
+      },
+      {
+        "kind": "current",
+        "pair": 1,
+        "source_sha256": "edfa85970a88646ddb602270bc7acfdf46145440e63cbce46c39655869cc396f",
+        "p95": {
+          "count": 7093,
+          "p50": 72.84876400001394,
+          "p95": 133.79309920001106,
+          "p99": 181.09868688000913,
+          "max": 294.34637700001076
+        },
+        "candidate": {
+          "contract_version": 1,
+          "execution": "existing_candidate_worker",
+          "queue_policy": "bounded_latest_per_root",
+          "root_admission_order": "fifo_preserved_on_coalesce",
+          "oldest_root_wait_ms": 9075.348018,
+          "queue_limit": 32,
+          "queue_depth": 20,
+          "pending_roots": [
+            "6a43f574",
+            "0f2f22fb",
+            "5481a9d3",
+            "0711b781",
+            "cd93a7a8",
+            "512588b1",
+            "f8bb0483",
+            "9b7610d3"
+          ],
+          "queued": 727,
+          "coalesced": 6386,
+          "deduplicated": 0,
+          "dropped": 0,
+          "processed": 706,
+          "stale_generation_dropped": 0,
+          "errors": 0,
+          "observation_gaps": 0,
+          "max_depth": 20,
+          "last_error": null,
+          "last_root_agent_id": "5c77d0fa",
+          "last_queue_lag_ms": 413.66505999997116
+        },
+        "journal": {
+          "storage_retry": {
+            "reason": null,
+            "pauses": 0,
+            "busy_retries": 0,
+            "retry_in_seconds": 0.0
+          },
+          "observations": {
+            "queued": 1480,
+            "flushed": 1406,
+            "flushes": 52,
+            "max_queue": 102,
+            "overflow_sync": 0,
+            "errors": 0,
+            "pending": 18
+          },
+          "windows": {
+            "queued": 7113,
+            "flushed": 4512,
+            "flushes": 56,
+            "max_queue": 2601,
+            "overflow_sync": 0,
+            "overflow_gaps": 0,
+            "errors": 0,
+            "pending": 2601
+          }
+        },
+        "ui_stats": {
+          "requests": 380,
+          "errors": 0,
+          "routes": {
+            "api/live": {
+              "requests": 328,
+              "errors": 0
+            },
+            "api/events": {
+              "requests": 4,
+              "errors": 0
+            },
+            "api/status": {
+              "requests": 4,
+              "errors": 0
+            },
+            "api/candidate-live": {
+              "requests": 36,
+              "errors": 0
+            },
+            "api/agents": {
+              "requests": 4,
+              "errors": 0
+            },
+            "api/candidates": {
+              "requests": 4,
+              "errors": 0
+            }
+          }
+        }
+      },
+      {
+        "kind": "baseline",
+        "pair": 1,
+        "source_sha256": "41cfb72cce03ef2ff73dea19d8e55a02fbb4a482de3ab46036d73f3de306389b",
+        "p95": {
+          "count": 4547,
+          "p50": 162.26793099997394,
+          "p95": 404.82556739999603,
+          "p99": 550.593215760018,
+          "max": 735.3274140000394
+        },
+        "candidate": {
+          "contract_version": 1,
+          "execution": "existing_candidate_worker",
+          "queue_policy": "bounded_latest_per_root",
+          "queue_limit": 32,
+          "queue_depth": 20,
+          "pending_roots": [
+            "46839bae",
+            "c7ca62fc",
+            "7ebf976a",
+            "73b63940",
+            "88bd8d0e",
+            "633582b2",
+            "f43e1d02",
+            "33936350"
+          ],
+          "queued": 139,
+          "coalesced": 4427,
+          "deduplicated": 0,
+          "dropped": 0,
+          "processed": 116,
+          "stale_generation_dropped": 0,
+          "errors": 0,
+          "observation_gaps": 0,
+          "max_depth": 20,
+          "last_error": null,
+          "last_root_agent_id": "d4fd07fd",
+          "last_queue_lag_ms": 1126.4547460000358
+        },
+        "journal": {
+          "storage_retry": {
+            "reason": null,
+            "pauses": 0,
+            "busy_retries": 0,
+            "retry_in_seconds": 0.0
+          },
+          "observations": {
+            "queued": 1480,
+            "flushed": 1344,
+            "flushes": 21,
+            "max_queue": 200,
+            "overflow_sync": 0,
+            "errors": 0,
+            "pending": 136
+          },
+          "windows": {
+            "queued": 4567,
+            "flushed": 2224,
+            "flushes": 25,
+            "max_queue": 2235,
+            "overflow_sync": 0,
+            "errors": 0,
+            "pending": 2215
+          }
+        },
+        "ui_stats": {
+          "requests": 378,
+          "errors": 3,
+          "routes": {
+            "api/live": {
+              "requests": 333,
+              "errors": 0
+            },
+            "api/candidate-live": {
+              "requests": 36,
+              "errors": 0
+            },
+            "api/agents": {
+              "requests": 3,
+              "errors": 0
+            },
+            "api/events": {
+              "requests": 3,
+              "errors": 0
+            },
+            "api/status": {
+              "requests": 3,
+              "errors": 0
+            },
+            "api/candidates": {
+              "requests": 0,
+              "errors": 3
+            }
+          }
+        }
+      },
+      {
+        "kind": "baseline",
+        "pair": 2,
+        "source_sha256": "41cfb72cce03ef2ff73dea19d8e55a02fbb4a482de3ab46036d73f3de306389b",
+        "p95": {
+          "count": 2674,
+          "p50": 121.18619850002688,
+          "p95": 1465.3681724000248,
+          "p99": 1816.3770381800214,
+          "max": 2594.876109999973
+        },
+        "candidate": {
+          "contract_version": 1,
+          "execution": "existing_candidate_worker",
+          "queue_policy": "bounded_latest_per_root",
+          "queue_limit": 32,
+          "queue_depth": 20,
+          "pending_roots": [
+            "98d50ef0",
+            "02dca0a9",
+            "3a290fcb",
+            "1e39820f",
+            "5dcda794",
+            "c019ffd4",
+            "183897e4",
+            "9f0f82fb"
+          ],
+          "queued": 109,
+          "coalesced": 2585,
+          "deduplicated": 0,
+          "dropped": 0,
+          "processed": 85,
+          "stale_generation_dropped": 0,
+          "errors": 0,
+          "observation_gaps": 0,
+          "max_depth": 20,
+          "last_error": null,
+          "last_root_agent_id": "183897e4",
+          "last_queue_lag_ms": 2387.496556999963
+        },
+        "journal": {
+          "storage_retry": {
+            "reason": null,
+            "pauses": 0,
+            "busy_retries": 0,
+            "retry_in_seconds": 0.0
+          },
+          "observations": {
+            "queued": 1480,
+            "flushed": 730,
+            "flushes": 12,
+            "max_queue": 550,
+            "overflow_sync": 0,
+            "errors": 0,
+            "pending": 238
+          },
+          "windows": {
+            "queued": 2694,
+            "flushed": 1401,
+            "flushes": 18,
+            "max_queue": 1293,
+            "overflow_sync": 0,
+            "errors": 0,
+            "pending": 1293
+          }
+        },
+        "ui_stats": {
+          "requests": 245,
+          "errors": 3,
+          "routes": {
+            "api/candidate-live": {
+              "requests": 36,
+              "errors": 0
+            },
+            "api/agents": {
+              "requests": 3,
+              "errors": 0
+            },
+            "api/events": {
+              "requests": 3,
+              "errors": 0
+            },
+            "api/live": {
+              "requests": 200,
+              "errors": 0
+            },
+            "api/status": {
+              "requests": 3,
+              "errors": 0
+            },
+            "api/candidates": {
+              "requests": 0,
+              "errors": 3
+            }
+          }
+        }
+      },
+      {
+        "kind": "current",
+        "pair": 2,
+        "source_sha256": "edfa85970a88646ddb602270bc7acfdf46145440e63cbce46c39655869cc396f",
+        "p95": {
+          "count": 7102,
+          "p50": 71.26503849997334,
+          "p95": 128.9875310499326,
+          "p99": 176.2853841800153,
+          "max": 422.1293009999272
+        },
+        "candidate": {
+          "contract_version": 1,
+          "execution": "existing_candidate_worker",
+          "queue_policy": "bounded_latest_per_root",
+          "root_admission_order": "fifo_preserved_on_coalesce",
+          "oldest_root_wait_ms": 5990.113867000105,
+          "queue_limit": 32,
+          "queue_depth": 20,
+          "pending_roots": [
+            "c92b6239",
+            "b4e7518b",
+            "384a502e",
+            "a45519e4",
+            "60ef7b1e",
+            "ae0337cd",
+            "aaa7887c",
+            "5d4375bd"
+          ],
+          "queued": 771,
+          "coalesced": 6351,
+          "deduplicated": 0,
+          "dropped": 0,
+          "processed": 750,
+          "stale_generation_dropped": 0,
+          "errors": 0,
+          "observation_gaps": 0,
+          "max_depth": 20,
+          "last_error": null,
+          "last_root_agent_id": "34be1619",
+          "last_queue_lag_ms": 253.27239499995358
+        },
+        "journal": {
+          "storage_retry": {
+            "reason": null,
+            "pauses": 0,
+            "busy_retries": 0,
+            "retry_in_seconds": 0.0
+          },
+          "observations": {
+            "queued": 1480,
+            "flushed": 1304,
+            "flushes": 48,
+            "max_queue": 175,
+            "overflow_sync": 0,
+            "errors": 0,
+            "pending": 112
+          },
+          "windows": {
+            "queued": 7122,
+            "flushed": 4058,
+            "flushes": 53,
+            "max_queue": 3122,
+            "overflow_sync": 0,
+            "overflow_gaps": 0,
+            "errors": 0,
+            "pending": 3064
+          }
+        },
+        "ui_stats": {
+          "requests": 378,
+          "errors": 0,
+          "routes": {
+            "api/candidate-live": {
+              "requests": 36,
+              "errors": 0
+            },
+            "api/events": {
+              "requests": 4,
+              "errors": 0
+            },
+            "api/status": {
+              "requests": 4,
+              "errors": 0
+            },
+            "api/agents": {
+              "requests": 4,
+              "errors": 0
+            },
+            "api/live": {
+              "requests": 326,
+              "errors": 0
+            },
+            "api/candidates": {
+              "requests": 4,
+              "errors": 0
+            }
+          }
+        }
+      },
+      {
+        "kind": "current",
+        "pair": 3,
+        "source_sha256": "edfa85970a88646ddb602270bc7acfdf46145440e63cbce46c39655869cc396f",
+        "p95": {
+          "count": 7208,
+          "p50": 30.075881999948706,
+          "p95": 67.39050444997474,
+          "p99": 85.81290127996567,
+          "max": 860.8845619999101
+        },
+        "candidate": {
+          "contract_version": 1,
+          "execution": "existing_candidate_worker",
+          "queue_policy": "bounded_latest_per_root",
+          "root_admission_order": "fifo_preserved_on_coalesce",
+          "oldest_root_wait_ms": 915.9408310000572,
+          "queue_limit": 32,
+          "queue_depth": 20,
+          "pending_roots": [
+            "318e0fc1",
+            "9eba3ba7",
+            "c918b0ca",
+            "e519c8b6",
+            "8e032f4c",
+            "8254a33c",
+            "9d486acb",
+            "b1805f17"
+          ],
+          "queued": 1516,
+          "coalesced": 5712,
+          "deduplicated": 0,
+          "dropped": 0,
+          "processed": 1492,
+          "stale_generation_dropped": 0,
+          "errors": 0,
+          "observation_gaps": 0,
+          "max_depth": 20,
+          "last_error": null,
+          "last_root_agent_id": "3d75ff5d",
+          "last_queue_lag_ms": 36.36124300010124
+        },
+        "journal": {
+          "storage_retry": {
+            "reason": null,
+            "pauses": 0,
+            "busy_retries": 0,
+            "retry_in_seconds": 0.0
+          },
+          "observations": {
+            "queued": 1480,
+            "flushed": 1462,
+            "flushes": 114,
+            "max_queue": 88,
+            "overflow_sync": 0,
+            "errors": 0,
+            "pending": 18
+          },
+          "windows": {
+            "queued": 7228,
+            "flushed": 7088,
+            "flushes": 114,
+            "max_queue": 946,
+            "overflow_sync": 0,
+            "overflow_gaps": 0,
+            "errors": 0,
+            "pending": 12
+          }
+        },
+        "ui_stats": {
+          "requests": 387,
+          "errors": 0,
+          "routes": {
+            "api/candidate-live": {
+              "requests": 36,
+              "errors": 0
+            },
+            "api/events": {
+              "requests": 5,
+              "errors": 0
+            },
+            "api/status": {
+              "requests": 5,
+              "errors": 0
+            },
+            "api/live": {
+              "requests": 331,
+              "errors": 0
+            },
+            "api/agents": {
+              "requests": 5,
+              "errors": 0
+            },
+            "api/candidates": {
+              "requests": 5,
+              "errors": 0
+            }
+          }
+        }
+      },
+      {
+        "kind": "baseline",
+        "pair": 3,
+        "source_sha256": "41cfb72cce03ef2ff73dea19d8e55a02fbb4a482de3ab46036d73f3de306389b",
+        "p95": {
+          "count": 4567,
+          "p50": 161.25688199997512,
+          "p95": 410.2069113000539,
+          "p99": 484.97161293993946,
+          "max": 565.2010939999172
+        },
+        "candidate": {
+          "contract_version": 1,
+          "execution": "existing_candidate_worker",
+          "queue_policy": "bounded_latest_per_root",
+          "queue_limit": 32,
+          "queue_depth": 20,
+          "pending_roots": [
+            "019337f9",
+            "b9349cbc",
+            "b3c262db",
+            "94fbeef0",
+            "3be97e7d",
+            "e07dc584",
+            "6b380403",
+            "9a5cacf2"
+          ],
+          "queued": 156,
+          "coalesced": 4430,
+          "deduplicated": 0,
+          "dropped": 0,
+          "processed": 136,
+          "stale_generation_dropped": 0,
+          "errors": 0,
+          "observation_gaps": 0,
+          "max_depth": 20,
+          "last_error": null,
+          "last_root_agent_id": "b3c262db",
+          "last_queue_lag_ms": 2549.5623340000293
+        },
+        "journal": {
+          "storage_retry": {
+            "reason": null,
+            "pauses": 0,
+            "busy_retries": 0,
+            "retry_in_seconds": 0.0
+          },
+          "observations": {
+            "queued": 1480,
+            "flushed": 1374,
+            "flushes": 21,
+            "max_queue": 184,
+            "overflow_sync": 0,
+            "errors": 0,
+            "pending": 2
+          },
+          "windows": {
+            "queued": 4587,
+            "flushed": 2401,
+            "flushes": 26,
+            "max_queue": 2186,
+            "overflow_sync": 0,
+            "errors": 0,
+            "pending": 2186
+          }
+        },
+        "ui_stats": {
+          "requests": 382,
+          "errors": 2,
+          "routes": {
+            "api/live": {
+              "requests": 336,
+              "errors": 0
+            },
+            "api/events": {
+              "requests": 3,
+              "errors": 0
+            },
+            "api/status": {
+              "requests": 3,
+              "errors": 0
+            },
+            "api/candidate-live": {
+              "requests": 36,
+              "errors": 0
+            },
+            "api/agents": {
+              "requests": 3,
+              "errors": 0
+            },
+            "api/candidates": {
+              "requests": 1,
+              "errors": 2
+            }
+          }
+        }
+      },
+      {
+        "kind": "baseline",
+        "pair": 4,
+        "source_sha256": "41cfb72cce03ef2ff73dea19d8e55a02fbb4a482de3ab46036d73f3de306389b",
+        "p95": {
+          "count": 4773,
+          "p50": 144.06401700000515,
+          "p95": 389.1202545999702,
+          "p99": 475.6371827600193,
+          "max": 560.6708990000016
+        },
+        "candidate": {
+          "contract_version": 1,
+          "execution": "existing_candidate_worker",
+          "queue_policy": "bounded_latest_per_root",
+          "queue_limit": 32,
+          "queue_depth": 20,
+          "pending_roots": [
+            "fcb0cda0",
+            "86ba776b",
+            "09a85ae0",
+            "65b23188",
+            "96bfbd01",
+            "46d6b881",
+            "9af7cd20",
+            "f8ed324e"
+          ],
+          "queued": 153,
+          "coalesced": 4640,
+          "deduplicated": 0,
+          "dropped": 0,
+          "processed": 132,
+          "stale_generation_dropped": 0,
+          "errors": 0,
+          "observation_gaps": 0,
+          "max_depth": 20,
+          "last_error": null,
+          "last_root_agent_id": "f6892fc9",
+          "last_queue_lag_ms": 4164.117651000083
+        },
+        "journal": {
+          "storage_retry": {
+            "reason": null,
+            "pauses": 0,
+            "busy_retries": 0,
+            "retry_in_seconds": 0.0
+          },
+          "observations": {
+            "queued": 1480,
+            "flushed": 1414,
+            "flushes": 22,
+            "max_queue": 178,
+            "overflow_sync": 0,
+            "errors": 0,
+            "pending": 66
+          },
+          "windows": {
+            "queued": 4793,
+            "flushed": 2425,
+            "flushes": 26,
+            "max_queue": 2304,
+            "overflow_sync": 0,
+            "errors": 0,
+            "pending": 2240
+          }
+        },
+        "ui_stats": {
+          "requests": 379,
+          "errors": 3,
+          "routes": {
+            "api/live": {
+              "requests": 334,
+              "errors": 0
+            },
+            "api/events": {
+              "requests": 3,
+              "errors": 0
+            },
+            "api/agents": {
+              "requests": 3,
+              "errors": 0
+            },
+            "api/candidate-live": {
+              "requests": 36,
+              "errors": 0
+            },
+            "api/status": {
+              "requests": 3,
+              "errors": 0
+            },
+            "api/candidates": {
+              "requests": 0,
+              "errors": 3
+            }
+          }
+        }
+      },
+      {
+        "kind": "current",
+        "pair": 4,
+        "source_sha256": "edfa85970a88646ddb602270bc7acfdf46145440e63cbce46c39655869cc396f",
+        "p95": {
+          "count": 7372,
+          "p50": 62.84893299999794,
+          "p95": 117.28209334996221,
+          "p99": 142.77137593001953,
+          "max": 227.0351040000378
+        },
+        "candidate": {
+          "contract_version": 1,
+          "execution": "existing_candidate_worker",
+          "queue_policy": "bounded_latest_per_root",
+          "root_admission_order": "fifo_preserved_on_coalesce",
+          "oldest_root_wait_ms": 7593.077042000004,
+          "queue_limit": 32,
+          "queue_depth": 20,
+          "pending_roots": [
+            "7fc99760",
+            "8ed3b5cc",
+            "5b90d52b",
+            "3a63517a",
+            "3fbca10c",
+            "892b42d3",
+            "af6e3d5a",
+            "8c53828f"
+          ],
+          "queued": 826,
+          "coalesced": 6566,
+          "deduplicated": 0,
+          "dropped": 0,
+          "processed": 802,
+          "stale_generation_dropped": 0,
+          "errors": 0,
+          "observation_gaps": 0,
+          "max_depth": 20,
+          "last_error": null,
+          "last_root_agent_id": "736587f5",
+          "last_queue_lag_ms": 54.78707800000393
+        },
+        "journal": {
+          "storage_retry": {
+            "reason": null,
+            "pauses": 0,
+            "busy_retries": 0,
+            "retry_in_seconds": 0.0
+          },
+          "observations": {
+            "queued": 1480,
+            "flushed": 1350,
+            "flushes": 67,
+            "max_queue": 124,
+            "overflow_sync": 0,
+            "errors": 0,
+            "pending": 66
+          },
+          "windows": {
+            "queued": 7392,
+            "flushed": 4752,
+            "flushes": 72,
+            "max_queue": 2640,
+            "overflow_sync": 0,
+            "overflow_gaps": 0,
+            "errors": 0,
+            "pending": 2640
+          }
+        },
+        "ui_stats": {
+          "requests": 385,
+          "errors": 0,
+          "routes": {
+            "api/events": {
+              "requests": 5,
+              "errors": 0
+            },
+            "api/live": {
+              "requests": 329,
+              "errors": 0
+            },
+            "api/status": {
+              "requests": 5,
+              "errors": 0
+            },
+            "api/candidate-live": {
+              "requests": 36,
+              "errors": 0
+            },
+            "api/agents": {
+              "requests": 5,
+              "errors": 0
+            },
+            "api/candidates": {
+              "requests": 5,
+              "errors": 0
+            }
+          }
+        }
+      }
+    ],
+    "summary": {
+      "event_to_decision": {
+        "baseline_p95_ms": 433.5134698000048,
+        "current_p95_ms": 123.49076930004223,
+        "relative_change_percent": -71.5139717903084,
+        "paired_run_bootstrap_95_percent": [
+          -89.37170125131088,
+          -67.8766607739842
+        ],
+        "baseline_count": 20857,
+        "current_count": 35735
+      },
+      "event_to_target_start": {
+        "baseline_p95_ms": 420.5804281500491,
+        "current_p95_ms": 114.27545015001215,
+        "relative_change_percent": -72.82910889299812,
+        "paired_run_bootstrap_95_percent": [
+          -89.89922335636696,
+          -69.00210775859446
+        ],
+        "baseline_count": 20860,
+        "current_count": 35744
+      },
+      "inference": {
+        "baseline_p95_ms": 8.999434999986992,
+        "current_p95_ms": 6.374795100020938,
+        "relative_change_percent": -29.16449643749688,
+        "paired_run_bootstrap_95_percent": [
+          -62.47480270599086,
+          -18.889886155535663
+        ],
+        "baseline_count": 20857,
+        "current_count": 35735
+      },
+      "wrapped_inference": {
+        "baseline_p95_ms": 32.2663418500099,
+        "current_p95_ms": 14.223742300043796,
+        "relative_change_percent": -55.91771026860477,
+        "paired_run_bootstrap_95_percent": [
+          -76.86073776691711,
+          -48.92366668436789
+        ],
+        "baseline_count": 20852,
+        "current_count": 35735
+      }
+    }
+  },
+  {
+    "file": "PERFORMANCE_PLAN_0_14_217_FINAL_SHADOW_3_UI-candidate-ui-1s.json",
+    "sha256": "eea5ab55624f9a81a9a66664129f7f40fc63e732d59d6993ec54900f86703e7d",
+    "raw_local_path": "C:\\Users\\mpuch\\OneDrive\\Dokumenty\\HomeMind\\tmp\\performance217-experiments\\PERFORMANCE_PLAN_0_14_217_FINAL_SHADOW_3_UI-candidate-ui-1s.json",
+    "status": "Pre-UI-change source/profile; not final acceptance. Twenty-Root matrix also overlapped local PR preparation.",
+    "runs": [
+      {
+        "kind": "baseline",
+        "pair": 0,
+        "source_sha256": "41cfb72cce03ef2ff73dea19d8e55a02fbb4a482de3ab46036d73f3de306389b",
+        "p95": {
+          "count": 2152,
+          "p50": 6.989471999986563,
+          "p95": 17.836166150095767,
+          "p99": 29.145350909893725,
+          "max": 69.42598299997371
+        },
+        "candidate": {
+          "contract_version": 1,
+          "execution": "existing_candidate_worker",
+          "queue_policy": "bounded_latest_per_root",
+          "queue_limit": 32,
+          "queue_depth": 0,
+          "pending_roots": [],
+          "queued": 2125,
+          "coalesced": 30,
+          "deduplicated": 0,
+          "dropped": 0,
+          "processed": 2125,
+          "stale_generation_dropped": 0,
+          "errors": 0,
+          "observation_gaps": 0,
+          "max_depth": 3,
+          "last_error": null,
+          "last_root_agent_id": "423a4ec7",
+          "last_queue_lag_ms": 2.409709999938059
+        },
+        "journal": {
+          "storage_retry": {
+            "reason": null,
+            "pauses": 0,
+            "busy_retries": 0,
+            "retry_in_seconds": 0.0
+          },
+          "observations": {
+            "queued": 1446,
+            "flushed": 1412,
+            "flushes": 54,
+            "max_queue": 44,
+            "overflow_sync": 0,
+            "errors": 0,
+            "pending": 34
+          },
+          "windows": {
+            "queued": 2155,
+            "flushed": 2104,
+            "flushes": 55,
+            "max_queue": 78,
+            "overflow_sync": 0,
+            "errors": 0,
+            "pending": 51
+          }
+        },
+        "ui_stats": {
+          "requests": 418,
+          "errors": 0,
+          "routes": {
+            "api/status": {
+              "requests": 8,
+              "errors": 0
+            },
+            "api/agents": {
+              "requests": 8,
+              "errors": 0
+            },
+            "api/candidate-live": {
+              "requests": 36,
+              "errors": 0
+            },
+            "api/live": {
+              "requests": 350,
+              "errors": 0
+            },
+            "api/events": {
+              "requests": 8,
+              "errors": 0
+            },
+            "api/candidates": {
+              "requests": 8,
+              "errors": 0
+            }
+          }
+        }
+      },
+      {
+        "kind": "current",
+        "pair": 0,
+        "source_sha256": "edfa85970a88646ddb602270bc7acfdf46145440e63cbce46c39655869cc396f",
+        "p95": {
+          "count": 2151,
+          "p50": 6.022283999982392,
+          "p95": 11.759440999981052,
+          "p99": 22.614829999952235,
+          "max": 36.053658999890104
+        },
+        "candidate": {
+          "contract_version": 1,
+          "execution": "existing_candidate_worker",
+          "queue_policy": "bounded_latest_per_root",
+          "root_admission_order": "fifo_preserved_on_coalesce",
+          "oldest_root_wait_ms": 0.0,
+          "queue_limit": 32,
+          "queue_depth": 0,
+          "pending_roots": [],
+          "queued": 2154,
+          "coalesced": 0,
+          "deduplicated": 0,
+          "dropped": 0,
+          "processed": 2154,
+          "stale_generation_dropped": 0,
+          "errors": 0,
+          "observation_gaps": 0,
+          "max_depth": 3,
+          "last_error": null,
+          "last_root_agent_id": "8e26a63f",
+          "last_queue_lag_ms": 1.7091950001031364
+        },
+        "journal": {
+          "storage_retry": {
+            "reason": null,
+            "pauses": 0,
+            "busy_retries": 0,
+            "retry_in_seconds": 0.0
+          },
+          "observations": {
+            "queued": 1446,
+            "flushed": 1438,
+            "flushes": 35,
+            "max_queue": 44,
+            "overflow_sync": 0,
+            "errors": 0,
+            "pending": 8
+          },
+          "windows": {
+            "queued": 2154,
+            "flushed": 2142,
+            "flushes": 36,
+            "max_queue": 66,
+            "overflow_sync": 0,
+            "overflow_gaps": 0,
+            "errors": 0,
+            "pending": 12
+          }
+        },
+        "ui_stats": {
+          "requests": 422,
+          "errors": 0,
+          "routes": {
+            "api/status": {
+              "requests": 9,
+              "errors": 0
+            },
+            "api/candidate-live": {
+              "requests": 36,
+              "errors": 0
+            },
+            "api/live": {
+              "requests": 350,
+              "errors": 0
+            },
+            "api/events": {
+              "requests": 9,
+              "errors": 0
+            },
+            "api/agents": {
+              "requests": 9,
+              "errors": 0
+            },
+            "api/candidates": {
+              "requests": 9,
+              "errors": 0
+            }
+          }
+        }
+      },
+      {
+        "kind": "current",
+        "pair": 1,
+        "source_sha256": "edfa85970a88646ddb602270bc7acfdf46145440e63cbce46c39655869cc396f",
+        "p95": {
+          "count": 2151,
+          "p50": 6.210120999867286,
+          "p95": 11.480350000056205,
+          "p99": 18.84977450004044,
+          "max": 33.406491000050664
+        },
+        "candidate": {
+          "contract_version": 1,
+          "execution": "existing_candidate_worker",
+          "queue_policy": "bounded_latest_per_root",
+          "root_admission_order": "fifo_preserved_on_coalesce",
+          "oldest_root_wait_ms": 0.0,
+          "queue_limit": 32,
+          "queue_depth": 0,
+          "pending_roots": [],
+          "queued": 2154,
+          "coalesced": 0,
+          "deduplicated": 0,
+          "dropped": 0,
+          "processed": 2154,
+          "stale_generation_dropped": 0,
+          "errors": 0,
+          "observation_gaps": 0,
+          "max_depth": 3,
+          "last_error": null,
+          "last_root_agent_id": "32d60489",
+          "last_queue_lag_ms": 0.5597230001512798
+        },
+        "journal": {
+          "storage_retry": {
+            "reason": null,
+            "pauses": 0,
+            "busy_retries": 0,
+            "retry_in_seconds": 0.0
+          },
+          "observations": {
+            "queued": 1446,
+            "flushed": 1436,
+            "flushes": 34,
+            "max_queue": 44,
+            "overflow_sync": 0,
+            "errors": 0,
+            "pending": 10
+          },
+          "windows": {
+            "queued": 2154,
+            "flushed": 2139,
+            "flushes": 35,
+            "max_queue": 66,
+            "overflow_sync": 0,
+            "overflow_gaps": 0,
+            "errors": 0,
+            "pending": 15
+          }
+        },
+        "ui_stats": {
+          "requests": 423,
+          "errors": 0,
+          "routes": {
+            "api/agents": {
+              "requests": 9,
+              "errors": 0
+            },
+            "api/live": {
+              "requests": 351,
+              "errors": 0
+            },
+            "api/candidate-live": {
+              "requests": 36,
+              "errors": 0
+            },
+            "api/events": {
+              "requests": 9,
+              "errors": 0
+            },
+            "api/status": {
+              "requests": 9,
+              "errors": 0
+            },
+            "api/candidates": {
+              "requests": 9,
+              "errors": 0
+            }
+          }
+        }
+      },
+      {
+        "kind": "baseline",
+        "pair": 1,
+        "source_sha256": "41cfb72cce03ef2ff73dea19d8e55a02fbb4a482de3ab46036d73f3de306389b",
+        "p95": {
+          "count": 2151,
+          "p50": 7.41954800014355,
+          "p95": 16.107621500054847,
+          "p99": 23.694255500004147,
+          "max": 44.856363999997484
+        },
+        "candidate": {
+          "contract_version": 1,
+          "execution": "existing_candidate_worker",
+          "queue_policy": "bounded_latest_per_root",
+          "queue_limit": 32,
+          "queue_depth": 0,
+          "pending_roots": [],
+          "queued": 2154,
+          "coalesced": 0,
+          "deduplicated": 0,
+          "dropped": 0,
+          "processed": 2154,
+          "stale_generation_dropped": 0,
+          "errors": 0,
+          "observation_gaps": 0,
+          "max_depth": 3,
+          "last_error": null,
+          "last_root_agent_id": "9eb00041",
+          "last_queue_lag_ms": 2.426507000109268
+        },
+        "journal": {
+          "storage_retry": {
+            "reason": null,
+            "pauses": 0,
+            "busy_retries": 0,
+            "retry_in_seconds": 0.0
+          },
+          "observations": {
+            "queued": 1446,
+            "flushed": 1438,
+            "flushes": 50,
+            "max_queue": 44,
+            "overflow_sync": 0,
+            "errors": 0,
+            "pending": 8
+          },
+          "windows": {
+            "queued": 2154,
+            "flushed": 2142,
+            "flushes": 52,
+            "max_queue": 66,
+            "overflow_sync": 0,
+            "errors": 0,
+            "pending": 12
+          }
+        },
+        "ui_stats": {
+          "requests": 418,
+          "errors": 0,
+          "routes": {
+            "api/candidate-live": {
+              "requests": 36,
+              "errors": 0
+            },
+            "api/events": {
+              "requests": 8,
+              "errors": 0
+            },
+            "api/agents": {
+              "requests": 8,
+              "errors": 0
+            },
+            "api/live": {
+              "requests": 350,
+              "errors": 0
+            },
+            "api/status": {
+              "requests": 8,
+              "errors": 0
+            },
+            "api/candidates": {
+              "requests": 8,
+              "errors": 0
+            }
+          }
+        }
+      }
+    ],
+    "summary": null
+  },
+  {
+    "file": "PERFORMANCE_PLAN_0_14_217_LONG_CURRENT_20-candidate-ui-1s.json",
+    "sha256": "62e49cfc0fe280dab754b00115472d0bb09482f4468725631958b90cd169a951",
+    "raw_local_path": "C:\\Users\\mpuch\\OneDrive\\Dokumenty\\HomeMind\\tmp\\performance217-experiments\\PERFORMANCE_PLAN_0_14_217_LONG_CURRENT_20-candidate-ui-1s.json",
+    "status": "Pre-UI-change source/profile; not final acceptance. Twenty-Root matrix also overlapped local PR preparation.",
+    "runs": [
+      {
+        "kind": null,
+        "pair": null,
+        "source_sha256": "edfa85970a88646ddb602270bc7acfdf46145440e63cbce46c39655869cc396f",
+        "p95": {
+          "count": 19741,
+          "p50": 97.60125200000402,
+          "p95": 181.5006129999972,
+          "p99": 244.3187888000123,
+          "max": 444.11705799998913
+        },
+        "candidate": {
+          "contract_version": 1,
+          "execution": "existing_candidate_worker",
+          "queue_policy": "bounded_latest_per_root",
+          "root_admission_order": "fifo_preserved_on_coalesce",
+          "oldest_root_wait_ms": 22996.14409099999,
+          "queue_limit": 32,
+          "queue_depth": 20,
+          "pending_roots": [
+            "af6a2051",
+            "7e9a6125",
+            "c246ee9b",
+            "68d7fef9",
+            "f0844a9e",
+            "82dba3b3",
+            "8a9b0d89",
+            "4a8afcb7"
+          ],
+          "queued": 849,
+          "coalesced": 18912,
+          "deduplicated": 0,
+          "dropped": 0,
+          "processed": 826,
+          "stale_generation_dropped": 0,
+          "errors": 0,
+          "observation_gaps": 0,
+          "max_depth": 20,
+          "last_error": null,
+          "last_root_agent_id": "0f27f97d",
+          "last_queue_lag_ms": 3771.3662219999833
+        },
+        "journal": {
+          "storage_retry": {
+            "reason": null,
+            "pauses": 0,
+            "busy_retries": 0,
+            "retry_in_seconds": 0.0
+          },
+          "observations": {
+            "queued": 4840,
+            "flushed": 3514,
+            "flushes": 78,
+            "max_queue": 1302,
+            "overflow_sync": 0,
+            "errors": 0,
+            "pending": 1262
+          },
+          "windows": {
+            "queued": 12581,
+            "flushed": 8485,
+            "flushes": 82,
+            "max_queue": 4096,
+            "overflow_sync": 0,
+            "overflow_gaps": 7180,
+            "errors": 0,
+            "last_gap_anchor_time": 1792341576.0753262,
+            "last_gap_reason": "window_queue_capacity",
+            "pending": 4096
+          }
+        },
+        "ui_stats": {
+          "requests": 1233,
+          "errors": 0,
+          "routes": {
+            "api/agents": {
+              "requests": 11,
+              "errors": 0
+            },
+            "api/candidate-live": {
+              "requests": 119,
+              "errors": 0
+            },
+            "api/status": {
+              "requests": 11,
+              "errors": 0
+            },
+            "api/events": {
+              "requests": 11,
+              "errors": 0
+            },
+            "api/live": {
+              "requests": 1070,
+              "errors": 0
+            },
+            "api/candidates": {
+              "requests": 11,
+              "errors": 0
+            }
+          }
+        }
+      }
+    ],
+    "summary": null
+  }
+]

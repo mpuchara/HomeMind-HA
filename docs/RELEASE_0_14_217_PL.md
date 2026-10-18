@@ -13,6 +13,12 @@ Bazą jest 0.14.216, lokalny commit `cd8a0f817d360cf39351248db7a119f26ea4fca7`, 
 - Cały odczyt `/api/candidates` współdzieli jedno połączenie SQL, zwalniane przed serializacją i wysłaniem odpowiedzi. Każdy zagnieżdżony helper zachowuje własny commit/rollback i świeży odczyt. Nie ma jednej transakcji na całe żądanie ani cache wyników. Test sprawdza commit z drugiego połączenia pomiędzy dwoma odczytami oraz zamknięcie połączenia po błędzie.
 - Nie ma nowego cache zgody na sterowanie ani lifecycle TTL. Zmiana tabeli/sesji przez raw SQL lub inne połączenie pozostaje widoczna. Brak opcjonalnej tabeli oznacza brak sesji; inne błędy SQLite pozostają błędami.
 
+## Odświeżanie widocznych kafelków Candidate
+
+`candidate_preference_ui.js` wykonuje lekki odczyt co 100 ms po zakończeniu poprzedniego, zamiast co sekundę. `liveBusy` i wspólny broker zachowują współdzielenie odczytów w locie. Cache w `runtime_activity_ui.js` wygasa po 100 ms zamiast po sekundzie; początkowy pusty cache nie blokuje pierwszej karty. Ukryta strona nie odpytuje backendu, a brak kart Candidate oznacza zero żądań do tego endpointu. Ciężki `/api/candidates` nadal ma osobny, wolniejszy cykl.
+
+Nowy test VM uruchamia wszystkie trzy produkcyjne warstwy JavaScript. Sprawdza 100 ms, wygaśnięcie cache, jeden odczyt przy równoległych klientach, pierwszą kartę oraz brak HTTP dla ukrytej strony i bez kart. To dowód zachowania interfejsu, a nie zmierzony czas reakcji fizycznego urządzenia. Benchmark backendu odtwarza teraz odczyt Candidate co 100 ms dla obu źródeł, żeby koszt szybszego panelu był uwzględniony w porównaniu. Próby ze starym profilem 1 s zachowano osobno w `PRE_UI_1S`.
+
 ## Bieżące ramki i kolejność celów, część E2/E3
 
 Scheduler dopuszcza tyle rzeczywistych zadań zdarzeń/timerów, ile jest wolnych pracowników. Oczekujące cele mają kolejkę FIFO zmian w RAM, a ich stan i zegary są pobierane do ramki dopiero przy dopuszczeniu. Kolejne zmiany tego samego celu koalescują do bieżącego stanu. Nie tworzy się kolejka do 20 starzejących się ramek wewnątrz ThreadPoolExecutor. Liczba pracowników pozostaje bez zmian. Licznik `capacity_deferrals` ujawnia odroczenia; zakończenie pracy wybudza kolejne cele bez aktywnego oczekiwania. Ponowienia, anulowanie, zmiana właściciela/zależności i brak zegarów zdarzeń dla timerów pozostają sprawdzane testami.
@@ -59,7 +65,7 @@ python tools/benchmark_full_runtime_pair.py --baseline-root /path/to/216 \
   --candidates --ui --output /path/to/result.json
 ```
 
-Strumień ma ustaloną liczbę kroków 20 Hz, naprzemienne zmiany obecności każdego aktywnego agenta oraz sygnał numeryczny. Para musi mieć identyczny hash kolejności i wartości wejść oraz tego samego narzędzia. Raport pokazuje spóźnienia generatora. UI odtwarza niezależne odczyty status/agents/events/candidates co 4 s, reaktywne live z rewizją i 100 ms przerwy oraz candidate-live co 1 s. Jest to obciążenie rzeczywistych tras HTTP, bez kosztu DOM i przeglądarki/Ingress.
+Strumień ma ustaloną liczbę kroków 20 Hz, naprzemienne zmiany obecności każdego aktywnego agenta oraz sygnał numeryczny. Para musi mieć identyczny hash kolejności i wartości wejść oraz tego samego narzędzia. Raport pokazuje spóźnienia generatora. UI odtwarza niezależne odczyty status/agents/events/candidates co 4 s, reaktywne live z rewizją i 100 ms przerwy oraz candidate-live co 100 ms. Jest to obciążenie rzeczywistych tras HTTP, bez kosztu DOM i przeglądarki/Ingress.
 
 Okno pomiaru kończy się z podawaniem zdarzeń. Zakończenia podczas wygaszania klientów są osobno w `tail_window` i `tail_latency_samples`; `backlog_at_input_stop` ujawnia niezakończoną pracę. Przy przeciążeniu należy czytać także liczby ukończonych decyzji i ogon, nie sam p95 szybkiego podzbioru. `service_calls` obejmuje rozgrzewkę; liczba usług w oknie jest widoczna jako count metryki `measured_window.ha_service_request`. Samo `control_dispatch_exercised` nie dowodzi wykonywania usług w okresie pomiarowym.
 

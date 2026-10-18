@@ -224,6 +224,18 @@ class LockTimingTests(unittest.TestCase):
 
 
 class FullRuntimeBenchmarkTests(unittest.TestCase):
+    def test_real_candidate_ui_cadence_cache_expiry_and_inflight_coalescing(self):
+        root=Path(__file__).resolve().parents[1]
+        result=subprocess.run(['node',str(root/'tools/verify_candidate_live_ui.js')],
+            cwd=root,capture_output=True,text=True,timeout=30)
+        self.assertEqual(result.returncode,0,result.stdout+result.stderr)
+        row=json.loads(result.stdout.strip().splitlines()[-1])
+        self.assertEqual(row['visible_cadence_ms'],100)
+        self.assertTrue(row['shared_inflight'])
+        self.assertTrue(row['first_card_fresh'])
+        self.assertTrue(row['no_cards_no_requests'])
+        self.assertTrue(row['hidden_no_requests'])
+
     def test_shipped_composition_real_root_candidate_and_debug_ui_work_together(self):
         root=Path(__file__).resolve().parents[1]
         result=subprocess.run([sys.executable,str(root/'tools/benchmark_full_runtime.py'),

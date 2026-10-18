@@ -3,7 +3,7 @@
   "release_date": "2026-10-18",
   "base_version": "0.14.216",
   "base_commit": "cd8a0f817d360cf39351248db7a119f26ea4fca7",
-  "release_status": "draft-performance-first-packet-functional-validation-passed-overload-gate-open",
+  "release_status": "draft-final-100ms-candidate-ui-validation-pending",
   "release_014140": {
     "scope": "inventory_and_remove_remaining_shipped_feature_Handler_fallbacks_for_Candidate_Live_and_manual_feedback_transport",
     "explicit_routes": "manual_feedback.js, candidate_ui.js, candidate_preference_ui.js, /api/candidates, Candidate Teach-RL status/train, generation history/comparison, /api/candidate-live, /api/live and Candidate discard",
@@ -3088,6 +3088,7 @@
     "optional_window_overload": "New decision retention window rejected explicitly at capacity; accepted windows/raw events retained; manual corrections keep durable fallback",
     "validation_tests_passed": 2650,
     "validation_seconds": 317.686,
-    "performance_gate": "pending alternating comparisons; 120-second 20-Root run has growing queues and explicit optional retention gaps"
+    "performance_gate": "pending alternating comparisons; 120-second 20-Root run has growing queues and explicit optional retention gaps",
+    "candidate_ui": "100ms visible loop/cache, shared inflight, no requests hidden or without cards; final validation pending"
   }
 }

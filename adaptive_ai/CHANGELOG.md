@@ -11,7 +11,8 @@
 - Split cumulative optional context writes into bounded commits and yield Store between them. Drain feature-journal background work in bounded turns, retaining explicit full flush barriers. Use guarded batch admission with fresh entry/exit/commit checks, payload/page/WAL limits and rollback.
 - Group overlapping evidence-window protection updates by entity set while preserving the exact pointwise maximum, inclusive boundaries, gaps, duplicate-ID semantics and retention. Bound statement parameters for older SQLite builds.
 - Bulk-insert journal records/links and reuse an exact common protection maximum when it covers the complete sample range. Preserve partial-window fallback, writer reservation, admission and atomic rollback. At a full queue, expose rejection of a new optional decision-retention window as a gap instead of blocking Executor; retain accepted evidence and manual-correction durability.
-- Functional validation: 2650 tests pass. Performance acceptance remains open: a sustained 20-Root workload grows retention queues and reports gaps. A dedicated Shadow-thread experiment was rejected and is not installed.
+- Refresh visible Candidate decision tiles at 100 ms, expire the extra UI cache after 100 ms and fetch the first card immediately. Keep hidden/no-card suppression and shared requests in flight. The benchmark uses this faster UI profile for both sources.
+- Earlier backend validation: 2650 tests pass; final validation including the UI change is pending. Performance acceptance remains open: a sustained 20-Root workload grows retention queues and reports gaps. A dedicated Shadow-thread experiment was rejected and is not installed.
 - Add correlated ws.recv-to-Engine/worker/decision/release clocks beside existing latency keys, separate Home Context lock wait from locked work, and include hot-path stage metrics in runtime exports.
 
 ## 0.14.216 (2026-10-18)
