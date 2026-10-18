@@ -1,0 +1,147 @@
+{
+  "pairs": [
+    {
+      "baseline": {
+        "passes": 8,
+        "entities": 778,
+        "agents": 20,
+        "median_ms": 312.71953050000434,
+        "samples_ms": [
+          317.80506900003047,
+          307.6339919999782,
+          291.82760399999097,
+          304.87701200001993,
+          327.45483399997966,
+          367.8671480000162,
+          333.11279599996624,
+          306.54820499995594
+        ],
+        "sql_counts_outside_timing": {
+          "select": 31941,
+          "other": 0
+        },
+        "result_sha256": "940f6e9e6326967c0403ce173c36e1cfe58a5937db8a0ed1a440b5521314f70c",
+        "scope": "actual DeviceAgentService descriptor + shared manual-hold guard; no Executor/HA"
+      },
+      "current": {
+        "passes": 8,
+        "entities": 778,
+        "agents": 20,
+        "median_ms": 0.7940289999908146,
+        "samples_ms": [
+          2.1516639999958898,
+          2.5268140000207495,
+          0.8441009999842208,
+          0.9793669999567101,
+          0.7439569999974083,
+          0.6546640000237858,
+          0.673333999998249,
+          0.6297589999917363
+        ],
+        "sql_counts_outside_timing": {
+          "select": 9,
+          "other": 0
+        },
+        "result_sha256": "940f6e9e6326967c0403ce173c36e1cfe58a5937db8a0ed1a440b5521314f70c",
+        "scope": "actual DeviceAgentService descriptor + shared manual-hold guard; no Executor/HA"
+      },
+      "median_speedup": 393.83892843160885
+    },
+    {
+      "current": {
+        "passes": 8,
+        "entities": 778,
+        "agents": 20,
+        "median_ms": 0.5878659999893898,
+        "samples_ms": [
+          0.8322930000304041,
+          0.7235799999989467,
+          0.6016040000531575,
+          0.5872360000012122,
+          0.5697849999819482,
+          0.5483329999833586,
+          0.5884959999775674,
+          0.5649779999998827
+        ],
+        "sql_counts_outside_timing": {
+          "select": 9,
+          "other": 0
+        },
+        "result_sha256": "940f6e9e6326967c0403ce173c36e1cfe58a5937db8a0ed1a440b5521314f70c",
+        "scope": "actual DeviceAgentService descriptor + shared manual-hold guard; no Executor/HA"
+      },
+      "baseline": {
+        "passes": 8,
+        "entities": 778,
+        "agents": 20,
+        "median_ms": 273.67681199999083,
+        "samples_ms": [
+          272.44449999994913,
+          265.5773309999745,
+          257.8670439999655,
+          270.01838600000383,
+          274.90912400003253,
+          286.05795400000034,
+          302.34919899999113,
+          319.13201399999025
+        ],
+        "sql_counts_outside_timing": {
+          "select": 31941,
+          "other": 0
+        },
+        "result_sha256": "940f6e9e6326967c0403ce173c36e1cfe58a5937db8a0ed1a440b5521314f70c",
+        "scope": "actual DeviceAgentService descriptor + shared manual-hold guard; no Executor/HA"
+      },
+      "median_speedup": 465.5428482084868
+    },
+    {
+      "baseline": {
+        "passes": 8,
+        "entities": 778,
+        "agents": 20,
+        "median_ms": 295.4733394999778,
+        "samples_ms": [
+          315.4426629999989,
+          304.50211800001625,
+          294.8373759999754,
+          302.26043999999774,
+          296.1093029999802,
+          259.6495430000232,
+          282.0259210000131,
+          280.2692610000008
+        ],
+        "sql_counts_outside_timing": {
+          "select": 31941,
+          "other": 0
+        },
+        "result_sha256": "940f6e9e6326967c0403ce173c36e1cfe58a5937db8a0ed1a440b5521314f70c",
+        "scope": "actual DeviceAgentService descriptor + shared manual-hold guard; no Executor/HA"
+      },
+      "current": {
+        "passes": 8,
+        "entities": 778,
+        "agents": 20,
+        "median_ms": 0.5838339999968412,
+        "samples_ms": [
+          0.7064640000180589,
+          0.7048869999835006,
+          0.5859089999944445,
+          0.5477959999780069,
+          0.6508010000061404,
+          0.5799260000003414,
+          0.5817589999992379,
+          0.5571529999883751
+        ],
+        "sql_counts_outside_timing": {
+          "select": 9,
+          "other": 0
+        },
+        "result_sha256": "940f6e9e6326967c0403ce173c36e1cfe58a5937db8a0ed1a440b5521314f70c",
+        "scope": "actual DeviceAgentService descriptor + shared manual-hold guard; no Executor/HA"
+      },
+      "median_speedup": 506.09135388068603
+    }
+  ],
+  "all_results_identical": true,
+  "limitation": "Host SQL component; not end-to-end or physical HA latency."
+}

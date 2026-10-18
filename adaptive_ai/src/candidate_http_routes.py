@@ -6,6 +6,7 @@ after all Candidate decorators have installed their final manager methods.
 """
 from __future__ import annotations
 
+from contextlib import nullcontext
 import time
 from urllib.parse import parse_qs, unquote, urlsplit
 
@@ -27,7 +28,13 @@ def register_routes(registry, core, manager):
         )
 
     def candidates(http, _params):
-        return http.send_json(200, {"candidates": manager.list_status()})
+        # The composed card decorators issue fresh SQL in many small conn()
+        # scopes. Retain one connection for this request, preserving each nested
+        # commit/rollback and releasing it before serialization/socket writes.
+        session = getattr(core.STORE, 'connection_session', None)
+        with session() if callable(session) else nullcontext():
+            payload = {"candidates": manager.list_status()}
+        return http.send_json(200, payload)
 
     def teach_status(http, params):
         agent_id = params["agent_id"]

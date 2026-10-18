@@ -678,9 +678,10 @@ def install(manager):
     def invalidate_generation_cache(*_args, **_kwargs):
         # Candidate lineage mutations are rare. Invalidate all root caches immediately
         # instead of polling SQLite from every realtime inference.
-        manager.store._provenance_generation_revision = int(
-            getattr(manager.store, "_provenance_generation_revision", 0)
-        ) + 1
+        with manager.lock:
+            manager.store._provenance_generation_revision = int(
+                getattr(manager.store, "_provenance_generation_revision", 0)
+            ) + 1
         _refresh_active_candidate_parents()
         _rebuild_candidate_dependency_index()
         try:
@@ -727,6 +728,13 @@ def install(manager):
         root_agent, state_map, *, include_parent=True, event_id=None, event_ts=None,
         parent_observation=None,
     ):
+        generation_revision = int(getattr(manager.store,'_provenance_generation_revision',0) or 0)
+        current_job = getattr(manager,'candidate_shadow_current_job',None)
+        current_job = current_job() if callable(current_job) else None
+        expected_revision = (current_job or {}).get('generation_revision')
+        if expected_revision is not None and int(expected_revision) != generation_revision:
+            _evidence_gap(root_agent['id'],reason='generation_changed_during_observation')
+            return None
         root_gen, shadow_generations = _cached_generations(root_agent["id"])
         # No Candidate means no A/B observation work at all. Live runtime telemetry is
         # already stored by Engine; candidate_generation_decisions exist only to compare
@@ -764,6 +772,9 @@ def install(manager):
         # Publish every inference to RAM even when the durable 30 s history heartbeat
         # decides that no SQLite row needs to be written.
         with manager.lock:
+            if int(getattr(manager.store,'_provenance_generation_revision',0) or 0) != generation_revision:
+                _evidence_gap(root_agent['id'],reason='generation_changed_during_observation')
+                return None
             for gid, result in results.items():
                 latest_generation_runtime[str(gid)] = {
                     "root_agent_id": str(root_agent["id"]),
@@ -874,6 +885,14 @@ def install(manager):
 
     def _increment_false_early(root_id, previous_bundle, current_bundle):
         if not previous_bundle or not current_bundle or previous_bundle.get("current") != current_bundle.get("current"):
+            return
+        previous_results = previous_bundle.get('results') or {}
+        if not any(previous_results.get(gid) and
+                   previous_results[gid].get('desired') != result.get('desired')
+                   for gid, result in (current_bundle.get('results') or {}).items()):
+            # With no changed observed prediction, neither side can have
+            # returned from a false-early excursion. No lifecycle/permission
+            # state is cached: a possible transition still reads fresh SQL.
             return
         edge = _active_comparison_edge(manager, root_id)
         if not edge:

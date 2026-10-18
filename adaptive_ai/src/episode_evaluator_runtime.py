@@ -429,9 +429,19 @@ def install_candidate(manager, evaluator: EpisodeEvaluator):
 
     def after(agent, state_map):
         bundle = original_after(agent, state_map)
-        if not bundle or str(agent.get("target_property") or "") != "power":
+        if (not bundle or str(agent.get("target_property") or "") != "power"
+                or not bundle.get('results')):
+            # Deferred admission is only a queue receipt. It contains no
+            # observed predictions from which an episode can be evaluated.
+            # Resolve the edge only for an actual Parent/Candidate bundle.
             return bundle
         root_id = str(agent.get("id"))
+        pending = false_runtime.get(root_id)
+        observed_current = _binary(bundle.get('current'))
+        if observed_current is not None:
+            desired = tuple(_binary(row.get('desired')) for row in bundle['results'].values())
+            if pending is None and all(value == observed_current for value in desired):
+                return bundle  # No excursion or pending proxy episode to finalize.
         edge = _candidate_edge(manager, root_id)
         if not edge:
             false_runtime.pop(root_id, None)

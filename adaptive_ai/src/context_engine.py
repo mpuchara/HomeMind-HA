@@ -11,6 +11,7 @@ from context import (
 from home_sources import select_sources
 from home_state import RoomBeliefModel
 from semantic_reliability import SemanticReliabilityModel
+from runtime_lock_timing import timed_lock
 
 
 class ContextEngine:
@@ -277,7 +278,7 @@ class ContextEngine:
         processing_ts = float(received_ts if received_ts is not None else ts)
         event_ts = float(event_ts if event_ts is not None else ts)
         received_ts = float(received_ts if received_ts is not None else processing_ts)
-        with self.lock:
+        with timed_lock(self.lock, 'context_ingest'):
             self._discard_orphan_movement_state()
             if eid not in self.admitted:
                 previous_area = self.home.source_area(eid)
@@ -464,7 +465,7 @@ class ContextEngine:
         return result
 
     def forecast(self, eid, ts):
-        with self.lock:
+        with timed_lock(self.lock, 'context_forecast'):
             self._discard_orphan_movement_state()
             area = self.area_for(eid)
             self.prepare_home_reliability(self.home, area, ts)

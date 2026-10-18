@@ -255,7 +255,9 @@ class InferenceSQLSession171Tests(unittest.TestCase):
             from tools.benchmark_inference_sql_session import run_mode
         previous = run_mode('previous', passes=3, shadow_queries=8)
         current = run_mode('current', passes=3, shadow_queries=8)
-        self.assertEqual(previous['connections_per_decision'], 5)
+        # Frozen outer connection scope, current helpers: .217 removed Explore's
+        # separate schema query, leaving four independent connection owners.
+        self.assertEqual(previous['connections_per_decision'], 4)
         self.assertEqual(current['connections_per_decision'], 1)
         self.assertEqual(previous['result_sha256'], current['result_sha256'])
 

@@ -181,6 +181,8 @@ class RuntimeDebugLogService:
                         if callable(getattr(self.core, 'startup_snapshot', None)) else None),
             "runtime_debug": RUNTIME_DEBUG.export(),
             "telemetry": TELEMETRY.snapshot(),
+            "inference_hot_path": (engine.inference_hot_path_metrics.snapshot()
+                                   if getattr(engine, 'inference_hot_path_metrics', None) is not None else None),
             "heavy_job": HEAVY_JOBS.owner,
             "training_queue": self._queue_status(),
             "candidate_worker": self._candidate_worker_status(),
@@ -203,8 +205,11 @@ class RuntimeDebugLogService:
             "shadow_json_encoding_cache": shadow_json_snapshot(),
             "threads": _thread_snapshot(),
             "notes": {
+                "ws_receive_to_decision": "ws.recv return to completed decision; excludes upstream HA/socket buffering; legacy event_to_decision unchanged",
+                "receipt_clock_contract": 2,
+                "legacy_clock_start": "Engine ingestion after its lock is acquired; event_to_intent/event_to_decision names and values retained",
                 "event_to_decision_recent_p95_window_seconds": 60,
-                "event_to_decision_semantics": "ha_websocket_receive_to_actionintent_decision_ready",
+                "event_to_decision_semantics": "legacy_engine_ingestion_to_actionintent_decision_ready",
                 "legacy_event_to_intent_alias": True,
                 "decision_to_executor_metric": True,
                 "event_to_target_start": "HA receipt to worker start, including debounce and previous target work",

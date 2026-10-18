@@ -44,8 +44,8 @@ def run_mode(mode, passes, shadow_queries):
                               [(a['id'], f'sensor.context_{i}') for i in range(96)])
             outputs = []
             def process(*_):
-                # Actual helper reads seen in the user's trace: generation before
-                # and after Live, Explore table check + active session query.
+                # Current helper implementations, with generation before/after
+                # Live and one Explore session SELECT (no schema probe since .217).
                 before = _generation(store, agent_id=a['id'])['lifecycle_state']
                 explore = _active_free_for_live(store, a['id'])
                 after = _generation(store, agent_id=a['id'])['lifecycle_state']
@@ -92,7 +92,7 @@ def run_mode(mode, passes, shadow_queries):
                     return real_connect(*args, **kwargs)
                 with patch('storage.sqlite3.connect', side_effect=measured_connect):
                     r.process_target([a], {'sensor.radar'}, snapshot)
-                expected = 1 if mode == 'current' else 5
+                expected = 1 if mode == 'current' else 4
                 assert connections == expected, connections
             digest = hashlib.sha256(json.dumps(outputs, sort_keys=True).encode()).hexdigest()
             return dict(median_ms=statistics.median(samples), total_ms=sum(samples),

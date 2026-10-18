@@ -1,0 +1,41 @@
+{
+  "runs": [
+    {
+      "ms": 90.6152059999954,
+      "result_sha256": "56a8a6f5d7ae2afa93bcaaf5acaf4d79adf6550e6df10b3446d80dc2d2c7768e",
+      "kind": "baseline",
+      "pair": 0
+    },
+    {
+      "ms": 65.16492600002266,
+      "result_sha256": "56a8a6f5d7ae2afa93bcaaf5acaf4d79adf6550e6df10b3446d80dc2d2c7768e",
+      "kind": "current",
+      "pair": 0
+    },
+    {
+      "ms": 64.61029500002269,
+      "result_sha256": "56a8a6f5d7ae2afa93bcaaf5acaf4d79adf6550e6df10b3446d80dc2d2c7768e",
+      "kind": "current",
+      "pair": 1
+    },
+    {
+      "ms": 91.67540599997892,
+      "result_sha256": "56a8a6f5d7ae2afa93bcaaf5acaf4d79adf6550e6df10b3446d80dc2d2c7768e",
+      "kind": "baseline",
+      "pair": 1
+    },
+    {
+      "ms": 91.30316400000993,
+      "result_sha256": "56a8a6f5d7ae2afa93bcaaf5acaf4d79adf6550e6df10b3446d80dc2d2c7768e",
+      "kind": "baseline",
+      "pair": 2
+    },
+    {
+      "ms": 59.16227000000163,
+      "result_sha256": "56a8a6f5d7ae2afa93bcaaf5acaf4d79adf6550e6df10b3446d80dc2d2c7768e",
+      "kind": "current",
+      "pair": 2
+    }
+  ],
+  "limitation": "Journal component only, no agent/HA end-to-end claim."
+}

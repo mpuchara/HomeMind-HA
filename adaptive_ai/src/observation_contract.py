@@ -89,6 +89,30 @@ WINDOW_BEFORE_SECONDS = 12.0
 WINDOW_AFTER_SECONDS = 6.0
 
 
+def _insert_journal_rows(connection, prefix, rows, width, suffix=''):
+    """One VM step for a bounded VALUES group, with normal admission guards.
+
+    sqlite3.executemany releases/reacquires the interpreter for every row.
+    Tiny journal rows otherwise spend more time competing with inference than
+    writing SQLite. Keep bind count below 999 and ordinary groups below 256 KiB;
+    an individual large row still goes through the existing payload guard.
+    """
+    params, count, size = [], 0, 0
+    def write():
+        connection.execute(prefix+' VALUES '+','.join('('+','.join('?' for _ in range(width))+')' for _ in range(count))+suffix, params)
+    for row in rows:
+        row_size = sum(len(value.encode('utf-8')) if isinstance(value, str) else
+                       len(value) if isinstance(value, (bytes, bytearray, memoryview)) else 16 for value in row)
+        if count and (len(params)+width > 900 or size+row_size > 256*1024):
+            write()
+            params, count, size = [], 0, 0
+        params.extend(row)
+        count += 1
+        size += row_size
+    if count:
+        write()
+
+
 def _attrs(state):
     return (state or {}).get("attributes") or {}
 
@@ -983,25 +1007,56 @@ class FeatureJournal:
         if not prepared:
             return []
 
-        with self.store.lock, self.store.conn() as c:
-            for row in prepared:
-                protected = self._protection(c, row["entity_id"], row["event_time"])
-                c.execute(
+        with self.store.lock, self.store.conn() as c, c.storage_batch():
+            # Read protection and insert observations in one writer snapshot.
+            # Preserve the connection's normal WAL/checkpoint admission before
+            # explicitly reserving the writer, including direct record() calls.
+            if not c.in_transaction:
+                admission = getattr(c, 'storage_write_admission', None)
+                if admission is not None:
+                    admission()
+                c.execute('BEGIN IMMEDIATE')
+            protection = {}
+            for start in range(0, len(prepared), 256):
+                chunk = prepared[start:start+256]
+                values = ','.join('(?,?,?)' for _ in chunk)
+                params = [value for offset,row in enumerate(chunk) for value in
+                          (start+offset, str(row['entity_id']), float(row['event_time']))]
+                # Most fresh samples share the newest protecting window. When
+                # the maximum expiry also covers an entity's complete sample
+                # range, it is the exact answer for every sample in that range.
+                # Partial/disjoint coverage retains the exact per-sample query.
+                protection.update((int(row[0]), float(row[1] or 0.)) for row in c.execute(f'''
+                    WITH samples(seq,entity,stamp) AS (VALUES {values}),
+                    ranges AS (SELECT entity,MIN(stamp) lo,MAX(stamp) hi FROM samples GROUP BY entity),
+                    coverage AS (
+                        SELECT r.entity,COALESCE(MAX(w.protected_until),0) maximum,
+                            COALESCE(MAX(CASE WHEN w.start_time<=r.lo AND w.end_time>=r.hi
+                                THEN w.protected_until END),0) common
+                        FROM ranges r LEFT JOIN feature_window_entities e ON e.entity_id=r.entity
+                        LEFT JOIN feature_windows w ON w.window_id=e.window_id
+                            AND w.start_time<=r.hi AND w.end_time>=r.lo
+                        GROUP BY r.entity
+                    )
+                    SELECT s.seq,CASE WHEN c.maximum=c.common THEN c.common ELSE (
+                        SELECT MAX(w.protected_until) FROM feature_window_entities e
+                        JOIN feature_windows w ON w.window_id=e.window_id
+                        WHERE e.entity_id=s.entity AND w.start_time<=s.stamp AND w.end_time>=s.stamp
+                    ) END FROM samples s JOIN coverage c ON c.entity=s.entity''', params))
+            _insert_journal_rows(c,
                     """INSERT INTO feature_observation_events
                        (event_key,contract_version,entity_id,event_time,received_time,state,
-                        attributes_json,last_changed,last_updated,source,quality,protected_until)
-                       VALUES(?,?,?,?,?,?,?,?,?,?,?,?)
-                       ON CONFLICT(event_key) DO UPDATE SET
-                         received_time=MIN(feature_observation_events.received_time,excluded.received_time),
-                         protected_until=MAX(feature_observation_events.protected_until,excluded.protected_until),
-                         quality=MAX(feature_observation_events.quality,excluded.quality)""",
-                    (
+                        attributes_json,last_changed,last_updated,source,quality,protected_until)""",
+                    ((
                         row["event_key"], CONTRACT_VERSION, row["entity_id"],
                         row["event_time"], row["received_time"], row["state"],
                         row["attributes_json"], row.get("last_changed"), row.get("last_updated"),
-                        row["source"], row["quality"], protected,
-                    ),
-                )
+                        row["source"], row["quality"], protection[index],
+                    ) for index,row in enumerate(prepared)), 12,
+                    ''' ON CONFLICT(event_key) DO UPDATE SET
+                         received_time=MIN(feature_observation_events.received_time,excluded.received_time),
+                         protected_until=MAX(feature_observation_events.protected_until,excluded.protected_until),
+                         quality=MAX(feature_observation_events.quality,excluded.quality)''')
             previous_writes = self._writes
             self._writes += len(prepared)
             should_prune = self._writes // 128 > previous_writes // 128
@@ -1045,24 +1100,46 @@ class FeatureJournal:
             })
         if not prepared:
             return 0
-        with self.store.lock, self.store.conn() as c:
+        with self.store.lock, self.store.conn() as c, c.storage_batch():
+            protections = {}
+            window_values = []
             for row in prepared:
-                c.execute("""INSERT OR IGNORE INTO feature_windows
-                    (window_id,contract_version,agent_id,anchor_time,start_time,end_time,kind,created_time,protected_until)
-                    VALUES(?,?,?,?,?,?,?,?,?)""",
+                window_values.append(
                     (row["window_id"], CONTRACT_VERSION, row["agent_id"], row["anchor"],
                      row["start"], row["end"], row["kind"], row["created"],
                      row["protected_until"]))
-                c.executemany(
-                    "INSERT OR IGNORE INTO feature_window_entities(window_id,entity_id) VALUES(?,?)",
-                    [(row["window_id"], eid) for eid in row["entities"]],
-                )
-                placeholders = ",".join("?" for _ in row["entities"])
-                c.execute(
-                    f"""UPDATE feature_observation_events SET protected_until=MAX(protected_until,?)
-                        WHERE entity_id IN ({placeholders}) AND event_time>=? AND event_time<=?""",
-                    [row["protected_until"], *row["entities"], row["start"], row["end"]],
-                )
+                protections.setdefault(tuple(row['entities']), []).append(
+                    (row['start'], row['end'], row['protected_until']))
+            _insert_journal_rows(c, '''INSERT OR IGNORE INTO feature_windows
+                (window_id,contract_version,agent_id,anchor_time,start_time,end_time,kind,created_time,protected_until)''',
+                window_values, 9)
+            _insert_journal_rows(c, 'INSERT OR IGNORE INTO feature_window_entities(window_id,entity_id)',
+                ((row['window_id'], eid) for row in prepared for eid in row['entities']), 2)
+            # Apply the same pointwise maximum once per entity-set and bounded
+            # interval group. Repeated decisions commonly protect overlapping
+            # windows; updating every matching event once per window multiplies
+            # SQLite work while holding Store. Use prepared intervals even when
+            # INSERT OR IGNORE retained an older window with the same ID.
+            for entities, intervals in protections.items():
+                # At most 900 bind parameters, also on older SQLite builds.
+                entity_chunk_size = 128
+                for entity_start in range(0, len(entities), entity_chunk_size):
+                    entity_chunk = entities[entity_start:entity_start+entity_chunk_size]
+                    for interval_start in range(0, len(intervals), 256):
+                        chunk = intervals[interval_start:interval_start+256]
+                        values = ','.join('(?,?,?)' for _ in chunk)
+                        marks = ','.join('?' for _ in entity_chunk)
+                        params = [part for interval in chunk for part in interval]
+                        params.extend(entity_chunk)
+                        params.extend((min(v[0] for v in chunk), max(v[1] for v in chunk)))
+                        c.execute(f'''WITH protection(start,end,expiry) AS (VALUES {values})
+                            UPDATE feature_observation_events AS event
+                            SET protected_until=MAX(protected_until,
+                                (SELECT MAX(expiry) FROM protection
+                                 WHERE start<=event.event_time AND end>=event.event_time))
+                            WHERE entity_id IN ({marks}) AND event_time>=? AND event_time<=?
+                              AND EXISTS(SELECT 1 FROM protection
+                                  WHERE start<=event.event_time AND end>=event.event_time)''', params)
             for agent_id in sorted(set(row["agent_id"] for row in prepared)):
                 stale = c.execute(
                     """SELECT window_id FROM feature_windows WHERE agent_id=?
@@ -2080,7 +2157,7 @@ def install(core):
     }
     window_stats = {
         "queued": 0, "flushed": 0, "flushes": 0, "max_queue": 0,
-        "overflow_sync": 0, "errors": 0,
+        "overflow_sync": 0, "overflow_gaps": 0, "errors": 0,
     }
 
     def queue_observation(entity_id, state, *, event_time, received_time, source,
@@ -2141,25 +2218,39 @@ def install(core):
         overflow = False
         with journal_lock:
             if len(window_rows) >= window_limit:
-                overflow = True
-                window_stats["overflow_sync"] += 1
+                overflow = 'decision_gap' if row['kind'] == 'decision' else 'required'
+                # This is optional retention metadata, ahead of Executor. A
+                # saturated diagnostic queue must never synchronously acquire
+                # Store here and postpone an otherwise valid physical action.
+                # Retain every already-admitted window and all raw sensor rows;
+                # expose rejection of this new window as an explicit gap.
+                if overflow == 'decision_gap':
+                    window_stats['overflow_gaps'] += 1
+                    window_stats['last_gap_anchor_time'] = row['anchor_time']
+                    window_stats['last_gap_reason'] = 'window_queue_capacity'
+                else:
+                    # Manual corrections retain their original durable fallback.
+                    window_stats['overflow_sync'] += 1
             else:
                 window_rows.append(row)
                 window_stats["queued"] += 1
                 window_stats["max_queue"] = max(window_stats["max_queue"], len(window_rows))
                 if len(window_rows) >= 64:
                     journal_event.set()
-        if overflow:
+        if overflow == 'decision_gap':
+            journal_event.set()
+            from telemetry import TELEMETRY
+            TELEMETRY.inc('feature_window_admission_gaps')
+            return None
+        if overflow == 'required':
             try:
                 journal.open_windows_batch([row])
             except Exception:
                 with journal_lock:
                     window_rows.append(row)
-                    window_stats["queued"] += 1
-                    window_stats["errors"] += 1
-                    window_stats["max_queue"] = max(
-                        window_stats["max_queue"], len(window_rows)
-                    )
+                    window_stats['queued'] += 1
+                    window_stats['errors'] += 1
+                    window_stats['max_queue'] = max(window_stats['max_queue'],len(window_rows))
                 journal_event.set()
         return row["window_id"]
 
@@ -2213,17 +2304,18 @@ def install(core):
                 "windows": {**window_stats, "pending": len(window_rows)},
             }
 
-    def flush_feature_journal():
+    def flush_feature_journal(*, max_batches=None):
         """Drain both replay-evidence queues; one failed class never skips the other."""
         admit_background_write(store)
         require_storage_available(store)
         totals = {"observations": 0, "windows": 0}
+        batches = 0
         while True:
             errors = []
             pressure = None
             progressed = False
             try:
-                count = int(flush_observations() or 0)
+                count = int(flush_observations(64 if max_batches is not None else 512) or 0)
                 totals["observations"] += count
                 progressed = progressed or bool(count)
             except StoragePressure as exc:
@@ -2231,7 +2323,7 @@ def install(core):
             except Exception as exc:
                 errors.append(("observations", exc))
             try:
-                count = int(flush_windows() or 0)
+                count = int(flush_windows(128) or 0)
                 totals["windows"] += count
                 progressed = progressed or bool(count)
             except StoragePressure as exc:
@@ -2243,6 +2335,12 @@ def install(core):
             if pressure is not None:
                 raise pressure
             if not progressed:
+                return totals
+            batches += 1
+            if max_batches is not None and batches >= max(1, int(max_batches)):
+                with journal_lock:
+                    if observation_rows or window_rows:
+                        journal_event.set()
                 return totals
 
     def journal_writer():
@@ -2261,7 +2359,9 @@ def install(core):
             journal_event.clear()
             try:
                 with background_sqlite(store):
-                    flush_feature_journal()
+                    # Yield Store between bounded turns. The public shutdown/
+                    # durability barrier still drains all retained rows.
+                    flush_feature_journal(max_batches=1)
                 storage_retry.recovered()
             except StoragePressure as exc:
                 storage_retry.defer(exc)
