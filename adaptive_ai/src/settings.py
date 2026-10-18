@@ -16,7 +16,7 @@ try:
 except Exception:
     ws_connect = None
 
-APP_VERSION = "0.14.217"
+APP_VERSION = "0.14.218"
 HISTORY_BOOTSTRAP_REVISION = "target-attrs-v2"
 TRAINING_REVISION = "shared-home-intents-v26"
 DATA_DIR = Path(os.environ.get("ADAPTIVE_AI_DATA", "/data"))
@@ -122,6 +122,7 @@ DEFAULT_OPTIONS = {
     "storage_wal_quiesce_ms": 100,
     "runtime_sqlite_cache_mb": 256,
     "runtime_episode_comparison_cache_mb": 64,
+    "runtime_candidate_evidence_mb": 16,
     "runtime_thread_switch_ms": 1,
     "runtime_compute_ram_mb": 256,
     "runtime_tournament_ram_mb": 64,

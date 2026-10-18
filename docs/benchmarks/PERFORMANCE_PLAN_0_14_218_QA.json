@@ -1,0 +1,25 @@
+{
+  "first_full_run": {
+    "tests": 2679,
+    "seconds": 383.341,
+    "result": "FAILED: Docker metadata (2), missing files in initial WSL copy (3)",
+    "log_sha256": "42e9188595cd1a28fd411efc1f74578f09d7873272f2b5e3b920e8858a5710de",
+    "local_log": "C:\\Users\\mpuch\\OneDrive\\Dokumenty\\HomeMind\\tmp\\plan218-first-full-failed.log",
+    "resolution": "Correct build version; seed the complete tracked tree before overlaying modifications. No assertions or timeouts changed."
+  },
+  "final_full_run": {
+    "tests": 2680,
+    "seconds": 296.139,
+    "result": "OK",
+    "log_sha256": "8b17fb30cd71c3ee99513b0c9e78a125de987f22c542f755fb325175522e8ae8"
+  },
+  "additional_fix": "Typed generation read status prevents Live Correct from substituting older history while generation evidence is pending",
+  "post_validation_whitespace_only": [
+    {
+      "file": "adaptive_ai/src/sqlite_bulk_rows.py",
+      "before_sha256": "33855f4efeac5fe2287ef2ea154ab9e6db196a4a235baf8cc54c8f98e863f0a7",
+      "after_sha256": "21ba061b01097d657cf8b70b86c8389fe664febc8cb2ce78bc023c95c776395a",
+      "ast_identical": true
+    }
+  ]
+}

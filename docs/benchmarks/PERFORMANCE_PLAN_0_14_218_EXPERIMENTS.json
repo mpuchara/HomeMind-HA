@@ -1,0 +1,971 @@
+{
+  "status": "Intermediate probes, not final acceptance. Source/tool hashes and training fixture differ.",
+  "runs": [
+    {
+      "file": "probe218-baseline.json",
+      "local_path": "C:\\Users\\mpuch\\OneDrive\\Dokumenty\\HomeMind\\tmp\\probe218-baseline.json",
+      "sha256": "7f0409c89d913fd91553b6cbcaeea2df27c417a48c21ff2a7359fe23495c9319",
+      "bytes": 1010912,
+      "summary": {
+        "source_sha256": "edfa85970a88646ddb602270bc7acfdf46145440e63cbce46c39655869cc396f",
+        "benchmark_tool_sha256": "22579fd4a04700610ad4cffe37b9c32e9d6a7bade009e1d444dfe3c875ebb091",
+        "ui_profile": "full status/agents/events/candidates 4s; reactive live 100ms + revision wait; candidate-live 100ms",
+        "seconds": 60.00128945899999,
+        "mode": "shadow",
+        "active": 20,
+        "ui_stats": {
+          "requests": 1080,
+          "errors": 0,
+          "routes": {
+            "api/candidate-live": {
+              "requests": 530,
+              "errors": 0
+            },
+            "api/live": {
+              "requests": 526,
+              "errors": 0
+            },
+            "api/events": {
+              "requests": 6,
+              "errors": 0
+            },
+            "api/agents": {
+              "requests": 6,
+              "errors": 0
+            },
+            "api/status": {
+              "requests": 6,
+              "errors": 0
+            },
+            "api/candidates": {
+              "requests": 6,
+              "errors": 0
+            }
+          }
+        },
+        "candidate_at_input_stop": {
+          "contract_version": 1,
+          "execution": "existing_candidate_worker",
+          "queue_policy": "bounded_latest_per_root",
+          "root_admission_order": "fifo_preserved_on_coalesce",
+          "oldest_root_wait_ms": 22070.259592000013,
+          "queue_limit": 32,
+          "queue_depth": 20,
+          "pending_roots": [
+            "c8e6373e",
+            "6049d1b8",
+            "fba2bb59",
+            "42079c63",
+            "87d5db4d",
+            "eedae273",
+            "93f92f14",
+            "1afc822c"
+          ],
+          "queued": 427,
+          "coalesced": 8018,
+          "deduplicated": 0,
+          "dropped": 0,
+          "processed": 404,
+          "stale_generation_dropped": 0,
+          "errors": 0,
+          "observation_gaps": 0,
+          "max_depth": 20,
+          "last_error": null,
+          "last_root_agent_id": "ef619787",
+          "last_queue_lag_ms": 525.9163419999879
+        },
+        "journal_at_input_stop": {
+          "storage_retry": {
+            "reason": null,
+            "pauses": 0,
+            "busy_retries": 0,
+            "retry_in_seconds": 0.0
+          },
+          "observations": {
+            "queued": 2440,
+            "flushed": 1814,
+            "flushes": 46,
+            "max_queue": 604,
+            "overflow_sync": 0,
+            "errors": 0,
+            "pending": 562
+          },
+          "windows": {
+            "queued": 8445,
+            "flushed": 4749,
+            "flushes": 50,
+            "max_queue": 3696,
+            "overflow_sync": 0,
+            "overflow_gaps": 0,
+            "errors": 0,
+            "pending": 3696
+          }
+        },
+        "service_calls": 0,
+        "measured_window": {
+          "event_to_decision": {
+            "count": 8425,
+            "p50": 114.85203000000865,
+            "p95": 219.59454999999363,
+            "p99": 336.37422552000345,
+            "max": 846.7948429999979
+          }
+        }
+      }
+    },
+    {
+      "file": "probe218-control-fixture-current.json",
+      "local_path": "C:\\Users\\mpuch\\OneDrive\\Dokumenty\\HomeMind\\tmp\\probe218-control-fixture-current.json",
+      "sha256": "1fcb5faabceb0cf415c85d1a6279a13c3bb6d433927f3cd8e15d381ca518e3a6",
+      "bytes": 335135,
+      "summary": {
+        "source_sha256": "9adad9213b36eec26264ebb889571ed411be3b7b1a92951a13de799fc988d396",
+        "benchmark_tool_sha256": "7d15c3adb3a4117ec24dbb251c96d4ca04b0edfec597e390d30d0e0471430ed1",
+        "training_contract": "80 updates/validations with production feature extraction and alternating presence states",
+        "ui_profile": "full status/agents/events/candidates 4s; reactive live 100ms + revision wait; candidate-live 100ms",
+        "seconds": 36.000594788,
+        "mode": "control",
+        "active": 3,
+        "ui_stats": {
+          "requests": 724,
+          "errors": 0,
+          "routes": {
+            "api/agents": {
+              "requests": 9,
+              "errors": 0
+            },
+            "api/candidate-live": {
+              "requests": 344,
+              "errors": 0
+            },
+            "api/live": {
+              "requests": 344,
+              "errors": 0
+            },
+            "api/events": {
+              "requests": 9,
+              "errors": 0
+            },
+            "api/status": {
+              "requests": 9,
+              "errors": 0
+            },
+            "api/candidates": {
+              "requests": 9,
+              "errors": 0
+            }
+          }
+        },
+        "candidate_at_input_stop": {
+          "contract_version": 1,
+          "execution": "existing_candidate_worker",
+          "queue_policy": "bounded_latest_per_root",
+          "root_admission_order": "fifo_preserved_on_coalesce",
+          "oldest_root_wait_ms": 1.4072319999982597,
+          "queue_limit": 32,
+          "queue_depth": 1,
+          "pending_roots": [
+            "b4291720"
+          ],
+          "queued": 1735,
+          "coalesced": 0,
+          "deduplicated": 0,
+          "dropped": 0,
+          "processed": 1733,
+          "stale_generation_dropped": 0,
+          "errors": 0,
+          "observation_gaps": 0,
+          "max_depth": 3,
+          "last_error": null,
+          "last_root_agent_id": "5ba87ba3",
+          "last_queue_lag_ms": 3.012032000000886
+        },
+        "journal_at_input_stop": {
+          "storage_retry": {
+            "reason": null,
+            "pauses": 0,
+            "busy_retries": 0,
+            "retry_in_seconds": 0.0
+          },
+          "observations": {
+            "queued": 1446,
+            "flushed": 1420,
+            "flushes": 49,
+            "max_queue": 68,
+            "overflow_sync": 0,
+            "errors": 0,
+            "pending": 26
+          },
+          "windows": {
+            "queued": 1736,
+            "flushed": 1705,
+            "flushes": 49,
+            "max_queue": 65,
+            "overflow_sync": 0,
+            "overflow_gaps": 0,
+            "errors": 0,
+            "max_batch_rows": 65,
+            "max_batch_entity_links": 130,
+            "pending": 31
+          }
+        },
+        "service_calls": 3,
+        "measured_window": {
+          "event_to_decision": {
+            "count": 1733,
+            "p50": 33.60219099999995,
+            "p95": 75.90769839999889,
+            "p99": 112.62339856000037,
+            "max": 147.73164700000052
+          },
+          "candidate_enqueue_to_decision": {
+            "count": 1731,
+            "p50": 3.9401869999977635,
+            "p95": 24.945329000001237,
+            "p99": 42.91068849999894,
+            "max": 68.98338699999584
+          },
+          "candidate_deferred_event_to_decision": {
+            "count": 1731,
+            "p50": 74.79304599999992,
+            "p95": 135.49579550000246,
+            "p99": 193.20604860000216,
+            "max": 241.48924400000027
+          },
+          "ha_service_request": {
+            "count": 3,
+            "p50": 0.0656640000009645,
+            "p95": 0.07032419999966066,
+            "p99": 0.07073843999954477,
+            "max": 0.07084199999951579
+          },
+          "event_to_state_ack": {
+            "count": 3,
+            "p50": 115.36084800000168,
+            "p95": 171.345044700001,
+            "p99": 176.32141774000098,
+            "max": 177.56551100000095
+          }
+        }
+      }
+    },
+    {
+      "file": "probe218-current.json",
+      "local_path": "C:\\Users\\mpuch\\OneDrive\\Dokumenty\\HomeMind\\tmp\\probe218-current.json",
+      "sha256": "9fdede581d6647f5c1b7b45f8fd9714b46ee101e6bccbb47cab69d1b7a7cc2f1",
+      "bytes": 802787,
+      "summary": {
+        "source_sha256": "2f5d663af89e75c424a8a514e8ea79c0b8da9afa4f2870383844e11705631b41",
+        "benchmark_tool_sha256": "22579fd4a04700610ad4cffe37b9c32e9d6a7bade009e1d444dfe3c875ebb091",
+        "ui_profile": "full status/agents/events/candidates 4s; reactive live 100ms + revision wait; candidate-live 100ms",
+        "seconds": 60.00163184399999,
+        "mode": "shadow",
+        "active": 20,
+        "ui_stats": {
+          "requests": 1049,
+          "errors": 2,
+          "routes": {
+            "api/events": {
+              "requests": 5,
+              "errors": 0
+            },
+            "api/live": {
+              "requests": 513,
+              "errors": 0
+            },
+            "api/candidate-live": {
+              "requests": 518,
+              "errors": 0
+            },
+            "api/agents": {
+              "requests": 5,
+              "errors": 0
+            },
+            "api/status": {
+              "requests": 5,
+              "errors": 0
+            },
+            "api/candidates": {
+              "requests": 3,
+              "errors": 2
+            }
+          }
+        },
+        "candidate_at_input_stop": {
+          "contract_version": 1,
+          "execution": "existing_candidate_worker",
+          "queue_policy": "bounded_latest_per_root",
+          "root_admission_order": "fifo_preserved_on_coalesce",
+          "oldest_root_wait_ms": 1088.3529150000015,
+          "queue_limit": 32,
+          "queue_depth": 18,
+          "pending_roots": [
+            "4242eb95",
+            "e0a01ea3",
+            "915aa5a7",
+            "f522daa1",
+            "0d0c7ded",
+            "227c5b1e",
+            "29b9a15f",
+            "e2aaa57a"
+          ],
+          "queued": 1725,
+          "coalesced": 4921,
+          "deduplicated": 0,
+          "dropped": 0,
+          "processed": 1707,
+          "stale_generation_dropped": 0,
+          "errors": 0,
+          "observation_gaps": 0,
+          "max_depth": 20,
+          "last_error": null,
+          "last_root_agent_id": "c1c01b8f",
+          "last_queue_lag_ms": 128.57678800000372
+        },
+        "journal_at_input_stop": {
+          "storage_retry": {
+            "reason": null,
+            "pauses": 0,
+            "busy_retries": 0,
+            "retry_in_seconds": 0.0
+          },
+          "observations": {
+            "queued": 2440,
+            "flushed": 1390,
+            "flushes": 35,
+            "max_queue": 986,
+            "overflow_sync": 0,
+            "errors": 0,
+            "pending": 986
+          },
+          "windows": {
+            "queued": 6646,
+            "flushed": 3399,
+            "flushes": 40,
+            "max_queue": 3247,
+            "overflow_sync": 0,
+            "overflow_gaps": 0,
+            "errors": 0,
+            "pending": 3247
+          }
+        },
+        "service_calls": 0,
+        "measured_window": {
+          "event_to_decision": {
+            "count": 6626,
+            "p50": 120.71419199998701,
+            "p95": 342.090491250012,
+            "p99": 611.348648499991,
+            "max": 902.260799000004
+          },
+          "candidate_enqueue_to_decision": {
+            "count": 1687,
+            "p50": 113.15523199999689,
+            "p95": 340.0107468999962,
+            "p99": 538.4661261600038,
+            "max": 1048.9998019999973
+          }
+        }
+      }
+    },
+    {
+      "file": "probe218-v2-current.json",
+      "local_path": "C:\\Users\\mpuch\\OneDrive\\Dokumenty\\HomeMind\\tmp\\probe218-v2-current.json",
+      "sha256": "71c19d5385209f487ca6ca086bcb9fef9da127aa76b3bdf3d9119fe3b1d74612",
+      "bytes": 1138769,
+      "summary": {
+        "source_sha256": "15d4772d0c2d635b4e677a61254969b5a093b6cbb91941293c17e26c9fdfc437",
+        "benchmark_tool_sha256": "22579fd4a04700610ad4cffe37b9c32e9d6a7bade009e1d444dfe3c875ebb091",
+        "ui_profile": "full status/agents/events/candidates 4s; reactive live 100ms + revision wait; candidate-live 100ms",
+        "seconds": 60.002506036999996,
+        "mode": "shadow",
+        "active": 20,
+        "ui_stats": {
+          "requests": 1091,
+          "errors": 0,
+          "routes": {
+            "api/live": {
+              "requests": 534,
+              "errors": 0
+            },
+            "api/events": {
+              "requests": 5,
+              "errors": 0
+            },
+            "api/candidate-live": {
+              "requests": 537,
+              "errors": 0
+            },
+            "api/agents": {
+              "requests": 5,
+              "errors": 0
+            },
+            "api/status": {
+              "requests": 5,
+              "errors": 0
+            },
+            "api/candidates": {
+              "requests": 5,
+              "errors": 0
+            }
+          }
+        },
+        "candidate_at_input_stop": {
+          "contract_version": 1,
+          "execution": "existing_candidate_worker",
+          "queue_policy": "bounded_latest_per_root",
+          "root_admission_order": "fifo_preserved_on_coalesce",
+          "oldest_root_wait_ms": 662.4389950000023,
+          "queue_limit": 32,
+          "queue_depth": 18,
+          "pending_roots": [
+            "df25c192",
+            "e956514f",
+            "dbf131e6",
+            "5c5b4653",
+            "f83946ea",
+            "26a9ccbb",
+            "153f3885",
+            "d9356282"
+          ],
+          "queued": 3201,
+          "coalesced": 6366,
+          "deduplicated": 0,
+          "dropped": 0,
+          "processed": 3183,
+          "stale_generation_dropped": 0,
+          "errors": 0,
+          "observation_gaps": 0,
+          "max_depth": 20,
+          "last_error": null,
+          "last_root_agent_id": "339235b8",
+          "last_queue_lag_ms": 72.91504399999837
+        },
+        "journal_at_input_stop": {
+          "storage_retry": {
+            "reason": null,
+            "pauses": 0,
+            "busy_retries": 0,
+            "retry_in_seconds": 0.0
+          },
+          "observations": {
+            "queued": 2440,
+            "flushed": 1684,
+            "flushes": 47,
+            "max_queue": 692,
+            "overflow_sync": 0,
+            "errors": 0,
+            "pending": 692
+          },
+          "windows": {
+            "queued": 8263,
+            "flushed": 4167,
+            "flushes": 52,
+            "max_queue": 4096,
+            "overflow_sync": 0,
+            "overflow_gaps": 1305,
+            "errors": 0,
+            "last_gap_anchor_time": 1792364910.2616844,
+            "last_gap_reason": "window_queue_capacity",
+            "pending": 4096
+          }
+        },
+        "service_calls": 0,
+        "measured_window": {
+          "event_to_decision": {
+            "count": 9547,
+            "p50": 99.37163399999349,
+            "p95": 168.11379730000198,
+            "p99": 216.86264221999676,
+            "max": 328.4321930000118
+          },
+          "candidate_enqueue_to_decision": {
+            "count": 3163,
+            "p50": 51.99273699999196,
+            "p95": 143.3874501000062,
+            "p99": 231.6338743000012,
+            "max": 364.920730999998
+          }
+        }
+      }
+    },
+    {
+      "file": "probe218-v3-current.json",
+      "local_path": "C:\\Users\\mpuch\\OneDrive\\Dokumenty\\HomeMind\\tmp\\probe218-v3-current.json",
+      "sha256": "7655c0dde8b978f0c148434fe9b1daebec1f0b41cb071554c0a001f7084d1495",
+      "bytes": 854694,
+      "summary": {
+        "source_sha256": "dc857f41e0d4bc1803bfa21c492f0e411a7f9fb2241bf70ad711b10627a7453e",
+        "benchmark_tool_sha256": "22579fd4a04700610ad4cffe37b9c32e9d6a7bade009e1d444dfe3c875ebb091",
+        "ui_profile": "full status/agents/events/candidates 4s; reactive live 100ms + revision wait; candidate-live 100ms",
+        "seconds": 60.00111970499998,
+        "mode": "shadow",
+        "active": 20,
+        "ui_stats": {
+          "requests": 1055,
+          "errors": 3,
+          "routes": {
+            "api/events": {
+              "requests": 5,
+              "errors": 0
+            },
+            "api/agents": {
+              "requests": 5,
+              "errors": 0
+            },
+            "api/live": {
+              "requests": 516,
+              "errors": 0
+            },
+            "api/candidate-live": {
+              "requests": 522,
+              "errors": 0
+            },
+            "api/status": {
+              "requests": 5,
+              "errors": 0
+            },
+            "api/candidates": {
+              "requests": 2,
+              "errors": 3
+            }
+          }
+        },
+        "candidate_at_input_stop": {
+          "contract_version": 1,
+          "execution": "existing_candidate_worker",
+          "queue_policy": "bounded_latest_per_root",
+          "root_admission_order": "fifo_preserved_on_coalesce",
+          "oldest_root_wait_ms": 277.21923900003276,
+          "queue_limit": 32,
+          "queue_depth": 9,
+          "pending_roots": [
+            "0ea3fd67",
+            "8efa85ce",
+            "9c0ad1b7",
+            "c267d176",
+            "0174abe6",
+            "59fb02b4",
+            "a0feec94",
+            "819e8f32"
+          ],
+          "queued": 2566,
+          "coalesced": 4521,
+          "deduplicated": 0,
+          "dropped": 0,
+          "processed": 2557,
+          "stale_generation_dropped": 0,
+          "errors": 0,
+          "observation_gaps": 0,
+          "max_depth": 20,
+          "last_error": null,
+          "last_root_agent_id": "039e4601",
+          "last_queue_lag_ms": 45.97465799997735
+        },
+        "journal_at_input_stop": {
+          "storage_retry": {
+            "reason": null,
+            "pauses": 0,
+            "busy_retries": 0,
+            "retry_in_seconds": 0.0
+          },
+          "observations": {
+            "queued": 2440,
+            "flushed": 1648,
+            "flushes": 37,
+            "max_queue": 792,
+            "overflow_sync": 0,
+            "errors": 0,
+            "pending": 792
+          },
+          "windows": {
+            "queued": 7087,
+            "flushed": 3557,
+            "flushes": 41,
+            "max_queue": 3436,
+            "overflow_sync": 0,
+            "overflow_gaps": 0,
+            "errors": 0,
+            "pending": 3402
+          }
+        },
+        "service_calls": 0,
+        "measured_window": {
+          "event_to_decision": {
+            "count": 7067,
+            "p50": 127.92244599995684,
+            "p95": 261.4218951999874,
+            "p99": 371.7694025599782,
+            "max": 529.5977249999737
+          },
+          "candidate_enqueue_to_decision": {
+            "count": 2537,
+            "p50": 73.53299299998639,
+            "p95": 242.4606327999867,
+            "p99": 343.21768423999396,
+            "max": 477.4938420000012
+          }
+        }
+      }
+    },
+    {
+      "file": "probe218-v4-current.json",
+      "local_path": "C:\\Users\\mpuch\\OneDrive\\Dokumenty\\HomeMind\\tmp\\probe218-v4-current.json",
+      "sha256": "23182c35ff029941ca54b9d631a838ed53db84ada94bac7aa8cde9176951806c",
+      "bytes": 1044867,
+      "summary": {
+        "source_sha256": "2e32464a4b9a901193fe58c6de3a491861d768dda1621453d7dcbe2927acb202",
+        "benchmark_tool_sha256": "22579fd4a04700610ad4cffe37b9c32e9d6a7bade009e1d444dfe3c875ebb091",
+        "ui_profile": "full status/agents/events/candidates 4s; reactive live 100ms + revision wait; candidate-live 100ms",
+        "seconds": 60.00008084200002,
+        "mode": "shadow",
+        "active": 20,
+        "ui_stats": {
+          "requests": 1077,
+          "errors": 1,
+          "routes": {
+            "api/events": {
+              "requests": 5,
+              "errors": 0
+            },
+            "api/agents": {
+              "requests": 5,
+              "errors": 0
+            },
+            "api/status": {
+              "requests": 5,
+              "errors": 0
+            },
+            "api/candidate-live": {
+              "requests": 530,
+              "errors": 0
+            },
+            "api/live": {
+              "requests": 528,
+              "errors": 0
+            },
+            "api/candidates": {
+              "requests": 4,
+              "errors": 1
+            }
+          }
+        },
+        "candidate_at_input_stop": {
+          "contract_version": 1,
+          "execution": "existing_candidate_worker",
+          "queue_policy": "bounded_latest_per_root",
+          "root_admission_order": "fifo_preserved_on_coalesce",
+          "oldest_root_wait_ms": 520.2027959999782,
+          "queue_limit": 32,
+          "queue_depth": 16,
+          "pending_roots": [
+            "131da093",
+            "14981b90",
+            "1559fd37",
+            "26f29b24",
+            "e1e74b76",
+            "0ee5648c",
+            "f7e3cf09",
+            "9b94b54d"
+          ],
+          "queued": 2799,
+          "coalesced": 5936,
+          "deduplicated": 0,
+          "dropped": 0,
+          "processed": 2783,
+          "stale_generation_dropped": 0,
+          "errors": 0,
+          "observation_gaps": 0,
+          "max_depth": 20,
+          "last_error": null,
+          "last_root_agent_id": "cb8ae1f8",
+          "last_queue_lag_ms": 65.59223400000747
+        },
+        "journal_at_input_stop": {
+          "storage_retry": {
+            "reason": null,
+            "pauses": 0,
+            "busy_retries": 0,
+            "retry_in_seconds": 0.0
+          },
+          "observations": {
+            "queued": 2440,
+            "flushed": 1742,
+            "flushes": 36,
+            "max_queue": 698,
+            "overflow_sync": 0,
+            "errors": 0,
+            "pending": 698
+          },
+          "windows": {
+            "queued": 8313,
+            "flushed": 4089,
+            "flushes": 40,
+            "max_queue": 4096,
+            "overflow_sync": 0,
+            "overflow_gaps": 422,
+            "errors": 0,
+            "last_gap_anchor_time": 1792365430.2784402,
+            "last_gap_reason": "window_queue_capacity",
+            "pending": 4096
+          }
+        },
+        "service_calls": 0,
+        "measured_window": {
+          "event_to_decision": {
+            "count": 8715,
+            "p50": 111.29558999999745,
+            "p95": 202.03690310002565,
+            "p99": 304.0347558000046,
+            "max": 424.97784700000807
+          },
+          "candidate_enqueue_to_decision": {
+            "count": 2763,
+            "p50": 62.381070000014915,
+            "p95": 168.71035919998863,
+            "p99": 239.15787964000415,
+            "max": 362.96162400000753
+          }
+        }
+      }
+    },
+    {
+      "file": "probe218-v4-windows.json",
+      "local_path": "C:\\Users\\mpuch\\OneDrive\\Dokumenty\\HomeMind\\tmp\\probe218-v4-windows.json",
+      "sha256": "d538861278d70bd54dacd8c145ab902a07f958f7a57855e4dfd217ef8b4c7cc4",
+      "bytes": 939,
+      "summary": {}
+    },
+    {
+      "file": "probe218-v5-current.json",
+      "local_path": "C:\\Users\\mpuch\\OneDrive\\Dokumenty\\HomeMind\\tmp\\probe218-v5-current.json",
+      "sha256": "89ede4ff6be6e9df639df4c044c783687b07fb7647482d27bb7ec5162e44b0c6",
+      "bytes": 1199489,
+      "summary": {
+        "source_sha256": "ef38c9791593f4cb27d08f17d1816ff60fea0b78d9aca3da2d112ae1ef36acd6",
+        "benchmark_tool_sha256": "22579fd4a04700610ad4cffe37b9c32e9d6a7bade009e1d444dfe3c875ebb091",
+        "ui_profile": "full status/agents/events/candidates 4s; reactive live 100ms + revision wait; candidate-live 100ms",
+        "seconds": 60.001709799000004,
+        "mode": "shadow",
+        "active": 20,
+        "ui_stats": {
+          "requests": 1096,
+          "errors": 2,
+          "routes": {
+            "api/live": {
+              "requests": 539,
+              "errors": 0
+            },
+            "api/events": {
+              "requests": 5,
+              "errors": 0
+            },
+            "api/status": {
+              "requests": 5,
+              "errors": 0
+            },
+            "api/agents": {
+              "requests": 5,
+              "errors": 0
+            },
+            "api/candidate-live": {
+              "requests": 539,
+              "errors": 0
+            },
+            "api/candidates": {
+              "requests": 3,
+              "errors": 2
+            }
+          }
+        },
+        "candidate_at_input_stop": {
+          "contract_version": 1,
+          "execution": "existing_candidate_worker",
+          "queue_policy": "bounded_latest_per_root",
+          "root_admission_order": "fifo_preserved_on_coalesce",
+          "oldest_root_wait_ms": 481.6184370000087,
+          "queue_limit": 32,
+          "queue_depth": 17,
+          "pending_roots": [
+            "2317dca4",
+            "51a91a9d",
+            "a6f190cf",
+            "bbfa717a",
+            "ed8c7da1",
+            "0082ed1b",
+            "c9d3645f",
+            "44c6c292"
+          ],
+          "queued": 3073,
+          "coalesced": 7028,
+          "deduplicated": 0,
+          "dropped": 0,
+          "processed": 3056,
+          "stale_generation_dropped": 0,
+          "errors": 0,
+          "observation_gaps": 0,
+          "max_depth": 20,
+          "last_error": null,
+          "last_root_agent_id": "b90f89ff",
+          "last_queue_lag_ms": 7.802584000003776
+        },
+        "journal_at_input_stop": {
+          "storage_retry": {
+            "reason": null,
+            "pauses": 0,
+            "busy_retries": 0,
+            "retry_in_seconds": 0.0
+          },
+          "observations": {
+            "queued": 2440,
+            "flushed": 2290,
+            "flushes": 66,
+            "max_queue": 168,
+            "overflow_sync": 0,
+            "errors": 0,
+            "pending": 150
+          },
+          "windows": {
+            "queued": 10101,
+            "flushed": 6912,
+            "flushes": 70,
+            "max_queue": 3157,
+            "overflow_sync": 0,
+            "overflow_gaps": 0,
+            "errors": 0,
+            "pending": 3061
+          }
+        },
+        "service_calls": 0,
+        "measured_window": {
+          "event_to_decision": {
+            "count": 10081,
+            "p50": 62.842834999997876,
+            "p95": 139.6775340000005,
+            "p99": 172.36930319999718,
+            "max": 281.77659499999663
+          },
+          "candidate_enqueue_to_decision": {
+            "count": 3036,
+            "p50": 45.399816499998025,
+            "p95": 224.6388194999973,
+            "p99": 294.2767268999937,
+            "max": 378.11630000000207
+          }
+        }
+      }
+    },
+    {
+      "file": "probe218-v6-current.json",
+      "local_path": "C:\\Users\\mpuch\\OneDrive\\Dokumenty\\HomeMind\\tmp\\probe218-v6-current.json",
+      "sha256": "68c2bb1d18bbec0b121dc65e50daafabe02e70b20a6bade9ea879af15e30f8e0",
+      "bytes": 1520211,
+      "summary": {
+        "source_sha256": "9ceeebdb7b3fc50264895754a0f6aa71c7f4a330562b8003f45aa99791b3d99c",
+        "benchmark_tool_sha256": "22579fd4a04700610ad4cffe37b9c32e9d6a7bade009e1d444dfe3c875ebb091",
+        "ui_profile": "full status/agents/events/candidates 4s; reactive live 100ms + revision wait; candidate-live 100ms",
+        "seconds": 60.000537181,
+        "mode": "shadow",
+        "active": 20,
+        "ui_stats": {
+          "requests": 1126,
+          "errors": 0,
+          "routes": {
+            "api/events": {
+              "requests": 6,
+              "errors": 0
+            },
+            "api/candidate-live": {
+              "requests": 551,
+              "errors": 0
+            },
+            "api/live": {
+              "requests": 551,
+              "errors": 0
+            },
+            "api/status": {
+              "requests": 6,
+              "errors": 0
+            },
+            "api/agents": {
+              "requests": 6,
+              "errors": 0
+            },
+            "api/candidates": {
+              "requests": 6,
+              "errors": 0
+            }
+          }
+        },
+        "candidate_at_input_stop": {
+          "contract_version": 1,
+          "execution": "existing_candidate_worker",
+          "queue_policy": "bounded_latest_per_root",
+          "root_admission_order": "fifo_preserved_on_coalesce",
+          "oldest_root_wait_ms": 0.0,
+          "queue_limit": 32,
+          "queue_depth": 0,
+          "pending_roots": [],
+          "queued": 6339,
+          "coalesced": 6481,
+          "deduplicated": 0,
+          "dropped": 0,
+          "processed": 6339,
+          "stale_generation_dropped": 0,
+          "errors": 0,
+          "observation_gaps": 0,
+          "max_depth": 20,
+          "last_error": null,
+          "last_root_agent_id": "a501c709",
+          "last_queue_lag_ms": 8.645045999998047
+        },
+        "journal_at_input_stop": {
+          "storage_retry": {
+            "reason": null,
+            "pauses": 0,
+            "busy_retries": 0,
+            "retry_in_seconds": 0.0
+          },
+          "observations": {
+            "queued": 2440,
+            "flushed": 2374,
+            "flushes": 135,
+            "max_queue": 266,
+            "overflow_sync": 0,
+            "errors": 0,
+            "pending": 2
+          },
+          "windows": {
+            "queued": 12820,
+            "flushed": 12477,
+            "flushes": 137,
+            "max_queue": 948,
+            "overflow_sync": 0,
+            "overflow_gaps": 0,
+            "errors": 0,
+            "max_batch_rows": 512,
+            "max_batch_entity_links": 1024,
+            "pending": 343
+          }
+        },
+        "service_calls": 0,
+        "measured_window": {
+          "event_to_decision": {
+            "count": 12800,
+            "p50": 24.70540849999736,
+            "p95": 54.212592600001116,
+            "p99": 69.92941640000254,
+            "max": 132.1637439999961
+          },
+          "candidate_enqueue_to_decision": {
+            "count": 6319,
+            "p50": 22.461589999991816,
+            "p95": 167.96173889999392,
+            "p99": 238.9774921599931,
+            "max": 353.0861530000067
+          }
+        }
+      }
+    }
+  ]
+}

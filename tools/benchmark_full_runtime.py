@@ -67,9 +67,15 @@ def one(source, seconds=30, active=3, configured=20, mode='shadow', ui=False, tr
                 mode='paused',confidence_threshold=.5,action_interval=0,micro_exploration=False))
             if i < active:
                 model=policy.MultiHorizonPolicy(agent,states,{r['entity_id']:r for r in registry},set())
-                for head in model.heads.values():
-                    for j in range(80):
-                        value=j%2;features={0:1.,5:1. if value else -1.}
+                for j in range(80):
+                    value=j%2
+                    training_states=dict(states)
+                    eid=f'binary_sensor.bench_{i}'
+                    training_states[eid]=state(eid,'on' if value else 'off',device_class='occupancy')
+                    eid=f'sensor.bench_{i}_move_energy'
+                    training_states[eid]=state(eid,(j*34)%100,unit_of_measurement='%')
+                    features,_,_=model.features(training_states,None,at_ts=time.time())
+                    for head in model.heads.values():
                         head.update(value,features,1.)
                         head.validate(value,features,1.)
                 store.save_model(agent['id'],model.serialize())
@@ -232,12 +238,22 @@ def one(source, seconds=30, active=3, configured=20, mode='shadow', ui=False, tr
             # Passive timing collection only. No model, feature or scheduler override.
             stack.enter_context(patch.object(TELEMETRY,'observe',observe))
             start=time.monotonic();cpu=time.process_time();sent=0;digest=hashlib.sha256()
-            lag_sum=lag_max=missed=0.;ticks=max(1,round(seconds*20))
+            lag_sum=lag_max=missed=0.;ticks=max(1,round(seconds*20));queue_series=[]
             for tick in range(ticks):
                 due=start+tick/20
                 time.sleep(max(0.,due-time.monotonic()))
                 lag=max(0.,time.monotonic()-due)*1000
                 lag_sum+=lag;lag_max=max(lag_max,lag);missed+=int(lag>50.)
+                if tick%20==0 and len(queue_series)<1000:
+                    journal=runtime.feature_observation_deferred_snapshot()
+                    candidate=runtime.agent_candidates.candidate_shadow_async_diagnostics()
+                    evidence=runtime.agent_candidates.candidate_shadow_persistence_snapshot()
+                    queue_series.append(dict(seconds=time.monotonic()-start,
+                        raw_pending=journal['observations']['pending'],windows_pending=journal['windows']['pending'],
+                        retention_gaps=journal['windows'].get('overflow_gaps',0),
+                        candidate_pending=candidate['queue_depth'],candidate_oldest_ms=candidate.get('oldest_root_wait_ms'),
+                        candidate_processed=candidate['processed'],candidate_gaps=candidate['observation_gaps'],
+                        evidence_pending=evidence['pending'],evidence_bytes=evidence['bytes']))
                 i=tick%active;binary='on' if (tick//active)%2 else 'off';move=(tick*34)%100
                 digest.update(json.dumps((tick,i,binary,move)).encode())
                 eid=f'binary_sensor.bench_{i}'
@@ -280,7 +296,9 @@ def one(source, seconds=30, active=3, configured=20, mode='shadow', ui=False, tr
                 tail_measured={key:distribution(values) for key,values in tail_samples.items() if values}
                 latency_samples={key:list(values) for key,values in samples.items()
                     if key in ('event_to_decision','ws_receive_to_decision','event_to_target_start',
-                               'inference','wrapped_inference','event_to_worker_release')}
+                               'inference','wrapped_inference','event_to_worker_release',
+                               'candidate_enqueue_to_decision','candidate_deferred_event_to_decision',
+                               'ws_receive_to_candidate_decision')}
                 tail_latencies={key:list(values) for key,values in tail_samples.items()
                     if key in ('event_to_decision','ws_receive_to_decision','event_to_target_start')}
             source_files={str(p.relative_to(source)):hashlib.sha256(p.read_bytes().replace(b'\r\n',b'\n')).hexdigest()
@@ -303,6 +321,7 @@ def one(source, seconds=30, active=3, configured=20, mode='shadow', ui=False, tr
                 backlog_at_input_stop=backlog_at_input_stop,
                 journal_at_input_stop=journal_at_input_stop,
                 candidate_at_input_stop=candidate_at_input_stop,
+                candidate_evidence_at_input_stop=manager.candidate_shadow_persistence_snapshot(),queue_series=queue_series,
                 journal_after_tail=runtime.feature_observation_deferred_snapshot(),
                 source_sha256=hashlib.sha256(json.dumps(source_files,sort_keys=True).encode()).hexdigest(),
                 benchmark_tool_sha256=hashlib.sha256(Path(__file__).read_bytes().replace(b'\r\n',b'\n')).hexdigest(),
@@ -312,6 +331,7 @@ def one(source, seconds=30, active=3, configured=20, mode='shadow', ui=False, tr
                 root_decisions={a['target_entity']:dict(desired=runtime.runtime[a['id']].get('last_prediction'),
                     source=runtime.runtime[a['id']].get('decision_source')) for a in roots},
                 production_root=True,prediction_override=False,ha_transport='local stub only',
+                training_contract='80 updates/validations with production feature extraction and alternating presence states',
                 limits='Synthetic trained models and local transport, no deployed Pi/Ingress/physical ACK claim; startup grace and workers retained.')
         finally:
             ui_stop.set()

@@ -1,0 +1,60 @@
+{
+  "version": "0.14.218",
+  "baseline_commit": "f84211d676cf07c8ef80ea72aa6868d8747f38f7",
+  "full_suite": {
+    "tests": 2680,
+    "seconds": 296.139,
+    "result": "OK",
+    "log_sha256": "8b17fb30cd71c3ee99513b0c9e78a125de987f22c542f755fb325175522e8ae8"
+  },
+  "entrypoint": {
+    "entrypoint": "adaptive_ai/src/trial_queue_main.py",
+    "health": {
+      "ok": true,
+      "ready": true,
+      "startup": {
+        "current_state_seconds": 0.027502585999968687,
+        "elapsed_seconds": 0.28182125091552734,
+        "error": null,
+        "message": "Adaptive AI runtime is ready",
+        "ready": true,
+        "started_at": 1792367118.3391788,
+        "state": "ready",
+        "step": 7,
+        "steps": 7,
+        "timings": {
+          "building_runtime": 0.0035,
+          "http_ready": 0.0796,
+          "http_starting": 0.0088,
+          "installing_extensions": 0.1144,
+          "loading_runtime": 0.0163,
+          "reconciling_control": 0.0001,
+          "starting_engine": 0.0008,
+          "starting_history": 0.026,
+          "starting_realtime": 0.0047
+        }
+      },
+      "version": "0.14.218"
+    }
+  },
+  "ui": {
+    "revision_wait": true,
+    "latest_desired": true,
+    "physical_current": true,
+    "off_confirmation": true,
+    "pending_explanation": true,
+    "independent_ws_clock": true
+  },
+  "candidate_ui": {
+    "visible_cadence_ms": 100,
+    "cache_expiry_ms": 100,
+    "shared_inflight": true,
+    "first_card_fresh": true,
+    "no_cards_no_requests": true,
+    "hidden_no_requests": true
+  },
+  "compileall": "PASS",
+  "javascript_scripts": 21,
+  "source_files": 624,
+  "platform": "WSL Ubuntu Python 3.12.3 NumPy 2.3.3"
+}

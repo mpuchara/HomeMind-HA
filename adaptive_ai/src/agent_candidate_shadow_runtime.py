@@ -787,23 +787,47 @@ def install(manager):
                     "model_revision": result.get("model_revision"),
                     "schema_revision": result.get("schema_revision"),
                 }
+        if results and current_job:
+            # This boundary is publication to the visible tile RAM state, before
+            # evidence persistence and false-early bookkeeping. Coalescing uses
+            # the selected payload's own enqueue clock, never a newer event.
+            queued = current_job.get('queued_perf')
+            if type(queued) in (int, float) and 0 < queued <= time.perf_counter():
+                TELEMETRY.observe('candidate_enqueue_to_decision', (time.perf_counter()-queued)*1000)
+            for field, metric in (('event_receipts','candidate_deferred_event_to_decision'),
+                                  ('websocket_receipts','ws_receive_to_candidate_decision')):
+                completed = time.perf_counter()
+                starts = [stamp for stamp in current_job.get(field, ())
+                          if type(stamp) in (int,float) and math.isfinite(stamp) and 0 < stamp <= completed]
+                if starts:
+                    TELEMETRY.observe(metric, (completed-min(starts))*1000)
         return bundle
 
     def _write_bundle(bundle):
-        with manager.store.lock, manager.store.conn() as c:
-            for gid, result in bundle["results"].items():
-                c.execute(
-                    """INSERT OR REPLACE INTO candidate_generation_decisions
-                       (root_agent_id,generation_id,event_id,ts,current,desired,confidence,model_revision,schema_revision)
-                       VALUES(?,?,?,?,?,?,?,?,?)""",
-                    (bundle["root_agent_id"], gid, bundle["event_id"], float(bundle["ts"]),
-                     float(bundle["current"]), float(result["desired"]), result.get("confidence"),
-                     result.get("model_revision"), result.get("schema_revision")),
-                )
-        root_rt = _root_runtime(bundle["root_agent_id"])
-        root_rt["last_persist"] = float(bundle["ts"])
+        return _write_bundles([bundle])
 
-    decision_writes = DeferredEvidence(manager.store, _write_bundle)
+    def _write_bundles(bundles):
+        from sqlite_bulk_rows import insert_bounded_rows
+        with manager.store.lock, manager.store.conn() as c, c.storage_batch():
+            insert_bounded_rows(c, """INSERT OR REPLACE INTO candidate_generation_decisions
+                (root_agent_id,generation_id,event_id,ts,current,desired,confidence,model_revision,schema_revision)""",
+                ((bundle["root_agent_id"], gid, bundle["event_id"], float(bundle["ts"]),
+                  float(bundle["current"]), float(result["desired"]), result.get("confidence"),
+                  result.get("model_revision"), result.get("schema_revision"))
+                 for bundle in bundles for gid,result in bundle["results"].items()), 9)
+        with manager.lock:
+            for bundle in bundles:
+                root_rt = _root_runtime(bundle["root_agent_id"])
+                root_rt["last_persist"] = max(float(root_rt.get('last_persist') or 0), float(bundle["ts"]))
+
+    decision_writes = DeferredEvidence(manager.store, _write_bundle, batch_writer=_write_bundles)
+
+    def request_persistence():
+        request = getattr(manager, 'request_candidate_shadow_persistence', None)
+        if callable(request):
+            request()
+        else:
+            decision_writes.flush()
     admission = dict(skipped=0, persistence_gaps=0, paused=False, reason=None,
                      last_gap_ts=None, last_root_agent_id=None, recoveries=0)
 
@@ -826,7 +850,7 @@ def install(manager):
     def _admit_observation(root_id):
         if decision_writes.full():
             # Worker-owned, bounded and subject to the existing retry cooldown.
-            decision_writes.flush()
+            request_persistence()
             if decision_writes.full():
                 return _evidence_gap(root_id)
         with manager.lock:
@@ -837,6 +861,9 @@ def install(manager):
 
     def persistence_snapshot():
         result = decision_writes.snapshot()
+        writer = getattr(manager, 'candidate_shadow_persistence_writer', None)
+        if writer is not None:
+            result['writer'] = writer.snapshot()
         with manager.lock:
             result['admission'] = dict(admission)
         result['storage'] = storage_status(manager.store)
@@ -880,7 +907,7 @@ def install(manager):
                   "model_revision": result.get("model_revision"), "schema_revision": result.get("schema_revision")}
             for gid, result in bundle["results"].items()
         }
-        decision_writes.flush()
+        request_persistence()
         return True
 
     def _increment_false_early(root_id, previous_bundle, current_bundle):
@@ -1073,6 +1100,11 @@ def install(manager):
             _evidence_gap(agent['id'], persistence=True, reason=getattr(exc, 'reason', None))
             return None
 
+    def _pending_generation(generation_id, start, end):
+        return {bundle['event_id']: float(bundle['ts'])
+                for bundle in decision_writes.retained_payloads()
+                if generation_id in bundle['results'] and start <= float(bundle['ts']) <= end}
+
     def generation_history(ref, start, end):
         generation = _generation(manager.store, generation_id=ref) or _generation(manager.store, agent_id=ref)
         if not generation:
@@ -1080,12 +1112,14 @@ def install(manager):
         start, end = float(start), float(end)
         if end < start:
             start, end = end, start
+        pending = _pending_generation(generation['generation_id'], start, end)
         with manager.store.conn() as c:
             rows = [dict(r) for r in c.execute(
                 """SELECT root_agent_id,generation_id,event_id,ts,current,desired,confidence,model_revision,schema_revision
                    FROM candidate_generation_decisions WHERE generation_id=? AND ts>=? AND ts<=? ORDER BY ts""",
                 (generation["generation_id"], start, end),
             ).fetchall()]
+        pending.update(_pending_generation(generation['generation_id'], start, end))
         gaps = []
         cursor = start
         for row in rows:
@@ -1097,6 +1131,9 @@ def install(manager):
             gaps.append({"start": cursor, "end": end, "reason": "generation_not_observed"})
         if not rows and end > start:
             gaps = [{"start": start, "end": end, "reason": "generation_not_observed"}]
+        if pending:
+            gaps.append({'start': min(pending.values()), 'end': end,
+                         'reason': 'evidence_persistence_pending'})
         return {
             "root_agent_id": generation["root_agent_id"],
             "generation_id": generation["generation_id"],
@@ -1105,22 +1142,34 @@ def install(manager):
             "desired_semantics": "prediction actually observed from this exact generation at that timestamp",
             "policy_replay_used": False,
             "stale_after_seconds": DECISION_STALE_SECONDS,
+            "pending_evidence_count": len(pending),
+            "evidence_persistence_pending": bool(pending),
         }
 
-    def generation_decision_at(ref, timestamp):
+    def generation_decision_read(ref, timestamp):
         generation = _generation(manager.store, generation_id=ref) or _generation(manager.store, agent_id=ref)
         if not generation:
-            return None
+            return {'decision': None, 'pending': False}
         timestamp = float(timestamp)
+        pending = _pending_generation(generation['generation_id'], float('-inf'), timestamp)
         with manager.store.conn() as c:
             row = c.execute(
                 """SELECT * FROM candidate_generation_decisions
                    WHERE generation_id=? AND ts<=? ORDER BY ts DESC LIMIT 1""",
                 (generation["generation_id"], timestamp),
             ).fetchone()
+        pending.update(_pending_generation(generation['generation_id'], float('-inf'), timestamp))
+        # A newer accepted observation must not be replaced by the previous
+        # durable Desired in Correct. Return a gap until the writer commits it.
+        # Reads on both sides also cover a commit concurrent with this SELECT.
+        if pending and (not row or max(pending.values()) >= float(row['ts'])):
+            return {'decision': None, 'pending': True}
         if not row or timestamp - float(row["ts"]) > DECISION_STALE_SECONDS:
-            return None
-        return dict(row)
+            return {'decision': None, 'pending': False}
+        return {'decision': dict(row), 'pending': False}
+
+    def generation_decision_at(ref, timestamp):
+        return generation_decision_read(ref, timestamp)['decision']
 
     def generation_comparison(ref):
         child = _generation(manager.store, generation_id=ref) or _generation(manager.store, agent_id=ref)
@@ -1476,7 +1525,7 @@ def install(manager):
         return result
 
     def maintenance():
-        decision_writes.flush()
+        request_persistence()
         deferred_shadow.drain(max_roots=4)
         # Runtime evidence is never synthesized from history. Passive observations use
         # only the live websocket-backed state map and run on the Candidate worker, never
@@ -1541,6 +1590,7 @@ def install(manager):
     manager.candidate_shadow_async_diagnostics = deferred_shadow.diagnostics
     manager.candidate_shadow_async = deferred_shadow
     manager.flush_candidate_shadow_decisions = decision_writes.flush
+    manager.candidate_shadow_decision_writes = decision_writes
     manager.candidate_shadow_persistence_snapshot = persistence_snapshot
     manager.drain_candidate_shadow_events = drain_candidate_shadow_events
     manager.candidate_shadow_wait_seconds = candidate_shadow_wait_seconds
@@ -1558,6 +1608,7 @@ def install(manager):
         )
     manager.generation_history = generation_history
     manager.generation_decision_at = generation_decision_at
+    manager.generation_decision_read = generation_decision_read
     manager.generation_comparison = generation_comparison
     manager.status = status
     manager.list_status = list_status

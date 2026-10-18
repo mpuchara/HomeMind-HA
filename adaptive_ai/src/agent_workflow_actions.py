@@ -297,7 +297,16 @@ def _observed_live_decision(manager, agent_id, timestamp):
 
 
 def _observed_decision(manager, generation, timestamp):
-    if hasattr(manager, "generation_decision_at"):
+    read = getattr(manager, 'generation_decision_read', None)
+    if callable(read):
+        observed = read(generation['generation_id'], timestamp)
+        if observed['pending']:
+            # A known pending generation observation is a gap even for Live.
+            # Do not fall back to an older row in the separate history journal.
+            return None
+        if observed['decision']:
+            return observed['decision']
+    elif hasattr(manager, "generation_decision_at"):
         row = manager.generation_decision_at(generation["generation_id"], timestamp)
         if row:
             return row
@@ -505,9 +514,19 @@ def _install_candidate_teaching_overlay(manager):
         result = original(active_manager, generation, state_map, event_ts, **kwargs)
         if not result:
             return result
+        teaching = active_manager.engine.teaching
+        matcher = getattr(teaching, "match", None)
+        if not callable(matcher):
+            return result
+        # Use the exact standard matcher's existing label-cache semantics. An
+        # empty set cannot match any fingerprint, so no fresh agent read is
+        # needed. Unknown/custom matchers retain their ordinary full path.
+        from teaching import Teaching
+        if (type(teaching) is Teaching and getattr(matcher, '__func__', None) is Teaching.match
+                and not teaching.labels(str(generation.get('agent_id') or ''))):
+            return result
         agent = active_manager.store.get_agent_config(str(generation.get("agent_id") or ""))
-        matcher = getattr(active_manager.engine.teaching, "match", None)
-        if not agent or not callable(matcher):
+        if not agent:
             return result
         try:
             policy = active_manager.engine.models.get(str(agent["id"]))

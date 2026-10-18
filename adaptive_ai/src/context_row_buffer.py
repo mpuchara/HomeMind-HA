@@ -2,14 +2,16 @@
 import threading
 import sys
 import time
+import re
 from itertools import islice
 from sqlite_background import admit_background_write
+from sqlite_bulk_rows import insert_bounded_rows
 
 from telemetry import RUNTIME_DEBUG, TELEMETRY
 
 
 class ContextRowBuffer:
-    def __init__(self, store, name, statement, *, flush_seconds=30., max_bytes=16 * 1024 * 1024, max_rows=4096, shared_columns=(), batch_rows=64):
+    def __init__(self, store, name, statement, *, flush_seconds=30., max_bytes=16 * 1024 * 1024, max_rows=4096, shared_columns=(), batch_rows=64, batch_bytes=1024 * 1024):
         self.store, self.name, self.statement = store, str(name), statement
         self.lock = threading.Lock()
         self.flush_lock = threading.Lock()
@@ -23,6 +25,8 @@ class ContextRowBuffer:
         self.bytes = self.inflight_count = self.overflow_flushes = 0
         self.first_pending_at = None
         self.batch_rows = max(1, min(256, int(batch_rows)))
+        self.batch_bytes = max(64 * 1024, min(16 * 1024 * 1024, int(batch_bytes)))
+        self._values = re.search(r'\bVALUES\s*\(\s*\?(?:\s*,\s*\?)*\s*\)', statement, re.I)
         self.commits = 0
         self.max_store_hold_ms = 0.
 
@@ -146,12 +150,27 @@ class ContextRowBuffer:
             committed = 0
             try:
                 while batch:
-                    keys = tuple(islice(batch, self.batch_rows))
+                    keys, size = [], 0
+                    for key in islice(batch, self.batch_rows):
+                        # Shared RAM strings are still bound once per SQL row.
+                        # Bound transaction work by complete row size, without
+                        # discounting identity sharing or rejecting a large row
+                        # that already passed the existing admission limits.
+                        row_size = self._row_bytes(batch[key])
+                        if keys and size + row_size > self.batch_bytes:
+                            break
+                        keys.append(key)
+                        size += row_size
                     queued = time.perf_counter()
                     with self.store.lock:
                         acquired = time.perf_counter()
                         with self.store.conn() as connection, connection.storage_batch():
-                            connection.executemany(self.statement, [batch[key] for key in keys])
+                            rows = [batch[key] for key in keys]
+                            if self._values is not None and self._values.group().count('?') == len(rows[0]):
+                                insert_bounded_rows(connection, self.statement[:self._values.start()], rows,
+                                                    len(rows[0]), self.statement[self._values.end():])
+                            else:
+                                connection.executemany(self.statement, rows)
                     finished = time.perf_counter()
                     with self.lock:
                         self.flushed += len(keys)
@@ -190,7 +209,7 @@ class ContextRowBuffer:
                         bytes=self.bytes, max_bytes=self.max_bytes, max_rows=self.max_rows,
                         inflight=self.inflight_count, flush_seconds=self.flush_seconds,
                         overflow_flushes=self.overflow_flushes,
-                        batch_rows=self.batch_rows, commits=self.commits,
+                        batch_rows=self.batch_rows, batch_bytes=self.batch_bytes, commits=self.commits,
                         max_store_hold_ms=self.max_store_hold_ms,
                         shared_payload_columns=self.shared_columns,
                         shared_payloads=len(self._shared_refs),

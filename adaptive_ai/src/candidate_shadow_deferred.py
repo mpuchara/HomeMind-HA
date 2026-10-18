@@ -13,6 +13,7 @@ async scheduling cannot leak a newer room/home belief into the paired Candidate 
 from __future__ import annotations
 
 from collections import OrderedDict
+from itertools import islice
 import threading
 import time
 
@@ -91,6 +92,7 @@ class DeferredCandidateShadowQueue:
             return {"deferred": False, "reason": "invalid_candidate_shadow_job"}
         job["root_agent_id"] = root_id
         job["queued_monotonic"] = time.monotonic()
+        job["queued_perf"] = time.perf_counter()
 
         with self.lock:
             was_empty = not self.pending
@@ -224,15 +226,18 @@ class DeferredCandidateShadowQueue:
                     pass
 
     def drain(self, *, max_roots=4):
-        jobs = []
         with self.lock:
-            for _ in range(max(1, int(max_roots))):
-                if not self.pending:
-                    break
-                _, job = self.pending.popitem(last=False)
-                jobs.append(job)
+            # Reserve only FIFO identities. A peer waiting for this worker's
+            # previous root can still replace its payload with the latest exact
+            # Root context. Detaching four payloads in advance creates a second
+            # stale queue and duplicates work when those roots enqueue again.
+            roots = tuple(islice(self.pending, max(1, int(max_roots))))
         completed = 0
-        for job in jobs:
+        for root_id in roots:
+            with self.lock:
+                job = self.pending.pop(root_id, None)
+            if job is None:
+                continue  # Capacity eviction already accounts for this gap.
             queued = float(job.get("queued_monotonic") or time.monotonic())
             lag_ms = max(0.0, (time.monotonic() - queued) * 1000.0)
             self.stats["last_queue_lag_ms"] = lag_ms

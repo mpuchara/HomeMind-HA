@@ -1,3 +1,14 @@
+## 0.14.218 (2026-10-19, draft)
+
+- Separate Candidate decision-history persistence from Candidate inference. Use one persistent writer connection and bounded batches of immutable observed results; retain exact retry, byte/item admission, explicit gaps and shutdown durability. No new prediction worker or HA ownership is added.
+- Bound the production Candidate evidence buffer to 1024 items and a configurable 4 to 64 MiB (16 MiB default). Accepted records stay charged until commit. Full-buffer observations remain explicit gaps.
+- Take each deferred Candidate payload at FIFO admission rather than detaching a stale batch in advance. Preserve the exact parent frame, generation checks and causal pairing.
+- Avoid an Explore table probe and fresh agent reads when the standard Teaching matcher's own cache proves there are no labels. Custom matchers and nonempty label sets retain their full path.
+- Use bounded multi-VALUES writes for Candidate/context rows; bound context transactions by complete payload size as well as row count and yield Store between commits.
+- Compute exact nonoverlapping maximum protection ranges before updating journal observations. Preserve closed boundaries, disjoint gaps, duplicate window IDs and expiry reversals. Older SQLite/nonfinite intervals retain the prior SQL path.
+- Keep pending history explicit; Correct never substitutes an older durable Desired for a newer observation awaiting commit. Measure enqueue-to-Candidate RAM publication separately from persistence.
+- Full local functional validation passes: 2680 tests, shipped entrypoint, both UI VMs, compileall and 21 JavaScript syntax checks. Sustained paired performance acceptance remains pending. No physical HA or production-startup gain is claimed.
+
 ## 0.14.217 (2026-10-18)
 
 - Start the staged performance plan with a shipped-entrypoint benchmark: real Root policies, passive blocked Candidate generations, 778 HA states, 3 or 20 eligible agents, optional UI and trace load. External HA transport is local and never reaches a real installation.
