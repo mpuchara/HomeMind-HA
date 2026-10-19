@@ -32,6 +32,18 @@ DEFAULT_FINAL_MAX_REGRESSION = 0.03
 FINAL_CALIBRATION_EVIDENCE_KINDS = {"manual_user_target_change", "independent_preference_label", "episode_evaluator_independent"}
 EVALUATION_REVISION_SEPARATOR = "::backend="
 
+
+def _save_report_cache(store, table, sql, parameters):
+    # These rows are reproducible acceleration only. The fresh report is already
+    # computed; epoch creation/final-end locking stay on their durable write path.
+    writer = getattr(store, 'try_confidence_cache_write', None)
+    if callable(writer):
+        return writer(table, sql, parameters)
+    # Standalone providers retain their original persistence contract.
+    with store.lock, store.conn() as connection:
+        connection.execute(sql, parameters)
+    return True
+
 METRIC_SEMANTICS = {
     "presence_probability": "calibrated_probability_candidate_0_to_1",
     "forecast_uncertainty": "uncertainty_score_0_to_1_not_probability_of_failure",
@@ -1139,19 +1151,18 @@ class ProbabilityCalibrationJournal:
         report, aggregate_meta = _probability_calibration_from_store(
             self.store, metric_id, model_key, scope_id,
         )
-        with self.store.lock, self.store.conn() as c:
-            c.execute(
-                """INSERT INTO confidence_probability_report_cache
-                   (metric_id,model_key,scope_id,contract_version,revision,
-                    report_json,scanned_rows,updated_ts)
-                   VALUES(?,?,?,?,?,?,?,?)
-                   ON CONFLICT(metric_id,model_key,scope_id,contract_version) DO UPDATE SET
-                     revision=excluded.revision,report_json=excluded.report_json,
-                     scanned_rows=excluded.scanned_rows,updated_ts=excluded.updated_ts""",
-                (metric_id, model_key, scope_id, CONTRACT_VERSION, revision,
-                 json.dumps(report, separators=(",", ":"), sort_keys=True),
-                 int(aggregate_meta.get("source_rows") or 0), time.time()),
-            )
+        _save_report_cache(self.store, 'confidence_probability_report_cache',
+            """INSERT INTO confidence_probability_report_cache
+               (metric_id,model_key,scope_id,contract_version,revision,
+                report_json,scanned_rows,updated_ts)
+               VALUES(?,?,?,?,?,?,?,?)
+               ON CONFLICT(metric_id,model_key,scope_id,contract_version) DO UPDATE SET
+                 revision=excluded.revision,report_json=excluded.report_json,
+                 scanned_rows=excluded.scanned_rows,updated_ts=excluded.updated_ts""",
+            (metric_id, model_key, scope_id, CONTRACT_VERSION, revision,
+             json.dumps(report, separators=(",", ":"), sort_keys=True),
+             int(aggregate_meta.get("source_rows") or 0), time.time()),
+        )
         if diagnostics is not None:
             diagnostics.confidence_probability_scans += 1
             diagnostics.record_batch(aggregate_meta.get("python_rows_materialized") or 0)
@@ -1277,22 +1288,21 @@ class EvaluationEpochJournal:
                      int(min_per_action), now),
                 )
             epoch = self.get(parent_gid, child_gid, evaluation_revision)
-        with self.store.lock, self.store.conn() as c:
-            c.execute(
-                """INSERT INTO confidence_selection_scan_cache
-                   (parent_generation_id,child_generation_id,evaluation_revision,
-                    contract_version,selection_revision,params_fingerprint,sufficient,
-                    scanned_rows,updated_ts)
-                   VALUES(?,?,?,?,?,?,?,?,?)
-                   ON CONFLICT(parent_generation_id,child_generation_id,evaluation_revision,
-                               contract_version) DO UPDATE SET
-                     selection_revision=excluded.selection_revision,
-                     params_fingerprint=excluded.params_fingerprint,
-                     sufficient=excluded.sufficient,scanned_rows=excluded.scanned_rows,
-                     updated_ts=excluded.updated_ts""",
-                (str(parent_gid), str(child_gid), evaluation_revision, CONTRACT_VERSION,
-                 revision, params, 1 if epoch else 0, int(selection.get("episodes") or 0), time.time()),
-            )
+        _save_report_cache(self.store, 'confidence_selection_scan_cache',
+            """INSERT INTO confidence_selection_scan_cache
+               (parent_generation_id,child_generation_id,evaluation_revision,
+                contract_version,selection_revision,params_fingerprint,sufficient,
+                scanned_rows,updated_ts)
+               VALUES(?,?,?,?,?,?,?,?,?)
+               ON CONFLICT(parent_generation_id,child_generation_id,evaluation_revision,
+                           contract_version) DO UPDATE SET
+                 selection_revision=excluded.selection_revision,
+                 params_fingerprint=excluded.params_fingerprint,
+                 sufficient=excluded.sufficient,scanned_rows=excluded.scanned_rows,
+                 updated_ts=excluded.updated_ts""",
+            (str(parent_gid), str(child_gid), evaluation_revision, CONTRACT_VERSION,
+             revision, params, 1 if epoch else 0, int(selection.get("episodes") or 0), time.time()),
+        )
         return epoch
 
     def final_report_from_store(self, epoch, parent_gid, child_gid, *, scope_id=None,
@@ -1350,24 +1360,23 @@ class EvaluationEpochJournal:
             "max_regression": float(max_regression),
             "contract_version": CONTRACT_VERSION,
         })
-        with self.store.lock, self.store.conn() as c:
-            c.execute(
-                """INSERT INTO confidence_final_report_cache
-                   (parent_generation_id,child_generation_id,evaluation_revision,
-                    contract_version,calibration_revision,params_fingerprint,
-                    report_json,scanned_rows,updated_ts)
-                   VALUES(?,?,?,?,?,?,?,?,?)
-                   ON CONFLICT(parent_generation_id,child_generation_id,evaluation_revision,
-                               contract_version) DO UPDATE SET
-                     calibration_revision=excluded.calibration_revision,
-                     params_fingerprint=excluded.params_fingerprint,
-                     report_json=excluded.report_json,scanned_rows=excluded.scanned_rows,
-                     updated_ts=excluded.updated_ts""",
-                (str(parent_gid), str(child_gid), str(current["model_revision"]),
-                 CONTRACT_VERSION, revision, final_params,
-                 json.dumps(report, separators=(",", ":"), sort_keys=True),
-                 len(rows), time.time()),
-            )
+        _save_report_cache(self.store, 'confidence_final_report_cache',
+            """INSERT INTO confidence_final_report_cache
+               (parent_generation_id,child_generation_id,evaluation_revision,
+                contract_version,calibration_revision,params_fingerprint,
+                report_json,scanned_rows,updated_ts)
+               VALUES(?,?,?,?,?,?,?,?,?)
+               ON CONFLICT(parent_generation_id,child_generation_id,evaluation_revision,
+                           contract_version) DO UPDATE SET
+                 calibration_revision=excluded.calibration_revision,
+                 params_fingerprint=excluded.params_fingerprint,
+                 report_json=excluded.report_json,scanned_rows=excluded.scanned_rows,
+                 updated_ts=excluded.updated_ts""",
+            (str(parent_gid), str(child_gid), str(current["model_revision"]),
+             CONTRACT_VERSION, revision, final_params,
+             json.dumps(report, separators=(",", ":"), sort_keys=True),
+             len(rows), time.time()),
+        )
         return report
 
     def final_report(self, epoch, pairs, *, scope_id=None,

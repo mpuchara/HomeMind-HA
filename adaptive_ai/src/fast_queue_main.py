@@ -3,6 +3,8 @@ import queue_main as queued_runtime
 from manual_feedback import install as install_manual_feedback
 from manual_feedback_static import install as install_manual_feedback_static
 
+from startup_components import startup_scope
+
 core = queued_runtime.core
 
 # Final entrypoints may add cross-cutting observers at dependency-sensitive composition
@@ -42,56 +44,80 @@ def prepare_runtime_extensions():
 
 
 def prepare_engine_extensions():
-    from fast_runtime import install as install_fast_runtime
-    from paused_shadow_inference import install as install_paused_shadow_inference
-    from fast_local_primary import install as install_fast_local_primary
-    from manual_feedback import install_runtime_physical_equivalence
-    from manual_feedback_lifecycle import install_runtime as install_lifecycle
-    from teaching_learning_bridge import install as install_teaching_learning_bridge
-    from manual_feedback_rl import JournaledRLTeaching
-    from context_tournament import install as install_context_tournament
-    from context_tournament_metrics import install_metrics as install_context_tournament_metrics
-    from fast_light_objective_runtime import install as install_fast_light_objective
-    from context_tournament_hysteresis import install as install_context_tournament_hysteresis
-    from context_tournament_promotion import install_promotion as install_context_tournament_promotion
-    from context_tournament_primary_protection import install_primary_protection
-    from context_tournament_quality import install_sensor_quality
-    from context_tournament_policy_candidate import install_policy_candidates
-    from context_schema_history import install_schema_history
-    from context_tournament_requalification import install_promotion_shadow_requalification
-    from context_schema_probation import install_schema_probation
-    from teach_rl_rebenchmark import install_teach_rl_rebenchmark
-    from control_diagnostics import install_control_diagnostics
-    from context_ui_diagnostics import install_context_ui_diagnostics
-    from context_tournament_events import install_context_events
+    with startup_scope(core, 'fast.imports'):
+        from fast_runtime import install as install_fast_runtime
+        from paused_shadow_inference import install as install_paused_shadow_inference
+        from fast_local_primary import install as install_fast_local_primary
+        from manual_feedback import install_runtime_physical_equivalence
+        from manual_feedback_lifecycle import install_runtime as install_lifecycle
+        from teaching_learning_bridge import install as install_teaching_learning_bridge
+        from manual_feedback_rl import JournaledRLTeaching
+        from context_tournament import install as install_context_tournament
+        from context_tournament_metrics import install_metrics as install_context_tournament_metrics
+        from fast_light_objective_runtime import install as install_fast_light_objective
+        from context_tournament_hysteresis import install as install_context_tournament_hysteresis
+        from context_tournament_promotion import install_promotion as install_context_tournament_promotion
+        from context_tournament_primary_protection import install_primary_protection
+        from context_tournament_quality import install_sensor_quality
+        from context_tournament_policy_candidate import install_policy_candidates
+        from context_schema_history import install_schema_history
+        from context_tournament_requalification import install_promotion_shadow_requalification
+        from context_schema_probation import install_schema_probation
+        from teach_rl_rebenchmark import install_teach_rl_rebenchmark
+        from control_diagnostics import install_control_diagnostics
+        from context_ui_diagnostics import install_context_ui_diagnostics
+        from context_tournament_events import install_context_events
 
-    changed = install_fast_runtime(core)
+    with startup_scope(core, 'fast.install_fast_runtime'):
+        changed = install_fast_runtime(core)
     if changed:
         core.STORE.event(None, "info", "fast_runtime_migration",
                          f"Realtime timing applied to {len(changed)} fast agent(s)", {"agents": changed})
-    install_paused_shadow_inference(core)
-    install_fast_local_primary(core.STORE, core.ENGINE)
-    install_runtime_physical_equivalence(core, core.ENGINE)
-    install_lifecycle(core)
-    install_teaching_learning_bridge(core)
-    core.ENGINE.rl_teaching = JournaledRLTeaching(core.STORE, core.ENGINE)
+    with startup_scope(core, 'fast.install_paused_shadow_inference'):
+        install_paused_shadow_inference(core)
+    with startup_scope(core, 'fast.install_fast_local_primary'):
+        install_fast_local_primary(core.STORE, core.ENGINE)
+    with startup_scope(core, 'fast.install_runtime_physical_equivalence'):
+        install_runtime_physical_equivalence(core, core.ENGINE)
+    with startup_scope(core, 'fast.install_lifecycle'):
+        install_lifecycle(core)
+    with startup_scope(core, 'fast.install_teaching_learning_bridge'):
+        install_teaching_learning_bridge(core)
+    with startup_scope(core, 'fast.JournaledRLTeaching'):
+        core.ENGINE.rl_teaching = JournaledRLTeaching(core.STORE, core.ENGINE)
 
-    tournament = install_context_tournament(core.STORE, core.ENGINE)
-    install_context_tournament_metrics(tournament)
-    install_fast_light_objective(tournament)
-    tournament = _apply_engine_extension_hooks("after_fast_light", tournament)
-    install_context_tournament_hysteresis()
-    install_context_tournament_promotion(tournament)
-    install_primary_protection(tournament)
-    install_sensor_quality(tournament)
-    install_policy_candidates(tournament)
-    install_schema_history(tournament)
-    install_promotion_shadow_requalification(tournament)
-    install_schema_probation(tournament)
-    install_teach_rl_rebenchmark(core.STORE, core.ENGINE, core.ENGINE.rl_teaching)
-    install_control_diagnostics(core, tournament)
-    install_context_ui_diagnostics(tournament)
-    install_context_events(tournament)
+    with startup_scope(core, 'fast.install_context_tournament'):
+        tournament = install_context_tournament(core.STORE, core.ENGINE)
+    with startup_scope(core, 'fast.install_context_tournament_metrics'):
+        install_context_tournament_metrics(tournament)
+    with startup_scope(core, 'fast.install_fast_light_objective'):
+        install_fast_light_objective(tournament)
+    with startup_scope(core, 'fast._apply_engine_extension_hooks'):
+        tournament = _apply_engine_extension_hooks("after_fast_light", tournament)
+    with startup_scope(core, 'fast.install_context_tournament_hysteresis'):
+        install_context_tournament_hysteresis()
+    with startup_scope(core, 'fast.install_context_tournament_promotion'):
+        install_context_tournament_promotion(tournament)
+    with startup_scope(core, 'fast.install_primary_protection'):
+        install_primary_protection(tournament)
+    with startup_scope(core, 'fast.install_sensor_quality'):
+        install_sensor_quality(tournament)
+    with startup_scope(core, 'fast.install_policy_candidates'):
+        install_policy_candidates(tournament)
+    with startup_scope(core, 'fast.install_schema_history'):
+        install_schema_history(tournament)
+    with startup_scope(core, 'fast.install_promotion_shadow_requalification'):
+        install_promotion_shadow_requalification(tournament)
+    with startup_scope(core, 'fast.install_schema_probation'):
+        install_schema_probation(tournament)
+    with startup_scope(core, 'fast.install_teach_rl_rebenchmark'):
+        install_teach_rl_rebenchmark(core.STORE, core.ENGINE, core.ENGINE.rl_teaching)
+    with startup_scope(core, 'fast.install_control_diagnostics'):
+        install_control_diagnostics(core, tournament)
+    with startup_scope(core, 'fast.install_context_ui_diagnostics'):
+        install_context_ui_diagnostics(tournament)
+    with startup_scope(core, 'fast.install_context_events'):
+        install_context_events(tournament)
 
     # Candidate generations are installed last. Stage 06 opts into the explicit listener
     # contract below, so AgentCandidateManager does not install its legacy per-instance
@@ -118,30 +144,49 @@ def prepare_engine_extensions():
 
     core.ENGINE.teaching._candidate_feedback_hook = True
     core.ENGINE.rl_teaching._candidate_feedback_hook = True
-    candidates = install_agent_candidates(core, start_worker=False)
+    with startup_scope(core, 'fast.install_agent_candidates'):
+        candidates = install_agent_candidates(core, start_worker=False)
 
-    candidates = install_candidate_manual_rebuild(candidates)
-    candidates = install_candidate_config_guard(candidates)
-    candidates = install_candidate_balance(candidates)
-    candidates = install_candidate_debounce(candidates)
-    candidates = install_candidate_teach_status(core, candidates)
-    candidates = install_candidate_lifecycle_hardening(candidates)
-    candidates = install_candidate_conservative_correct(candidates)
-    candidates = install_candidate_lineage(candidates)
-    candidates = install_candidate_lineage_retention(candidates)
-    candidates = install_candidate_lineage_guards(candidates)
-    candidates = install_candidate_shadow_runtime(candidates)
-    candidates = install_candidate_shadow_context(candidates)
-    candidates = _apply_engine_extension_hooks("after_candidate_shadow_context", candidates)
-    candidates = install_candidate_atomic_promote(candidates)
-    candidates = install_candidate_user_promotion(candidates)
-    candidates = install_candidate_blocked_shadow_evidence(candidates)
+    with startup_scope(core, 'fast.install_candidate_manual_rebuild'):
+        candidates = install_candidate_manual_rebuild(candidates)
+    with startup_scope(core, 'fast.install_candidate_config_guard'):
+        candidates = install_candidate_config_guard(candidates)
+    with startup_scope(core, 'fast.install_candidate_balance'):
+        candidates = install_candidate_balance(candidates)
+    with startup_scope(core, 'fast.install_candidate_debounce'):
+        candidates = install_candidate_debounce(candidates)
+    with startup_scope(core, 'fast.install_candidate_teach_status'):
+        candidates = install_candidate_teach_status(core, candidates)
+    with startup_scope(core, 'fast.install_candidate_lifecycle_hardening'):
+        candidates = install_candidate_lifecycle_hardening(candidates)
+    with startup_scope(core, 'fast.install_candidate_conservative_correct'):
+        candidates = install_candidate_conservative_correct(candidates)
+    with startup_scope(core, 'fast.install_candidate_lineage'):
+        candidates = install_candidate_lineage(candidates)
+    with startup_scope(core, 'fast.install_candidate_lineage_retention'):
+        candidates = install_candidate_lineage_retention(candidates)
+    with startup_scope(core, 'fast.install_candidate_lineage_guards'):
+        candidates = install_candidate_lineage_guards(candidates)
+    with startup_scope(core, 'fast.install_candidate_shadow_runtime'):
+        candidates = install_candidate_shadow_runtime(candidates)
+    with startup_scope(core, 'fast.install_candidate_shadow_context'):
+        candidates = install_candidate_shadow_context(candidates)
+    with startup_scope(core, 'fast._apply_engine_extension_hooks'):
+        candidates = _apply_engine_extension_hooks("after_candidate_shadow_context", candidates)
+    with startup_scope(core, 'fast.install_candidate_atomic_promote'):
+        candidates = install_candidate_atomic_promote(candidates)
+    with startup_scope(core, 'fast.install_candidate_user_promotion'):
+        candidates = install_candidate_user_promotion(candidates)
+    with startup_scope(core, 'fast.install_candidate_blocked_shadow_evidence'):
+        candidates = install_candidate_blocked_shadow_evidence(candidates)
     # Stage 5 is installed before the Candidate worker starts so a queued neural Correct
     # recovered on boot cannot race through the older Ridge-only build path.
-    candidates = install_candidate_neural_correct(candidates)
+    with startup_scope(core, 'fast.install_candidate_neural_correct'):
+        candidates = install_candidate_neural_correct(candidates)
     # Stage 7 must own queued Offline-RL recovery before the Candidate worker starts;
     # otherwise an after-restart RL child could fall through to the historical rebuild.
-    candidates = install_candidate_offline_rl(candidates)
+    with startup_scope(core, 'fast.install_candidate_offline_rl'):
+        candidates = install_candidate_offline_rl(candidates)
 
     # One listener contract owns all Teaching/Teach-RL -> Candidate transitions. Adding a
     # correction keeps the conservative direct-parent Candidate path. Undo is different:

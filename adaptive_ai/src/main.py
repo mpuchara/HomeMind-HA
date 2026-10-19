@@ -12,6 +12,7 @@ from urllib.parse import parse_qs
 from settings import (APP_VERSION, OPTIONS, STATIC_DIR, SUPPORTED_TARGETS, clamp, now_ts)
 from training_request_semantics import train_request_decision
 from runtime_threading import configure_runtime_threads
+from startup_components import StartupComponents
 
 # UI scripts must be available before background runtime composition registers feature routes.
 # Exact names only: never expose arbitrary files or paths from the application directory.
@@ -38,6 +39,7 @@ review_status = None
 set_review_approval = None
 
 STARTUP_LOCK = threading.RLock()
+STARTUP_COMPONENTS = StartupComponents()
 STARTUP = {
     "state": "http_starting",
     "step": 0,
@@ -81,6 +83,7 @@ def startup_snapshot():
         time.monotonic() - float(data.get("state_started_monotonic") or time.monotonic()),
     )
     data.pop("state_started_monotonic", None)
+    data['components'] = STARTUP_COMPONENTS.snapshot()
     return data
 
 

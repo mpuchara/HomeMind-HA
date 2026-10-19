@@ -1,0 +1,764 @@
+{
+  "source": "Four user-provided runtime exports from the confirmed Raspberry Pi 4 / microSD 64GB installation",
+  "rows": [
+    {
+      "file": "adaptive-ai-runtime-debug-20261019-142934.json",
+      "sha256": "b52863ae0ba75d13d0c386d32a9bea48d201ec4875afda62c08f2062242ec672",
+      "generated_at": "2026-10-19T12:29:34.454103+00:00",
+      "version": "0.14.218",
+      "startup_timings_seconds": {
+        "building_runtime": 0.1674,
+        "http_ready": 1.1465,
+        "http_starting": 0.1347,
+        "installing_extensions": 334.1384,
+        "loading_runtime": 0.3541,
+        "reconciling_control": 0.0002,
+        "starting_engine": 0.0009,
+        "starting_history": 0.1216,
+        "starting_realtime": 0.0025
+      },
+      "metrics": {
+        "event_to_decision": {
+          "avg_ms": 128.93190849495514,
+          "count": 7841,
+          "p95_ms": 377.2474640281871,
+          "recent_count": 467,
+          "recent_p95_ms": 385.1524580968544
+        },
+        "event_to_target_start": {
+          "avg_ms": 53.69739746055775,
+          "count": 7841,
+          "p95_ms": 274.0817390149459,
+          "recent_count": 465,
+          "recent_p95_ms": 284.29193096235394
+        },
+        "inference": {
+          "avg_ms": 60.980258234338464,
+          "count": 7887,
+          "p95_ms": 123.1003919383511,
+          "recent_count": 470,
+          "recent_p95_ms": 123.1003919383511
+        },
+        "wrapped_inference": {
+          "avg_ms": 143.1855189414024,
+          "count": 7887,
+          "p95_ms": 331.89620496705174,
+          "recent_count": 470,
+          "recent_p95_ms": 331.89620496705174
+        },
+        "event_to_worker_release": {
+          "avg_ms": 196.88179637870812,
+          "count": 7841,
+          "p95_ms": 535.4660910088569,
+          "recent_count": 467,
+          "recent_p95_ms": 545.916186994873
+        },
+        "candidate_deferred_event_to_decision": {
+          "avg_ms": 222.48455696404443,
+          "count": 605,
+          "p95_ms": 418.5307410079986,
+          "recent_count": 16,
+          "recent_p95_ms": 522.3166699288413
+        },
+        "context_shadow_capture": {
+          "avg_ms": 113.02001129525925,
+          "count": 2377,
+          "p95_ms": 205.48212504945695,
+          "recent_count": 102,
+          "recent_p95_ms": 279.27461289800704
+        },
+        "context_capture_entities": {
+          "avg_ms": 59.751974392704255,
+          "count": 2377,
+          "p95_ms": 116.79767805617303,
+          "recent_count": 102,
+          "recent_p95_ms": 147.78930600732565
+        },
+        "context_capture_history": {
+          "avg_ms": 37.570685920439544,
+          "count": 2377,
+          "p95_ms": 73.98355996701866,
+          "recent_count": 102,
+          "recent_p95_ms": 102.1045499946922
+        },
+        "sqlite_wal_checkpoint": {
+          "avg_ms": 1651.135003276777,
+          "count": 282,
+          "p95_ms": 5106.76897095982,
+          "recent_count": 9,
+          "recent_p95_ms": 3409.4383500050753
+        }
+      },
+      "rss_mb": 208.37890625,
+      "candidate_worker_errors": 0,
+      "candidate_evidence": {
+        "pending": 0,
+        "rejected": 0,
+        "errors": 0
+      },
+      "capture": {
+        "state_snapshots": {
+          "bytes": 2870560,
+          "entries": 779,
+          "hits": 1816897,
+          "max_bytes": 16777216,
+          "max_entries": 2048,
+          "misses": 34786
+        },
+        "registry_snapshots": {
+          "bytes": 6307248,
+          "entries": 1340,
+          "hits": 3183840,
+          "max_bytes": 8388608,
+          "max_entries": 2048,
+          "misses": 1340
+        },
+        "temporal_snapshots": {
+          "bytes": 6390936,
+          "entities": 779,
+          "hits": 1817551,
+          "max_bytes": 67108864,
+          "max_entities": 2048,
+          "misses": 34132
+        }
+      },
+      "sqlite": {
+        "storage_budget": {
+          "auto_pool_bytes": 20889886800,
+          "auto_use_percent": 70,
+          "batch_sample_interval_seconds": 0.05,
+          "batch_sample_payload_bytes": 1048576,
+          "blocked_writes": 3,
+          "budget_mode": "auto",
+          "database_max_bytes": 13891774722,
+          "database_used_bytes": 11116670976,
+          "db_bytes": 11396464640,
+          "disk_samples": 32961,
+          "free_bytes": 9372958720,
+          "level": "normal",
+          "max_statement_payload_bytes": 16777216,
+          "minimum_free_bytes": 6266966040,
+          "page_observations": 22132,
+          "readonly_page_observations_skipped": 75787,
+          "reason": null,
+          "sample_error": null,
+          "wal_bytes": 123509392,
+          "wal_max_bytes": 731146038
+        },
+        "wal_checkpoint": {
+          "active": true,
+          "alive": true,
+          "busy_results": 0,
+          "checkpointed_frames": 25552,
+          "db_bytes": 11396464640,
+          "disk_free_bytes": 9380540416,
+          "errors": 0,
+          "last_busy": 0,
+          "last_checkpoint_at": 1792412964.6421928,
+          "last_duration_ms": 482.27898601908237,
+          "last_error": null,
+          "last_reclaim_duration_ms": 1636.594962910749,
+          "last_reclaim_error": null,
+          "log_frames": 25552,
+          "max_duration_ms": 8969.40427296795,
+          "max_idle_seconds": 30.0,
+          "mode": "PASSIVE",
+          "poll_seconds": 5.0,
+          "quiesce_ms": 100.0,
+          "quiesce_runs": 15,
+          "reclaim_attempts": 15,
+          "reclaim_busy": 9,
+          "reclaim_busy_timeout_ms": 0,
+          "reclaim_errors": 0,
+          "reclaim_interval_seconds": 60.0,
+          "reclaim_mode": "TRUNCATE",
+          "reclaim_pressure_attempts": 5,
+          "reclaim_pressure_interval_seconds": 5.0,
+          "reclaim_pressure_threshold_bytes": 292458415,
+          "reclaim_successes": 6,
+          "reclaim_threshold_bytes": 182786509,
+          "reclaimed_bytes": 1541386952,
+          "recovery_requests": 0,
+          "remaining_frames": 0,
+          "runs": 282,
+          "storage_sample_error": null,
+          "threshold_pages": 1000,
+          "wal_bytes": 115928592,
+          "wal_retain_bytes": 16777216
+        }
+      },
+      "physical_service_samples": 0
+    },
+    {
+      "file": "adaptive-ai-runtime-debug-20261019-142957.json",
+      "sha256": "cd6722ffd90df5483735767cf0190ec2376c231e9589984d8b5e5fadc21e607f",
+      "generated_at": "2026-10-19T12:29:57.580350+00:00",
+      "version": "0.14.218",
+      "startup_timings_seconds": {
+        "building_runtime": 0.1674,
+        "http_ready": 1.1465,
+        "http_starting": 0.1347,
+        "installing_extensions": 334.1384,
+        "loading_runtime": 0.3541,
+        "reconciling_control": 0.0002,
+        "starting_engine": 0.0009,
+        "starting_history": 0.1216,
+        "starting_realtime": 0.0025
+      },
+      "metrics": {
+        "event_to_decision": {
+          "avg_ms": 129.22733381979938,
+          "count": 7999,
+          "p95_ms": 362.72326100151986,
+          "recent_count": 445,
+          "recent_p95_ms": 373.91036900226027
+        },
+        "event_to_target_start": {
+          "avg_ms": 53.907393764580235,
+          "count": 7999,
+          "p95_ms": 258.8580430019647,
+          "recent_count": 445,
+          "recent_p95_ms": 260.11566002853215
+        },
+        "inference": {
+          "avg_ms": 61.01730017888958,
+          "count": 8045,
+          "p95_ms": 121.17281905375421,
+          "recent_count": 448,
+          "recent_p95_ms": 122.33175104483962
+        },
+        "wrapped_inference": {
+          "avg_ms": 143.22062710489942,
+          "count": 8045,
+          "p95_ms": 299.7001080075279,
+          "recent_count": 448,
+          "recent_p95_ms": 299.9849020270631
+        },
+        "event_to_worker_release": {
+          "avg_ms": 197.17155190681345,
+          "count": 7999,
+          "p95_ms": 462.1762279421091,
+          "recent_count": 445,
+          "recent_p95_ms": 479.70104799605906
+        },
+        "candidate_deferred_event_to_decision": {
+          "avg_ms": 222.7467855892097,
+          "count": 613,
+          "p95_ms": 419.9549020268023,
+          "recent_count": 16,
+          "recent_p95_ms": 504.0917999576777
+        },
+        "context_shadow_capture": {
+          "avg_ms": 113.04109256371991,
+          "count": 2414,
+          "p95_ms": 206.10521105118096,
+          "recent_count": 96,
+          "recent_p95_ms": 331.3549520680681
+        },
+        "context_capture_entities": {
+          "avg_ms": 59.8442315350826,
+          "count": 2414,
+          "p95_ms": 116.79767805617303,
+          "recent_count": 96,
+          "recent_p95_ms": 169.6210460504517
+        },
+        "context_capture_history": {
+          "avg_ms": 37.51654552424854,
+          "count": 2414,
+          "p95_ms": 73.98355996701866,
+          "recent_count": 96,
+          "recent_p95_ms": 88.65766902454197
+        },
+        "sqlite_wal_checkpoint": {
+          "avg_ms": 1656.0825408677329,
+          "count": 286,
+          "p95_ms": 5146.830353070982,
+          "recent_count": 9,
+          "recent_p95_ms": 5838.679781067185
+        }
+      },
+      "rss_mb": 206.78125,
+      "candidate_worker_errors": 0,
+      "candidate_evidence": {
+        "pending": 0,
+        "rejected": 0,
+        "errors": 0
+      },
+      "capture": {
+        "state_snapshots": {
+          "bytes": 2870520,
+          "entries": 779,
+          "hits": 1844528,
+          "max_bytes": 16777216,
+          "max_entries": 2048,
+          "misses": 35978
+        },
+        "registry_snapshots": {
+          "bytes": 6307248,
+          "entries": 1340,
+          "hits": 3233420,
+          "max_bytes": 8388608,
+          "max_entries": 2048,
+          "misses": 1340
+        },
+        "temporal_snapshots": {
+          "bytes": 6415384,
+          "entities": 779,
+          "hits": 1845925,
+          "max_bytes": 67108864,
+          "max_entities": 2048,
+          "misses": 34581
+        }
+      },
+      "sqlite": {
+        "storage_budget": {
+          "auto_pool_bytes": 20889886800,
+          "auto_use_percent": 70,
+          "batch_sample_interval_seconds": 0.05,
+          "batch_sample_payload_bytes": 1048576,
+          "blocked_writes": 3,
+          "budget_mode": "auto",
+          "database_max_bytes": 13891774722,
+          "database_used_bytes": 11117166592,
+          "db_bytes": 11396464640,
+          "disk_samples": 33524,
+          "free_bytes": 9319829504,
+          "level": "normal",
+          "max_statement_payload_bytes": 16777216,
+          "minimum_free_bytes": 6266966040,
+          "page_observations": 22499,
+          "readonly_page_observations_skipped": 76803,
+          "reason": null,
+          "sample_error": null,
+          "wal_bytes": 176636792,
+          "wal_max_bytes": 731146038
+        },
+        "wal_checkpoint": {
+          "active": true,
+          "alive": true,
+          "busy_results": 0,
+          "checkpointed_frames": 38802,
+          "db_bytes": 11396464640,
+          "disk_free_bytes": 9336446976,
+          "errors": 0,
+          "last_busy": 0,
+          "last_checkpoint_at": 1792412992.8135526,
+          "last_duration_ms": 551.5732039930299,
+          "last_error": null,
+          "last_reclaim_duration_ms": 1636.594962910749,
+          "last_reclaim_error": null,
+          "log_frames": 38802,
+          "max_duration_ms": 8969.40427296795,
+          "max_idle_seconds": 30.0,
+          "mode": "PASSIVE",
+          "poll_seconds": 5.0,
+          "quiesce_ms": 100.0,
+          "quiesce_runs": 15,
+          "reclaim_attempts": 15,
+          "reclaim_busy": 9,
+          "reclaim_busy_timeout_ms": 0,
+          "reclaim_errors": 0,
+          "reclaim_interval_seconds": 60.0,
+          "reclaim_mode": "TRUNCATE",
+          "reclaim_pressure_attempts": 5,
+          "reclaim_pressure_interval_seconds": 5.0,
+          "reclaim_pressure_threshold_bytes": 292458415,
+          "reclaim_successes": 6,
+          "reclaim_threshold_bytes": 182786509,
+          "reclaimed_bytes": 1541386952,
+          "recovery_requests": 0,
+          "remaining_frames": 0,
+          "runs": 286,
+          "storage_sample_error": null,
+          "threshold_pages": 1000,
+          "wal_bytes": 160020832,
+          "wal_retain_bytes": 16777216
+        }
+      },
+      "physical_service_samples": 0
+    },
+    {
+      "file": "adaptive-ai-runtime-debug-20261019-143032.json",
+      "sha256": "bdafb81568a13a956a42519c5bd5397ad6945ec3211bf1a68ef17085798648b5",
+      "generated_at": "2026-10-19T12:30:31.844966+00:00",
+      "version": "0.14.218",
+      "startup_timings_seconds": {
+        "building_runtime": 0.1674,
+        "http_ready": 1.1465,
+        "http_starting": 0.1347,
+        "installing_extensions": 334.1384,
+        "loading_runtime": 0.3541,
+        "reconciling_control": 0.0002,
+        "starting_engine": 0.0009,
+        "starting_history": 0.1216,
+        "starting_realtime": 0.0025
+      },
+      "metrics": {
+        "event_to_decision": {
+          "avg_ms": 129.43913646827497,
+          "count": 8114,
+          "p95_ms": 359.2173900688067,
+          "recent_count": 295,
+          "recent_p95_ms": 359.2173900688067
+        },
+        "event_to_target_start": {
+          "avg_ms": 53.93796686199236,
+          "count": 8114,
+          "p95_ms": 252.57471902295947,
+          "recent_count": 295,
+          "recent_p95_ms": 249.73719206172973
+        },
+        "inference": {
+          "avg_ms": 61.1744096389028,
+          "count": 8161,
+          "p95_ms": 122.35936301294714,
+          "recent_count": 296,
+          "recent_p95_ms": 138.27206997666508
+        },
+        "wrapped_inference": {
+          "avg_ms": 143.78338548576025,
+          "count": 8161,
+          "p95_ms": 337.0734299533069,
+          "recent_count": 297,
+          "recent_p95_ms": 349.9344480223954
+        },
+        "event_to_worker_release": {
+          "avg_ms": 197.76777934664028,
+          "count": 8114,
+          "p95_ms": 518.2554699713364,
+          "recent_count": 296,
+          "recent_p95_ms": 518.2554699713364
+        },
+        "candidate_deferred_event_to_decision": {
+          "avg_ms": 221.63986101645136,
+          "count": 629,
+          "p95_ms": 416.6483440203592,
+          "recent_count": 26,
+          "recent_p95_ms": 504.0917999576777
+        },
+        "context_shadow_capture": {
+          "avg_ms": 113.61380679131715,
+          "count": 2455,
+          "p95_ms": 222.47452498413622,
+          "recent_count": 81,
+          "recent_p95_ms": 245.1140540651977
+        },
+        "context_capture_entities": {
+          "avg_ms": 60.182460647478486,
+          "count": 2455,
+          "p95_ms": 123.2855370035395,
+          "recent_count": 81,
+          "recent_p95_ms": 166.93827789276838
+        },
+        "context_capture_history": {
+          "avg_ms": 37.64705560924087,
+          "count": 2455,
+          "p95_ms": 80.34806896466762,
+          "recent_count": 81,
+          "recent_p95_ms": 84.92728101555258
+        },
+        "sqlite_wal_checkpoint": {
+          "avg_ms": 1656.3043211998026,
+          "count": 291,
+          "p95_ms": 5146.830353070982,
+          "recent_count": 9,
+          "recent_p95_ms": 5838.679781067185
+        }
+      },
+      "rss_mb": 213.1796875,
+      "candidate_worker_errors": 0,
+      "candidate_evidence": {
+        "pending": 0,
+        "rejected": 0,
+        "errors": 0
+      },
+      "capture": {
+        "state_snapshots": {
+          "bytes": 2869256,
+          "entries": 779,
+          "hits": 1875869,
+          "max_bytes": 16777216,
+          "max_entries": 2048,
+          "misses": 36576
+        },
+        "registry_snapshots": {
+          "bytes": 6307248,
+          "entries": 1340,
+          "hits": 3288360,
+          "max_bytes": 8388608,
+          "max_entries": 2048,
+          "misses": 1340
+        },
+        "temporal_snapshots": {
+          "bytes": 6457576,
+          "entities": 779,
+          "hits": 1877260,
+          "max_bytes": 67108864,
+          "max_entities": 2048,
+          "misses": 35185
+        }
+      },
+      "sqlite": {
+        "storage_budget": {
+          "auto_pool_bytes": 20889886800,
+          "auto_use_percent": 70,
+          "batch_sample_interval_seconds": 0.05,
+          "batch_sample_payload_bytes": 1048576,
+          "blocked_writes": 3,
+          "budget_mode": "auto",
+          "database_max_bytes": 13891774722,
+          "database_used_bytes": 11117502464,
+          "db_bytes": 11396333568,
+          "disk_samples": 34079,
+          "free_bytes": 9461018624,
+          "level": "normal",
+          "max_statement_payload_bytes": 16777216,
+          "minimum_free_bytes": 6266966040,
+          "page_observations": 22834,
+          "readonly_page_observations_skipped": 78159,
+          "reason": null,
+          "sample_error": null,
+          "wal_bytes": 35580352,
+          "wal_max_bytes": 731146038
+        },
+        "wal_checkpoint": {
+          "active": true,
+          "alive": true,
+          "busy_results": 0,
+          "checkpointed_frames": 6270,
+          "db_bytes": 11396333568,
+          "disk_free_bytes": 9469071360,
+          "errors": 0,
+          "last_busy": 0,
+          "last_checkpoint_at": 1792413028.5882568,
+          "last_duration_ms": 361.30055296234787,
+          "last_error": null,
+          "last_reclaim_duration_ms": 2392.5891750259325,
+          "last_reclaim_error": null,
+          "log_frames": 6270,
+          "max_duration_ms": 8969.40427296795,
+          "max_idle_seconds": 30.0,
+          "mode": "PASSIVE",
+          "poll_seconds": 5.0,
+          "quiesce_ms": 100.0,
+          "quiesce_runs": 16,
+          "reclaim_attempts": 16,
+          "reclaim_busy": 9,
+          "reclaim_busy_timeout_ms": 0,
+          "reclaim_errors": 0,
+          "reclaim_interval_seconds": 60.0,
+          "reclaim_mode": "TRUNCATE",
+          "reclaim_pressure_attempts": 5,
+          "reclaim_pressure_interval_seconds": 5.0,
+          "reclaim_pressure_threshold_bytes": 292458415,
+          "reclaim_successes": 7,
+          "reclaim_threshold_bytes": 182786509,
+          "reclaimed_bytes": 1728542104,
+          "recovery_requests": 0,
+          "remaining_frames": 0,
+          "runs": 291,
+          "storage_sample_error": null,
+          "threshold_pages": 1000,
+          "wal_bytes": 27525752,
+          "wal_retain_bytes": 16777216
+        }
+      },
+      "physical_service_samples": 0
+    },
+    {
+      "file": "adaptive-ai-runtime-debug-20261019-143110.json",
+      "sha256": "c31f9629269b0cd1dd9706a592163801f1e302bbc1692bae052f63fb24cfc752",
+      "generated_at": "2026-10-19T12:31:10.092741+00:00",
+      "version": "0.14.218",
+      "startup_timings_seconds": {
+        "building_runtime": 0.1674,
+        "http_ready": 1.1465,
+        "http_starting": 0.1347,
+        "installing_extensions": 334.1384,
+        "loading_runtime": 0.3541,
+        "reconciling_control": 0.0002,
+        "starting_engine": 0.0009,
+        "starting_history": 0.1216,
+        "starting_realtime": 0.0025
+      },
+      "metrics": {
+        "event_to_decision": {
+          "avg_ms": 129.0411581908714,
+          "count": 8237,
+          "p95_ms": 335.3578560054302,
+          "recent_count": 197,
+          "recent_p95_ms": 268.4700379613787
+        },
+        "event_to_target_start": {
+          "avg_ms": 53.512258466859585,
+          "count": 8237,
+          "p95_ms": 217.6577780628577,
+          "recent_count": 197,
+          "recent_p95_ms": 153.46243302337825
+        },
+        "inference": {
+          "avg_ms": 61.21456356406915,
+          "count": 8285,
+          "p95_ms": 126.12576899118721,
+          "recent_count": 198,
+          "recent_p95_ms": 118.68841806426644
+        },
+        "wrapped_inference": {
+          "avg_ms": 143.94850462544065,
+          "count": 8284,
+          "p95_ms": 337.0734299533069,
+          "recent_count": 197,
+          "recent_p95_ms": 336.17371693253517
+        },
+        "event_to_worker_release": {
+          "avg_ms": 197.52487029524426,
+          "count": 8236,
+          "p95_ms": 477.0948350196704,
+          "recent_count": 196,
+          "recent_p95_ms": 467.75126399006695
+        },
+        "candidate_deferred_event_to_decision": {
+          "avg_ms": 221.0089760223127,
+          "count": 640,
+          "p95_ms": 414.50046899262816,
+          "recent_count": 23,
+          "recent_p95_ms": 291.78454098291695
+        },
+        "context_shadow_capture": {
+          "avg_ms": 113.5408984102839,
+          "count": 2501,
+          "p95_ms": 224.87709403503686,
+          "recent_count": 69,
+          "recent_p95_ms": 225.91530589852482
+        },
+        "context_capture_entities": {
+          "avg_ms": 60.16113920372536,
+          "count": 2502,
+          "p95_ms": 123.2855370035395,
+          "recent_count": 70,
+          "recent_p95_ms": 123.26535303145647
+        },
+        "context_capture_history": {
+          "avg_ms": 37.61362249529895,
+          "count": 2502,
+          "p95_ms": 80.34806896466762,
+          "recent_count": 70,
+          "recent_p95_ms": 78.55327194556594
+        },
+        "sqlite_wal_checkpoint": {
+          "avg_ms": 1643.0828540212779,
+          "count": 297,
+          "p95_ms": 5146.830353070982,
+          "recent_count": 9,
+          "recent_p95_ms": 3084.5501329749823
+        }
+      },
+      "rss_mb": 209.3125,
+      "candidate_worker_errors": 0,
+      "candidate_evidence": {
+        "pending": 0,
+        "rejected": 0,
+        "errors": 0
+      },
+      "capture": {
+        "state_snapshots": {
+          "bytes": 2869472,
+          "entries": 779,
+          "hits": 1911917,
+          "max_bytes": 16777216,
+          "max_entries": 2048,
+          "misses": 37141
+        },
+        "registry_snapshots": {
+          "bytes": 6307248,
+          "entries": 1340,
+          "hits": 3351340,
+          "max_bytes": 8388608,
+          "max_entries": 2048,
+          "misses": 1340
+        },
+        "temporal_snapshots": {
+          "bytes": 6485712,
+          "entities": 779,
+          "hits": 1913315,
+          "max_bytes": 67108864,
+          "max_entities": 2048,
+          "misses": 35743
+        }
+      },
+      "sqlite": {
+        "storage_budget": {
+          "auto_pool_bytes": 20889886800,
+          "auto_use_percent": 70,
+          "batch_sample_interval_seconds": 0.05,
+          "batch_sample_payload_bytes": 1048576,
+          "blocked_writes": 3,
+          "budget_mode": "auto",
+          "database_max_bytes": 13891774722,
+          "database_used_bytes": 11118006272,
+          "db_bytes": 11396202496,
+          "disk_samples": 34801,
+          "free_bytes": 9410027520,
+          "level": "normal",
+          "max_statement_payload_bytes": 16777216,
+          "minimum_free_bytes": 6266966040,
+          "page_observations": 23275,
+          "readonly_page_observations_skipped": 79558,
+          "reason": null,
+          "sample_error": null,
+          "wal_bytes": 86590072,
+          "wal_max_bytes": 731146038
+        },
+        "wal_checkpoint": {
+          "active": true,
+          "alive": true,
+          "busy_results": 0,
+          "checkpointed_frames": 19858,
+          "db_bytes": 11396333568,
+          "disk_free_bytes": 9409896448,
+          "errors": 0,
+          "last_busy": 0,
+          "last_checkpoint_at": 1792413064.651845,
+          "last_duration_ms": 498.3089700108394,
+          "last_error": null,
+          "last_reclaim_duration_ms": 2392.5891750259325,
+          "last_reclaim_error": null,
+          "log_frames": 19858,
+          "max_duration_ms": 8969.40427296795,
+          "max_idle_seconds": 30.0,
+          "mode": "PASSIVE",
+          "poll_seconds": 5.0,
+          "quiesce_ms": 100.0,
+          "quiesce_runs": 16,
+          "reclaim_attempts": 16,
+          "reclaim_busy": 9,
+          "reclaim_busy_timeout_ms": 0,
+          "reclaim_errors": 0,
+          "reclaim_interval_seconds": 60.0,
+          "reclaim_mode": "TRUNCATE",
+          "reclaim_pressure_attempts": 5,
+          "reclaim_pressure_interval_seconds": 5.0,
+          "reclaim_pressure_threshold_bytes": 292458415,
+          "reclaim_successes": 7,
+          "reclaim_threshold_bytes": 182786509,
+          "reclaimed_bytes": 1728542104,
+          "recovery_requests": 0,
+          "remaining_frames": 0,
+          "runs": 297,
+          "storage_sample_error": null,
+          "threshold_pages": 1000,
+          "wal_bytes": 86590072,
+          "wal_retain_bytes": 16777216
+        }
+      },
+      "physical_service_samples": 0
+    }
+  ],
+  "findings": [
+    "Extension installation dominates observed startup: 334.1384 seconds, without component-level attribution in 0.14.218.",
+    "Candidate evidence writer is empty with no rejects/errors in these snapshots.",
+    "Reaction latency persists with high feature/capture cost and off-CPU contention.",
+    "Logs have no physical HA-service latency samples; root agents in these windows are Shadow/rejected.",
+    "0.14.218 source uses an unindexed ORDER BY received_time for provenance warmup; its contribution to the observed 334 seconds is not established by these exports."
+  ]
+}

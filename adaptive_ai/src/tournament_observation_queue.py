@@ -84,7 +84,8 @@ class DeferredTournamentObservations:
         self._sample_memory()
         self.temporal_snapshots = TemporalObservationSnapshots(max_bytes=min(64*1024**2, self.max_bytes))
         self.state_snapshots = DetachedMappingSnapshots(max_bytes=min(16*1024**2, self.max_bytes))
-        self.registry_snapshots = DetachedMappingSnapshots(max_bytes=min(8*1024**2, self.max_bytes))
+        self.registry_snapshots = DetachedMappingSnapshots(
+            max_bytes=min(8*1024**2, self.max_bytes), reuse_complete=True)
 
     def is_deferred(self):
         return bool(getattr(self.local, 'deferred', False))

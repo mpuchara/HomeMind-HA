@@ -3,6 +3,7 @@ from contextlib import contextmanager
 from collections import deque
 import json
 import os
+import re
 import sqlite3
 import sys
 from telemetry import RUNTIME_DEBUG
@@ -11,7 +12,13 @@ import threading
 import time
 import uuid
 from settings import (DATA_DIR, DB_PATH, OPTIONS, clamp, iso_now, now_ts)
-from storage_budget import BudgetConnection, StorageBudget
+from storage_budget import BudgetConnection, StorageBudget, StoragePressure
+from sqlite_background import is_sqlite_busy
+
+CONFIDENCE_REPORT_CACHES = frozenset({
+    'confidence_selection_scan_cache', 'confidence_final_report_cache',
+    'confidence_probability_report_cache',
+})
 
 class Store:
     def __init__(self, path):
@@ -21,6 +28,9 @@ class Store:
         self._retention_worker = None
         self.lock = threading.RLock()
         self._meta_lock = threading.RLock()
+        self._confidence_cache_lock = threading.Lock()
+        self._confidence_cache_stats = dict(written=0, lock_skips=0, busy_skips=0,
+                                            pressure_skips=0, transaction_skips=0)
         self._connection_session = threading.local()
         self._runtime_sqlite_cache = None
         self._wal_keeper_lock = threading.RLock()
@@ -80,6 +90,49 @@ class Store:
             self._agent_index_revision = int(self._agent_index_revision) + 1
             return self._agent_index_revision
 
+    def confidence_cache_write_snapshot(self):
+        with self._confidence_cache_lock:
+            return dict(self._confidence_cache_stats)
+
+    def _count_confidence_cache_write(self, kind):
+        with self._confidence_cache_lock:
+            self._confidence_cache_stats[kind] += 1
+
+    def try_confidence_cache_write(self, table, sql, parameters):
+        """Best-effort derived reports only; never skip evidence/epoch writes.
+
+        The caller already computed the fresh report. Saving its revision-keyed
+        cache must not wait behind history/model writes on Store or SQLite.
+        Ordinary conn() admission/rollback remains authoritative. Do not enter a
+        nested conn() when a caller owns a transaction: it could commit its work.
+        """
+        target = re.match(r'\s*INSERT\s+INTO\s+(\w+)\s*\(', sql, re.I)
+        if table not in CONFIDENCE_REPORT_CACHES or target is None or target[1] != table:
+            raise ValueError('Only derived Confidence report caches may use this writer')
+        if not self.lock.acquire(blocking=False):
+            self._count_confidence_cache_write('lock_skips')
+            return False
+        try:
+            borrowed = getattr(self._connection_session, 'connection', None)
+            if borrowed is not None and borrowed.in_transaction:
+                self._count_confidence_cache_write('transaction_skips')
+                return False
+            try:
+                with self.background_sqlite(timeout_ms=0), self.conn() as connection:
+                    connection.execute(sql, parameters)
+            except StoragePressure:
+                self._count_confidence_cache_write('pressure_skips')
+                return False
+            except sqlite3.OperationalError as exc:
+                if not is_sqlite_busy(exc):
+                    raise
+                self._count_confidence_cache_write('busy_skips')
+                return False
+            self._count_confidence_cache_write('written')
+            return True
+        finally:
+            self.lock.release()
+
     def start_wal_keeper(self):
         """Keep WAL attached during runtime without a transaction or shared SQL use.
 
@@ -126,6 +179,7 @@ class Store:
         """RAM-only diagnostics, never run SQL from the debug export."""
         with self._wal_keeper_lock:
             return dict(version=sqlite3.sqlite_version,
+                        confidence_cache_writes=self.confidence_cache_write_snapshot(),
                         startup_seconds=dict(self.startup_timings),
                         runtime_cache=(self._runtime_sqlite_cache.snapshot()
                                        if self._runtime_sqlite_cache is not None else None),
@@ -239,7 +293,7 @@ class Store:
             pool.release(connection, healthy=healthy)
 
     @contextmanager
-    def background_sqlite(self, *, retryable=True):
+    def background_sqlite(self, *, retryable=True, timeout_ms=250):
         """Bound busy waits per thread; only retained batches opt into deferral.
 
         This does not alter explicit durability barriers or training worker writes.
@@ -248,7 +302,7 @@ class Store:
         """
         previous = getattr(self._connection_session, "busy_timeout_ms", None)
         previous_retryable = getattr(self._connection_session, "retryable_write", True)
-        self._connection_session.busy_timeout_ms = 250
+        self._connection_session.busy_timeout_ms = max(0, min(250, int(timeout_ms)))
         self._connection_session.retryable_write = retryable
         try:
             yield
@@ -380,7 +434,7 @@ class Store:
         # batches already keep their data in RAM: don't spend 250 ms under
         # Store.lock or encode large models just to collide with our own worker.
         # Reads, explicit durability and isolated training retain their contract.
-        if (getattr(self._connection_session, 'busy_timeout_ms', None) == 250
+        if (getattr(self._connection_session, 'busy_timeout_ms', None) in (0, 250)
                 and getattr(self._connection_session, 'retryable_write', True)
                 and self._wal_reclaiming.is_set()):
             with self._wal_keeper_lock:
