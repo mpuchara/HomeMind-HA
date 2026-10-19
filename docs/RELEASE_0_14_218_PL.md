@@ -62,3 +62,11 @@ Pełny manifest 624 plików jest zgodny z walidacją 2717 testów i pozostał ni
 Pozostało 419 operacji dowodów. Trend ostatnich 180 s wyniósł +0,225 operacji/s, więc sam test nie dowodzi zerowego długoterminowego trendu. Kolejka nie przepełniła się. Pełne serie i maksimum są w raporcie. Bez dodatkowej macierzy nie ogłaszamy procentowego przyspieszenia ani odbioru całego planu.
 
 WAL: 72 przebiegi PASSIVE bez błędu, ostatnio 288343/288343 skopiowane strony, 0 zaległych. Zaalokowany plik około 1,19 GB pozostał poniżej progu reclaim 6,38 GB wynikającego z limitu WAL 25,54 GB w automatycznej alokacji hosta. Reclaim nie został uruchomiony. To rozróżnienie rozmiaru pliku i backlogu checkpointu nie potwierdza zachowania rzeczywistej karty SD ani presji dyskowej urządzenia.
+
+## Pięć naprzemiennych par, 20 Root + 20 Candidate
+
+Ta sama nowa fixture produkcyjnych cech i narzędzie dla obu źródeł; 36 s na przebieg, pięć par w odwracanej kolejności, 20 kwalifikujących się agentów i UI. P95 Root event → decision: 124,60 ms w 0.14.217 i 132,89 ms w obecnym kodzie (+6,65%). Bootstrap całych par: od -13,04% do +29,55%. Wynik **nierozstrzygnięty** co do poprawy Root; nie przechodzi odbioru end-to-end. Samo wnioskowanie: 6,61 → 3,28 ms, lecz koszt całego przebiegu i oczekiwanie nie spadły w sposób potwierdzony tym testem.
+
+Liczbę obserwacji Candidate rozliczono jako różnicę licznika na końcu okna i przy jego pierwszej próbce, bez zakończonych zadań rozgrzewki. Pełne liczby, coalescing, luki i błędy każdego przebiegu pozostają w raporcie. Większej liczby wykonanych obserwacji nie utożsamiamy z przyspieszeniem Root.
+
+Przed tą macierzą narzędzie dostało pasywny znacznik fixture emit → ws receive i licznik oczekujących wiadomości. Znacznik jest usuwany przed serializacją wiadomości HA, nie trafia do cech ani do produkcyjnego odbiorcy. Runtime ma ten sam hash co próba 360 s. Zmieniono tylko narzędzie i jego test; wszystkie 22 testy modułu przeszły w 19,710 s. Poprzedni pełny przebieg 2717 testów pozostaje oddzielnym receipt; nowy CI sprawdzi także te dodatkowe asercje.

@@ -3168,7 +3168,7 @@
       "result": "OK",
       "log_sha256": "a36b4299deb766f12dd3767786cd310a44c711055b816e55b216326cc5a765e7"
     },
-    "performance_gate": "FUNCTIONAL/STABILITY SMOKE: 360s on final validated source; zero admission gaps/rejections/UI or server errors. Paired performance acceptance and deployed hardware/startup validation remain open.",
+    "performance_gate": "INCONCLUSIVE: Root20 five-pair end-to-end result does not establish improvement; 360s final-runtime stability smoke passed without gaps/errors. Other scenarios and target hardware remain open.",
     "candidate_evidence": {
       "owner": "separate persistence worker; prediction remains on existing Candidate worker",
       "max_items": 1024,

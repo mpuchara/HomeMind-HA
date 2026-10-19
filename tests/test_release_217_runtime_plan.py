@@ -256,6 +256,9 @@ class FullRuntimeBenchmarkTests(unittest.TestCase):
         self.assertGreater(sqlite_status['storage_budget']['wal_max_bytes'],0)
         self.assertEqual(sqlite_status['wal_checkpoint']['mode'],'PASSIVE')
         self.assertEqual(sqlite_status['wal_checkpoint']['errors'],0)
+        self.assertGreaterEqual(row['transport_pending_at_input_stop'],0)
+        self.assertGreater(row['measured_window']['benchmark_emit_to_ws_receive']['count'],0)
+        self.assertTrue(all(sample['transport_pending_messages']>=0 for sample in row['queue_series']))
         self.assertTrue(all(sample['wal_allocated_bytes']>=0 and sample['wal_remaining_frames']>=0
                             for sample in row['queue_series']))
 

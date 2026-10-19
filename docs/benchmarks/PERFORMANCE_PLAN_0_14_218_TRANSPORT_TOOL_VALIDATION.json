@@ -1,0 +1,10 @@
+{
+  "result": "PASS",
+  "scope": "Passive fixture emit-to-recv timing, pending transport messages; runtime source unchanged",
+  "log_sha256": "4dc185d32314eb783a2ae2fea27e691dbe2b672ab4dce2346d9343778e6b6c47",
+  "tail": "udes_timers) ... ok\ntest_websocket_owns_timestamp_before_parse_and_never_trusts_payload_clock (test_release_217_runtime_plan.ReceiptTests.test_websocket_owns_timestamp_before_parse_and_never_trusts_payload_clock) ... ok\ntest_worker_binding_is_local_and_cleared_even_after_agent_error (test_release_217_runtime_plan.ReceiptTests.test_worker_binding_is_local_and_cleared_even_after_agent_error) ... ok\n\n----------------------------------------------------------------------\nRan 22 tests in 19.710s\n\nOK\n",
+  "changed_files_since_full_run": [
+    "tests/test_release_217_runtime_plan.py",
+    "tools/benchmark_full_runtime.py"
+  ]
+}

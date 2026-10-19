@@ -116,7 +116,7 @@
   },
   "latest_scope": "Four-Root counter transactions with exact partial-commit retry and fresh epoch/lifecycle reads; request-local Confidence summary reuse without erasing pending Promote veto; RAM-only WAL/frame/checkpoint benchmark snapshots.",
   "all_attempts_index": "docs/benchmarks/PERFORMANCE_PLAN_0_14_218_EXPERIMENTS.json",
-  "performance_status": "FUNCTIONAL/STABILITY SMOKE: 360s on final validated source; zero admission gaps/rejections/UI or server errors. Paired performance acceptance and deployed hardware/startup validation remain open.",
+  "performance_status": "INCONCLUSIVE: Root20 five-pair end-to-end result does not establish improvement; 360s final-runtime stability smoke passed without gaps/errors. Other scenarios and target hardware remain open.",
   "fourth_ci_run": {
     "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/39232484353",
     "commit": "42fff4ff47a69359e4b9265d6f613d5c0892d693",
@@ -251,5 +251,186 @@
     },
     "source_sha256": "e39d80b15d3b1a1e86e5eba1b1649e1768f038a01272df1172cf391e3ed40023",
     "benchmark_tool_sha256": "c84e8759e02fe18549d491f220ae1f746ce439707b467143c0991c111db6aa9e"
+  },
+  "paired_shadow20": {
+    "summary": {
+      "event_to_decision": {
+        "baseline_p95_ms": 124.60424009997752,
+        "current_p95_ms": 132.88956459997505,
+        "relative_change_percent": 6.649311847935291,
+        "paired_run_bootstrap_95_percent": [
+          -13.043234628369238,
+          29.545519841605472
+        ],
+        "baseline_count": 34512,
+        "current_count": 33017
+      },
+      "event_to_target_start": {
+        "baseline_p95_ms": 115.71671944997487,
+        "current_p95_ms": 124.61813709998209,
+        "relative_change_percent": 7.69242136513848,
+        "paired_run_bootstrap_95_percent": [
+          -12.820124295257473,
+          31.38387700714631
+        ],
+        "baseline_count": 34520,
+        "current_count": 33024
+      },
+      "inference": {
+        "baseline_p95_ms": 6.612664200011408,
+        "current_p95_ms": 3.2788913999866023,
+        "relative_change_percent": -50.41497192642951,
+        "paired_run_bootstrap_95_percent": [
+          -56.263598778011,
+          -42.56648388166055
+        ],
+        "baseline_count": 34512,
+        "current_count": 33017
+      },
+      "wrapped_inference": {
+        "baseline_p95_ms": 15.128150499930365,
+        "current_p95_ms": 15.689966300007532,
+        "relative_change_percent": 3.713711071817749,
+        "paired_run_bootstrap_95_percent": [
+          -10.243323026979322,
+          18.931757047766574
+        ],
+        "baseline_count": 34512,
+        "current_count": 33015
+      },
+      "event_to_worker_release": {
+        "baseline_p95_ms": 126.32595674998295,
+        "current_p95_ms": 134.88958739997656,
+        "relative_change_percent": 6.778995283560185,
+        "paired_run_bootstrap_95_percent": [
+          -12.541239961739292,
+          31.05373286081381
+        ],
+        "baseline_count": 34512,
+        "current_count": 33015
+      }
+    },
+    "candidate_throughput": {
+      "observed_in_measurement_window": {
+        "baseline": 3937,
+        "current": 32946
+      },
+      "current_to_baseline_ratio": 8.368300736601473,
+      "formula": "input-stop processed minus first in-window queue-series processed; excludes completed warmup jobs"
+    },
+    "status": "INCONCLUSIVE for Root end-to-end acceleration: 124.60 -> 132.89ms (+6.65%), paired bootstrap [-13.04%,+29.55%]. More completed Candidate observations do not establish Root speedup. Full acceptance remains open.",
+    "per_run_quality": [
+      {
+        "pair": 0,
+        "kind": "baseline",
+        "root_p95": 117.53551899999337,
+        "candidate_observations": 891,
+        "candidate_gaps": 0,
+        "ui_errors": 0,
+        "transport_pending": 0,
+        "transport_p95": 3.5219761000028873
+      },
+      {
+        "pair": 0,
+        "kind": "current",
+        "root_p95": 67.61510879999832,
+        "candidate_observations": 7067,
+        "candidate_gaps": 0,
+        "ui_errors": 0,
+        "transport_pending": 0,
+        "transport_p95": 4.215572200008915
+      },
+      {
+        "pair": 1,
+        "kind": "current",
+        "root_p95": 140.72280300001694,
+        "candidate_observations": 6317,
+        "candidate_gaps": 0,
+        "ui_errors": 0,
+        "transport_pending": 0,
+        "transport_p95": 5.145514249990406
+      },
+      {
+        "pair": 1,
+        "kind": "baseline",
+        "root_p95": 157.99184299995656,
+        "candidate_observations": 325,
+        "candidate_gaps": 0,
+        "ui_errors": 0,
+        "transport_pending": 0,
+        "transport_p95": 6.009891250042185
+      },
+      {
+        "pair": 2,
+        "kind": "baseline",
+        "root_p95": 106.2716740000127,
+        "candidate_observations": 1049,
+        "candidate_gaps": 0,
+        "ui_errors": 0,
+        "transport_pending": 0,
+        "transport_p95": 3.1258841500402914
+      },
+      {
+        "pair": 2,
+        "kind": "current",
+        "root_p95": 132.6514764999871,
+        "candidate_observations": 6856,
+        "candidate_gaps": 0,
+        "ui_errors": 0,
+        "transport_pending": 0,
+        "transport_p95": 5.455579300013367
+      },
+      {
+        "pair": 3,
+        "kind": "current",
+        "root_p95": 113.66171099999178,
+        "candidate_observations": 6901,
+        "candidate_gaps": 0,
+        "ui_errors": 0,
+        "transport_pending": 0,
+        "transport_p95": 4.606199099964668
+      },
+      {
+        "pair": 3,
+        "kind": "baseline",
+        "root_p95": 66.73395385001866,
+        "candidate_observations": 1036,
+        "candidate_gaps": 0,
+        "ui_errors": 0,
+        "transport_pending": 0,
+        "transport_p95": 2.682108000095695
+      },
+      {
+        "pair": 4,
+        "kind": "baseline",
+        "root_p95": 129.03569939999213,
+        "candidate_observations": 636,
+        "candidate_gaps": 0,
+        "ui_errors": 0,
+        "transport_pending": 0,
+        "transport_p95": 3.7972642999250166
+      },
+      {
+        "pair": 4,
+        "kind": "current",
+        "root_p95": 180.6631819000131,
+        "candidate_observations": 5805,
+        "candidate_gaps": 0,
+        "ui_errors": 0,
+        "transport_pending": 0,
+        "transport_p95": 9.229663400043364
+      }
+    ]
+  },
+  "passive_transport_diagnostic": {
+    "result": "PASS",
+    "scope": "Passive fixture emit-to-recv timing, pending transport messages; runtime source unchanged",
+    "log_sha256": "4dc185d32314eb783a2ae2fea27e691dbe2b672ab4dce2346d9343778e6b6c47",
+    "tail": "udes_timers) ... ok\ntest_websocket_owns_timestamp_before_parse_and_never_trusts_payload_clock (test_release_217_runtime_plan.ReceiptTests.test_websocket_owns_timestamp_before_parse_and_never_trusts_payload_clock) ... ok\ntest_worker_binding_is_local_and_cleared_even_after_agent_error (test_release_217_runtime_plan.ReceiptTests.test_worker_binding_is_local_and_cleared_even_after_agent_error) ... ok\n\n----------------------------------------------------------------------\nRan 22 tests in 19.710s\n\nOK\n",
+    "changed_files_since_full_run": [
+      "tests/test_release_217_runtime_plan.py",
+      "tools/benchmark_full_runtime.py"
+    ],
+    "preceding_full_validation_commit": "7d5e53b25d9715301ba14f7741d3f115dc7abe67"
   }
 }

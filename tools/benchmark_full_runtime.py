@@ -140,11 +140,19 @@ def one(source, seconds=30, active=3, configured=20, mode='shadow', ui=False, tr
                 elif kind=='config/area_registry/list':result=[dict(area_id=f'area_{i}',name=f'Area {i}') for i in range(9)]
                 messages.put(dict(type='result',id=msg['id'],success=True,result=result))
             def recv(self,timeout=5):
-                try:return json.dumps(messages.get(timeout=min(.1,timeout)))
+                try:
+                    message=messages.get(timeout=min(.1,timeout))
+                    sent_perf=message.pop('_benchmark_sent_perf',None)
+                    if sent_perf is not None:
+                        TELEMETRY.observe('benchmark_emit_to_ws_receive',(time.perf_counter()-sent_perf)*1000)
+                    # The timing stamp is fixture-only; the shipped receiver
+                    # sees the identical HA message contract and state payload.
+                    return json.dumps(message)
                 except queue.Empty:raise TimeoutError()
         def emit(eid,new):
             states[eid]=new
-            messages.put(dict(type='event',id=2,event=dict(data=dict(entity_id=eid,new_state=new))))
+            messages.put(dict(type='event',id=2,event=dict(data=dict(entity_id=eid,new_state=new)),
+                              _benchmark_sent_perf=time.perf_counter()))
         def request(method,path,payload=None,timeout=10):
             if path=='states':return copy.deepcopy(list(states.values()))
             if path.startswith('services/'):
@@ -270,7 +278,7 @@ def one(source, seconds=30, active=3, configured=20, mode='shadow', ui=False, tr
                     evidence=runtime.agent_candidates.candidate_shadow_persistence_snapshot()
                     sqlite_status=store.sqlite_snapshot()
                     checkpoint=sqlite_status.get('wal_checkpoint') or {}
-                    queue_series.append(dict(seconds=time.monotonic()-start,
+                    queue_series.append(dict(seconds=time.monotonic()-start,transport_pending_messages=messages.qsize(),
                         raw_pending=journal['observations']['pending'],windows_pending=journal['windows']['pending'],
                         retention_gaps=journal['windows'].get('overflow_gaps',0),
                         candidate_pending=candidate['queue_depth'],candidate_oldest_ms=candidate.get('oldest_root_wait_ms'),
@@ -297,6 +305,7 @@ def one(source, seconds=30, active=3, configured=20, mode='shadow', ui=False, tr
             journal_at_input_stop=runtime.feature_observation_deferred_snapshot()
             candidate_at_input_stop=runtime.agent_candidates.candidate_shadow_async_diagnostics()
             candidate_evidence_at_input_stop=runtime.agent_candidates.candidate_shadow_persistence_snapshot()
+            transport_pending_at_input_stop=messages.qsize()
             sqlite_at_input_stop=store.sqlite_snapshot()
             ui_stop.set()
             time.sleep(.5)
@@ -347,6 +356,7 @@ def one(source, seconds=30, active=3, configured=20, mode='shadow', ui=False, tr
                 measured_window=measured,latency_samples=latency_samples,
                 tail_window=tail_measured,tail_latency_samples=tail_latencies,tail_seconds=tail_seconds,
                 backlog_at_input_stop=backlog_at_input_stop,
+                transport_pending_at_input_stop=transport_pending_at_input_stop,
                 sqlite_at_input_stop=sqlite_at_input_stop,sqlite_after_tail=store.sqlite_snapshot(),
                 journal_at_input_stop=journal_at_input_stop,
                 candidate_at_input_stop=candidate_at_input_stop,
