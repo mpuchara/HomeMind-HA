@@ -34,13 +34,25 @@
       "seconds": 339.596,
       "result": "OK",
       "log_sha256": "c1a69c3f5eee74bdf34500bc73e6beac491db772e81695a8b2d9b15f0c703c1f"
+    },
+    {
+      "tests": 2708,
+      "seconds": 333.75,
+      "result": "OK",
+      "log_sha256": "da9705ec7b8c2f62bc52cf3fc7a4444e091e85855f655e46e8db64e24279435e"
+    },
+    {
+      "tests": 2715,
+      "seconds": 324.471,
+      "result": "OK",
+      "log_sha256": "0af80511151fdcfba02bd02ddd9d50d888a52969b56dc31972eabf9ec8afc19d"
     }
   ],
   "final_full_run": {
-    "tests": 2708,
-    "seconds": 333.75,
+    "tests": 2717,
+    "seconds": 328.914,
     "result": "OK",
-    "log_sha256": "da9705ec7b8c2f62bc52cf3fc7a4444e091e85855f655e46e8db64e24279435e"
+    "log_sha256": "a36b4299deb766f12dd3767786cd310a44c711055b816e55b216326cc5a765e7"
   },
   "first_ci_run": {
     "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/39178106458",
@@ -102,7 +114,142 @@
     "image": "PASS",
     "scope": "Preceding published native aggregation tree, before asynchronous false-early and native prune/bulk changes; new exact-tree CI required."
   },
-  "latest_scope": "Asynchronous immutable false-early observations with epoch/retry/Promote pending guards; readonly VM callback handling; lifecycle and request-local UI no-op reads; bounded native string-ID pruning and archive/Teaching VALUES; benchmark joins producers after shipped shutdown.",
+  "latest_scope": "Four-Root counter transactions with exact partial-commit retry and fresh epoch/lifecycle reads; request-local Confidence summary reuse without erasing pending Promote veto; RAM-only WAL/frame/checkpoint benchmark snapshots.",
   "all_attempts_index": "docs/benchmarks/PERFORMANCE_PLAN_0_14_218_EXPERIMENTS.json",
-  "performance_status": "PENDING: no performance acceptance. Intermediate regressions and cleanup failure retained. Four-worker diagnostic rejected and not shipped."
+  "performance_status": "FUNCTIONAL/STABILITY SMOKE: 360s on final validated source; zero admission gaps/rejections/UI or server errors. Paired performance acceptance and deployed hardware/startup validation remain open.",
+  "fourth_ci_run": {
+    "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/39232484353",
+    "commit": "42fff4ff47a69359e4b9265d6f613d5c0892d693",
+    "python_311": {
+      "tests": 2708,
+      "seconds": 290.331,
+      "result": "OK"
+    },
+    "python_313": {
+      "tests": 2708,
+      "seconds": 274.492,
+      "result": "OK"
+    },
+    "image": "PASS",
+    "workflow": "SUCCESS; package intentionally skipped on PR",
+    "scope": "Preceding published source before Confidence-list reuse, four-Root counter groups and in-transaction lifecycle read. New code requires its own CI."
+  },
+  "late_focused_failures": [
+    {
+      "tests": 64,
+      "seconds": 71.51,
+      "result": "One error: test injected an independent writer after the new SQLite writer reservation, so the test writer correctly encountered SQLITE_BUSY.",
+      "resolution": "Move the simulated generation replacement before reservation; keep exact counter/epoch assertions. Add an in-transaction SQL-trigger epoch replacement test."
+    },
+    {
+      "tests": 66,
+      "seconds": 7.017,
+      "result": "Two new offline lifecycle tests used the standalone base adapter, not the shipped blocked-evidence adapter.",
+      "resolution": "Bind the shipped helper functions in those narrow fixtures. Assertions unchanged; both repair and a newly failed offline gate are checked on the reserved connection."
+    }
+  ],
+  "final_sustained_run": {
+    "seconds": 360.004494604,
+    "root": {
+      "count": 61064,
+      "p50": 99.56906899992646,
+      "p95": 150.3171570999939,
+      "p99": 196.8931945399755,
+      "max": 538.8397500000792
+    },
+    "candidate": {
+      "count": 61018,
+      "p50": 117.25167500003408,
+      "p95": 168.38580885017788,
+      "p99": 214.3736951498799,
+      "max": 596.5299229999346
+    },
+    "candidate_enqueue": {
+      "count": 61018,
+      "p50": 14.684352000074341,
+      "p95": 32.55798370004183,
+      "p99": 44.683900960028524,
+      "max": 130.44545200000357
+    },
+    "ui": {
+      "requests": 6462,
+      "errors": 0,
+      "routes": {
+        "api/live": {
+          "requests": 3171,
+          "errors": 0
+        },
+        "api/candidate-live": {
+          "requests": 3175,
+          "errors": 0
+        },
+        "api/status": {
+          "requests": 29,
+          "errors": 0
+        },
+        "api/events": {
+          "requests": 29,
+          "errors": 0
+        },
+        "api/agents": {
+          "requests": 29,
+          "errors": 0
+        },
+        "api/candidates": {
+          "requests": 29,
+          "errors": 0
+        }
+      }
+    },
+    "checkpoint": {
+      "runs": 72,
+      "errors": 0,
+      "busy_results": 0,
+      "last_busy": 0,
+      "last_error": null,
+      "wal_bytes": 1187993792,
+      "log_frames": 288343,
+      "checkpointed_frames": 288343,
+      "remaining_frames": 0,
+      "last_duration_ms": 67.10067599988179,
+      "max_duration_ms": 3761.3654409999526,
+      "last_checkpoint_at": 1792406286.771959,
+      "db_bytes": 143175680,
+      "disk_free_bytes": 1020131471360,
+      "storage_sample_error": null,
+      "reclaim_attempts": 0,
+      "reclaim_successes": 0,
+      "reclaim_busy": 0,
+      "reclaim_errors": 0,
+      "reclaim_pressure_attempts": 0,
+      "recovery_requests": 0,
+      "quiesce_runs": 0,
+      "reclaimed_bytes": 0,
+      "last_reclaim_duration_ms": 0.0,
+      "last_reclaim_error": null,
+      "active": true,
+      "alive": true,
+      "mode": "PASSIVE",
+      "poll_seconds": 5.0,
+      "max_idle_seconds": 30.0,
+      "threshold_pages": 1000,
+      "wal_retain_bytes": 16777216,
+      "reclaim_threshold_bytes": 6384156083,
+      "reclaim_pressure_threshold_bytes": 10214649732,
+      "reclaim_interval_seconds": 60.0,
+      "reclaim_pressure_interval_seconds": 5.0,
+      "quiesce_ms": 100.0,
+      "reclaim_mode": "TRUNCATE",
+      "reclaim_busy_timeout_ms": 0
+    },
+    "evidence_pending_max": 584,
+    "queue_slopes_last_180s": {
+      "raw_pending": -0.06420473166068374,
+      "windows_pending": -0.26776298752002525,
+      "candidate_pending": -0.006654491795914489,
+      "evidence_pending": 0.22527598078917643
+    },
+    "source_sha256": "e39d80b15d3b1a1e86e5eba1b1649e1768f038a01272df1172cf391e3ed40023",
+    "benchmark_tool_sha256": "c84e8759e02fe18549d491f220ae1f746ce439707b467143c0991c111db6aa9e"
+  }
 }

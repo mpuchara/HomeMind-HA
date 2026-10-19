@@ -16,7 +16,7 @@ import math
 import threading
 import time
 import uuid
-from contextlib import nullcontext
+from contextlib import contextmanager, nullcontext
 from urllib.parse import parse_qs, unquote, urlsplit
 
 from context import target_value
@@ -417,7 +417,7 @@ def _merge_false_early_summary(manager, edge, summary, token=None):
     return summary
 
 
-def _persist_summary(manager, edge, summary, *, false_early_token=None, false_early_root=None):
+def _persist_summary(manager, edge, summary, *, false_early_token=None, false_early_root=None, counter_connection=None):
     with getattr(manager, 'candidate_summary_write_lock', manager.store.lock):
         if false_early_root is None:
             summary = _merge_false_early_summary(manager, edge, summary, false_early_token)
@@ -425,7 +425,8 @@ def _persist_summary(manager, edge, summary, *, false_early_token=None, false_ea
             summary = {**summary, '_false_early_cursor':{key:false_early_token[key] for key in ('session','sequence')}}
         return _persist_summary_unlocked(manager, edge, summary, derive=false_early_token is None,
                                          observed_root=false_early_root,
-                                         expected_epochs=(false_early_token or {}).get('epochs'))
+                                         expected_epochs=(false_early_token or {}).get('epochs'),
+                                         counter_connection=counter_connection)
 
 
 def _counter_epoch_valid(connection, expected):
@@ -444,18 +445,29 @@ def _counter_epoch_valid(connection, expected):
     return True
 
 
-def _persist_summary_unlocked(manager, edge, summary, *, derive=True, observed_root=None, expected_epochs=None):
+@contextmanager
+def _summary_connection(manager, derive, counter_connection):
+    if counter_connection is not None:
+        if derive or not counter_connection.in_transaction:
+            raise ValueError('Counter connection requires a reserved counter-only transaction')
+        yield counter_connection
+    else:
+        with manager.store.lock, manager.store.conn() as connection, (nullcontext() if derive else connection.storage_batch()):
+            yield connection
+
+
+def _persist_summary_unlocked(manager, edge, summary, *, derive=True, observed_root=None, expected_epochs=None, counter_connection=None):
     summary["updated_ts"] = time.time()
     parent_gid = edge["parent_generation_id"]
     child_gid = edge["child_generation_id"]
     root_id = str(observed_root) if observed_root is not None else str(_generation(manager.store, generation_id=child_gid)["root_agent_id"])
     raw = json.dumps(summary, separators=(",", ":"))
-    row = manager._candidate_row(edge["parent_agent_id"]) or edge
+    row = (manager._candidate_row(edge["parent_agent_id"]) or edge) if derive else edge
     derived = manager._comparison_summary({**row, "comparison_json": raw}) if derive else None
     # Counter persistence cannot grant readiness. Actual status/Promote still
     # derive every existing quality gate freshly from the committed counters.
     state = "ready" if derived and derived.get("promotable") else "comparing"
-    with manager.store.lock, manager.store.conn() as c, (nullcontext() if derive else c.storage_batch()):
+    with _summary_connection(manager, derive, counter_connection) as c:
         if not derive and not _counter_epoch_valid(c, expected_epochs):
             return False
         c.execute(
@@ -901,13 +913,26 @@ def install(manager):
             if bundle.get('kind') == 'false_early':
                 groups.setdefault(bundle['root_agent_id'], []).append(
                     (bundle['previous'], bundle['current_bundle'], bundle['token']))
-        for root_id, observations in groups.items():
+        roots = list(groups)
+        for start in range(0, len(roots), 4):
+            selected = roots[start:start+4]
             with manager.candidate_summary_write_lock:
-                _apply_false_early_batch(root_id, observations)
+                # Fresh reads and all Python derivation precede Store/transaction.
+                # Only these four counter updates share the reserved writer turn.
+                prepared = [(root_id, _prepare_false_early_batch(root_id, groups[root_id]))
+                            for root_id in selected]
+                if any(value is not None for _, value in prepared):
+                    with manager.store.lock, manager.store.conn() as c, c.storage_batch():
+                        _counter_epoch_valid(c, {})  # Reserve before any counter mutation.
+                        for root_id, value in prepared:
+                            _persist_false_early_batch(root_id, groups[root_id], value, counter_connection=c)
+            # A failing group retains every payload, including earlier SQL in
+            # this transaction. Acknowledge only after the whole group committed.
+            selected = set(selected)
             for bundle in bundles:
-                if bundle.get('kind') == 'false_early' and bundle['root_agent_id'] == root_id:
-                    decision_writes.acknowledge('false-early:'+root_id+':'+bundle['event_id'], bundle)
-            time.sleep(0)  # Yield to synchronous future-outcome updates between Roots.
+                if bundle.get('kind') == 'false_early' and bundle['root_agent_id'] in selected:
+                    decision_writes.acknowledge('false-early:'+bundle['root_agent_id']+':'+bundle['event_id'], bundle)
+            time.sleep(0)  # Yield to synchronous future-outcome updates between groups.
 
     decision_writes = DeferredEvidence(manager.store, _write_bundle, batch_writer=_write_bundles)
 
@@ -1033,6 +1058,9 @@ def install(manager):
         return _apply_false_early_batch(root_id, [(previous_bundle, current_bundle, token)])
 
     def _apply_false_early_batch(root_id, observations):
+        return _persist_false_early_batch(root_id, observations, _prepare_false_early_batch(root_id, observations))
+
+    def _prepare_false_early_batch(root_id, observations):
         edge = _active_comparison_edge(manager, root_id)
         if not edge:
             summary_invalidations[0] += sum(bool(row[2]) for row in observations)
@@ -1080,9 +1108,16 @@ def install(manager):
             if token:
                 cursor = token
         if not changed:
+            return None
+        return edge, summary, last_token
+
+    def _persist_false_early_batch(root_id, observations, prepared, *, counter_connection=None):
+        if prepared is None:
             return
+        edge, summary, last_token = prepared
         if last_token:
-            persisted = _persist_summary(manager, edge, summary, false_early_token=last_token, false_early_root=root_id)
+            persisted = _persist_summary(manager, edge, summary, false_early_token=last_token,
+                                         false_early_root=root_id, counter_connection=counter_connection)
             if persisted is False:
                 summary_invalidations[0] += len(observations)
         else:

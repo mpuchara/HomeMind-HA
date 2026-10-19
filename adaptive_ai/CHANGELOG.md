@@ -12,7 +12,10 @@
 - Pause only the managed no-op storage progress callback inside SQLite-enforced read-only queries. Preserve external cancellation, page/WAL/payload admission, callback restoration and rollback.
 - Avoid idle lifecycle/backup work and duplicate request-local Candidate-list summaries. Preserve fresh single-agent status and authoritative promotion checks.
 - Prune bounded groups of stale string window IDs natively, and use bounded VALUES for archive and Teaching history without changing retention, receipt/revision or transaction semantics.
-- Full local functional validation passes: 2708 tests, shipped entrypoint, both UI VMs, compileall and 21 JavaScript syntax checks. Sustained paired performance acceptance remains pending. No physical HA or production-startup gain is claimed.
+- Group quality counters for at most four Roots in one reserved transaction. Recheck each generation and current offline gate inside it; retain exact rollback and postcommit acknowledgments. Decision transactions remain capped at 32 observations.
+- Reuse the final same-card Confidence summary on list requests, and preserve the atomic pending-evidence Promote veto through later decoration. Single status and promotion remain fresh.
+- Retain WAL frame/backlog and allocated-file diagnostics separately in full-runtime reports; host auto-allocation is reported explicitly.
+- Full local functional validation passes: 2717 tests, shipped entrypoint, both UI VMs, compileall and 21 JavaScript syntax checks. Sustained paired performance acceptance remains pending. No physical HA or production-startup gain is claimed.
 
 ## 0.14.217 (2026-10-18)
 

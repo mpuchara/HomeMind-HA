@@ -1,0 +1,47 @@
+[
+  {
+    "report": "PERFORMANCE_PLAN_0_14_218_LONG_CURRENT_20_QUALITY_PILOT.json",
+    "raw": "perf218-long-quality-groups.json",
+    "verified": true
+  },
+  {
+    "report": "PERFORMANCE_PLAN_0_14_218_LONG_CURRENT_20_REJECTED.json",
+    "raw": "perf218-long-rejected-5460656.json",
+    "verified": true
+  },
+  {
+    "report": "PERFORMANCE_PLAN_0_14_218_LONG_CURRENT_20_REJECTED_ASYNC.json",
+    "raw": "perf218-long-rejected-async-before-batching.json",
+    "verified": true
+  },
+  {
+    "report": "PERFORMANCE_PLAN_0_14_218_LONG_CURRENT_20_REJECTED_BATCHED.json",
+    "raw": "perf218-long-rejected-batched-before-prune-bulk.json",
+    "verified": true
+  },
+  {
+    "report": "PERFORMANCE_PLAN_0_14_218_LONG_CURRENT_20_REJECTED_CONFIDENCE.json",
+    "raw": "perf218-long-confidence.json",
+    "verified": true
+  },
+  {
+    "report": "PERFORMANCE_PLAN_0_14_218_LONG_CURRENT_20_REJECTED_HANDOFF.json",
+    "raw": "perf218-long-handoff.json",
+    "verified": true
+  },
+  {
+    "report": "PERFORMANCE_PLAN_0_14_218_LONG_CURRENT_20_REJECTED_NATIVE.json",
+    "raw": "perf218-long-rejected-59db81f.json",
+    "verified": true
+  },
+  {
+    "report": "PERFORMANCE_PLAN_0_14_218_LONG_CURRENT_20_REJECTED_PRUNE_BULK.json",
+    "raw": "perf218-long-prune-bulk.json",
+    "verified": true
+  },
+  {
+    "report": "PERFORMANCE_PLAN_0_14_218_LONG_CURRENT_20_REJECTED_READONLY.json",
+    "raw": "perf218-long-rejected-readonly-before-summary.json",
+    "verified": true
+  }
+]

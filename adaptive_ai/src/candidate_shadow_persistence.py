@@ -66,7 +66,7 @@ class CandidateShadowPersistence:
 
     def snapshot(self):
         return dict(owner=self.thread.name, alive=self.thread.is_alive(),
-                    drain_limit=1024, decision_transaction_limit=32,
+                    drain_limit=1024, decision_transaction_limit=32, quality_transaction_roots=4,
                     stopped=self.stop_event.is_set() or self.engine_stop_event.is_set())
 
 

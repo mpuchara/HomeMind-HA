@@ -2,10 +2,10 @@
   "version": "0.14.218",
   "baseline_commit": "f84211d676cf07c8ef80ea72aa6868d8747f38f7",
   "full_suite": {
-    "tests": 2708,
-    "seconds": 333.75,
+    "tests": 2717,
+    "seconds": 328.914,
     "result": "OK",
-    "log_sha256": "da9705ec7b8c2f62bc52cf3fc7a4444e091e85855f655e46e8db64e24279435e"
+    "log_sha256": "a36b4299deb766f12dd3767786cd310a44c711055b816e55b216326cc5a765e7"
   },
   "entrypoint": {
     "entrypoint": "adaptive_ai/src/trial_queue_main.py",
@@ -13,25 +13,25 @@
       "ok": true,
       "ready": true,
       "startup": {
-        "current_state_seconds": 0.1166725509999651,
-        "elapsed_seconds": 0.43893933296203613,
+        "current_state_seconds": 0.03204056699996727,
+        "elapsed_seconds": 0.2789316177368164,
         "error": null,
         "message": "Adaptive AI runtime is ready",
         "ready": true,
-        "started_at": 1792392125.8686094,
+        "started_at": 1792405791.092678,
         "state": "ready",
         "step": 7,
         "steps": 7,
         "timings": {
-          "building_runtime": 0.0055,
-          "http_ready": 0.1211,
-          "http_starting": 0.0105,
-          "installing_extensions": 0.1383,
-          "loading_runtime": 0.0205,
-          "reconciling_control": 0.0003,
-          "starting_engine": 0.0017,
-          "starting_history": 0.023,
-          "starting_realtime": 0.0013
+          "building_runtime": 0.0034,
+          "http_ready": 0.0889,
+          "http_starting": 0.0111,
+          "installing_extensions": 0.1154,
+          "loading_runtime": 0.0144,
+          "reconciling_control": 0.0001,
+          "starting_engine": 0.0008,
+          "starting_history": 0.0119,
+          "starting_realtime": 0.0007
         }
       },
       "version": "0.14.218"

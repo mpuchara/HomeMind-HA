@@ -76,7 +76,7 @@ def _active_comparison_edge(manager, root_id):
     return dict(row) if row else None
 
 
-def _persist_summary(manager, edge, summary, *, false_early_token=None, false_early_root=None):
+def _persist_summary(manager, edge, summary, *, false_early_token=None, false_early_root=None, counter_connection=None):
     with getattr(manager, 'candidate_summary_write_lock', manager.store.lock):
         if false_early_root is None:
             summary = shadow_runtime._merge_false_early_summary(manager, edge, summary, false_early_token)
@@ -84,10 +84,11 @@ def _persist_summary(manager, edge, summary, *, false_early_token=None, false_ea
             summary = {**summary, '_false_early_cursor':{key:false_early_token[key] for key in ('session','sequence')}}
         return _persist_summary_unlocked(manager, edge, summary, derive=false_early_token is None,
                                          observed_root=false_early_root,
-                                         expected_epochs=(false_early_token or {}).get('epochs'))
+                                         expected_epochs=(false_early_token or {}).get('epochs'),
+                                         counter_connection=counter_connection)
 
 
-def _persist_summary_unlocked(manager, edge, summary, *, derive=True, observed_root=None, expected_epochs=None):
+def _persist_summary_unlocked(manager, edge, summary, *, derive=True, observed_root=None, expected_epochs=None, counter_connection=None):
     """Persist paired evidence while preserving a failed offline-gate lifecycle."""
     summary = dict(summary or {})
     summary["updated_ts"] = time.time()
@@ -100,14 +101,24 @@ def _persist_summary_unlocked(manager, edge, summary, *, derive=True, observed_r
         observed_root = generation['root_agent_id']
     root_id = str(observed_root)
     raw = json.dumps(summary, separators=(",", ":"))
-    current_row = manager._candidate_row(edge["parent_agent_id"]) or edge
+    current_row = (manager._candidate_row(edge["parent_agent_id"]) or edge) if derive else edge
     derived = manager._comparison_summary({**current_row, "comparison_json": raw}) if derive else None
-    blocked_state = _blocked_state(current_row)
+    blocked_state = _blocked_state(current_row) if derive else None
     next_state = blocked_state or ("ready" if derived and derived.get("promotable") else "comparing")
 
-    with manager.store.lock, manager.store.conn() as c, (nullcontext() if derive else c.storage_batch()):
-        if not derive and not shadow_runtime._counter_epoch_valid(c, expected_epochs):
-            return False
+    with shadow_runtime._summary_connection(manager, derive, counter_connection) as c:
+        if not derive:
+            if not shadow_runtime._counter_epoch_valid(c, expected_epochs):
+                return False
+            # Read lifecycle/gate on the already reserved connection. A repair
+            # or new offline veto after preparation must not be overwritten by
+            # the earlier edge snapshot; no nested conn()/commit is permitted.
+            fresh = c.execute('SELECT state,offline_gate_json FROM agent_candidates '
+                              'WHERE parent_agent_id=? AND candidate_id=?',
+                              (edge['parent_agent_id'],edge['candidate_id'])).fetchone()
+            if fresh is None:
+                return False
+            next_state = _blocked_state(dict(fresh)) or 'comparing'
         active = '' if derive else " AND state IN ('comparing','ready','offline_blocked','insufficient_evidence')"
         state_value = '?' if derive else "CASE WHEN state IN ('offline_blocked','insufficient_evidence') THEN state ELSE ? END"
         c.execute(

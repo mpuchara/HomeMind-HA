@@ -4176,7 +4176,7 @@
     }
   ],
   "measurement_failure": {
-    "local_path": "C:\\Users\\mpuch\\OneDrive\\Dokumenty\\HomeMind\\tmp\\perf218-prune-bulk-pilot.log",
+    "local_path": "C:\\Users\\mpuch\\OneDrive\\Dokumenty\\HomeMind\\tmp\\perf218-prune-bulk-cleanup-failed.log",
     "sha256": "d4940887576f26fbae8e67ffea12301663d4403ef4991011cf3d7f1bbde74044",
     "bytes": 265997,
     "status": "INCONCLUSIVE: 180s input completed, but TemporaryDirectory cleanup raced a late producer reopening adaptive_ai.db; no JSON result returned. Repeat required.",
@@ -4203,6 +4203,31 @@
       "sha256": "34417baca2c60033da77e66c5523f0d590cd2ff5efd5c01acd9b5ded09b9b234",
       "bytes": 8046,
       "purpose": "Native query VM/progress diagnostic on retained synthetic database, not latency acceptance."
+    },
+    {
+      "file": "profile218-prune-bulk.json",
+      "local_path": "C:\\Users\\mpuch\\OneDrive\\Dokumenty\\HomeMind\\tmp\\profile218-prune-bulk.json",
+      "sha256": "e267c174c501928045b99e7a8af788e21f50b5fb030353a7e853ab669c1b479e",
+      "bytes": 3585622,
+      "purpose": "120s named-thread profile on native prune/bulk source; Candidate writer waits on Store and UI repeats Confidence summary."
+    },
+    {
+      "file": "profile218-owner-prune-bulk.json",
+      "local_path": "C:\\Users\\mpuch\\OneDrive\\Dokumenty\\HomeMind\\tmp\\profile218-owner-prune-bulk.json",
+      "sha256": "565a1a18048daf1c81be4dcbd276d55be4b6bfa2bbb0e3b321abefed4e56f862",
+      "bytes": 2449510,
+      "purpose": "75s actual Store owner sampling; journal is the main owner. Handoff scheduling experiment based on this profile was subsequently rejected."
     }
+  ],
+  "latest_sustained_attempts": [
+    "docs\\benchmarks\\PERFORMANCE_PLAN_0_14_218_LONG_CURRENT_20_QUALITY_PILOT.json",
+    "docs\\benchmarks\\PERFORMANCE_PLAN_0_14_218_LONG_CURRENT_20_REJECTED.json",
+    "docs\\benchmarks\\PERFORMANCE_PLAN_0_14_218_LONG_CURRENT_20_REJECTED_ASYNC.json",
+    "docs\\benchmarks\\PERFORMANCE_PLAN_0_14_218_LONG_CURRENT_20_REJECTED_BATCHED.json",
+    "docs\\benchmarks\\PERFORMANCE_PLAN_0_14_218_LONG_CURRENT_20_REJECTED_CONFIDENCE.json",
+    "docs\\benchmarks\\PERFORMANCE_PLAN_0_14_218_LONG_CURRENT_20_REJECTED_HANDOFF.json",
+    "docs\\benchmarks\\PERFORMANCE_PLAN_0_14_218_LONG_CURRENT_20_REJECTED_NATIVE.json",
+    "docs\\benchmarks\\PERFORMANCE_PLAN_0_14_218_LONG_CURRENT_20_REJECTED_PRUNE_BULK.json",
+    "docs\\benchmarks\\PERFORMANCE_PLAN_0_14_218_LONG_CURRENT_20_REJECTED_READONLY.json"
   ]
 }

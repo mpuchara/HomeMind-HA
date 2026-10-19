@@ -252,6 +252,12 @@ class FullRuntimeBenchmarkTests(unittest.TestCase):
         self.assertGreater(row['measured_window']['ws_receive_to_decision']['count'],0)
         self.assertEqual(row['service_calls'],0);self.assertGreater(row['ui_stats']['requests'],0)
         self.assertEqual(row['ui_stats']['errors'],0)
+        sqlite_status = row['sqlite_at_input_stop']
+        self.assertGreater(sqlite_status['storage_budget']['wal_max_bytes'],0)
+        self.assertEqual(sqlite_status['wal_checkpoint']['mode'],'PASSIVE')
+        self.assertEqual(sqlite_status['wal_checkpoint']['errors'],0)
+        self.assertTrue(all(sample['wal_allocated_bytes']>=0 and sample['wal_remaining_frames']>=0
+                            for sample in row['queue_series']))
 
     def test_control_fixture_dispatches_with_twenty_configured_agents_and_all_guards(self):
         root=Path(__file__).resolve().parents[1]

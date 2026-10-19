@@ -69,13 +69,13 @@ class CandidatePersistence218Tests(unittest.TestCase):
         import agent_candidate_shadow_runtime as shadow
         self.queued_return()
         self.fixture.observe(3);self.fixture.observe(4)
-        original = shadow._persist_summary
-        def fail_after_commit(*args, **kwargs):
-            result = original(*args, **kwargs)
-            if kwargs.get('false_early_token'):
+        queue = self.f.manager.candidate_shadow_decision_writes
+        original = queue.acknowledge
+        def fail_after_commit(key, payload):
+            if str(key).startswith('false-early:'):
                 raise RuntimeError('after committed quality write')
-            return result
-        with patch.object(shadow, '_persist_summary', fail_after_commit):
+            return original(key, payload)
+        with patch.object(queue, 'acknowledge', fail_after_commit):
             with self.assertRaisesRegex(RuntimeError, 'after committed'):
                 self.f.manager.flush_candidate_shadow_decisions(force=True)
         self.assertEqual(self.summary()['candidate_false_early'], 2)  # One atomic Root summary for both returns.
@@ -157,13 +157,14 @@ class CandidatePersistence218Tests(unittest.TestCase):
     def test_epoch_changed_after_batch_read_is_checked_again_with_writer_reserved(self):
         import agent_candidate_shadow_runtime as shadow
         self.queued_return()
-        original = shadow._persist_summary
-        def replace_before_write(*args, **kwargs):
-            with self.f.store.conn() as c:
-                c.execute('UPDATE agent_candidate_generations SET created_ts=created_ts+1 WHERE generation_id=?',
-                          (self.f.generation_id,))
-            return original(*args, **kwargs)
-        with patch.object(shadow, '_persist_summary', replace_before_write):
+        original = shadow._counter_epoch_valid
+        def replace_before_reservation(connection, expected):
+            if not expected and not connection.in_transaction:
+                with self.f.store.conn() as c:
+                    c.execute('UPDATE agent_candidate_generations SET created_ts=created_ts+1 WHERE generation_id=?',
+                              (self.f.generation_id,))
+            return original(connection, expected)
+        with patch.object(shadow, '_counter_epoch_valid', replace_before_reservation):
             self.f.manager.flush_candidate_shadow_decisions(force=True)
         self.assertEqual(self.summary(), {})
         self.assertEqual(self.f.manager.candidate_shadow_persistence_snapshot()['comparison_evidence_invalidations'], 1)
@@ -193,6 +194,139 @@ class CandidatePersistence218Tests(unittest.TestCase):
         self.f.manager.flush_candidate_shadow_decisions(force=True)
         self.assertEqual(self.summary()['candidate_false_early'], 35)
         self.assertEqual(queue.snapshot()['pending'], 0)
+
+    def blocked_persistence(self):
+        import agent_candidate_shadow_runtime as shadow
+        import agent_candidate_blocked_shadow_evidence as blocked
+        # Exercise the shipped blocked-evidence adapter without installing
+        # unrelated Correct layers into this narrow fixture.
+        self.enterContext(patch.object(shadow, '_persist_summary', blocked._persist_summary))
+        self.enterContext(patch.object(shadow, '_active_comparison_edge', blocked._active_comparison_edge))
+
+    def quality_roots(self, count=5):
+        self.blocked_persistence()
+        self.queued_return()
+        queue = self.f.manager.candidate_shadow_decision_writes
+        template = next(row for row in queue.retained_payloads() if row.get('kind') == 'false_early')
+        self.f.manager.flush_candidate_shadow_decisions(force=True)
+        with self.f.store.conn() as c:
+            edge = dict(c.execute('SELECT * FROM agent_candidates WHERE parent_agent_id=?', (self.f.root['id'],)).fetchone())
+            generations = [dict(row) for row in c.execute('SELECT * FROM agent_candidate_generations WHERE root_agent_id=?',
+                                                         (self.f.root['id'],))]
+        roots = []
+        for index in range(count):
+            root = self.f.store.create_agent({**self.f.root, 'id':None, 'name':f'counter root {index}',
+                                             'target_entity':f'light.counter_{index}'})
+            child = self.f.store.create_agent({**self.f.root, 'id':None, 'name':f'counter child {index}',
+                                              'target_entity':f'light.counter_child_{index}'})
+            mapping = {row['generation_id']:f"{root['id']}:counter:{row['generation_type']}" for row in generations}
+            with self.f.store.conn() as c:
+                for row in generations:
+                    values = {**row, 'root_agent_id':root['id'], 'generation_id':mapping[row['generation_id']],
+                        'agent_id':root['id'] if row['generation_type']=='live' else child['id'],
+                        'parent_generation_id':mapping.get(row.get('parent_generation_id'))}
+                    c.execute('INSERT INTO agent_candidate_generations ('+','.join(values)+') VALUES ('+
+                              ','.join('?' for _ in values)+')',tuple(values.values()))
+                values = {**edge, 'parent_agent_id':root['id'], 'candidate_id':child['id']}
+                c.execute('INSERT INTO agent_candidates ('+','.join(values)+') VALUES ('+
+                          ','.join('?' for _ in values)+')',tuple(values.values()))
+            payload = json.loads(json.dumps(template))
+            payload.update(root_agent_id=root['id'],event_id=f'counter-{index}')
+            for field in ('previous','current_bundle'):
+                payload[field]['results'] = {mapping[gid]:value for gid,value in payload[field]['results'].items()}
+            payload['token']['epochs'] = {mapping[gid]:epoch for gid,epoch in payload['token']['epochs'].items()}
+            payload['token']['sequence'] += index+10
+            queue.submit('false-early:'+root['id']+':'+payload['event_id'], payload)
+            roots.append((root['id'], mapping[self.f.generation_id]))
+        return roots
+
+    def counter_values(self, roots):
+        with self.f.store.conn() as c:
+            rows = {row[0]:json.loads(row[1]).get('candidate_false_early',0)
+                    for row in c.execute('SELECT root_agent_id,summary_json FROM candidate_generation_comparisons')}
+        return [rows.get(root) for root,_ in roots]
+
+    def test_four_root_counter_transaction_rolls_back_every_root_and_retains_exact_payloads(self):
+        roots = self.quality_roots()
+        queue = self.f.manager.candidate_shadow_decision_writes
+        retained = dict(queue.pending)
+        with self.f.store.conn() as c:
+            c.execute("CREATE TRIGGER fail_fourth_counter BEFORE INSERT ON candidate_generation_comparisons "
+                      f"WHEN NEW.root_agent_id='{roots[3][0]}' BEGIN SELECT RAISE(ABORT,'fourth counter'); END")
+        with self.assertRaisesRegex(sqlite3.IntegrityError,'fourth counter'):
+            self.f.manager.flush_candidate_shadow_decisions(force=True)
+        self.assertEqual(self.counter_values(roots),[None]*5)
+        self.assertEqual(dict(queue.pending),retained)
+        self.assertEqual(queue.snapshot()['bytes'],sum(map(len,retained.values())))
+        with self.f.store.conn() as c:c.execute('DROP TRIGGER fail_fourth_counter')
+        self.f.manager.flush_candidate_shadow_decisions(force=True)
+        self.assertEqual(self.counter_values(roots),[1]*5)
+        self.f.executor.service.assert_not_called()
+
+    def test_committed_four_root_group_is_acknowledged_before_a_later_group_failure(self):
+        roots = self.quality_roots()
+        queue = self.f.manager.candidate_shadow_decision_writes
+        retained = {key:raw for key,raw in queue.pending.items() if roots[4][0] in str(key)}
+        with self.f.store.conn() as c:
+            c.execute("CREATE TRIGGER fail_fifth_counter BEFORE INSERT ON candidate_generation_comparisons "
+                      f"WHEN NEW.root_agent_id='{roots[4][0]}' BEGIN SELECT RAISE(ABORT,'fifth counter'); END")
+        with self.assertRaisesRegex(sqlite3.IntegrityError,'fifth counter'):
+            self.f.manager.flush_candidate_shadow_decisions(force=True)
+        self.assertEqual(self.counter_values(roots),[1,1,1,1,None])
+        self.assertEqual(dict(queue.pending),retained)
+        self.assertEqual(queue.snapshot()['bytes'],sum(map(len,retained.values())))
+        with self.f.store.conn() as c:c.execute('DROP TRIGGER fail_fifth_counter')
+        self.f.manager.flush_candidate_shadow_decisions(force=True)
+        self.assertEqual(self.counter_values(roots),[1]*5)
+
+    def test_each_root_epoch_is_rechecked_after_an_earlier_root_mutates_its_generation(self):
+        roots = self.quality_roots(4)
+        with self.f.store.conn() as c:
+            c.execute("CREATE TRIGGER replace_next_counter BEFORE INSERT ON candidate_generation_comparisons "
+                f"WHEN NEW.root_agent_id='{roots[0][0]}' BEGIN "
+                f"UPDATE agent_candidate_generations SET created_ts=created_ts+1 WHERE generation_id='{roots[1][1]}'; END")
+        self.f.manager.flush_candidate_shadow_decisions(force=True)
+        self.assertEqual(self.counter_values(roots),[1,None,1,1])
+        self.assertGreaterEqual(self.f.manager.candidate_shadow_persistence_snapshot()['comparison_evidence_invalidations'],1)
+        self.assertEqual(self.f.manager.candidate_shadow_persistence_snapshot()['pending'],0)
+
+    def test_offline_repair_before_reservation_is_not_reblocked_from_a_prepared_edge(self):
+        import agent_candidate_shadow_runtime as shadow
+        self.blocked_persistence()
+        self.queued_return()
+        with self.f.store.conn() as c:
+            c.execute("UPDATE agent_candidates SET state='offline_blocked',offline_gate_json='{\"passed\":false}'")
+            c.execute("UPDATE agent_candidate_generations SET lifecycle_state='offline_blocked' WHERE generation_type='candidate'")
+        original = shadow._counter_epoch_valid
+        def repair_before_reservation(connection, expected):
+            if not expected and not connection.in_transaction:
+                with self.f.store.conn() as c:
+                    c.execute("UPDATE agent_candidates SET state='comparing',offline_gate_json='{\"passed\":true}'")
+                    c.execute("UPDATE agent_candidate_generations SET lifecycle_state='comparing' WHERE generation_type='candidate'")
+            return original(connection, expected)
+        with patch.object(shadow,'_counter_epoch_valid',repair_before_reservation):
+            self.f.manager.flush_candidate_shadow_decisions(force=True)
+        with self.f.store.conn() as c:
+            self.assertEqual(c.execute('SELECT state FROM agent_candidates').fetchone()[0],'comparing')
+            self.assertEqual(c.execute('SELECT lifecycle_state FROM agent_candidate_generations WHERE generation_id=?',
+                                      (self.f.generation_id,)).fetchone()[0],'comparing')
+        self.assertEqual(self.summary()['candidate_false_early'],1)
+
+    def test_an_earlier_root_new_offline_gate_is_read_fresh_for_the_next_root(self):
+        roots = self.quality_roots(4)
+        with self.f.store.conn() as c:
+            c.execute("CREATE TRIGGER block_next_counter BEFORE INSERT ON candidate_generation_comparisons "
+                f"WHEN NEW.root_agent_id='{roots[0][0]}' BEGIN "
+                f"UPDATE agent_candidates SET state='comparing',offline_gate_json='{{\"passed\":false}}' "
+                f"WHERE parent_agent_id='{roots[1][0]}'; END")
+        self.f.manager.flush_candidate_shadow_decisions(force=True)
+        self.assertEqual(self.counter_values(roots),[1]*4)
+        with self.f.store.conn() as c:
+            self.assertEqual(c.execute('SELECT state FROM agent_candidates WHERE parent_agent_id=?',
+                                      (roots[1][0],)).fetchone()[0],'offline_blocked')
+            self.assertEqual(c.execute('SELECT lifecycle_state FROM agent_candidate_generations WHERE generation_id=?',
+                                      (roots[1][1],)).fetchone()[0],'offline_blocked')
+        self.f.executor.service.assert_not_called()
 
     def test_backup_cleanup_with_no_expired_row_never_waits_for_store(self):
         from agent_candidates import AgentCandidateManager

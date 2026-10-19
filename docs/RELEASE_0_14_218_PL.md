@@ -1,6 +1,6 @@
 # 0.14.218: odłączenie zapisu Shadow i ograniczenie blokad SQLite
 
-Pakiet na bazie 0.14.217 / PR #333 (`f84211d676cf07c8ef80ea72aa6868d8747f38f7`). Status: **draft, odbiór performance pozostaje otwarty**. Pełna lokalna regresja: **2708 testów OK w 333,750 s**; entrypoint, oba testy UI, compileall i składnia 21 plików JavaScript przechodzą. Manifest obejmuje 624 pliki źródeł, testów i narzędzi.
+Pakiet na bazie 0.14.217 / PR #333 (`f84211d676cf07c8ef80ea72aa6868d8747f38f7`). Status: **draft, odbiór performance pozostaje otwarty**. Pełna lokalna regresja: **2717 testów OK w 328.914 s**; entrypoint, oba testy UI, compileall i składnia 21 plików JavaScript przechodzą. Manifest obejmuje 624 pliki źródeł, testów i narzędzi.
 
 ## Ustalenia i poprawki
 
@@ -37,8 +37,28 @@ Pierwsza długa próba finalnych zmian nie zwróciła JSON: sprzątanie katalogu
 
 ## Odbiór i pozostała praca
 
-Najświeższa pełna lokalna walidacja obejmuje 2708 testów. Poprzedni opublikowany commit `59db81f` ma zielone CI: Python 3.11, 2682 testy / 263,277 s; Python 3.13, 2682 testy / 292,892 s; obraz Docker. Nowe źródła wymagają własnego CI. Receipty i wcześniejsze błędy znajdują się w QA.
+Najświeższa pełna lokalna walidacja obejmuje 2717 testów. Poprzedni opublikowany commit `59db81f` ma zielone CI: Python 3.11, 2682 testy / 263,277 s; Python 3.13, 2682 testy / 292,892 s; obraz Docker. Nowe źródła wymagają własnego CI. Receipty i wcześniejsze błędy znajdują się w QA.
 
 Pakiet rozszerza E0/E1 oraz części E3/E6. Pozostają: pełna izolacja lifecycle, odłączone przyrostowe ramki i epoka wszystkich mutacji modelu, pozostała praca po decyzji, blokady Home Context, IPC/CPU na urządzeniu, scenariusze build/training/checkpoint i cold/warm start na dużej bazie. Macierz krótkich prób nie zastępuje protokołu odbioru E0–E7.
 
 Brak pomiaru Raspberry Pi, fizycznego urządzenia i startu na kopii bazy użytkownika. Nie ma podstaw do stwierdzenia, że prawie dziesięciominutowy start został usunięty. Schematy modeli i wyuczone parametry pozostają zgodne; Full Rebuild nie jest wymagany. Draft nie jest wydaniem wdrożonym.
+
+## Końcowe grupowanie liczników i dekoracja Confidence
+
+Usunięto kolejne pełne liczenie porównań z listy Confidence. Kompletny wynik tej samej karty jest wykorzystywany ponownie tylko w tym żądaniu. Status pojedynczego agenta nadal liczy świeżo. Późniejsza dekoracja nie może nadpisać `comparison_evidence_pending` i ponownie pokazać zgody na Promote.
+
+Writer przygotowuje liczniki najwyżej czterech Root poza Store, a następnie zapisuje je we wspólnej, zarezerwowanej transakcji. Generacja i bieżąca bramka offline są sprawdzane ponownie na tym samym połączeniu. Nie ma wewnętrznego `conn()` mogącego przypadkiem zatwierdzić połowę grupy. Błąd czwartego Root cofa cztery, błąd kolejnej grupy zachowuje pierwszą już zatwierdzoną. Postcommit retry korzysta z trwałych kursorów. Limity 1024 pozycji / 16 MiB i 32 obserwacji w transakcji decyzji pozostają.
+
+Próba 180 s poprzedzająca końcowe sprawdzenie świeżości lifecycle: Root 29770 próbek event → decision i Candidate 29742 próbek w tym samym oknie (29762 zadania Candidate z rozgrzewką); zero luk, odrzuceń i błędów UI/serwera. P95 Root 153,86 ms, Candidate 172,56 ms. Na końcu czekało 485 operacji dowodów; trend drugiej połowy wyniósł -0,015 operacji/s. To pomiar hosta i tej konkretnej próby, bez parowanego dowodu przyspieszenia.
+
+WAL miał około 979 MB przy automatycznym limicie hosta około 25,5 GB i progu reclaim zależnym od tego limitu. Tego rozmiaru nie utożsamia się z zaległością checkpointu. Końcowe narzędzie zbiera osobno liczbę stron logu, strony pozostałe do checkpointu, odzyskiwanie miejsca i rzeczywistą alokację. Odbiór stabilności WAL i pełny odbiór performance pozostają otwarte.
+
+Próba dodatkowej przerwy 5 ms między turami dziennika została odrzucona i wycofana: pogorszyła p95 do 262 ms oraz zachowała luki. Także próby pogarszające wynik i pełne skróty SHA surowych danych pozostają w indeksie. Poprzedni CI `42fff4ff` zakończył się sukcesem: 2708 testów na 3.11 (290,331 s) i 3.13 (274,492 s), dodatkowe benchmarki oraz obraz. Końcowe źródła wymagają nowego CI.
+
+## Pomiar zamrożonych końcowych źródeł, 360 s
+
+Pełny manifest 624 plików jest zgodny z walidacją 2717 testów i pozostał niezmieniony podczas próby. 20 kwalifikujących się Root, 20 Candidate, 778 encji, UI kafelków co 100 ms i pełne listy co 4 s. Root event → decision p95: 150,32 ms (61064 próbek), Candidate: 168,39 ms (61018 próbek w tym samym oknie). Zero luk, odrzuceń, błędów Candidate, UI i serwera. Odrębne liczniki kolejki obejmują również rozgrzewkę; nie służą do zawyżania pokrycia w oknie pomiarowym. Coalescing zastąpił 42 oczekujące ramki nowszymi, cztery czekały na końcu.
+
+Pozostało 419 operacji dowodów. Trend ostatnich 180 s wyniósł +0,225 operacji/s, więc sam test nie dowodzi zerowego długoterminowego trendu. Kolejka nie przepełniła się. Pełne serie i maksimum są w raporcie. Bez dodatkowej macierzy nie ogłaszamy procentowego przyspieszenia ani odbioru całego planu.
+
+WAL: 72 przebiegi PASSIVE bez błędu, ostatnio 288343/288343 skopiowane strony, 0 zaległych. Zaalokowany plik około 1,19 GB pozostał poniżej progu reclaim 6,38 GB wynikającego z limitu WAL 25,54 GB w automatycznej alokacji hosta. Reclaim nie został uruchomiony. To rozróżnienie rozmiaru pliku i backlogu checkpointu nie potwierdza zachowania rzeczywistej karty SD ani presji dyskowej urządzenia.

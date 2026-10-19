@@ -48,6 +48,55 @@ class ShadowReads218Tests(unittest.TestCase):
         finally:
             release.set();producer.join(1)
 
+    def confidence_manager(self, *, complete=True, pending=False):
+        import confidence_contract as confidence
+        self.enterContext(patch.object(confidence, 'ensure_tables'))
+        self.enterContext(patch.object(confidence, 'EvaluationEpochJournal'))
+        self.enterContext(patch.object(confidence, 'ProbabilityCalibrationJournal'))
+        observed = dict(confidence_contract={'source':'same_card'}, promotion_gates={},
+            promotion_vetoes=[], empirical_policy_quality={'count':7}, promotable=True) if complete else dict(promotable=True)
+        fresh = dict(confidence_contract={'source':'fresh'}, promotion_gates={},
+            promotion_vetoes=[], empirical_policy_quality={'count':8}, promotable=True)
+        self.enterContext(patch.object(confidence, '_decorate_summary', side_effect=lambda *a: dict(fresh)))
+        row = dict(parent_agent_id='root', candidate_id='child', comparison=observed,
+                   promotable=not pending, comparison_evidence_pending=pending)
+        manager = SimpleNamespace(core=SimpleNamespace(),
+            store=SimpleNamespace(get_agent_config=Mock(return_value={'id':'root'})),
+            _comparison_summary=Mock(return_value={}),
+            _candidate_row=Mock(return_value=dict(parent_agent_id='root',candidate_id='child')),
+            status=lambda _: dict(row), list_status=lambda: [dict(row)])
+        return confidence.install(manager, legacy_http=False), observed
+
+    def test_confidence_list_reuses_the_final_same_card_summary_without_duplicate_sql(self):
+        manager, observed = self.confidence_manager()
+        result = manager.list_status()[0]
+        self.assertEqual(result['confidence_contract'], {'source':'same_card'})
+        self.assertEqual(result['empirical_policy_quality'], {'count':7})
+        self.assertIs(result['comparison'], observed)
+        manager._candidate_row.assert_not_called()
+        manager.store.get_agent_config.assert_not_called()
+
+    def test_confidence_single_status_still_reads_fresh_and_preserves_atomic_pending_veto(self):
+        manager, _ = self.confidence_manager(pending=True)
+        result = manager.status('root')
+        self.assertEqual(result['confidence_contract'], {'source':'fresh'})
+        self.assertFalse(result['promotable'])
+        manager._candidate_row.assert_called_once_with('root')
+        self.assertEqual(manager.store.get_agent_config.call_count, 2)
+
+    def test_confidence_incomplete_custom_list_summary_falls_back_to_fresh_path(self):
+        manager, _ = self.confidence_manager(complete=False)
+        result = manager.list_status()[0]
+        self.assertEqual(result['confidence_contract'], {'source':'fresh'})
+        manager._candidate_row.assert_called_once_with('root')
+
+    def test_confidence_list_pending_veto_cannot_reenable_promote_or_mutate_shared_summary(self):
+        manager, observed = self.confidence_manager(pending=True)
+        result = manager.list_status()[0]
+        self.assertFalse(result['promotable'])
+        self.assertTrue(observed['promotable'])
+        manager._candidate_row.assert_not_called()
+
     def preference_manager(self, complete=True):
         from agent_candidate_preference_metrics import install
         observed = dict(comparison_metric='observed_ui_snapshot', promotion_gates={},

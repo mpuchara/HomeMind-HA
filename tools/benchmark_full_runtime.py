@@ -268,12 +268,18 @@ def one(source, seconds=30, active=3, configured=20, mode='shadow', ui=False, tr
                     journal=runtime.feature_observation_deferred_snapshot()
                     candidate=runtime.agent_candidates.candidate_shadow_async_diagnostics()
                     evidence=runtime.agent_candidates.candidate_shadow_persistence_snapshot()
+                    sqlite_status=store.sqlite_snapshot()
+                    checkpoint=sqlite_status.get('wal_checkpoint') or {}
                     queue_series.append(dict(seconds=time.monotonic()-start,
                         raw_pending=journal['observations']['pending'],windows_pending=journal['windows']['pending'],
                         retention_gaps=journal['windows'].get('overflow_gaps',0),
                         candidate_pending=candidate['queue_depth'],candidate_oldest_ms=candidate.get('oldest_root_wait_ms'),
                         candidate_processed=candidate['processed'],candidate_gaps=candidate['observation_gaps'],
-                        evidence_pending=evidence['pending'],evidence_bytes=evidence['bytes']))
+                        evidence_pending=evidence['pending'],evidence_bytes=evidence['bytes'],
+                        wal_allocated_bytes=checkpoint.get('wal_bytes',0),
+                        wal_log_frames=checkpoint.get('log_frames',0),
+                        wal_remaining_frames=checkpoint.get('remaining_frames',0),
+                        wal_reclaim_successes=checkpoint.get('reclaim_successes',0)))
                 i=tick%active;binary='on' if (tick//active)%2 else 'off';move=(tick*34)%100
                 digest.update(json.dumps((tick,i,binary,move)).encode())
                 eid=f'binary_sensor.bench_{i}'
@@ -291,6 +297,7 @@ def one(source, seconds=30, active=3, configured=20, mode='shadow', ui=False, tr
             journal_at_input_stop=runtime.feature_observation_deferred_snapshot()
             candidate_at_input_stop=runtime.agent_candidates.candidate_shadow_async_diagnostics()
             candidate_evidence_at_input_stop=runtime.agent_candidates.candidate_shadow_persistence_snapshot()
+            sqlite_at_input_stop=store.sqlite_snapshot()
             ui_stop.set()
             time.sleep(.5)
             for thread in ui_threads:thread.join(15)
@@ -340,6 +347,7 @@ def one(source, seconds=30, active=3, configured=20, mode='shadow', ui=False, tr
                 measured_window=measured,latency_samples=latency_samples,
                 tail_window=tail_measured,tail_latency_samples=tail_latencies,tail_seconds=tail_seconds,
                 backlog_at_input_stop=backlog_at_input_stop,
+                sqlite_at_input_stop=sqlite_at_input_stop,sqlite_after_tail=store.sqlite_snapshot(),
                 journal_at_input_stop=journal_at_input_stop,
                 candidate_at_input_stop=candidate_at_input_stop,
                 candidate_evidence_at_input_stop=candidate_evidence_at_input_stop,queue_series=queue_series,
