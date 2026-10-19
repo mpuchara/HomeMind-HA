@@ -12,14 +12,16 @@ from sqlite_bulk_rows import insert_bounded_rows
 import hashlib
 import json
 import math
+import sqlite3
 import threading
+import time
 import uuid
 from collections import OrderedDict
 
 from context import target_value
 from control import same_value
 from settings import iso_now, now_ts
-from storage_budget import storage_recording_paused
+from storage_budget import StoragePressure, storage_recording_paused
 
 CONTRACT_VERSION = 1
 UNKNOWN = "unknown"
@@ -66,9 +68,15 @@ class ProvenanceJournal:
         self._max_pending_events = 0
         # Backwards-compatible diagnostic counter. 0.14.132 never increments it.
         self._dropped_pending_events = 0
+        self.startup_diagnostics = {}
+        started = time.perf_counter()
         self._migrate()
+        self.startup_diagnostics['schema_seconds'] = time.perf_counter()-started
+        self._ensure_recent_event_index()
         self._load_recent_event_cache()
+        started = time.perf_counter()
         self._load_active_command_cache()
+        self.startup_diagnostics['active_command_cache_seconds'] = time.perf_counter()-started
 
     @staticmethod
     def _columns(c, table):
@@ -219,7 +227,32 @@ class ProvenanceJournal:
             while len(self._history_event_cache) > self._event_cache_limit:
                 self._history_event_cache.popitem(last=False)
 
+    def _ensure_recent_event_index(self):
+        # The restart cache orders by receipt, not event time. Entity/time indexes
+        # cannot serve that order; without this index every boot scans/sorts the
+        # complete audit table before HA ingestion starts. Retain the original
+        # query and its cache/deduplication semantics even if optional DDL is denied.
+        started = time.perf_counter()
+        self.startup_diagnostics['recent_event_index_error'] = None
+        try:
+            with self.store.lock, self.store.conn() as c:
+                if c.execute("SELECT 1 FROM sqlite_master WHERE type='index' "
+                             "AND name='idx_provenance_events_received_219'").fetchone() is None:
+                    # DDL otherwise autocommits in sqlite3: a post-statement or
+                    # commit admission failure must be able to roll back the index.
+                    c.execute('BEGIN IMMEDIATE')
+                    c.execute('CREATE INDEX IF NOT EXISTS idx_provenance_events_received_219 '
+                              'ON provenance_events(received_time DESC)')
+        except StoragePressure as exc:
+            self.startup_diagnostics['recent_event_index_error'] = str(exc)
+        except sqlite3.OperationalError as exc:
+            if not any(word in str(exc).lower() for word in ('locked', 'busy', 'interrupt', 'full')):
+                raise
+            self.startup_diagnostics['recent_event_index_error'] = str(exc)
+        self.startup_diagnostics['recent_event_index_seconds'] = time.perf_counter()-started
+
     def _load_recent_event_cache(self):
+        started = time.perf_counter()
         with self.store.conn() as c:
             rows = c.execute(
                 "SELECT * FROM provenance_events ORDER BY received_time DESC LIMIT ?",
@@ -227,6 +260,8 @@ class ProvenanceJournal:
             ).fetchall()
         for row in reversed(rows):
             self._remember_event(dict(row))
+        self.startup_diagnostics.update(recent_event_cache_seconds=time.perf_counter()-started,
+                                        recent_event_cache_rows=len(rows))
 
     def pending_event_count(self):
         with self._event_cache_lock:

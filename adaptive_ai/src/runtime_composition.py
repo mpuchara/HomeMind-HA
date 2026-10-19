@@ -13,6 +13,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import time
+from startup_components import startup_scope
 
 
 CONTRACT_VERSION = 2
@@ -185,62 +186,64 @@ class RuntimeCompositionRoot:
 
         # Imports remain off the pre-HTTP path; final composition happens in the
         # background runtime-init thread after Ingress is already listening.
-        from agent_workflow_actions import (
-            install as install_agent_workflow_actions,
-            register_read_routes as register_workflow_read_routes,
-            register_mutation_routes as register_workflow_mutation_routes,
-        )
-        from agent_correct_generation_history import install as install_correct_generation_history
-        from agent_explore import (
-            install as install_agent_explore,
-            register_read_routes as register_explore_read_routes,
-            register_mutation_routes as register_explore_mutation_routes,
-        )
-        from cold_start_drift import install as install_cold_start_drift
-        from confidence_contract import (
-            install as install_confidence_contract,
-            register_read_routes as register_confidence_read_routes,
-        )
-        from confidence_runtime import install_runtime_semantics
-        from device_agents import install_runtime as install_device_agent_runtime
-        from correct_learning_debug import register_correct_learning_debug_route
-        from correct_margin_repair import install as install_correct_margin_repair
-        from correct_schema_evolution import install as install_correct_schema_evolution
-        from correct_data_foundation import install as install_correct_data_foundation
-        from performance_f22 import install as install_performance_f22
-        from performance_f22_order_guard import install as install_performance_f22_order_guard
-        from promotion_validation import install as install_promotion_validation
-        from policy_backend_shadow import install_policy_backend_shadow
-        from rpi_low_power_runtime import install as install_rpi_low_power_runtime
-        from workflow_request_queue import (
-            install as install_workflow_request_queue,
-            register_routes as register_workflow_request_routes,
-        )
-        from runtime_http import install_dispatch, register_feedback_routes, register_promotion_routes
-        from candidate_http_routes import register_routes as register_candidate_routes
-        from manual_feedback_static import register_routes as register_manual_feedback_static_routes
-        from runtime_debug_log import register_runtime_debug_routes
-        from tiny_mlp_shadow import install as install_tiny_mlp_shadow
-        from hybrid_policy_runtime import install as install_hybrid_policy_runtime
-        from candidate_neural_shadow import install as install_candidate_neural_shadow
-        from trial_knowledge import install as install_trial_knowledge
-        from automatic_correct_rewards import (
-            install as install_automatic_correct_rewards,
-            register_routes as register_automatic_correct_routes,
-        )
-        from candidate_offline_rl import register_routes as register_offline_rl_routes
-        from state_event_pipeline import (
-            EXPECTED_INSTALL_ORDER as EXPECTED_STATE_EVENT_INSTALL_ORDER,
-            assert_state_event_pipeline,
-        )
-        from process_agent_pipeline import (
-            BASE_INSTALL_ORDER as BASE_PROCESS_AGENT_INSTALL_ORDER,
-            EXPECTED_INSTALL_ORDER as EXPECTED_PROCESS_AGENT_INSTALL_ORDER,
-            assert_process_agent_pipeline,
-        )
+        with startup_scope(self.core, 'final.imports'):
+            from agent_workflow_actions import (
+                install as install_agent_workflow_actions,
+                register_read_routes as register_workflow_read_routes,
+                register_mutation_routes as register_workflow_mutation_routes,
+            )
+            from agent_correct_generation_history import install as install_correct_generation_history
+            from agent_explore import (
+                install as install_agent_explore,
+                register_read_routes as register_explore_read_routes,
+                register_mutation_routes as register_explore_mutation_routes,
+            )
+            from cold_start_drift import install as install_cold_start_drift
+            from confidence_contract import (
+                install as install_confidence_contract,
+                register_read_routes as register_confidence_read_routes,
+            )
+            from confidence_runtime import install_runtime_semantics
+            from device_agents import install_runtime as install_device_agent_runtime
+            from correct_learning_debug import register_correct_learning_debug_route
+            from correct_margin_repair import install as install_correct_margin_repair
+            from correct_schema_evolution import install as install_correct_schema_evolution
+            from correct_data_foundation import install as install_correct_data_foundation
+            from performance_f22 import install as install_performance_f22
+            from performance_f22_order_guard import install as install_performance_f22_order_guard
+            from promotion_validation import install as install_promotion_validation
+            from policy_backend_shadow import install_policy_backend_shadow
+            from rpi_low_power_runtime import install as install_rpi_low_power_runtime
+            from workflow_request_queue import (
+                install as install_workflow_request_queue,
+                register_routes as register_workflow_request_routes,
+            )
+            from runtime_http import install_dispatch, register_feedback_routes, register_promotion_routes
+            from candidate_http_routes import register_routes as register_candidate_routes
+            from manual_feedback_static import register_routes as register_manual_feedback_static_routes
+            from runtime_debug_log import register_runtime_debug_routes
+            from tiny_mlp_shadow import install as install_tiny_mlp_shadow
+            from hybrid_policy_runtime import install as install_hybrid_policy_runtime
+            from candidate_neural_shadow import install as install_candidate_neural_shadow
+            from trial_knowledge import install as install_trial_knowledge
+            from automatic_correct_rewards import (
+                install as install_automatic_correct_rewards,
+                register_routes as register_automatic_correct_routes,
+            )
+            from candidate_offline_rl import register_routes as register_offline_rl_routes
+            from state_event_pipeline import (
+                EXPECTED_INSTALL_ORDER as EXPECTED_STATE_EVENT_INSTALL_ORDER,
+                assert_state_event_pipeline,
+            )
+            from process_agent_pipeline import (
+                BASE_INSTALL_ORDER as BASE_PROCESS_AGENT_INSTALL_ORDER,
+                EXPECTED_INSTALL_ORDER as EXPECTED_PROCESS_AGENT_INSTALL_ORDER,
+                assert_process_agent_pipeline,
+            )
 
         # Existing fast + preference + episode composition is the characterized base.
-        self.base_prepare_engine_extensions()
+        with startup_scope(self.core, 'final.base_prepare_engine_extensions'):
+            self.base_prepare_engine_extensions()
         # 0.14.134 makes the historically implicit state-change wrapper order explicit.
         # Assert immediately after the base stack is composed, before later services can
         # start workers or accidentally hide a direct handler reassignment.
@@ -254,7 +257,8 @@ class RuntimeCompositionRoot:
             engine, BASE_PROCESS_AGENT_INSTALL_ORDER
         )
         # Stage 12 is opt-in and observer-only. Disabled mode performs no inference or learning.
-        policy_shadow = install_policy_backend_shadow(engine, self.core.STORE)
+        with startup_scope(self.core, 'final.install_policy_backend_shadow'):
+            policy_shadow = install_policy_backend_shadow(engine, self.core.STORE)
         manager = getattr(engine, "agent_candidates", None)
         if manager is None:
             return
@@ -262,48 +266,67 @@ class RuntimeCompositionRoot:
         # Stage 2 replaces the old positive-only hard-repair hook before Stage 1 wraps
         # it with residual diagnostics. Both are Candidate-build-only and stay entirely
         # off the realtime event-to-intent path.
-        manager = install_correct_margin_repair(self.core, manager)
-        manager = install_correct_schema_evolution(self.core, manager)
-        manager = install_correct_data_foundation(self.core, manager)
+        with startup_scope(self.core, 'final.install_correct_margin_repair'):
+            manager = install_correct_margin_repair(self.core, manager)
+        with startup_scope(self.core, 'final.install_correct_schema_evolution'):
+            manager = install_correct_schema_evolution(self.core, manager)
+        with startup_scope(self.core, 'final.install_correct_data_foundation'):
+            manager = install_correct_data_foundation(self.core, manager)
         engine.agent_candidates = manager
 
         # These are user-facing product capabilities. Install them explicitly in the
         # shipped root rather than depending on a legacy overlay side effect. Both
         # installers are idempotent, so upgrades never stack duplicate HTTP handlers.
-        manager = install_agent_workflow_actions(
-            manager, legacy_get=False, legacy_post=False
-        )
-        manager = install_workflow_request_queue(manager, legacy_http=False)
+        with startup_scope(self.core, 'final.install_agent_workflow_actions'):
+            manager = install_agent_workflow_actions(
+                manager, legacy_get=False, legacy_post=False
+            )
+        with startup_scope(self.core, 'final.install_workflow_request_queue'):
+            manager = install_workflow_request_queue(manager, legacy_http=False)
         # The optimized generation-aware Correct reader used to exist only as tested
         # library code and was never bound into the shipped final composition. Install
         # it after the durable workflow queue so the established request-queue ordering
         # remains intact. Its manager methods become authoritative before the final
         # explicit Workflow GET routes are registered below.
-        manager = install_correct_generation_history(manager, legacy_get=False)
-        manager = install_agent_explore(
-            manager, legacy_get=False, legacy_post=False
-        )
+        with startup_scope(self.core, 'final.install_correct_generation_history'):
+            manager = install_correct_generation_history(manager, legacy_get=False)
+        with startup_scope(self.core, 'final.install_agent_explore'):
+            manager = install_agent_explore(
+                manager, legacy_get=False, legacy_post=False
+            )
 
         # RPi resource control changes scheduling only, never learning semantics.
-        manager = install_rpi_low_power_runtime(self.core, manager)
+        with startup_scope(self.core, 'final.install_rpi_low_power_runtime'):
+            manager = install_rpi_low_power_runtime(self.core, manager)
         from candidate_shadow_persistence import install as install_candidate_shadow_persistence
-        manager = install_candidate_shadow_persistence(manager)
+        with startup_scope(self.core, 'final.install_candidate_shadow_persistence'):
+            manager = install_candidate_shadow_persistence(manager)
         engine.agent_candidates = manager
 
         # Trial knowledge intentionally wraps generation-aware Explore.
-        manager = install_trial_knowledge(manager)
-        install_automatic_correct_rewards(self.core)
-        manager = install_confidence_contract(manager, legacy_http=False)
-        install_runtime_semantics(engine, manager.confidence_probability_journal)
-        manager = install_cold_start_drift(manager)
-        install_device_agent_runtime(engine)
+        with startup_scope(self.core, 'final.install_trial_knowledge'):
+            manager = install_trial_knowledge(manager)
+        with startup_scope(self.core, 'final.install_automatic_correct_rewards'):
+            install_automatic_correct_rewards(self.core)
+        with startup_scope(self.core, 'final.install_confidence_contract'):
+            manager = install_confidence_contract(manager, legacy_http=False)
+        with startup_scope(self.core, 'final.install_runtime_semantics'):
+            install_runtime_semantics(engine, manager.confidence_probability_journal)
+        with startup_scope(self.core, 'final.install_cold_start_drift'):
+            manager = install_cold_start_drift(manager)
+        with startup_scope(self.core, 'final.install_device_agent_runtime'):
+            install_device_agent_runtime(engine)
 
-        manager = install_promotion_validation(manager, clock=self.clock, repository=self.core.STORE)
-        manager = install_performance_f22(manager, core=self.core)
-        manager = install_performance_f22_order_guard(manager)
+        with startup_scope(self.core, 'final.install_promotion_validation'):
+            manager = install_promotion_validation(manager, clock=self.clock, repository=self.core.STORE)
+        with startup_scope(self.core, 'final.install_performance_f22'):
+            manager = install_performance_f22(manager, core=self.core)
+        with startup_scope(self.core, 'final.install_performance_f22_order_guard'):
+            manager = install_performance_f22_order_guard(manager)
         engine.agent_candidates = manager
 
-        router = install_dispatch(self.core)
+        with startup_scope(self.core, 'final.install_dispatch'):
+            router = install_dispatch(self.core)
         register_workflow_read_routes(router, manager)
         register_workflow_mutation_routes(router, manager)
         register_workflow_request_routes(router, manager)
@@ -322,9 +345,12 @@ class RuntimeCompositionRoot:
         # Stage 3 observer is installed after all established policy/Candidate/Correct
         # composition. It wraps the completed Shadow inference result only and has no
         # ActionIntent/Executor path.
-        install_tiny_mlp_shadow(self.core)
-        install_hybrid_policy_runtime(self.core)
-        manager = install_candidate_neural_shadow(manager)
+        with startup_scope(self.core, 'final.install_tiny_mlp_shadow'):
+            install_tiny_mlp_shadow(self.core)
+        with startup_scope(self.core, 'final.install_hybrid_policy_runtime'):
+            install_hybrid_policy_runtime(self.core)
+        with startup_scope(self.core, 'final.install_candidate_neural_shadow'):
+            manager = install_candidate_neural_shadow(manager)
         engine.agent_candidates = manager
 
         # Later Stage-3/HTTP services must not replace the registered event top handler.

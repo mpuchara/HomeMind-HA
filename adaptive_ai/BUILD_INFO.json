@@ -1,8 +1,8 @@
 {
-  "version": "0.14.218",
+  "version": "0.14.219",
   "release_date": "2026-10-19",
-  "base_version": "0.14.217",
-  "base_commit": "f84211d676cf07c8ef80ea72aa6868d8747f38f7",
+  "base_version": "0.14.218",
+  "base_commit": "0eae5b9cab5e37c1d09114affa4ada419408ef77",
   "release_status": "draft-functional-validation-passed-performance-acceptance-pending",
   "release_014140": {
     "scope": "inventory_and_remove_remaining_shipped_feature_Handler_fallbacks_for_Candidate_Live_and_manual_feedback_transport",
@@ -249,8 +249,8 @@
   "pi4_release_gate_contract": "pi4_release_gate_v1",
   "pi4_real_hardware_required": true,
   "stage7_offline_rl_control_unlock": false,
-  "tests_passed": 2717,
-  "tests_passed_version": "0.14.218",
+  "tests_passed": 2736,
+  "tests_passed_version": "0.14.219",
   "profile": "rpi4-ram-first-complete-discovery-manual-agent-selection",
   "manual_agent_training": true,
   "max_concurrent_training_jobs": 1,
@@ -286,7 +286,7 @@
   "migration": "no destructive migration; existing agents, models, feedback, raw archive, historical experiences, candidate lineage, rollback and generation state preserved",
   "physical_control": "unchanged; repaired agents return to Shadow and Control still requires qualified state plus all existing guards",
   "pi4": "0.14.38 targets the long-soak Raspberry Pi failure: drift analysis is coalesced on a throttled background observer, REST /states reconciliation is delta-only after bootstrap, websocket outage fallback reconciles every 10 s, and HA core-state health is tracked separately from unrelated REST errors.",
-  "ci_status": "0.14.107 release candidate: 1448 Python tests pass on the optimized head; final release PR reruns Python 3.11/3.13, compileall, JS syntax, Docker image smoke, training QoS/HA ingress/shared context, Tiny MLP/Hybrid/Candidate, Manual/Automatic Correct, Offline-RL, stateful replay, sparse long-memory, Pi gate, product-runtime benchmark and simulators.",
+  "ci_status": "0.14.219 executable commit 867e8a9d: full local 2736 tests, Python 3.11/3.13 CI, workflow checks and Docker pass; full target performance acceptance remains open.",
   "training_slice_budget": "adaptive-ai-index workers call a shared CooperativeTrainingBudget; expensive temporal tracker loops yield between entities/events and finalization is no longer outside the throttle",
   "finalization_lifeline": "HEAVY_JOBS remains owned through final gc.collect(), so /api/status and /api/agents stay on lightweight lifeline reads until the worker is actually finished",
   "finalization_progress": "post-replay UI now exposes bounded stages: replay complete, policy serialization, benchmark save, qualification, checkpoint complete",
@@ -1331,7 +1331,7 @@
     "semantics": "no reward/sample selection/feature contract/validation boundary/policy update order/Correct/Candidate/ActionIntent/Executor/physical control change",
     "validation": "1517 tests expected on Python 3.11 and 3.13; final CI confirmation required before merge"
   },
-  "release_validation_pending": false,
+  "release_validation_pending": true,
   "release_014121": {
     "scope": "persistent_selected_agent_transport_acceleration",
     "durable_experience_ids": "loaded once per selected-agent worker sequence; accepted ids join the session set only after successful batch persistence",
@@ -2760,7 +2760,7 @@
     "benchmark": "docs/benchmarks/CONTEXT_BUFFER_0_14_195_VALIDATION.json",
     "median_observer_speedup": 1.018396920512725
   },
-  "release_validation_tests_passed": 2680,
+  "release_validation_tests_passed": 2736,
   "release_014196": {
     "scope": "typed_deferred_batch_busy_retry_and_cooperative_wal_reclaim_write_admission",
     "learning_semantics_changed": false,
@@ -3320,5 +3320,125 @@
       "package": "SKIPPED: PR"
     },
     "acceptance_report": "docs/benchmarks/PERFORMANCE_PLAN_0_14_218_ACCEPTANCE.json"
+  },
+  "release_014219": {
+    "scope": "Indexed receipt-cache warm start, per-component startup timing, bounded complete registry snapshot reuse; derived Confidence cache writes skip Store/SQLite lock contention, without deferring authoritative evaluation epochs or final-end locks.",
+    "physical_device_speedup_established": false,
+    "target_hardware": {
+      "device": "Raspberry Pi 4",
+      "storage": "microSD 64 GB",
+      "ram_capacity": "not provided"
+    },
+    "performance_acceptance": "OPEN: no accepted general Root/Pi/device/startup speedup; short host runtime probes pass after the cache change.",
+    "source_files": 628,
+    "source_hashes": "docs/benchmarks/PERFORMANCE_PLAN_0_14_219_SOURCE_HASHES.json",
+    "component_report": "docs/benchmarks/PERFORMANCE_PLAN_0_14_219_COMPONENTS.json",
+    "runtime_smoke": "PASS_HOST_PROBES_60s_SHADOW20_30s_CONTROL3_AFTER_30s_WARMUP; not performance acceptance",
+    "prior_validation": {
+      "tests": 2727,
+      "seconds": 397.376,
+      "result": "OK",
+      "log_sha256": "d07cd7905b3c772228214086de0f6646eba0fa1f88d2f0cf43edab89c47f60a9"
+    },
+    "validation": {
+      "tests": 2736,
+      "seconds": 393.571,
+      "result": "OK",
+      "log_sha256": "64aef656a7f00fc8d76fc55c91d6d26ff511dab22152487eb364467a82cbcf12"
+    },
+    "runtime_probes": [
+      {
+        "report": "PERFORMANCE_PLAN_0_14_219_CACHE_SHADOW_20.json",
+        "root": {
+          "count": 8863,
+          "p50": 110.78073499999164,
+          "p95": 183.20929320000087,
+          "p99": 244.00554997999788,
+          "max": 419.58053400000495
+        },
+        "gaps": 0,
+        "ui_errors": 0,
+        "candidate_errors": 0,
+        "transport_pending": 0,
+        "cache_writes": {
+          "written": 19,
+          "lock_skips": 5,
+          "busy_skips": 0,
+          "pressure_skips": 0,
+          "transaction_skips": 0
+        },
+        "warmup_seconds": 30.0,
+        "seconds": 60.00085460599999,
+        "service_calls_including_warmup_and_tail": 0
+      },
+      {
+        "report": "PERFORMANCE_PLAN_0_14_219_CACHE_CONTROL_3.json",
+        "root": {
+          "count": 1407,
+          "p50": 35.09107100001074,
+          "p95": 78.21464580001134,
+          "p99": 117.70018491999909,
+          "max": 143.62115500000527
+        },
+        "gaps": 0,
+        "ui_errors": 0,
+        "candidate_errors": 0,
+        "transport_pending": 0,
+        "cache_writes": {
+          "written": 3,
+          "lock_skips": 7,
+          "busy_skips": 0,
+          "pressure_skips": 0,
+          "transaction_skips": 0
+        },
+        "warmup_seconds": 30.0,
+        "seconds": 30.00054721500001,
+        "service_calls_including_warmup_and_tail": 3
+      }
+    ],
+    "latest_executable_ci": {
+      "conclusion": "success",
+      "commit": "867e8a9d9144ea1aa0d66696428de6cda84def53",
+      "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/39283091745",
+      "jobs": [
+        {
+          "id": 118161396994,
+          "name": "image",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "id": 118161397461,
+          "name": "tests (3.13)",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "id": 118161397695,
+          "name": "tests (3.11)",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "id": 118172500833,
+          "name": "package",
+          "status": "completed",
+          "conclusion": "skipped"
+        }
+      ],
+      "test_results": {
+        "3.11": {
+          "tests": 2736,
+          "seconds": 252.69,
+          "result": "OK"
+        },
+        "3.13": {
+          "tests": 2736,
+          "seconds": 200.051,
+          "result": "OK"
+        }
+      }
+    },
+    "acceptance_report": "docs/benchmarks/PERFORMANCE_PLAN_0_14_219_ACCEPTANCE.json"
   }
 }

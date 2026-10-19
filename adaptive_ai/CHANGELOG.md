@@ -1,3 +1,11 @@
+## 0.14.219 (2026-10-19, draft)
+
+- Index provenance receipt order so restart warming no longer sorts the entire event audit table; retain the same 8192-row query, processed-event deduplication and command/context recovery. Optional index DDL retains storage admission and safe query fallback.
+- Expose bounded, nested per-installer startup elapsed/CPU timing and live progress, including failed installation, without debug trace or changing initialization order.
+- Reuse a complete detached registry snapshot after native strong-identity and nested-value validation; charge its witnesses/container to the existing bounded cache. Preserve in-place corrections, replacement types and returned-container ownership.
+- Keep derived Confidence cache writes off Store/SQLite lock waits; always return the fresh computed report, retaining durable epoch creation/final locking and full write admission.
+- Full local validation passes: 2736 tests in 393.571s, entrypoint, both UI VMs, compileall and 21 JavaScript checks. Exact executable-source CI passes Python 3.11/3.13, workflow benchmarks and Docker. General Root, target Pi/microSD startup and device performance acceptance remain open.
+
 ## 0.14.218 (2026-10-19, draft)
 
 - Separate Candidate decision-history persistence from Candidate inference. Use one persistent writer connection and bounded batches of immutable observed results; retain exact retry, byte/item admission, explicit gaps and shutdown durability. No new prediction worker or HA ownership is added.

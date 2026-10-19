@@ -12,6 +12,8 @@ initialization thread after the HTTP server is already listening.
 import fast_queue_main as runtime
 
 
+from startup_components import startup_scope
+
 core = runtime.core
 _original_prepare_engine_extensions = core.prepare_engine_extensions
 
@@ -19,34 +21,38 @@ _original_prepare_engine_extensions = core.prepare_engine_extensions
 def prepare_engine_extensions():
     # Keep these imports off the pre-HTTP entrypoint path. They initialize substantial
     # Candidate/Trial/feedback code but are only needed once ENGINE and STORE exist.
-    from agent_candidate_card_summary import install as install_candidate_card_summary
-    from agent_candidate_preference_metrics import install as install_candidate_preference_metrics
-    from agent_candidate_promotion_cycle import install as install_candidate_promotion_cycle
-    from agent_live_card_refresh import install as install_agent_live_card_refresh
-    from episode_evaluator import EpisodeEvaluator
-    from episode_evaluator_runtime import (
-        install_candidate as install_candidate_episode_evaluator,
-        install_core as install_core_episode_evaluator,
-        install_tournament as install_tournament_episode_evaluator,
-    )
-    from manual_feedback_live_isolation import install as install_manual_feedback_live_isolation
-    from manual_feedback_unified import UnifiedManualFeedbackJournal
-    from manual_feedback_workflow import install as install_manual_feedback_workflow
-    from preference_model import LightingPreferenceModel, PreferenceDecisionComposer
-    from provenance_runtime import install as install_provenance_runtime
-    from observation_contract import install as install_observation_contract
+    with startup_scope(core, 'preference.imports'):
+        from agent_candidate_card_summary import install as install_candidate_card_summary
+        from agent_candidate_preference_metrics import install as install_candidate_preference_metrics
+        from agent_candidate_promotion_cycle import install as install_candidate_promotion_cycle
+        from agent_live_card_refresh import install as install_agent_live_card_refresh
+        from episode_evaluator import EpisodeEvaluator
+        from episode_evaluator_runtime import (
+            install_candidate as install_candidate_episode_evaluator,
+            install_core as install_core_episode_evaluator,
+            install_tournament as install_tournament_episode_evaluator,
+        )
+        from manual_feedback_live_isolation import install as install_manual_feedback_live_isolation
+        from manual_feedback_unified import UnifiedManualFeedbackJournal
+        from manual_feedback_workflow import install as install_manual_feedback_workflow
+        from preference_model import LightingPreferenceModel, PreferenceDecisionComposer
+        from provenance_runtime import install as install_provenance_runtime
+        from observation_contract import install as install_observation_contract
 
     # Shared episode evaluation is available before Tournament/Candidate workers exist.
     evaluator = getattr(core.ENGINE, "episode_evaluator", None)
     if evaluator is None:
-        evaluator = EpisodeEvaluator(core.STORE)
-    install_core_episode_evaluator(core, evaluator)
+        with startup_scope(core, 'preference.EpisodeEvaluator'):
+            evaluator = EpisodeEvaluator(core.STORE)
+    with startup_scope(core, 'preference.install_core_episode_evaluator'):
+        install_core_episode_evaluator(core, evaluator)
 
     # Manual feedback is a durable fact before any learning layer consumes it. This
     # migration is additive; legacy labels remain valid/unlinked and are not reinterpreted.
     feedback = getattr(core.ENGINE, "manual_feedback_journal", None)
     if feedback is None:
-        feedback = UnifiedManualFeedbackJournal(core.STORE)
+        with startup_scope(core, 'preference.UnifiedManualFeedbackJournal'):
+            feedback = UnifiedManualFeedbackJournal(core.STORE)
         core.ENGINE.manual_feedback_journal = feedback
     if getattr(core.ENGINE, "teaching", None) is not None:
         core.ENGINE.teaching.feedback_journal = feedback
@@ -54,7 +60,8 @@ def prepare_engine_extensions():
     # Stage 07 is an explicit service, not another process_agent monkey patch. Engine owns
     # the decision-composition contract; the final entrypoint only supplies the light-power
     # preference model backed by Stage-06 durable feedback facts.
-    preference = LightingPreferenceModel(core.STORE)
+    with startup_scope(core, 'preference.LightingPreferenceModel'):
+        preference = LightingPreferenceModel(core.STORE)
     if callable(getattr(feedback, "add_listener", None)):
         feedback.add_listener(preference.invalidate)
     core.ENGINE.preference_model = preference
@@ -63,15 +70,18 @@ def prepare_engine_extensions():
     installed = {"manager": None, "tournament": None}
 
     def after_fast_light(service):
-        service = install_tournament_episode_evaluator(service, evaluator)
+        with startup_scope(core, 'preference.install_tournament_episode_evaluator'):
+            service = install_tournament_episode_evaluator(service, evaluator)
         installed["tournament"] = service
         return service
 
     def after_candidate_shadow_context(manager):
         # Stage-01 preference metrics and stage-05 episode evidence must both precede
         # atomic promotion so status/UI and the committed swap consume identical gates.
-        manager = install_candidate_preference_metrics(manager)
-        manager = install_candidate_episode_evaluator(manager, evaluator)
+        with startup_scope(core, 'preference.install_candidate_preference_metrics'):
+            manager = install_candidate_preference_metrics(manager)
+        with startup_scope(core, 'preference.install_candidate_episode_evaluator'):
+            manager = install_candidate_episode_evaluator(manager, evaluator)
         installed["manager"] = manager
         return manager
 
@@ -80,7 +90,8 @@ def prepare_engine_extensions():
         "after_candidate_shadow_context", "preference_and_episode", after_candidate_shadow_context
     )
     try:
-        _original_prepare_engine_extensions()
+        with startup_scope(core, 'preference._original_prepare_engine_extensions'):
+            _original_prepare_engine_extensions()
     finally:
         runtime.set_engine_extension_hook("after_fast_light", "episode_evaluator", None)
         runtime.set_engine_extension_hook("after_candidate_shadow_context", "preference_and_episode", None)
@@ -88,12 +99,15 @@ def prepare_engine_extensions():
     # The legacy Engine still contains direct manual-demonstration updates. Suppress only
     # those exact physical-user updates; ordinary physical/environment outcomes remain
     # separate from Stage-07 preference evidence.
-    install_manual_feedback_live_isolation(core)
+    with startup_scope(core, 'preference.install_manual_feedback_live_isolation'):
+        install_manual_feedback_live_isolation(core)
 
     # Provenance can now resolve decision_id/episode_id for all feedback recorded after
     # runtime readiness. Missing historical links remain NULL/unknown, never fabricated.
-    install_provenance_runtime(core)
-    install_observation_contract(core)
+    with startup_scope(core, 'preference.install_provenance_runtime'):
+        install_provenance_runtime(core)
+    with startup_scope(core, 'preference.install_observation_contract'):
+        install_observation_contract(core)
 
     manager = installed["manager"] or (
         getattr(core.ENGINE, "agent_candidates", None) if core.ENGINE is not None else None
@@ -104,10 +118,14 @@ def prepare_engine_extensions():
     # Stage 06 does not own the generation-workflow composition order. If that workflow is
     # present, bind Correct/Change decision to the same journal; otherwise Prompt 16 can
     # install the workflow first and this adapter remains a deterministic no-op today.
-    manager = install_manual_feedback_workflow(manager)
-    manager = install_candidate_card_summary(manager)
-    manager = install_candidate_promotion_cycle(manager)
-    install_agent_live_card_refresh(core)
+    with startup_scope(core, 'preference.install_manual_feedback_workflow'):
+        manager = install_manual_feedback_workflow(manager)
+    with startup_scope(core, 'preference.install_candidate_card_summary'):
+        manager = install_candidate_card_summary(manager)
+    with startup_scope(core, 'preference.install_candidate_promotion_cycle'):
+        manager = install_candidate_promotion_cycle(manager)
+    with startup_scope(core, 'preference.install_agent_live_card_refresh'):
+        install_agent_live_card_refresh(core)
 
     core.STORE.event(
         None, "info", "candidate_preference_metrics_ready",

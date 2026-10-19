@@ -1,0 +1,61 @@
+{
+  "scope": "Host component microbenchmarks, not event-to-decision, Pi startup or physical action latency",
+  "results": {
+    "receipt_order": {
+      "rows": 50000,
+      "payload_bytes": 2076,
+      "result_rows": 8192,
+      "first_index_creation_ms": 115.32450200002131,
+      "baseline_ms": [
+        426.2129680000726,
+        353.8873729999068,
+        433.7345789999745,
+        415.48058800003673,
+        349.61500300005355
+      ],
+      "indexed_ms": [
+        17.21008000004076,
+        14.204794000079346,
+        13.558747999923071,
+        15.364481999995405,
+        12.786656000116636
+      ],
+      "baseline_median_ms": 415.48058800003673,
+      "indexed_median_ms": 14.204794000079346,
+      "exact_result_parity": true,
+      "query_plan": [
+        [
+          5,
+          0,
+          0,
+          "SCAN provenance_events USING INDEX idx_provenance_events_received_219"
+        ]
+      ]
+    },
+    "stable_registry": {
+      "entities": 779,
+      "captures_per_run": 200,
+      "baseline_ms": [
+        0.3036427899996852,
+        0.2918588499994712,
+        0.2921378400003505,
+        0.2806772849999106,
+        0.29600894500049435
+      ],
+      "complete_ms": [
+        0.15844834000063202,
+        0.17125189500006854,
+        0.1545727900008842,
+        0.1653493100002379,
+        0.16163065499995355
+      ],
+      "baseline_median_ms": 0.2921378400003505,
+      "complete_median_ms": 0.16163065499995355,
+      "exact_result_parity": true
+    }
+  },
+  "source_hashes": {
+    "provenance.py": "02bdff0c5c5d9e0131b7d2ff4aad380902e91087d953436a816a2fe73625f7ae",
+    "detached_mapping_snapshots.py": "957b8a8e70f74a0ab90fd68acbde68847550827cb11a701b7db5c9a13a2f3ab5"
+  }
+}

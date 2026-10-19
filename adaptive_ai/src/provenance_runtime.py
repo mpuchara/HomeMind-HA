@@ -288,6 +288,7 @@ def install(core):
             acknowledgements = {**ack_stats, "pending": len(deferred_acks)}
         return {
             **decision,
+            'startup': dict(journal.startup_diagnostics),
             'storage_retry': storage_retry.snapshot(),
             "decisions": decision,
             "acknowledgements": acknowledgements,
