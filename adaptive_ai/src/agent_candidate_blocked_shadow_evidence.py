@@ -21,7 +21,7 @@ No ActionIntent or Executor ownership is added here.
 """
 from __future__ import annotations
 
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 import json
 import time
 
@@ -76,23 +76,40 @@ def _active_comparison_edge(manager, root_id):
     return dict(row) if row else None
 
 
-def _persist_summary(manager, edge, summary):
+def _persist_summary(manager, edge, summary, *, false_early_token=None, false_early_root=None):
+    with getattr(manager, 'candidate_summary_write_lock', manager.store.lock):
+        if false_early_root is None:
+            summary = shadow_runtime._merge_false_early_summary(manager, edge, summary, false_early_token)
+        else:
+            summary = {**summary, '_false_early_cursor':{key:false_early_token[key] for key in ('session','sequence')}}
+        return _persist_summary_unlocked(manager, edge, summary, derive=false_early_token is None,
+                                         observed_root=false_early_root,
+                                         expected_epochs=(false_early_token or {}).get('epochs'))
+
+
+def _persist_summary_unlocked(manager, edge, summary, *, derive=True, observed_root=None, expected_epochs=None):
     """Persist paired evidence while preserving a failed offline-gate lifecycle."""
     summary = dict(summary or {})
     summary["updated_ts"] = time.time()
     parent_gid = edge["parent_generation_id"]
     child_gid = edge["child_generation_id"]
-    generation = shadow_runtime._generation(manager.store, generation_id=child_gid)
-    if not generation:
-        raise RuntimeError("Candidate generation disappeared while persisting comparison")
-    root_id = str(generation["root_agent_id"])
+    if observed_root is None:
+        generation = shadow_runtime._generation(manager.store, generation_id=child_gid)
+        if not generation:
+            raise RuntimeError("Candidate generation disappeared while persisting comparison")
+        observed_root = generation['root_agent_id']
+    root_id = str(observed_root)
     raw = json.dumps(summary, separators=(",", ":"))
     current_row = manager._candidate_row(edge["parent_agent_id"]) or edge
-    derived = manager._comparison_summary({**current_row, "comparison_json": raw})
+    derived = manager._comparison_summary({**current_row, "comparison_json": raw}) if derive else None
     blocked_state = _blocked_state(current_row)
-    next_state = blocked_state or ("ready" if derived.get("promotable") else "comparing")
+    next_state = blocked_state or ("ready" if derived and derived.get("promotable") else "comparing")
 
-    with manager.store.lock, manager.store.conn() as c:
+    with manager.store.lock, manager.store.conn() as c, (nullcontext() if derive else c.storage_batch()):
+        if not derive and not shadow_runtime._counter_epoch_valid(c, expected_epochs):
+            return False
+        active = '' if derive else " AND state IN ('comparing','ready','offline_blocked','insufficient_evidence')"
+        state_value = '?' if derive else "CASE WHEN state IN ('offline_blocked','insufficient_evidence') THEN state ELSE ? END"
         c.execute(
             """INSERT INTO candidate_generation_comparisons
                (parent_generation_id,child_generation_id,root_agent_id,summary_json,updated_ts)
@@ -102,16 +119,18 @@ def _persist_summary(manager, edge, summary):
             (parent_gid, child_gid, root_id, raw, time.time()),
         )
         c.execute(
-            """UPDATE agent_candidates SET comparison_json=?,state=?,updated_ts=?
-               WHERE parent_agent_id=? AND candidate_id=?""",
+            f"""UPDATE agent_candidates SET comparison_json=?,state={state_value},updated_ts=?
+               WHERE parent_agent_id=? AND candidate_id=?"""+active,
             (raw, next_state, time.time(), edge["parent_agent_id"], edge["candidate_id"]),
         )
+        active = '' if derive else " AND lifecycle_state IN ('comparing','ready','offline_blocked','insufficient_evidence')"
+        state_value = '?' if derive else "CASE WHEN lifecycle_state IN ('offline_blocked','insufficient_evidence') THEN lifecycle_state ELSE ? END"
         c.execute(
-            """UPDATE agent_candidate_generations SET comparison_json=?,lifecycle_state=?,updated_ts=?
-               WHERE generation_id=?""",
+            f"""UPDATE agent_candidate_generations SET comparison_json=?,lifecycle_state={state_value},updated_ts=?
+               WHERE generation_id=?"""+active,
             (raw, next_state, time.time(), child_gid),
         )
-    return derived
+    return derived if derive else True
 
 
 def install(manager):

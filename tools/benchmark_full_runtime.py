@@ -27,6 +27,20 @@ from unittest.mock import patch
 ROOT = Path(__file__).resolve().parents[1]
 
 
+
+def join_runtime_producers(core, timeout=10.):
+    """Own fixture threads through directory cleanup, after shipped shutdown.
+
+    main() signals Engine/History but need not join their Thread objects before
+    returning. A final loop turn may still open the test database. Never race
+    TemporaryDirectory cleanup with those producers, or suppress cleanup errors.
+    """
+    for name in ('ENGINE', 'HISTORY', 'EVENT_STREAM'):
+        worker = getattr(core, name, None)
+        if isinstance(worker, threading.Thread) and worker.is_alive():
+            worker.join(timeout)
+            assert not worker.is_alive(), f'Fixture producer {name} did not stop after shipped shutdown'
+
 def one(source, seconds=30, active=3, configured=20, mode='shadow', ui=False, trace=False, candidates=False, warmup=5., training_fixture='production'):
     with tempfile.TemporaryDirectory(prefix='full-runtime-') as directory, ExitStack() as stack:
         os.environ['ADAPTIVE_AI_DATA'] = directory
@@ -357,6 +371,7 @@ def one(source, seconds=30, active=3, configured=20, mode='shadow', ui=False, tr
             if core.HTTP_SERVER is not None:core.HTTP_SERVER.shutdown()
             server_thread.join(30)
             assert not server_thread.is_alive(),'shipped shutdown did not finish'
+            join_runtime_producers(core)
 
 
 if __name__=='__main__':

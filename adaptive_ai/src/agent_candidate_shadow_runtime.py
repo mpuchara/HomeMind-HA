@@ -13,8 +13,10 @@ assembled from mismatched contexts.
 """
 import json
 import math
+import threading
 import time
 import uuid
+from contextlib import nullcontext
 from urllib.parse import parse_qs, unquote, urlsplit
 
 from context import target_value
@@ -400,16 +402,62 @@ def _comparison_row(store, parent_generation_id, child_generation_id):
     return dict(row) if row else None
 
 
-def _persist_summary(manager, edge, summary):
+def _merge_false_early_summary(manager, edge, summary, token=None):
+    existing = _comparison_row(manager.store, edge['parent_generation_id'], edge['child_generation_id'])
+    previous = _json((existing or {}).get('summary_json'), {})
+    summary = dict(summary)
+    for key in ('live_false_early', 'candidate_false_early'):
+        summary[key] = max(int(summary.get(key) or 0), int(previous.get(key) or 0))
+    cursor = ({key:token[key] for key in ('session','sequence')}
+              if token else previous.get('_false_early_cursor'))
+    if cursor:
+        summary['_false_early_cursor'] = cursor
+    else:
+        summary.pop('_false_early_cursor', None)
+    return summary
+
+
+def _persist_summary(manager, edge, summary, *, false_early_token=None, false_early_root=None):
+    with getattr(manager, 'candidate_summary_write_lock', manager.store.lock):
+        if false_early_root is None:
+            summary = _merge_false_early_summary(manager, edge, summary, false_early_token)
+        else:
+            summary = {**summary, '_false_early_cursor':{key:false_early_token[key] for key in ('session','sequence')}}
+        return _persist_summary_unlocked(manager, edge, summary, derive=false_early_token is None,
+                                         observed_root=false_early_root,
+                                         expected_epochs=(false_early_token or {}).get('epochs'))
+
+
+def _counter_epoch_valid(connection, expected):
+    if not connection.in_transaction:
+        admission = getattr(connection, 'storage_write_admission', None)
+        if callable(admission):
+            admission()
+        connection.execute('BEGIN IMMEDIATE')
+    items = list((expected or {}).items())
+    for start in range(0,len(items),256):
+        group = items[start:start+256]
+        query = 'SELECT '+','.join('(SELECT created_ts FROM agent_candidate_generations WHERE generation_id=?)' for _ in group)
+        actual = connection.execute(query, [gid for gid,_ in group]).fetchone()
+        if any(value is None or value != epoch for value,(_,epoch) in zip(actual,group)):
+            return False
+    return True
+
+
+def _persist_summary_unlocked(manager, edge, summary, *, derive=True, observed_root=None, expected_epochs=None):
     summary["updated_ts"] = time.time()
     parent_gid = edge["parent_generation_id"]
     child_gid = edge["child_generation_id"]
-    root_id = str(_generation(manager.store, generation_id=child_gid)["root_agent_id"])
+    root_id = str(observed_root) if observed_root is not None else str(_generation(manager.store, generation_id=child_gid)["root_agent_id"])
     raw = json.dumps(summary, separators=(",", ":"))
     row = manager._candidate_row(edge["parent_agent_id"]) or edge
-    derived = manager._comparison_summary({**row, "comparison_json": raw})
-    state = "ready" if derived.get("promotable") else "comparing"
-    with manager.store.lock, manager.store.conn() as c:
+    derived = manager._comparison_summary({**row, "comparison_json": raw}) if derive else None
+    # Counter persistence cannot grant readiness. Actual status/Promote still
+    # derive every existing quality gate freshly from the committed counters.
+    state = "ready" if derived and derived.get("promotable") else "comparing"
+    with manager.store.lock, manager.store.conn() as c, (nullcontext() if derive else c.storage_batch()):
+        if not derive and not _counter_epoch_valid(c, expected_epochs):
+            return False
         c.execute(
             """INSERT INTO candidate_generation_comparisons
                (parent_generation_id,child_generation_id,root_agent_id,summary_json,updated_ts)
@@ -418,17 +466,21 @@ def _persist_summary(manager, edge, summary):
                  summary_json=excluded.summary_json,updated_ts=excluded.updated_ts""",
             (parent_gid, child_gid, root_id, raw, time.time()),
         )
+        active = '' if derive else " AND state IN ('comparing','ready','offline_blocked','insufficient_evidence')"
+        state_value = '?' if derive else "CASE WHEN state IN ('offline_blocked','insufficient_evidence') THEN state ELSE ? END"
         c.execute(
-            """UPDATE agent_candidates SET comparison_json=?,state=?,updated_ts=?
-               WHERE parent_agent_id=? AND candidate_id=?""",
+            f"""UPDATE agent_candidates SET comparison_json=?,state={state_value},updated_ts=?
+               WHERE parent_agent_id=? AND candidate_id=?"""+active,
             (raw, state, time.time(), edge["parent_agent_id"], edge["candidate_id"]),
         )
+        active = '' if derive else " AND lifecycle_state IN ('comparing','ready','offline_blocked','insufficient_evidence')"
+        state_value = '?' if derive else "CASE WHEN lifecycle_state IN ('offline_blocked','insufficient_evidence') THEN lifecycle_state ELSE ? END"
         c.execute(
-            """UPDATE agent_candidate_generations SET comparison_json=?,lifecycle_state=?,updated_ts=?
-               WHERE generation_id=?""",
+            f"""UPDATE agent_candidate_generations SET comparison_json=?,lifecycle_state={state_value},updated_ts=?
+               WHERE generation_id=?"""+active,
             (raw, state, time.time(), child_gid),
         )
-    return derived
+    return derived if derive else True
 
 
 def _rebuild_summary(manager, edge):
@@ -548,6 +600,10 @@ def install(manager):
     original_list_status = manager.list_status
     original_lineage_status = getattr(manager, "lineage_status", None)
     original_maintenance = manager._maintenance
+    manager.candidate_summary_write_lock = threading.RLock()
+    false_early_session = str(uuid.uuid4())
+    false_early_sequence = [0]
+    summary_invalidations = [0]
     legacy_http = not bool(getattr(manager.core, "_final_explicit_http_only", False))
     handler = manager.core.Handler if legacy_http else None
     original_get = handler.do_GET if legacy_http else None
@@ -726,7 +782,7 @@ def install(manager):
 
     def _bundle(
         root_agent, state_map, *, include_parent=True, event_id=None, event_ts=None,
-        parent_observation=None,
+        parent_observation=None, defer_summary=False,
     ):
         generation_revision = int(getattr(manager.store,'_provenance_generation_revision',0) or 0)
         current_job = getattr(manager,'candidate_shadow_current_job',None)
@@ -775,6 +831,22 @@ def install(manager):
             if int(getattr(manager.store,'_provenance_generation_revision',0) or 0) != generation_revision:
                 _evidence_gap(root_agent['id'],reason='generation_changed_during_observation')
                 return None
+            if defer_summary:
+                try:
+                    previous = root_rt.get('bundle')
+                    # Binary equality is independent of a parent deadband or
+                    # config. An outward-only change cannot be false early.
+                    potential = str(root_agent.get('target_property')) != 'power' or any(
+                        old and not _same_value(root_agent, old.get('desired'), current)
+                        and _same_value(root_agent, result.get('desired'), current)
+                        for gid,result in results.items()
+                        for old in [((previous or {}).get('results') or {}).get(gid)])
+                    if potential:
+                        _increment_false_early(root_agent['id'], previous, bundle,
+                            epochs={g['generation_id']:g.get('created_ts') for g in [root_gen,*shadow_generations]})
+                except EvidenceBufferFull:
+                    _evidence_gap(root_agent['id'], persistence=True, reason='evidence_buffer_full')
+                    return None
             for gid, result in results.items():
                 latest_generation_runtime[str(gid)] = {
                     "root_agent_id": str(root_agent["id"]),
@@ -809,17 +881,33 @@ def install(manager):
 
     def _write_bundles(bundles):
         from sqlite_bulk_rows import insert_bounded_rows
-        with manager.store.lock, manager.store.conn() as c, c.storage_batch():
-            insert_bounded_rows(c, """INSERT OR REPLACE INTO candidate_generation_decisions
-                (root_agent_id,generation_id,event_id,ts,current,desired,confidence,model_revision,schema_revision)""",
-                ((bundle["root_agent_id"], gid, bundle["event_id"], float(bundle["ts"]),
-                  float(bundle["current"]), float(result["desired"]), result.get("confidence"),
-                  result.get("model_revision"), result.get("schema_revision"))
-                 for bundle in bundles for gid,result in bundle["results"].items()), 9)
+        decisions = [bundle for bundle in bundles if bundle.get('kind') != 'false_early']
+        for start in range(0, len(decisions), 32):
+            with manager.store.lock, manager.store.conn() as c, c.storage_batch():
+                insert_bounded_rows(c, """INSERT OR REPLACE INTO candidate_generation_decisions
+                    (root_agent_id,generation_id,event_id,ts,current,desired,confidence,model_revision,schema_revision)""",
+                    ((bundle["root_agent_id"], gid, bundle["event_id"], float(bundle["ts"]),
+                      float(bundle["current"]), float(result["desired"]), result.get("confidence"),
+                      result.get("model_revision"), result.get("schema_revision"))
+                     for bundle in decisions[start:start+32] for gid,result in bundle["results"].items()), 9)
+            for bundle in decisions[start:start+32]:
+                decision_writes.acknowledge(bundle['event_id'], bundle)
         with manager.lock:
-            for bundle in bundles:
+            for bundle in decisions:
                 root_rt = _root_runtime(bundle["root_agent_id"])
                 root_rt["last_persist"] = max(float(root_rt.get('last_persist') or 0), float(bundle["ts"]))
+        groups = {}
+        for bundle in bundles:
+            if bundle.get('kind') == 'false_early':
+                groups.setdefault(bundle['root_agent_id'], []).append(
+                    (bundle['previous'], bundle['current_bundle'], bundle['token']))
+        for root_id, observations in groups.items():
+            with manager.candidate_summary_write_lock:
+                _apply_false_early_batch(root_id, observations)
+            for bundle in bundles:
+                if bundle.get('kind') == 'false_early' and bundle['root_agent_id'] == root_id:
+                    decision_writes.acknowledge('false-early:'+root_id+':'+bundle['event_id'], bundle)
+            time.sleep(0)  # Yield to synchronous future-outcome updates between Roots.
 
     decision_writes = DeferredEvidence(manager.store, _write_bundle, batch_writer=_write_bundles)
 
@@ -867,6 +955,7 @@ def install(manager):
             result['writer'] = writer.snapshot()
         with manager.lock:
             result['admission'] = dict(admission)
+            result['comparison_evidence_invalidations'] = summary_invalidations[0]
         result['storage'] = storage_status(manager.store)
         return result
 
@@ -911,7 +1000,7 @@ def install(manager):
         request_persistence()
         return True
 
-    def _increment_false_early(root_id, previous_bundle, current_bundle):
+    def _increment_false_early(root_id, previous_bundle, current_bundle, *, token=None, epochs=None):
         if not previous_bundle or not current_bundle or previous_bundle.get("current") != current_bundle.get("current"):
             return
         previous_results = previous_bundle.get('results') or {}
@@ -922,29 +1011,82 @@ def install(manager):
             # returned from a false-early excursion. No lifecycle/permission
             # state is cached: a possible transition still reads fresh SQL.
             return
+        if token is None and callable(getattr(manager, 'request_candidate_shadow_persistence', None)):
+            def freeze(bundle):
+                return dict(current=bundle['current'], results={gid:dict(
+                    desired=result['desired'], additional_signal=dict(applied=bool(
+                        (result.get('additional_signal') or {}).get('applied'))))
+                    for gid,result in bundle['results'].items()})
+            with manager.lock:
+                false_early_sequence[0] += 1
+                decision_writes.submit('false-early:'+str(root_id)+':'+current_bundle['event_id'], dict(
+                    kind='false_early', root_agent_id=str(root_id), event_id=current_bundle['event_id'],
+                    ts=current_bundle['ts'], results={}, previous=freeze(previous_bundle),
+                    current_bundle=freeze(current_bundle), token=dict(epochs=epochs or {}, session=false_early_session,
+                                                                    sequence=false_early_sequence[0])))
+            request_persistence()
+            return
+        with manager.candidate_summary_write_lock:
+            return _apply_false_early(root_id, previous_bundle, current_bundle, token)
+
+    def _apply_false_early(root_id, previous_bundle, current_bundle, token):
+        return _apply_false_early_batch(root_id, [(previous_bundle, current_bundle, token)])
+
+    def _apply_false_early_batch(root_id, observations):
         edge = _active_comparison_edge(manager, root_id)
         if not edge:
+            summary_invalidations[0] += sum(bool(row[2]) for row in observations)
             return
         parent_gid, child_gid = edge["parent_generation_id"], edge["child_generation_id"]
-        prev_parent = previous_bundle["results"].get(parent_gid)
-        prev_child = previous_bundle["results"].get(child_gid)
-        now_parent = current_bundle["results"].get(parent_gid)
-        now_child = current_bundle["results"].get(child_gid)
-        if not prev_parent or not prev_child or not now_parent or not now_child:
-            return
         agent = manager.store.get_agent_config(edge["parent_agent_id"]) or manager.store.get_agent_config(root_id)
-        current = current_bundle["current"]
-        parent_false = (not _same_value(agent, prev_parent["desired"], current) and _same_value(agent, now_parent["desired"], current))
-        child_false = (not _same_value(agent, prev_child["desired"], current) and _same_value(agent, now_child["desired"], current))
-        if (prev_child.get("additional_signal") or {}).get("applied"):
-            child_false = False
-        if not parent_false and not child_false:
-            return
         existing = _comparison_row(manager.store, parent_gid, child_gid)
         summary = {**_blank_summary(), **_json((existing or {}).get("summary_json"), _blank_summary())}
-        summary["live_false_early"] = int(summary.get("live_false_early") or 0) + int(parent_false)
-        summary["candidate_false_early"] = int(summary.get("candidate_false_early") or 0) + int(child_false)
-        _persist_summary(manager, edge, summary)
+        cursor = summary.get('_false_early_cursor') or {}
+        epochs, last_token, changed = {}, None, False
+        generation_ids = list(dict.fromkeys(gid for _,_,token in observations
+                              for gid in ((token or {}).get('epochs') or {})))
+        for start in range(0, len(generation_ids), 256):
+            selected = generation_ids[start:start+256]
+            query = 'SELECT '+','.join('(SELECT created_ts FROM agent_candidate_generations WHERE generation_id=?)' for _ in selected)
+            with manager.store.conn() as c:
+                values = c.execute(query, selected).fetchone()
+            epochs.update(zip(selected, values))
+        for previous_bundle, current_bundle, token in observations:
+            valid = True
+            for gid, created in ((token or {}).get('epochs') or {}).items():
+                if epochs.get(gid) is None or epochs[gid] != created:
+                    valid = False
+            prev_parent = previous_bundle['results'].get(parent_gid)
+            prev_child = previous_bundle['results'].get(child_gid)
+            now_parent = current_bundle['results'].get(parent_gid)
+            now_child = current_bundle['results'].get(child_gid)
+            if not valid or not all((prev_parent,prev_child,now_parent,now_child)):
+                summary_invalidations[0] += int(bool(token))
+                continue
+            if token and cursor.get('session') == token['session'] and int(cursor.get('sequence') or 0) >= token['sequence']:
+                continue
+            current = current_bundle['current']
+            parent_false = (not _same_value(agent, prev_parent['desired'], current)
+                            and _same_value(agent, now_parent['desired'], current))
+            child_false = (not _same_value(agent, prev_child['desired'], current)
+                           and _same_value(agent, now_child['desired'], current))
+            if (prev_child.get('additional_signal') or {}).get('applied'):
+                child_false = False
+            if not parent_false and not child_false:
+                continue
+            summary['live_false_early'] = int(summary.get('live_false_early') or 0) + int(parent_false)
+            summary['candidate_false_early'] = int(summary.get('candidate_false_early') or 0) + int(child_false)
+            changed, last_token = True, token
+            if token:
+                cursor = token
+        if not changed:
+            return
+        if last_token:
+            persisted = _persist_summary(manager, edge, summary, false_early_token=last_token, false_early_root=root_id)
+            if persisted is False:
+                summary_invalidations[0] += len(observations)
+        else:
+            _persist_summary(manager, edge, summary)
 
     def after_live_process(agent, state_map):
         # This extension is authoritative for Candidate Shadow runtime; the older Candidate
@@ -958,10 +1100,12 @@ def install(manager):
         previous_bundle = root_rt.get("bundle")
         current_job = getattr(manager, "candidate_shadow_current_job", None)
         current_job = current_job() if callable(current_job) else None
+        deferred_summary = callable(getattr(manager, 'request_candidate_shadow_persistence', None))
         bundle = _bundle(
             agent, state_map,
             event_ts=(current_job or {}).get("context_ts"),
             parent_observation=(current_job or {}).get("parent_observation"),
+            defer_summary=deferred_summary,
         )
         if not bundle:
             return None
@@ -975,7 +1119,8 @@ def install(manager):
         root_rt["last_candidate_observed_monotonic"] = time.monotonic()
         try:
             _persist_bundle(bundle, force=False)
-            _increment_false_early(agent["id"], previous_bundle, bundle)
+            if not deferred_summary:
+                _increment_false_early(agent["id"], previous_bundle, bundle)
         except (EvidenceBufferFull, StoragePressure) as exc:
             return _evidence_gap(agent['id'], persistence=True, reason=getattr(exc, 'reason', None))
         return bundle
@@ -1592,6 +1737,8 @@ def install(manager):
     manager.candidate_shadow_async = deferred_shadow
     manager.flush_candidate_shadow_decisions = decision_writes.flush
     manager.candidate_shadow_decision_writes = decision_writes
+    manager.candidate_summary_pending = lambda root_id=None: decision_writes.has_pending_prefix(
+        'false-early:'+(str(root_id)+':' if root_id is not None else ''))
     manager.candidate_shadow_persistence_snapshot = persistence_snapshot
     manager.drain_candidate_shadow_events = drain_candidate_shadow_events
     manager.candidate_shadow_wait_seconds = candidate_shadow_wait_seconds

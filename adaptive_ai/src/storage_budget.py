@@ -288,6 +288,42 @@ class BudgetConnection(sqlite3.Connection):
     storage_denial = None
     storage_batch_depth = 0
     storage_pages_dirty = False
+    storage_managed_progress = None
+
+    def set_progress_handler(self, callback, n):
+        # External cancellation/progress handlers retain their own semantics.
+        result = super().set_progress_handler(callback, n)
+        self.storage_managed_progress = ((callback, n)
+                                         if callback == self.storage_progress else None)
+        return result
+
+    def storage_readonly_one(self, sql, parameters=()):
+        """One result under SQLite-enforced read-only admission.
+
+        A long SELECT otherwise calls the no-op Python storage callback every
+        1000 VM instructions, reacquiring the GIL while its owner holds Store.
+        Disable only our own callback while query_only prohibits every write,
+        including a write attempted by a SQL function. Restore the callback
+        before restoring writable admission. Custom handlers stay installed.
+        """
+        previous = sqlite3.Connection.execute(self, 'PRAGMA query_only').fetchone()[0]
+        sqlite3.Connection.execute(self, 'PRAGMA query_only=ON')
+        managed = self.storage_managed_progress if not self.storage_writing else None
+        cursor = None
+        try:
+            if managed:
+                sqlite3.Connection.set_progress_handler(self, None, 0)
+            cursor = self.execute(sql, parameters)
+            return cursor.fetchone()
+        finally:
+            try:
+                if cursor is not None:
+                    cursor.close()
+            finally:
+                if managed and self.storage_managed_progress == managed:
+                    sqlite3.Connection.set_progress_handler(self, *managed)
+                # If restoring the guard fails, leave query_only enabled.
+                sqlite3.Connection.execute(self, f'PRAGMA query_only={int(previous)}')
 
     @contextmanager
     def storage_batch(self):

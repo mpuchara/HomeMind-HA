@@ -67,14 +67,18 @@ class ArchiveWrites185Tests(unittest.TestCase):
         self.store.archive_batch([self.row()])
         before = self.snapshot()
         with self.store.connection_session() as c:
-            original = c.executemany
-            def pressure_after_sql(sql, rows):
-                result = original(sql, rows)
-                self.budget.reserve = 10 ** 18
-                return result
-            with patch.object(c, 'executemany', side_effect=pressure_after_sql):
-                with self.assertRaises(StoragePressure):
+            writes = []
+            def pressure_after_sql(sql):
+                if sql.lstrip().upper().startswith('INSERT INTO ENTITY_HISTORY'):
+                    writes.append(sql)
+                    self.budget.reserve = 10 ** 18
+            c.set_trace_callback(pressure_after_sql)
+            try:
+                with patch('storage_budget.time.monotonic', return_value=100.), self.assertRaises(StoragePressure):
                     self.store.archive_batch([self.row(state='off')])
+            finally:
+                c.set_trace_callback(None)
+            self.assertTrue(writes)
             self.assertEqual(c.storage_batch_depth, 0)
             self.assertFalse(c.in_transaction)
         self.assertEqual(self.snapshot(), before)

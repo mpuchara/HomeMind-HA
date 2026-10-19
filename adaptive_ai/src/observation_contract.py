@@ -1051,7 +1051,7 @@ class FeatureJournal:
                 # the native REAL values without a text/JSON round trip.
                 columns = ','.join(f'MAX(CASE WHEN seq={start+offset} THEN expiry END)'
                                    for offset in range(len(chunk)))
-                row = c.execute(f'''
+                query = f'''SELECT * FROM (
                     WITH samples(seq,entity,stamp) AS (VALUES {values}),
                     ranges AS (SELECT entity,MIN(stamp) lo,MAX(stamp) hi FROM samples GROUP BY entity),
                     coverage AS (
@@ -1068,7 +1068,9 @@ class FeatureJournal:
                         JOIN feature_windows w ON w.window_id=e.window_id
                         WHERE e.entity_id=s.entity AND w.start_time<=s.stamp AND w.end_time>=s.stamp
                     ) END AS expiry FROM samples s JOIN coverage c ON c.entity=s.entity)
-                    SELECT {columns} FROM protection''', params).fetchone()
+                    SELECT {columns} FROM protection)'''
+                read = getattr(c, 'storage_readonly_one', None)
+                row = read(query, params) if callable(read) else c.execute(query, params).fetchone()
                 protection.update((start+offset, float(value or 0.)) for offset,value in enumerate(row))
             _insert_journal_rows(c,
                     """INSERT INTO feature_observation_events
@@ -1179,18 +1181,50 @@ class FeatureJournal:
                             WHERE entity_id IN ({marks}) AND event_time>=? AND event_time<=?
                               AND EXISTS(SELECT 1 FROM protection
                                   WHERE start<=event.event_time AND end>=event.event_time)''', params)
-            for agent_id in sorted(set(row["agent_id"] for row in prepared)):
-                stale = c.execute(
-                    """SELECT window_id FROM feature_windows WHERE agent_id=?
-                       ORDER BY anchor_time DESC LIMIT -1 OFFSET ?""",
-                    (agent_id, self.max_windows_per_agent),
-                ).fetchall()
-                if stale:
-                    ids = [r[0] for r in stale]
-                    marks = ",".join("?" for _ in ids)
-                    c.execute(f"DELETE FROM feature_window_entities WHERE window_id IN ({marks})", ids)
-                    c.execute(f"DELETE FROM feature_windows WHERE window_id IN ({marks})", ids)
+            self._prune_window_owners(c, sorted(set(row['agent_id'] for row in prepared)))
         return len(prepared)
+
+    def _prune_window_owners(self, connection, owners):
+        if getattr(self, '_window_prune_json', True):
+            try:
+                for start in range(0,len(owners),64):
+                    group = owners[start:start+64]
+                    # IDs are strings: native JSON preserves them exactly.
+                    # Each scalar returns at most 256 stale IDs, never an
+                    # unbounded legacy backlog or per-row GIL handoffs.
+                    query = 'SELECT '+','.join('''(SELECT json_group_array(window_id) FROM
+                        (SELECT window_id FROM feature_windows WHERE agent_id=?
+                         ORDER BY anchor_time DESC LIMIT 256 OFFSET ?))''' for _ in group)
+                    parameters = [value for owner in group for value in (owner,self.max_windows_per_agent)]
+                    while True:
+                        read = getattr(connection, 'storage_readonly_one', None)
+                        row = read(query,parameters) if callable(read) else connection.execute(query,parameters).fetchone()
+                        ids = [value for raw in row for value in json.loads(raw or '[]')]
+                        if not ids:
+                            break
+                        for offset in range(0,len(ids),512):
+                            selected = ids[offset:offset+512]
+                            marks = ','.join('?' for _ in selected)
+                            connection.execute(f'DELETE FROM feature_window_entities WHERE window_id IN ({marks})',selected)
+                            connection.execute(f'DELETE FROM feature_windows WHERE window_id IN ({marks})',selected)
+                return
+            except sqlite3.OperationalError as exc:
+                message = str(exc).lower()
+                if 'no such function: json_group_array' in message:
+                    self._window_prune_json = False
+                elif 'json cannot hold blob values' not in message:
+                    raise
+        for agent_id in owners:
+            stale = connection.execute(
+                """SELECT window_id FROM feature_windows WHERE agent_id=?
+                   ORDER BY anchor_time DESC LIMIT -1 OFFSET ?""",
+                (agent_id, self.max_windows_per_agent),
+            ).fetchall()
+            if stale:
+                ids = [r[0] for r in stale]
+                marks = ",".join("?" for _ in ids)
+                connection.execute(f"DELETE FROM feature_window_entities WHERE window_id IN ({marks})", ids)
+                connection.execute(f"DELETE FROM feature_windows WHERE window_id IN ({marks})", ids)
 
     def open_window(self, window_id, agent_id, entities, anchor_time, kind,
                     before=WINDOW_BEFORE_SECONDS, after=WINDOW_AFTER_SECONDS):

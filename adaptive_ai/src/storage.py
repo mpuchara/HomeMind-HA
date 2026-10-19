@@ -1310,12 +1310,12 @@ class Store:
         with self.lock, self.conn() as c, c.storage_batch():
             revision = self._next_entity_history_revision(c)
             versioned = [(*item, revision) for item in packed]
-            c.executemany(
+            from sqlite_bulk_rows import insert_bounded_rows
+            insert_bounded_rows(c,
                 """INSERT INTO entity_history
                    (entity_id,ts,received_ts,state,attributes_json,context_user_id,source,
-                    mutation_revision)
-                   VALUES(?,?,?,?,?,?,?,?)
-                   ON CONFLICT(entity_id,ts) DO UPDATE SET
+                    mutation_revision)""", versioned, 8,
+                """ ON CONFLICT(entity_id,ts) DO UPDATE SET
                      received_ts=CASE
                        WHEN entity_history.source='live' THEN entity_history.received_ts
                        WHEN excluded.source='live' THEN excluded.received_ts
@@ -1337,7 +1337,6 @@ class Store:
                          entity_history.received_ts IS NOT
                            CASE WHEN excluded.source='live' THEN excluded.received_ts
                                 ELSE COALESCE(entity_history.received_ts, excluded.received_ts) END)""",
-                versioned,
             )
         return len(packed)
 

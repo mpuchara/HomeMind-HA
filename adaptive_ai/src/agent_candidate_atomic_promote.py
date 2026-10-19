@@ -219,6 +219,10 @@ def install(manager):
         result["promotion_target_mode"] = _preference(row, live_mode)
         result["candidate_physical_mode"] = "shadow"
         result["candidate_can_dispatch"] = False
+        pending = getattr(manager, 'candidate_summary_pending', None)
+        if callable(pending) and pending(root_id):
+            result['comparison_evidence_pending'] = True
+            result['promotable'] = False
         result["automation_ownership"] = automation_ownership(manager, root)
         return result
 
@@ -264,6 +268,9 @@ def install(manager):
 
         with executor.target_lock(target_entity):
             with manager.lock:
+                pending = getattr(manager, 'candidate_summary_pending', None)
+                if callable(pending) and pending(root_id):
+                    raise ValueError('Candidate comparison evidence is awaiting persistence before Promote')
                 row = _edge_for_ref(manager, parent_id)
                 if not row:
                     raise ValueError("Candidate disappeared before Promote")

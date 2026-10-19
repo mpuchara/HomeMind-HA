@@ -8,7 +8,11 @@
 - Compute exact nonoverlapping maximum protection ranges before updating journal observations. Preserve closed boundaries, disjoint gaps, duplicate window IDs and expiry reversals. Older SQLite/nonfinite intervals retain the prior SQL path.
 - Keep pending history explicit; Correct never substitutes an older durable Desired for a newer observation awaiting commit. Measure enqueue-to-Candidate RAM publication separately from persistence.
 - Return bounded sample protection as one native SQLite result row, avoiding repeated GIL handoffs while Store is held; retain exact REAL precision and transactional freshness.
-- Full local functional validation passes: 2682 tests, shipped entrypoint, both UI VMs, compileall and 21 JavaScript syntax checks. Sustained paired performance acceptance remains pending. No physical HA or production-startup gain is claimed.
+- Queue possible false-early returns before Candidate RAM publication; group FIFO observations by Root for epoch-checked idempotent quality writes. Pending quality evidence vetoes Promote. No prediction replay or automatic readiness grant.
+- Pause only the managed no-op storage progress callback inside SQLite-enforced read-only queries. Preserve external cancellation, page/WAL/payload admission, callback restoration and rollback.
+- Avoid idle lifecycle/backup work and duplicate request-local Candidate-list summaries. Preserve fresh single-agent status and authoritative promotion checks.
+- Prune bounded groups of stale string window IDs natively, and use bounded VALUES for archive and Teaching history without changing retention, receipt/revision or transaction semantics.
+- Full local functional validation passes: 2708 tests, shipped entrypoint, both UI VMs, compileall and 21 JavaScript syntax checks. Sustained paired performance acceptance remains pending. No physical HA or production-startup gain is claimed.
 
 ## 0.14.217 (2026-10-18)
 

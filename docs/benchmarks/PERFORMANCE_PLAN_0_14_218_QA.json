@@ -28,13 +28,19 @@
       "seconds": 310.685,
       "result": "OK",
       "log_sha256": "e200d0a971bef0cf5f5b0da35ec0173a93d9cc7e8ef518a87562740681403028"
+    },
+    {
+      "tests": 2682,
+      "seconds": 339.596,
+      "result": "OK",
+      "log_sha256": "c1a69c3f5eee74bdf34500bc73e6beac491db772e81695a8b2d9b15f0c703c1f"
     }
   ],
   "final_full_run": {
-    "tests": 2682,
-    "seconds": 339.596,
+    "tests": 2708,
+    "seconds": 333.75,
     "result": "OK",
-    "log_sha256": "c1a69c3f5eee74bdf34500bc73e6beac491db772e81695a8b2d9b15f0c703c1f"
+    "log_sha256": "da9705ec7b8c2f62bc52cf3fc7a4444e091e85855f655e46e8db64e24279435e"
   },
   "first_ci_run": {
     "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/39178106458",
@@ -79,5 +85,24 @@
     "diagnosis": "Late thread-stack samples locate Candidate false-early summary waiting on Store and journal record_batch iterating result rows while holding Store.",
     "correction": "Return native CASE/MAX columns in one result row per bounded 256-sample group, with no text/JSON conversion or changed protection semantics.",
     "regression": "600 samples over three bind groups, 999 SQLite parameter limit, exact float values, missing entities and inclusive interval endpoints."
-  }
+  },
+  "third_ci_run": {
+    "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/39201663690",
+    "commit": "59db81f5223022b4417fa2bb46d0eff2d86dd726",
+    "python_311": {
+      "tests": 2682,
+      "seconds": 263.277,
+      "result": "OK"
+    },
+    "python_313": {
+      "tests": 2682,
+      "seconds": 292.892,
+      "result": "OK"
+    },
+    "image": "PASS",
+    "scope": "Preceding published native aggregation tree, before asynchronous false-early and native prune/bulk changes; new exact-tree CI required."
+  },
+  "latest_scope": "Asynchronous immutable false-early observations with epoch/retry/Promote pending guards; readonly VM callback handling; lifecycle and request-local UI no-op reads; bounded native string-ID pruning and archive/Teaching VALUES; benchmark joins producers after shipped shutdown.",
+  "all_attempts_index": "docs/benchmarks/PERFORMANCE_PLAN_0_14_218_EXPERIMENTS.json",
+  "performance_status": "PENDING: no performance acceptance. Intermediate regressions and cleanup failure retained. Four-worker diagnostic rejected and not shipped."
 }

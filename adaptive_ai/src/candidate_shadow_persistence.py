@@ -19,6 +19,7 @@ class CandidateShadowPersistence:
         self.wake_event = threading.Event()
         with self.queue.lock:
             self.queue.max_items = 1024
+            self.queue.batch_items = 1024
             self.queue.max_bytes = max(4, min(64, int(
                 OPTIONS.get('runtime_candidate_evidence_mb', 16)))) * 1024 * 1024
         self.thread = threading.Thread(target=self.run,
@@ -49,7 +50,7 @@ class CandidateShadowPersistence:
             if self.queue.snapshot()['pending'] < 32 and self.stop_event.wait(.025):
                 break
             try:
-                self.queue.flush(limit=32)
+                self.queue.flush(limit=1024)
             except Exception as exc:
                 if self.queue.retry.defer(exc):
                     self.report(exc)
@@ -65,7 +66,8 @@ class CandidateShadowPersistence:
 
     def snapshot(self):
         return dict(owner=self.thread.name, alive=self.thread.is_alive(),
-                    batch_limit=32, stopped=self.stop_event.is_set() or self.engine_stop_event.is_set())
+                    drain_limit=1024, decision_transaction_limit=32,
+                    stopped=self.stop_event.is_set() or self.engine_stop_event.is_set())
 
 
 def install(manager):

@@ -4,6 +4,7 @@ import random
 import sys
 import tempfile
 import threading
+import time
 import unittest
 from contextlib import contextmanager
 from pathlib import Path
@@ -18,6 +19,7 @@ from context_row_buffer import ContextRowBuffer
 from storage import Store
 from teaching import Teaching
 from observation_contract import _maximum_protection_segments
+from storage_budget import BudgetConnection, StoragePressure
 
 
 class ShadowReads218Tests(unittest.TestCase):
@@ -25,6 +27,80 @@ class ShadowReads218Tests(unittest.TestCase):
         temp = tempfile.TemporaryDirectory()
         self.addCleanup(temp.cleanup)
         self.store = Store(Path(temp.name)/'reads.db')
+
+    def test_benchmark_waits_for_runtime_producer_before_temporary_database_cleanup(self):
+        import importlib.util
+        path = Path(__file__).resolve().parents[1]/'tools/benchmark_full_runtime.py'
+        spec = importlib.util.spec_from_file_location('full_runtime_cleanup218', path)
+        benchmark = importlib.util.module_from_spec(spec);spec.loader.exec_module(benchmark)
+        stopped = threading.Event()
+        producer = threading.Thread(target=lambda: (time.sleep(.02), stopped.set()))
+        producer.start()
+        benchmark.join_runtime_producers(SimpleNamespace(ENGINE=producer))
+        self.assertTrue(stopped.is_set())
+        self.assertFalse(producer.is_alive())
+        alive = threading.Event();release = threading.Event()
+        producer = threading.Thread(target=lambda: (alive.set(), release.wait()))
+        producer.start();self.assertTrue(alive.wait(1))
+        try:
+            with self.assertRaisesRegex(AssertionError, 'ENGINE did not stop'):
+                benchmark.join_runtime_producers(SimpleNamespace(ENGINE=producer), timeout=.01)
+        finally:
+            release.set();producer.join(1)
+
+    def preference_manager(self, complete=True):
+        from agent_candidate_preference_metrics import install
+        observed = dict(comparison_metric='observed_ui_snapshot', promotion_gates={},
+                        promotion_vetoes=[], promotable=True) if complete else dict(promotable=True)
+        fresh = dict(comparison_metric='fresh_status', promotion_gates={}, promotion_vetoes=['fresh veto'], promotable=False)
+        result = dict(parent_agent_id='root', candidate_id='child', comparison=observed, state='comparing')
+        summary = Mock(side_effect=lambda *args: dict(fresh))
+        store = SimpleNamespace(get_agent_config=Mock(return_value=dict(
+            target_entity='climate.test',target_property='temperature')))
+        manager = SimpleNamespace(core=SimpleNamespace(_final_explicit_http_only=True), store=store,
+            _comparison_summary=summary, _candidate_row=Mock(return_value=dict(parent_agent_id='root',candidate_id='child')),
+            status=lambda _: dict(result), list_status=lambda: [dict(result)])
+        return install(manager), summary
+
+    def test_candidate_list_reuses_its_already_computed_card_summary_without_lifecycle_reads(self):
+        manager, compute = self.preference_manager()
+        row = manager.list_status()[0]
+        self.assertEqual(row['comparison']['comparison_metric'], 'observed_ui_snapshot')
+        compute.assert_not_called()
+        manager._candidate_row.assert_not_called()
+        manager.store.get_agent_config.assert_not_called()
+
+    def test_single_candidate_status_still_recomputes_fresh_vetoes(self):
+        manager, compute = self.preference_manager()
+        row = manager.status('root')
+        self.assertFalse(row['promotable'])
+        self.assertEqual(row['comparison']['comparison_metric'], 'fresh_status')
+        compute.assert_called_once()
+        manager._candidate_row.assert_called_once_with('root')
+
+    def test_incomplete_custom_list_summary_keeps_the_original_fresh_path(self):
+        manager, compute = self.preference_manager(complete=False)
+        row = manager.list_status()[0]
+        self.assertFalse(row['promotable'])
+        compute.assert_called_once()
+
+    def test_decision_history_bulk_failure_is_atomic_and_restores_every_observed_row(self):
+        teaching = Teaching(self.store)
+        base = int(time.time())-1000
+        for index in range(600):teaching.record('a',index%3,index%2,base+index)
+        retained = list(teaching.buffer)
+        self.assertEqual(len(retained), 600)
+        with self.store.connection_session() as c:
+            c.setlimit(sqlite3.SQLITE_LIMIT_VARIABLE_NUMBER,999)
+            c.execute(f"CREATE TRIGGER fail_history BEFORE INSERT ON decision_history WHEN NEW.ts={base+333} "
+                      "BEGIN SELECT RAISE(ABORT,'history batch'); END")
+            with self.assertRaisesRegex(sqlite3.IntegrityError, 'history batch'):
+                teaching.flush()
+            self.assertEqual(list(teaching.buffer),retained)
+            self.assertEqual(c.execute('SELECT COUNT(*) FROM decision_history').fetchone()[0],0)
+            c.execute('DROP TRIGGER fail_history')
+            self.assertEqual(teaching.flush(),600)
+            self.assertEqual([tuple(row) for row in c.execute('SELECT * FROM decision_history ORDER BY ts')],retained)
 
     def overlay(self, teaching):
         engine = SimpleNamespace(teaching=teaching, models={'child': object()}, temporal_history=None)
@@ -146,7 +222,147 @@ class ShadowReads218Tests(unittest.TestCase):
         self.assertEqual(engine.feature_window_deferred_snapshot()['windows']['pending'],596)
 
 
+class ReadonlyProtection218Tests(unittest.TestCase):
+    query = 'SELECT * FROM (WITH RECURSIVE r(n) AS (VALUES(1) UNION ALL SELECT n+1 FROM r WHERE n<3000) SELECT SUM(n) FROM r)'
+
+    def setUp(self):
+        temp = tempfile.TemporaryDirectory()
+        self.addCleanup(temp.cleanup)
+        self.store = Store(Path(temp.name)/'readonly.db')
+
+    def test_pure_read_has_no_guard_callbacks_but_next_write_still_runs_them(self):
+        calls = []
+        original = BudgetConnection.storage_progress
+        def progress(connection):
+            calls.append(connection.storage_writing)
+            return original(connection)
+        with patch.object(BudgetConnection, 'storage_progress', progress), self.store.conn() as c:
+            c.execute('CREATE TABLE scratch(n INTEGER)')
+            calls.clear()
+            self.assertEqual(c.storage_readonly_one(self.query)[0], 4501500)
+            self.assertEqual(calls, [])
+            self.assertEqual(c.execute('PRAGMA query_only').fetchone()[0], 0)
+            c.execute('INSERT INTO scratch '+self.query)
+            self.assertTrue(calls)
+            self.assertTrue(all(value>0 for value in calls))
+
+    def test_query_only_blocks_direct_and_sql_function_writes_without_leaking_mode(self):
+        with self.store.conn() as c:
+            c.execute('CREATE TABLE scratch(n INTEGER)')
+            prepared = 'INSERT INTO scratch VALUES(?)'
+            c.execute(prepared, (8,))
+            with self.assertRaises(sqlite3.OperationalError):
+                c.storage_readonly_one(prepared, (9,))
+            c.execute('DELETE FROM scratch')
+            with self.assertRaises(sqlite3.OperationalError):
+                c.storage_readonly_one('INSERT INTO scratch VALUES(1)')
+            failures = []
+            def attempt_write():
+                try:
+                    c.execute('INSERT INTO scratch VALUES(2)')
+                except sqlite3.OperationalError as exc:
+                    failures.append(str(exc))
+                return 7
+            c.create_function('attempt_write', 0, attempt_write)
+            self.assertEqual(c.storage_readonly_one('SELECT attempt_write()')[0], 7)
+            self.assertEqual(len(failures), 1)
+            self.assertEqual(c.execute('SELECT COUNT(*) FROM scratch').fetchone()[0], 0)
+            self.assertEqual(c.execute('PRAGMA query_only').fetchone()[0], 0)
+            c.execute('INSERT INTO scratch VALUES(3)')
+
+    def test_failed_read_restores_guard_and_preexisting_readonly_mode_is_preserved(self):
+        with self.store.conn() as c:
+            original = c.storage_managed_progress
+            with self.assertRaises(sqlite3.OperationalError):
+                c.storage_readonly_one('SELECT no_such_column')
+            self.assertEqual(c.storage_managed_progress, original)
+            self.assertEqual(c.execute('PRAGMA query_only').fetchone()[0], 0)
+            c.execute('PRAGMA query_only=ON')
+            self.assertEqual(c.storage_readonly_one('SELECT 1')[0], 1)
+            self.assertEqual(c.execute('PRAGMA query_only').fetchone()[0], 1)
+            c.execute('PRAGMA query_only=OFF')
+
+    def test_external_progress_handler_keeps_running_during_and_after_read(self):
+        calls = []
+        with self.store.conn() as c:
+            c.set_progress_handler(lambda: calls.append(True) or 0, 10)
+            self.assertEqual(c.storage_readonly_one(self.query)[0], 4501500)
+            before = len(calls)
+            self.assertGreater(before, 0)
+            c.execute(self.query).fetchone()
+            self.assertGreater(len(calls), before)
+            self.assertIsNone(c.storage_managed_progress)
+
+    def test_next_write_is_still_interrupted_and_rolled_back_by_vm_pressure(self):
+        with self.store.conn() as c:
+            c.execute('CREATE TABLE scratch(n INTEGER)')
+            c.storage_readonly_one(self.query)
+            original = self.store.storage_budget.check
+            def check(parameters=(), *, refresh=True):
+                if not refresh and c.storage_writing:
+                    raise StoragePressure('VM guard retained after read')
+                return original(parameters, refresh=refresh)
+            with patch.object(self.store.storage_budget, 'check', check):
+                with self.assertRaisesRegex(StoragePressure, 'VM guard retained'):
+                    c.execute('INSERT INTO scratch '+self.query)
+            self.assertEqual(c.execute('SELECT COUNT(*) FROM scratch').fetchone()[0], 0)
+
+    def test_external_cancellation_is_not_bypassed(self):
+        with self.store.conn() as c:
+            calls = [0]
+            def cancel():
+                calls[0] += 1
+                return int(calls[0]>=50)
+            c.set_progress_handler(cancel, 100)
+            try:
+                with self.assertRaises(sqlite3.OperationalError) as error:
+                    c.storage_readonly_one(self.query)
+                self.assertEqual(error.exception.sqlite_errorcode, sqlite3.SQLITE_INTERRUPT)
+                self.assertGreaterEqual(calls[0], 50)
+            finally:
+                c.set_progress_handler(None, 0)
+            self.assertEqual(c.execute('PRAGMA query_only').fetchone()[0], 0)
+
+
 class ProtectionSegments218Tests(unittest.TestCase):
+    def test_native_prune_matches_legacy_ids_links_ties_unicode_and_multiple_bounded_turns(self):
+        from observation_contract import FeatureJournal
+        temp = tempfile.TemporaryDirectory();self.addCleanup(temp.cleanup)
+        windows = [dict(window_id=f'{owner},"ąć:{i}',agent_id=str(owner),entities=['sensor.a','sensor.b'],
+                        anchor_time=float(i%4)) for owner in range(70) for i in range(10)]
+        windows += [dict(window_id='large:'+str(i),agent_id='large',entities=['sensor.a'],anchor_time=float(i%5))
+                    for i in range(700)]
+        snapshots = []
+        for name,native in [('native',True),('legacy',False)]:
+            store = Store(Path(temp.name)/(name+'.db'))
+            journal = FeatureJournal(store,clock=lambda:100.,max_windows_per_agent=5)
+            journal._window_prune_json = native
+            with store.connection_session() as c:
+                c.setlimit(sqlite3.SQLITE_LIMIT_VARIABLE_NUMBER,999)
+                journal.open_windows_batch(windows)
+                snapshots.append(([tuple(r) for r in c.execute('SELECT * FROM feature_windows ORDER BY window_id')],
+                                  [tuple(r) for r in c.execute('SELECT * FROM feature_window_entities ORDER BY window_id,entity_id')]))
+        self.assertEqual(snapshots[0],snapshots[1])
+        self.assertEqual(len(snapshots[0][0]),71*5)
+
+    def test_missing_json_uses_legacy_prune_but_lock_error_rolls_back_the_complete_batch(self):
+        from observation_contract import FeatureJournal
+        temp = tempfile.TemporaryDirectory();self.addCleanup(temp.cleanup)
+        store = Store(Path(temp.name)/'fallback.db')
+        journal = FeatureJournal(store,clock=lambda:100.,max_windows_per_agent=2)
+        rows = [dict(window_id=str(i),agent_id='a',entities=['sensor.a'],anchor_time=float(i)) for i in range(4)]
+        with patch.object(BudgetConnection,'storage_readonly_one',side_effect=sqlite3.OperationalError('no such function: json_group_array')):
+            journal.open_windows_batch(rows)
+        self.assertFalse(journal._window_prune_json)
+        with store.conn() as c:self.assertEqual(c.execute('SELECT COUNT(*) FROM feature_windows').fetchone()[0],2)
+        journal._window_prune_json = True
+        with patch.object(BudgetConnection,'storage_readonly_one',side_effect=sqlite3.OperationalError('database is locked')):
+            with self.assertRaisesRegex(sqlite3.OperationalError,'database is locked'):
+                journal.open_windows_batch([dict(window_id='new',agent_id='a',entities=['sensor.b'],anchor_time=10.)])
+        with store.conn() as c:
+            self.assertEqual(c.execute("SELECT COUNT(*) FROM feature_windows WHERE window_id='new'").fetchone()[0],0)
+            self.assertEqual(c.execute("SELECT COUNT(*) FROM feature_window_entities WHERE window_id='new'").fetchone()[0],0)
+
     def test_bulk_sample_protection_keeps_native_float_precision_across_bind_groups(self):
         from observation_contract import FeatureJournal
         temp = tempfile.TemporaryDirectory()
