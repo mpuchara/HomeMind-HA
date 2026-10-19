@@ -1355,6 +1355,8 @@ class Store:
                 json.dumps(attrs or {}, separators=(",", ":"), ensure_ascii=False), user_id, source)
 
     def archive_batch(self, rows):
+        if not rows:
+            return 0
         return self.archive_packed_batch([self.pack_archive_row(row) for row in rows])
 
     def archive_packed_batch(self, packed):

@@ -36,6 +36,8 @@ class Preparation220Tests(unittest.TestCase):
         p = patch.object(history.TRAINING_BUDGET, 'checkpoint', return_value=0);p.start();self.addCleanup(p.stop)
 
     def test_headroom_and_custom_limits(self):
+        self.assertEqual(self.store.archive_batch(None),0)
+        self.assertEqual(self.store.archive_batch([]),0)
         large = self.manager.training_preparation_profile
         self.assertEqual(large['memory_limit_mb'], 1536)
         self.assertEqual(large['batch_rows'], 1024)
