@@ -1,5 +1,5 @@
 {
-  "status": "Intermediate probes, not final acceptance. Source/tool hashes and training fixture differ.",
+  "status": "Earlier probes and rejected alternatives retained. Final host reports listed separately; full-plan acceptance remains open.",
   "runs": [
     {
       "file": "probe218-baseline.json",
@@ -4229,5 +4229,13 @@
     "docs\\benchmarks\\PERFORMANCE_PLAN_0_14_218_LONG_CURRENT_20_REJECTED_NATIVE.json",
     "docs\\benchmarks\\PERFORMANCE_PLAN_0_14_218_LONG_CURRENT_20_REJECTED_PRUNE_BULK.json",
     "docs\\benchmarks\\PERFORMANCE_PLAN_0_14_218_LONG_CURRENT_20_REJECTED_READONLY.json"
-  ]
+  ],
+  "final_reports": [
+    "PERFORMANCE_PLAN_0_14_218_LONG_CURRENT_20.json",
+    "PERFORMANCE_PLAN_0_14_218_FINAL_SHADOW_20_UI.json",
+    "PERFORMANCE_PLAN_0_14_218_FINAL_SHADOW_3_UI.json",
+    "PERFORMANCE_PLAN_0_14_218_FINAL_CONTROL_3_UI.json",
+    "PERFORMANCE_PLAN_0_14_218_TRACE_OVERHEAD.json"
+  ],
+  "acceptance_report": "PERFORMANCE_PLAN_0_14_218_ACCEPTANCE.json"
 }

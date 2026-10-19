@@ -3168,7 +3168,7 @@
       "result": "OK",
       "log_sha256": "a36b4299deb766f12dd3767786cd310a44c711055b816e55b216326cc5a765e7"
     },
-    "performance_gate": "INCONCLUSIVE: Root20 five-pair end-to-end result does not establish improvement; 360s final-runtime stability smoke passed without gaps/errors. Other scenarios and target hardware remain open.",
+    "performance_gate": "OPEN: host Shadow3 and Control3 decision scenarios improved; Root20 end-to-end improvement remains inconclusive. Full E0-E7 and target Pi/microSD acceptance are incomplete.",
     "candidate_evidence": {
       "owner": "separate persistence worker; prediction remains on existing Candidate worker",
       "max_items": 1024,
@@ -3215,6 +3215,110 @@
       "wal_checkpoint_remaining_frames": 0,
       "wal_reclaim_exercised": false,
       "report": "docs/benchmarks/PERFORMANCE_PLAN_0_14_218_LONG_CURRENT_20.json"
-    }
+    },
+    "target_hardware": {
+      "device": "Raspberry Pi 4",
+      "storage": "microSD 64 GB",
+      "source": "User confirmation in this chat, 2026-10-19",
+      "ram_capacity": "not provided",
+      "target_hardware_benchmarked": false
+    },
+    "paired_host_decision_results": {
+      "SHADOW_20": {
+        "event_to_decision": {
+          "baseline_p95_ms": 124.60424009997752,
+          "current_p95_ms": 132.88956459997505,
+          "relative_change_percent": 6.649311847935291,
+          "paired_run_bootstrap_95_percent": [
+            -13.043234628369238,
+            29.545519841605472
+          ],
+          "baseline_count": 34512,
+          "current_count": 33017
+        },
+        "status": "INCONCLUSIVE for Root end-to-end acceleration: 124.60 -> 132.89ms (+6.65%), paired bootstrap [-13.04%,+29.55%]. More completed Candidate observations do not establish Root speedup. Full acceptance remains open.",
+        "report": "PERFORMANCE_PLAN_0_14_218_FINAL_SHADOW_20_UI.json",
+        "pairs": 5,
+        "seconds_per_run": 36
+      },
+      "SHADOW_3": {
+        "event_to_decision": {
+          "baseline_p95_ms": 15.173243000003112,
+          "current_p95_ms": 9.983003499996812,
+          "relative_change_percent": -34.206527240124174,
+          "paired_run_bootstrap_95_percent": [
+            -38.442313211673294,
+            -30.10533543205668
+          ],
+          "baseline_count": 10746,
+          "current_count": 10756
+        },
+        "status": "HOST SCENARIO IMPROVEMENT: 3 eligible/20 configured Shadow Root p95 -34.21%, paired bootstrap [-38.44%,-30.11%]. Short alternating probes only; does not resolve Root20 uncertainty or deployed/startup acceptance.",
+        "report": "PERFORMANCE_PLAN_0_14_218_FINAL_SHADOW_3_UI.json",
+        "pairs": 5,
+        "seconds_per_run": 36
+      },
+      "CONTROL_3": {
+        "event_to_decision": {
+          "baseline_p95_ms": 125.19965404998742,
+          "current_p95_ms": 80.87545650001572,
+          "relative_change_percent": -35.40281152236631,
+          "paired_run_bootstrap_95_percent": [
+            -38.64606983072567,
+            -29.983192441263796
+          ],
+          "baseline_count": 6220,
+          "current_count": 8339
+        },
+        "status": "HOST DECISION SCENARIO IMPROVEMENT: 3 eligible Control Root p95 -35.40%, paired bootstrap [-38.65%,-29.98%]. Only 12 baseline/15 current service and ACK samples in measured windows; no physical device/service-latency acceptance.",
+        "report": "PERFORMANCE_PLAN_0_14_218_FINAL_CONTROL_3_UI.json",
+        "pairs": 5,
+        "seconds_per_run": 36,
+        "service_sample_coverage": {
+          "baseline": {
+            "services_with_warmup": 15,
+            "measured_service_samples": 12,
+            "measured_ack_samples": 12
+          },
+          "current": {
+            "services_with_warmup": 15,
+            "measured_service_samples": 15,
+            "measured_ack_samples": 15
+          }
+        }
+      }
+    },
+    "trace_overhead": {
+      "off": {
+        "p95_ms": 8.484310299996881,
+        "cpu_seconds": 26.618341954,
+        "samples": 5355
+      },
+      "on": {
+        "p95_ms": 9.863629400007312,
+        "cpu_seconds": 29.668062135000003,
+        "samples": 5355
+      },
+      "p95_relative_change_percent": 16.257292004170786,
+      "cpu_relative_change_percent": 11.457213173796932
+    },
+    "latest_executable_ci": {
+      "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/39241471893",
+      "commit": "6b883526e7ce7893f0722d6f0309a43a8b14a222",
+      "python_311": {
+        "tests": 2717,
+        "seconds": 275.44,
+        "result": "OK"
+      },
+      "python_313": {
+        "tests": 2717,
+        "seconds": 278.14,
+        "result": "OK"
+      },
+      "image": "PASS",
+      "additional_workflow_checks": "PASS",
+      "package": "SKIPPED: PR"
+    },
+    "acceptance_report": "docs/benchmarks/PERFORMANCE_PLAN_0_14_218_ACCEPTANCE.json"
   }
 }

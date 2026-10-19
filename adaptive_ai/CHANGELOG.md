@@ -16,6 +16,7 @@
 - Reuse the final same-card Confidence summary on list requests, and preserve the atomic pending-evidence Promote veto through later decoration. Single status and promotion remain fresh.
 - Retain WAL frame/backlog and allocated-file diagnostics separately in full-runtime reports; host auto-allocation is reported explicitly.
 - Full local functional validation passes: 2717 tests, shipped entrypoint, both UI VMs, compileall and 21 JavaScript syntax checks. Sustained paired performance acceptance remains pending. No physical HA or production-startup gain is claimed.
+- Exact-source CI passes 2717 tests on Python 3.11 and 3.13, additional workflow benchmarks and Docker. Five paired host runs show decision p95 15.17 to 9.98 ms for 3-active Shadow and 125.20 to 80.88 ms for 3-active Control. The 20-active result remains inconclusive; full-plan, target Raspberry Pi/microSD, device and production-startup acceptance are open.
 
 ## 0.14.217 (2026-10-18)
 

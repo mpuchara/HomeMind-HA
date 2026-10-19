@@ -116,7 +116,7 @@
   },
   "latest_scope": "Four-Root counter transactions with exact partial-commit retry and fresh epoch/lifecycle reads; request-local Confidence summary reuse without erasing pending Promote veto; RAM-only WAL/frame/checkpoint benchmark snapshots.",
   "all_attempts_index": "docs/benchmarks/PERFORMANCE_PLAN_0_14_218_EXPERIMENTS.json",
-  "performance_status": "INCONCLUSIVE: Root20 five-pair end-to-end result does not establish improvement; 360s final-runtime stability smoke passed without gaps/errors. Other scenarios and target hardware remain open.",
+  "performance_status": "OPEN: host Shadow3 and Control3 decision scenarios improved; Root20 end-to-end improvement remains inconclusive. Full E0-E7 and target Pi/microSD acceptance are incomplete.",
   "fourth_ci_run": {
     "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/39232484353",
     "commit": "42fff4ff47a69359e4b9265d6f613d5c0892d693",
@@ -432,5 +432,436 @@
       "tools/benchmark_full_runtime.py"
     ],
     "preceding_full_validation_commit": "7d5e53b25d9715301ba14f7741d3f115dc7abe67"
-  }
+  },
+  "paired_shadow3": {
+    "summary": {
+      "event_to_decision": {
+        "baseline_p95_ms": 15.173243000003112,
+        "current_p95_ms": 9.983003499996812,
+        "relative_change_percent": -34.206527240124174,
+        "paired_run_bootstrap_95_percent": [
+          -38.442313211673294,
+          -30.10533543205668
+        ],
+        "baseline_count": 10746,
+        "current_count": 10756
+      },
+      "event_to_target_start": {
+        "baseline_p95_ms": 9.02236124998268,
+        "current_p95_ms": 6.879877500001186,
+        "relative_change_percent": -23.74637515191056,
+        "paired_run_bootstrap_95_percent": [
+          -30.577965257724994,
+          -15.562963155446807
+        ],
+        "baseline_count": 10746,
+        "current_count": 10756
+      },
+      "inference": {
+        "baseline_p95_ms": 6.375292249998665,
+        "current_p95_ms": 2.1869659999715907,
+        "relative_change_percent": -65.69622357356168,
+        "paired_run_bootstrap_95_percent": [
+          -67.70371273965632,
+          -62.5444531837527
+        ],
+        "baseline_count": 10746,
+        "current_count": 10756
+      },
+      "wrapped_inference": {
+        "baseline_p95_ms": 11.483145249997051,
+        "current_p95_ms": 8.077508499980013,
+        "relative_change_percent": -29.65769983635723,
+        "paired_run_bootstrap_95_percent": [
+          -32.81590532808107,
+          -25.47736020821545
+        ],
+        "baseline_count": 10746,
+        "current_count": 10756
+      },
+      "event_to_worker_release": {
+        "baseline_p95_ms": 16.762797500005533,
+        "current_p95_ms": 11.933015250004786,
+        "relative_change_percent": -28.812507279880663,
+        "paired_run_bootstrap_95_percent": [
+          -33.742766432818186,
+          -23.92553242332992
+        ],
+        "baseline_count": 10746,
+        "current_count": 10756
+      }
+    },
+    "quality": [
+      {
+        "pair": 0,
+        "kind": "baseline",
+        "gaps": 0,
+        "ui_errors": 0,
+        "candidate_errors": 0,
+        "transport_pending": 0
+      },
+      {
+        "pair": 0,
+        "kind": "current",
+        "gaps": 0,
+        "ui_errors": 0,
+        "candidate_errors": 0,
+        "transport_pending": 0
+      },
+      {
+        "pair": 1,
+        "kind": "current",
+        "gaps": 0,
+        "ui_errors": 0,
+        "candidate_errors": 0,
+        "transport_pending": 0
+      },
+      {
+        "pair": 1,
+        "kind": "baseline",
+        "gaps": 0,
+        "ui_errors": 0,
+        "candidate_errors": 0,
+        "transport_pending": 0
+      },
+      {
+        "pair": 2,
+        "kind": "baseline",
+        "gaps": 0,
+        "ui_errors": 0,
+        "candidate_errors": 0,
+        "transport_pending": 0
+      },
+      {
+        "pair": 2,
+        "kind": "current",
+        "gaps": 0,
+        "ui_errors": 0,
+        "candidate_errors": 0,
+        "transport_pending": 0
+      },
+      {
+        "pair": 3,
+        "kind": "current",
+        "gaps": 0,
+        "ui_errors": 0,
+        "candidate_errors": 0,
+        "transport_pending": 0
+      },
+      {
+        "pair": 3,
+        "kind": "baseline",
+        "gaps": 0,
+        "ui_errors": 0,
+        "candidate_errors": 0,
+        "transport_pending": 0
+      },
+      {
+        "pair": 4,
+        "kind": "baseline",
+        "gaps": 0,
+        "ui_errors": 0,
+        "candidate_errors": 0,
+        "transport_pending": 0
+      },
+      {
+        "pair": 4,
+        "kind": "current",
+        "gaps": 0,
+        "ui_errors": 0,
+        "candidate_errors": 0,
+        "transport_pending": 0
+      }
+    ],
+    "status": "HOST SCENARIO IMPROVEMENT: 3 eligible/20 configured Shadow Root p95 -34.21%, paired bootstrap [-38.44%,-30.11%]. Short alternating probes only; does not resolve Root20 uncertainty or deployed/startup acceptance."
+  },
+  "paired_control3": {
+    "summary": {
+      "event_to_decision": {
+        "baseline_p95_ms": 125.19965404998742,
+        "current_p95_ms": 80.87545650001572,
+        "relative_change_percent": -35.40281152236631,
+        "paired_run_bootstrap_95_percent": [
+          -38.64606983072567,
+          -29.983192441263796
+        ],
+        "baseline_count": 6220,
+        "current_count": 8339
+      },
+      "event_to_target_start": {
+        "baseline_p95_ms": 120.36147514998702,
+        "current_p95_ms": 78.09268299997852,
+        "relative_change_percent": -35.1182071317552,
+        "paired_run_bootstrap_95_percent": [
+          -38.05445423265794,
+          -29.860286406926644
+        ],
+        "baseline_count": 6222,
+        "current_count": 8339
+      },
+      "inference": {
+        "baseline_p95_ms": 4.694689099994764,
+        "current_p95_ms": 2.1030711000037163,
+        "relative_change_percent": -55.20318693721248,
+        "paired_run_bootstrap_95_percent": [
+          -60.631950571624536,
+          -51.77704269943328
+        ],
+        "baseline_count": 6220,
+        "current_count": 8339
+      },
+      "wrapped_inference": {
+        "baseline_p95_ms": 109.41402250000179,
+        "current_p95_ms": 71.7632803000015,
+        "relative_change_percent": -34.411258575197415,
+        "paired_run_bootstrap_95_percent": [
+          -42.14082874811227,
+          -27.440422672736197
+        ],
+        "baseline_count": 6212,
+        "current_count": 8330
+      },
+      "event_to_worker_release": {
+        "baseline_p95_ms": 201.87424505001275,
+        "current_p95_ms": 136.1999336000096,
+        "relative_change_percent": -32.53228832322462,
+        "paired_run_bootstrap_95_percent": [
+          -39.43969476465733,
+          -24.97433267367143
+        ],
+        "baseline_count": 6212,
+        "current_count": 8330
+      }
+    },
+    "quality": [
+      {
+        "pair": 0,
+        "kind": "baseline",
+        "gaps": 0,
+        "ui_errors": 0,
+        "candidate_errors": 0,
+        "transport_pending": 0
+      },
+      {
+        "pair": 0,
+        "kind": "current",
+        "gaps": 0,
+        "ui_errors": 0,
+        "candidate_errors": 0,
+        "transport_pending": 0
+      },
+      {
+        "pair": 1,
+        "kind": "current",
+        "gaps": 0,
+        "ui_errors": 0,
+        "candidate_errors": 0,
+        "transport_pending": 0
+      },
+      {
+        "pair": 1,
+        "kind": "baseline",
+        "gaps": 0,
+        "ui_errors": 0,
+        "candidate_errors": 0,
+        "transport_pending": 0
+      },
+      {
+        "pair": 2,
+        "kind": "baseline",
+        "gaps": 0,
+        "ui_errors": 0,
+        "candidate_errors": 0,
+        "transport_pending": 0
+      },
+      {
+        "pair": 2,
+        "kind": "current",
+        "gaps": 0,
+        "ui_errors": 0,
+        "candidate_errors": 0,
+        "transport_pending": 0
+      },
+      {
+        "pair": 3,
+        "kind": "current",
+        "gaps": 0,
+        "ui_errors": 0,
+        "candidate_errors": 0,
+        "transport_pending": 0
+      },
+      {
+        "pair": 3,
+        "kind": "baseline",
+        "gaps": 0,
+        "ui_errors": 0,
+        "candidate_errors": 0,
+        "transport_pending": 0
+      },
+      {
+        "pair": 4,
+        "kind": "baseline",
+        "gaps": 0,
+        "ui_errors": 0,
+        "candidate_errors": 0,
+        "transport_pending": 0
+      },
+      {
+        "pair": 4,
+        "kind": "current",
+        "gaps": 0,
+        "ui_errors": 0,
+        "candidate_errors": 0,
+        "transport_pending": 0
+      }
+    ],
+    "coverage": {
+      "baseline": {
+        "services_with_warmup": 15,
+        "measured_service_samples": 12,
+        "measured_ack_samples": 12
+      },
+      "current": {
+        "services_with_warmup": 15,
+        "measured_service_samples": 15,
+        "measured_ack_samples": 15
+      }
+    },
+    "status": "HOST DECISION SCENARIO IMPROVEMENT: 3 eligible Control Root p95 -35.40%, paired bootstrap [-38.65%,-29.98%]. Only 12 baseline/15 current service and ACK samples in measured windows; no physical device/service-latency acceptance."
+  },
+  "latest_code_ci": {
+    "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/39241471893",
+    "commit": "6b883526e7ce7893f0722d6f0309a43a8b14a222",
+    "python_311": {
+      "tests": 2717,
+      "seconds": 275.44,
+      "result": "OK"
+    },
+    "python_313": {
+      "tests": 2717,
+      "seconds": 278.14,
+      "result": "OK"
+    },
+    "image": "PASS",
+    "additional_workflow_checks": "PASS",
+    "package": "SKIPPED: PR"
+  },
+  "trace_overhead": {
+    "summary": {
+      "off": {
+        "p95_ms": 8.484310299996881,
+        "cpu_seconds": 26.618341954,
+        "samples": 5355
+      },
+      "on": {
+        "p95_ms": 9.863629400007312,
+        "cpu_seconds": 29.668062135000003,
+        "samples": 5355
+      },
+      "p95_relative_change_percent": 16.257292004170786,
+      "cpu_relative_change_percent": 11.457213173796932
+    },
+    "quality": [
+      {
+        "trace": false,
+        "pair": 0,
+        "gaps": 0,
+        "candidate_errors": 0,
+        "ui_errors": 0,
+        "transport_pending": 0
+      },
+      {
+        "trace": true,
+        "pair": 0,
+        "gaps": 0,
+        "candidate_errors": 0,
+        "ui_errors": 0,
+        "transport_pending": 0
+      },
+      {
+        "trace": true,
+        "pair": 1,
+        "gaps": 0,
+        "candidate_errors": 0,
+        "ui_errors": 0,
+        "transport_pending": 0
+      },
+      {
+        "trace": false,
+        "pair": 1,
+        "gaps": 0,
+        "candidate_errors": 0,
+        "ui_errors": 0,
+        "transport_pending": 0
+      },
+      {
+        "trace": false,
+        "pair": 2,
+        "gaps": 0,
+        "candidate_errors": 0,
+        "ui_errors": 0,
+        "transport_pending": 0
+      },
+      {
+        "trace": true,
+        "pair": 2,
+        "gaps": 0,
+        "candidate_errors": 0,
+        "ui_errors": 0,
+        "transport_pending": 0
+      },
+      {
+        "trace": true,
+        "pair": 3,
+        "gaps": 0,
+        "candidate_errors": 0,
+        "ui_errors": 0,
+        "transport_pending": 0
+      },
+      {
+        "trace": false,
+        "pair": 3,
+        "gaps": 0,
+        "candidate_errors": 0,
+        "ui_errors": 0,
+        "transport_pending": 0
+      },
+      {
+        "trace": false,
+        "pair": 4,
+        "gaps": 0,
+        "candidate_errors": 0,
+        "ui_errors": 0,
+        "transport_pending": 0
+      },
+      {
+        "trace": true,
+        "pair": 4,
+        "gaps": 0,
+        "candidate_errors": 0,
+        "ui_errors": 0,
+        "transport_pending": 0
+      }
+    ],
+    "cpu_scope": "Main process CPU during measured window; optional child process CPU is not included.",
+    "report": "PERFORMANCE_PLAN_0_14_218_TRACE_OVERHEAD.json"
+  },
+  "source_integrity": {
+    "current_files": 624,
+    "baseline_files": 618,
+    "baseline_unchanged": true,
+    "current_unchanged": true,
+    "windows_tracked_set_exact": true,
+    "windows_source_unchanged": true,
+    "executable_source_remote_commit": "6b883526e7ce7893f0722d6f0309a43a8b14a222",
+    "manifest_sha256": "4d94f61874f8ec1683710ff07e2d261bd0c827cf33366a1d439c694dc3e96cf6"
+  },
+  "target_hardware": {
+    "device": "Raspberry Pi 4",
+    "storage": "microSD 64 GB",
+    "source": "User confirmation in this chat, 2026-10-19",
+    "ram_capacity": "not provided",
+    "target_hardware_benchmarked": false
+  },
+  "acceptance_report": "PERFORMANCE_PLAN_0_14_218_ACCEPTANCE.json"
 }

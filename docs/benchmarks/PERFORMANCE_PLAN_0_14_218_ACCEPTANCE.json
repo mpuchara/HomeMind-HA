@@ -1,0 +1,213 @@
+{
+  "overall_status": "NOT_ACCEPTED_FULL_PLAN",
+  "performance_status": "OPEN: host Shadow3 and Control3 decision scenarios improved; Root20 end-to-end improvement remains inconclusive. Full E0-E7 and target Pi/microSD acceptance are incomplete.",
+  "functional_status": "PASS",
+  "validated_executable_remote_commit": "6b883526e7ce7893f0722d6f0309a43a8b14a222",
+  "source_integrity": {
+    "current_files": 624,
+    "baseline_files": 618,
+    "baseline_unchanged": true,
+    "current_unchanged": true,
+    "windows_tracked_set_exact": true,
+    "windows_source_unchanged": true,
+    "executable_source_remote_commit": "6b883526e7ce7893f0722d6f0309a43a8b14a222",
+    "manifest_sha256": "4d94f61874f8ec1683710ff07e2d261bd0c827cf33366a1d439c694dc3e96cf6"
+  },
+  "target_hardware": {
+    "device": "Raspberry Pi 4",
+    "storage": "microSD 64 GB",
+    "source": "User confirmation in this chat, 2026-10-19",
+    "ram_capacity": "not provided",
+    "target_hardware_benchmarked": false
+  },
+  "scenarios": {
+    "SHADOW_20": {
+      "event_to_decision": {
+        "baseline_p95_ms": 124.60424009997752,
+        "current_p95_ms": 132.88956459997505,
+        "relative_change_percent": 6.649311847935291,
+        "paired_run_bootstrap_95_percent": [
+          -13.043234628369238,
+          29.545519841605472
+        ],
+        "baseline_count": 34512,
+        "current_count": 33017
+      },
+      "status": "INCONCLUSIVE for Root end-to-end acceleration: 124.60 -> 132.89ms (+6.65%), paired bootstrap [-13.04%,+29.55%]. More completed Candidate observations do not establish Root speedup. Full acceptance remains open.",
+      "report": "PERFORMANCE_PLAN_0_14_218_FINAL_SHADOW_20_UI.json",
+      "pairs": 5,
+      "seconds_per_run": 36
+    },
+    "SHADOW_3": {
+      "event_to_decision": {
+        "baseline_p95_ms": 15.173243000003112,
+        "current_p95_ms": 9.983003499996812,
+        "relative_change_percent": -34.206527240124174,
+        "paired_run_bootstrap_95_percent": [
+          -38.442313211673294,
+          -30.10533543205668
+        ],
+        "baseline_count": 10746,
+        "current_count": 10756
+      },
+      "status": "HOST SCENARIO IMPROVEMENT: 3 eligible/20 configured Shadow Root p95 -34.21%, paired bootstrap [-38.44%,-30.11%]. Short alternating probes only; does not resolve Root20 uncertainty or deployed/startup acceptance.",
+      "report": "PERFORMANCE_PLAN_0_14_218_FINAL_SHADOW_3_UI.json",
+      "pairs": 5,
+      "seconds_per_run": 36
+    },
+    "CONTROL_3": {
+      "event_to_decision": {
+        "baseline_p95_ms": 125.19965404998742,
+        "current_p95_ms": 80.87545650001572,
+        "relative_change_percent": -35.40281152236631,
+        "paired_run_bootstrap_95_percent": [
+          -38.64606983072567,
+          -29.983192441263796
+        ],
+        "baseline_count": 6220,
+        "current_count": 8339
+      },
+      "status": "HOST DECISION SCENARIO IMPROVEMENT: 3 eligible Control Root p95 -35.40%, paired bootstrap [-38.65%,-29.98%]. Only 12 baseline/15 current service and ACK samples in measured windows; no physical device/service-latency acceptance.",
+      "report": "PERFORMANCE_PLAN_0_14_218_FINAL_CONTROL_3_UI.json",
+      "pairs": 5,
+      "seconds_per_run": 36,
+      "service_sample_coverage": {
+        "baseline": {
+          "services_with_warmup": 15,
+          "measured_service_samples": 12,
+          "measured_ack_samples": 12
+        },
+        "current": {
+          "services_with_warmup": 15,
+          "measured_service_samples": 15,
+          "measured_ack_samples": 15
+        }
+      }
+    }
+  },
+  "trace": {
+    "summary": {
+      "off": {
+        "p95_ms": 8.484310299996881,
+        "cpu_seconds": 26.618341954,
+        "samples": 5355
+      },
+      "on": {
+        "p95_ms": 9.863629400007312,
+        "cpu_seconds": 29.668062135000003,
+        "samples": 5355
+      },
+      "p95_relative_change_percent": 16.257292004170786,
+      "cpu_relative_change_percent": 11.457213173796932
+    },
+    "quality": [
+      {
+        "trace": false,
+        "pair": 0,
+        "gaps": 0,
+        "candidate_errors": 0,
+        "ui_errors": 0,
+        "transport_pending": 0
+      },
+      {
+        "trace": true,
+        "pair": 0,
+        "gaps": 0,
+        "candidate_errors": 0,
+        "ui_errors": 0,
+        "transport_pending": 0
+      },
+      {
+        "trace": true,
+        "pair": 1,
+        "gaps": 0,
+        "candidate_errors": 0,
+        "ui_errors": 0,
+        "transport_pending": 0
+      },
+      {
+        "trace": false,
+        "pair": 1,
+        "gaps": 0,
+        "candidate_errors": 0,
+        "ui_errors": 0,
+        "transport_pending": 0
+      },
+      {
+        "trace": false,
+        "pair": 2,
+        "gaps": 0,
+        "candidate_errors": 0,
+        "ui_errors": 0,
+        "transport_pending": 0
+      },
+      {
+        "trace": true,
+        "pair": 2,
+        "gaps": 0,
+        "candidate_errors": 0,
+        "ui_errors": 0,
+        "transport_pending": 0
+      },
+      {
+        "trace": true,
+        "pair": 3,
+        "gaps": 0,
+        "candidate_errors": 0,
+        "ui_errors": 0,
+        "transport_pending": 0
+      },
+      {
+        "trace": false,
+        "pair": 3,
+        "gaps": 0,
+        "candidate_errors": 0,
+        "ui_errors": 0,
+        "transport_pending": 0
+      },
+      {
+        "trace": false,
+        "pair": 4,
+        "gaps": 0,
+        "candidate_errors": 0,
+        "ui_errors": 0,
+        "transport_pending": 0
+      },
+      {
+        "trace": true,
+        "pair": 4,
+        "gaps": 0,
+        "candidate_errors": 0,
+        "ui_errors": 0,
+        "transport_pending": 0
+      }
+    ],
+    "cpu_scope": "Main process CPU during measured window; optional child process CPU is not included.",
+    "report": "PERFORMANCE_PLAN_0_14_218_TRACE_OVERHEAD.json"
+  },
+  "sustained_smoke": {
+    "seconds": 360,
+    "status": "PASS_SIX_MINUTE_SMOKE_ONLY",
+    "observation_gaps": 0,
+    "ui_errors": 0,
+    "candidate_errors": 0,
+    "queue_growth_last_180s_operations_per_second": 0.2253,
+    "indefinite_steady_state_established": false,
+    "report": "PERFORMANCE_PLAN_0_14_218_LONG_CURRENT_20.json"
+  },
+  "limitations": [
+    "Alternating performance pairs are 36 seconds, not a full minutes-per-pair sustained acceptance protocol.",
+    "Host local HA stub is not a physical-device measurement; only 12/15 measured service/ACK samples in Control pairs.",
+    "No cold/warm startup benchmark on the large production database or Raspberry Pi/microSD.",
+    "No production storage-pressure/reclaim acceptance; host WAL allocation is not a target SD-card budget.",
+    "Build, training, lifecycle/finalization, checkpoint and prolonged overload interference scenarios remain open.",
+    "Main-process trace CPU excludes optional child compute processes."
+  ],
+  "remaining_work": [
+    "Full lifecycle isolation and remaining optional post-decision work.",
+    "Detached incremental ingest frames and a complete model-mutation epoch before caching mutable model views.",
+    "CPU/IPC evaluation on the target Raspberry Pi; retain existing worker limits until evidence supports changes.",
+    "Large-database startup tracing, microSD write-pressure scenarios, guarded storage cleanup/checkpoint recovery.",
+    "Conditional Home Context lock changes only if a target trace identifies contention."
+  ]
+}
