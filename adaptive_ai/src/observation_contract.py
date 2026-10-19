@@ -1044,7 +1044,14 @@ class FeatureJournal:
                 # the maximum expiry also covers an entity's complete sample
                 # range, it is the exact answer for every sample in that range.
                 # Partial/disjoint coverage retains the exact per-sample query.
-                protection.update((int(row[0]), float(row[1] or 0.)) for row in c.execute(f'''
+                # Return one SQLite row for the whole bounded group. Iterating
+                # one native result row per sample repeatedly yields the GIL
+                # while Store is held; busy inference can turn a short query
+                # into seconds of writer lock residency. CASE/MAX preserves
+                # the native REAL values without a text/JSON round trip.
+                columns = ','.join(f'MAX(CASE WHEN seq={start+offset} THEN expiry END)'
+                                   for offset in range(len(chunk)))
+                row = c.execute(f'''
                     WITH samples(seq,entity,stamp) AS (VALUES {values}),
                     ranges AS (SELECT entity,MIN(stamp) lo,MAX(stamp) hi FROM samples GROUP BY entity),
                     coverage AS (
@@ -1056,11 +1063,13 @@ class FeatureJournal:
                             AND w.start_time<=r.hi AND w.end_time>=r.lo
                         GROUP BY r.entity
                     )
-                    SELECT s.seq,CASE WHEN c.maximum=c.common THEN c.common ELSE (
+                    , protection AS (SELECT s.seq,CASE WHEN c.maximum=c.common THEN c.common ELSE (
                         SELECT MAX(w.protected_until) FROM feature_window_entities e
                         JOIN feature_windows w ON w.window_id=e.window_id
                         WHERE e.entity_id=s.entity AND w.start_time<=s.stamp AND w.end_time>=s.stamp
-                    ) END FROM samples s JOIN coverage c ON c.entity=s.entity''', params))
+                    ) END AS expiry FROM samples s JOIN coverage c ON c.entity=s.entity)
+                    SELECT {columns} FROM protection''', params).fetchone()
+                protection.update((start+offset, float(value or 0.)) for offset,value in enumerate(row))
             _insert_journal_rows(c,
                     """INSERT INTO feature_observation_events
                        (event_key,contract_version,entity_id,event_time,received_time,state,

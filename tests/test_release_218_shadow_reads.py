@@ -147,6 +147,35 @@ class ShadowReads218Tests(unittest.TestCase):
 
 
 class ProtectionSegments218Tests(unittest.TestCase):
+    def test_bulk_sample_protection_keeps_native_float_precision_across_bind_groups(self):
+        from observation_contract import FeatureJournal
+        temp = tempfile.TemporaryDirectory()
+        self.addCleanup(temp.cleanup)
+        store = Store(Path(temp.name)/'protection.db')
+        stamp = [0.]
+        journal = FeatureJournal(store, clock=lambda: stamp[0], window_retention_days=0.)
+        windows = []
+        for i, expiry in enumerate((math.nextafter(100., math.inf), 1./3., 1e200, 1e-200)):
+            stamp[0] = expiry
+            selected = ['sensor.a'] if i % 2 else ['sensor.a', 'sensor.b']
+            lo, hi = float(i*10), float(i*10+12)
+            journal.open_window(str(i), 'a', selected, lo, 'test', before=0., after=hi-lo)
+            windows.append((selected, lo, hi, expiry))
+        stamp[0] = 0.
+        records = [dict(event_key=str(i), entity_id=('sensor.a','sensor.b','sensor.missing')[i%3],
+                        event_time=float(i%61), received_time=100.,
+                        state=support.state('sensor.sample', i), source='test') for i in range(600)]
+        with store.connection_session() as c:
+            c.setlimit(sqlite3.SQLITE_LIMIT_VARIABLE_NUMBER, 999)
+            journal.record_batch(records)
+        with store.conn() as c:
+            actual = dict(c.execute('SELECT event_key,protected_until FROM feature_observation_events'))
+        self.assertEqual(len(actual), len(records))
+        for row in records:
+            values = [expiry for selected,lo,hi,expiry in windows
+                      if row['entity_id'] in selected and lo<=row['event_time']<=hi]
+            self.assertEqual(actual[row['event_key']], max(values) if values else 0., row)
+
     def test_older_sqlite_fallback_retains_complete_sql_parity(self):
         from test_release_217_writer_turns import JournalAdmissionTests
         helper = JournalAdmissionTests()

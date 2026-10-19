@@ -22,13 +22,19 @@
       "seconds": 296.139,
       "result": "OK",
       "log_sha256": "8b17fb30cd71c3ee99513b0c9e78a125de987f22c542f755fb325175522e8ae8"
+    },
+    {
+      "tests": 2681,
+      "seconds": 310.685,
+      "result": "OK",
+      "log_sha256": "e200d0a971bef0cf5f5b0da35ec0173a93d9cc7e8ef518a87562740681403028"
     }
   ],
   "final_full_run": {
-    "tests": 2681,
-    "seconds": 310.685,
+    "tests": 2682,
+    "seconds": 339.596,
     "result": "OK",
-    "log_sha256": "e200d0a971bef0cf5f5b0da35ec0173a93d9cc7e8ef518a87562740681403028"
+    "log_sha256": "c1a69c3f5eee74bdf34500bc73e6beac491db772e81695a8b2d9b15f0c703c1f"
   },
   "first_ci_run": {
     "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/39178106458",
@@ -50,5 +56,28 @@
     "suite": "test_release_217_runtime_plan.py",
     "log_sha256": "396d67309652ca9107be822fdf0ad4d14724f65982e25a46519b2fdac9d9c4a2",
     "tail": "binding_is_local_and_cleared_even_after_agent_error) ... ok\n\n----------------------------------------------------------------------\nRan 22 tests in 18.456s\n\nOK\n"
+  },
+  "second_ci_run": {
+    "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/39179392891",
+    "commit": "5460656a7cfa23bf209899e91f5198b726750c7e",
+    "python_311": {
+      "tests": 2681,
+      "seconds": 236.329,
+      "result": "OK"
+    },
+    "python_313": {
+      "tests": 2681,
+      "seconds": 195.837,
+      "result": "OK"
+    },
+    "image": "PASS",
+    "scope": "Before the native row aggregation change; the final tree requires a new CI run."
+  },
+  "rejected_sustained_run": {
+    "report": "docs/benchmarks/PERFORMANCE_PLAN_0_14_218_LONG_CURRENT_20_REJECTED.json",
+    "result": "REJECTED: growing raw/window queues, Candidate queue wait measured in seconds, one Candidate-list HTTP timeout. Matrix did not start.",
+    "diagnosis": "Late thread-stack samples locate Candidate false-early summary waiting on Store and journal record_batch iterating result rows while holding Store.",
+    "correction": "Return native CASE/MAX columns in one result row per bounded 256-sample group, with no text/JSON conversion or changed protection semantics.",
+    "regression": "600 samples over three bind groups, 999 SQLite parameter limit, exact float values, missing entities and inclusive interval endpoints."
   }
 }

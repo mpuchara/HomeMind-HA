@@ -1,6 +1,6 @@
 # 0.14.218: niezależny zapis Candidate i krótsze porcje audytu
 
-Drugi pakiet planu performance, na bazie 0.14.217 / PR #333 (`f84211d676cf07c8ef80ea72aa6868d8747f38f7`). Status: draft; pełna regresja kończy się 2681 testami OK w 310.685 s. Entry point, oba testy VM, compileall i składnia 21 plików JS przechodzą. Macierz porównań i długi test są w toku. Nie jest to zakończenie całego E0–E7.
+Drugi pakiet planu performance, na bazie 0.14.217 / PR #333 (`f84211d676cf07c8ef80ea72aa6868d8747f38f7`). Status: draft; pełna regresja kończy się 2682 testami OK w 339.596 s. Entry point, oba testy VM, compileall i składnia 21 plików JS przechodzą. Macierz porównań i długi test są w toku. Nie jest to zakończenie całego E0–E7.
 
 ## Co blokowało runtime
 
@@ -42,3 +42,5 @@ Pakiet rozszerza E0/E1 oraz części E3/E6. Pełne oddzielenie lifecycle od obli
 Nie ma pomiaru Raspberry Pi, fizycznego urządzenia ani startu na kopii bazy użytkownika. Nie ma podstaw do stwierdzenia, że prawie dziesięciominutowy start instalacji został usunięty. Schematy modeli i wyuczone parametry instalacji nie zmieniają się; Full Rebuild nie jest wymagany.
 
 Smoke Control zachowuje pierwotne rzadkie cechy treningowe (`--training-fixture legacy`) i niezmienione wymaganie co najmniej trzech komend w krótkim teście. Pomiary performance domyślnie używają produkcyjnego extractora. Pierwszy CI 3.11 wykazał różnicę fixture (dwie komendy); 3.13 i obraz przeszły. Ponowny CI sprawdza końcowe źródła. Licznik opóźnienia Candidate wymaga faktycznego wyniku Shadow; sam wynik Parent nie tworzy próbki.
+
+Pierwszy test 180 s został odrzucony: rosły kolejki dziennika, Shadow czekał sekundami, a jedno zapytanie pełnej listy Candidate przekroczyło timeout. Raport wraz z pełnym SHA surowych danych pozostaje w repozytorium. Profil wskazał przekazywanie GIL przy iteracji próbek SQL pod Store oraz czekający zapis false-early. Nowy odczyt CASE/MAX zwraca jedną natywną krotkę na porcję do 256 próbek. Nie serializuje floatów do JSON ani tekstu i zachowuje świeży snapshot transakcji. Dodatkowy test obejmuje 600 próbek, trzy porcje, limit 999 parametrów, precyzję REAL, brakujące encje i domknięte końce przedziałów. Nowy pomiar obciążenia jest wymagany; wcześniejszy zielony CI dotyczył źródeł sprzed tej zmiany.

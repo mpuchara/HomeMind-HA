@@ -249,7 +249,7 @@
   "pi4_release_gate_contract": "pi4_release_gate_v1",
   "pi4_real_hardware_required": true,
   "stage7_offline_rl_control_unlock": false,
-  "tests_passed": 2681,
+  "tests_passed": 2682,
   "tests_passed_version": "0.14.218",
   "profile": "rpi4-ram-first-complete-discovery-manual-agent-selection",
   "manual_agent_training": true,
@@ -3163,12 +3163,12 @@
     "scope": "Candidate decision persistence isolation, fair late admission and exact retention envelope",
     "physical_device_speedup_established": false,
     "validation": {
-      "tests": 2681,
-      "seconds": 310.685,
+      "tests": 2682,
+      "seconds": 339.596,
       "result": "OK",
-      "log_sha256": "e200d0a971bef0cf5f5b0da35ec0173a93d9cc7e8ef518a87562740681403028"
+      "log_sha256": "c1a69c3f5eee74bdf34500bc73e6beac491db772e81695a8b2d9b15f0c703c1f"
     },
-    "performance_gate": "pending sustained 180s and alternating full runtime comparisons",
+    "performance_gate": "First 180s run rejected; repeat after native protection-row aggregation, then alternating comparisons",
     "candidate_evidence": {
       "owner": "separate persistence worker; prediction remains on existing Candidate worker",
       "max_items": 1024,
@@ -3194,6 +3194,7 @@
       "max_entity_links": 4096,
       "single_indivisible_row_preserved": true
     },
-    "trial_gate": "exact standard proposer no-op under its original RLock, unknown/custom implementations keep full path"
+    "trial_gate": "exact standard proposer no-op under its original RLock, unknown/custom implementations keep full path",
+    "native_protection_read": "One native REAL result row per <=256 samples; no per-sample cursor iteration under Store, no float text conversion"
   }
 }
