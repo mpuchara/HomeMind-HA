@@ -1,6 +1,6 @@
 # 0.14.219: start i przygotowanie kontekstu na Raspberry Pi
 
-Pakiet rozwija 0.14.218 / PR #334. Status: **draft, bieżąca pełna regresja i CI w toku**. Poprzedni pakiet przed odłączeniem zapisów cache przeszedł 2727 testów. Aktualny kod przeszedł 53 testy ukierunkowane oraz próby runtime opisane poniżej. Sprzęt użytkownika: Raspberry Pi 4 z microSD 64 GB; pojemności RAM nie podano.
+Pakiet rozwija 0.14.218 / PR #334. Status: **wersja testowa, pełny odbiór performance pozostaje otwarty**. Końcowa lokalna regresja: **2736 testów OK / 393.571 s**; entrypoint, oba UI, compileall i składnia 21 plików JS przeszły. CI końcowego kodu `867e8a9d` przeszło na Pythonie 3.11/3.13, wraz z dodatkowymi benchmarkami i obrazem Docker. Sprzęt użytkownika: Raspberry Pi 4, microSD 64 GB; pojemności RAM nie podano.
 
 ## Co wynika z czterech eksportów 0.14.218
 
@@ -37,3 +37,7 @@ Tworzenie epoki selekcji, zamrożenie końca finalnej oceny, etykiety, surowe ob
 Przed tą zmianą zachowano dwie odrzucone próby 60 s z 20 Root: odpowiednio 1 i 2 błędy UI, bez luk Candidate. Pięć par po 18 s dało p95 225,82 → 166,25 ms, ale bootstrap od -70,79% do +19,92%; wynik jest nierozstrzygający i nie stanowi odbioru końcowych źródeł.
 
 Po zmianie, na zamrożonych 628 plikach: 60 s Shadow20, p95 183,21 ms, 0 błędów UI/Candidate i 0 luk; zapisano 19 cache, pięć razy pominięto zajętą blokadę Store. Control3 przez 30 s: p95 decyzji 78,21 ms, 0 błędów/luk, 3 zapisy cache i 7 pominięć blokady. Obie próby mają 30 s rozgrzewki i lokalny stub HA. Nie są parowanym dowodem przyspieszenia, pomiarem Pi ani odbiorem opóźnienia urządzeń. Wcześniejsze błędy i pełne lokalne surowe dane pozostają w QA.
+
+## Końcowa walidacja i instalacja testowa
+
+Manifest 628 plików kodu, testów i narzędzi jest identyczny z obiema próbami po poprawce cache, lokalnym pełnym testem i opublikowanym kodem. Późniejszy commit raportów zmienia wyłącznie dokumentację oraz metadane. Pakiet pozostaje testowy: nie ma dowodu ogólnej poprawy Root ani przyspieszenia startu produkcyjnej bazy na Pi. Kolejny eksport zawiera szczegółowe `startup.components` oraz `sqlite.confidence_cache_writes`. Podmiana źródeł wymaga przebudowania dodatku; ponowne trenowanie modeli nie jest wymagane przez ten pakiet.

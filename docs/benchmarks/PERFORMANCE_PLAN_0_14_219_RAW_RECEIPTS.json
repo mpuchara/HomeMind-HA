@@ -1,0 +1,37 @@
+[
+  {
+    "report": "PERFORMANCE_PLAN_0_14_219_REJECTED_SMOKE_SHADOW_20.json",
+    "raw": "perf219-shadow20-first-rejected.json",
+    "sha256": "d2295b1f0808676dc53e98dccd839dd11481dea27655b4618472c5c08b8e5a40",
+    "bytes": 1379819,
+    "verified": true
+  },
+  {
+    "report": "PERFORMANCE_PLAN_0_14_219_REJECTED_WARM30_SHADOW_20.json",
+    "raw": "perf219-shadow20-warm30-rejected.json",
+    "sha256": "432824666096518b0b7b96435d9807d06d6e3ce61496b6186b4b4fd15d2bfed3",
+    "bytes": 1666519,
+    "verified": true
+  },
+  {
+    "report": "PERFORMANCE_PLAN_0_14_219_PAIRED_SHADOW_20.json",
+    "raw": "perf219-paired-shadow20.json",
+    "sha256": "d2c448f6ac5ae16d72c8ac5b342c5976cd274a9b210b616ddc445bc7b283f24e",
+    "bytes": 8324320,
+    "verified": true
+  },
+  {
+    "report": "PERFORMANCE_PLAN_0_14_219_CACHE_SHADOW_20.json",
+    "raw": "perf219-cache-shadow20.json",
+    "sha256": "e427499f16805235e808479d87ddd9dea64dca087329b2a4bc6da63296d65d8c",
+    "bytes": 1629828,
+    "verified": true
+  },
+  {
+    "report": "PERFORMANCE_PLAN_0_14_219_CACHE_CONTROL_3.json",
+    "raw": "perf219-cache-control3.json",
+    "sha256": "2de34640979766688c1c6218b9ffb89f1e3ac3f42f6d0d0f7687fe6316d297fa",
+    "bytes": 301462,
+    "verified": true
+  }
+]

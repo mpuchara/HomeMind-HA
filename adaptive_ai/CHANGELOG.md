@@ -4,7 +4,7 @@
 - Expose bounded, nested per-installer startup elapsed/CPU timing and live progress, including failed installation, without debug trace or changing initialization order.
 - Reuse a complete detached registry snapshot after native strong-identity and nested-value validation; charge its witnesses/container to the existing bounded cache. Preserve in-place corrections, replacement types and returned-container ownership.
 - Keep derived Confidence cache writes off Store/SQLite lock waits; always return the fresh computed report, retaining durable epoch creation/final locking and full write admission.
-- Current focused validation passes 53 tests, with zero gaps/UI errors in 60s Shadow20 and 30s Control3 host probes after 30s warmup. Current full regression/CI pending; target performance acceptance open.
+- Full local validation passes: 2736 tests in 393.571s, entrypoint, both UI VMs, compileall and 21 JavaScript checks. Exact executable-source CI passes Python 3.11/3.13, workflow benchmarks and Docker. General Root, target Pi/microSD startup and device performance acceptance remain open.
 
 ## 0.14.218 (2026-10-19, draft)
 
