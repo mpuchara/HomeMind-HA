@@ -10,7 +10,7 @@ import time
 import traceback
 from settings import (OPTIONS, TRAINING_REVISION, clamp, iso_from_ts, now_ts, parse_ts)
 from storage import STORE
-from storage_budget import StoragePressure, require_storage_available, run_storage_write
+from storage_budget import StoragePressure, require_storage_available, run_storage_write, _payload_bytes
 from ha import HA, AUTOMATION_KNOWLEDGE
 from context import (archived_state, balanced_presence_driver_score, controllable_context_exclusions, default_action_interval, electrical_context_exclusions, entity_capability_tags, historical_reward, is_context_candidate_entity, is_esphome_sensor_entity, is_fast_reactive_agent, numeric_activity_driver_score, occupancy_state_bool, target_options_for_state, target_value, transition_edges)
 from telemetry import HEAVY_JOBS, RUNTIME_DEBUG, rss_mb
@@ -20,6 +20,7 @@ from replay import (
     HistoricalFeatureSnapshotCache, RAMReplayIndex,
 )
 from training_budget import TRAINING_BUDGET
+from training_preparation import preparation_memory, preparation_profile
 from policy import MultiHorizonPolicy
 from training_balance_audit import TrainingBalanceAudit
 from training_evidence import evidence_weight_for, normalized_dwell_sample_mass
@@ -241,6 +242,7 @@ class HistoryManager(threading.Thread):
         self.training_recorder_coverage_hits = 0
         self.training_recorder_coverage_misses = 0
         self.recorder_skipped_slices = 0
+        self.training_preparation_profile = {}
         self.job_cancel_event = None
         self.agent_jobs_lock = threading.RLock()
         self.discovery_job_lock = threading.RLock()
@@ -313,6 +315,7 @@ class HistoryManager(threading.Thread):
                     getattr(self, "training_process_status", {}) or {}
                 ),
                 "training_recorder_coverage_entries": len(getattr(self, "training_recorder_coverage", {}) or {}),
+                "training_preparation_profile": dict(self.training_preparation_profile),
                 "training_recorder_coverage_hits": int(getattr(self, "training_recorder_coverage_hits", 0) or 0),
                 "training_recorder_coverage_misses": int(getattr(self, "training_recorder_coverage_misses", 0) or 0),
                 "training_stage_progress": (
@@ -414,6 +417,7 @@ class HistoryManager(threading.Thread):
             d["training_process"] = dict(rows[0]["training_process"] or {})
             d.update(rows[0]["status"])
             oldest_session = sessions[0][1]
+            d['training_preparation_profile'] = dict(oldest_session.training_preparation_profile)
             for key, attribute in (
                 ('training_phase_timings', 'training_phase_timings'),
                 ('training_job_timings', 'training_job_timings'),
@@ -804,6 +808,7 @@ class HistoryManager(threading.Thread):
                     STORE.set_training_state(
                         agent_id, "paused", detail={"reason": str(exc),
                             "storage_pressure": isinstance(exc, StoragePressure),
+                            "storage_reason": getattr(exc, 'reason', None),
                             "rebuild_reset_completed": bool(getattr(session, 'training_reset_completed', False))}
                     )
             finally:
@@ -1864,6 +1869,12 @@ class HistoryManager(threading.Thread):
 
     def _archive_history_payload(self, data, source):
         rows = []
+        buffered_bytes = 0
+        explicit = bool(getattr(self, 'training_job_agent_id', None))
+        profile = self.training_preparation_profile if explicit else {}
+        batch_rows = int(profile.get('batch_rows', HISTORY_IMPORT_BATCH_ROWS))
+        batch_bytes = int(profile.get('batch_bytes', 1024 * 1024))
+        staged = batch_rows > HISTORY_IMPORT_BATCH_ROWS
         written = 0
         batches = 0
         max_batch_rows = 0
@@ -1878,16 +1889,29 @@ class HistoryManager(threading.Thread):
                 raise InterruptedError("History import cancelled")
 
         def flush():
-            nonlocal written, batches, max_batch_rows, last_report_at
+            nonlocal written, batches, max_batch_rows, last_report_at, buffered_bytes
             if not rows:
                 return
             check_cancelled()
             count = len(rows)
-            written += run_storage_write(STORE, lambda: STORE.archive_batch(rows),
-                self.stop_event, self.job_cancel_event)
+            def waiting(status):
+                self.set_status(
+                    message='Recorder response retained in RAM; waiting for diagnostic cleanup',
+                    phase_detail='Waiting for storage headroom; committed history is preserved',
+                    eta_source='waiting for storage recovery', stage_eta_seconds=None,
+                )
+            write_batch = (lambda: STORE.archive_packed_batch(rows)) if staged else (lambda: STORE.archive_batch(rows))
+            if explicit and profile.get('capacity_wait_seconds', 0) > 0:
+                written += run_storage_write(STORE, write_batch,
+                    self.stop_event, self.job_cancel_event,
+                    capacity_timeout=profile['capacity_wait_seconds'], on_wait=waiting)
+            else:
+                written += run_storage_write(STORE, write_batch,
+                    self.stop_event, self.job_cancel_event)
             batches += 1
             max_batch_rows = max(max_batch_rows, count)
             rows.clear()
+            buffered_bytes = 0
             if report and time.monotonic() - last_report_at >= 1.0:
                 report(scanned / max(1, source_rows), scanned, source_rows, written)
                 last_report_at = time.monotonic()
@@ -1896,8 +1920,16 @@ class HistoryManager(threading.Thread):
             TRAINING_BUDGET.checkpoint("history_import_committed_batch", force=True)
 
         def append(row):
+            nonlocal buffered_bytes
+            # Bound encoded input as well as rows, including one large attribute map.
+            if staged:
+                row = STORE.pack_archive_row(row)
+            size = _payload_bytes(row) + 16 if staged else 0  # mutation revision
+            if rows and buffered_bytes + size > batch_bytes:
+                flush()
             rows.append(row)
-            if len(rows) >= HISTORY_IMPORT_BATCH_ROWS:
+            buffered_bytes += size
+            if len(rows) >= batch_rows or buffered_bytes >= batch_bytes:
                 flush()
 
         def import_groups():
@@ -1942,7 +1974,7 @@ class HistoryManager(threading.Thread):
             flush()
 
         trace = RUNTIME_DEBUG.begin("history_archive_import", source=source,
-                                    batch_rows=HISTORY_IMPORT_BATCH_ROWS)
+                                    batch_rows=batch_rows)
         status = "ok"
         error_type = None
         try:
@@ -1970,8 +2002,12 @@ class HistoryManager(threading.Thread):
         if self.stop_event.is_set() or (self.job_cancel_event and self.job_cancel_event.is_set()):
             raise InterruptedError('History import cancelled')
         memory = rss_mb()
-        if memory is not None and memory > 500:
-            raise MemoryError('500 MB training memory limit reached')
+        explicit = bool(getattr(self, 'training_job_agent_id', None))
+        if explicit:
+            self.training_preparation_profile = preparation_profile(OPTIONS, preparation_memory(), memory)
+        memory_limit = self.training_preparation_profile.get('memory_limit_mb', 500) if explicit else 500
+        if memory is not None and memory > memory_limit:
+            raise MemoryError(f'{memory_limit} MB training preparation memory limit reached')
         if not entity_ids or end_ts <= start_ts:
             return 0
         try:

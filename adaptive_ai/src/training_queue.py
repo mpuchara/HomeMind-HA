@@ -110,6 +110,8 @@ class TrainingQueue(threading.Thread):
         self.cancel_requested = set()
         self._queue_sequence = 0
         self.revision = 0
+        self.storage_retry_reason = None
+        self.storage_retry_after = 0.0
         # Bounded in-RAM lifecycle trace for diagnosing queue hand-off without adding
         # SQLite writes to the training path. Exported by RuntimeDebugLogService via
         # snapshot(); it is deliberately diagnostic-only and never drives admission.
@@ -580,6 +582,9 @@ class TrainingQueue(threading.Thread):
             return {
                 "active": active,
                 "storage_waiting": storage_status(self.store),
+                "storage_retry": {"reason": self.storage_retry_reason,
+                    "retry_in_seconds": max(0., self.storage_retry_after-time.monotonic()),
+                    "database_resume_fraction": .85},
                 "active_jobs": active_jobs,
                 "active_count": active_count,
                 "effective_slots": self._effective_slots(),
@@ -613,10 +618,23 @@ class TrainingQueue(threading.Thread):
     def _try_start_head(self):
         try:
             require_storage_available(self.store)
-        except StoragePressure:
+        except StoragePressure as exc:
             # Keep the request queued. Never clear a model for a job that cannot
             # write its training data. Normal polling resumes after recovery.
+            if getattr(exc, 'reason', None) == 'database_budget':
+                self.storage_retry_reason = 'database_budget'
+                self.storage_retry_after = time.monotonic() + 5.
             return False
+        if self.storage_retry_reason:
+            status = storage_status(self.store)
+            if time.monotonic() < self.storage_retry_after:
+                return False
+            if (self.storage_retry_reason == 'database_budget'
+                    and status.get('database_used_bytes', 0) >= status.get('database_max_bytes', float('inf')) * .85):
+                return False
+            if (status.get('wal_bytes', 0) >= status.get('wal_max_bytes', float('inf')) * .25):
+                return False
+            self.storage_retry_reason = None
         with self.cv:
             if not self.jobs:
                 return False
@@ -828,6 +846,11 @@ class TrainingQueue(threading.Thread):
             ((agent or {}).get('benchmark_detail') or {}).get('storage_pressure')
         )
         if storage_interrupted and not cancelled and job.get('reason') != 'teach_rl':
+            pressure_detail = (agent or {}).get('benchmark_detail') or {}
+            if (pressure_detail.get('storage_reason') == 'database_budget'
+                    or 'database_budget' in str(pressure_detail.get('reason') or '')):
+                self.storage_retry_reason = 'database_budget'
+                self.storage_retry_after = time.monotonic() + 5.
             reset_completed = bool(((agent or {}).get('benchmark_detail') or {}).get('rebuild_reset_completed'))
             self.enqueue(agent_id, rebuild=bool(job.get('rebuild')) and not reset_completed,
                          reason=job.get('reason') or 'training',

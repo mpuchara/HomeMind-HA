@@ -1341,26 +1341,26 @@ class Store:
                 ),
             )
 
+    @staticmethod
+    def pack_archive_row(row):
+        if len(row) == 6:
+            entity_id, ts, state, attrs, user_id, source = row
+            received_ts = None
+        elif len(row) == 7:
+            entity_id, ts, state, attrs, user_id, source, received_ts = row
+        else:
+            raise ValueError("archive row must contain 6 legacy fields or 7 fields with received_ts")
+        return (entity_id, float(ts), float(received_ts) if received_ts is not None else None,
+                None if state is None else str(state),
+                json.dumps(attrs or {}, separators=(",", ":"), ensure_ascii=False), user_id, source)
+
     def archive_batch(self, rows):
-        if not rows:
+        return self.archive_packed_batch([self.pack_archive_row(row) for row in rows])
+
+    def archive_packed_batch(self, packed):
+        """Internal pre-encoded Recorder buffer; identical guarded UPSERT/commit path."""
+        if not packed:
             return 0
-
-        def pack(row):
-            if len(row) == 6:
-                entity_id, ts, state, attrs, user_id, source = row
-                received_ts = None
-            elif len(row) == 7:
-                entity_id, ts, state, attrs, user_id, source, received_ts = row
-            else:
-                raise ValueError("archive row must contain 6 legacy fields or 7 fields with received_ts")
-            received_ts = float(received_ts) if received_ts is not None else None
-            return (
-                entity_id, float(ts), received_ts, None if state is None else str(state),
-                json.dumps(attrs or {}, separators=(",", ":"), ensure_ascii=False),
-                user_id, source,
-            )
-
-        packed = [pack(row) for row in rows]
         with self.lock, self.conn() as c, c.storage_batch():
             revision = self._next_entity_history_revision(c)
             versioned = [(*item, revision) for item in packed]

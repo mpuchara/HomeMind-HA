@@ -16,7 +16,7 @@ try:
 except Exception:
     ws_connect = None
 
-APP_VERSION = "0.14.219"
+APP_VERSION = "0.14.220"
 HISTORY_BOOTSTRAP_REVISION = "target-attrs-v2"
 TRAINING_REVISION = "shared-home-intents-v26"
 DATA_DIR = Path(os.environ.get("ADAPTIVE_AI_DATA", "/data"))
@@ -158,6 +158,9 @@ DEFAULT_OPTIONS = {
     "training_home_context_cache_entries": 64,
     "training_home_context_cache_units": 32768,
     "training_sqlite_cache_mb": 64,
+    "training_preparation_memory_limit_mb": 1536,
+    "training_recorder_batch_rows": 1024,
+    "training_recorder_capacity_wait_seconds": 300,
     # Stage-2 semantic observation contract. Active Ridge inference still uses the
     # existing ExplicitFeatureSchema in 0.14.81; these bounds prepare future backends.
     "observation_selected_features": 96,

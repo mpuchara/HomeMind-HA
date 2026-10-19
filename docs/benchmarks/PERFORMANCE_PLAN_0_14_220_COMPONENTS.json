@@ -1,0 +1,105 @@
+{
+  "scope": "healthy local SQLite component; QoS sleeps disabled; not Pi, full training or device latency",
+  "pairs": [
+    {
+      "128": {
+        "rows": 8000,
+        "seconds": 0.15897540299999946,
+        "batches": 63,
+        "max_batch_write_ms": 10.947380000004614,
+        "checksum": "92c24ae101cf6235ba91dc3bcce603b76d8c6efc9fb1b72a409e5716791c3ace",
+        "disk_samples": 251
+      },
+      "1024": {
+        "rows": 8000,
+        "seconds": 0.14200752700000407,
+        "batches": 8,
+        "max_batch_write_ms": 8.275024999989,
+        "checksum": "92c24ae101cf6235ba91dc3bcce603b76d8c6efc9fb1b72a409e5716791c3ace",
+        "disk_samples": 86
+      }
+    },
+    {
+      "1024": {
+        "rows": 8000,
+        "seconds": 0.12299452400000632,
+        "batches": 8,
+        "max_batch_write_ms": 7.555596999992531,
+        "checksum": "92c24ae101cf6235ba91dc3bcce603b76d8c6efc9fb1b72a409e5716791c3ace",
+        "disk_samples": 86
+      },
+      "128": {
+        "rows": 8000,
+        "seconds": 0.24494503200000395,
+        "batches": 63,
+        "max_batch_write_ms": 15.79247700001929,
+        "checksum": "92c24ae101cf6235ba91dc3bcce603b76d8c6efc9fb1b72a409e5716791c3ace",
+        "disk_samples": 251
+      }
+    },
+    {
+      "128": {
+        "rows": 8000,
+        "seconds": 0.17188573399999996,
+        "batches": 63,
+        "max_batch_write_ms": 11.53393699999583,
+        "checksum": "92c24ae101cf6235ba91dc3bcce603b76d8c6efc9fb1b72a409e5716791c3ace",
+        "disk_samples": 251
+      },
+      "1024": {
+        "rows": 8000,
+        "seconds": 0.15414931699999102,
+        "batches": 8,
+        "max_batch_write_ms": 10.658182999975452,
+        "checksum": "92c24ae101cf6235ba91dc3bcce603b76d8c6efc9fb1b72a409e5716791c3ace",
+        "disk_samples": 86
+      }
+    },
+    {
+      "1024": {
+        "rows": 8000,
+        "seconds": 0.2250500980000254,
+        "batches": 8,
+        "max_batch_write_ms": 20.927246999974614,
+        "checksum": "92c24ae101cf6235ba91dc3bcce603b76d8c6efc9fb1b72a409e5716791c3ace",
+        "disk_samples": 86
+      },
+      "128": {
+        "rows": 8000,
+        "seconds": 0.17134199999998145,
+        "batches": 63,
+        "max_batch_write_ms": 11.942269999991595,
+        "checksum": "92c24ae101cf6235ba91dc3bcce603b76d8c6efc9fb1b72a409e5716791c3ace",
+        "disk_samples": 251
+      }
+    },
+    {
+      "128": {
+        "rows": 8000,
+        "seconds": 0.1567999379999776,
+        "batches": 63,
+        "max_batch_write_ms": 10.191722000001846,
+        "checksum": "92c24ae101cf6235ba91dc3bcce603b76d8c6efc9fb1b72a409e5716791c3ace",
+        "disk_samples": 251
+      },
+      "1024": {
+        "rows": 8000,
+        "seconds": 0.15383373100002018,
+        "batches": 8,
+        "max_batch_write_ms": 8.378208000010545,
+        "checksum": "92c24ae101cf6235ba91dc3bcce603b76d8c6efc9fb1b72a409e5716791c3ace",
+        "disk_samples": 86
+      }
+    }
+  ],
+  "median_seconds": {
+    "128": 0.17134199999998145,
+    "1024": 0.15383373100002018
+  },
+  "relative_change_percent": -10.218317166814428,
+  "parity": "PASS",
+  "raw_receipt": {
+    "local_path": "C:\\Users\\mpuch\\OneDrive\\Dokumenty\\HomeMind\\tmp\\perf220-preparation.json",
+    "sha256": "870693c394a6c6f4050bd6d52b0b61b3665ae3d48cdfcfd7dc7b6b7e33b20740"
+  }
+}
