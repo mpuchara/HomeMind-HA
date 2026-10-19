@@ -451,6 +451,14 @@ class AgentCandidateManager(threading.Thread):
         with self.store.conn() as c:
             return [dict(r) for r in c.execute("SELECT * FROM agent_candidates ORDER BY queued_ts,updated_ts")]
 
+    def _maintenance_rows(self):
+        if getattr(self._all_rows, '__func__', None) is not _STANDARD_ALL_ROWS:
+            return self._all_rows()
+        with self.store.conn() as c:
+            return [dict(r) for r in c.execute("""SELECT * FROM agent_candidates
+                WHERE COALESCE(NULLIF(state,''),'queued') IN ('queued','building','discarding')
+                ORDER BY queued_ts,updated_ts""")]
+
     def _generation(self, parent_id):
         with self.store.conn() as c:
             row = c.execute("SELECT generation FROM agent_generation_state WHERE agent_id=?", (str(parent_id),)).fetchone()
@@ -1215,13 +1223,19 @@ class AgentCandidateManager(threading.Thread):
         handler._agent_candidates_installed = True
 
     def _maintenance(self):
+        now = time.time()
+        # Empty/future-only backups need no writer admission or Store lock.
+        # This is an optional cleanup hint, never a permission/control cache.
+        with self.store.conn() as c:
+            if c.execute('SELECT 1 FROM agent_generation_backups WHERE expires_ts<? LIMIT 1', (now,)).fetchone() is None:
+                return
         with self.store.lock, self.store.conn() as c:
-            c.execute("DELETE FROM agent_generation_backups WHERE expires_ts<?", (time.time(),))
+            c.execute("DELETE FROM agent_generation_backups WHERE expires_ts<?", (now,))
 
     def _worker_maintenance_pass(self):
         changed = False
         try:
-            rows = self._all_rows()
+            rows = self._maintenance_rows()
         except Exception as exc:
             self._record_worker_error("list_candidates", exc)
             rows = []
@@ -1306,6 +1320,9 @@ class AgentCandidateManager(threading.Thread):
     def stop(self):
         self.stop_event.set()
         self.wake_event.set()
+
+
+_STANDARD_ALL_ROWS = AgentCandidateManager._all_rows
 
 
 def install(core, *, start_worker=True):

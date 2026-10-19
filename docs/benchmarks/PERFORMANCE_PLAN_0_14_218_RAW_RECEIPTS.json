@@ -1,0 +1,82 @@
+[
+  {
+    "report": "PERFORMANCE_PLAN_0_14_218_LONG_CURRENT_20_QUALITY_PILOT.json",
+    "raw": "perf218-long-quality-groups.json",
+    "verified": true
+  },
+  {
+    "report": "PERFORMANCE_PLAN_0_14_218_LONG_CURRENT_20_REJECTED.json",
+    "raw": "perf218-long-rejected-5460656.json",
+    "verified": true
+  },
+  {
+    "report": "PERFORMANCE_PLAN_0_14_218_LONG_CURRENT_20_REJECTED_ASYNC.json",
+    "raw": "perf218-long-rejected-async-before-batching.json",
+    "verified": true
+  },
+  {
+    "report": "PERFORMANCE_PLAN_0_14_218_LONG_CURRENT_20_REJECTED_BATCHED.json",
+    "raw": "perf218-long-rejected-batched-before-prune-bulk.json",
+    "verified": true
+  },
+  {
+    "report": "PERFORMANCE_PLAN_0_14_218_LONG_CURRENT_20_REJECTED_CONFIDENCE.json",
+    "raw": "perf218-long-confidence.json",
+    "verified": true
+  },
+  {
+    "report": "PERFORMANCE_PLAN_0_14_218_LONG_CURRENT_20_REJECTED_HANDOFF.json",
+    "raw": "perf218-long-handoff.json",
+    "verified": true
+  },
+  {
+    "report": "PERFORMANCE_PLAN_0_14_218_LONG_CURRENT_20_REJECTED_NATIVE.json",
+    "raw": "perf218-long-rejected-59db81f.json",
+    "verified": true
+  },
+  {
+    "report": "PERFORMANCE_PLAN_0_14_218_LONG_CURRENT_20_REJECTED_PRUNE_BULK.json",
+    "raw": "perf218-long-prune-bulk.json",
+    "verified": true
+  },
+  {
+    "report": "PERFORMANCE_PLAN_0_14_218_LONG_CURRENT_20_REJECTED_READONLY.json",
+    "raw": "perf218-long-rejected-readonly-before-summary.json",
+    "verified": true
+  },
+  {
+    "report": "PERFORMANCE_PLAN_0_14_218_LONG_CURRENT_20.json",
+    "raw": "perf218-long-final-wal.json",
+    "sha256": "86d1705fdecda9cb2de1c6142510fe4a293b3fea1655d0523405c10d1ea99a7f",
+    "bytes": 14190786,
+    "verified": true
+  },
+  {
+    "report": "PERFORMANCE_PLAN_0_14_218_FINAL_SHADOW_20_UI.json",
+    "raw": "perf218-final-shadow20-ui-transport-5pairs.json",
+    "sha256": "8d49af879e24a4cf002a451f14059f94506a79db2a4dbd4c36cd9df656bd9120",
+    "bytes": 15550978,
+    "verified": true
+  },
+  {
+    "report": "PERFORMANCE_PLAN_0_14_218_FINAL_SHADOW_3_UI.json",
+    "raw": "perf218-final-shadow3-ui-transport-5pairs.json",
+    "sha256": "4501f7ae4308f6fae2dcb1039cc46cfbc9d81c0b2e8f3a0831d26242d12a7afe",
+    "bytes": 5349587,
+    "verified": true
+  },
+  {
+    "report": "PERFORMANCE_PLAN_0_14_218_FINAL_CONTROL_3_UI.json",
+    "raw": "perf218-final-control3-ui-transport-5pairs.json",
+    "sha256": "0c98606302614380532f24fc7df5dbd5715d9dd8f70db9ec26f9941556e79372",
+    "bytes": 3976521,
+    "verified": true
+  },
+  {
+    "report": "PERFORMANCE_PLAN_0_14_218_TRACE_OVERHEAD.json",
+    "raw": "perf218-trace-frozen-5pairs.json",
+    "sha256": "95ef51613487e17aa24db082240c028086f3f66108acb277d341924bc6e4b2b0",
+    "bytes": 3340935,
+    "verified": true
+  }
+]

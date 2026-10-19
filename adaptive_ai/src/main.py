@@ -803,6 +803,9 @@ def shutdown_runtime():
             candidate_manager = getattr(ENGINE, "agent_candidates", None)
             if candidate_manager is not None and candidate_manager.is_alive():
                 candidate_manager.join(timeout=6.0)
+            candidate_writer = getattr(candidate_manager, 'candidate_shadow_persistence_writer', None)
+            if candidate_writer is not None:
+                shutdown_step('candidate_evidence_writer', candidate_writer.close)
             flush_candidates = getattr(candidate_manager, "flush_candidate_shadow_decisions", None)
             if callable(flush_candidates):
                 shutdown_step("candidate_shadow_decisions", lambda: flush_candidates(force=True))

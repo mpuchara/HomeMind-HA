@@ -1,9 +1,9 @@
 {
-  "version": "0.14.217",
-  "release_date": "2026-10-18",
-  "base_version": "0.14.216",
-  "base_commit": "cd8a0f817d360cf39351248db7a119f26ea4fca7",
-  "release_status": "draft-functional-validation-passed-sustained-overload-open",
+  "version": "0.14.218",
+  "release_date": "2026-10-19",
+  "base_version": "0.14.217",
+  "base_commit": "f84211d676cf07c8ef80ea72aa6868d8747f38f7",
+  "release_status": "draft-functional-validation-passed-performance-acceptance-pending",
   "release_014140": {
     "scope": "inventory_and_remove_remaining_shipped_feature_Handler_fallbacks_for_Candidate_Live_and_manual_feedback_transport",
     "explicit_routes": "manual_feedback.js, candidate_ui.js, candidate_preference_ui.js, /api/candidates, Candidate Teach-RL status/train, generation history/comparison, /api/candidate-live, /api/live and Candidate discard",
@@ -249,8 +249,8 @@
   "pi4_release_gate_contract": "pi4_release_gate_v1",
   "pi4_real_hardware_required": true,
   "stage7_offline_rl_control_unlock": false,
-  "tests_passed": 2651,
-  "tests_passed_version": "0.14.217",
+  "tests_passed": 2717,
+  "tests_passed_version": "0.14.218",
   "profile": "rpi4-ram-first-complete-discovery-manual-agent-selection",
   "manual_agent_training": true,
   "max_concurrent_training_jobs": 1,
@@ -2760,7 +2760,7 @@
     "benchmark": "docs/benchmarks/CONTEXT_BUFFER_0_14_195_VALIDATION.json",
     "median_observer_speedup": 1.018396920512725
   },
-  "release_validation_tests_passed": 2651,
+  "release_validation_tests_passed": 2680,
   "release_014196": {
     "scope": "typed_deferred_batch_busy_retry_and_cooperative_wal_reclaim_write_admission",
     "learning_semantics_changed": false,
@@ -3158,5 +3158,167 @@
       "image_build_and_smoke": "PASS"
     },
     "qa_retry_report": "docs/benchmarks/PERFORMANCE_PLAN_0_14_217_QA_RETRY.json"
+  },
+  "release_014218": {
+    "scope": "Candidate decision/quality persistence isolation, guarded native SQLite batches and fresh counter transactions; Four-Root counter transactions with exact partial-commit retry and fresh epoch/lifecycle reads; request-local Confidence summary reuse without erasing pending Promote veto; RAM-only WAL/frame/checkpoint benchmark snapshots.",
+    "physical_device_speedup_established": false,
+    "validation": {
+      "tests": 2717,
+      "seconds": 328.914,
+      "result": "OK",
+      "log_sha256": "a36b4299deb766f12dd3767786cd310a44c711055b816e55b216326cc5a765e7"
+    },
+    "performance_gate": "OPEN: host Shadow3 and Control3 decision scenarios improved; Root20 end-to-end improvement remains inconclusive. Full E0-E7 and target Pi/microSD acceptance are incomplete.",
+    "candidate_evidence": {
+      "owner": "separate persistence worker; prediction remains on existing Candidate worker",
+      "max_items": 1024,
+      "default_ram_mb": 16,
+      "configured_ram_range_mb": [
+        4,
+        64
+      ],
+      "accepted_payloads": "immutable and charged through commit, no policy replay, no eviction",
+      "shutdown": "join writer then explicit force flush",
+      "correct_history": "pending evidence is an explicit gap; never substitute older durable Desired",
+      "drain_items": 1024,
+      "decision_transaction_items": 32,
+      "quality": "FIFO grouped false-early observations; immutable bounded queue shared with decisions; exact postcommit acknowledgments and epoch-checked idempotent counters",
+      "promote": "pending comparison observations veto Promote under the producer publication lock",
+      "quality_transaction_roots": 4,
+      "quality_freshness": "Prepare at most four Roots outside Store; reserve SQLite once, recheck each epoch and current offline lifecycle inside the transaction; acknowledge only committed groups."
+    },
+    "candidate_admission": "reserve FIFO root identities; take latest exact parent context only when worker reaches that root",
+    "retention": "disjoint exact pointwise maximum over binary64 timestamps, UPDATE FROM when SQLite supports it; legacy fallback",
+    "context_writer": "bounded VALUES and full-row payload limit per transaction, with original guarded admission and rollback",
+    "remaining": "full E0-E7 plan remains open; no target Pi or large production-database startup validation",
+    "source_files": 624,
+    "source_hashes": "docs/benchmarks/PERFORMANCE_PLAN_0_14_218_SOURCE_HASHES.json",
+    "provenance": "bounded VALUES with original whole-batch atomicity and fresh entry/exit/commit plus 50ms/1MiB sampling; Control reservation/dispatch/ACK boundaries unchanged",
+    "journal_background": {
+      "max_windows": 512,
+      "max_entity_links": 4096,
+      "single_indivisible_row_preserved": true
+    },
+    "trial_gate": "exact standard proposer no-op under its original RLock, unknown/custom implementations keep full path",
+    "native_protection_read": "One native REAL result row per <=256 samples; no per-sample cursor iteration under Store, no float text conversion",
+    "readonly_admission": "SQLite query_only enforces pure read while only the managed no-op storage callback is paused; external cancellation and write VM guards retained",
+    "maintenance": "Fresh idle-backup hint and active lifecycle-only query; custom providers retain full path",
+    "native_window_prune": "Bounded native JSON of string IDs, <=64 owners and <=256 stale IDs/owner; exact SQL fallback on missing JSON; transactional rollback retained",
+    "ui_summary": "Preference and Confidence reuse complete request-local list summaries; single status/Promote remains fresh and later decorators preserve pending-evidence veto",
+    "worker_pool": "Unchanged bounded 1-2 workers; experimental 4-worker configuration rejected, no scheduler default change",
+    "sustained_smoke": {
+      "seconds": 360.004494604,
+      "root_event_to_decision_p95_ms": 150.3171570999939,
+      "candidate_event_to_decision_p95_ms": 168.38580885017788,
+      "candidate_observation_gaps": 0,
+      "ui_errors": 0,
+      "wal_checkpoint_remaining_frames": 0,
+      "wal_reclaim_exercised": false,
+      "report": "docs/benchmarks/PERFORMANCE_PLAN_0_14_218_LONG_CURRENT_20.json"
+    },
+    "target_hardware": {
+      "device": "Raspberry Pi 4",
+      "storage": "microSD 64 GB",
+      "source": "User confirmation in this chat, 2026-10-19",
+      "ram_capacity": "not provided",
+      "target_hardware_benchmarked": false
+    },
+    "paired_host_decision_results": {
+      "SHADOW_20": {
+        "event_to_decision": {
+          "baseline_p95_ms": 124.60424009997752,
+          "current_p95_ms": 132.88956459997505,
+          "relative_change_percent": 6.649311847935291,
+          "paired_run_bootstrap_95_percent": [
+            -13.043234628369238,
+            29.545519841605472
+          ],
+          "baseline_count": 34512,
+          "current_count": 33017
+        },
+        "status": "INCONCLUSIVE for Root end-to-end acceleration: 124.60 -> 132.89ms (+6.65%), paired bootstrap [-13.04%,+29.55%]. More completed Candidate observations do not establish Root speedup. Full acceptance remains open.",
+        "report": "PERFORMANCE_PLAN_0_14_218_FINAL_SHADOW_20_UI.json",
+        "pairs": 5,
+        "seconds_per_run": 36
+      },
+      "SHADOW_3": {
+        "event_to_decision": {
+          "baseline_p95_ms": 15.173243000003112,
+          "current_p95_ms": 9.983003499996812,
+          "relative_change_percent": -34.206527240124174,
+          "paired_run_bootstrap_95_percent": [
+            -38.442313211673294,
+            -30.10533543205668
+          ],
+          "baseline_count": 10746,
+          "current_count": 10756
+        },
+        "status": "HOST SCENARIO IMPROVEMENT: 3 eligible/20 configured Shadow Root p95 -34.21%, paired bootstrap [-38.44%,-30.11%]. Short alternating probes only; does not resolve Root20 uncertainty or deployed/startup acceptance.",
+        "report": "PERFORMANCE_PLAN_0_14_218_FINAL_SHADOW_3_UI.json",
+        "pairs": 5,
+        "seconds_per_run": 36
+      },
+      "CONTROL_3": {
+        "event_to_decision": {
+          "baseline_p95_ms": 125.19965404998742,
+          "current_p95_ms": 80.87545650001572,
+          "relative_change_percent": -35.40281152236631,
+          "paired_run_bootstrap_95_percent": [
+            -38.64606983072567,
+            -29.983192441263796
+          ],
+          "baseline_count": 6220,
+          "current_count": 8339
+        },
+        "status": "HOST DECISION SCENARIO IMPROVEMENT: 3 eligible Control Root p95 -35.40%, paired bootstrap [-38.65%,-29.98%]. Only 12 baseline/15 current service and ACK samples in measured windows; no physical device/service-latency acceptance.",
+        "report": "PERFORMANCE_PLAN_0_14_218_FINAL_CONTROL_3_UI.json",
+        "pairs": 5,
+        "seconds_per_run": 36,
+        "service_sample_coverage": {
+          "baseline": {
+            "services_with_warmup": 15,
+            "measured_service_samples": 12,
+            "measured_ack_samples": 12
+          },
+          "current": {
+            "services_with_warmup": 15,
+            "measured_service_samples": 15,
+            "measured_ack_samples": 15
+          }
+        }
+      }
+    },
+    "trace_overhead": {
+      "off": {
+        "p95_ms": 8.484310299996881,
+        "cpu_seconds": 26.618341954,
+        "samples": 5355
+      },
+      "on": {
+        "p95_ms": 9.863629400007312,
+        "cpu_seconds": 29.668062135000003,
+        "samples": 5355
+      },
+      "p95_relative_change_percent": 16.257292004170786,
+      "cpu_relative_change_percent": 11.457213173796932
+    },
+    "latest_executable_ci": {
+      "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/39241471893",
+      "commit": "6b883526e7ce7893f0722d6f0309a43a8b14a222",
+      "python_311": {
+        "tests": 2717,
+        "seconds": 275.44,
+        "result": "OK"
+      },
+      "python_313": {
+        "tests": 2717,
+        "seconds": 278.14,
+        "result": "OK"
+      },
+      "image": "PASS",
+      "additional_workflow_checks": "PASS",
+      "package": "SKIPPED: PR"
+    },
+    "acceptance_report": "docs/benchmarks/PERFORMANCE_PLAN_0_14_218_ACCEPTANCE.json"
   }
 }

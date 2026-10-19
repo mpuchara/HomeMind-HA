@@ -13,6 +13,7 @@ from bisect import bisect_right
 from collections import deque
 from contextlib import suppress
 import hashlib
+import heapq
 import json
 import math
 import sqlite3
@@ -89,28 +90,45 @@ WINDOW_BEFORE_SECONDS = 12.0
 WINDOW_AFTER_SECONDS = 6.0
 
 
-def _insert_journal_rows(connection, prefix, rows, width, suffix=''):
-    """One VM step for a bounded VALUES group, with normal admission guards.
+from sqlite_bulk_rows import insert_bounded_rows as _insert_journal_rows
 
-    sqlite3.executemany releases/reacquires the interpreter for every row.
-    Tiny journal rows otherwise spend more time competing with inference than
-    writing SQLite. Keep bind count below 999 and ordinary groups below 256 KiB;
-    an individual large row still goes through the existing payload guard.
+
+def _maximum_protection_segments(intervals):
+    """Disjoint exact maxima over SQLite REAL timestamps; None needs legacy SQL.
+
+    REAL timestamps are binary64 values. [start, end] therefore equals
+    [start, nextafter(end, +inf)) for every finite stored timestamp. Using
+    exclusive upper bounds makes every event match at most one segment in
+    UPDATE FROM, including touching endpoints with different expiry values.
+    This transforms protection ranges only; no observation clock is changed.
     """
-    params, count, size = [], 0, 0
-    def write():
-        connection.execute(prefix+' VALUES '+','.join('('+','.join('?' for _ in range(width))+')' for _ in range(count))+suffix, params)
-    for row in rows:
-        row_size = sum(len(value.encode('utf-8')) if isinstance(value, str) else
-                       len(value) if isinstance(value, (bytes, bytearray, memoryview)) else 16 for value in row)
-        if count and (len(params)+width > 900 or size+row_size > 256*1024):
-            write()
-            params, count, size = [], 0, 0
-        params.extend(row)
-        count += 1
-        size += row_size
-    if count:
-        write()
+    events = {}
+    for ident, (start, end, expiry) in enumerate(intervals):
+        if not all(math.isfinite(value) for value in (start, end, expiry)):
+            return None
+        if start > end:
+            continue
+        events.setdefault(start, []).append((True, ident, expiry))
+        events.setdefault(math.nextafter(end, math.inf), []).append((False, ident, expiry))
+    active, heap, segments = set(), [], []
+    previous = None
+    for stamp, changes in sorted(events.items()):
+        if previous is not None and heap and previous < stamp:
+            expiry = -heap[0][0]
+            if segments and segments[-1][1] == previous and segments[-1][2] == expiry:
+                segments[-1] = (segments[-1][0], stamp, expiry)
+            else:
+                segments.append((previous, stamp, expiry))
+        for begin, ident, expiry in changes:
+            if begin:
+                active.add(ident)
+                heapq.heappush(heap, (-expiry, ident))
+            else:
+                active.discard(ident)
+        while heap and heap[0][1] not in active:
+            heapq.heappop(heap)
+        previous = stamp
+    return segments
 
 
 def _attrs(state):
@@ -1026,7 +1044,14 @@ class FeatureJournal:
                 # the maximum expiry also covers an entity's complete sample
                 # range, it is the exact answer for every sample in that range.
                 # Partial/disjoint coverage retains the exact per-sample query.
-                protection.update((int(row[0]), float(row[1] or 0.)) for row in c.execute(f'''
+                # Return one SQLite row for the whole bounded group. Iterating
+                # one native result row per sample repeatedly yields the GIL
+                # while Store is held; busy inference can turn a short query
+                # into seconds of writer lock residency. CASE/MAX preserves
+                # the native REAL values without a text/JSON round trip.
+                columns = ','.join(f'MAX(CASE WHEN seq={start+offset} THEN expiry END)'
+                                   for offset in range(len(chunk)))
+                query = f'''SELECT * FROM (
                     WITH samples(seq,entity,stamp) AS (VALUES {values}),
                     ranges AS (SELECT entity,MIN(stamp) lo,MAX(stamp) hi FROM samples GROUP BY entity),
                     coverage AS (
@@ -1038,11 +1063,15 @@ class FeatureJournal:
                             AND w.start_time<=r.hi AND w.end_time>=r.lo
                         GROUP BY r.entity
                     )
-                    SELECT s.seq,CASE WHEN c.maximum=c.common THEN c.common ELSE (
+                    , protection AS (SELECT s.seq,CASE WHEN c.maximum=c.common THEN c.common ELSE (
                         SELECT MAX(w.protected_until) FROM feature_window_entities e
                         JOIN feature_windows w ON w.window_id=e.window_id
                         WHERE e.entity_id=s.entity AND w.start_time<=s.stamp AND w.end_time>=s.stamp
-                    ) END FROM samples s JOIN coverage c ON c.entity=s.entity''', params))
+                    ) END AS expiry FROM samples s JOIN coverage c ON c.entity=s.entity)
+                    SELECT {columns} FROM protection)'''
+                read = getattr(c, 'storage_readonly_one', None)
+                row = read(query, params) if callable(read) else c.execute(query, params).fetchone()
+                protection.update((start+offset, float(value or 0.)) for offset,value in enumerate(row))
             _insert_journal_rows(c,
                     """INSERT INTO feature_observation_events
                        (event_key,contract_version,entity_id,event_time,received_time,state,
@@ -1121,16 +1150,28 @@ class FeatureJournal:
             # SQLite work while holding Store. Use prepared intervals even when
             # INSERT OR IGNORE retained an older window with the same ID.
             for entities, intervals in protections.items():
+                segments = (_maximum_protection_segments(intervals)
+                            if sqlite3.sqlite_version_info >= (3, 33, 0) else None)
+                ranges = intervals if segments is None else segments
                 # At most 900 bind parameters, also on older SQLite builds.
                 entity_chunk_size = 128
                 for entity_start in range(0, len(entities), entity_chunk_size):
                     entity_chunk = entities[entity_start:entity_start+entity_chunk_size]
-                    for interval_start in range(0, len(intervals), 256):
-                        chunk = intervals[interval_start:interval_start+256]
+                    for interval_start in range(0, len(ranges), 256):
+                        chunk = ranges[interval_start:interval_start+256]
                         values = ','.join('(?,?,?)' for _ in chunk)
                         marks = ','.join('?' for _ in entity_chunk)
                         params = [part for interval in chunk for part in interval]
                         params.extend(entity_chunk)
+                        if segments is not None:
+                            c.execute(f'''WITH protection(start,end,expiry) AS (VALUES {values})
+                                UPDATE feature_observation_events AS event
+                                SET protected_until=MAX(event.protected_until,p.expiry)
+                                FROM protection AS p
+                                WHERE event.entity_id IN ({marks})
+                                  AND event.event_time>=p.start AND event.event_time<p.end
+                                  AND event.protected_until<p.expiry''', params)
+                            continue
                         params.extend((min(v[0] for v in chunk), max(v[1] for v in chunk)))
                         c.execute(f'''WITH protection(start,end,expiry) AS (VALUES {values})
                             UPDATE feature_observation_events AS event
@@ -1140,18 +1181,50 @@ class FeatureJournal:
                             WHERE entity_id IN ({marks}) AND event_time>=? AND event_time<=?
                               AND EXISTS(SELECT 1 FROM protection
                                   WHERE start<=event.event_time AND end>=event.event_time)''', params)
-            for agent_id in sorted(set(row["agent_id"] for row in prepared)):
-                stale = c.execute(
-                    """SELECT window_id FROM feature_windows WHERE agent_id=?
-                       ORDER BY anchor_time DESC LIMIT -1 OFFSET ?""",
-                    (agent_id, self.max_windows_per_agent),
-                ).fetchall()
-                if stale:
-                    ids = [r[0] for r in stale]
-                    marks = ",".join("?" for _ in ids)
-                    c.execute(f"DELETE FROM feature_window_entities WHERE window_id IN ({marks})", ids)
-                    c.execute(f"DELETE FROM feature_windows WHERE window_id IN ({marks})", ids)
+            self._prune_window_owners(c, sorted(set(row['agent_id'] for row in prepared)))
         return len(prepared)
+
+    def _prune_window_owners(self, connection, owners):
+        if getattr(self, '_window_prune_json', True):
+            try:
+                for start in range(0,len(owners),64):
+                    group = owners[start:start+64]
+                    # IDs are strings: native JSON preserves them exactly.
+                    # Each scalar returns at most 256 stale IDs, never an
+                    # unbounded legacy backlog or per-row GIL handoffs.
+                    query = 'SELECT '+','.join('''(SELECT json_group_array(window_id) FROM
+                        (SELECT window_id FROM feature_windows WHERE agent_id=?
+                         ORDER BY anchor_time DESC LIMIT 256 OFFSET ?))''' for _ in group)
+                    parameters = [value for owner in group for value in (owner,self.max_windows_per_agent)]
+                    while True:
+                        read = getattr(connection, 'storage_readonly_one', None)
+                        row = read(query,parameters) if callable(read) else connection.execute(query,parameters).fetchone()
+                        ids = [value for raw in row for value in json.loads(raw or '[]')]
+                        if not ids:
+                            break
+                        for offset in range(0,len(ids),512):
+                            selected = ids[offset:offset+512]
+                            marks = ','.join('?' for _ in selected)
+                            connection.execute(f'DELETE FROM feature_window_entities WHERE window_id IN ({marks})',selected)
+                            connection.execute(f'DELETE FROM feature_windows WHERE window_id IN ({marks})',selected)
+                return
+            except sqlite3.OperationalError as exc:
+                message = str(exc).lower()
+                if 'no such function: json_group_array' in message:
+                    self._window_prune_json = False
+                elif 'json cannot hold blob values' not in message:
+                    raise
+        for agent_id in owners:
+            stale = connection.execute(
+                """SELECT window_id FROM feature_windows WHERE agent_id=?
+                   ORDER BY anchor_time DESC LIMIT -1 OFFSET ?""",
+                (agent_id, self.max_windows_per_agent),
+            ).fetchall()
+            if stale:
+                ids = [r[0] for r in stale]
+                marks = ",".join("?" for _ in ids)
+                connection.execute(f"DELETE FROM feature_window_entities WHERE window_id IN ({marks})", ids)
+                connection.execute(f"DELETE FROM feature_windows WHERE window_id IN ({marks})", ids)
 
     def open_window(self, window_id, agent_id, entities, anchor_time, kind,
                     before=WINDOW_BEFORE_SECONDS, after=WINDOW_AFTER_SECONDS):
@@ -2278,8 +2351,13 @@ def install(core):
     def flush_windows(limit=128):
         batch = []
         with journal_lock:
+            links = 0
             while window_rows and len(batch) < max(1, int(limit)):
+                incoming = len(window_rows[0]['entities'])
+                if batch and links + incoming > 4096:
+                    break
                 batch.append(window_rows.popleft())
+                links += incoming
         if not batch:
             return 0
         try:
@@ -2294,6 +2372,8 @@ def install(core):
         with journal_lock:
             window_stats["flushed"] += len(batch)
             window_stats["flushes"] += 1
+            window_stats['max_batch_rows'] = max(window_stats.get('max_batch_rows',0),len(batch))
+            window_stats['max_batch_entity_links'] = max(window_stats.get('max_batch_entity_links',0),links)
         return written
 
     def journal_snapshot():
@@ -2323,7 +2403,13 @@ def install(core):
             except Exception as exc:
                 errors.append(("observations", exc))
             try:
-                count = int(flush_windows(128) or 0)
+                # Larger coalesced backlogs amortize writer admission and
+                # protection updates. The entity-link bound in flush_windows
+                # still caps a turn for wide policy schemas. Explicit drains
+                # retain their existing row limit and complete all batches.
+                with journal_lock:
+                    window_batch = 512 if max_batches is not None and len(window_rows)>512 else 128
+                count = int(flush_windows(window_batch) or 0)
                 totals["windows"] += count
                 progressed = progressed or bool(count)
             except StoragePressure as exc:

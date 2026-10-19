@@ -7,6 +7,8 @@ across a process restart.
 """
 from __future__ import annotations
 
+from sqlite_bulk_rows import insert_bounded_rows
+
 import hashlib
 import json
 import math
@@ -249,25 +251,22 @@ class ProvenanceJournal:
         ]
         links = [(str(row["entity_id"]), float(row["event_time"]), str(row["event_id"])) for row in rows]
         try:
-            with self.store.lock, self.store.conn() as c:
-                c.executemany(
+            with self.store.lock, self.store.conn() as c, c.storage_batch():
+                insert_bounded_rows(c,
                     """INSERT INTO provenance_events
                        (event_id,contract_version,event_time,received_time,entity_id,context_id,
                         context_parent_id,user_id,source,origin,state_json,processed_time)
-                       VALUES(?,?,?,?,?,?,?,?,?,?,?,?)
-                       ON CONFLICT(event_id) DO UPDATE SET
+                    """, packed, 12,
+                    """ ON CONFLICT(event_id) DO UPDATE SET
                          received_time=MIN(provenance_events.received_time,excluded.received_time),
                          origin=CASE WHEN provenance_events.origin='unknown' AND excluded.origin!='unknown'
                                      THEN excluded.origin ELSE provenance_events.origin END,
                          state_json=COALESCE(provenance_events.state_json,excluded.state_json),
                          processed_time=COALESCE(provenance_events.processed_time,excluded.processed_time)""",
-                    packed,
                 )
-                c.executemany(
-                    """INSERT INTO provenance_history_links(entity_id,event_time,event_id)
-                       VALUES(?,?,?) ON CONFLICT(entity_id,event_time) DO UPDATE SET event_id=excluded.event_id""",
-                    links,
-                )
+                insert_bounded_rows(c,
+                    "INSERT INTO provenance_history_links(entity_id,event_time,event_id)", links, 3,
+                    " ON CONFLICT(entity_id,event_time) DO UPDATE SET event_id=excluded.event_id")
             return len(rows)
         except Exception:
             with self._event_cache_lock:
@@ -517,17 +516,16 @@ class ProvenanceJournal:
             ))
         if not prepared:
             return 0
-        with self.store.lock, self.store.conn() as c:
+        with self.store.lock, self.store.conn() as c, c.storage_batch():
             before = c.total_changes
-            c.executemany(
+            insert_bounded_rows(c,
                 """INSERT OR IGNORE INTO provenance_decisions
                    (decision_id,contract_version,created_time,agent_id,generation_id,trigger_event_id,
                     model_version,model_revision,schema_version,schema_revision,reward_version,
                     feature_manifest_json,allowed_actions_json,chosen_action,model_desired,
                     teaching_id,teaching_desired,experiment_id,episode_id,action_probability,
                     dispatch_status,dispatch_reason)
-                   VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
-                prepared,
+                   """, prepared, 22,
             )
             return int(c.total_changes - before)
 

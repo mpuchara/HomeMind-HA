@@ -1670,18 +1670,27 @@ def install(manager, *, legacy_http=True):
 
     manager._comparison_summary = comparison_summary
 
-    def _decorate(result):
+    def _decorate(result, *, list_snapshot=False):
         if not result:
             return result
         out = dict(result)
+        # Base cards call the final composed summary, including Confidence.
+        # Reuse only a complete result from this card and this list request.
+        # Authoritative status/Promote retains the fresh path below.
+        summary = out.get('comparison') if list_snapshot else None
+        if not isinstance(summary, dict) or not {
+                'confidence_contract', 'promotion_gates', 'promotion_vetoes',
+                'empirical_policy_quality', 'promotable'} <= summary.keys():
+            summary = None
         row = None
         parent_id = out.get("parent_agent_id")
-        if parent_id and callable(getattr(manager, "_candidate_row", None)):
+        if summary is None and parent_id and callable(getattr(manager, "_candidate_row", None)):
             row = manager._candidate_row(parent_id)
-        if row:
-            parent = manager.store.get_agent_config(row.get("parent_agent_id"))
-            candidate = manager.store.get_agent_config(row.get("candidate_id"))
-            summary = manager._comparison_summary(row, parent, candidate)
+        if row or summary is not None:
+            if row:
+                parent = manager.store.get_agent_config(row.get("parent_agent_id"))
+                candidate = manager.store.get_agent_config(row.get("candidate_id"))
+                summary = manager._comparison_summary(row, parent, candidate)
             out["comparison"] = summary
             out["confidence_contract"] = summary.get("confidence_contract")
             out["preference_alignment_score"] = summary.get("preference_alignment_score")
@@ -1693,11 +1702,15 @@ def install(manager, *, legacy_http=True):
             out["model_confidence_semantics"] = METRIC_SEMANTICS["decision_strength"]
         else:
             out["confidence_contract"] = contract_descriptor()
+        # This decorator follows atomic-promotion status. A later metric
+        # decoration must not erase its pending-evidence veto.
+        if out.get('comparison_evidence_pending'):
+            out['promotable'] = False
         return out
 
     manager.status = lambda parent_id: _decorate(original_status(parent_id))
     manager.list_status = lambda: [
-        _decorate(item) for item in (original_list_status() or []) if item
+        _decorate(item, list_snapshot=True) for item in (original_list_status() or []) if item
     ]
     if original_lineage_status is not None:
         manager.lineage_status = lambda ref: _decorate(original_lineage_status(ref))

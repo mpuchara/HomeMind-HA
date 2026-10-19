@@ -286,6 +286,8 @@ class RuntimeCompositionRoot:
 
         # RPi resource control changes scheduling only, never learning semantics.
         manager = install_rpi_low_power_runtime(self.core, manager)
+        from candidate_shadow_persistence import install as install_candidate_shadow_persistence
+        manager = install_candidate_shadow_persistence(manager)
         engine.agent_candidates = manager
 
         # Trial knowledge intentionally wraps generation-aware Explore.

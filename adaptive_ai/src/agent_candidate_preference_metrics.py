@@ -539,18 +539,26 @@ def install(manager):
 
     manager._comparison_summary = comparison_summary
 
-    def _decorate(result):
+    def _decorate(result, *, list_snapshot=False):
         if not result:
             return result
         result["model_confidence"] = result.get("candidate_confidence")
+        # The base list already invokes the final composed summary for this
+        # card. Reuse that request-local UI observation. Single-agent status,
+        # lineage reads and Promote retain their fresh authoritative path.
+        summary = result.get('comparison') if list_snapshot else None
+        if not isinstance(summary, dict) or not {
+                'comparison_metric','promotion_gates','promotion_vetoes','promotable'} <= summary.keys():
+            summary = None
         row = None
         parent_id = result.get("parent_agent_id")
-        if parent_id and callable(getattr(manager, "_candidate_row", None)):
+        if summary is None and parent_id and callable(getattr(manager, "_candidate_row", None)):
             row = manager._candidate_row(parent_id)
-        if row:
-            parent = manager.store.get_agent_config(row.get("parent_agent_id"))
-            candidate = manager.store.get_agent_config(row.get("candidate_id"))
-            summary = manager._comparison_summary(row, parent, candidate)
+        if row or summary is not None:
+            if row:
+                parent = manager.store.get_agent_config(row.get("parent_agent_id"))
+                candidate = manager.store.get_agent_config(row.get("candidate_id"))
+                summary = manager._comparison_summary(row, parent, candidate)
             result["comparison"] = summary
             result["preference_confidence"] = summary.get("preference_confidence")
             result["preference_metric"] = summary.get("comparison_metric")
@@ -568,7 +576,7 @@ def install(manager):
         return _decorate(original_status(parent_id))
 
     def list_status():
-        return [_decorate(dict(item)) for item in (original_list_status() or []) if item]
+        return [_decorate(dict(item), list_snapshot=True) for item in (original_list_status() or []) if item]
 
     def lineage_status(ref):
         result = original_lineage_status(ref) if original_lineage_status is not None else None

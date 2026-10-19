@@ -80,6 +80,8 @@ def install(manager):
                     "state_revision": getattr(tls, "state_revision", getattr(engine, "state_revision", None)) if tls is not None else getattr(engine, "state_revision", None),
                     "entity_revisions": getattr(tls, "entity_revisions", None) if tls is not None else None,
                     "context_revision": getattr(tls, "context_revision", None) if tls is not None else None,
+                    "event_receipts": tuple((getattr(tls, 'event_received_perf', {}) or {}).values()) if tls is not None else (),
+                    "websocket_receipts": tuple((getattr(tls, 'websocket_received_perf', {}) or {}).values()) if tls is not None else (),
                     "home_forecast_captured": "home_forecast" in meta,
                     "home_forecast": dict(meta.get("home_forecast") or {}),
                     "parent_model_revision": getattr(policy_obj, "model_revision", None),
@@ -159,6 +161,8 @@ def install(manager):
             "state_revision": capture.get("state_revision"),
             "entity_revisions": capture.get("entity_revisions"),
             "context_revision": capture.get("context_revision"),
+            "event_receipts": capture.get('event_receipts') or (),
+            "websocket_receipts": capture.get('websocket_receipts') or (),
             "generation_revision": int(
                 getattr(manager.store, "_provenance_generation_revision", 0) or 0
             ),

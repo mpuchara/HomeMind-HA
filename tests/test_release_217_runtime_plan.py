@@ -252,12 +252,21 @@ class FullRuntimeBenchmarkTests(unittest.TestCase):
         self.assertGreater(row['measured_window']['ws_receive_to_decision']['count'],0)
         self.assertEqual(row['service_calls'],0);self.assertGreater(row['ui_stats']['requests'],0)
         self.assertEqual(row['ui_stats']['errors'],0)
+        sqlite_status = row['sqlite_at_input_stop']
+        self.assertGreater(sqlite_status['storage_budget']['wal_max_bytes'],0)
+        self.assertEqual(sqlite_status['wal_checkpoint']['mode'],'PASSIVE')
+        self.assertEqual(sqlite_status['wal_checkpoint']['errors'],0)
+        self.assertGreaterEqual(row['transport_pending_at_input_stop'],0)
+        self.assertGreater(row['measured_window']['benchmark_emit_to_ws_receive']['count'],0)
+        self.assertTrue(all(sample['transport_pending_messages']>=0 for sample in row['queue_series']))
+        self.assertTrue(all(sample['wal_allocated_bytes']>=0 and sample['wal_remaining_frames']>=0
+                            for sample in row['queue_series']))
 
     def test_control_fixture_dispatches_with_twenty_configured_agents_and_all_guards(self):
         root=Path(__file__).resolve().parents[1]
         result=subprocess.run([sys.executable,str(root/'tools/benchmark_full_runtime.py'),
             '--seconds','1','--warmup-seconds','1','--active','3','--configured','20',
-            '--candidates','--mode','control'],cwd=root,capture_output=True,text=True,timeout=120)
+            '--candidates','--mode','control','--training-fixture','legacy'],cwd=root,capture_output=True,text=True,timeout=120)
         self.assertEqual(result.returncode,0,result.stdout[-4000:]+result.stderr[-4000:])
         row=json.loads(result.stdout.strip().splitlines()[-1])
         self.assertTrue(row['control_dispatch_exercised'],row['root_executor_results'])

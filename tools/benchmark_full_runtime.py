@@ -27,7 +27,21 @@ from unittest.mock import patch
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def one(source, seconds=30, active=3, configured=20, mode='shadow', ui=False, trace=False, candidates=False, warmup=5.):
+
+def join_runtime_producers(core, timeout=10.):
+    """Own fixture threads through directory cleanup, after shipped shutdown.
+
+    main() signals Engine/History but need not join their Thread objects before
+    returning. A final loop turn may still open the test database. Never race
+    TemporaryDirectory cleanup with those producers, or suppress cleanup errors.
+    """
+    for name in ('ENGINE', 'HISTORY', 'EVENT_STREAM'):
+        worker = getattr(core, name, None)
+        if isinstance(worker, threading.Thread) and worker.is_alive():
+            worker.join(timeout)
+            assert not worker.is_alive(), f'Fixture producer {name} did not stop after shipped shutdown'
+
+def one(source, seconds=30, active=3, configured=20, mode='shadow', ui=False, trace=False, candidates=False, warmup=5., training_fixture='production'):
     with tempfile.TemporaryDirectory(prefix='full-runtime-') as directory, ExitStack() as stack:
         os.environ['ADAPTIVE_AI_DATA'] = directory
         os.environ.pop('SUPERVISOR_TOKEN', None)
@@ -67,9 +81,21 @@ def one(source, seconds=30, active=3, configured=20, mode='shadow', ui=False, tr
                 mode='paused',confidence_threshold=.5,action_interval=0,micro_exploration=False))
             if i < active:
                 model=policy.MultiHorizonPolicy(agent,states,{r['entity_id']:r for r in registry},set())
-                for head in model.heads.values():
-                    for j in range(80):
-                        value=j%2;features={0:1.,5:1. if value else -1.}
+                for j in range(80):
+                    value=j%2
+                    if training_fixture=='legacy':
+                        # Preserve the original one-second functional Control
+                        # smoke's prepared model, independently of the richer
+                        # feature-training fixture used for performance runs.
+                        features={0:1.,5:1. if value else -1.}
+                    else:
+                        training_states=dict(states)
+                        eid=f'binary_sensor.bench_{i}'
+                        training_states[eid]=state(eid,'on' if value else 'off',device_class='occupancy')
+                        eid=f'sensor.bench_{i}_move_energy'
+                        training_states[eid]=state(eid,(j*34)%100,unit_of_measurement='%')
+                        features,_,_=model.features(training_states,None,at_ts=time.time())
+                    for head in model.heads.values():
                         head.update(value,features,1.)
                         head.validate(value,features,1.)
                 store.save_model(agent['id'],model.serialize())
@@ -114,11 +140,19 @@ def one(source, seconds=30, active=3, configured=20, mode='shadow', ui=False, tr
                 elif kind=='config/area_registry/list':result=[dict(area_id=f'area_{i}',name=f'Area {i}') for i in range(9)]
                 messages.put(dict(type='result',id=msg['id'],success=True,result=result))
             def recv(self,timeout=5):
-                try:return json.dumps(messages.get(timeout=min(.1,timeout)))
+                try:
+                    message=messages.get(timeout=min(.1,timeout))
+                    sent_perf=message.pop('_benchmark_sent_perf',None)
+                    if sent_perf is not None:
+                        TELEMETRY.observe('benchmark_emit_to_ws_receive',(time.perf_counter()-sent_perf)*1000)
+                    # The timing stamp is fixture-only; the shipped receiver
+                    # sees the identical HA message contract and state payload.
+                    return json.dumps(message)
                 except queue.Empty:raise TimeoutError()
         def emit(eid,new):
             states[eid]=new
-            messages.put(dict(type='event',id=2,event=dict(data=dict(entity_id=eid,new_state=new))))
+            messages.put(dict(type='event',id=2,event=dict(data=dict(entity_id=eid,new_state=new)),
+                              _benchmark_sent_perf=time.perf_counter()))
         def request(method,path,payload=None,timeout=10):
             if path=='states':return copy.deepcopy(list(states.values()))
             if path.startswith('services/'):
@@ -232,12 +266,28 @@ def one(source, seconds=30, active=3, configured=20, mode='shadow', ui=False, tr
             # Passive timing collection only. No model, feature or scheduler override.
             stack.enter_context(patch.object(TELEMETRY,'observe',observe))
             start=time.monotonic();cpu=time.process_time();sent=0;digest=hashlib.sha256()
-            lag_sum=lag_max=missed=0.;ticks=max(1,round(seconds*20))
+            lag_sum=lag_max=missed=0.;ticks=max(1,round(seconds*20));queue_series=[]
             for tick in range(ticks):
                 due=start+tick/20
                 time.sleep(max(0.,due-time.monotonic()))
                 lag=max(0.,time.monotonic()-due)*1000
                 lag_sum+=lag;lag_max=max(lag_max,lag);missed+=int(lag>50.)
+                if tick%20==0 and len(queue_series)<1000:
+                    journal=runtime.feature_observation_deferred_snapshot()
+                    candidate=runtime.agent_candidates.candidate_shadow_async_diagnostics()
+                    evidence=runtime.agent_candidates.candidate_shadow_persistence_snapshot()
+                    sqlite_status=store.sqlite_snapshot()
+                    checkpoint=sqlite_status.get('wal_checkpoint') or {}
+                    queue_series.append(dict(seconds=time.monotonic()-start,transport_pending_messages=messages.qsize(),
+                        raw_pending=journal['observations']['pending'],windows_pending=journal['windows']['pending'],
+                        retention_gaps=journal['windows'].get('overflow_gaps',0),
+                        candidate_pending=candidate['queue_depth'],candidate_oldest_ms=candidate.get('oldest_root_wait_ms'),
+                        candidate_processed=candidate['processed'],candidate_gaps=candidate['observation_gaps'],
+                        evidence_pending=evidence['pending'],evidence_bytes=evidence['bytes'],
+                        wal_allocated_bytes=checkpoint.get('wal_bytes',0),
+                        wal_log_frames=checkpoint.get('log_frames',0),
+                        wal_remaining_frames=checkpoint.get('remaining_frames',0),
+                        wal_reclaim_successes=checkpoint.get('reclaim_successes',0)))
                 i=tick%active;binary='on' if (tick//active)%2 else 'off';move=(tick*34)%100
                 digest.update(json.dumps((tick,i,binary,move)).encode())
                 eid=f'binary_sensor.bench_{i}'
@@ -254,6 +304,9 @@ def one(source, seconds=30, active=3, configured=20, mode='shadow', ui=False, tr
                     dirty_entities=len(runtime.dirty_entities))
             journal_at_input_stop=runtime.feature_observation_deferred_snapshot()
             candidate_at_input_stop=runtime.agent_candidates.candidate_shadow_async_diagnostics()
+            candidate_evidence_at_input_stop=runtime.agent_candidates.candidate_shadow_persistence_snapshot()
+            transport_pending_at_input_stop=messages.qsize()
+            sqlite_at_input_stop=store.sqlite_snapshot()
             ui_stop.set()
             time.sleep(.5)
             for thread in ui_threads:thread.join(15)
@@ -280,7 +333,9 @@ def one(source, seconds=30, active=3, configured=20, mode='shadow', ui=False, tr
                 tail_measured={key:distribution(values) for key,values in tail_samples.items() if values}
                 latency_samples={key:list(values) for key,values in samples.items()
                     if key in ('event_to_decision','ws_receive_to_decision','event_to_target_start',
-                               'inference','wrapped_inference','event_to_worker_release')}
+                               'inference','wrapped_inference','event_to_worker_release',
+                               'candidate_enqueue_to_decision','candidate_deferred_event_to_decision',
+                               'ws_receive_to_candidate_decision')}
                 tail_latencies={key:list(values) for key,values in tail_samples.items()
                     if key in ('event_to_decision','ws_receive_to_decision','event_to_target_start')}
             source_files={str(p.relative_to(source)):hashlib.sha256(p.read_bytes().replace(b'\r\n',b'\n')).hexdigest()
@@ -301,8 +356,11 @@ def one(source, seconds=30, active=3, configured=20, mode='shadow', ui=False, tr
                 measured_window=measured,latency_samples=latency_samples,
                 tail_window=tail_measured,tail_latency_samples=tail_latencies,tail_seconds=tail_seconds,
                 backlog_at_input_stop=backlog_at_input_stop,
+                transport_pending_at_input_stop=transport_pending_at_input_stop,
+                sqlite_at_input_stop=sqlite_at_input_stop,sqlite_after_tail=store.sqlite_snapshot(),
                 journal_at_input_stop=journal_at_input_stop,
                 candidate_at_input_stop=candidate_at_input_stop,
+                candidate_evidence_at_input_stop=candidate_evidence_at_input_stop,queue_series=queue_series,
                 journal_after_tail=runtime.feature_observation_deferred_snapshot(),
                 source_sha256=hashlib.sha256(json.dumps(source_files,sort_keys=True).encode()).hexdigest(),
                 benchmark_tool_sha256=hashlib.sha256(Path(__file__).read_bytes().replace(b'\r\n',b'\n')).hexdigest(),
@@ -312,6 +370,9 @@ def one(source, seconds=30, active=3, configured=20, mode='shadow', ui=False, tr
                 root_decisions={a['target_entity']:dict(desired=runtime.runtime[a['id']].get('last_prediction'),
                     source=runtime.runtime[a['id']].get('decision_source')) for a in roots},
                 production_root=True,prediction_override=False,ha_transport='local stub only',
+                training_fixture=training_fixture,
+                training_contract=('80 updates/validations with production feature extraction and alternating presence states'
+                    if training_fixture=='production' else '80 sparse fixture updates/validations; functional Control smoke only'),
                 limits='Synthetic trained models and local transport, no deployed Pi/Ingress/physical ACK claim; startup grace and workers retained.')
         finally:
             ui_stop.set()
@@ -328,6 +389,7 @@ def one(source, seconds=30, active=3, configured=20, mode='shadow', ui=False, tr
             if core.HTTP_SERVER is not None:core.HTTP_SERVER.shutdown()
             server_thread.join(30)
             assert not server_thread.is_alive(),'shipped shutdown did not finish'
+            join_runtime_producers(core)
 
 
 if __name__=='__main__':
@@ -340,6 +402,7 @@ if __name__=='__main__':
     p.add_argument('--mode',choices=('shadow','control'),default='shadow')
     p.add_argument('--ui',action='store_true');p.add_argument('--trace',action='store_true')
     p.add_argument('--candidates',action='store_true')
+    p.add_argument('--training-fixture',choices=('production','legacy'),default='production')
     a=p.parse_args()
     assert 1<=a.active<=a.configured<=100 and a.seconds>0
-    print(json.dumps(one(a.source_root,a.seconds,a.active,a.configured,a.mode,a.ui,a.trace,a.candidates,a.warmup_seconds)))
+    print(json.dumps(one(a.source_root,a.seconds,a.active,a.configured,a.mode,a.ui,a.trace,a.candidates,a.warmup_seconds,a.training_fixture)))

@@ -1,3 +1,23 @@
+## 0.14.218 (2026-10-19, draft)
+
+- Separate Candidate decision-history persistence from Candidate inference. Use one persistent writer connection and bounded batches of immutable observed results; retain exact retry, byte/item admission, explicit gaps and shutdown durability. No new prediction worker or HA ownership is added.
+- Bound the production Candidate evidence buffer to 1024 items and a configurable 4 to 64 MiB (16 MiB default). Accepted records stay charged until commit. Full-buffer observations remain explicit gaps.
+- Take each deferred Candidate payload at FIFO admission rather than detaching a stale batch in advance. Preserve the exact parent frame, generation checks and causal pairing.
+- Avoid an Explore table probe and fresh agent reads when the standard Teaching matcher's own cache proves there are no labels. Custom matchers and nonempty label sets retain their full path.
+- Use bounded multi-VALUES writes for Candidate/context rows; bound context transactions by complete payload size as well as row count and yield Store between commits.
+- Compute exact nonoverlapping maximum protection ranges before updating journal observations. Preserve closed boundaries, disjoint gaps, duplicate window IDs and expiry reversals. Older SQLite/nonfinite intervals retain the prior SQL path.
+- Keep pending history explicit; Correct never substitutes an older durable Desired for a newer observation awaiting commit. Measure enqueue-to-Candidate RAM publication separately from persistence.
+- Return bounded sample protection as one native SQLite result row, avoiding repeated GIL handoffs while Store is held; retain exact REAL precision and transactional freshness.
+- Queue possible false-early returns before Candidate RAM publication; group FIFO observations by Root for epoch-checked idempotent quality writes. Pending quality evidence vetoes Promote. No prediction replay or automatic readiness grant.
+- Pause only the managed no-op storage progress callback inside SQLite-enforced read-only queries. Preserve external cancellation, page/WAL/payload admission, callback restoration and rollback.
+- Avoid idle lifecycle/backup work and duplicate request-local Candidate-list summaries. Preserve fresh single-agent status and authoritative promotion checks.
+- Prune bounded groups of stale string window IDs natively, and use bounded VALUES for archive and Teaching history without changing retention, receipt/revision or transaction semantics.
+- Group quality counters for at most four Roots in one reserved transaction. Recheck each generation and current offline gate inside it; retain exact rollback and postcommit acknowledgments. Decision transactions remain capped at 32 observations.
+- Reuse the final same-card Confidence summary on list requests, and preserve the atomic pending-evidence Promote veto through later decoration. Single status and promotion remain fresh.
+- Retain WAL frame/backlog and allocated-file diagnostics separately in full-runtime reports; host auto-allocation is reported explicitly.
+- Full local functional validation passes: 2717 tests, shipped entrypoint, both UI VMs, compileall and 21 JavaScript syntax checks. Sustained paired performance acceptance remains pending. No physical HA or production-startup gain is claimed.
+- Exact-source CI passes 2717 tests on Python 3.11 and 3.13, additional workflow benchmarks and Docker. Five paired host runs show decision p95 15.17 to 9.98 ms for 3-active Shadow and 125.20 to 80.88 ms for 3-active Control. The 20-active result remains inconclusive; full-plan, target Raspberry Pi/microSD, device and production-startup acceptance are open.
+
 ## 0.14.217 (2026-10-18)
 
 - Start the staged performance plan with a shipped-entrypoint benchmark: real Root policies, passive blocked Candidate generations, 778 HA states, 3 or 20 eligible agents, optional UI and trace load. External HA transport is local and never reaches a real installation.

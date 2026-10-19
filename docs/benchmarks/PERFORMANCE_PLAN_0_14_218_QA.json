@@ -1,0 +1,867 @@
+{
+  "first_full_run": {
+    "tests": 2679,
+    "seconds": 383.341,
+    "result": "FAILED: Docker metadata (2), missing files in initial WSL copy (3)",
+    "log_sha256": "42e9188595cd1a28fd411efc1f74578f09d7873272f2b5e3b920e8858a5710de",
+    "local_log": "C:\\Users\\mpuch\\OneDrive\\Dokumenty\\HomeMind\\tmp\\plan218-first-full-failed.log",
+    "resolution": "Correct build version; seed the complete tracked tree before overlaying modifications. No assertions or timeouts changed."
+  },
+  "additional_fix": "Typed generation read status prevents Live Correct from substituting older history while generation evidence is pending",
+  "post_validation_whitespace_only": [
+    {
+      "file": "adaptive_ai/src/sqlite_bulk_rows.py",
+      "before_sha256": "33855f4efeac5fe2287ef2ea154ab9e6db196a4a235baf8cc54c8f98e863f0a7",
+      "after_sha256": "21ba061b01097d657cf8b70b86c8389fe664febc8cb2ce78bc023c95c776395a",
+      "ast_identical": true
+    }
+  ],
+  "earlier_full_passes": [
+    {
+      "tests": 2680,
+      "seconds": 296.139,
+      "result": "OK",
+      "log_sha256": "8b17fb30cd71c3ee99513b0c9e78a125de987f22c542f755fb325175522e8ae8"
+    },
+    {
+      "tests": 2681,
+      "seconds": 310.685,
+      "result": "OK",
+      "log_sha256": "e200d0a971bef0cf5f5b0da35ec0173a93d9cc7e8ef518a87562740681403028"
+    },
+    {
+      "tests": 2682,
+      "seconds": 339.596,
+      "result": "OK",
+      "log_sha256": "c1a69c3f5eee74bdf34500bc73e6beac491db772e81695a8b2d9b15f0c703c1f"
+    },
+    {
+      "tests": 2708,
+      "seconds": 333.75,
+      "result": "OK",
+      "log_sha256": "da9705ec7b8c2f62bc52cf3fc7a4444e091e85855f655e46e8db64e24279435e"
+    },
+    {
+      "tests": 2715,
+      "seconds": 324.471,
+      "result": "OK",
+      "log_sha256": "0af80511151fdcfba02bd02ddd9d50d888a52969b56dc31972eabf9ec8afc19d"
+    }
+  ],
+  "final_full_run": {
+    "tests": 2717,
+    "seconds": 328.914,
+    "result": "OK",
+    "log_sha256": "a36b4299deb766f12dd3767786cd310a44c711055b816e55b216326cc5a765e7"
+  },
+  "first_ci_run": {
+    "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/39178106458",
+    "commit": "1fb65ec9b59ff9f000e9074e28435289c1f0ff52",
+    "python_313": "PASS: 2680 tests and workflow checks",
+    "image": "PASS",
+    "python_311": {
+      "result": "FAILED: 2680 tests, one failure",
+      "seconds": 269.079,
+      "test": "FullRuntimeBenchmarkTests.test_control_fixture_dispatches_with_twenty_configured_agents_and_all_guards",
+      "error": "service_calls 2 < required 3",
+      "resolution": "Restore the original sparse training fixture only for this 1-second functional smoke; production-feature training remains the performance default. Assertion, timeout, guards and runtime authority unchanged."
+    }
+  },
+  "latency_metric_correction": "Exclude Parent-only bundles from successful Candidate latency samples; regression included in 2681-test full run.",
+  "late_measurement_only_correction": "Snapshot evidence at input stop, before UI joins/tail; benchmark production code otherwise identical. Focused FullRuntimeBenchmarkTests validate the final tool; remote full CI validates the published tree.",
+  "final_benchmark_tool_focused": {
+    "result": "PASS",
+    "suite": "test_release_217_runtime_plan.py",
+    "log_sha256": "396d67309652ca9107be822fdf0ad4d14724f65982e25a46519b2fdac9d9c4a2",
+    "tail": "binding_is_local_and_cleared_even_after_agent_error) ... ok\n\n----------------------------------------------------------------------\nRan 22 tests in 18.456s\n\nOK\n"
+  },
+  "second_ci_run": {
+    "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/39179392891",
+    "commit": "5460656a7cfa23bf209899e91f5198b726750c7e",
+    "python_311": {
+      "tests": 2681,
+      "seconds": 236.329,
+      "result": "OK"
+    },
+    "python_313": {
+      "tests": 2681,
+      "seconds": 195.837,
+      "result": "OK"
+    },
+    "image": "PASS",
+    "scope": "Before the native row aggregation change; the final tree requires a new CI run."
+  },
+  "rejected_sustained_run": {
+    "report": "docs/benchmarks/PERFORMANCE_PLAN_0_14_218_LONG_CURRENT_20_REJECTED.json",
+    "result": "REJECTED: growing raw/window queues, Candidate queue wait measured in seconds, one Candidate-list HTTP timeout. Matrix did not start.",
+    "diagnosis": "Late thread-stack samples locate Candidate false-early summary waiting on Store and journal record_batch iterating result rows while holding Store.",
+    "correction": "Return native CASE/MAX columns in one result row per bounded 256-sample group, with no text/JSON conversion or changed protection semantics.",
+    "regression": "600 samples over three bind groups, 999 SQLite parameter limit, exact float values, missing entities and inclusive interval endpoints."
+  },
+  "third_ci_run": {
+    "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/39201663690",
+    "commit": "59db81f5223022b4417fa2bb46d0eff2d86dd726",
+    "python_311": {
+      "tests": 2682,
+      "seconds": 263.277,
+      "result": "OK"
+    },
+    "python_313": {
+      "tests": 2682,
+      "seconds": 292.892,
+      "result": "OK"
+    },
+    "image": "PASS",
+    "scope": "Preceding published native aggregation tree, before asynchronous false-early and native prune/bulk changes; new exact-tree CI required."
+  },
+  "latest_scope": "Four-Root counter transactions with exact partial-commit retry and fresh epoch/lifecycle reads; request-local Confidence summary reuse without erasing pending Promote veto; RAM-only WAL/frame/checkpoint benchmark snapshots.",
+  "all_attempts_index": "docs/benchmarks/PERFORMANCE_PLAN_0_14_218_EXPERIMENTS.json",
+  "performance_status": "OPEN: host Shadow3 and Control3 decision scenarios improved; Root20 end-to-end improvement remains inconclusive. Full E0-E7 and target Pi/microSD acceptance are incomplete.",
+  "fourth_ci_run": {
+    "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/39232484353",
+    "commit": "42fff4ff47a69359e4b9265d6f613d5c0892d693",
+    "python_311": {
+      "tests": 2708,
+      "seconds": 290.331,
+      "result": "OK"
+    },
+    "python_313": {
+      "tests": 2708,
+      "seconds": 274.492,
+      "result": "OK"
+    },
+    "image": "PASS",
+    "workflow": "SUCCESS; package intentionally skipped on PR",
+    "scope": "Preceding published source before Confidence-list reuse, four-Root counter groups and in-transaction lifecycle read. New code requires its own CI."
+  },
+  "late_focused_failures": [
+    {
+      "tests": 64,
+      "seconds": 71.51,
+      "result": "One error: test injected an independent writer after the new SQLite writer reservation, so the test writer correctly encountered SQLITE_BUSY.",
+      "resolution": "Move the simulated generation replacement before reservation; keep exact counter/epoch assertions. Add an in-transaction SQL-trigger epoch replacement test."
+    },
+    {
+      "tests": 66,
+      "seconds": 7.017,
+      "result": "Two new offline lifecycle tests used the standalone base adapter, not the shipped blocked-evidence adapter.",
+      "resolution": "Bind the shipped helper functions in those narrow fixtures. Assertions unchanged; both repair and a newly failed offline gate are checked on the reserved connection."
+    }
+  ],
+  "final_sustained_run": {
+    "seconds": 360.004494604,
+    "root": {
+      "count": 61064,
+      "p50": 99.56906899992646,
+      "p95": 150.3171570999939,
+      "p99": 196.8931945399755,
+      "max": 538.8397500000792
+    },
+    "candidate": {
+      "count": 61018,
+      "p50": 117.25167500003408,
+      "p95": 168.38580885017788,
+      "p99": 214.3736951498799,
+      "max": 596.5299229999346
+    },
+    "candidate_enqueue": {
+      "count": 61018,
+      "p50": 14.684352000074341,
+      "p95": 32.55798370004183,
+      "p99": 44.683900960028524,
+      "max": 130.44545200000357
+    },
+    "ui": {
+      "requests": 6462,
+      "errors": 0,
+      "routes": {
+        "api/live": {
+          "requests": 3171,
+          "errors": 0
+        },
+        "api/candidate-live": {
+          "requests": 3175,
+          "errors": 0
+        },
+        "api/status": {
+          "requests": 29,
+          "errors": 0
+        },
+        "api/events": {
+          "requests": 29,
+          "errors": 0
+        },
+        "api/agents": {
+          "requests": 29,
+          "errors": 0
+        },
+        "api/candidates": {
+          "requests": 29,
+          "errors": 0
+        }
+      }
+    },
+    "checkpoint": {
+      "runs": 72,
+      "errors": 0,
+      "busy_results": 0,
+      "last_busy": 0,
+      "last_error": null,
+      "wal_bytes": 1187993792,
+      "log_frames": 288343,
+      "checkpointed_frames": 288343,
+      "remaining_frames": 0,
+      "last_duration_ms": 67.10067599988179,
+      "max_duration_ms": 3761.3654409999526,
+      "last_checkpoint_at": 1792406286.771959,
+      "db_bytes": 143175680,
+      "disk_free_bytes": 1020131471360,
+      "storage_sample_error": null,
+      "reclaim_attempts": 0,
+      "reclaim_successes": 0,
+      "reclaim_busy": 0,
+      "reclaim_errors": 0,
+      "reclaim_pressure_attempts": 0,
+      "recovery_requests": 0,
+      "quiesce_runs": 0,
+      "reclaimed_bytes": 0,
+      "last_reclaim_duration_ms": 0.0,
+      "last_reclaim_error": null,
+      "active": true,
+      "alive": true,
+      "mode": "PASSIVE",
+      "poll_seconds": 5.0,
+      "max_idle_seconds": 30.0,
+      "threshold_pages": 1000,
+      "wal_retain_bytes": 16777216,
+      "reclaim_threshold_bytes": 6384156083,
+      "reclaim_pressure_threshold_bytes": 10214649732,
+      "reclaim_interval_seconds": 60.0,
+      "reclaim_pressure_interval_seconds": 5.0,
+      "quiesce_ms": 100.0,
+      "reclaim_mode": "TRUNCATE",
+      "reclaim_busy_timeout_ms": 0
+    },
+    "evidence_pending_max": 584,
+    "queue_slopes_last_180s": {
+      "raw_pending": -0.06420473166068374,
+      "windows_pending": -0.26776298752002525,
+      "candidate_pending": -0.006654491795914489,
+      "evidence_pending": 0.22527598078917643
+    },
+    "source_sha256": "e39d80b15d3b1a1e86e5eba1b1649e1768f038a01272df1172cf391e3ed40023",
+    "benchmark_tool_sha256": "c84e8759e02fe18549d491f220ae1f746ce439707b467143c0991c111db6aa9e"
+  },
+  "paired_shadow20": {
+    "summary": {
+      "event_to_decision": {
+        "baseline_p95_ms": 124.60424009997752,
+        "current_p95_ms": 132.88956459997505,
+        "relative_change_percent": 6.649311847935291,
+        "paired_run_bootstrap_95_percent": [
+          -13.043234628369238,
+          29.545519841605472
+        ],
+        "baseline_count": 34512,
+        "current_count": 33017
+      },
+      "event_to_target_start": {
+        "baseline_p95_ms": 115.71671944997487,
+        "current_p95_ms": 124.61813709998209,
+        "relative_change_percent": 7.69242136513848,
+        "paired_run_bootstrap_95_percent": [
+          -12.820124295257473,
+          31.38387700714631
+        ],
+        "baseline_count": 34520,
+        "current_count": 33024
+      },
+      "inference": {
+        "baseline_p95_ms": 6.612664200011408,
+        "current_p95_ms": 3.2788913999866023,
+        "relative_change_percent": -50.41497192642951,
+        "paired_run_bootstrap_95_percent": [
+          -56.263598778011,
+          -42.56648388166055
+        ],
+        "baseline_count": 34512,
+        "current_count": 33017
+      },
+      "wrapped_inference": {
+        "baseline_p95_ms": 15.128150499930365,
+        "current_p95_ms": 15.689966300007532,
+        "relative_change_percent": 3.713711071817749,
+        "paired_run_bootstrap_95_percent": [
+          -10.243323026979322,
+          18.931757047766574
+        ],
+        "baseline_count": 34512,
+        "current_count": 33015
+      },
+      "event_to_worker_release": {
+        "baseline_p95_ms": 126.32595674998295,
+        "current_p95_ms": 134.88958739997656,
+        "relative_change_percent": 6.778995283560185,
+        "paired_run_bootstrap_95_percent": [
+          -12.541239961739292,
+          31.05373286081381
+        ],
+        "baseline_count": 34512,
+        "current_count": 33015
+      }
+    },
+    "candidate_throughput": {
+      "observed_in_measurement_window": {
+        "baseline": 3937,
+        "current": 32946
+      },
+      "current_to_baseline_ratio": 8.368300736601473,
+      "formula": "input-stop processed minus first in-window queue-series processed; excludes completed warmup jobs"
+    },
+    "status": "INCONCLUSIVE for Root end-to-end acceleration: 124.60 -> 132.89ms (+6.65%), paired bootstrap [-13.04%,+29.55%]. More completed Candidate observations do not establish Root speedup. Full acceptance remains open.",
+    "per_run_quality": [
+      {
+        "pair": 0,
+        "kind": "baseline",
+        "root_p95": 117.53551899999337,
+        "candidate_observations": 891,
+        "candidate_gaps": 0,
+        "ui_errors": 0,
+        "transport_pending": 0,
+        "transport_p95": 3.5219761000028873
+      },
+      {
+        "pair": 0,
+        "kind": "current",
+        "root_p95": 67.61510879999832,
+        "candidate_observations": 7067,
+        "candidate_gaps": 0,
+        "ui_errors": 0,
+        "transport_pending": 0,
+        "transport_p95": 4.215572200008915
+      },
+      {
+        "pair": 1,
+        "kind": "current",
+        "root_p95": 140.72280300001694,
+        "candidate_observations": 6317,
+        "candidate_gaps": 0,
+        "ui_errors": 0,
+        "transport_pending": 0,
+        "transport_p95": 5.145514249990406
+      },
+      {
+        "pair": 1,
+        "kind": "baseline",
+        "root_p95": 157.99184299995656,
+        "candidate_observations": 325,
+        "candidate_gaps": 0,
+        "ui_errors": 0,
+        "transport_pending": 0,
+        "transport_p95": 6.009891250042185
+      },
+      {
+        "pair": 2,
+        "kind": "baseline",
+        "root_p95": 106.2716740000127,
+        "candidate_observations": 1049,
+        "candidate_gaps": 0,
+        "ui_errors": 0,
+        "transport_pending": 0,
+        "transport_p95": 3.1258841500402914
+      },
+      {
+        "pair": 2,
+        "kind": "current",
+        "root_p95": 132.6514764999871,
+        "candidate_observations": 6856,
+        "candidate_gaps": 0,
+        "ui_errors": 0,
+        "transport_pending": 0,
+        "transport_p95": 5.455579300013367
+      },
+      {
+        "pair": 3,
+        "kind": "current",
+        "root_p95": 113.66171099999178,
+        "candidate_observations": 6901,
+        "candidate_gaps": 0,
+        "ui_errors": 0,
+        "transport_pending": 0,
+        "transport_p95": 4.606199099964668
+      },
+      {
+        "pair": 3,
+        "kind": "baseline",
+        "root_p95": 66.73395385001866,
+        "candidate_observations": 1036,
+        "candidate_gaps": 0,
+        "ui_errors": 0,
+        "transport_pending": 0,
+        "transport_p95": 2.682108000095695
+      },
+      {
+        "pair": 4,
+        "kind": "baseline",
+        "root_p95": 129.03569939999213,
+        "candidate_observations": 636,
+        "candidate_gaps": 0,
+        "ui_errors": 0,
+        "transport_pending": 0,
+        "transport_p95": 3.7972642999250166
+      },
+      {
+        "pair": 4,
+        "kind": "current",
+        "root_p95": 180.6631819000131,
+        "candidate_observations": 5805,
+        "candidate_gaps": 0,
+        "ui_errors": 0,
+        "transport_pending": 0,
+        "transport_p95": 9.229663400043364
+      }
+    ]
+  },
+  "passive_transport_diagnostic": {
+    "result": "PASS",
+    "scope": "Passive fixture emit-to-recv timing, pending transport messages; runtime source unchanged",
+    "log_sha256": "4dc185d32314eb783a2ae2fea27e691dbe2b672ab4dce2346d9343778e6b6c47",
+    "tail": "udes_timers) ... ok\ntest_websocket_owns_timestamp_before_parse_and_never_trusts_payload_clock (test_release_217_runtime_plan.ReceiptTests.test_websocket_owns_timestamp_before_parse_and_never_trusts_payload_clock) ... ok\ntest_worker_binding_is_local_and_cleared_even_after_agent_error (test_release_217_runtime_plan.ReceiptTests.test_worker_binding_is_local_and_cleared_even_after_agent_error) ... ok\n\n----------------------------------------------------------------------\nRan 22 tests in 19.710s\n\nOK\n",
+    "changed_files_since_full_run": [
+      "tests/test_release_217_runtime_plan.py",
+      "tools/benchmark_full_runtime.py"
+    ],
+    "preceding_full_validation_commit": "7d5e53b25d9715301ba14f7741d3f115dc7abe67"
+  },
+  "paired_shadow3": {
+    "summary": {
+      "event_to_decision": {
+        "baseline_p95_ms": 15.173243000003112,
+        "current_p95_ms": 9.983003499996812,
+        "relative_change_percent": -34.206527240124174,
+        "paired_run_bootstrap_95_percent": [
+          -38.442313211673294,
+          -30.10533543205668
+        ],
+        "baseline_count": 10746,
+        "current_count": 10756
+      },
+      "event_to_target_start": {
+        "baseline_p95_ms": 9.02236124998268,
+        "current_p95_ms": 6.879877500001186,
+        "relative_change_percent": -23.74637515191056,
+        "paired_run_bootstrap_95_percent": [
+          -30.577965257724994,
+          -15.562963155446807
+        ],
+        "baseline_count": 10746,
+        "current_count": 10756
+      },
+      "inference": {
+        "baseline_p95_ms": 6.375292249998665,
+        "current_p95_ms": 2.1869659999715907,
+        "relative_change_percent": -65.69622357356168,
+        "paired_run_bootstrap_95_percent": [
+          -67.70371273965632,
+          -62.5444531837527
+        ],
+        "baseline_count": 10746,
+        "current_count": 10756
+      },
+      "wrapped_inference": {
+        "baseline_p95_ms": 11.483145249997051,
+        "current_p95_ms": 8.077508499980013,
+        "relative_change_percent": -29.65769983635723,
+        "paired_run_bootstrap_95_percent": [
+          -32.81590532808107,
+          -25.47736020821545
+        ],
+        "baseline_count": 10746,
+        "current_count": 10756
+      },
+      "event_to_worker_release": {
+        "baseline_p95_ms": 16.762797500005533,
+        "current_p95_ms": 11.933015250004786,
+        "relative_change_percent": -28.812507279880663,
+        "paired_run_bootstrap_95_percent": [
+          -33.742766432818186,
+          -23.92553242332992
+        ],
+        "baseline_count": 10746,
+        "current_count": 10756
+      }
+    },
+    "quality": [
+      {
+        "pair": 0,
+        "kind": "baseline",
+        "gaps": 0,
+        "ui_errors": 0,
+        "candidate_errors": 0,
+        "transport_pending": 0
+      },
+      {
+        "pair": 0,
+        "kind": "current",
+        "gaps": 0,
+        "ui_errors": 0,
+        "candidate_errors": 0,
+        "transport_pending": 0
+      },
+      {
+        "pair": 1,
+        "kind": "current",
+        "gaps": 0,
+        "ui_errors": 0,
+        "candidate_errors": 0,
+        "transport_pending": 0
+      },
+      {
+        "pair": 1,
+        "kind": "baseline",
+        "gaps": 0,
+        "ui_errors": 0,
+        "candidate_errors": 0,
+        "transport_pending": 0
+      },
+      {
+        "pair": 2,
+        "kind": "baseline",
+        "gaps": 0,
+        "ui_errors": 0,
+        "candidate_errors": 0,
+        "transport_pending": 0
+      },
+      {
+        "pair": 2,
+        "kind": "current",
+        "gaps": 0,
+        "ui_errors": 0,
+        "candidate_errors": 0,
+        "transport_pending": 0
+      },
+      {
+        "pair": 3,
+        "kind": "current",
+        "gaps": 0,
+        "ui_errors": 0,
+        "candidate_errors": 0,
+        "transport_pending": 0
+      },
+      {
+        "pair": 3,
+        "kind": "baseline",
+        "gaps": 0,
+        "ui_errors": 0,
+        "candidate_errors": 0,
+        "transport_pending": 0
+      },
+      {
+        "pair": 4,
+        "kind": "baseline",
+        "gaps": 0,
+        "ui_errors": 0,
+        "candidate_errors": 0,
+        "transport_pending": 0
+      },
+      {
+        "pair": 4,
+        "kind": "current",
+        "gaps": 0,
+        "ui_errors": 0,
+        "candidate_errors": 0,
+        "transport_pending": 0
+      }
+    ],
+    "status": "HOST SCENARIO IMPROVEMENT: 3 eligible/20 configured Shadow Root p95 -34.21%, paired bootstrap [-38.44%,-30.11%]. Short alternating probes only; does not resolve Root20 uncertainty or deployed/startup acceptance."
+  },
+  "paired_control3": {
+    "summary": {
+      "event_to_decision": {
+        "baseline_p95_ms": 125.19965404998742,
+        "current_p95_ms": 80.87545650001572,
+        "relative_change_percent": -35.40281152236631,
+        "paired_run_bootstrap_95_percent": [
+          -38.64606983072567,
+          -29.983192441263796
+        ],
+        "baseline_count": 6220,
+        "current_count": 8339
+      },
+      "event_to_target_start": {
+        "baseline_p95_ms": 120.36147514998702,
+        "current_p95_ms": 78.09268299997852,
+        "relative_change_percent": -35.1182071317552,
+        "paired_run_bootstrap_95_percent": [
+          -38.05445423265794,
+          -29.860286406926644
+        ],
+        "baseline_count": 6222,
+        "current_count": 8339
+      },
+      "inference": {
+        "baseline_p95_ms": 4.694689099994764,
+        "current_p95_ms": 2.1030711000037163,
+        "relative_change_percent": -55.20318693721248,
+        "paired_run_bootstrap_95_percent": [
+          -60.631950571624536,
+          -51.77704269943328
+        ],
+        "baseline_count": 6220,
+        "current_count": 8339
+      },
+      "wrapped_inference": {
+        "baseline_p95_ms": 109.41402250000179,
+        "current_p95_ms": 71.7632803000015,
+        "relative_change_percent": -34.411258575197415,
+        "paired_run_bootstrap_95_percent": [
+          -42.14082874811227,
+          -27.440422672736197
+        ],
+        "baseline_count": 6212,
+        "current_count": 8330
+      },
+      "event_to_worker_release": {
+        "baseline_p95_ms": 201.87424505001275,
+        "current_p95_ms": 136.1999336000096,
+        "relative_change_percent": -32.53228832322462,
+        "paired_run_bootstrap_95_percent": [
+          -39.43969476465733,
+          -24.97433267367143
+        ],
+        "baseline_count": 6212,
+        "current_count": 8330
+      }
+    },
+    "quality": [
+      {
+        "pair": 0,
+        "kind": "baseline",
+        "gaps": 0,
+        "ui_errors": 0,
+        "candidate_errors": 0,
+        "transport_pending": 0
+      },
+      {
+        "pair": 0,
+        "kind": "current",
+        "gaps": 0,
+        "ui_errors": 0,
+        "candidate_errors": 0,
+        "transport_pending": 0
+      },
+      {
+        "pair": 1,
+        "kind": "current",
+        "gaps": 0,
+        "ui_errors": 0,
+        "candidate_errors": 0,
+        "transport_pending": 0
+      },
+      {
+        "pair": 1,
+        "kind": "baseline",
+        "gaps": 0,
+        "ui_errors": 0,
+        "candidate_errors": 0,
+        "transport_pending": 0
+      },
+      {
+        "pair": 2,
+        "kind": "baseline",
+        "gaps": 0,
+        "ui_errors": 0,
+        "candidate_errors": 0,
+        "transport_pending": 0
+      },
+      {
+        "pair": 2,
+        "kind": "current",
+        "gaps": 0,
+        "ui_errors": 0,
+        "candidate_errors": 0,
+        "transport_pending": 0
+      },
+      {
+        "pair": 3,
+        "kind": "current",
+        "gaps": 0,
+        "ui_errors": 0,
+        "candidate_errors": 0,
+        "transport_pending": 0
+      },
+      {
+        "pair": 3,
+        "kind": "baseline",
+        "gaps": 0,
+        "ui_errors": 0,
+        "candidate_errors": 0,
+        "transport_pending": 0
+      },
+      {
+        "pair": 4,
+        "kind": "baseline",
+        "gaps": 0,
+        "ui_errors": 0,
+        "candidate_errors": 0,
+        "transport_pending": 0
+      },
+      {
+        "pair": 4,
+        "kind": "current",
+        "gaps": 0,
+        "ui_errors": 0,
+        "candidate_errors": 0,
+        "transport_pending": 0
+      }
+    ],
+    "coverage": {
+      "baseline": {
+        "services_with_warmup": 15,
+        "measured_service_samples": 12,
+        "measured_ack_samples": 12
+      },
+      "current": {
+        "services_with_warmup": 15,
+        "measured_service_samples": 15,
+        "measured_ack_samples": 15
+      }
+    },
+    "status": "HOST DECISION SCENARIO IMPROVEMENT: 3 eligible Control Root p95 -35.40%, paired bootstrap [-38.65%,-29.98%]. Only 12 baseline/15 current service and ACK samples in measured windows; no physical device/service-latency acceptance."
+  },
+  "latest_code_ci": {
+    "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/39241471893",
+    "commit": "6b883526e7ce7893f0722d6f0309a43a8b14a222",
+    "python_311": {
+      "tests": 2717,
+      "seconds": 275.44,
+      "result": "OK"
+    },
+    "python_313": {
+      "tests": 2717,
+      "seconds": 278.14,
+      "result": "OK"
+    },
+    "image": "PASS",
+    "additional_workflow_checks": "PASS",
+    "package": "SKIPPED: PR"
+  },
+  "trace_overhead": {
+    "summary": {
+      "off": {
+        "p95_ms": 8.484310299996881,
+        "cpu_seconds": 26.618341954,
+        "samples": 5355
+      },
+      "on": {
+        "p95_ms": 9.863629400007312,
+        "cpu_seconds": 29.668062135000003,
+        "samples": 5355
+      },
+      "p95_relative_change_percent": 16.257292004170786,
+      "cpu_relative_change_percent": 11.457213173796932
+    },
+    "quality": [
+      {
+        "trace": false,
+        "pair": 0,
+        "gaps": 0,
+        "candidate_errors": 0,
+        "ui_errors": 0,
+        "transport_pending": 0
+      },
+      {
+        "trace": true,
+        "pair": 0,
+        "gaps": 0,
+        "candidate_errors": 0,
+        "ui_errors": 0,
+        "transport_pending": 0
+      },
+      {
+        "trace": true,
+        "pair": 1,
+        "gaps": 0,
+        "candidate_errors": 0,
+        "ui_errors": 0,
+        "transport_pending": 0
+      },
+      {
+        "trace": false,
+        "pair": 1,
+        "gaps": 0,
+        "candidate_errors": 0,
+        "ui_errors": 0,
+        "transport_pending": 0
+      },
+      {
+        "trace": false,
+        "pair": 2,
+        "gaps": 0,
+        "candidate_errors": 0,
+        "ui_errors": 0,
+        "transport_pending": 0
+      },
+      {
+        "trace": true,
+        "pair": 2,
+        "gaps": 0,
+        "candidate_errors": 0,
+        "ui_errors": 0,
+        "transport_pending": 0
+      },
+      {
+        "trace": true,
+        "pair": 3,
+        "gaps": 0,
+        "candidate_errors": 0,
+        "ui_errors": 0,
+        "transport_pending": 0
+      },
+      {
+        "trace": false,
+        "pair": 3,
+        "gaps": 0,
+        "candidate_errors": 0,
+        "ui_errors": 0,
+        "transport_pending": 0
+      },
+      {
+        "trace": false,
+        "pair": 4,
+        "gaps": 0,
+        "candidate_errors": 0,
+        "ui_errors": 0,
+        "transport_pending": 0
+      },
+      {
+        "trace": true,
+        "pair": 4,
+        "gaps": 0,
+        "candidate_errors": 0,
+        "ui_errors": 0,
+        "transport_pending": 0
+      }
+    ],
+    "cpu_scope": "Main process CPU during measured window; optional child process CPU is not included.",
+    "report": "PERFORMANCE_PLAN_0_14_218_TRACE_OVERHEAD.json"
+  },
+  "source_integrity": {
+    "current_files": 624,
+    "baseline_files": 618,
+    "baseline_unchanged": true,
+    "current_unchanged": true,
+    "windows_tracked_set_exact": true,
+    "windows_source_unchanged": true,
+    "executable_source_remote_commit": "6b883526e7ce7893f0722d6f0309a43a8b14a222",
+    "manifest_sha256": "4d94f61874f8ec1683710ff07e2d261bd0c827cf33366a1d439c694dc3e96cf6"
+  },
+  "target_hardware": {
+    "device": "Raspberry Pi 4",
+    "storage": "microSD 64 GB",
+    "source": "User confirmation in this chat, 2026-10-19",
+    "ram_capacity": "not provided",
+    "target_hardware_benchmarked": false
+  },
+  "acceptance_report": "PERFORMANCE_PLAN_0_14_218_ACCEPTANCE.json"
+}

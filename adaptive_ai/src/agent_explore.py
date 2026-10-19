@@ -122,13 +122,16 @@ def _session_for_child(store, child_generation_id):
     # Candidate Shadow is a process-global module and can be exercised in tests/runtime
     # instances where Explore was not installed. Absence of this additive table therefore
     # means simply "no Explore session", never a Shadow failure.
-    if not _table_exists(store, "agent_explore_sessions"):
-        return None
-    with store.conn() as c:
-        row = c.execute(
-            "SELECT * FROM agent_explore_sessions WHERE child_generation_id=?",
-            (str(child_generation_id),),
-        ).fetchone()
+    try:
+        with store.conn() as c:
+            row = c.execute(
+                "SELECT * FROM agent_explore_sessions WHERE child_generation_id=?",
+                (str(child_generation_id),),
+            ).fetchone()
+    except sqlite3.OperationalError as exc:
+        if str(exc) == 'no such table: agent_explore_sessions':
+            return None
+        raise
     return dict(row) if row else None
 
 

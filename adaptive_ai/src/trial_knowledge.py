@@ -755,9 +755,24 @@ def install(manager):
     previous_finish = experiments._finish
     previous_workflow_explore = manager.workflow_explore
     previous_start_build = manager._start_build
+    from experiments import Experiments
+    standard_proposer = (type(experiments) is Experiments and
+                         getattr(previous_propose, '__func__', None) is Experiments.propose)
 
     def propose(agent, policy, states, registry, features, labels, chosen, confidence, arms, horizon, rt):
         aid = str(agent["id"])
+        if standard_proposer:
+            with experiments.lock:
+                data = experiments.cache.get(aid)
+                inactive = (agent.get('mode') != 'control' or not agent.get('enabled') or
+                            (data is not None and not (data.get('config') or {}).get('enabled')))
+                if inactive:
+                    # The unchanged base clears prepared state and applies its
+                    # own gate under this same RLock. No proposal can exist to
+                    # decorate; do not resolve a whole registry or query a
+                    # session, or revive an old information-probe message.
+                    return previous_propose(agent, policy, states, registry, features, labels,
+                                            chosen, confidence, arms, horizon, rt)
         reg = registry() if callable(registry) else registry
         ctx = {"agent": agent, "policy": policy, "states": states, "registry": reg,
                "features": features, "labels": labels, "chosen": chosen,

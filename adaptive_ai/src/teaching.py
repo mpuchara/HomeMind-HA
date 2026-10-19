@@ -9,6 +9,7 @@ home-trajectory features and explicit policy/schema versions. Missing historical
 trajectory is represented as unknown and never fabricated from current live state.
 """
 from collections import deque
+from contextlib import nullcontext
 import hashlib
 import json
 import math
@@ -553,10 +554,13 @@ class Teaching:
                     self.buffer.clear()
                 prune_ts = time.time()
                 prune = prune_ts - self.last_prune > 3600
+                from sqlite_bulk_rows import insert_bounded_rows
                 with self.store.conn() as c:
-                    c.executemany("INSERT OR REPLACE INTO decision_history VALUES(?,?,?,?)", batch)
-                    if prune:
-                        c.execute("DELETE FROM decision_history WHERE ts<?", (prune_ts - 31 * 86400,))
+                    scope = getattr(c, 'storage_batch', None)
+                    with scope() if callable(scope) else nullcontext():
+                        insert_bounded_rows(c, 'INSERT OR REPLACE INTO decision_history', batch, 4)
+                        if prune:
+                            c.execute("DELETE FROM decision_history WHERE ts<?", (prune_ts - 31 * 86400,))
                 if prune:
                     self.last_prune = prune_ts
                 self.last_flush = time.monotonic()
