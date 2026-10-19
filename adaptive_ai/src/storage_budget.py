@@ -494,13 +494,16 @@ def storage_recording_paused(store):
     return storage_status(store).get('level', 'normal') != 'normal'
 
 
-def run_storage_write(store, callback, stop_event, cancel_event=None, timeout=90.0):
+def run_storage_write(store, callback, stop_event, cancel_event=None, timeout=90.0,
+                      *, capacity_timeout=0.0, on_wait=None):
     """Retry the same rolled-back history batch after a transient WAL pause.
 
-    Called outside SQL/Store locks. The existing checkpoint worker owns recovery;
-    low free space, a full database and unrelated SQL errors are never retried here.
+    Called outside SQL/Store locks. The checkpoint/recovery workers own recovery.
+    Recorder may opt into a bounded database-capacity wait with a low watermark;
+    low free space, unknown capacity and unrelated SQL errors are never retried.
     """
     deadline = time.monotonic() + timeout
+    capacity_deadline = None
     while True:
         if stop_event.is_set() or (cancel_event is not None and cancel_event.is_set()):
             raise InterruptedError('Training storage wait cancelled')
@@ -510,9 +513,37 @@ def run_storage_write(store, callback, stop_event, cancel_event=None, timeout=90
             budget = getattr(store, 'storage_budget', None)
             if not isinstance(budget, StorageBudget):
                 raise
+            data = budget.sample()
+            reason = getattr(exc, 'reason', None)
+            if (capacity_timeout > 0 and (reason == 'database_budget'
+                    or (reason == 'storage_pressure_changed_during_batch' and data.get('reason') == 'database_budget'))):
+                # The decoded Recorder response and exact uncommitted batch stay in
+                # RAM. No Store/SQL lock is held here, and no coverage is published.
+                if capacity_deadline is None:
+                    capacity_deadline = time.monotonic() + capacity_timeout
+                while True:
+                    if stop_event.is_set() or (cancel_event is not None and cancel_event.is_set()):
+                        raise InterruptedError('Training storage wait cancelled')
+                    if (data.get('sample_error') or data.get('free_bytes') is None
+                            or data['free_bytes'] < budget.reserve
+                            or data.get('reason') not in (None, 'database_budget', 'wal_budget')
+                            or time.monotonic() >= capacity_deadline):
+                        raise
+                    if (data['level'] == 'normal'
+                            and data['database_used_bytes'] < budget.db_limit * .85
+                            and data['wal_bytes'] < budget.wal_limit * .25):
+                        break
+                    with budget.lock:
+                        budget.stats['training_capacity_waits'] = budget.stats.get('training_capacity_waits', 0) + 1
+                    if budget.recovery_event is not None:
+                        budget.recovery_event.set()
+                    if on_wait is not None:
+                        on_wait(data)
+                    stop_event.wait(1.0)
+                    data = budget.sample()
+                continue
             if getattr(exc, 'reason', None) not in ('wal_budget', 'storage_pressure_changed_during_batch'):
                 raise
-            data = budget.sample()
             healthy_capacity = (data.get('free_bytes') is not None
                 and data['free_bytes'] >= budget.reserve
                 and data['database_used_bytes'] < budget.db_limit * .90)

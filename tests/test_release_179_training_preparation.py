@@ -21,6 +21,10 @@ class TrainingPreparation179Tests(unittest.TestCase):
         patcher = patch.object(history, "STORE", self.store)
         patcher.start()
         self.addCleanup(patcher.stop)
+        # These prefix/cancellation fixtures exercise the original 128-row profile.
+        patcher = patch.dict(history.OPTIONS, training_recorder_batch_rows=128)
+        patcher.start()
+        self.addCleanup(patcher.stop)
         self.engine = SimpleNamespace(lock=threading.RLock(), state_map={}, entity_registry={})
         self.manager = self.session("a")
 

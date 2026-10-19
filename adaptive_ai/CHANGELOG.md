@@ -1,3 +1,10 @@
+# 0.14.220
+
+- Use headroom-aware, cgroup-bounded RAM staging for explicit Recorder preparation (up to 1024 rows / 1 MiB input per transaction and 1536 MiB parent RSS ceiling). Low-memory and discovery paths keep 128 rows.
+- Retain the current Recorder response while waiting up to 300 seconds for database headroom. Retry outside Store/SQL locks, never publish incomplete coverage, and preserve normal admission and rollback.
+- Prevent database-pressure training restart loops with a cooldown and an 85% resume watermark. Expose the effective preparation profile and queue retry state.
+- Final validation: 2747 local tests OK (366.829s), entrypoint, both UI VMs, compileall and 21 JS syntax checks. Exact-source CI passes Python 3.11/3.13, workflow checks and Docker. Healthy local component: 63 to 8 transactions for 8000 rows, identical history; whole Pi training and runtime latency remain unverified.
+
 ## 0.14.219 (2026-10-19, draft)
 
 - Index provenance receipt order so restart warming no longer sorts the entire event audit table; retain the same 8192-row query, processed-event deduplication and command/context recovery. Optional index DDL retains storage admission and safe query fallback.
