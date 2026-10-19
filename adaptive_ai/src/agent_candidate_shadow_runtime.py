@@ -787,7 +787,8 @@ def install(manager):
                     "model_revision": result.get("model_revision"),
                     "schema_revision": result.get("schema_revision"),
                 }
-        if results and current_job:
+        observed_shadow = any(str(generation.get('generation_id') or '') in results for generation in shadow_generations)
+        if observed_shadow and current_job:
             # This boundary is publication to the visible tile RAM state, before
             # evidence persistence and false-early bookkeeping. Coalescing uses
             # the selected payload's own enqueue clock, never a newer event.

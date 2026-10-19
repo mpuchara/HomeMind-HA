@@ -7,12 +7,6 @@
     "local_log": "C:\\Users\\mpuch\\OneDrive\\Dokumenty\\HomeMind\\tmp\\plan218-first-full-failed.log",
     "resolution": "Correct build version; seed the complete tracked tree before overlaying modifications. No assertions or timeouts changed."
   },
-  "final_full_run": {
-    "tests": 2680,
-    "seconds": 296.139,
-    "result": "OK",
-    "log_sha256": "8b17fb30cd71c3ee99513b0c9e78a125de987f22c542f755fb325175522e8ae8"
-  },
   "additional_fix": "Typed generation read status prevents Live Correct from substituting older history while generation evidence is pending",
   "post_validation_whitespace_only": [
     {
@@ -21,5 +15,40 @@
       "after_sha256": "21ba061b01097d657cf8b70b86c8389fe664febc8cb2ce78bc023c95c776395a",
       "ast_identical": true
     }
-  ]
+  ],
+  "earlier_full_passes": [
+    {
+      "tests": 2680,
+      "seconds": 296.139,
+      "result": "OK",
+      "log_sha256": "8b17fb30cd71c3ee99513b0c9e78a125de987f22c542f755fb325175522e8ae8"
+    }
+  ],
+  "final_full_run": {
+    "tests": 2681,
+    "seconds": 310.685,
+    "result": "OK",
+    "log_sha256": "e200d0a971bef0cf5f5b0da35ec0173a93d9cc7e8ef518a87562740681403028"
+  },
+  "first_ci_run": {
+    "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/39178106458",
+    "commit": "1fb65ec9b59ff9f000e9074e28435289c1f0ff52",
+    "python_313": "PASS: 2680 tests and workflow checks",
+    "image": "PASS",
+    "python_311": {
+      "result": "FAILED: 2680 tests, one failure",
+      "seconds": 269.079,
+      "test": "FullRuntimeBenchmarkTests.test_control_fixture_dispatches_with_twenty_configured_agents_and_all_guards",
+      "error": "service_calls 2 < required 3",
+      "resolution": "Restore the original sparse training fixture only for this 1-second functional smoke; production-feature training remains the performance default. Assertion, timeout, guards and runtime authority unchanged."
+    }
+  },
+  "latency_metric_correction": "Exclude Parent-only bundles from successful Candidate latency samples; regression included in 2681-test full run.",
+  "late_measurement_only_correction": "Snapshot evidence at input stop, before UI joins/tail; benchmark production code otherwise identical. Focused FullRuntimeBenchmarkTests validate the final tool; remote full CI validates the published tree.",
+  "final_benchmark_tool_focused": {
+    "result": "PASS",
+    "suite": "test_release_217_runtime_plan.py",
+    "log_sha256": "396d67309652ca9107be822fdf0ad4d14724f65982e25a46519b2fdac9d9c4a2",
+    "tail": "binding_is_local_and_cleared_even_after_agent_error) ... ok\n\n----------------------------------------------------------------------\nRan 22 tests in 18.456s\n\nOK\n"
+  }
 }

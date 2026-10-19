@@ -7,7 +7,7 @@
 - Use bounded multi-VALUES writes for Candidate/context rows; bound context transactions by complete payload size as well as row count and yield Store between commits.
 - Compute exact nonoverlapping maximum protection ranges before updating journal observations. Preserve closed boundaries, disjoint gaps, duplicate window IDs and expiry reversals. Older SQLite/nonfinite intervals retain the prior SQL path.
 - Keep pending history explicit; Correct never substitutes an older durable Desired for a newer observation awaiting commit. Measure enqueue-to-Candidate RAM publication separately from persistence.
-- Full local functional validation passes: 2680 tests, shipped entrypoint, both UI VMs, compileall and 21 JavaScript syntax checks. Sustained paired performance acceptance remains pending. No physical HA or production-startup gain is claimed.
+- Full local functional validation passes: 2681 tests, shipped entrypoint, both UI VMs, compileall and 21 JavaScript syntax checks. Sustained paired performance acceptance remains pending. No physical HA or production-startup gain is claimed.
 
 ## 0.14.217 (2026-10-18)
 

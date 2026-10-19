@@ -249,7 +249,7 @@
   "pi4_release_gate_contract": "pi4_release_gate_v1",
   "pi4_real_hardware_required": true,
   "stage7_offline_rl_control_unlock": false,
-  "tests_passed": 2680,
+  "tests_passed": 2681,
   "tests_passed_version": "0.14.218",
   "profile": "rpi4-ram-first-complete-discovery-manual-agent-selection",
   "manual_agent_training": true,
@@ -3163,10 +3163,10 @@
     "scope": "Candidate decision persistence isolation, fair late admission and exact retention envelope",
     "physical_device_speedup_established": false,
     "validation": {
-      "tests": 2680,
-      "seconds": 296.139,
+      "tests": 2681,
+      "seconds": 310.685,
       "result": "OK",
-      "log_sha256": "8b17fb30cd71c3ee99513b0c9e78a125de987f22c542f755fb325175522e8ae8"
+      "log_sha256": "e200d0a971bef0cf5f5b0da35ec0173a93d9cc7e8ef518a87562740681403028"
     },
     "performance_gate": "pending sustained 180s and alternating full runtime comparisons",
     "candidate_evidence": {

@@ -27,7 +27,7 @@ from unittest.mock import patch
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def one(source, seconds=30, active=3, configured=20, mode='shadow', ui=False, trace=False, candidates=False, warmup=5.):
+def one(source, seconds=30, active=3, configured=20, mode='shadow', ui=False, trace=False, candidates=False, warmup=5., training_fixture='production'):
     with tempfile.TemporaryDirectory(prefix='full-runtime-') as directory, ExitStack() as stack:
         os.environ['ADAPTIVE_AI_DATA'] = directory
         os.environ.pop('SUPERVISOR_TOKEN', None)
@@ -69,12 +69,18 @@ def one(source, seconds=30, active=3, configured=20, mode='shadow', ui=False, tr
                 model=policy.MultiHorizonPolicy(agent,states,{r['entity_id']:r for r in registry},set())
                 for j in range(80):
                     value=j%2
-                    training_states=dict(states)
-                    eid=f'binary_sensor.bench_{i}'
-                    training_states[eid]=state(eid,'on' if value else 'off',device_class='occupancy')
-                    eid=f'sensor.bench_{i}_move_energy'
-                    training_states[eid]=state(eid,(j*34)%100,unit_of_measurement='%')
-                    features,_,_=model.features(training_states,None,at_ts=time.time())
+                    if training_fixture=='legacy':
+                        # Preserve the original one-second functional Control
+                        # smoke's prepared model, independently of the richer
+                        # feature-training fixture used for performance runs.
+                        features={0:1.,5:1. if value else -1.}
+                    else:
+                        training_states=dict(states)
+                        eid=f'binary_sensor.bench_{i}'
+                        training_states[eid]=state(eid,'on' if value else 'off',device_class='occupancy')
+                        eid=f'sensor.bench_{i}_move_energy'
+                        training_states[eid]=state(eid,(j*34)%100,unit_of_measurement='%')
+                        features,_,_=model.features(training_states,None,at_ts=time.time())
                     for head in model.heads.values():
                         head.update(value,features,1.)
                         head.validate(value,features,1.)
@@ -270,6 +276,7 @@ def one(source, seconds=30, active=3, configured=20, mode='shadow', ui=False, tr
                     dirty_entities=len(runtime.dirty_entities))
             journal_at_input_stop=runtime.feature_observation_deferred_snapshot()
             candidate_at_input_stop=runtime.agent_candidates.candidate_shadow_async_diagnostics()
+            candidate_evidence_at_input_stop=runtime.agent_candidates.candidate_shadow_persistence_snapshot()
             ui_stop.set()
             time.sleep(.5)
             for thread in ui_threads:thread.join(15)
@@ -321,7 +328,7 @@ def one(source, seconds=30, active=3, configured=20, mode='shadow', ui=False, tr
                 backlog_at_input_stop=backlog_at_input_stop,
                 journal_at_input_stop=journal_at_input_stop,
                 candidate_at_input_stop=candidate_at_input_stop,
-                candidate_evidence_at_input_stop=manager.candidate_shadow_persistence_snapshot(),queue_series=queue_series,
+                candidate_evidence_at_input_stop=candidate_evidence_at_input_stop,queue_series=queue_series,
                 journal_after_tail=runtime.feature_observation_deferred_snapshot(),
                 source_sha256=hashlib.sha256(json.dumps(source_files,sort_keys=True).encode()).hexdigest(),
                 benchmark_tool_sha256=hashlib.sha256(Path(__file__).read_bytes().replace(b'\r\n',b'\n')).hexdigest(),
@@ -331,7 +338,9 @@ def one(source, seconds=30, active=3, configured=20, mode='shadow', ui=False, tr
                 root_decisions={a['target_entity']:dict(desired=runtime.runtime[a['id']].get('last_prediction'),
                     source=runtime.runtime[a['id']].get('decision_source')) for a in roots},
                 production_root=True,prediction_override=False,ha_transport='local stub only',
-                training_contract='80 updates/validations with production feature extraction and alternating presence states',
+                training_fixture=training_fixture,
+                training_contract=('80 updates/validations with production feature extraction and alternating presence states'
+                    if training_fixture=='production' else '80 sparse fixture updates/validations; functional Control smoke only'),
                 limits='Synthetic trained models and local transport, no deployed Pi/Ingress/physical ACK claim; startup grace and workers retained.')
         finally:
             ui_stop.set()
@@ -360,6 +369,7 @@ if __name__=='__main__':
     p.add_argument('--mode',choices=('shadow','control'),default='shadow')
     p.add_argument('--ui',action='store_true');p.add_argument('--trace',action='store_true')
     p.add_argument('--candidates',action='store_true')
+    p.add_argument('--training-fixture',choices=('production','legacy'),default='production')
     a=p.parse_args()
     assert 1<=a.active<=a.configured<=100 and a.seconds>0
-    print(json.dumps(one(a.source_root,a.seconds,a.active,a.configured,a.mode,a.ui,a.trace,a.candidates,a.warmup_seconds)))
+    print(json.dumps(one(a.source_root,a.seconds,a.active,a.configured,a.mode,a.ui,a.trace,a.candidates,a.warmup_seconds,a.training_fixture)))

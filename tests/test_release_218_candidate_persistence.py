@@ -196,6 +196,20 @@ class CandidatePersistence218Tests(unittest.TestCase):
         self.assertNotIn('candidate_deferred_event_to_decision',names)
         self.assertNotIn('ws_receive_to_candidate_decision',names)
 
+    def test_parent_only_bundle_is_not_a_successful_candidate_latency_sample(self):
+        tls = self.f.engine._inference_tls = threading.local()
+        tls.event_received_perf = {'binary_sensor.presence':time.perf_counter()-.01}
+        tls.websocket_received_perf = dict(tls.event_received_perf)
+        self.fixture.observe(0,drain=False)
+        with patch('agent_candidate_shadow_runtime._predict_candidate',return_value=None), \
+             patch('agent_candidate_shadow_runtime.TELEMETRY.observe') as observe:
+            self.f.manager.drain_deferred_candidate_shadow()
+        names = [args[0] for args,_ in observe.call_args_list]
+        self.assertNotIn('candidate_enqueue_to_decision',names)
+        self.assertNotIn('candidate_deferred_event_to_decision',names)
+        self.assertNotIn('ws_receive_to_candidate_decision',names)
+        self.f.executor.service.assert_not_called()
+
 
 class EvidenceBatch218Tests(unittest.TestCase):
     def test_peer_context_is_taken_at_admission_after_the_previous_root_finishes(self):

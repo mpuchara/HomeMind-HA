@@ -257,7 +257,7 @@ class FullRuntimeBenchmarkTests(unittest.TestCase):
         root=Path(__file__).resolve().parents[1]
         result=subprocess.run([sys.executable,str(root/'tools/benchmark_full_runtime.py'),
             '--seconds','1','--warmup-seconds','1','--active','3','--configured','20',
-            '--candidates','--mode','control'],cwd=root,capture_output=True,text=True,timeout=120)
+            '--candidates','--mode','control','--training-fixture','legacy'],cwd=root,capture_output=True,text=True,timeout=120)
         self.assertEqual(result.returncode,0,result.stdout[-4000:]+result.stderr[-4000:])
         row=json.loads(result.stdout.strip().splitlines()[-1])
         self.assertTrue(row['control_dispatch_exercised'],row['root_executor_results'])
