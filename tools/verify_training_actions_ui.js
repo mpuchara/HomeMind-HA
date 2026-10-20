@@ -16,15 +16,17 @@ class Dialog extends Element{
   remove(){this.removed=true;}
 }
 function harness(){
-  const dialogs=[],requests=[],refreshErrors=[];
+  const dialogs=[],requests=[],refreshErrors=[],timers=new Map();let timerId=0;
   let impl=async()=>({ok:true,state:'queued',message:'Training queued at position 1'}),refresh=async()=>{};
   const context={lastAgents:[{id:'a',name:'Paused light <name>'}],
     document:{createElement:()=>new Dialog(),body:{append:d=>dialogs.push(d)}},
     api:async(...args)=>{requests.push(args);return impl(...args);},load:()=>refresh(),
     confirm:()=>{throw Error('native confirmation unavailable');},alert:()=>{throw Error('native alert unavailable');},
-    console:{error:(...args)=>refreshErrors.push(args)},encodeURIComponent};
+    console:{error:(...args)=>refreshErrors.push(args)},encodeURIComponent,AbortController,
+    setTimeout:(fn,ms)=>{assert.equal(ms,30000);timers.set(++timerId,fn);return timerId;},
+    clearTimeout:id=>timers.delete(id)};
   vm.createContext(context);vm.runInContext(helper+'\n'+actions,context);
-  return {context,dialogs,requests,refreshErrors,api:f=>impl=f,load:f=>refresh=f};
+  return {context,dialogs,requests,refreshErrors,timers,api:f=>impl=f,load:f=>refresh=f};
 }
 const event=()=>({preventDefault(){this.prevented=true;}});
 async function main(){
@@ -49,10 +51,24 @@ async function main(){
   const pending=d.querySelector('form').onsubmit(event());
   await d.querySelector('form').onsubmit(event());await busy.context.resetLearning('other');
   assert.equal(busy.requests.length,1);assert.equal(busy.dialogs.length,1);
-  assert.equal(d.querySelector('[data-cancel]').disabled,true);
-  const esc=event();d.oncancel(esc);assert.equal(esc.prevented,true);
+  assert.equal(d.querySelector('[data-cancel]').disabled,false);
+  assert.equal(d.oncancel,undefined); // Native Escape remains available while pending.
+  d.querySelector('[data-cancel]').onclick();assert.equal(d.removed,true);
+  await busy.context.resetLearning('a');const reopened=busy.dialogs[1];
+  await reopened.querySelector('form').onsubmit(event());assert.equal(busy.requests.length,1);
   finish({ok:true,message:'Training is running now'});await pending;
-  const failed=harness();failed.api(async()=>{throw Error('HTTP 409 Candidate blocks rebuild');});
+  assert.equal(reopened.querySelector('h2').textContent,'Training request accepted');
+  assert.equal(busy.timers.size,0);
+  const timed=harness();timed.api(()=>new Promise(()=>{}));
+  await timed.context.resetLearning('a');const t=timed.dialogs[0];
+  const waiting=t.querySelector('form').onsubmit(event());
+  [...timed.timers.values()][0]();await waiting;
+  assert.equal(timed.requests[0][1].signal.aborted,true);
+  assert.equal(t.querySelector('[data-result]').attrs.role,'alert');
+  assert.ok(t.querySelector('[data-result]').textContent.includes('may still start training'));
+  t.close();await timed.context.resetLearning('a');
+  await timed.dialogs[1].querySelector('form').onsubmit(event());assert.equal(timed.requests.length,1);
+  const failed=harness();failed.api(async()=>{const e=Error('HTTP 409 Candidate blocks rebuild');e.httpStatus=409;throw e;});
   await failed.context.resetLearning('a');const f=failed.dialogs[0];
   await f.querySelector('form').onsubmit(event());
   assert.equal(f.querySelector('[data-result]').attrs.role,'alert');
@@ -70,6 +86,7 @@ async function main(){
   await encoded.dialogs[0].querySelector('form').onsubmit(event());
   assert.equal(encoded.requests[0][0],'api/agents/id%2Fwith%20space/resume');
   console.log(JSON.stringify({native_dialogs_unused:true,resume:true,rebuild:true,destructive_confirmation:true,
-    cancel_no_request:true,pending_duplicate_guard:true,inline_api_error:true,accepted_refresh_failure:true,encoded_id:true}));
+    cancel_no_request:true,pending_duplicate_guard:true,pending_close:true,timeout_unknown_no_retry:true,
+    inline_api_error:true,accepted_refresh_failure:true,encoded_id:true}));
 }
 main().catch(error=>{console.error(error);process.exitCode=1;});

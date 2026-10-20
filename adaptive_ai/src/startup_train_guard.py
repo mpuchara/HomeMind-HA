@@ -7,8 +7,7 @@ the fixes narrow:
 * status stays lightweight until the runtime reports ready, so a half-built Engine can
   never make the first UI status poll block;
 * the priority training queue is created before HistoryManager starts background discovery;
-* an explicit normal Train gets an immediate admission attempt when the heavy slot is
-  idle, instead of depending solely on thread scheduling;
+* explicit training wakes the queue worker; HTTP never runs training preparation;
 * the queue worker survives an unexpected iteration error and reports it to events.
 
 ``core.runtime_available()`` is intentionally NOT changed here. Internal extension
@@ -89,7 +88,6 @@ def install(runtime):
     core.Handler.status_payload = status_payload
 
     # ---- Training queue reliability ----------------------------------------
-    original_enqueue = TrainingQueue.enqueue
     original_thread_start = TrainingQueue.start
 
     def idempotent_start(self):
@@ -99,31 +97,6 @@ def install(runtime):
         if self.ident is not None or self.is_alive():
             return None
         return original_thread_start(self)
-
-    def enqueue(self, agent_id, rebuild=False, reason="training", rebuild_reason=None):
-        result = original_enqueue(
-            self, agent_id, rebuild=rebuild, reason=reason, rebuild_reason=rebuild_reason
-        )
-        # Teach-RL owns a context-selection preflight and remains worker-driven. Plain
-        # Train/Rebuild/Resume can safely claim an idle slot immediately because the
-        # HistoryManager itself performs the expensive replay in its own worker thread.
-        if str(reason) != "teach_rl" and isinstance(result, dict) and result.get("state") == "queued":
-            try:
-                if HEAVY_JOBS.owner is None and not self._history_active_ids():
-                    self._try_start_head()
-                    latest = self.status_for(agent_id)
-                    if latest is not None:
-                        result = latest
-            except Exception as exc:
-                try:
-                    self.store.event(
-                        agent_id, "error", "training_queue_immediate_start_failed",
-                        f"Immediate Train admission failed: {type(exc).__name__}: {exc}",
-                        {"error": str(exc)},
-                    )
-                except Exception:
-                    pass
-        return result
 
     def resilient_run(self):
         while not self.stop_event.is_set():
@@ -151,7 +124,6 @@ def install(runtime):
                     self.cv.wait(timeout=self.poll_seconds)
 
     TrainingQueue.start = idempotent_start
-    TrainingQueue.enqueue = enqueue
     TrainingQueue.run = resilient_run
 
     # ---- Queue before background discovery ---------------------------------
@@ -204,7 +176,7 @@ def install(runtime):
         "status_until_ready": "lightweight_only",
         "training_queue_order": "before_history_discovery",
         "training_queue_priority_order": "interactive_then_explicit_user_fifo",
-        "explicit_train_idle_slot": "immediate_admission_attempt",
+        "explicit_train_idle_slot": "notify_worker_without_http_preparation",
         "initial_auto_agent_training": "disabled_manual_device_selection_required",
         "candidate_before_base_model": "forbidden_by_candidate_manager",
         "worker_failure": "recover_and_continue",

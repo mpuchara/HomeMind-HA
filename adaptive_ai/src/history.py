@@ -721,32 +721,7 @@ class HistoryManager(threading.Thread):
         session = None
         try:
             with self.engine.executor.target_lock(agent["target_entity"]):
-                if rebuild:
-                    # Capture schema/input selection before deleting learned weights.
-                    seed = self._remember_training_schema(agent, rescreen=True)
-                    suppressors = self._false_activation_schema_rescreen(
-                        agent, seed
-                    )
-                    if suppressors:
-                        # Deliberately drop only the in-RAM schema seed. The normal
-                        # rebuild path will broad-refresh Recorder context and perform
-                        # the established causal/behavioural feature screen from scratch.
-                        self.training_schema_cache.pop(agent_id, None)
-                        STORE.event(
-                            agent_id, "info",
-                            "false_activation_schema_rescreen",
-                            (
-                                "Rebuild will re-screen context because "
-                                "new false-activation suppressors were learned"
-                            ),
-                            {
-                                "suppressor_scores": suppressors,
-                                "reward_effect": "none",
-                                "policy_update": False,
-                            },
-                        )
-                    # Retain the working model until Recorder preparation succeeds.
-                else:
+                if not rebuild:
                     STORE.set_training_state(
                         agent_id, "training", score=agent.get("benchmark_score"),
                         samples=agent.get("benchmark_samples") or 0,
@@ -794,6 +769,38 @@ class HistoryManager(threading.Thread):
             TRAINING_BUDGET.begin()
             failure_text = None
             try:
+                def check_cancelled():
+                    if session.stop_event.is_set() or (session.job_cancel_event and session.job_cancel_event.is_set()):
+                        raise InterruptedError("Training preparation cancelled")
+
+                check_cancelled()
+                if rebuild:
+                    session.phase_detail = "Selecting sensors for rebuild"
+                    session.message = f"Training {agent['name']}: selecting sensors"
+                    # Capture schema/input selection before deleting learned weights.
+                    seed = session._remember_training_schema(agent, rescreen=True)
+                    suppressors = session._false_activation_schema_rescreen(
+                        agent, seed
+                    )
+                    if suppressors:
+                        # Deliberately drop only the in-RAM schema seed. The normal
+                        # rebuild path will broad-refresh Recorder context and perform
+                        # the established causal/behavioural feature screen from scratch.
+                        session.training_schema_cache.pop(agent_id, None)
+                        STORE.event(
+                            agent_id, "info",
+                            "false_activation_schema_rescreen",
+                            (
+                                "Rebuild will re-screen context because "
+                                "new false-activation suppressors were learned"
+                            ),
+                            {
+                                "suppressor_scores": suppressors,
+                                "reward_effect": "none",
+                                "policy_update": False,
+                            },
+                        )
+                check_cancelled()
                 session._run_agent_indexing(
                     agent_id, rebuild=rebuild, rebuild_reason=rebuild_reason
                 )
@@ -805,8 +812,12 @@ class HistoryManager(threading.Thread):
                     {"trace": traceback.format_exc(limit=6)},
                 )
                 if not bool(getattr(exc, "preserve_training_state", False)):
+                    current = STORE.get_agent_config(agent_id) or agent
                     STORE.set_training_state(
-                        agent_id, "paused", detail={"reason": str(exc),
+                        agent_id, "paused", score=current.get("benchmark_score"),
+                        samples=current.get("benchmark_samples") or 0,
+                        source=current.get("benchmark_source"),
+                        detail={**(current.get("benchmark_detail") or {}), "reason": str(exc),
                             "storage_pressure": isinstance(exc, StoragePressure),
                             "storage_reason": getattr(exc, 'reason', None),
                             "rebuild_reset_completed": bool(getattr(session, 'training_reset_completed', False))}
