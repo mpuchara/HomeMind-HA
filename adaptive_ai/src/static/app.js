@@ -259,6 +259,56 @@ async function setMode(id,mode){
   try{await load();}catch(e){console.error('Mode changed successfully; UI refresh will retry automatically',e);}
 }
 async function verifyControl(id){if(!confirm('This sends the device its CURRENT value again through the same Home Assistant service path used by Control. It should not intentionally change the setting. Continue?'))return;try{const r=await api(`api/agents/${id}/verify-control`,{method:'POST',body:'{}'});alert(`Control path OK: ${r.service}`);await load();}catch(e){alert('Control verification failed: '+e.message);await load();}}
+let trainingActionDialog=null;
+function openTrainingAction(id,rebuild){
+  // Native confirm/alert can be suppressed by an embedding frame. Keep both
+  // confirmation and admission feedback in the document, outside refreshed cards.
+  if(trainingActionDialog?.open)return trainingActionDialog;
+  const dialog=document.createElement('dialog');
+  trainingActionDialog=dialog;
+  dialog.id='trainingActionDialog';
+  dialog.innerHTML='<form><h2></h2><p data-description></p><p data-result role="status" aria-live="polite"></p><div class="dialog-actions"><button type="button" class="ghost" data-cancel>Cancel</button><button type="submit" class="primary" data-submit></button></div></form>';
+  const title=dialog.querySelector('h2'),description=dialog.querySelector('[data-description]');
+  const result=dialog.querySelector('[data-result]'),submit=dialog.querySelector('[data-submit]');
+  const cancel=dialog.querySelector('[data-cancel]'),form=dialog.querySelector('form');
+  const label=rebuild?'Rebuild model':'Resume training';
+  const agent=lastAgents.find(a=>String(a.id)===String(id));
+  title.textContent=label;
+  description.textContent=(agent?.name||String(id))+': '+(rebuild
+    ?'Full rebuild clears this agent model, benchmark and saved cursor, then starts historical learning again. It does not restore a discarded Candidate.'
+    :'Continue from the saved historical cursor. Existing model and benchmark are preserved.');
+  submit.textContent=label;
+  let busy=false,accepted=false;
+  cancel.onclick=()=>dialog.close();
+  dialog.oncancel=event=>{if(busy)event.preventDefault();};
+  dialog.onclose=()=>{dialog.remove();if(trainingActionDialog===dialog)trainingActionDialog=null;};
+  form.onsubmit=async event=>{
+    event.preventDefault();
+    if(busy||accepted)return;
+    busy=true;submit.disabled=true;cancel.disabled=true;
+    result.setAttribute('role','status');result.textContent='Sending training request...';
+    let response;
+    try{
+      response=await api(`api/agents/${encodeURIComponent(id)}/${rebuild?'learning':'resume'}`,
+        rebuild?{method:'DELETE'}:{method:'POST',body:'{}'});
+    }catch(error){
+      result.setAttribute('role','alert');result.textContent=label+' request could not be confirmed: '+(error?.message||String(error))+'. Check the training queue before trying again.';
+      busy=false;submit.disabled=false;cancel.disabled=false;
+      return;
+    }
+    accepted=true;busy=false;cancel.disabled=false;cancel.textContent='Close';submit.hidden=true;
+    title.textContent='Training request accepted';
+    result.textContent=response?.message||'Training request accepted; check the training queue for progress.';
+    // A failed card refresh cannot turn an accepted request into a failed admission.
+    try{await load();}catch(error){
+      console.error('Training was accepted; UI refresh will retry automatically',error);
+      result.textContent+=' The request was accepted; the panel refresh will retry automatically.';
+    }
+  };
+  document.body.append(dialog);
+  if(typeof dialog.showModal==='function')dialog.showModal();else dialog.setAttribute('open','');
+  return dialog;
+}
 async function trainAgent(id){
   if(!confirm('TRAIN: continue this agent from its saved historical cursor and learn newly available data. The first-ever Train builds the initial model. Low-memory mode trains only one agent at a time.'))return;
   try{
@@ -274,8 +324,8 @@ async function trainAgent(id){
     console.error('Training was accepted; UI refresh will retry automatically',e);
   }
 }
-async function resumeLearning(id){if(!confirm('Resume learning from the saved historical cursor? Existing model and benchmark are preserved.'))return;try{await api(`api/agents/${id}/resume`,{method:'POST',body:'{}'});await load();}catch(e){alert('Resume failed: '+e.message);await load();}}
-async function resetLearning(id){if(!confirm('FULL REBUILD: clear THIS agent model, benchmark and saved cursor, then learn all locally archived history again from the beginning. Rebuild does not restore or create a discarded Candidate.'))return;await api(`api/agents/${id}/learning`,{method:'DELETE'});load();}
+async function resumeLearning(id){return openTrainingAction(id,false);}
+async function resetLearning(id){return openTrainingAction(id,true);}
 async function removeAgent(id){if(!confirm('Delete this agent and its learned policy? Auto-discovery may recreate it if the device remains active.'))return;await api(`api/agents/${id}`,{method:'DELETE'});load();}
 window.setMode=setMode;window.verifyControl=verifyControl;window.trainAgent=trainAgent;window.resumeLearning=resumeLearning;window.resetLearning=resetLearning;window.removeAgent=removeAgent;
 async function rescan(){

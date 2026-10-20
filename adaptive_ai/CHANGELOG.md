@@ -1,3 +1,9 @@
+# 0.14.221
+
+- Replace native browser confirm/alert in Resume and Rebuild with a document dialog that remains visible in an embedded panel. Keep explicit destructive rebuild confirmation.
+- Show pending, accepted and server error states inline, prevent duplicate admission while pending or accepted, and keep refresh failures separate from successful queue admission.
+- Regression checks cover native dialogs unavailable, cancel, duplicate click, server error, refresh error, and paused durable state/queue admission after restart. Validation pending.
+
 # 0.14.220
 
 - Use headroom-aware, cgroup-bounded RAM staging for explicit Recorder preparation (up to 1024 rows / 1 MiB input per transaction and 1536 MiB parent RSS ceiling). Low-memory and discovery paths keep 128 rows.

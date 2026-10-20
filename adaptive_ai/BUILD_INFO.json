@@ -1,9 +1,9 @@
 {
-  "version": "0.14.220",
-  "release_date": "2026-10-19",
-  "base_version": "0.14.219",
-  "base_commit": "196ce914dcb31a9c9f98c3897abdec10c66de987",
-  "release_status": "draft-functional-validation-passed-pi-performance-pending",
+  "version": "0.14.221",
+  "release_date": "2026-10-20",
+  "base_version": "0.14.220",
+  "base_commit": "724e5e5b6936f3fd38e249bc08ba0fd5d47e69db",
+  "release_status": "draft-validation-pending",
   "release_014140": {
     "scope": "inventory_and_remove_remaining_shipped_feature_Handler_fallbacks_for_Candidate_Live_and_manual_feedback_transport",
     "explicit_routes": "manual_feedback.js, candidate_ui.js, candidate_preference_ui.js, /api/candidates, Candidate Teach-RL status/train, generation history/comparison, /api/candidate-live, /api/live and Candidate discard",
@@ -286,7 +286,7 @@
   "migration": "no destructive migration; existing agents, models, feedback, raw archive, historical experiences, candidate lineage, rollback and generation state preserved",
   "physical_control": "unchanged; repaired agents return to Shadow and Control still requires qualified state plus all existing guards",
   "pi4": "0.14.38 targets the long-soak Raspberry Pi failure: drift analysis is coalesced on a throttled background observer, REST /states reconciliation is delta-only after bootstrap, websocket outage fallback reconciles every 10 s, and HA core-state health is tracked separately from unrelated REST errors.",
-  "ci_status": "0.14.220 executable source 0b006ee8: 2747 local tests, Python 3.11/3.13 CI, workflow checks and Docker pass; production Pi training and Control performance acceptance remain open.",
+  "ci_status": "0.14.221 validation pending; earlier version receipts retain their version labels.",
   "training_slice_budget": "adaptive-ai-index workers call a shared CooperativeTrainingBudget; expensive temporal tracker loops yield between entities/events and finalization is no longer outside the throttle",
   "finalization_lifeline": "HEAVY_JOBS remains owned through final gc.collect(), so /api/status and /api/agents stay on lightweight lifeline reads until the worker is actually finished",
   "finalization_progress": "post-replay UI now exposes bounded stages: replay complete, policy serialization, benchmark save, qualification, checkpoint complete",
@@ -3498,5 +3498,12 @@
       }
     },
     "qa_report": "docs/benchmarks/PERFORMANCE_PLAN_0_14_220_QA.json"
+  },
+  "release_014221": {
+    "changes": [
+      "DOM confirmation and inline admission feedback for Resume/Rebuild",
+      "preserve destructive confirmation and separate accepted request from refresh failures"
+    ],
+    "validation": "pending"
   }
 }
