@@ -4,7 +4,7 @@
 - Run rebuild sensor selection inside the registered training session, expose the preparation phase, and honour cooperative cancellation before replay/reset. Preserve model, cursor and benchmark if cancelled during selection.
 - Replace queue-path aggregate agent reads with indexed configuration reads.
 - Keep pending dialog Close/Escape usable. Bound acknowledgement waiting at 30 seconds; an unknown outcome does not automatically retry a potentially destructive mutation.
-- Regressions exercise the shipped entrypoint with blocked HistoryManager preparation, real session registration/cancellation, and pending/timeout UI states. Validation pending.
+- Regressions exercise the shipped entrypoint with blocked HistoryManager preparation, real session registration/cancellation, and pending/timeout UI states. Final local validation: 2751 tests OK (355.393s), entrypoint, both UI VMs, compileall and 21 JavaScript checks. Device acceptance remains open.
 
 # 0.14.221
 

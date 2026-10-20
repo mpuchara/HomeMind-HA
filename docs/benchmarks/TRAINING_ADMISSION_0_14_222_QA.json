@@ -1,0 +1,637 @@
+{
+  "version": "0.14.222",
+  "functional_status": "PASS",
+  "validation": {
+    "version": "0.14.222",
+    "full_suite": {
+      "tests": 2751,
+      "seconds": 355.393,
+      "result": "OK",
+      "log_sha256": "e53375e4d71808206ee25da376eeb70fb4a5a1a9d1f7f1c653443dc0fb5f7527"
+    },
+    "entrypoint": {
+      "entrypoint": "adaptive_ai/src/trial_queue_main.py",
+      "health": {
+        "ok": true,
+        "ready": true,
+        "startup": {
+          "components": {
+            "active": [],
+            "semantics": "inclusive nested durations; do not sum components",
+            "steps": {
+              "fast.JournaledRLTeaching": {
+                "calls": 1,
+                "cpu_seconds": 0.001215332999999999,
+                "seconds": 0.0012355909999541836,
+                "status": "ok"
+              },
+              "fast._apply_engine_extension_hooks": {
+                "calls": 2,
+                "cpu_seconds": 6.857600000000075e-05,
+                "seconds": 6.940400010080339e-05,
+                "status": "ok"
+              },
+              "fast.imports": {
+                "calls": 1,
+                "cpu_seconds": 0.0047526870000000054,
+                "seconds": 0.004834343999959856,
+                "status": "ok"
+              },
+              "fast.install_agent_candidates": {
+                "calls": 1,
+                "cpu_seconds": 0.0026247459999999972,
+                "seconds": 0.0026702260000774913,
+                "status": "ok"
+              },
+              "fast.install_candidate_atomic_promote": {
+                "calls": 1,
+                "cpu_seconds": 0.0012844769999999922,
+                "seconds": 0.00130580600000485,
+                "status": "ok"
+              },
+              "fast.install_candidate_balance": {
+                "calls": 1,
+                "cpu_seconds": 2.0679999999939636e-06,
+                "seconds": 2.0040000663357205e-06,
+                "status": "ok"
+              },
+              "fast.install_candidate_blocked_shadow_evidence": {
+                "calls": 1,
+                "cpu_seconds": 1.714199999999777e-05,
+                "seconds": 1.7196999920088274e-05,
+                "status": "ok"
+              },
+              "fast.install_candidate_config_guard": {
+                "calls": 1,
+                "cpu_seconds": 4.850000000000687e-06,
+                "seconds": 4.823000040232728e-06,
+                "status": "ok"
+              },
+              "fast.install_candidate_conservative_correct": {
+                "calls": 1,
+                "cpu_seconds": 0.0017101279999999913,
+                "seconds": 0.0017390000000432337,
+                "status": "ok"
+              },
+              "fast.install_candidate_debounce": {
+                "calls": 1,
+                "cpu_seconds": 2.1360000000136825e-06,
+                "seconds": 2.008000024034118e-06,
+                "status": "ok"
+              },
+              "fast.install_candidate_lifecycle_hardening": {
+                "calls": 1,
+                "cpu_seconds": 0.0006186069999999932,
+                "seconds": 0.0006285590000061347,
+                "status": "ok"
+              },
+              "fast.install_candidate_lineage": {
+                "calls": 1,
+                "cpu_seconds": 0.0057821730000000016,
+                "seconds": 0.0058812299999999595,
+                "status": "ok"
+              },
+              "fast.install_candidate_lineage_guards": {
+                "calls": 1,
+                "cpu_seconds": 5.3680000000055905e-06,
+                "seconds": 5.286000032356242e-06,
+                "status": "ok"
+              },
+              "fast.install_candidate_lineage_retention": {
+                "calls": 1,
+                "cpu_seconds": 0.0005471739999999975,
+                "seconds": 0.0005558359999895401,
+                "status": "ok"
+              },
+              "fast.install_candidate_manual_rebuild": {
+                "calls": 1,
+                "cpu_seconds": 4.165999999999892e-06,
+                "seconds": 4.0410000110568944e-06,
+                "status": "ok"
+              },
+              "fast.install_candidate_neural_correct": {
+                "calls": 1,
+                "cpu_seconds": 0.0023240760000000082,
+                "seconds": 0.0023635850000118808,
+                "status": "ok"
+              },
+              "fast.install_candidate_offline_rl": {
+                "calls": 1,
+                "cpu_seconds": 0.0009121059999999959,
+                "seconds": 0.0009270769999147888,
+                "status": "ok"
+              },
+              "fast.install_candidate_shadow_context": {
+                "calls": 1,
+                "cpu_seconds": 0.002372394,
+                "seconds": 0.003168142999925294,
+                "status": "ok"
+              },
+              "fast.install_candidate_shadow_runtime": {
+                "calls": 1,
+                "cpu_seconds": 0.002940279000000004,
+                "seconds": 0.0029905279999411505,
+                "status": "ok"
+              },
+              "fast.install_candidate_teach_status": {
+                "calls": 1,
+                "cpu_seconds": 0.0007246699999999967,
+                "seconds": 0.000736327000026904,
+                "status": "ok"
+              },
+              "fast.install_candidate_user_promotion": {
+                "calls": 1,
+                "cpu_seconds": 6.3520000000011345e-06,
+                "seconds": 6.274000043049455e-06,
+                "status": "ok"
+              },
+              "fast.install_context_events": {
+                "calls": 1,
+                "cpu_seconds": 0.0007026420000000033,
+                "seconds": 0.0007137990000956052,
+                "status": "ok"
+              },
+              "fast.install_context_tournament": {
+                "calls": 1,
+                "cpu_seconds": 0.001156721999999999,
+                "seconds": 0.0012915720000137298,
+                "status": "ok"
+              },
+              "fast.install_context_tournament_hysteresis": {
+                "calls": 1,
+                "cpu_seconds": 4.734000000006233e-06,
+                "seconds": 4.710999974122387e-06,
+                "status": "ok"
+              },
+              "fast.install_context_tournament_metrics": {
+                "calls": 1,
+                "cpu_seconds": 1.4993000000004808e-05,
+                "seconds": 1.510200002030615e-05,
+                "status": "ok"
+              },
+              "fast.install_context_tournament_promotion": {
+                "calls": 1,
+                "cpu_seconds": 0.0008220809999999884,
+                "seconds": 0.0008350870000413124,
+                "status": "ok"
+              },
+              "fast.install_context_ui_diagnostics": {
+                "calls": 1,
+                "cpu_seconds": 4.298999999999276e-06,
+                "seconds": 4.2639999264793005e-06,
+                "status": "ok"
+              },
+              "fast.install_control_diagnostics": {
+                "calls": 1,
+                "cpu_seconds": 0.0007400449999999947,
+                "seconds": 0.0007519380000076126,
+                "status": "ok"
+              },
+              "fast.install_fast_light_objective": {
+                "calls": 1,
+                "cpu_seconds": 0.002317438000000005,
+                "seconds": 0.00274749499999416,
+                "status": "ok"
+              },
+              "fast.install_fast_local_primary": {
+                "calls": 1,
+                "cpu_seconds": 7.183999999993418e-06,
+                "seconds": 7.197999934760446e-06,
+                "status": "ok"
+              },
+              "fast.install_fast_runtime": {
+                "calls": 1,
+                "cpu_seconds": 0.0006795109999999938,
+                "seconds": 0.0006900619999896662,
+                "status": "ok"
+              },
+              "fast.install_lifecycle": {
+                "calls": 1,
+                "cpu_seconds": 3.634499999999319e-05,
+                "seconds": 3.6708000038743194e-05,
+                "status": "ok"
+              },
+              "fast.install_paused_shadow_inference": {
+                "calls": 1,
+                "cpu_seconds": 7.962000000000247e-06,
+                "seconds": 7.86300006438978e-06,
+                "status": "ok"
+              },
+              "fast.install_policy_candidates": {
+                "calls": 1,
+                "cpu_seconds": 0.0008908920000000042,
+                "seconds": 0.0009057590000338678,
+                "status": "ok"
+              },
+              "fast.install_primary_protection": {
+                "calls": 1,
+                "cpu_seconds": 7.101999999994946e-06,
+                "seconds": 7.011999969108729e-06,
+                "status": "ok"
+              },
+              "fast.install_promotion_shadow_requalification": {
+                "calls": 1,
+                "cpu_seconds": 4.24400000000047e-06,
+                "seconds": 4.1480000163574005e-06,
+                "status": "ok"
+              },
+              "fast.install_runtime_physical_equivalence": {
+                "calls": 1,
+                "cpu_seconds": 1.3954999999996054e-05,
+                "seconds": 1.4056000054551987e-05,
+                "status": "ok"
+              },
+              "fast.install_schema_history": {
+                "calls": 1,
+                "cpu_seconds": 0.0007457449999999921,
+                "seconds": 0.0007578940000030343,
+                "status": "ok"
+              },
+              "fast.install_schema_probation": {
+                "calls": 1,
+                "cpu_seconds": 0.0008133990000000063,
+                "seconds": 0.0008265559999927063,
+                "status": "ok"
+              },
+              "fast.install_sensor_quality": {
+                "calls": 1,
+                "cpu_seconds": 0.0008439460000000121,
+                "seconds": 0.0008579390000704734,
+                "status": "ok"
+              },
+              "fast.install_teach_rl_rebenchmark": {
+                "calls": 1,
+                "cpu_seconds": 1.600699999999844e-05,
+                "seconds": 1.6019999975469545e-05,
+                "status": "ok"
+              },
+              "fast.install_teaching_learning_bridge": {
+                "calls": 1,
+                "cpu_seconds": 1.15379999999915e-05,
+                "seconds": 1.1492999988149677e-05,
+                "status": "ok"
+              },
+              "final.base_prepare_engine_extensions": {
+                "calls": 1,
+                "cpu_seconds": 0.06415990399999999,
+                "seconds": 0.0698878829999785,
+                "status": "ok"
+              },
+              "final.imports": {
+                "calls": 1,
+                "cpu_seconds": 0.013184814000000003,
+                "seconds": 0.013414409000006344,
+                "status": "ok"
+              },
+              "final.install_agent_explore": {
+                "calls": 1,
+                "cpu_seconds": 3.4479999999892375e-06,
+                "seconds": 3.4089999871866894e-06,
+                "status": "ok"
+              },
+              "final.install_agent_workflow_actions": {
+                "calls": 1,
+                "cpu_seconds": 4.886000000009494e-06,
+                "seconds": 4.955000008521893e-06,
+                "status": "ok"
+              },
+              "final.install_automatic_correct_rewards": {
+                "calls": 1,
+                "cpu_seconds": 0.0030790089999999937,
+                "seconds": 0.0031315319999976055,
+                "status": "ok"
+              },
+              "final.install_candidate_neural_shadow": {
+                "calls": 1,
+                "cpu_seconds": 9.127999999997138e-06,
+                "seconds": 9.041999987857707e-06,
+                "status": "ok"
+              },
+              "final.install_candidate_shadow_persistence": {
+                "calls": 1,
+                "cpu_seconds": 0.0004530209999999979,
+                "seconds": 0.0006088149999641246,
+                "status": "ok"
+              },
+              "final.install_cold_start_drift": {
+                "calls": 1,
+                "cpu_seconds": 0.0018642729999999996,
+                "seconds": 0.0018953309999005796,
+                "status": "ok"
+              },
+              "final.install_confidence_contract": {
+                "calls": 1,
+                "cpu_seconds": 0.005504964000000001,
+                "seconds": 0.00560006200009866,
+                "status": "ok"
+              },
+              "final.install_correct_data_foundation": {
+                "calls": 1,
+                "cpu_seconds": 0.00788090000000001,
+                "seconds": 0.008016791999921224,
+                "status": "ok"
+              },
+              "final.install_correct_generation_history": {
+                "calls": 1,
+                "cpu_seconds": 4.486999999997465e-06,
+                "seconds": 4.498000066632812e-06,
+                "status": "ok"
+              },
+              "final.install_correct_margin_repair": {
+                "calls": 1,
+                "cpu_seconds": 3.174200000000127e-05,
+                "seconds": 3.204899996944732e-05,
+                "status": "ok"
+              },
+              "final.install_correct_schema_evolution": {
+                "calls": 1,
+                "cpu_seconds": 0.0019538439999999963,
+                "seconds": 0.0019863810000515514,
+                "status": "ok"
+              },
+              "final.install_device_agent_runtime": {
+                "calls": 1,
+                "cpu_seconds": 0.0030953029999999937,
+                "seconds": 0.003148299999907067,
+                "status": "ok"
+              },
+              "final.install_dispatch": {
+                "calls": 1,
+                "cpu_seconds": 1.6696999999982198e-05,
+                "seconds": 1.679000001786335e-05,
+                "status": "ok"
+              },
+              "final.install_hybrid_policy_runtime": {
+                "calls": 1,
+                "cpu_seconds": 1.6732000000019287e-05,
+                "seconds": 1.6780000009930518e-05,
+                "status": "ok"
+              },
+              "final.install_performance_f22": {
+                "calls": 1,
+                "cpu_seconds": 0.003645887999999986,
+                "seconds": 0.0037078589999737233,
+                "status": "ok"
+              },
+              "final.install_performance_f22_order_guard": {
+                "calls": 1,
+                "cpu_seconds": 0.0017231129999999983,
+                "seconds": 0.0017514959999971325,
+                "status": "ok"
+              },
+              "final.install_policy_backend_shadow": {
+                "calls": 1,
+                "cpu_seconds": 0.001115047000000008,
+                "seconds": 0.0011333779999631588,
+                "status": "ok"
+              },
+              "final.install_promotion_validation": {
+                "calls": 1,
+                "cpu_seconds": 9.846000000007793e-06,
+                "seconds": 9.815999987949908e-06,
+                "status": "ok"
+              },
+              "final.install_rpi_low_power_runtime": {
+                "calls": 1,
+                "cpu_seconds": 7.270800000000466e-05,
+                "seconds": 7.37390000722371e-05,
+                "status": "ok"
+              },
+              "final.install_runtime_semantics": {
+                "calls": 1,
+                "cpu_seconds": 1.1274999999977275e-05,
+                "seconds": 1.1237999956392741e-05,
+                "status": "ok"
+              },
+              "final.install_tiny_mlp_shadow": {
+                "calls": 1,
+                "cpu_seconds": 0.001486828999999995,
+                "seconds": 0.0015125059999263613,
+                "status": "ok"
+              },
+              "final.install_trial_knowledge": {
+                "calls": 1,
+                "cpu_seconds": 0.0035766090000000084,
+                "seconds": 0.005012946999954693,
+                "status": "ok"
+              },
+              "final.install_workflow_request_queue": {
+                "calls": 1,
+                "cpu_seconds": 0.0023800690000000124,
+                "seconds": 0.0024828419999494145,
+                "status": "ok"
+              },
+              "preference.EpisodeEvaluator": {
+                "calls": 1,
+                "cpu_seconds": 0.001981469999999999,
+                "seconds": 0.0020147679999809043,
+                "status": "ok"
+              },
+              "preference.LightingPreferenceModel": {
+                "calls": 1,
+                "cpu_seconds": 5.663000000002971e-06,
+                "seconds": 5.563000058828038e-06,
+                "status": "ok"
+              },
+              "preference.UnifiedManualFeedbackJournal": {
+                "calls": 1,
+                "cpu_seconds": 0.001040137999999996,
+                "seconds": 0.001057011000057173,
+                "status": "ok"
+              },
+              "preference._original_prepare_engine_extensions": {
+                "calls": 1,
+                "cpu_seconds": 0.039754687,
+                "seconds": 0.04179707699995561,
+                "status": "ok"
+              },
+              "preference.imports": {
+                "calls": 1,
+                "cpu_seconds": 0.008672698999999999,
+                "seconds": 0.008820934000027592,
+                "status": "ok"
+              },
+              "preference.install_agent_live_card_refresh": {
+                "calls": 1,
+                "cpu_seconds": 3.770000000000162e-06,
+                "seconds": 3.723000077116012e-06,
+                "status": "ok"
+              },
+              "preference.install_candidate_card_summary": {
+                "calls": 1,
+                "cpu_seconds": 6.381999999999222e-06,
+                "seconds": 6.278999990172451e-06,
+                "status": "ok"
+              },
+              "preference.install_candidate_episode_evaluator": {
+                "calls": 1,
+                "cpu_seconds": 5.5550000000043065e-06,
+                "seconds": 5.4640000826111645e-06,
+                "status": "ok"
+              },
+              "preference.install_candidate_preference_metrics": {
+                "calls": 1,
+                "cpu_seconds": 1.232800000000589e-05,
+                "seconds": 1.240299991422944e-05,
+                "status": "ok"
+              },
+              "preference.install_candidate_promotion_cycle": {
+                "calls": 1,
+                "cpu_seconds": 4.600999999992972e-06,
+                "seconds": 4.565000040201994e-06,
+                "status": "ok"
+              },
+              "preference.install_core_episode_evaluator": {
+                "calls": 1,
+                "cpu_seconds": 7.45200000000501e-06,
+                "seconds": 7.421999953294289e-06,
+                "status": "ok"
+              },
+              "preference.install_manual_feedback_live_isolation": {
+                "calls": 1,
+                "cpu_seconds": 1.4157000000000752e-05,
+                "seconds": 1.423599996996927e-05,
+                "status": "ok"
+              },
+              "preference.install_manual_feedback_workflow": {
+                "calls": 1,
+                "cpu_seconds": 9.169000000003313e-06,
+                "seconds": 9.158000011666445e-06,
+                "status": "ok"
+              },
+              "preference.install_observation_contract": {
+                "calls": 1,
+                "cpu_seconds": 0.007154315999999994,
+                "seconds": 0.00936578800008192,
+                "status": "ok"
+              },
+              "preference.install_provenance_runtime": {
+                "calls": 1,
+                "cpu_seconds": 0.0053933060000000005,
+                "seconds": 0.006655289999912384,
+                "status": "ok"
+              },
+              "preference.install_tournament_episode_evaluator": {
+                "calls": 1,
+                "cpu_seconds": 1.804099999999642e-05,
+                "seconds": 1.78940000523653e-05,
+                "status": "ok"
+              }
+            }
+          },
+          "current_state_seconds": 0.04028983200009861,
+          "elapsed_seconds": 0.2848083972930908,
+          "error": null,
+          "message": "Adaptive AI runtime is ready",
+          "ready": true,
+          "started_at": 1792521999.1360948,
+          "state": "ready",
+          "step": 7,
+          "steps": 7,
+          "timings": {
+            "building_runtime": 0.004,
+            "http_ready": 0.0422,
+            "http_starting": 0.0117,
+            "installing_extensions": 0.1277,
+            "loading_runtime": 0.0141,
+            "reconciling_control": 0.0,
+            "starting_engine": 0.0002,
+            "starting_history": 0.0409,
+            "starting_realtime": 0.0036
+          }
+        },
+        "version": "0.14.222"
+      }
+    },
+    "ui": {
+      "revision_wait": true,
+      "latest_desired": true,
+      "physical_current": true,
+      "off_confirmation": true,
+      "pending_explanation": true,
+      "independent_ws_clock": true
+    },
+    "candidate_ui": {
+      "visible_cadence_ms": 100,
+      "cache_expiry_ms": 100,
+      "shared_inflight": true,
+      "first_card_fresh": true,
+      "no_cards_no_requests": true,
+      "hidden_no_requests": true
+    },
+    "compileall": "PASS",
+    "javascript_scripts": 21,
+    "source_files": 634,
+    "platform": "WSL Ubuntu Python 3.12.3 NumPy 2.3.3"
+  },
+  "source_files": 634,
+  "exact_source_ci": {
+    "commit": "4d8f8b9c0d37a061babe676e7f73c63e1f9aa2a5",
+    "tree": "4901055645a8733cb7575724558a1c4787cfa706",
+    "run_id": 39476946194,
+    "run_url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/39476946194",
+    "conclusion": "success",
+    "python311": {
+      "job_id": 118815246731,
+      "tests": 2751,
+      "seconds": 283.818,
+      "result": "OK"
+    },
+    "python313": {
+      "job_id": 118815246833,
+      "tests": 2751,
+      "seconds": 294.302,
+      "result": "OK",
+      "log_contains_final_ok": true
+    },
+    "jobs": [
+      {
+        "id": 118815246495,
+        "name": "image",
+        "conclusion": "success"
+      },
+      {
+        "id": 118815246731,
+        "name": "tests (3.11)",
+        "conclusion": "success"
+      },
+      {
+        "id": 118815246833,
+        "name": "tests (3.13)",
+        "conclusion": "success"
+      },
+      {
+        "id": 118820386584,
+        "name": "package",
+        "conclusion": "skipped"
+      }
+    ],
+    "package_skipped": "Expected for a pull request; install ZIPs produced and checked locally."
+  },
+  "regression_reproduction": {
+    "version": "0.14.221",
+    "result": "Both blocked-preparation regressions fail as expected",
+    "log_sha256": "b3e85e25f0a0d13fab92f052cba60c7bea79f22d8e36fcd36874110e13b99b60",
+    "note": "Old-release comparison permits aggregate reads to reach the original HTTP blocking path; current regression forbids those reads as well."
+  },
+  "focused": {
+    "new_tests": 2,
+    "existing_tests": 41,
+    "result": "OK"
+  },
+  "prior_attempts": [
+    {
+      "full_suite_tests": 2751,
+      "failures": 2,
+      "seconds": 359.775,
+      "reason": "Two source contracts expected the manager cache receiver instead of the newly registered session. Updated receiver assertions only; executable source unchanged.",
+      "log_sha256": "17c5588421e4c610abb3b8dbd9236a863ec4779ea7beae8bb7cdb2f7778a45ee"
+    }
+  ],
+  "limitations": [
+    "UI test uses a DOM fixture; user Home Assistant ingress behavior remains to confirm.",
+    "Cancellation during sensor selection is cooperative: it is checked before and after selection, before replay/reset; selection itself is not forcibly interrupted.",
+    "This is not a Raspberry Pi training-throughput or physical power-loss benchmark.",
+    "HTTP admission retains durable waiting-state writes and Control release; SQLite writer contention or HA release can still delay acknowledgement."
+  ]
+}
