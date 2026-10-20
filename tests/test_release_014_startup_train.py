@@ -60,7 +60,7 @@ core.set_startup('ready', 7, 'ready', ready=True)
 assert handler.require_runtime() is True
 ''')
 
-    def test_plain_train_claims_idle_slot_without_queue_worker_schedule(self):
+    def test_plain_train_notifies_worker_without_preparation_in_caller(self):
         self.run_isolated(r'''
 import threading
 import trial_queue_main  # installs the final release guard
@@ -103,13 +103,19 @@ class History:
 
 store=Store(); history=History(store)
 queue=TrainingQueue(history,store,Engine(),poll_seconds=.02)
-# Deliberately DO NOT queue.start(). A user Train must still launch when the slot is idle.
+# Admission is independent of slow preparation and wakes the background worker.
 result=queue.enqueue(
     'fresh', rebuild=True, reason='training', rebuild_reason='initial_model_build'
 )
-assert history.started == [('fresh',True)], history.started
-assert result['state'] == 'active', result
+assert history.started == [], history.started
+assert result['state'] == 'queued', result
 assert result['rebuild_reason'] == 'initial_model_build', result
+queue.start()
+import time
+deadline=time.monotonic()+2
+while not history.started and time.monotonic()<deadline: time.sleep(.01)
+queue.stop();queue.join(2)
+assert history.started == [('fresh',True)], history.started
 assert store.row['training_state'] == 'training', store.row
 ''')
 
@@ -124,7 +130,7 @@ assert source.index('queue.start()') < source.index('return original_history_sta
 assert getattr(entry.core, '_startup_train_guard_installed', False)
 contract = entry.core.startup_train_guard_contract
 assert contract['training_queue_order'] == 'before_history_discovery'
-assert contract['explicit_train_idle_slot'] == 'immediate_admission_attempt'
+assert contract['explicit_train_idle_slot'] == 'notify_worker_without_http_preparation'
 ''')
 
     def test_auto_discovered_agents_remain_waiting_for_manual_selection(self):

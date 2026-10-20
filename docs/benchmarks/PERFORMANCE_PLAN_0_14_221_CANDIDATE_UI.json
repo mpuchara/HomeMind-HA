@@ -1,0 +1,8 @@
+{
+  "visible_cadence_ms": 100,
+  "cache_expiry_ms": 100,
+  "shared_inflight": true,
+  "first_card_fresh": true,
+  "no_cards_no_requests": true,
+  "hidden_no_requests": true
+}

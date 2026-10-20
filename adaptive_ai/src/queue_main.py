@@ -198,11 +198,16 @@ def register_read_routes(registry):
     )
     return registry
 
+def _agent_config(agent_id):
+    getter = getattr(core.STORE, "get_agent_config", None)
+    return getter(agent_id) if callable(getter) else core.STORE.get_agent(agent_id)
+
+
 def _queue_agent(self, agent_id, *, rebuild, reason, resumed=False,
                  rebuild_reason=None, learning_path=None):
     if TRAINING_QUEUE is None:
         return self.send_json(409, {"error": "Training queue is not ready"})
-    agent = core.STORE.get_agent(agent_id)
+    agent = _agent_config(agent_id)
     if not agent or core.HISTORY is None:
         return self.send_json(404, {"error": "agent/history engine not found"})
     try:
@@ -302,7 +307,7 @@ def register_mutation_routes(registry):
         if not http.require_trusted_client() or not http.require_runtime():
             return None
         agent_id = params["agent_id"]
-        agent = core.STORE.get_agent(agent_id)
+        agent = _agent_config(agent_id)
         if not agent:
             return http.send_json(404, {"error": "agent/history engine not found"})
         decision = train_request_decision(
@@ -324,7 +329,7 @@ def register_mutation_routes(registry):
         if not http.require_trusted_client() or not http.require_runtime():
             return None
         agent_id = params["agent_id"]
-        agent = core.STORE.get_agent(agent_id)
+        agent = _agent_config(agent_id)
         if not agent:
             return http.send_json(404, {"error": "agent/history engine not found"})
         existing = TRAINING_QUEUE.status_for(agent_id)

@@ -15,7 +15,7 @@ let lastTrainingQueueAgentRefresh=-1;
 window.__adaptiveAiRuntimeReady=null; // unknown until status answers; server gates half-built runtime
 const openAgentDetails=new Set(JSON.parse(localStorage.getItem('adaptiveAiOpenAgentDetails')||'[]').map(String));
 const $=s=>document.querySelector(s);
-const api=async(path,opts={})=>{const r=await fetch(path,{headers:{'Content-Type':'application/json'},...opts});if(!r.ok)throw new Error(await r.text());return r.status===204?null:r.json()};
+const api=async(path,opts={})=>{const r=await fetch(path,{headers:{'Content-Type':'application/json'},...opts});if(!r.ok){const error=new Error(await r.text());error.httpStatus=r.status;throw error;}return r.status===204?null:r.json()};
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const pct=v=>Math.round((Number(v)||0)*100)+'%';
 const num=(v,d=0)=>Number(v||0).toLocaleString(undefined,{maximumFractionDigits:d});
@@ -260,17 +260,14 @@ async function setMode(id,mode){
 }
 async function verifyControl(id){if(!confirm('This sends the device its CURRENT value again through the same Home Assistant service path used by Control. It should not intentionally change the setting. Continue?'))return;try{const r=await api(`api/agents/${id}/verify-control`,{method:'POST',body:'{}'});alert(`Control path OK: ${r.service}`);await load();}catch(e){alert('Control verification failed: '+e.message);await load();}}
 let trainingActionDialog=null;
+const trainingActionRequests=new Map();
 function openTrainingAction(id,rebuild){
-  // Native confirm/alert can be suppressed by an embedding frame. Keep both
-  // confirmation and admission feedback in the document, outside refreshed cards.
   if(trainingActionDialog?.open)return trainingActionDialog;
   const dialog=document.createElement('dialog');
   trainingActionDialog=dialog;
   dialog.id='trainingActionDialog';
   dialog.innerHTML='<form><h2></h2><p data-description></p><p data-result role="status" aria-live="polite"></p><div class="dialog-actions"><button type="button" class="ghost" data-cancel>Cancel</button><button type="submit" class="primary" data-submit></button></div></form>';
-  const title=dialog.querySelector('h2'),description=dialog.querySelector('[data-description]');
-  const result=dialog.querySelector('[data-result]'),submit=dialog.querySelector('[data-submit]');
-  const cancel=dialog.querySelector('[data-cancel]'),form=dialog.querySelector('form');
+  const title=dialog.querySelector('h2'),description=dialog.querySelector('[data-description]'),result=dialog.querySelector('[data-result]'),submit=dialog.querySelector('[data-submit]'),cancel=dialog.querySelector('[data-cancel]'),form=dialog.querySelector('form');
   const label=rebuild?'Rebuild model':'Resume training';
   const agent=lastAgents.find(a=>String(a.id)===String(id));
   title.textContent=label;
@@ -278,37 +275,67 @@ function openTrainingAction(id,rebuild){
     ?'Full rebuild clears this agent model, benchmark and saved cursor, then starts historical learning again. It does not restore a discarded Candidate.'
     :'Continue from the saved historical cursor. Existing model and benchmark are preserved.');
   submit.textContent=label;
-  let busy=false,accepted=false;
+  let request=trainingActionRequests.get(String(id));
+  const render=()=>{
+    if(!request)return;
+    submit.disabled=true;
+    cancel.textContent='Close';
+    result.setAttribute('role',request.state==='unknown'||request.state==='failed'?'alert':'status');
+    result.textContent=request.message;
+    if(request.state==='accepted'){
+      title.textContent='Training request accepted';submit.hidden=true;
+    }else if(request.state==='failed'){
+      submit.disabled=false;
+    }
+  };
   cancel.onclick=()=>dialog.close();
-  dialog.oncancel=event=>{if(busy)event.preventDefault();};
-  dialog.onclose=()=>{dialog.remove();if(trainingActionDialog===dialog)trainingActionDialog=null;};
+  // Closing or Escape only dismisses this window. It never cancels server work.
+  dialog.onclose=()=>{
+    request?.listeners.delete(render);
+    dialog.remove();if(trainingActionDialog===dialog)trainingActionDialog=null;
+  };
+  if(request){request.listeners.add(render);render();}
   form.onsubmit=async event=>{
     event.preventDefault();
-    if(busy||accepted)return;
-    busy=true;submit.disabled=true;cancel.disabled=true;
-    result.setAttribute('role','status');result.textContent='Sending training request...';
-    let response;
+    if(request&&request.state!=='failed')return;
+    request={state:'pending',message:'Sending training request... You can close this window; closing does not cancel training.',listeners:new Set([render])};
+    trainingActionRequests.set(String(id),request);
+    const current=request,controller=new AbortController();
+    let timer;
+    render();
     try{
-      response=await api(`api/agents/${encodeURIComponent(id)}/${rebuild?'learning':'resume'}`,
-        rebuild?{method:'DELETE'}:{method:'POST',body:'{}'});
+      const response=await Promise.race([
+        api(`api/agents/${encodeURIComponent(id)}/${rebuild?'learning':'resume'}`,
+          rebuild?{method:'DELETE',signal:controller.signal}:{method:'POST',body:'{}',signal:controller.signal}),
+        new Promise((_,reject)=>{timer=setTimeout(()=>{
+          const error=new Error('No server acknowledgement within 30 seconds');
+          error.admissionUnknown=true;reject(error);controller.abort();
+        },30000);})
+      ]);
+      current.state='accepted';current.message=response?.message||'Training request accepted. Check the training queue for progress.';
+      trainingActionRequests.delete(String(id));
+      current.listeners.forEach(fn=>fn());
+      try{await load();}catch(error){
+        console.error('Training accepted; panel refresh failed',error);
+        current.message+=' The request was accepted; the panel refresh will retry automatically.';
+      }
     }catch(error){
-      result.setAttribute('role','alert');result.textContent=label+' request could not be confirmed: '+(error?.message||String(error))+'. Check the training queue before trying again.';
-      busy=false;submit.disabled=false;cancel.disabled=false;
-      return;
-    }
-    accepted=true;busy=false;cancel.disabled=false;cancel.textContent='Close';submit.hidden=true;
-    title.textContent='Training request accepted';
-    result.textContent=response?.message||'Training request accepted; check the training queue for progress.';
-    // A failed card refresh cannot turn an accepted request into a failed admission.
-    try{await load();}catch(error){
-      console.error('Training was accepted; UI refresh will retry automatically',error);
-      result.textContent+=' The request was accepted; the panel refresh will retry automatically.';
+      const unknown=error.admissionUnknown||!error.httpStatus;
+      current.state=unknown?'unknown':'failed';
+      current.message=label+' request could not be confirmed: '+(error.message||String(error))+'. '+(unknown
+        ?'The server may still start training. Check the training queue before submitting another request. Closing only dismisses this window.'
+        :'The server rejected this request.');
+      if(!unknown)trainingActionRequests.delete(String(id));
+    }finally{
+      clearTimeout(timer);
+      current.listeners.forEach(fn=>fn());
     }
   };
   document.body.append(dialog);
   if(typeof dialog.showModal==='function')dialog.showModal();else dialog.setAttribute('open','');
   return dialog;
 }
+
 async function trainAgent(id){
   if(!confirm('TRAIN: continue this agent from its saved historical cursor and learn newly available data. The first-ever Train builds the initial model. Low-memory mode trains only one agent at a time.'))return;
   try{

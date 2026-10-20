@@ -167,8 +167,12 @@ class TrainingQueue(threading.Thread):
                 pass
         return 1
 
+    def _agent_config(self, agent_id):
+        getter = getattr(self.store, "get_agent_config", None)
+        return getter(agent_id) if callable(getter) else self.store.get_agent(agent_id)
+
     def _agent_label(self, agent_id):
-        agent = self.store.get_agent(agent_id)
+        agent = self._agent_config(agent_id)
         return (agent or {}).get("name") or agent_id
 
     def _mark_discovery_preempted(self):
@@ -354,7 +358,7 @@ class TrainingQueue(threading.Thread):
         return changed, old_priority
 
     def enqueue(self, agent_id, rebuild=False, reason="training", rebuild_reason=None):
-        agent = self.store.get_agent(agent_id)
+        agent = self._agent_config(agent_id)
         if not agent:
             raise ValueError("agent not found")
         requested_priority = training_priority_for_reason(reason)
@@ -650,7 +654,7 @@ class TrainingQueue(threading.Thread):
             if any(active.get("reason") == "teach_rl" for active in active_jobs):
                 return False
 
-        agent = self.store.get_agent(job["agent_id"])
+        agent = self._agent_config(job["agent_id"])
         if not agent:
             self._drop_head(
                 "training_queue_dropped",
@@ -661,7 +665,7 @@ class TrainingQueue(threading.Thread):
         if active_jobs:
             target = str(agent.get("target_entity") or "")
             for active_job in active_jobs:
-                active_agent = self.store.get_agent(active_job["agent_id"])
+                active_agent = self._agent_config(active_job["agent_id"])
                 if (
                     active_agent
                     and target
@@ -683,7 +687,7 @@ class TrainingQueue(threading.Thread):
                 raise RuntimeError("Teach RL service unavailable")
             if service is not None and service.needs_context_selection(job["agent_id"]):
                 service.prepare_context_selection(agent)
-                agent = self.store.get_agent(job["agent_id"]) or agent
+                agent = self._agent_config(job["agent_id"]) or agent
             started = (
                 _call_rebuild_compat(
                     self.history, job["agent_id"], job.get("rebuild_reason")
@@ -707,7 +711,7 @@ class TrainingQueue(threading.Thread):
                 "training_queue_failed", str(exc), {"error": str(exc)}
             )
             if dropped:
-                current = self.store.get_agent(dropped["agent_id"])
+                current = self._agent_config(dropped["agent_id"])
                 if current:
                     self.store.set_training_state(
                         dropped["agent_id"], "paused",
@@ -791,7 +795,7 @@ class TrainingQueue(threading.Thread):
         config_getter = getattr(self.store, "get_agent_config", None)
         agent = (
             config_getter(agent_id)
-            if callable(config_getter) else self.store.get_agent(agent_id)
+            if callable(config_getter) else self._agent_config(agent_id)
         )
         with self.cv:
             if self.active and str(self.active.get("agent_id")) == agent_id:

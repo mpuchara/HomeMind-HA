@@ -1,8 +1,16 @@
+# 0.14.222
+
+- Remove the shipped startup wrapper's synchronous training start from HTTP admission. The queue worker wakes on enqueue and owns preparation.
+- Run rebuild sensor selection inside the registered training session, expose the preparation phase, and honour cooperative cancellation before replay/reset. Preserve model, cursor and benchmark if cancelled during selection.
+- Replace queue-path aggregate agent reads with indexed configuration reads.
+- Keep pending dialog Close/Escape usable. Bound acknowledgement waiting at 30 seconds; an unknown outcome does not automatically retry a potentially destructive mutation.
+- Regressions exercise the shipped entrypoint with blocked HistoryManager preparation, real session registration/cancellation, and pending/timeout UI states. Validation pending.
+
 # 0.14.221
 
 - Replace native browser confirm/alert in Resume and Rebuild with a document dialog that remains visible in an embedded panel. Keep explicit destructive rebuild confirmation.
 - Show pending, accepted and server error states inline, prevent duplicate admission while pending or accepted, and keep refresh failures separate from successful queue admission.
-- Regression checks cover native dialogs unavailable, cancel, duplicate click, server error, refresh error, and paused durable state/queue admission after restart. Validation pending.
+- Regression checks cover native dialogs unavailable, cancel, duplicate click, server error, refresh error, and paused durable state/queue admission after restart. Final validation: 2749 local tests OK (374.252s), entrypoint, both UI VMs, compileall, 21 JS checks and native-dialog-unavailable UI harness. Exact-source CI passes Python 3.11/3.13, workflow checks and Docker.
 
 # 0.14.220
 
