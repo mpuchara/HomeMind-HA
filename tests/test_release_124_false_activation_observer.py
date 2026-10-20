@@ -322,7 +322,8 @@ class FalseActivationSourceContracts(unittest.TestCase):
         self.assertIn("context_suppressor_relevance", source)
         self.assertIn("_false_activation_schema_rescreen", source)
         self.assertIn("false_activation_schema_rescreen", source)
-        self.assertIn("self.training_schema_cache.pop(agent_id, None)", source)
+        # Rebuild selection runs inside the registered training session.
+        self.assertIn("session.training_schema_cache.pop(agent_id, None)", source)
 
 
 if __name__ == "__main__":
