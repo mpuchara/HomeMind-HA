@@ -1,0 +1,49 @@
+{
+  "version": "0.14.220",
+  "files": [
+    {
+      "name": "adaptive-ai-runtime-debug-20261020-165914.json",
+      "sha256": "9c8e3f3654990d65fd549dedcf06c945502773f341aed2cee55fbc77151b9fd5"
+    },
+    {
+      "name": "correct-learning-fdcec6cb-ab768ea5.json",
+      "sha256": "78bf37059ad91540f39113a509b684fc4812693bba6c390ad5147f9ec8a310e9"
+    }
+  ],
+  "queue": {
+    "active_count": 0,
+    "queued_count": 0,
+    "revision": 0,
+    "transitions": 0
+  },
+  "storage": {
+    "auto_pool_bytes": 80758609856,
+    "auto_use_percent": 70,
+    "batch_sample_interval_seconds": 0.05,
+    "batch_sample_payload_bytes": 1048576,
+    "blocked_writes": 0,
+    "budget_mode": "auto",
+    "database_max_bytes": 53704475555,
+    "database_used_bytes": 12084088832,
+    "db_bytes": 12667396096,
+    "disk_samples": 31985,
+    "free_bytes": 67265511424,
+    "level": "normal",
+    "max_statement_payload_bytes": 16777216,
+    "minimum_free_bytes": 24227582957,
+    "page_observations": 24530,
+    "readonly_page_observations_skipped": 91548,
+    "reason": null,
+    "sample_error": null,
+    "wal_bytes": 802081632,
+    "wal_max_bytes": 2826551344
+  },
+  "startup_ready": true,
+  "training_state": "paused",
+  "mode": "paused",
+  "model_present": true,
+  "model_checksum_valid": true,
+  "benchmark_samples": 1259,
+  "warnings": [],
+  "interpretation": "No training admission reached this queue in the current process; storage is normal. Existing partial model is present with matching checksum. Native confirm in both buttons can return before any HTTP request; browser suppression is a reproduction hypothesis, not directly observed console evidence."
+}
