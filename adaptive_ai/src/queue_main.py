@@ -5,6 +5,7 @@ training queue hooks before calling it, so a busy low-memory training slot becom
 "queued" instead of an HTTP 409.
 """
 import traceback
+import threading
 from urllib.parse import parse_qs, urlsplit
 
 import main as core
@@ -14,6 +15,7 @@ from runtime_http import FALLTHROUGH, install_dispatch
 
 
 TRAINING_QUEUE = None
+_ADMISSION_LOCK = threading.Lock()
 
 
 _original_initialize_runtime = core.initialize_runtime
@@ -68,6 +70,8 @@ def initialize_runtime():
             "registered_before_base_runtime_initialize": True,
             "conditional_delegate": "runtime_http.FALLTHROUGH",
             "routes": [
+                "queue.training.request",
+                "queue.training.request_status",
                 "queue.teach_rl.add",
                 "queue.teach_rl.undo",
                 "queue.teach_rl.train",
@@ -245,6 +249,51 @@ def _teach_queue_busy(agent_id):
 
 def register_mutation_routes(registry):
     """Move queue-owned POST/PATCH/DELETE behavior into the explicit route registry."""
+
+    def admission_service():
+        from training_admission import TrainingAdmission
+        with _ADMISSION_LOCK:
+            service = getattr(TRAINING_QUEUE, 'training_admission', None)
+            if service is None:
+                service = TrainingAdmission(TRAINING_QUEUE, registry, lambda:
+                    core.runtime_available() and core.startup_snapshot().get('ready'))
+                TRAINING_QUEUE.training_admission = service
+            return service
+
+    def training_request(http, params):
+        if TRAINING_QUEUE is None:
+            return http.send_json(503, {'error': 'Training queue is not ready'})
+        try:
+            if int(getattr(http, 'headers', {}).get('Content-Length', 0)) > 4096:
+                return http.send_json(413, {'error': 'Training request is too large'})
+            body = http.read_json()
+            if not isinstance(body, dict):
+                raise ValueError('Training request must be an object')
+            result = admission_service().submit(body.get('request_id'), params['agent_id'], body.get('action'))
+            # This acknowledges only a RAM receipt. The GET status reports when the
+            # original queue route has completed its durable admission.
+            return http.send_json(202, result)
+        except ValueError as exc:
+            from training_admission import AdmissionConflict
+            return http.send_json(409 if isinstance(exc, AdmissionConflict) else 400, {'error': str(exc)})
+        except RuntimeError as exc:
+            return http.send_json(503, {'error': str(exc)})
+
+    def training_request_status(http, params):
+        if TRAINING_QUEUE is None:
+            return http.send_json(503, {'error': 'Training queue is not ready'})
+        service = admission_service()
+        result = service.get(params['request_id'])
+        return http.send_json(200 if result else 404, result or {
+            'error': 'Training request is no longer tracked; runtime may have restarted',
+            'boot_id': service.boot_id})
+
+    registry.register('POST', 'queue.training.request',
+                      r'^/api/agents/(?P<agent_id>[^/]+)/training-requests$', training_request,
+                      require_trusted=True, require_runtime=True, priority=180)
+    registry.register('GET', 'queue.training.request_status',
+                      r'^/api/training-requests/(?P<request_id>[A-Za-z0-9_-]{8,80})$', training_request_status,
+                      require_trusted=True, require_runtime=False, priority=180)
 
     def teach_rl(http, params, action):
         agent_id = params["agent_id"]

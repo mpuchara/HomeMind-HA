@@ -1,3 +1,11 @@
+# 0.14.224
+
+- Receive Resume/Rebuild requests on a bounded asynchronous admission service. A RAM receipt is distinct from successful durable training queue admission; status reads do not wait for Store.lock.
+- Run the original explicit mutation routes on the admission worker, preserving Candidate guards, Control release, durable waiting state and storage admission. Retryable diagnostic batches yield while explicit admission is pending and retain all uncommitted rows.
+- Reconcile lost acknowledgements through read-only request status. Repeated request ids cannot change action/agent or execute the mutation twice within the bounded result retention window. Pending actions cannot silently upgrade to destructive Rebuild.
+- Keep Close/Escape usable, provide Check request, and require explicit reconfirmation after request loss/restart. Reconfirmation reuses the original request id. No automatic POST retry.
+- Add a real HTTP regression through the shipped entrypoint with two interrupted SQLite checkpoints and a deliberately held Store lock; verify both workers start after release and Candidate rebuild rejection remains authoritative. Validation pending.
+
 # 0.14.223
 
 - Add a subtle overview latency sparkline: rolling 60-second p95 history, up to 10 minutes, bounded RAM only, no additional polling or disk writes. Missing samples remain gaps.

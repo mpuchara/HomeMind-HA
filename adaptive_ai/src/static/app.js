@@ -261,75 +261,116 @@ async function setMode(id,mode){
 async function verifyControl(id){if(!confirm('This sends the device its CURRENT value again through the same Home Assistant service path used by Control. It should not intentionally change the setting. Continue?'))return;try{const r=await api(`api/agents/${id}/verify-control`,{method:'POST',body:'{}'});alert(`Control path OK: ${r.service}`);await load();}catch(e){alert('Control verification failed: '+e.message);await load();}}
 let trainingActionDialog=null;
 const trainingActionRequests=new Map();
+const trainingRequestId=()=>typeof crypto!=='undefined'&&crypto.randomUUID
+  ?crypto.randomUUID():`training-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+async function trainingRequestApi(path,options={},timeout=15000){
+  const controller=new AbortController();let timer;
+  try{return await Promise.race([
+    api(path,{...options,signal:controller.signal}),
+    new Promise((_,reject)=>{timer=setTimeout(()=>{
+      const error=new Error('No server acknowledgement within '+timeout/1000+' seconds');
+      error.admissionUnknown=true;reject(error);controller.abort();
+    },timeout);})
+  ]);}finally{clearTimeout(timer);}
+}
+function trainingRequestRender(request){request.listeners.forEach(fn=>fn());}
+async function trainingRequestResult(request,ticket){
+  request.bootId=ticket.boot_id;
+  request.requestId=ticket.request_id||request.requestId;
+  if(ticket.state==='accepted'){
+    request.state='accepted';request.message=ticket.response?.message||ticket.message||'Training queued';
+    if(trainingActionRequests.get(request.agentId)===request)trainingActionRequests.delete(request.agentId);
+    trainingRequestRender(request);
+    if(!request.refreshed){
+      request.refreshed=true;
+      try{await load();}catch(error){console.error('Training accepted; panel refresh failed',error);request.message+=' The request was accepted; the panel refresh will retry automatically.';}
+    }
+    return true;
+  }
+  if(ticket.state==='failed'){
+    request.state='failed';request.message='Server rejected the training request: '+(ticket.response?.error||ticket.message||'Unknown error');
+    if(trainingActionRequests.get(request.agentId)===request)trainingActionRequests.delete(request.agentId);
+    return true;
+  }
+  request.state='pending';
+  request.message=(ticket.message||'Request received; preparing training queue admission')
+    +' · '+Math.round(Number(ticket.elapsed_seconds)||0)+' s. Closing only dismisses this window.';
+  trainingRequestRender(request);return false;
+}
+async function checkTrainingRequest(request){
+  if(request.watching||request.state==='accepted'||request.state==='failed')return;
+  request.watching=true;
+  try{
+    for(let attempt=0;attempt<60;attempt++){
+      const ticket=await trainingRequestApi(`api/training-requests/${encodeURIComponent(request.requestId)}`);
+      if(await trainingRequestResult(request,ticket))return;
+      await new Promise(resolve=>setTimeout(resolve,1000));
+    }
+    throw new Error('Admission is still pending; use Check request to read its status again');
+  }catch(error){
+    if(error.httpStatus===404){
+      // A page can survive an add-on restart. Require explicit confirmation and
+      // reuse the original id, so a delayed original POST cannot duplicate it.
+      request.state='retryable';
+      request.message='This request is no longer tracked (the runtime may have restarted). Check current training progress, then confirm this action again if needed. No training request was resubmitted.';
+    }else{
+      request.state='unknown';
+      request.message='Training admission is not yet confirmed: '+(error.message||String(error))+'. Use Check request; it only reads status and never sends another training request.';
+    }
+  }finally{request.watching=false;trainingRequestRender(request);}
+}
 function openTrainingAction(id,rebuild){
   if(trainingActionDialog?.open)return trainingActionDialog;
-  const dialog=document.createElement('dialog');
-  trainingActionDialog=dialog;
+  const agentId=String(id),action=rebuild?'rebuild':'resume';
+  const dialog=document.createElement('dialog');trainingActionDialog=dialog;
   dialog.id='trainingActionDialog';
-  dialog.innerHTML='<form><h2></h2><p data-description></p><p data-result role="status" aria-live="polite"></p><div class="dialog-actions"><button type="button" class="ghost" data-cancel>Cancel</button><button type="submit" class="primary" data-submit></button></div></form>';
-  const title=dialog.querySelector('h2'),description=dialog.querySelector('[data-description]'),result=dialog.querySelector('[data-result]'),submit=dialog.querySelector('[data-submit]'),cancel=dialog.querySelector('[data-cancel]'),form=dialog.querySelector('form');
+  dialog.innerHTML='<form><h2></h2><p data-description></p><p data-result role="status" aria-live="polite"></p><div class="dialog-actions"><button type="button" class="ghost" data-cancel>Cancel</button><button type="button" class="ghost" data-check hidden>Check request</button><button type="submit" class="primary" data-submit></button></div></form>';
+  const title=dialog.querySelector('h2'),description=dialog.querySelector('[data-description]'),result=dialog.querySelector('[data-result]'),submit=dialog.querySelector('[data-submit]'),cancel=dialog.querySelector('[data-cancel]'),check=dialog.querySelector('[data-check]'),form=dialog.querySelector('form');
   const label=rebuild?'Rebuild model':'Resume training';
-  const agent=lastAgents.find(a=>String(a.id)===String(id));
+  const agent=lastAgents.find(a=>String(a.id)===agentId);
   title.textContent=label;
-  description.textContent=(agent?.name||String(id))+': '+(rebuild
+  description.textContent=(agent?.name||agentId)+': '+(rebuild
     ?'Full rebuild clears this agent model, benchmark and saved cursor, then starts historical learning again. It does not restore a discarded Candidate.'
     :'Continue from the saved historical cursor. Existing model and benchmark are preserved.');
-  submit.textContent=label;
-  let request=trainingActionRequests.get(String(id));
+  submit.textContent=label;check.hidden=true;
+  let request=trainingActionRequests.get(agentId);
   const render=()=>{
     if(!request)return;
-    submit.disabled=true;
+    submit.disabled=!(request.state==='failed'||(request.state==='retryable'&&request.action===action));
     cancel.textContent='Close';
-    result.setAttribute('role',request.state==='unknown'||request.state==='failed'?'alert':'status');
+    check.hidden=!['unknown','retryable'].includes(request.state);
+    check.disabled=Boolean(request.watching);
+    result.setAttribute('role',['unknown','retryable','failed'].includes(request.state)?'alert':'status');
     result.textContent=request.message;
-    if(request.state==='accepted'){
-      title.textContent='Training request accepted';submit.hidden=true;
-    }else if(request.state==='failed'){
-      submit.disabled=false;
+    if(request.action!==action){
+      result.textContent+=' An unconfirmed '+request.action+' request already exists. Check it before choosing a different action.';
     }
+    if(request.state==='accepted'){title.textContent='Training request accepted';submit.hidden=true;}
   };
   cancel.onclick=()=>dialog.close();
-  // Closing or Escape only dismisses this window. It never cancels server work.
-  dialog.onclose=()=>{
-    request?.listeners.delete(render);
-    dialog.remove();if(trainingActionDialog===dialog)trainingActionDialog=null;
-  };
+  check.onclick=()=>checkTrainingRequest(request);
+  // Escape/Close always remain usable. Dismissing this window does not cancel server work.
+  dialog.onclose=()=>{request?.listeners.delete(render);dialog.remove();if(trainingActionDialog===dialog)trainingActionDialog=null;};
   if(request){request.listeners.add(render);render();}
   form.onsubmit=async event=>{
     event.preventDefault();
-    if(request&&request.state!=='failed')return;
-    request={state:'pending',message:'Sending training request... You can close this window; closing does not cancel training.',listeners:new Set([render])};
-    trainingActionRequests.set(String(id),request);
-    const current=request,controller=new AbortController();
-    let timer;
-    render();
+    if(request&&request.state!=='failed'&&!(request.state==='retryable'&&request.action===action))return;
+    const retryId=request?.state==='retryable'?request.requestId:null;
+    request={agentId,action,requestId:retryId||trainingRequestId(),state:'sending',message:'Sending training request... Closing does not cancel training.',listeners:new Set([render])};
+    trainingActionRequests.set(agentId,request);const current=request;render();
     try{
-      const response=await Promise.race([
-        api(`api/agents/${encodeURIComponent(id)}/${rebuild?'learning':'resume'}`,
-          rebuild?{method:'DELETE',signal:controller.signal}:{method:'POST',body:'{}',signal:controller.signal}),
-        new Promise((_,reject)=>{timer=setTimeout(()=>{
-          const error=new Error('No server acknowledgement within 30 seconds');
-          error.admissionUnknown=true;reject(error);controller.abort();
-        },30000);})
-      ]);
-      current.state='accepted';current.message=response?.message||'Training request accepted. Check the training queue for progress.';
-      trainingActionRequests.delete(String(id));
-      current.listeners.forEach(fn=>fn());
-      try{await load();}catch(error){
-        console.error('Training accepted; panel refresh failed',error);
-        current.message+=' The request was accepted; the panel refresh will retry automatically.';
-      }
+      const ticket=await trainingRequestApi(`api/agents/${encodeURIComponent(id)}/training-requests`,
+        {method:'POST',body:JSON.stringify({request_id:current.requestId,action})},30000);
+      if(!await trainingRequestResult(current,ticket))await checkTrainingRequest(current);
     }catch(error){
-      const unknown=error.admissionUnknown||!error.httpStatus;
-      current.state=unknown?'unknown':'failed';
-      current.message=label+' request could not be confirmed: '+(error.message||String(error))+'. '+(unknown
-        ?'The server may still start training. Check the training queue before submitting another request. Closing only dismisses this window.'
-        :'The server rejected this request.');
-      if(!unknown)trainingActionRequests.delete(String(id));
-    }finally{
-      clearTimeout(timer);
-      current.listeners.forEach(fn=>fn());
-    }
+      if(error.httpStatus&&error.httpStatus<500){
+        current.state='failed';current.message=label+' request rejected: '+(error.message||String(error));
+        if(trainingActionRequests.get(agentId)===current)trainingActionRequests.delete(agentId);
+      }else{
+        current.state='unknown';current.message='Request acknowledgement lost; checking its id before any retry';
+        trainingRequestRender(current);await checkTrainingRequest(current);
+      }
+    }finally{trainingRequestRender(current);}
   };
   document.body.append(dialog);
   if(typeof dialog.showModal==='function')dialog.showModal();else dialog.setAttribute('open','');

@@ -1,0 +1,21 @@
+{
+  "baseline": {
+    "version": "0.14.223",
+    "store_contention_reproduction": true,
+    "timed_out": [
+      {
+        "action": "resume",
+        "timeout_seconds": 0.27
+      },
+      {
+        "action": "rebuild",
+        "timeout_seconds": 0.251
+      }
+    ],
+    "requests_queued_after_client_timeout": 2,
+    "note": "Controlled contention reproduction, not a trace from the user device. Broken-pipe logs are expected after deliberate client timeouts."
+  },
+  "log_sha256": "d0ff4f5ae9fcf2afa0e3a74343095f9692bed4e7369f0026ed848f799831a1b1",
+  "user_evidence": "User reports Sending request remains visible after interrupting two agents during update to 0.14.223; no fresh 0.14.223 runtime export available in this turn.",
+  "interpretation": "Controlled Store contention reproduces missing acknowledgement in both legacy routes, including jobs admitted after client timeout. It does not establish the exact blocked stack on the user device."
+}
