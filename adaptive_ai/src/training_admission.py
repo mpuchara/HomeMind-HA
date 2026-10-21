@@ -158,7 +158,8 @@ class TrainingAdmission:
                     queued = status_for(row['agent_id']) if callable(status_for) else None
                 except Exception:
                     queued = None
-                if queued and queued.get('state') in ('queued', 'active'):
+                if (queued and queued.get('state') in ('queued', 'active')
+                        and bool(queued.get('rebuild')) == (row['action'] == 'rebuild')):
                     status, payload = 202, {
                         'state': queued['state'], 'rebuild': bool(queued.get('rebuild')),
                         'queue_position': queued.get('position', 0),

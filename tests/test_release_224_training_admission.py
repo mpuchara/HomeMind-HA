@@ -47,6 +47,11 @@ class Admission224Tests(unittest.TestCase):
             while time.monotonic()<deadline and service.get('request-recovered')['state']=='pending':time.sleep(.01)
             self.assertEqual(service.get('request-recovered')['state'],'accepted')
             self.assertEqual(service.get('request-recovered')['response_status'],202)
+            # An older Resume in the queue cannot acknowledge a failed Rebuild.
+            registry.register('DELETE','fixture-rebuild',r'^/api/agents/(?P<agent_id>[^/]+)/learning$',resume)
+            service.submit('request-rebuild-failed','a','rebuild');deadline=time.monotonic()+2
+            while time.monotonic()<deadline and service.get('request-rebuild-failed')['state']=='pending':time.sleep(.01)
+            self.assertEqual(service.get('request-rebuild-failed')['state'],'failed')
         finally:service.stop();service.thread.join(2)
 
     def test_shipped_http_two_agent_restart_under_store_contention(self):
