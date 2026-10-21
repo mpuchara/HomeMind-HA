@@ -1,0 +1,14 @@
+const fs=require('fs'),vm=require('vm'),assert=require('assert/strict');
+const context={window:{}};vm.createContext(context);
+vm.runInContext(fs.readFileSync('adaptive_ai/src/static/latency_sparkline.js','utf8'),context);
+const draw=context.window.latencySparkline;
+assert.equal(draw({}), '');
+assert.equal(draw({trend:[{age_seconds:0,p95_ms:null,count:0}]}),'');
+const html=draw({trend:[{age_seconds:20,p95_ms:300,count:4},{age_seconds:15,p95_ms:500,count:5},{age_seconds:10,p95_ms:null,count:0},{age_seconds:5,p95_ms:200,count:2},{age_seconds:0,p95_ms:250,count:3}]});
+assert.equal((html.match(/<polyline/g)||[]).length,2);
+assert.ok(html.includes('role="img"'));assert.ok(html.includes('last 10 minutes'));
+const stale=draw({trend:[{age_seconds:100,p95_ms:300,count:1},{age_seconds:0,p95_ms:200,count:1}]});
+assert.equal((stale.match(/<circle/g)||[]).length,2);assert.ok(!stale.includes('polyline'));
+const invalid=draw({trend:[{age_seconds:0,p95_ms:NaN,count:1},{age_seconds:0,p95_ms:'<script>',count:1}]});
+assert.equal(invalid,'');
+console.log(JSON.stringify({real_renderer:true,empty_no_fabrication:true,missing_windows_break_lines:true,outage_gaps:true,numeric_only:true}));

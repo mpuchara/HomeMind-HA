@@ -16,7 +16,7 @@ try:
 except Exception:
     ws_connect = None
 
-APP_VERSION = "0.14.222"
+APP_VERSION = "0.14.223"
 HISTORY_BOOTSTRAP_REVISION = "target-attrs-v2"
 TRAINING_REVISION = "shared-home-intents-v26"
 DATA_DIR = Path(os.environ.get("ADAPTIVE_AI_DATA", "/data"))
@@ -157,7 +157,7 @@ DEFAULT_OPTIONS = {
     # a smaller effective profile from MemTotal/MemAvailable before each heavy job.
     "training_home_context_cache_entries": 64,
     "training_home_context_cache_units": 32768,
-    "training_sqlite_cache_mb": 64,
+    "training_sqlite_cache_mb": 128,
     "training_preparation_memory_limit_mb": 1536,
     "training_recorder_batch_rows": 1024,
     "training_recorder_capacity_wait_seconds": 300,
@@ -268,12 +268,12 @@ DEFAULT_OPTIONS = {
     "training_persistent_worker_enabled": True,
     "training_persistent_worker_cache_enabled": True,
     "training_worker_nice": 10,
-    "training_worker_memory_limit_mb": 1024,
+    "training_worker_memory_limit_mb": 1536,
     # 0.14.109: two agent replay workers may run on >=4-core hosts with enough RAM.
     # Each worker gets a lower cap so realtime HA keeps explicit headroom.
     "training_parallel_agent_workers": 2,
     "training_parallel_min_available_mb": 2048,
-    "training_parallel_worker_memory_limit_mb": 768,
+    "training_parallel_worker_memory_limit_mb": 1536,
     "training_worker_memory_floor_mb": 256,
     "training_worker_memory_total_fraction": 0.30,
     "training_worker_memory_available_fraction": 0.50,
@@ -503,8 +503,12 @@ def load_options():
                 options["training_home_context_cache_entries"] = 64
             if data.get("training_home_context_cache_units") == 8192:
                 options["training_home_context_cache_units"] = 32768
-            if data.get("training_worker_memory_limit_mb") == 520:
-                options["training_worker_memory_limit_mb"] = 1024
+            if data.get("training_worker_memory_limit_mb") in (520, 1024):
+                options["training_worker_memory_limit_mb"] = 1536
+            if data.get("training_parallel_worker_memory_limit_mb") == 768:
+                options["training_parallel_worker_memory_limit_mb"] = 1536
+            if data.get("training_sqlite_cache_mb") == 64:
+                options["training_sqlite_cache_mb"] = 128
     except Exception as exc:
         print(f"[options] Failed to read options: {exc}", flush=True)
     # 0.9 never starts heavy replay implicitly, including installations with the

@@ -357,7 +357,7 @@ def resolve_training_resource_profile(options=None, memory=None):
     memory = dict(memory or _host_memory_mb())
 
     ceiling = max(
-        128.0, float(options.get("training_worker_memory_limit_mb", 1024) or 1024)
+        128.0, float(options.get("training_worker_memory_limit_mb", 1536) or 1536)
     )
     floor = max(
         128.0, min(
@@ -408,7 +408,15 @@ def resolve_training_resource_profile(options=None, memory=None):
 
     effective = int(max(floor, min(candidates)))
 
-    if effective >= 896:
+    if effective >= 1408:
+        tier = "large_ram"
+        target = {
+            "replay_rows": 65536, "replay_entry_rows": 2048,
+            "ram_index_mb": 192,
+            "feature_entries": 512, "feature_units": 65536,
+            "home_entries": 64, "home_units": 32768, "sqlite_mb": 128,
+        }
+    elif effective >= 896:
         tier = "large"
         target = {
             "replay_rows": 65536, "replay_entry_rows": 2048,
@@ -476,7 +484,7 @@ def resolve_training_resource_profile(options=None, memory=None):
             "training_home_context_cache_units", 32768, target["home_units"]
         ),
         "training_worker_effective_sqlite_cache_mb": bounded_int(
-            "training_sqlite_cache_mb", 64, target["sqlite_mb"], minimum=2
+            "training_sqlite_cache_mb", 128, target["sqlite_mb"], minimum=2
         ),
     }
     return {
@@ -500,13 +508,13 @@ def parallel_profile_options(options, slots, memory):
     result = dict(options)
     if slots <= 1:
         return result
-    cap = max(448, int(options.get("training_parallel_worker_memory_limit_mb", 768) or 768))
+    cap = max(448, int(options.get("training_parallel_worker_memory_limit_mb", 1536) or 1536))
     available = memory.get("available_mb")
     if isinstance(available, (int, float)) and available > 0:
         reserve = max(128., float(options.get("training_worker_memory_reserve_mb", 512) or 512))
         cap = min(cap, max(128, int((available - reserve) / slots)))
     result["training_worker_memory_limit_mb"] = min(
-        int(options.get("training_worker_memory_limit_mb", 1024) or 1024), cap)
+        int(options.get("training_worker_memory_limit_mb", 1536) or 1536), cap)
     return result
 
 

@@ -1,5 +1,5 @@
 name: "Adaptive AI"
-version: "0.14.222"
+version: "0.14.223"
 slug: "adaptive_ai"
 description: >-
   History-first local reinforcement-learning policies for Home Assistant. Imports
@@ -130,7 +130,7 @@ options:
   training_feature_snapshot_cache_units: 65536
   training_home_context_cache_entries: 64
   training_home_context_cache_units: 32768
-  training_sqlite_cache_mb: 64
+  training_sqlite_cache_mb: 128
   training_preparation_memory_limit_mb: 1536
   training_recorder_batch_rows: 1024
   training_recorder_capacity_wait_seconds: 300
@@ -216,10 +216,10 @@ options:
   training_persistent_worker_enabled: true
   training_persistent_worker_cache_enabled: true
   training_worker_nice: 10
-  training_worker_memory_limit_mb: 1024
+  training_worker_memory_limit_mb: 1536
   training_parallel_agent_workers: 2
   training_parallel_min_available_mb: 2048
-  training_parallel_worker_memory_limit_mb: 768
+  training_parallel_worker_memory_limit_mb: 1536
   training_worker_memory_floor_mb: 256
   training_worker_memory_total_fraction: 0.30
   training_worker_memory_available_fraction: 0.50
@@ -363,7 +363,7 @@ schema:
   training_feature_snapshot_cache_units: "int(0,262144)"
   training_home_context_cache_entries: "int(0,128)"
   training_home_context_cache_units: "int(0,65536)"
-  training_sqlite_cache_mb: "int(2,64)"
+  training_sqlite_cache_mb: "int(2,128)"
   training_preparation_memory_limit_mb: "int(256,2048)"
   training_recorder_batch_rows: "int(128,1024)"
   training_recorder_capacity_wait_seconds: "int(0,900)"
@@ -452,7 +452,7 @@ schema:
   training_worker_memory_limit_mb: "int(128,2048)"
   training_parallel_agent_workers: "int(1,2)"
   training_parallel_min_available_mb: "int(1024,8192)"
-  training_parallel_worker_memory_limit_mb: "int(448,1024)"
+  training_parallel_worker_memory_limit_mb: "int(448,2048)"
   training_worker_memory_floor_mb: "int(128,1024)"
   training_worker_memory_total_fraction: "float(0.10,0.50)"
   training_worker_memory_available_fraction: "float(0.20,0.80)"

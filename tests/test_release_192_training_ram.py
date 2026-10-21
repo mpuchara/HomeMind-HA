@@ -16,7 +16,7 @@ class TrainingRam192Tests(unittest.TestCase):
         memory = {'total_mb': 7806.3, 'available_mb': 5788.1}
         options = parallel_profile_options(DEFAULT_OPTIONS, 2, memory)
         profile = resolve_training_resource_profile(options, memory)
-        self.assertEqual(profile['effective_memory_limit_mb'], 768)
+        self.assertEqual(profile['effective_memory_limit_mb'], 1536)
         self.assertEqual(profile['worker_options']['training_worker_effective_ram_replay_index_mb'], 192)
         self.assertEqual(profile['worker_options']['training_worker_effective_transition_edge_max_rows_per_entity'], 262144)
         self.assertLessEqual(2 * profile['effective_memory_limit_mb'] + 512, memory['available_mb'])

@@ -60,7 +60,7 @@ class EffectiveParallelSlotsTests(unittest.TestCase):
         self.assertEqual(DEFAULT_OPTIONS["training_parallel_agent_workers"], 2)
         self.assertEqual(DEFAULT_OPTIONS["training_parallel_min_available_mb"], 2048)
         self.assertEqual(
-            DEFAULT_OPTIONS["training_parallel_worker_memory_limit_mb"], 768
+            DEFAULT_OPTIONS["training_parallel_worker_memory_limit_mb"], 1536
         )
         source = (ROOT / "adaptive_ai/src/history.py").read_text(encoding="utf-8")
         self.assertIn("session._run_agent_indexing(", source)
@@ -212,7 +212,7 @@ class ParallelWorkerResourceContractTests(unittest.TestCase):
         source = (ROOT / "adaptive_ai/src/training_process.py").read_text(
             encoding="utf-8"
         )
-        self.assertIn('training_parallel_worker_memory_limit_mb", 768', source)
+        self.assertIn('training_parallel_worker_memory_limit_mb", 1536', source)
         self.assertIn("parallel_memory_cap_applied", source)
         self.assertIn('"cpu_one_core_percent"', source)
         self.assertIn('"cpu_total_percent_estimate"', source)

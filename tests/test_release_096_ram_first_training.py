@@ -21,10 +21,10 @@ class Release096ResourceProfileTests(unittest.TestCase):
     def test_release_defaults_are_ram_first_but_keep_single_worker_and_nice(self):
         self.assertGreaterEqual(tuple(map(int, APP_VERSION.split("."))), (0, 14, 96))
         self.assertEqual(DEFAULT_OPTIONS["training_cpu_duty_cycle"], 0.85)
-        self.assertEqual(DEFAULT_OPTIONS["training_worker_memory_limit_mb"], 1024)
+        self.assertEqual(DEFAULT_OPTIONS["training_worker_memory_limit_mb"], 1536)
         self.assertEqual(DEFAULT_OPTIONS["training_replay_ram_cache_rows"], 65536)
         self.assertEqual(DEFAULT_OPTIONS["training_home_context_cache_entries"], 64)
-        self.assertEqual(DEFAULT_OPTIONS["training_sqlite_cache_mb"], 64)
+        self.assertEqual(DEFAULT_OPTIONS["training_sqlite_cache_mb"], 128)
         self.assertEqual(DEFAULT_OPTIONS["training_worker_nice"], 10)
         self.assertEqual(DEFAULT_OPTIONS["max_concurrent_training_jobs"], 1)
 
@@ -35,7 +35,7 @@ class Release096ResourceProfileTests(unittest.TestCase):
         )
         self.assertEqual(profile["contract"], RESOURCE_PROFILE_CONTRACT)
         self.assertEqual(profile["tier"], "large")
-        self.assertEqual(profile["effective_memory_limit_mb"], 1024)
+        self.assertEqual(profile["effective_memory_limit_mb"], 1170)
         worker = profile["worker_options"]
         self.assertEqual(worker["training_worker_effective_replay_cache_rows"], 65536)
         self.assertEqual(worker["training_worker_effective_replay_cache_entry_rows"], 2048)

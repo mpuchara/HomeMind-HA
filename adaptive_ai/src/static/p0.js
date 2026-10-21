@@ -45,7 +45,7 @@
       :candidateRecent!=null
         ?'event → Candidate decision p95 · '+candidateCount+' samples · last 60 s'
         :'event → decision p95 · waiting · 0 samples';
-    $('#overview').innerHTML=`<div class="metric"><b>${lastAgents.length||status.agent_count||0}</b><span>agents</span></div><div class="metric"><b>${control}</b><span>Control · ${shadow} Shadow</span></div><div class="metric"><b>${status.state_count||0}</b><span>HA entities</span></div><div class="metric"><b>${p95==null?'—':ms(p95)}</b><span>${p95Label}</span></div><div class="metric"><b>${commandP95==null?'waiting':ms(commandP95)}</b><span>event → HA command p95 · ${commandCount} samples · last 60 s</span></div>`;
+    $('#overview').innerHTML=`<div class="metric"><b>${lastAgents.length||status.agent_count||0}</b><span>agents</span></div><div class="metric"><b>${control}</b><span>Control · ${shadow} Shadow</span></div><div class="metric"><b>${status.state_count||0}</b><span>HA entities</span></div><div class="metric"><b>${p95==null?'—':ms(p95)}</b><span>${p95Label}</span>${window.latencySparkline?.(liveRecent!=null?latency:candidateLatency)||''}</div><div class="metric"><b>${commandP95==null?'waiting':ms(commandP95)}</b><span>event → HA command p95 · ${commandCount} samples · last 60 s</span>${window.latencySparkline?.(commandLatency)||''}</div>`;
     const c=$('#connection'), s=status.startup||{}, rt=status.realtime||{};
     if (!s.ready) { c.textContent=s.error?'Startup error':`Starting · ${s.step||0}/${s.steps||7}`; c.className='pill'; return; }
     c.textContent=status.ha_connected?`HA connected${rt.connected?' · realtime':' · REST fallback'}`:`Connecting to HA${status.ha_error?' · '+status.ha_error:''}`;
