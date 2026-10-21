@@ -101,6 +101,7 @@ class TrainingQueue(threading.Thread):
         self.poll_seconds = max(0.05, float(poll_seconds))
         self.stop_event = threading.Event()
         self.cv = threading.Condition(threading.RLock())
+        self._admission_local = threading.local()
         self.jobs = deque()
         self.pending = {}
         self.active = None
@@ -358,6 +359,9 @@ class TrainingQueue(threading.Thread):
         return changed, old_priority
 
     def enqueue(self, agent_id, rebuild=False, reason="training", rebuild_reason=None):
+        if self.stop_event.is_set():
+            raise RuntimeError('Training queue is stopping')
+        self.admission_phase('agent_state')
         agent = self._agent_config(agent_id)
         if not agent:
             raise ValueError("agent not found")
@@ -397,8 +401,11 @@ class TrainingQueue(threading.Thread):
                 return self.status_for(agent_id)
 
         # Do this outside the queue lock: restoring legacy automations can call HA.
+        self.admission_phase('control_release')
         self._release_control_before_queue(agent, reason)
+        self.admission_phase('waiting_state')
         self._preserve_waiting_state(agent)
+        self.admission_phase('queue')
 
         with self.cv:
             self._queue_sequence += 1
@@ -439,6 +446,8 @@ class TrainingQueue(threading.Thread):
                     )
                 self._request_training_priority()
                 return self.status_for(agent_id)
+            if self.stop_event.is_set():
+                raise RuntimeError('Training queue is stopping')
             self.jobs.append(job)
             self.pending[agent_id] = job
             self._resort_jobs_locked()
@@ -598,6 +607,8 @@ class TrainingQueue(threading.Thread):
                 "heavy_job": HEAVY_JOBS.owner,
                 "explicit_training_priority": self._training_priority.is_set(),
                 "recent_transitions": list(self.recent_transitions),
+                "admission": (self.training_admission.snapshot()
+                              if getattr(self, 'training_admission', None) is not None else None),
             }
 
     def _drop_head(self, event_code, message, detail=None):
@@ -897,8 +908,16 @@ class TrainingQueue(threading.Thread):
                 elif not progressed and not finished:
                     self.cv.wait(timeout=self.poll_seconds)
 
+    def admission_phase(self, phase):
+        progress = getattr(self._admission_local, 'progress', None)
+        if callable(progress):
+            progress(phase)
+
     def stop(self):
         self.stop_event.set()
+        admission = getattr(self, 'training_admission', None)
+        if admission is not None:
+            admission.stop()
         self._training_priority.clear()
         with self.cv:
             self.cv.notify_all()

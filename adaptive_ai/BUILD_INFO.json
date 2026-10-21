@@ -1,8 +1,8 @@
 {
-  "version": "0.14.223",
+  "version": "0.14.224",
   "release_date": "2026-10-21",
-  "base_version": "0.14.222",
-  "base_commit": "dbe5be5720d2b7bae5b779654fc8b619766f68d8",
+  "base_version": "0.14.223",
+  "base_commit": "9721c29138b106e176e707b6b0f349b73f50a2f9",
   "release_status": "draft-functional-validation-passed-target-pi-acceptance-open",
   "release_014140": {
     "scope": "inventory_and_remove_remaining_shipped_feature_Handler_fallbacks_for_Candidate_Live_and_manual_feedback_transport",
@@ -249,8 +249,8 @@
   "pi4_release_gate_contract": "pi4_release_gate_v1",
   "pi4_real_hardware_required": true,
   "stage7_offline_rl_control_unlock": false,
-  "tests_passed": 2757,
-  "tests_passed_version": "0.14.223",
+  "tests_passed": 2762,
+  "tests_passed_version": "0.14.224",
   "profile": "rpi4-ram-first-complete-discovery-manual-agent-selection",
   "manual_agent_training": true,
   "max_concurrent_training_jobs": 1,
@@ -286,7 +286,7 @@
   "migration": "no destructive migration; existing agents, models, feedback, raw archive, historical experiences, candidate lineage, rollback and generation state preserved",
   "physical_control": "unchanged; repaired agents return to Shadow and Control still requires qualified state plus all existing guards",
   "pi4": "0.14.38 targets the long-soak Raspberry Pi failure: drift analysis is coalesced on a throttled background observer, REST /states reconciliation is delta-only after bootstrap, websocket outage fallback reconciles every 10 s, and HA core-state health is tracked separately from unrelated REST errors.",
-  "ci_status": "0.14.223 executable source d936d9a8: 2757 local tests, Python 3.11/3.13 CI, workflow checks and Docker pass. Target Pi training and response acceptance remains open.",
+  "ci_status": "0.14.224 executable source d4183644: 2762 local tests, Python 3.11/3.13 CI, workflow checks and Docker pass. Real Pi restart/training acceptance remains open.",
   "training_slice_budget": "adaptive-ai-index workers call a shared CooperativeTrainingBudget; expensive temporal tracker loops yield between entities/events and finalization is no longer outside the throttle",
   "finalization_lifeline": "HEAVY_JOBS remains owned through final gc.collect(), so /api/status and /api/agents stay on lightweight lifeline reads until the worker is actually finished",
   "finalization_progress": "post-replay UI now exposes bounded stages: replay complete, policy serialization, benchmark save, qualification, checkpoint complete",
@@ -2760,7 +2760,7 @@
     "benchmark": "docs/benchmarks/CONTEXT_BUFFER_0_14_195_VALIDATION.json",
     "median_observer_speedup": 1.018396920512725
   },
-  "release_validation_tests_passed": 2757,
+  "release_validation_tests_passed": 2762,
   "release_014196": {
     "scope": "typed_deferred_batch_busy_retry_and_cooperative_wal_reclaim_write_admission",
     "learning_semantics_changed": false,
@@ -3673,5 +3673,63 @@
       "package_skipped": "Expected for a pull request; install ZIPs built locally."
     },
     "qa_report": "docs/benchmarks/PERFORMANCE_PLAN_0_14_223_QA.json"
+  },
+  "release_014224": {
+    "changes": [
+      "Bounded async training request receipts and status separate from durable queue admission",
+      "Dispatch original Resume/Rebuild routes and Candidate guards on an admission worker",
+      "Give explicit admission priority over retryable diagnostic writes",
+      "Recover lost acknowledgements by request id, with explicit confirmation after restart"
+    ],
+    "validation": {
+      "tests": 2762,
+      "seconds": 367.33,
+      "result": "OK",
+      "log_sha256": "50dffc6177ab881d58884b71129a199bcae0a60b9de1895cbc6c1abf46d2dd86"
+    },
+    "source_files": 641,
+    "latest_executable_ci": {
+      "commit": "d418364402ee7c2bf9a489857025c70dd60e0dbf",
+      "tree": "cc6f5b74d28783a3420fd07d6266f6bc22550ea7",
+      "run_id": 39643700315,
+      "run_url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/39643700315",
+      "conclusion": "success",
+      "python311": {
+        "job_id": 119373601907,
+        "tests": 2762,
+        "seconds": 182.577,
+        "result": "OK"
+      },
+      "python313": {
+        "job_id": 119373602030,
+        "tests": 2762,
+        "seconds": 278.98,
+        "result": "OK"
+      },
+      "jobs": [
+        {
+          "id": 119373601907,
+          "name": "tests (3.11)",
+          "conclusion": "success"
+        },
+        {
+          "id": 119373601936,
+          "name": "image",
+          "conclusion": "success"
+        },
+        {
+          "id": 119373602030,
+          "name": "tests (3.13)",
+          "conclusion": "success"
+        },
+        {
+          "id": 119376932463,
+          "name": "package",
+          "conclusion": "skipped"
+        }
+      ],
+      "package_skipped": "Expected for a pull request; install ZIPs built locally."
+    },
+    "qa_report": "docs/benchmarks/PERFORMANCE_PLAN_0_14_224_QA.json"
   }
 }

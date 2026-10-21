@@ -197,6 +197,7 @@ names = {
     for method in ("POST", "PATCH", "DELETE")
 }
 assert names["POST"] == [
+    "queue.training.request",
     "queue.teach_rl.add",
     "queue.teach_rl.undo",
     "queue.teach_rl.train",

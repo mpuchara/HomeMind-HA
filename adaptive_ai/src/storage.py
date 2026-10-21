@@ -27,6 +27,10 @@ class Store:
         self.storage_budget = StorageBudget(self.path, OPTIONS)
         self._retention_worker = None
         self.lock = threading.RLock()
+        self._training_admission_lock = threading.Lock()
+        self._training_admission_count = 0
+        self._training_admission_pending = threading.Event()
+        self._training_writer_deferrals = 0
         self._meta_lock = threading.RLock()
         self._confidence_cache_lock = threading.Lock()
         self._confidence_cache_stats = dict(written=0, lock_skips=0, busy_skips=0,
@@ -429,6 +433,24 @@ class Store:
                 RUNTIME_DEBUG.end(trace, status=status, autocheckpoint_pages=checkpoint_pages,
                                   **error_fields, **timings)
 
+    @contextmanager
+    def training_admission_priority(self):
+        """Let explicit admission acquire the writer before retryable diagnostics.
+
+        Deferred batches already retain data on SQLITE_BUSY. Explicit durability,
+        training subprocess writes and all storage-budget checks remain unchanged.
+        """
+        with self._training_admission_lock:
+            self._training_admission_count += 1
+            self._training_admission_pending.set()
+        try:
+            yield
+        finally:
+            with self._training_admission_lock:
+                self._training_admission_count -= 1
+                if not self._training_admission_count:
+                    self._training_admission_pending.clear()
+
     def admit_background_write(self):
         # TRUNCATE owns SQLite's writer lock even with busy_timeout=0. Retryable
         # batches already keep their data in RAM: don't spend 250 ms under
@@ -436,9 +458,12 @@ class Store:
         # Reads, explicit durability and isolated training retain their contract.
         if (getattr(self._connection_session, 'busy_timeout_ms', None) in (0, 250)
                 and getattr(self._connection_session, 'retryable_write', True)
-                and self._wal_reclaiming.is_set()):
+                and (self._wal_reclaiming.is_set() or self._training_admission_pending.is_set())):
             with self._wal_keeper_lock:
-                self._wal_writer_deferrals += 1
+                if self._training_admission_pending.is_set():
+                    self._training_writer_deferrals += 1
+                else:
+                    self._wal_writer_deferrals += 1
             exc = sqlite3.OperationalError('database is locked')
             exc.sqlite_errorcode = sqlite3.SQLITE_BUSY
             exc.sqlite_errorname = 'SQLITE_BUSY'
