@@ -20,10 +20,12 @@ Odbiór żądania, oczekiwanie na zapis i faktyczne przyjęcie do kolejki są ro
 
 ## Walidacja
 
-Końcowa walidacja w toku. Test realnego HTTP importuje trial_queue_main, otwiera ponownie bazę dwóch przerwanych agentów i rejestruje oryginalne trasy wraz z Candidate guard. Przy zablokowanym Store żądania otrzymują szybkie potwierdzenie odbioru i dostępny status, ale nie udają trwałego queue admission. Po zwolnieniu blokady oba workery HistoryManager startują. Po kolejnym restarcie stare identyfikatory nie uruchamiają niczego automatycznie. Sprawdzamy również zachowanie modeli/kursorów/benchmarków, blokadę Candidate Rebuild, odroczenie zapisu bez utraty wierszy i odzyskanie potwierdzenia przy błędzie po dodaniu zadania.
+Końcowa walidacja: **2762 testy OK / 367.330 s lokalnie**, 19 testów celowanych, entrypoint, testy UI, compileall i 22 skrypty JS. Kod wykonawczy d4183644 przeszedł CI Python 3.11/3.13, dodatkowe kontrole i obraz Docker. Zgodność manifestu 641 plików źródeł/testów/narzędzi potwierdzona. Test realnego HTTP importuje trial_queue_main, otwiera ponownie bazę dwóch przerwanych agentów i rejestruje oryginalne trasy wraz z Candidate guard. Przy zablokowanym Store żądania otrzymują szybkie potwierdzenie odbioru i dostępny status, ale nie udają trwałego queue admission. Po zwolnieniu blokady oba workery HistoryManager startują. Po kolejnym restarcie stare identyfikatory nie uruchamiają niczego automatycznie. Sprawdzamy również zachowanie modeli/kursorów/benchmarków, blokadę Candidate Rebuild, odroczenie zapisu bez utraty wierszy i odzyskanie potwierdzenia przy błędzie po dodaniu zadania.
 
 To test kontrolowanej blokady na hoście. Nie zastępuje eksportu z urządzenia użytkownika ani pomiaru pełnego treningu na Pi. Test UI korzysta z rzeczywistych funkcji aplikacji w modelu DOM. Zasoby RAM i wykres z .223 pozostają bez zmian.
 
 ## Instalacja
 
 Podmienić źródła tego samego dodatku i przebudować jego obraz, zachowując identyfikator, konfigurację i prywatne dane. Następnie uruchomić dodatek i mocno odświeżyć panel (Ctrl+F5), aby załadować nowy kod żądań, oraz sprawdzić wersję .224. Dla obu przerwanych agentów wybrać Resume training. Rebuild model nie jest wymagany do tej aktualizacji i nadal oznacza uczenie od początku.
+
+PR: https://github.com/mpuchara/HomeMind-HA/pull/340. CI: https://github.com/mpuchara/HomeMind-HA/actions/runs/39643700315. Raporty w docs/benchmarks/PERFORMANCE_PLAN_0_14_224_*.json. Końcowy commit obejmuje tylko raporty i metadane.

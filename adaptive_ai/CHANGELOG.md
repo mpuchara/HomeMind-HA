@@ -4,7 +4,7 @@
 - Run the original explicit mutation routes on the admission worker, preserving Candidate guards, Control release, durable waiting state and storage admission. Retryable diagnostic batches yield while explicit admission is pending and retain all uncommitted rows.
 - Reconcile lost acknowledgements through read-only request status. Repeated request ids cannot change action/agent or execute the mutation twice within the bounded result retention window. Pending actions cannot silently upgrade to destructive Rebuild.
 - Keep Close/Escape usable, provide Check request, and require explicit reconfirmation after request loss/restart. Reconfirmation reuses the original request id. No automatic POST retry.
-- Add a real HTTP regression through the shipped entrypoint with two interrupted SQLite checkpoints and a deliberately held Store lock; verify both workers start after release and Candidate rebuild rejection remains authoritative. Validation pending.
+- Add a real HTTP regression through the shipped entrypoint with two interrupted SQLite checkpoints and a deliberately held Store lock; verify both workers start after release and Candidate rebuild rejection remains authoritative. Validation: 2762 local tests OK (367.330s), entrypoint, both UI VMs, training-action UI VM, compileall, 22 JavaScript syntax checks, Python 3.11/3.13 CI and Docker. Real HTTP restart/contention regression passes; target Pi acceptance remains open.
 
 # 0.14.223
 
