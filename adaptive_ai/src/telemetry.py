@@ -242,6 +242,10 @@ class Telemetry:
         self.lock = threading.RLock()
         self.samples = {}
         self.recent_samples = {}
+        # Rolling-window p95 history is sampled only by status reads, never by
+        # the inference hot path. Three bounded series, no database writes.
+        self.trends = {}
+        self.trend_sample_at = {}
         self.counts = Counter()
         self.sums = Counter()
         self.reasons = Counter()
@@ -307,6 +311,15 @@ class Telemetry:
                     'recent_count': len(recent),
                     'recent_p95_ms': _p95(recent),
                 }
+                if name in ('event_to_decision', 'candidate_event_to_decision', 'event_to_service_dispatch'):
+                    trend = self.trends.setdefault(name, deque(maxlen=121))
+                    if now_mono - self.trend_sample_at.get(name, float('-inf')) >= 5.0:
+                        trend.append((now_mono, metrics[name]['recent_p95_ms'], len(recent)))
+                        self.trend_sample_at[name] = now_mono
+                    metrics[name]['trend'] = [
+                        {'age_seconds': round(now_mono-stamp, 2), 'p95_ms': value, 'count': count}
+                        for stamp, value, count in trend if now_mono-stamp <= 600.0
+                    ]
             wall,cpu = time.monotonic(),time.process_time()
             recent = 100*(cpu-self.last_cpu)/max(.001,wall-self.last_wall)
             self.last_cpu,self.last_wall = cpu,wall

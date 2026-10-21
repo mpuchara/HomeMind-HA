@@ -1,0 +1,182 @@
+[
+  {
+    "file": "adaptive-ai-runtime-debug-20261021-173854.json",
+    "sha256": "84bfb4402e789e4aa616d8995a4a68738e9251e6aea18f1ff928dc76068a2390",
+    "version": "0.14.222",
+    "generated_at": "2026-10-21T15:38:54.478634+00:00",
+    "storage": {
+      "auto_pool_bytes": 80555461992,
+      "auto_use_percent": 70,
+      "batch_sample_interval_seconds": 0.05,
+      "batch_sample_payload_bytes": 1048576,
+      "blocked_writes": 0,
+      "budget_mode": "auto",
+      "database_max_bytes": 53569382225,
+      "database_used_bytes": 13100449792,
+      "db_bytes": 13100732416,
+      "disk_samples": 1545047,
+      "free_bytes": 67133300736,
+      "level": "normal",
+      "max_statement_payload_bytes": 16777216,
+      "minimum_free_bytes": 24166638598,
+      "page_observations": 1001535,
+      "readonly_page_observations_skipped": 1194879,
+      "reason": null,
+      "sample_error": null,
+      "wal_bytes": 158105032,
+      "wal_max_bytes": 2819441169
+    },
+    "memory_failures": [
+      {
+        "progress": 0.785714285689197,
+        "wall_seconds": 21727.569,
+        "peak_rss_mb": 770.566,
+        "memory_limit_mb": 768.0,
+        "host": {
+          "available": 5477.3,
+          "total": 7806.3
+        }
+      },
+      {
+        "progress": 0.7857142856888872,
+        "wall_seconds": 20443.906,
+        "peak_rss_mb": 770.055,
+        "memory_limit_mb": 768.0,
+        "host": {
+          "available": 5852.5,
+          "total": 7806.3
+        }
+      }
+    ],
+    "active_training_workers": 2,
+    "event_to_decision": {
+      "avg_ms": 118.62584656654859,
+      "count": 61239,
+      "p95_ms": 436.2888150062645,
+      "recent_count": 17,
+      "recent_p95_ms": 1967.1164830069756
+    },
+    "ws_receive_to_decision": {
+      "avg_ms": 327.17886611649976,
+      "count": 61239,
+      "p95_ms": 1711.3099280104507,
+      "recent_count": 17,
+      "recent_p95_ms": 2479.4702819926897
+    },
+    "replay_cache": {
+      "copy_rows": false,
+      "entries": 22064,
+      "evictions": 0,
+      "hit_rate": 0.007422736065500022,
+      "hits": 165,
+      "max_entry_rows": 1536,
+      "max_rows": 32768,
+      "misses": 22064,
+      "rows": 0
+    },
+    "edge_index": {
+      "build_seconds": 7.556409,
+      "contract": "observation_transition_edge_index_v1",
+      "cover_end": 1792587164.5859427,
+      "cover_start": 1791377264.5858994,
+      "estimated_bytes": 0,
+      "fallback_entities": 1,
+      "indexed_entities": 0,
+      "requested_entities": 1,
+      "reused": true,
+      "rows_loaded": 262145,
+      "source_rows": 0,
+      "sql_queries": 2
+    }
+  },
+  {
+    "file": "adaptive-ai-runtime-debug-20261021-174024.json",
+    "sha256": "adf0b75bbbdf19dd69bf1bd3bf66e302f6960e58cfffe72d666305394a356b94",
+    "version": "0.14.222",
+    "generated_at": "2026-10-21T15:40:24.499356+00:00",
+    "storage": {
+      "auto_pool_bytes": 80555461992,
+      "auto_use_percent": 70,
+      "batch_sample_interval_seconds": 0.05,
+      "batch_sample_payload_bytes": 1048576,
+      "blocked_writes": 0,
+      "budget_mode": "auto",
+      "database_max_bytes": 53569382225,
+      "database_used_bytes": 13100584960,
+      "db_bytes": 13100740608,
+      "disk_samples": 1546738,
+      "free_bytes": 67085836288,
+      "level": "normal",
+      "max_statement_payload_bytes": 16777216,
+      "minimum_free_bytes": 24166638598,
+      "page_observations": 1002577,
+      "readonly_page_observations_skipped": 1195646,
+      "reason": null,
+      "sample_error": null,
+      "wal_bytes": 205567432,
+      "wal_max_bytes": 2819441169
+    },
+    "memory_failures": [
+      {
+        "progress": 0.785714285689197,
+        "wall_seconds": 21727.569,
+        "peak_rss_mb": 770.566,
+        "memory_limit_mb": 768.0,
+        "host": {
+          "available": 5477.3,
+          "total": 7806.3
+        }
+      },
+      {
+        "progress": 0.7857142856888872,
+        "wall_seconds": 20443.906,
+        "peak_rss_mb": 770.055,
+        "memory_limit_mb": 768.0,
+        "host": {
+          "available": 5852.5,
+          "total": 7806.3
+        }
+      }
+    ],
+    "active_training_workers": 2,
+    "event_to_decision": {
+      "avg_ms": 118.66188891749864,
+      "count": 61249,
+      "p95_ms": 437.08792299730703,
+      "recent_count": 6,
+      "recent_p95_ms": 401.4075229933951
+    },
+    "ws_receive_to_decision": {
+      "avg_ms": 327.3209965770761,
+      "count": 61249,
+      "p95_ms": 1711.3099280104507,
+      "recent_count": 6,
+      "recent_p95_ms": 1582.056786006433
+    },
+    "replay_cache": {
+      "copy_rows": false,
+      "entries": 22064,
+      "evictions": 0,
+      "hit_rate": 0.007422736065500022,
+      "hits": 165,
+      "max_entry_rows": 1536,
+      "max_rows": 32768,
+      "misses": 22064,
+      "rows": 0
+    },
+    "edge_index": {
+      "build_seconds": 7.556409,
+      "contract": "observation_transition_edge_index_v1",
+      "cover_end": 1792587164.5859427,
+      "cover_start": 1791377264.5858994,
+      "estimated_bytes": 0,
+      "fallback_entities": 1,
+      "indexed_entities": 0,
+      "requested_entities": 1,
+      "reused": true,
+      "rows_loaded": 262145,
+      "source_rows": 0,
+      "sql_queries": 2
+    }
+  }
+]

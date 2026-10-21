@@ -25,6 +25,9 @@ class ReplayQueryCache:
     def __init__(self, max_rows=8192, max_entry_rows=1024, copy_rows=True):
         self.max_rows = max(0, int(max_rows))
         self.max_entry_rows = max(1, int(max_entry_rows))
+        # Empty results consume Python keys/containers too. A row-only budget
+        # allowed tens of thousands of negative entries across persistent chunks.
+        self.max_entries = min(4096, self.max_rows)
         # Default keeps the historical defensive-copy contract. A private persistent
         # training worker can opt into read-only row sharing to avoid tens of thousands
         # of transient dict allocations across logical chunks.
@@ -70,7 +73,7 @@ class ReplayQueryCache:
             self.rows -= len(previous)
         self.data[key] = rows
         self.rows += len(rows)
-        while self.rows > self.max_rows and self.data:
+        while (self.rows > self.max_rows or len(self.data) > self.max_entries) and self.data:
             _, evicted = self.data.popitem(last=False)
             self.rows -= len(evicted)
             self.evictions += 1
@@ -85,6 +88,7 @@ class ReplayQueryCache:
             "evictions": int(self.evictions),
             "max_rows": int(self.max_rows),
             "max_entry_rows": int(self.max_entry_rows),
+            "max_entries": int(self.max_entries),
             "copy_rows": bool(self.copy_rows),
             "hit_rate": (float(self.hits) / requests) if requests else None,
         }

@@ -18,7 +18,7 @@ from startup_components import StartupComponents
 # Exact names only: never expose arbitrary files or paths from the application directory.
 UI_SCRIPT_ASSETS = frozenset({
     "ui_bootstrap.js", "home.js", "polling_guard.js", "app.js", "debug_export_ui.js",
-    "runtime_debug_ui.js", "settings.js", "p0.js", "automation_baseline_ui.js", "queue.js",
+    "runtime_debug_ui.js", "settings.js", "latency_sparkline.js", "p0.js", "automation_baseline_ui.js", "queue.js",
     "experiments.js", "manual_feedback.js", "teach_observed_ui.js", "candidate_ui.js",
     "candidate_preference_ui.js", "agent_workflow_ui.js", "explore_ui.js",
     "promotion_lifecycle_ui.js", "confidence_contract_ui.js", "simple_agent_names.js",

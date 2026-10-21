@@ -83,7 +83,7 @@ class DeferredTournamentObservations:
                           last_capture_ms=None, peak_bytes=0, coalesced=0, pending_interval_skips=0)
         self._sample_memory()
         self.temporal_snapshots = TemporalObservationSnapshots(max_bytes=min(64*1024**2, self.max_bytes))
-        self.state_snapshots = DetachedMappingSnapshots(max_bytes=min(16*1024**2, self.max_bytes))
+        self.state_snapshots = DetachedMappingSnapshots(max_bytes=min(16*1024**2, self.max_bytes), reuse_complete=True)
         self.registry_snapshots = DetachedMappingSnapshots(
             max_bytes=min(8*1024**2, self.max_bytes), reuse_complete=True)
 

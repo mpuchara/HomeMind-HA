@@ -3459,8 +3459,17 @@ class HistoryManager(threading.Thread):
             )
             if persistent_cache:
                 self._persistent_transition_edge_index = transition_edge_index
+        # Keep the full-window sparse index persistent; only dense overflows get
+        # a bounded chunk overlay. Never retain one chunk's incomplete coverage as
+        # the index for a later chunk.
+        if transition_edge_index is not None:
+            overlay = getattr(transition_edge_index, "for_chunk", None)
+            if callable(overlay):
+                transition_edge_index = overlay(
+                    STORE, start_ts, end_ts, connection=replay_connection
+                )
         edge_index_construction_seconds = (
-            0.0 if edge_index_reused
+            0.0 if edge_index_reused and not getattr(transition_edge_index, "chunk_overlay", False)
             else time.perf_counter() - edge_index_started
         )
         self.training_transition_edge_index_status = (

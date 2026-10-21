@@ -1,3 +1,12 @@
+# 0.14.223
+
+- Add a subtle overview latency sparkline: rolling 60-second p95 history, up to 10 minutes, bounded RAM only, no additional polling or disk writes. Missing samples remain gaps.
+- Raise previous default training RSS ceilings to 1536 MB per worker, still capped by host memory fractions and parallel headroom. The large-RAM profile permits 128 MB SQLite cache. Migrate former defaults (1024/768/64); retain other explicit custom limits.
+- Bound empty-result replay cache entries as well as cached row count, preventing unbounded negative-key accumulation during persistent training.
+- Build bounded per-chunk transition indexes for dense sources that overflow the full-window index. Preserve fallback, temporal ordering and late-arrival semantics.
+- Reuse complete detached state frames across observer captures while retaining replacement and in-place correction validation.
+- Disk allocation remains operator-controlled: supplied exports already show 70%, about 50 GiB database capacity and zero blocked writes. Validation pending.
+
 # 0.14.222
 
 - Remove the shipped startup wrapper's synchronous training start from HTTP admission. The queue worker wakes on enqueue and owns preparation.

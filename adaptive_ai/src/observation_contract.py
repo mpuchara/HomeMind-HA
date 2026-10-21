@@ -1630,6 +1630,7 @@ class ObservationTransitionEdgeIndex:
                 or cls.DEFAULT_MAX_ROWS_PER_ENTITY
             ),
         )
+        index.max_rows_per_entity = maximum
         owns_connection = connection is None
         conn = connection
         if conn is None:
@@ -1679,6 +1680,27 @@ class ObservationTransitionEdgeIndex:
             and float(hi) <= self.cover_end + 1e-9
         )
 
+    def for_chunk(self, store, lo, hi, *, connection=None):
+        """Index dense overflow sources for this chunk, retaining sparse tuples.
+
+        A full 14-day dense source can exceed the per-entity cap even though a
+        replay chunk fits easily. Avoid making every transition query fall back
+        to SQLite for the remainder of the training pass. The same row cap and
+        causal source readers still apply; an overflowing chunk keeps its fallback.
+        """
+        if not self.fallback_entities or not self.covers(lo, hi):
+            return self
+        local = type(self).build(store, self.fallback_entities, lo, hi,
+                                 connection=connection,
+                                 max_rows_per_entity=self.max_rows_per_entity)
+        local.requested_entities = self.requested_entities
+        local.records = {**self.records, **local.records}
+        local.source_rows = sum(map(len, local.records.values()))
+        local.estimated_bytes = local.source_rows * 160
+        local.chunk_overlay = True
+        local.full_window_fallback_entities = len(self.fallback_entities)
+        return local
+
     def new_cursor(self, entity_id):
         records = self.records.get(str(entity_id))
         if records is None:
@@ -1698,6 +1720,8 @@ class ObservationTransitionEdgeIndex:
             "sql_queries": int(self.sql_queries),
             "estimated_bytes": int(self.estimated_bytes),
             "build_seconds": float(self.build_seconds),
+            "chunk_overlay": bool(getattr(self, "chunk_overlay", False)),
+            "full_window_fallback_entities": int(getattr(self, "full_window_fallback_entities", 0)),
         }
 
 
