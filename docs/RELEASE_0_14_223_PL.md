@@ -18,6 +18,8 @@ Puste wyniki replay mają teraz osobny limit wpisów (maksymalnie 4096), więc s
 
 ## Walidacja i ograniczenia
 
-Końcowa walidacja w toku. Testy obejmują spóźnione rekordy, brak dostępności sensora, cofanie zapytań, porównanie z wcześniejszym czytnikiem, ograniczenie pustych wpisów, profile małej pamięci i niestandardowe limity. Osobny benchmark mierzy jedynie transport zapytań gęstej historii oraz kopiowanie stanów. Nie jest pomiarem pełnego treningu ani reakcji urządzeń na Raspberry Pi. Zmiany nie naprawiają automatycznie kosztu każdej opcjonalnej analizy i wszystkich zapisów SQLite. Końcowy pomiar na Pi wymaga świeżych eksportów po instalacji.
+Końcowa walidacja: **2757 testów OK / 338.731 s lokalnie**, entrypoint, oba UI, compileall i 22 skrypty JS. Dokładny kod wykonawczy d936d9a8 przeszedł CI Python 3.11/3.13, dodatkowe kontrole i obraz Docker. Zgodność manifestu 638 źródeł/testów/narzędzi potwierdzona. Testy obejmują spóźnione rekordy, brak dostępności sensora, cofanie zapytań, porównanie z wcześniejszym czytnikiem, ograniczenie pustych wpisów, profile małej pamięci i niestandardowe limity. Osobny benchmark mierzy jedynie transport zapytań gęstej historii oraz kopiowanie stanów. Nie jest pomiarem pełnego treningu ani reakcji urządzeń na Raspberry Pi. Zmiany nie naprawiają automatycznie kosztu każdej opcjonalnej analizy i wszystkich zapisów SQLite. Końcowy pomiar na Pi wymaga świeżych eksportów po instalacji.
 
 Do kontynuowania częściowego treningu użyj Resume training. Aktualizacja nie wymaga Rebuild model ani kasowania danych dodatku.
+
+PR: https://github.com/mpuchara/HomeMind-HA/pull/339. CI: https://github.com/mpuchara/HomeMind-HA/actions/runs/39630939956. Raporty w docs/benchmarks/PERFORMANCE_PLAN_0_14_223_*.json. Ostatni commit obejmuje tylko raporty i metadane.

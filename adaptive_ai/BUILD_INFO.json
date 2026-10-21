@@ -3,7 +3,7 @@
   "release_date": "2026-10-21",
   "base_version": "0.14.222",
   "base_commit": "dbe5be5720d2b7bae5b779654fc8b619766f68d8",
-  "release_status": "draft-validation-pending",
+  "release_status": "draft-functional-validation-passed-target-pi-acceptance-open",
   "release_014140": {
     "scope": "inventory_and_remove_remaining_shipped_feature_Handler_fallbacks_for_Candidate_Live_and_manual_feedback_transport",
     "explicit_routes": "manual_feedback.js, candidate_ui.js, candidate_preference_ui.js, /api/candidates, Candidate Teach-RL status/train, generation history/comparison, /api/candidate-live, /api/live and Candidate discard",
@@ -249,8 +249,8 @@
   "pi4_release_gate_contract": "pi4_release_gate_v1",
   "pi4_real_hardware_required": true,
   "stage7_offline_rl_control_unlock": false,
-  "tests_passed": 2751,
-  "tests_passed_version": "0.14.222",
+  "tests_passed": 2757,
+  "tests_passed_version": "0.14.223",
   "profile": "rpi4-ram-first-complete-discovery-manual-agent-selection",
   "manual_agent_training": true,
   "max_concurrent_training_jobs": 1,
@@ -286,7 +286,7 @@
   "migration": "no destructive migration; existing agents, models, feedback, raw archive, historical experiences, candidate lineage, rollback and generation state preserved",
   "physical_control": "unchanged; repaired agents return to Shadow and Control still requires qualified state plus all existing guards",
   "pi4": "0.14.38 targets the long-soak Raspberry Pi failure: drift analysis is coalesced on a throttled background observer, REST /states reconciliation is delta-only after bootstrap, websocket outage fallback reconciles every 10 s, and HA core-state health is tracked separately from unrelated REST errors.",
-  "ci_status": "0.14.223 validation pending; earlier receipts retain original version labels.",
+  "ci_status": "0.14.223 executable source d936d9a8: 2757 local tests, Python 3.11/3.13 CI, workflow checks and Docker pass. Target Pi training and response acceptance remains open.",
   "training_slice_budget": "adaptive-ai-index workers call a shared CooperativeTrainingBudget; expensive temporal tracker loops yield between entities/events and finalization is no longer outside the throttle",
   "finalization_lifeline": "HEAVY_JOBS remains owned through final gc.collect(), so /api/status and /api/agents stay on lightweight lifeline reads until the worker is actually finished",
   "finalization_progress": "post-replay UI now exposes bounded stages: replay complete, policy serialization, benchmark save, qualification, checkpoint complete",
@@ -2760,7 +2760,7 @@
     "benchmark": "docs/benchmarks/CONTEXT_BUFFER_0_14_195_VALIDATION.json",
     "median_observer_speedup": 1.018396920512725
   },
-  "release_validation_tests_passed": 2751,
+  "release_validation_tests_passed": 2757,
   "release_014196": {
     "scope": "typed_deferred_batch_busy_retry_and_cooperative_wal_reclaim_write_admission",
     "learning_semantics_changed": false,
@@ -3623,6 +3623,55 @@
       "Dense-source chunk overlays with legacy causal query parity",
       "Complete state snapshot reuse with mutation validation"
     ],
-    "validation": "pending"
+    "validation": {
+      "tests": 2757,
+      "seconds": 338.731,
+      "result": "OK",
+      "log_sha256": "04977a030b830f0a85dc327c1aed1caf7a0c0698c49de8f5614596b0a5d379e5"
+    },
+    "source_files": 638,
+    "latest_executable_ci": {
+      "commit": "d936d9a856a3bb8f3f0bcda908525f47c87ff4e1",
+      "tree": "8d6fdebf1c83aa4bd9db8d908ba478cd20edf602",
+      "run_id": 39630939956,
+      "run_url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/39630939956",
+      "conclusion": "success",
+      "python311": {
+        "job_id": 119328626784,
+        "tests": 2757,
+        "seconds": 189.434,
+        "result": "OK"
+      },
+      "python313": {
+        "job_id": 119328626922,
+        "tests": 2757,
+        "seconds": 283.138,
+        "result": "OK"
+      },
+      "jobs": [
+        {
+          "id": 119328626784,
+          "name": "tests (3.11)",
+          "conclusion": "success"
+        },
+        {
+          "id": 119328626922,
+          "name": "tests (3.13)",
+          "conclusion": "success"
+        },
+        {
+          "id": 119328626951,
+          "name": "image",
+          "conclusion": "success"
+        },
+        {
+          "id": 119332306084,
+          "name": "package",
+          "conclusion": "skipped"
+        }
+      ],
+      "package_skipped": "Expected for a pull request; install ZIPs built locally."
+    },
+    "qa_report": "docs/benchmarks/PERFORMANCE_PLAN_0_14_223_QA.json"
   }
 }

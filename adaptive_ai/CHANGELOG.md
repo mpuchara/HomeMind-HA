@@ -5,7 +5,7 @@
 - Bound empty-result replay cache entries as well as cached row count, preventing unbounded negative-key accumulation during persistent training.
 - Build bounded per-chunk transition indexes for dense sources that overflow the full-window index. Preserve fallback, temporal ordering and late-arrival semantics.
 - Reuse complete detached state frames across observer captures while retaining replacement and in-place correction validation.
-- Disk allocation remains operator-controlled: supplied exports already show 70%, about 50 GiB database capacity and zero blocked writes. Validation pending.
+- Disk allocation remains operator-controlled: supplied exports already show 70%, about 50 GiB database capacity and zero blocked writes. Validation: 2757 local tests OK (338.731s), entrypoint, both UI VMs, compileall, 22 JavaScript syntax checks, Python 3.11/3.13 CI and Docker. Component benchmarks and a desktop fixture preview pass; target Pi acceptance remains open.
 
 # 0.14.222
 
