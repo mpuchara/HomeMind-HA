@@ -11,7 +11,6 @@ import time
 from urllib.parse import parse_qs, unquote, urlsplit
 
 from agent_candidate_lineage import _row as lineage_row
-from agent_workflow_actions import _resolve_generation
 from context import archived_state, target_value
 from teach_observed_history import DESIRED_STALE_SECONDS, _desired_at, _recorded_rows, _timestamps
 from training_budget import TRAINING_BUDGET
@@ -20,6 +19,33 @@ from teaching_rl import fingerprint as rl_fingerprint
 
 
 CHART_CONTRACT = "observed_direct_parent_vs_child_no_policy_replay"
+
+
+def _resolve_history_generation(manager, ref):
+    """Resolve observed reads without mutating lineage or loading policy weights.
+
+    The mutation resolver synchronizes Live model metadata under Store.lock.
+    Historical evidence needs only identity and configuration, including when
+    the original model is unavailable. Save/undo/training retain their guards.
+    """
+    ref = str(ref)
+    generation = lineage_row(manager.store, generation_id=ref) or lineage_row(manager.store, agent_id=ref)
+    aid = generation.get('agent_id') if generation else (ref[5:] if ref.startswith('root:') else ref)
+    agent = manager.store.get_agent_config(str(aid)) if aid else None
+    if not agent:
+        raise ValueError('Generation configuration is no longer retained')
+    if generation is None:
+        # A first history read must not create a root row or hash the full model.
+        generation = dict(generation_id='root:'+str(aid), root_agent_id=str(aid),
+                          agent_id=str(aid), generation_type='live', generation_number=0,
+                          parent_generation_id=None)
+    else:
+        generation = dict(generation)
+    if generation.get('generation_type') == 'live':
+        counter = getattr(manager, '_generation', None)
+        if callable(counter):
+            generation['generation_number'] = int(counter(str(aid)))
+    return generation, agent
 
 
 def _generation_label(generation):
@@ -306,7 +332,7 @@ def build_correct_history(manager, ref, start, end, legacy_history, compact=Fals
 
     try:
         stage_started = time.perf_counter()
-        generation, agent = _resolve_generation(manager, ref)
+        generation, agent = _resolve_history_generation(manager, ref)
         stage(
             "resolve_generation",
             stage_started,
@@ -317,6 +343,9 @@ def build_correct_history(manager, ref, start, end, legacy_history, compact=Fals
         if end <= start or end - start > 31 * 86400:
             raise ValueError("Choose a history range from 1 second to 31 days")
         payload = _base_payload(generation, agent, start, end)
+        inventory = getattr(manager, 'workflow_correct_inventory', None)
+        if callable(inventory):
+            payload.update(inventory(generation, agent))
 
         stage_started = time.perf_counter()
         labels = _active_labels(manager, agent)
@@ -428,7 +457,7 @@ def build_correct_history(manager, ref, start, end, legacy_history, compact=Fals
 
 def build_correct_point(manager, ref, timestamp, legacy_point):
     TRAINING_BUDGET.request_interactive_window(1.0, reason="correct_point")
-    generation, agent = _resolve_generation(manager, ref)
+    generation, agent = _resolve_history_generation(manager, ref)
     timestamp = float(timestamp)
     observed = _observed_generation_at(manager, generation, timestamp)
     parent = observed_parent = None

@@ -132,9 +132,10 @@ const c={lastAgents:[],Date:class extends Date{static now(){return clock;}},docu
 vm.runInNewContext(fs.readFileSync('adaptive_ai/src/static/agent_workflow_ui.js','utf8'),c);
 const tick=async()=>{const [id,fn]=timers.entries().next().value;timers.delete(id);return fn();};
 (async()=>{
- await c.openWorkflowCorrect('a');assert.equal(requests.length,2);assert.equal(timers.size,1);
- clock+=5000;await tick();assert.equal(requests.length,3);assert.ok(requests[2].includes('end=2005'));
- c.document.hidden=true;await tick();assert.equal(requests.length,3);c.document.hidden=false;
+ // Correct opens directly from observed history; no full-status read is needed.
+ await c.openWorkflowCorrect('a');assert.equal(requests.length,1);assert.equal(timers.size,1);
+ clock+=5000;await tick();assert.equal(requests.length,2);assert.ok(requests[1].includes('end=2005'));
+ c.document.hidden=true;await tick();assert.equal(requests.length,2);c.document.hidden=false;
  dialog.querySelector('[data-time]').oninput();assert.equal(timers.size,0);
  clock+=1000;dialog.querySelector('[data-live]').onclick();await new Promise(r=>setImmediate(r));assert.equal(timers.size,1);
  defer={};clock+=1000;const pending=tick();await new Promise(r=>setImmediate(r));assert.equal(timers.size,0);

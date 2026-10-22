@@ -1,9 +1,9 @@
 {
-  "version": "0.14.225",
+  "version": "0.14.226",
   "release_date": "2026-10-22",
-  "base_version": "0.14.224",
-  "base_commit": "c28ac86d79d675f41a30bb39ac795ea8da5c7e40",
-  "release_status": "draft-local-validation-passed-ci-queued-target-pi-acceptance-open",
+  "base_version": "0.14.225",
+  "base_commit": "9fd5a24f81ad17d853c8b6e10cddc69502cf0ccb",
+  "release_status": "draft-validation-pending",
   "release_014140": {
     "scope": "inventory_and_remove_remaining_shipped_feature_Handler_fallbacks_for_Candidate_Live_and_manual_feedback_transport",
     "explicit_routes": "manual_feedback.js, candidate_ui.js, candidate_preference_ui.js, /api/candidates, Candidate Teach-RL status/train, generation history/comparison, /api/candidate-live, /api/live and Candidate discard",
@@ -3765,5 +3765,14 @@
       }
     },
     "qa_report": "docs/benchmarks/PERFORMANCE_PLAN_0_14_225_QA.json"
+  },
+  "release_014226": {
+    "changes": [
+      "Resolve observed Correct chart and point reads without metadata writes, root creation or model deserialization",
+      "Open/retry Correct from chart metadata without awaiting full workflow status",
+      "Coalesce matching in-flight history reads and retain the last chart on failure",
+      "Keep mutation resolver and Candidate/training/model guards unchanged"
+    ],
+    "validation": "pending"
   }
 }

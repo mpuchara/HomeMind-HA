@@ -1110,6 +1110,7 @@ def install(manager, *, legacy_get=True, legacy_post=True):
     manager._start_build = start_build
     manager._finish_build_if_ready = finish_build
     manager.workflow_subject = workflow_subject
+    manager.workflow_correct_inventory = lambda generation, agent: _correct_label_counts(manager, generation, agent)
     manager.workflow_autonomous = workflow_autonomous
     manager.workflow_correct_commit = workflow_correct_commit
     manager.workflow_change_decision = workflow_change_decision
