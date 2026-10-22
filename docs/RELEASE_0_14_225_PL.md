@@ -22,8 +22,10 @@ REST publikuje powiadomienie Current zaraz po zaakceptowaniu migawki, przed arch
 
 ## Walidacja i instalacja
 
-Końcowa walidacja w toku. 53 testy celowane OK, w tym 9 nowych regresji. Cztery testy ujawniają odpowiadające problemy na zamrożonym kodzie .224 i przechodzą po zmianie. Testy obejmują zamknięty panel, limit i zakończenie samplera, rzeczywistą SQLite podczas zapisu/rollback, brak odświeżania indeksu przez Live, migrację fallback, pojedynczy poll, powiadomienie przed archiwizacją i opóźnione odpowiedzi UI.
+Końcowa walidacja lokalna: **2772 testy OK / 342.768 s**, entrypoint, oba UI, compileall i 22 skrypty JS. Manifest 642 plików źródeł/testów/narzędzi jest zgodny z przetestowanym kodem. GitHub CI dokładnego źródła pozostaje w kolejce. Docker przeszedł test startu na identycznym poddrzewie dodatku; późniejsza zmiana dotyczy wyłącznie izolacji testu harmonogramu. 54 testy celowane OK, w tym 10 nowych regresji. Cztery testy ujawniają odpowiadające problemy na zamrożonym kodzie .224 i przechodzą po zmianie. Testy obejmują zamknięty panel, limit i zakończenie samplera, rzeczywistą SQLite podczas zapisu/rollback, brak odświeżania indeksu przez Live, migrację fallback, pojedynczy poll, powiadomienie przed archiwizacją i opóźnione odpowiedzi UI.
 
 To walidacja funkcjonalna na hoście. Nie stanowi pomiaru sprzętowej reakcji Pi ani potwierdzenia przyczyny zgłoszonych 10 s bez nowego eksportu. Weryfikacja na Pi pozostaje otwarta.
 
 Instalacja: zachować identyfikator, konfigurację, bazę i modele dotychczasowego dodatku; podmienić jego źródła, przebudować obraz, uruchomić i odświeżyć panel Ctrl+F5. Sprawdzić wersję .225. Rebuild model nie jest potrzebny. Zamknąć panel na kilka minut i ponownie otworzyć, aby sprawdzić historię wykresu. Przy próbie urządzenia sprawdzić również status realtime/REST fallback oraz świeży eksport metryk i znaczników czasu.
+
+PR: https://github.com/mpuchara/HomeMind-HA/pull/341. CI źródła 2f10bb65 (w kolejce): https://github.com/mpuchara/HomeMind-HA/actions/runs/39815230753. Końcowy commit obejmuje wyłącznie raporty i metadane.

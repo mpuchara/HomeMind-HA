@@ -5,7 +5,7 @@
 - Keep pending and in-flight archive/decision batches visible to read-only history until commit, restoring retained rows on rollback. Preserve original HA event and actual decision timestamps.
 - Prevent delayed Live replies from overwriting newer Current snapshots or completed Desired independently. Export HA state time, receipt time and current snapshot time separately.
 - Shorten the former default REST fallback from 10 s to 2 s only while websocket realtime is unavailable, with no overlapping poll jobs. Preserve other custom intervals and healthy websocket safety-resync cadence. Wake Current readers immediately after REST state acceptance.
-- Add closed-panel sampler, blocked-writer visibility, delayed-reply and fallback scheduling regressions. Validation pending.
+- Add closed-panel sampler, blocked-writer visibility, delayed-reply and fallback scheduling regressions. Validation: 2772 local tests OK (342.768s), 54 focused tests, 20 scheduler/freshness tests, shipped-entrypoint real HTTP, UI VMs, compileall and 22 JavaScript syntax checks. Exact-source GitHub CI is queued; Docker smoke passed for an identical addon subtree. Four controlled regressions fail on .224 and pass here. Target Pi latency acceptance remains open.
 
 # 0.14.224
 
