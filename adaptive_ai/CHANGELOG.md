@@ -1,3 +1,10 @@
+# 0.14.226
+
+- Resolve observed Correct history/point reads without synchronizing lineage, creating roots, loading or hashing full policy models. Read identity/config and actual recorded evidence only. Missing root metadata gets a read-only descriptor; a retained model is unnecessary for viewing evidence.
+- Remove full workflow-status admission from Correct opening/reconnect/save-refresh/undo-refresh. Populate the title and generation/config from the chart response; workflow mutations retain their existing resolver and model/safety guards.
+- Coalesce repeated pending reads for the same view/range. Retain the last rendered chart on failure and reject stale results after closing/switching views.
+- Add actual final-route HTTP with both Store.lock and a SQLite writer occupied, forbidden-model-read assertions and a real UI-function SVG-render/retry harness. Validation: 2777 local tests OK (282.573s), 26 focused tests, six legacy training/live tests, actual HTTP with writer locks held, UI script/SVG checks, entrypoint, compileall and 22 JS syntax checks. GitHub CI passed on Python 3.11 and 3.13, including image build/start and all required smoke/benchmark steps. Controlled .225 regressions reproduce the lock and status-first dependencies; target Pi acceptance remains open.
+
 # 0.14.225
 
 - Collect rolling latency trend points every 5 s in a bounded RAM sampler owned by Engine, including when the panel is closed. Idle windows remain gaps; no new disk writes.

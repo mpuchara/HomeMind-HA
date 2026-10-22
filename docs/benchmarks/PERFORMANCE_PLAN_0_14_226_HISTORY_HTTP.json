@@ -1,0 +1,12 @@
+{
+  "real_http": true,
+  "shipped_entrypoint": true,
+  "store_lock_held": true,
+  "sqlite_writer_held": true,
+  "live_and_two_generations": true,
+  "direct_parent_preserved": true,
+  "no_model_read": true,
+  "no_full_status": true,
+  "point_read": true,
+  "max_host_read_ms": 24.378
+}

@@ -111,6 +111,7 @@ Parent pozostaje bez zmian. Wynik przejdzie offline gate i Shadow A/B; nie dosta
   document.body.append(dialog);
   let subject=null,ref=null,range=null,data=null,selected=null,requestSeq=0;
   let followLive=false,liveTimer=null,historyReads=0,viewEpoch=0;
+  let historyFlight=null;
   function setFollowLive(enabled){
     if(followLive&&!enabled)++requestSeq;
     followLive=!!enabled;
@@ -158,15 +159,12 @@ Parent pozostaje bez zmian. Wynik przejdzie offline gate i Shadow A/B; nie dosta
 
   async function refreshSubjectAndLoad(){
     if(!dialog.open)return;
-    const epoch=viewEpoch,requestedRef=ref;
+    const epoch=viewEpoch;
     dialog.querySelector('[data-error]').textContent='';
     dialog.querySelector('[data-status]').textContent='Łączę z Adaptive AI i ładuję historię…';
     try{
-      const fresh=await status(requestedRef);
-      if(!dialog.open||epoch!==viewEpoch)return;
-      subject=fresh;
-      const title=dialog.querySelector('[data-title]');
-      if(title)title.textContent=`Correct: ${subject.name} · Gen ${subject.generation_number}`;
+      // History already contains generation/config metadata. Full workflow status
+      // can synchronize model metadata and must not gate this read-only view.
       await load();
     }catch(e){
       if(!dialog.open||epoch!==viewEpoch)return;
@@ -290,6 +288,15 @@ Parent pozostaje bez zmian. Wynik przejdzie offline gate i Shadow A/B; nie dosta
   }
 
   async function load(quiet=false){
+    if(!dialog.open)return;
+    const key=JSON.stringify([viewEpoch,ref,range.start,range.end]);
+    if(historyFlight?.key===key)return historyFlight.promise;
+    const promise=readHistory(quiet);
+    historyFlight={key:JSON.stringify([viewEpoch,ref,range.start,range.end]),promise};
+    try{return await promise;}finally{if(historyFlight?.promise===promise)historyFlight=null;}
+  }
+
+  async function readHistory(quiet=false){
     const seq=++requestSeq,end=Math.min(range.end,Date.now()/1000);range={start:range.start,end};
     if(!Number.isFinite(range.start)||!Number.isFinite(end)||end<=range.start||end-range.start>31*86400){error(Error('Wybierz zakres od 1 sekundy do 31 dni'));return;}
     dialog.querySelector('[data-start]').value=local(range.start);dialog.querySelector('[data-end]').value=local(end);dialog.querySelector('[data-error]').textContent='';if(!quiet)dialog.querySelector('[data-status]').textContent='Ładuję zaobserwowane decyzje generacji…';
@@ -297,7 +304,15 @@ Parent pozostaje bez zmian. Wynik przejdzie offline gate i Shadow A/B; nie dosta
     try{
       const out=normalizeCompactSeries(await api(`api/agent-workflow/${encodeURIComponent(ref)}/correct-history?start=${range.start}&end=${end}&compact=1`));
       if(seq!==requestSeq||!dialog.open)return;
-      data=out;renderLegend();draw();
+      data=out;
+      if(out.agent){
+        subject={...subject,...out.agent,agent_id:out.agent.id,generation_id:out.generation_id,
+          generation_type:out.generation_type,generation_number:out.generation_number,
+          correct_labels_pending:out.correct_labels_pending??null};
+        const title=dialog.querySelector('[data-title]');
+        if(title)title.textContent=`Correct: ${subject.name} · Gen ${subject.generation_number}`;
+      }
+      renderLegend();draw();
       const current=(out.series?.current?.points||[]).length,labels=(out.labels||[]).length;
       const parentPoints=(out.series?.parent_desired?.points||[]).length;
       const candidatePoints=(out.series?.candidate_desired?.points||[]).length;
@@ -309,7 +324,7 @@ Parent pozostaje bez zmian. Wynik przejdzie offline gate i Shadow A/B; nie dosta
       const pending=Number(subject?.correct_labels_pending??labels);
       dialog.querySelector('[data-status]').textContent=`${observed} · ${labels} zapisanych punktów Correct · ${pending} nowych do treningu${gaps?` · ${gaps} luk runtime`:''}. Zapis punktu nie uruchamia treningu.`;
       dialog.querySelector('[data-undo]').disabled=!labels;
-    }catch(e){if(seq===requestSeq&&dialog.open)error(e);}finally{historyReads--;}
+    }catch(e){if(seq===requestSeq&&dialog.open){error(e);dialog.querySelector('[data-status]').textContent='Nie udało się odczytać historii. Użyj „Połącz ponownie”; ostatni wykres pozostaje widoczny.';}}finally{historyReads--;}
   }
 
   async function inspect(ts){
@@ -336,11 +351,11 @@ Parent pozostaje bez zmian. Wynik przejdzie offline gate i Shadow A/B; nie dosta
     ev.preventDefault();if(!selected)return;
     const desired=Number(dialog.querySelector('[data-value]').value);if(!Number.isFinite(desired)){error(Error('Podaj poprawne Desired'));return;}
     setBusy(true);
-    try{await post(ref,'correct-label',{sample_ts:selected.ts,desired_value:desired});selected=null;try{subject=await status(ref);}catch(_){ }await load();}
+    try{await post(ref,'correct-label',{sample_ts:selected.ts,desired_value:desired});selected=null;await load();}
     catch(e){error(e);}finally{setBusy(false);}
   }
 
-  async function undo(){setBusy(true);try{await post(ref,'correct-undo');selected=null;try{subject=await status(ref);}catch(_){ }await load();}catch(e){error(e);}finally{setBusy(false);}}
+  async function undo(){setBusy(true);try{await post(ref,'correct-undo');selected=null;await load();}catch(e){error(e);}finally{setBusy(false);}}
 
   function draw(){
     const box=dialog.querySelector('[data-chart]');if(!box||!data)return;
