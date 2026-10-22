@@ -76,10 +76,10 @@ def _pending_current_rows(engine, entity_id, end):
         return []
     lock = getattr(engine, "lock", None)
     if lock is None:
-        pending = list(queue[-4096:])
+        pending = (list(getattr(engine, 'archive_inflight', ())) + list(queue))[-4096:]
     else:
         with lock:
-            pending = list(queue[-4096:])
+            pending = (list(getattr(engine, 'archive_inflight', ())) + list(queue))[-4096:]
     rows = []
     for row in pending:
         if len(row) >= 6 and str(row[0]) == entity_id and float(row[1]) <= float(end):

@@ -173,6 +173,7 @@ class Teaching:
         self.cache = {}
         self.revisions = {}
         self.buffer = deque(maxlen=8192)
+        self.inflight = []
         self.last_record = {}
         self.dropped_records = 0
         self.last_prune = 0
@@ -552,6 +553,7 @@ class Teaching:
                         return 0
                     batch = list(self.buffer)
                     self.buffer.clear()
+                    self.inflight = batch
                 prune_ts = time.time()
                 prune = prune_ts - self.last_prune > 3600
                 from sqlite_bulk_rows import insert_bounded_rows
@@ -564,6 +566,8 @@ class Teaching:
                 if prune:
                     self.last_prune = prune_ts
                 self.last_flush = time.monotonic()
+                with self.lock:
+                    self.inflight = []
                 return len(batch)
             except Exception:
                 with self.lock:
@@ -572,6 +576,7 @@ class Teaching:
                     self.dropped_records += excess
                     self.buffer.clear()
                     self.buffer.extend(merged[excess:])
+                    self.inflight = []
                 raise
             finally:
                 self.store.lock.release()

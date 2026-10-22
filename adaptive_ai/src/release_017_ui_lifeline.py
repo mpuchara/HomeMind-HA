@@ -127,9 +127,13 @@ def install(runtime):
 
         configs = hot_configs()
         with core.ENGINE.lock:
+            current_observed_ts = time.time()
             states = dict(core.ENGINE.state_map)
+            current_revisions = dict(getattr(core.ENGINE, 'entity_revisions', {}))
+            current_receipts = dict(getattr(core.ENGINE, 'entity_state_received_ts', {}))
             hot_runtime = {
-                aid: dict(value) for aid, value in core.ENGINE.runtime.items()
+                aid: {**dict(value), **dict(value.get('_live_decision') or {})}
+                for aid, value in core.ENGINE.runtime.items()
             }
             realtime_connected = bool(core.ENGINE.ws_connected)
             realtime_error = core.ENGINE.ws_error
@@ -145,6 +149,9 @@ def install(runtime):
         out = []
         runtime_keys = (
             "last_prediction",
+            "last_prediction_label",
+            "last_inference_ts",
+            "decision_ready_ts",
             "last_confidence",
             "last_uncertainty",
             "last_expected_reward",
@@ -180,6 +187,11 @@ def install(runtime):
                 if target_state
                 else None
             )
+            from settings import parse_ts
+            runtime_payload['current_observed_ts'] = current_observed_ts
+            runtime_payload['current_state_ts'] = parse_ts((target_state or {}).get('last_updated') or (target_state or {}).get('last_changed'))
+            runtime_payload['current_received_ts'] = current_receipts.get(config['target_entity'])
+            runtime_payload['current_revision'] = current_revisions.get(config['target_entity'], 0)
             runtime_payload["training_state"] = config.get("training_state") or "training"
             runtime_payload["realtime_connected"] = realtime_connected
             runtime_payload["realtime_error"] = realtime_error

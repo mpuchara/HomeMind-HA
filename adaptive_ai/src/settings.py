@@ -16,7 +16,7 @@ try:
 except Exception:
     ws_connect = None
 
-APP_VERSION = "0.14.224"
+APP_VERSION = "0.14.225"
 HISTORY_BOOTSTRAP_REVISION = "target-attrs-v2"
 TRAINING_REVISION = "shared-home-intents-v26"
 DATA_DIR = Path(os.environ.get("ADAPTIVE_AI_DATA", "/data"))
@@ -42,7 +42,7 @@ DEFAULT_OPTIONS = {
     "realtime_resync_seconds": 900,
     # If realtime is unavailable, keep Current usable without restoring the old 30 s lag.
     # Delta-only reconciliation makes this temporary fallback cheap enough for Pi 4.
-    "realtime_fallback_poll_seconds": 10,
+    "realtime_fallback_poll_seconds": 2,
     "proactive_tick_seconds": 1,
     # Cold startup prediction warm-up fills only free inference-worker slots and never
     # waits for Home Assistant to become completely quiet.
@@ -473,6 +473,8 @@ def load_options():
             # still coalesce bursts; preserve other explicitly configured delays.
             if data.get("realtime_inference_debounce_ms") in (25, 75):
                 options["realtime_inference_debounce_ms"] = 0
+            if data.get("realtime_fallback_poll_seconds") == 10:
+                options["realtime_fallback_poll_seconds"] = 2
             # 0.14.15: migrate only the previously shipped defaults. Explicit custom
             # values remain untouched; the new defaults make long historical replay
             # suitable for Raspberry Pi class hosts.

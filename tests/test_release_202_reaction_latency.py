@@ -143,8 +143,11 @@ class RetryAdmissionTests(unittest.TestCase):
         r._schedule_housekeeping = Mock()
         r._maybe_schedule_state_resync = Mock()
         r.process = Mock(side_effect=lambda *a,**kw: r.stop_event.set())
-        with patch.dict(engine_module.OPTIONS, {'realtime_inference_debounce_ms':250}):
+        # The independent trend sampler also waits on the lifecycle stop event.
+        # Isolate it so this assertion observes scheduler debounce only.
+        with patch.dict(engine_module.OPTIONS, {'realtime_inference_debounce_ms':250}), patch.object(engine_module.TELEMETRY, 'start_trend_sampling') as sampler:
             r.run()
+        sampler.assert_called_once_with(r.stop_event)
         r.process.assert_called_once()
         r.stop_event.wait.assert_not_called()
 

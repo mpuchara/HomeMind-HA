@@ -44,10 +44,10 @@ def _buffer_snapshot(engine, agent_id, end):
         return []
     try:
         if lock is None:
-            rows = list(buffer)
+            rows = list(getattr(teaching, 'inflight', ())) + list(buffer)
         else:
             with lock:
-                rows = list(buffer)
+                rows = list(getattr(teaching, 'inflight', ())) + list(buffer)
     except Exception:
         return []
     out = []

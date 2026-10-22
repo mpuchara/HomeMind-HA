@@ -18,7 +18,19 @@
     const n=Number(raw);return Number.isFinite(n)?`${(n*100).toFixed(1)}%`:'—';
   };
 
-  window.applyLiveValues=()=>{for(const a of lastAgents){const live=liveValues.get(String(a.id));if(live)a.runtime={...a.runtime,...live};}};
+  const mergeLive=(runtime,live)=>{
+    const next={...runtime,...live};
+    // A slow older HTTP response must not rewind a newer physical snapshot or
+    // completed decision already received through the independent read path.
+    if(Number(runtime.current_observed_ts||runtime.live_snapshot_ts||0)>Number(live.current_observed_ts||live.live_snapshot_ts||0)){
+      for(const key of ['current_value','current_state_ts','current_received_ts','current_revision','current_observed_ts'])next[key]=runtime[key];
+    }
+    if(Number(runtime.decision_ready_ts||runtime.last_inference_ts||0)>Number(live.decision_ready_ts||live.last_inference_ts||0)){
+      for(const key of ['last_prediction','last_prediction_label','last_confidence','last_inference_ts','decision_ready_ts','decision_source','teaching_id','fast_off_confirmation_active','fast_off_confirmation_elapsed','fast_off_confirmation_required'])next[key]=runtime[key];
+    }
+    return next;
+  };
+  window.applyLiveValues=()=>{for(const a of lastAgents){const live=liveValues.get(String(a.id));if(live)a.runtime=mergeLive(a.runtime||{},live);}};
   async function refreshLive(){
     if(window.__adaptiveAiUiReady===false||liveBusy||document.hidden||window.__adaptiveAiRuntimeReady===false)return;
     liveBusy=true;const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),2500);
