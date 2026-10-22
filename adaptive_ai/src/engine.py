@@ -153,6 +153,7 @@ class HAEventStream(threading.Thread):
                             flush_registry_due()
                             continue
                         websocket_received_perf = time.perf_counter()
+                        websocket_received_ts = now_ts()
                         msg = json.loads(raw)
                         with self.engine.lock:
                             self.engine.ws_messages_total += 1
@@ -196,6 +197,13 @@ class HAEventStream(threading.Thread):
                         event = msg.get("event") or {}
                         data = dict(event.get("data") or {})
                         data['_hm_ws_received_perf'] = websocket_received_perf
+                        data['_hm_ws_received_ts'] = websocket_received_ts
+                        state_ts = parse_ts((data.get('new_state') or {}).get('last_updated'))
+                        if state_ts is not None:
+                            if state_ts <= websocket_received_ts:
+                                TELEMETRY.observe('ha_state_to_ws_receive', (websocket_received_ts-state_ts)*1000)
+                            else:
+                                TELEMETRY.inc('ha_state_clock_ahead')
                         with self.engine.lock:
                             self.engine.ws_state_events_total += 1
                             # Receiving a real event is definitive evidence even if a
@@ -325,6 +333,8 @@ class Engine(threading.Thread):
         self.archive_seen = {}
         self.archive_last_ts = {}
         self.pending_archive = []
+        self.archive_inflight = []
+        self.archive_flush_lock = threading.Lock()
         self.archive_flush_interval_seconds = 5.0
         self.archive_flush_batch_rows = 128
         self.last_archive_flush = time.monotonic()
@@ -339,6 +349,7 @@ class Engine(threading.Thread):
         # before a coalesced inference pass reaches its worker.
         self.entity_event_received_perf = {}
         self.entity_ws_received_perf = {}
+        self.entity_state_received_ts = {}
         # Policy inference is predominantly Python CPU work. More worker threads increase
         # GIL contention and can starve Ingress on Raspberry Pi. Two workers retain limited
         # overlap for SQLite/I/O while bounding CPU contention; single-core hosts stay at 1.
@@ -497,6 +508,7 @@ class Engine(threading.Thread):
                 "registry_refresh": registry_refresh_stats,
                 "housekeeping": housekeeping_stats,
                 "healthy_resync_seconds": float(OPTIONS.get("realtime_resync_seconds", 900)),
+                "fallback_poll_seconds": float(OPTIONS.get("realtime_fallback_poll_seconds", 2)),
             },
             "inference_scheduler": {
                 **inference_scheduler,
@@ -619,6 +631,10 @@ class Engine(threading.Thread):
                 return
             self.state_revision += 1
             self.entity_revisions[entity_id] = self.state_revision
+            receipt = data.get('_hm_ws_received_ts')
+            self.entity_state_received_ts[entity_id] = (float(receipt)
+                if type(receipt) in (int, float) and math.isfinite(receipt) and 0 < receipt <= received_ts
+                else received_ts)
             if new_state is None:
                 self.state_map.pop(entity_id, None)
             else:
@@ -716,6 +732,15 @@ class Engine(threading.Thread):
             self.archive_last_ts[entity_id] = now
 
     def flush_archive(self, force=True):
+        # Keep batches visible to read-only history while their commit is in flight.
+        if not hasattr(self, 'archive_flush_lock'):
+            with self.lock:
+                if not hasattr(self, 'archive_flush_lock'):
+                    self.archive_flush_lock = threading.Lock()
+        with self.archive_flush_lock:
+            return self._flush_archive(force)
+
+    def _flush_archive(self, force=True):
         """Persist live history in coarse batches instead of one WAL txn per tick."""
         now = time.monotonic()
         with self.lock:
@@ -728,12 +753,16 @@ class Engine(threading.Thread):
                 return 0
             rows = self.pending_archive
             self.pending_archive = []
+            self.archive_inflight = rows
         try:
             written = STORE.archive_batch(rows)
         except Exception:
             with self.lock:
                 self.pending_archive = rows + self.pending_archive
+                self.archive_inflight = []
             raise
+        with self.lock:
+            self.archive_inflight = []
         self.last_archive_flush = time.monotonic()
         return int(written or 0)
 
@@ -786,9 +815,12 @@ class Engine(threading.Thread):
                 self.context.configure(state_map)
 
             poll_received_ts = now_ts()
+            if not hasattr(self, 'entity_state_received_ts'):
+                self.entity_state_received_ts = {}
             for eid in changed_eids:
                 self.state_revision += 1
                 self.entity_revisions[eid] = self.state_revision
+                self.entity_state_received_ts[eid] = poll_received_ts
                 current_state = state_map.get(eid)
                 event_ts = parse_ts(
                     (current_state or {}).get("last_updated") or
@@ -828,6 +860,12 @@ class Engine(threading.Thread):
             self.next_resync_retry_monotonic = 0.0
             self.error = None
 
+        # Current readers must wake at acceptance, before optional archive persistence.
+        if initial or changed_eids:
+            updates = getattr(self, 'live_card_updates', None)
+            if updates is not None:
+                updates.publish()
+
         # Initial bootstrap needs every current entity once. Later safety/fallback polls
         # touch only the changed suffix instead of rebuilding temporal/archive state for
         # the whole Home Assistant installation.
@@ -839,7 +877,8 @@ class Engine(threading.Thread):
             ts = parse_ts(st.get("last_updated") or st.get("last_changed")) or poll_received_ts
             self.temporal_history.add(eid, ts, self._temporal_state(st))
             self._queue_archive_state(st, received_ts=poll_received_ts)
-        self.flush_archive(force=False)
+        # The existing housekeeping worker persists the queue. A slow microSD
+        # commit must not occupy the sole REST poll slot and delay its next read.
         if initial or changed_eids:
             self.wake_event.set()
 
@@ -1069,10 +1108,10 @@ class Engine(threading.Thread):
         resync_seconds = float(
             OPTIONS.get("realtime_resync_seconds", 900)
             if healthy
-            else OPTIONS.get("realtime_fallback_poll_seconds", 10)
+            else OPTIONS.get("realtime_fallback_poll_seconds", 2)
         )
         periodic_due = (
-            now_epoch - last_full_poll >= max(5.0, resync_seconds)
+            now_epoch - last_full_poll >= max(5.0 if healthy else 1.0, resync_seconds)
         )
         if not urgent and not periodic_due:
             return False
@@ -1211,6 +1250,7 @@ class Engine(threading.Thread):
         return 0
 
     def run(self):
+        TELEMETRY.start_trend_sampling(self.stop_event)
         print(f"Adaptive AI {APP_VERSION} starting; HA={HA_BASE_URL}", flush=True)
         STORE.event(None, "info", "startup", f"Adaptive AI {APP_VERSION} started", None)
         try:

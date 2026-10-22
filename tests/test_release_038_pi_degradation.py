@@ -105,7 +105,7 @@ class Release038PiDegradationTests(unittest.TestCase):
     def test_live_cards_use_ram_agent_config_cache(self):
         source = self.source("agent_live_card_refresh.py")
         body = source.split("def live_agent_payload", 1)[1].split("def install", 1)[0]
-        self.assertIn("core.ENGINE._refresh_agent_index()", body)
+        self.assertNotIn("core.ENGINE._refresh_agent_index()", body)
         self.assertIn("core.ENGINE.all_agent_configs.values()", body)
         self.assertNotIn("STORE.list_agent_configs()", body)
 
@@ -122,8 +122,8 @@ class Release038PiDegradationTests(unittest.TestCase):
     def test_websocket_outage_fallback_is_fast_but_resync_processing_is_delta_only(self):
         engine = self.source("engine.py")
         settings = self.source("settings.py")
-        self.assertIn('OPTIONS.get("realtime_fallback_poll_seconds", 10)', engine)
-        self.assertIn('"realtime_fallback_poll_seconds": 10', settings)
+        self.assertIn('OPTIONS.get("realtime_fallback_poll_seconds", 2)', engine)
+        self.assertIn('"realtime_fallback_poll_seconds": 2', settings)
         self.assertIn("changed_eids = {", engine)
         self.assertIn(
             "process_eids = set(state_map) if initial else changed_eids",

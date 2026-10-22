@@ -242,10 +242,11 @@ class Telemetry:
         self.lock = threading.RLock()
         self.samples = {}
         self.recent_samples = {}
-        # Rolling-window p95 history is sampled only by status reads, never by
-        # the inference hot path. Three bounded series, no database writes.
+        # The runtime sampler owns rolling p95 history even with no HTTP readers.
+        # Three bounded series, no database writes or work per inference sample.
         self.trends = {}
         self.trend_sample_at = {}
+        self.trend_thread = None
         self.counts = Counter()
         self.sums = Counter()
         self.reasons = Counter()
@@ -295,10 +296,35 @@ class Telemetry:
                      'acknowledgement','retry','cooldown','expired','settings','service'}
             self.reasons[code if code in known else status.lower()] += 1
 
+    def _sample_trends_locked(self, now):
+        for name in ('event_to_decision', 'candidate_event_to_decision', 'event_to_service_dispatch'):
+            if name not in self.samples or now-self.trend_sample_at.get(name, float('-inf')) < 5.0:
+                continue
+            recent = [value for stamp, value in self.recent_samples.get(name, ()) if now-stamp <= 60.0]
+            self.trends.setdefault(name, deque(maxlen=121)).append((now, _p95(recent), len(recent)))
+            self.trend_sample_at[name] = now
+
+    def sample_trends(self):
+        with self.lock:
+            self._sample_trends_locked(time.monotonic())
+
+    def start_trend_sampling(self, stop_event):
+        with self.lock:
+            if self.trend_thread is not None and self.trend_thread.is_alive():
+                return
+            def run():
+                self.sample_trends()
+                while not stop_event.wait(5.0):
+                    self.sample_trends()
+            self.trend_thread = threading.Thread(target=run, name='adaptive-ai-latency-trend', daemon=True)
+            self.trend_thread.start()
+
     def snapshot(self):
         with self.lock:
             metrics = {}
             now_mono = time.monotonic()
+            # Compatibility for standalone tools; runtime does not need a reader.
+            self._sample_trends_locked(now_mono)
             for name, values in self.samples.items():
                 recent = [
                     value for stamp, value in self.recent_samples.get(name, ())
@@ -313,9 +339,6 @@ class Telemetry:
                 }
                 if name in ('event_to_decision', 'candidate_event_to_decision', 'event_to_service_dispatch'):
                     trend = self.trends.setdefault(name, deque(maxlen=121))
-                    if now_mono - self.trend_sample_at.get(name, float('-inf')) >= 5.0:
-                        trend.append((now_mono, metrics[name]['recent_p95_ms'], len(recent)))
-                        self.trend_sample_at[name] = now_mono
                     metrics[name]['trend'] = [
                         {'age_seconds': round(now_mono-stamp, 2), 'p95_ms': value, 'count': count}
                         for stamp, value, count in trend if now_mono-stamp <= 600.0

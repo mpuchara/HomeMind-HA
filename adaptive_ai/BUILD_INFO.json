@@ -1,9 +1,9 @@
 {
-  "version": "0.14.224",
-  "release_date": "2026-10-21",
-  "base_version": "0.14.223",
-  "base_commit": "9721c29138b106e176e707b6b0f349b73f50a2f9",
-  "release_status": "draft-functional-validation-passed-target-pi-acceptance-open",
+  "version": "0.14.225",
+  "release_date": "2026-10-22",
+  "base_version": "0.14.224",
+  "base_commit": "c28ac86d79d675f41a30bb39ac795ea8da5c7e40",
+  "release_status": "draft-validation-pending",
   "release_014140": {
     "scope": "inventory_and_remove_remaining_shipped_feature_Handler_fallbacks_for_Candidate_Live_and_manual_feedback_transport",
     "explicit_routes": "manual_feedback.js, candidate_ui.js, candidate_preference_ui.js, /api/candidates, Candidate Teach-RL status/train, generation history/comparison, /api/candidate-live, /api/live and Candidate discard",
@@ -3731,5 +3731,16 @@
       "package_skipped": "Expected for a pull request; install ZIPs built locally."
     },
     "qa_report": "docs/benchmarks/PERFORMANCE_PLAN_0_14_224_QA.json"
+  },
+  "release_014225": {
+    "changes": [
+      "Collect bounded latency trends on a runtime sampler without an open panel",
+      "Keep Current reads independent of index refresh and SQLite",
+      "Retain in-flight Current/Desired history until commit or rollback",
+      "Prevent delayed UI replies from rewinding newer Current and Desired independently",
+      "Migrate former 10 s REST fallback to 2 s, preserve single-flight and healthy websocket cadence",
+      "Export separate HA event, socket receive and Current snapshot timestamps"
+    ],
+    "validation": "pending"
   }
 }

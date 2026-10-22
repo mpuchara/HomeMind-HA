@@ -16,7 +16,7 @@ import time
 from urllib.parse import parse_qs, urlsplit
 
 from context import target_value
-from settings import clamp
+from settings import clamp, parse_ts
 
 
 def _finite(value):
@@ -31,10 +31,8 @@ def _finite(value):
 
 def live_agent_payload(core, *, include_configs=False):
     """Return only the state needed by Current / Desired / Confidence tiles."""
-    # /api/live runs frequently. Reuse the revision-invalidated complete config cache;
-    # never hit SQLite merely to refresh Current / Desired / Confidence tiles.
-    core.ENGINE._refresh_agent_index()
-    now = time.time()
+    # Index refresh can read SQLite and rebuild context/routing. Its runtime owner
+    # publishes complete configs; this HTTP reader must never perform that work.
     updates = getattr(core.ENGINE, 'live_card_updates', None)
     # Capture before the snapshot: a newer notification can cause a harmless
     # duplicate read, but can never be acknowledged without its decision data.
@@ -43,6 +41,7 @@ def live_agent_payload(core, *, include_configs=False):
     # Snapshot configs and both maps under the same short lock. Building labels and JSON
     # happens afterwards so websocket state_changed handling is not delayed by HTTP clients.
     with core.ENGINE.lock:
+        now = time.time()
         agents = [
             dict(agent)
             for agent in core.ENGINE.all_agent_configs.values()
@@ -58,6 +57,8 @@ def live_agent_payload(core, *, include_configs=False):
         }
         target_revisions = {str(agent['id']): getattr(core.ENGINE, 'entity_revisions', {}).get(
             agent['target_entity'], 0) for agent in agents}
+        receipts = {str(agent['id']): getattr(core.ENGINE, 'entity_state_received_ts', {}).get(
+            agent['target_entity']) for agent in agents}
 
     values = []
     for agent in agents:
@@ -79,6 +80,10 @@ def live_agent_payload(core, *, include_configs=False):
             {
                 "id": agent["id"],
                 "current_value": current,
+                "current_observed_ts": now,
+                "current_state_ts": parse_ts((state or {}).get('last_updated') or (state or {}).get('last_changed')),
+                "current_received_ts": receipts.get(aid),
+                "current_revision": target_revisions[aid],
                 "last_prediction": prediction,
                 "last_prediction_label": prediction_label,
                 "last_confidence": confidence,
