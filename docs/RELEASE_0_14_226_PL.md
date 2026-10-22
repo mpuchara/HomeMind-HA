@@ -12,10 +12,12 @@ Powtarzane odczyty tego samego okna i zakresu współdzielą jedno żądanie. B�
 
 ## Walidacja
 
-Końcowa walidacja w toku. 26 testów celowanych OK. Test przez rzeczywisty końcowy serwer HTTP trzyma Store.lock i transakcję BEGIN IMMEDIATE SQLite, odczytując Live, Candidate G1/G2 i punkt bez deserializacji modelu. Harness rzeczywistych funkcji JS sprawdza wygenerowanie SVG bez workflow status, retry bez duplikacji, zachowanie wykresu po błędzie i odrzucenie starej odpowiedzi. Testy obejmują także brak tworzenia root row, luki Desired, poprawnego bezpośredniego rodzica i zachowaną walidację modelu dla operacji zmieniających dane.
+Końcowa walidacja lokalna: **2777 testów OK / 282.573 s**, entrypoint, oba UI, compileall i 22 skrypty JS. Manifest 645 plików źródeł/testów/narzędzi jest zgodny z przetestowanym kodem. GitHub CI passed on Python 3.11 and 3.13, including image build/start and all required smoke/benchmark steps. 26 testów celowanych OK. Test przez rzeczywisty końcowy serwer HTTP trzyma Store.lock i transakcję BEGIN IMMEDIATE SQLite, odczytując Live, Candidate G1/G2 i punkt bez deserializacji modelu. Harness rzeczywistych funkcji JS sprawdza wygenerowanie SVG bez workflow status, retry bez duplikacji, zachowanie wykresu po błędzie i odrzucenie starej odpowiedzi. Testy obejmują także brak tworzenia root row, luki Desired, poprawnego bezpośredniego rodzica i zachowaną walidację modelu dla operacji zmieniających dane.
 
 Odtworzenie na hoście potwierdza podatne ścieżki kodu, a nie dokładny stos przyczyny na Pi. Czas odpowiedzi z testu hosta nie jest pomiarem szybkości na Raspberry Pi ani przez HA ingress.
 
 ## Instalacja
 
 Podmienić źródła tego samego dodatku, zachowując identyfikator, konfigurację, bazę, modele i kursory. Przebudować obraz dodatku, uruchomić i wykonać Ctrl+F5. Sprawdzić wersję .226, otworzyć Correct i ewentualnie użyć Połącz ponownie. Rebuild model nie jest potrzebny. Jeśli timeout pozostanie, świeży eksport z próby pozwoli rozdzielić etap resolve_generation, labels, live_observed_history lub current_history; pomiary etapów są dostępne w debug trace.
+
+PR: https://github.com/mpuchara/HomeMind-HA/pull/342. CI źródła 4ba0b2bb: https://github.com/mpuchara/HomeMind-HA/actions/runs/39837166933. Końcowy commit zawiera raporty i metadane.

@@ -1,0 +1,9 @@
+{
+  "chart_without_status": true,
+  "rendered_svg": true,
+  "coalesced_retry": true,
+  "last_chart_preserved_on_error": true,
+  "reconnect": true,
+  "stale_view_ignored": true,
+  "no_mutations": true
+}
