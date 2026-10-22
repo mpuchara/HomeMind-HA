@@ -190,16 +190,22 @@
     for(const key of LAST_DECISION_FIELDS){
       if((c[key]==null||c[key]==='')&&previous[key]!=null)merged[key]=previous[key];
     }
-    if(live){
-      merged._liveSnapshotTs=Number(c.live_snapshot_ts||Date.now()/1000);
-    }else if(previous._liveSnapshotTs&&Date.now()/1000-previous._liveSnapshotTs<2){
+    const snapshotTs=live?Number(c.live_snapshot_ts||Date.now()/1000):0;
+    // Rich status Current belongs to its older decision, not a fresh physical
+    // snapshot. It must never replace Current from the dedicated live stream.
+    if(previous._liveSnapshotTs&&(!live||snapshotTs<previous._liveSnapshotTs)){
       merged.shadow_current=previous.shadow_current;
-      const previousDecisionTs=Number(previous.shadow_timestamp||0);
-      const incomingDecisionTs=Number(c.shadow_timestamp||0);
-      if(previousDecisionTs>incomingDecisionTs){
-        for(const key of DECISION_FIELDS)merged[key]=previous[key];
-      }
       merged._liveSnapshotTs=previous._liveSnapshotTs;
+    }else if(live){
+      merged._liveSnapshotTs=snapshotTs;
+    }
+    const previousDecisionTs=Number(previous.shadow_timestamp||0);
+    const incomingDecisionTs=Number(c.shadow_timestamp||0);
+    if(previousDecisionTs>incomingDecisionTs){
+      for(const key of DECISION_FIELDS.filter(k=>!k.startsWith('parent_')))merged[key]=previous[key];
+    }
+    if(Number(previous.parent_shadow_timestamp||0)>Number(c.parent_shadow_timestamp||0)){
+      for(const key of ['parent_desired','parent_confidence','parent_shadow_timestamp'])merged[key]=previous[key];
     }
     latestByRef.set(ref,merged);
     return merged;

@@ -132,7 +132,8 @@ def install(runtime):
             current_revisions = dict(getattr(core.ENGINE, 'entity_revisions', {}))
             current_receipts = dict(getattr(core.ENGINE, 'entity_state_received_ts', {}))
             hot_runtime = {
-                aid: dict(value) for aid, value in core.ENGINE.runtime.items()
+                aid: {**dict(value), **dict(value.get('_live_decision') or {})}
+                for aid, value in core.ENGINE.runtime.items()
             }
             realtime_connected = bool(core.ENGINE.ws_connected)
             realtime_error = core.ENGINE.ws_error

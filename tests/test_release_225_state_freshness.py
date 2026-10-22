@@ -1,6 +1,7 @@
 """Closed-panel trends and read visibility during contended durable writes."""
 import queue
 import subprocess
+import sys
 import tempfile
 import threading
 import time
@@ -160,6 +161,46 @@ class Freshness225Tests(unittest.TestCase):
         self.assertEqual(runtime.pending_archive[0][1],1792663200.)
         self.assertEqual(runtime.pending_archive[0][-1],1792663210.)
 
+    def test_final_http_live_and_heavy_cards_use_completed_decision(self):
+        script=r'''
+import json,threading,time,sys
+sys.path.insert(0,'tests')
+from types import SimpleNamespace
+from unittest.mock import Mock,patch
+from http.server import ThreadingHTTPServer
+from urllib.request import urlopen
+import support,trial_queue_main,queue_main
+from storage import STORE
+from runtime_http import ExplicitRouteRegistry,install_dispatch
+from candidate_http_routes import register_routes
+from agent_live_card_refresh import live_agent_payload
+core=trial_queue_main.core;core.STORE=STORE;a=support.agent(id='a',target_entity='light.a')
+engine=SimpleNamespace(lock=threading.RLock(),all_agent_configs={'a':a},
+ state_map={'light.a':support.state('light.a','on')},entity_revisions={'light.a':2},
+ runtime={'a':dict(last_prediction=0.,last_inference_ts=200.,last_confidence=.1,
+   _live_decision=dict(last_prediction=1.,last_inference_ts=100.,decision_ready_ts=101.,last_confidence=.9))},
+ ws_connected=True,ws_error=None,_refresh_agent_index=Mock(side_effect=AssertionError('Live must not refresh index')))
+core.ENGINE=engine;core.HISTORY=None;core.AUTOMATION_KNOWLEDGE=object();core.TRAINING_QUEUE=None;queue_main.TRAINING_QUEUE=None
+core.set_startup('ready',7,'fixture',ready=True)
+core.live_agent_payload=lambda include_configs=False:live_agent_payload(core,include_configs=include_configs)
+registry=ExplicitRouteRegistry();register_routes(registry,core,SimpleNamespace())
+server=ThreadingHTTPServer(('127.0.0.1',0),core.Handler);core.HTTP_SERVER=server;install_dispatch(core,registry)
+worker=threading.Thread(target=server.serve_forever,daemon=True);worker.start()
+try:
+ with patch.object(core.STORE,'conn',side_effect=AssertionError('Live must not query SQLite')):
+  start=time.perf_counter()
+  with urlopen(f'http://127.0.0.1:{server.server_port}/api/live',timeout=2) as response:row=json.load(response)['agents'][0]
+  assert row['current_value']==1. and row['last_prediction']==1. and row['decision_ready_ts']==101.,row
+  elapsed=(time.perf_counter()-start)*1000;assert elapsed<500,elapsed
+ engine._refresh_agent_index.assert_not_called();engine._refresh_agent_index=lambda:None
+ row=queue_main._agent_payloads(None)[0]['runtime']
+ assert row['last_prediction']==1. and row['last_confidence']==.9 and row['decision_ready_ts']==101.,row
+ print(json.dumps(dict(real_http=True,shipped_entrypoint=True,live_without_index_or_sql=True,completed_decision_in_both_reads=True,host_receipt_ms=round(elapsed,3))))
+finally:server.shutdown();server.server_close();worker.join(2)
+'''
+        result=subprocess.run([sys.executable,'-c',script],cwd=support.ROOT,capture_output=True,text=True,timeout=15)
+        self.assertEqual(result.returncode,0,result.stdout+result.stderr)
+
     def test_only_previous_fallback_default_migrates(self):
         import settings
         path=Path(self.store.path).with_name('options.json')
@@ -182,7 +223,16 @@ let next=c.merge(fresh,late);assert.equal(next.current_value,1);assert.equal(nex
 next=c.merge(late,fresh);assert.equal(next.current_value,1);assert.equal(next.last_prediction,1);
 next=c.merge(fresh,{...late,decision_ready_ts:125,last_prediction:0});assert.equal(next.current_value,1);assert.equal(next.last_prediction,0);
 next=c.merge(fresh,{...late,current_observed_ts:130,current_value:0});assert.equal(next.current_value,0);assert.equal(next.last_prediction,1);
-console.log(JSON.stringify({late_current_rejected:true,late_desired_rejected:true,independent_streams:true}));
+const candidate=fs.readFileSync('adaptive_ai/src/static/candidate_preference_ui.js','utf8');
+const constants=candidate.slice(candidate.indexOf('  const latestByRef='),candidate.indexOf('  const cardRef='));
+const merge=candidate.slice(candidate.indexOf('  function mergeCandidate('),candidate.indexOf('  function decorate(c)'));
+vm.runInContext(constants+'\n'+merge+'\nthis.mergeCandidate=mergeCandidate;',c);
+c.mergeCandidate({generation_id:'g1',shadow_current:1,shadow_timestamp:119,candidate_desired:1,parent_shadow_timestamp:118,parent_desired:1,live_snapshot_ts:120},{live:true});
+next=c.mergeCandidate({generation_id:'g1',shadow_current:0,shadow_timestamp:99,candidate_desired:0,parent_shadow_timestamp:98,parent_desired:0,live_snapshot_ts:100},{live:true});
+assert.equal(next.shadow_current,1);assert.equal(next.candidate_desired,1);assert.equal(next.parent_desired,1);
+next=c.mergeCandidate({generation_id:'g1',shadow_current:0,shadow_timestamp:125,candidate_desired:0,parent_shadow_timestamp:130,parent_desired:0});
+assert.equal(next.shadow_current,1);assert.equal(next.candidate_desired,0);assert.equal(next.parent_desired,0);
+console.log(JSON.stringify({late_current_rejected:true,late_desired_rejected:true,independent_streams:true,candidate_rich_current_is_not_physical_snapshot:true}));
 '''
         result=subprocess.run(['node','-e',script],cwd=support.ROOT,capture_output=True,text=True)
         self.assertEqual(result.returncode,0,result.stdout+result.stderr)
