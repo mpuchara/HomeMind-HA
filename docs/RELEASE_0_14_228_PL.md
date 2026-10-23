@@ -29,3 +29,9 @@ SQLITE_CORRUPT pozostaje aktywne. Nowe zmiany izolują kolejne koszty i nie napr
 Zachowaj dotychczasową tożsamość dodatku i katalog danych. Przed restartem zabezpiecz bazę zgodnie z instrukcją offline. Wgraj paczkę 0.14.228, przebuduj obraz dodatku, wykonaj Ctrl+F5 w panelu i sprawdź numer wersji. Rebuild modelu nie jest wymagany.
 
 Sprawdź Export debug z Live i Candidate oraz świeży eksport runtime w Shadow i Control. Oceniaj event_to_decision osobno od service-dispatch i zgodnego state-ACK. Wynik kontrolowanego testu hosta usuwa zależność od mutexu, ale nie potwierdza opóźnienia urządzenia HA ani wydajności karty SD na Pi. Walidacja jest zapisana w raporcie QA tej wersji.
+
+## Walidacja wydania
+
+2797 testów lokalnych zakończyło się OK (Ubuntu WSL, Python 3.12.3, 320,059 s). [CI dokładnego kodu](https://github.com/mpuchara/HomeMind-HA/actions/runs/39940912430) zakończyło się sukcesem: Python 3.11, 2797 testów / 280,819 s; Python 3.13, 2797 testów / 256,761 s; dodatkowe benchmarki, build/start obrazu oraz spakowany trener wektorowy. Job paczkowania ograniczony do main jest pominięty; ZIP-y instalacyjne zostały utworzone i sprawdzone lokalnie.
+
+Kod/testy/narzędzia odpowiadają commitowi a378fc2288d903c9206d66883bb35141705b4b47. Wszystkie 653 sumy z normalizacją CRLF do LF odpowiadają zamrożonej walidacji. Końcowy commit dodaje wyłącznie raporty i metadane. Sprawdzono też 22 pliki JavaScript, compileall, start rzeczywistego entrypointu, UI eksportu/Correct/Current-Desired oraz rzeczywisty eksport HTTP przy zajętych mutexie Store i writerze SQLite. Przykład eksportu HTTP nie zawierał etykiet Correct; rekonstrukcję historii i zgodność modeli obejmują testy regresyjne. Wyniki hosta nie są pomiarem docelowego Pi ani urządzeń HA.

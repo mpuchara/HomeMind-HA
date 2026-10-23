@@ -1,0 +1,130 @@
+{
+  "version": "0.14.228",
+  "source_commit": "a378fc2288d903c9206d66883bb35141705b4b47",
+  "base_commit": "e60ee69ef1c432a54d44cc85ef7534348f6070b4",
+  "inputs": [
+    {
+      "filename": "adaptive-ai-runtime-debug-20261023-121229.json",
+      "sha256": "880906d142766a70847799ae8787eb37af56a1e7b30a421ca9dd987e535a1dbf",
+      "rss_mb": 341.55078125,
+      "recent_event_to_decision_p95_ms": 1162.1721679985058
+    },
+    {
+      "filename": "adaptive-ai-runtime-debug-20261023-121300.json",
+      "sha256": "23bf97849df0b5800e990a10a55b8944e521a39a2d601b3028c2b7c2c1a0a14a",
+      "rss_mb": 340.80078125,
+      "recent_event_to_decision_p95_ms": 1047.7957589901052
+    }
+  ],
+  "local_full_suite": {
+    "platform": "Ubuntu WSL, Python 3.12.3, SQLite 3.45.1, numpy 2.3.3",
+    "exit_code": 0,
+    "tests": 2797,
+    "seconds": 320.059,
+    "result": "OK",
+    "log_sha256": "0fe671df693c08bd5f4b67a28153aea533c4949f8baac5a9d387bc38813878b3"
+  },
+  "prior_attempts": [
+    {
+      "platform": "native Windows Python 3.11",
+      "result": "interrupted at existing process-identity test invoking os.kill(pid,0); not a complete pass"
+    },
+    {
+      "platform": "Linux first pass",
+      "tests": 2797,
+      "seconds": 346.001,
+      "result": "one stale 16 MiB expectation and one temporary null metadata count; both corrected before final pass"
+    }
+  ],
+  "checks": {
+    "new_regression_tests": 10,
+    "javascript_files_syntax": 22,
+    "compileall": true,
+    "shipped_entrypoint_ready": true,
+    "actual_http_export_with_store_and_sqlite_locks": {
+      "actual_no_label_json_downloaded": true,
+      "start_ms": 17.994,
+      "status_ms": 24.623,
+      "download_ms": 10.816,
+      "ha_calls": 0
+    },
+    "correct_http_with_store_and_sqlite_locks": {
+      "live_and_two_generations": true,
+      "max_host_read_ms": 20.274,
+      "direct_parent": true,
+      "observed_only": true
+    },
+    "debug_ui_vm": [
+      "5000ms timeout retry",
+      "HTTP 503 recovery",
+      "same-job resume after deadline",
+      "404 expiry permits explicit new job"
+    ],
+    "correct_history_ui_vm": true,
+    "live_delivery_ui_vm": true
+  },
+  "controlled_baseline": {
+    "tool": "tools/verify_candidate_outcome_priority.py",
+    "baseline_227_completed_while_store_locked": false,
+    "baseline_hook_ms_including_250ms_hold": 282.901,
+    "patched_completed_while_store_locked": true,
+    "patched_hook_ms": 0.212,
+    "both_committed_pairs": 1,
+    "ha_calls": 0,
+    "boundary": "host mutex fixture, not Pi or physical HA/device latency"
+  },
+  "source_manifest": {
+    "file": "MANIFEST_0_14_228_SOURCE.json",
+    "files": 653,
+    "normalization": "CRLF to LF before SHA-256; all executable/test/tool hashes match frozen validation"
+  },
+  "ci": {
+    "run_id": 39940912430,
+    "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/39940912430",
+    "source_commit": "a378fc2288d903c9206d66883bb35141705b4b47",
+    "python_313": {
+      "job_id": 120371824164,
+      "status": "completed",
+      "conclusion": "success",
+      "tests": 2797,
+      "seconds": 256.761
+    },
+    "image": {
+      "job_id": 120371823173,
+      "status": "completed",
+      "conclusion": "success",
+      "build_start_and_packaged_vector_trainer": true
+    },
+    "python_311": {
+      "job_id": 120371823077,
+      "status": "completed",
+      "conclusion": "success",
+      "tests": 2797,
+      "seconds": 280.819,
+      "additional_required_benchmarks": "passed"
+    },
+    "status": "completed",
+    "conclusion": "success",
+    "package_job": {
+      "job_id": 120375819049,
+      "status": "completed",
+      "conclusion": "skipped",
+      "reason": "main-only CI package job; manual install ZIPs verified locally"
+    }
+  },
+  "open_acceptance": [
+    "actual Pi/HA ingress and Shadow/Control event-to-service/state-ACK latency",
+    "database integrity diagnosis and data recovery on a secured offline copy",
+    "crash/power-loss durability of RAM queues is not provided"
+  ],
+  "database_repair_performed": false,
+  "storage_limits_weakened": false,
+  "physical_command_durability_changed": false,
+  "packages": {
+    "built_locally": true,
+    "crc": "passed",
+    "normalized_source_hashes_match": 653,
+    "all_archive_members_verified_against_payloads": true,
+    "sha256_receipts": "adjacent .zip.sha256 files; final ZIP hashes are external to avoid self-reference"
+  }
+}
