@@ -412,14 +412,19 @@ class ProvenanceJournal:
         with self._event_cache_lock:
             corrupt = self._event_audit_fault is not None
             if corrupt:
+                # Poll and websocket delivery can race on the same stable key.
+                # Do not replace an already processed cache row or count it twice.
+                if str(event_id) in self._event_cache or str(event_id) in self._pending_events:
+                    return str(event_id), False
                 # Live deduplication/origin remains RAM-first. Do not enqueue an
                 # unbounded stream behind an irrecoverable audit-table failure.
                 row['audit_gap_reason'] = 'database_corrupt'
                 self._remember_event(row)
                 self._event_audit_gap_count += 1
-                if self._event_audit_gap_start is None:
-                    self._event_audit_gap_start = received_time
-                self._event_audit_gap_end = received_time
+                self._event_audit_gap_start = (received_time if self._event_audit_gap_start is None
+                                              else min(self._event_audit_gap_start, received_time))
+                self._event_audit_gap_end = (received_time if self._event_audit_gap_end is None
+                                            else max(self._event_audit_gap_end, received_time))
                 return str(event_id), False
         if storage_recording_paused(self.store):
             # Keep origin in the bounded event cache for live command matching,
