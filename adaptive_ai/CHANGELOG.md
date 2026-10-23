@@ -3,7 +3,7 @@
 - Stop retrying corrupt raw-event audit writes after native SQLITE_CORRUPT/NOTADB detection. Keep accepted failed batches for recovery and expose new audit acquisition gaps while live deduplication/origin use bounded RAM caches. Transient busy/storage retry behavior and synchronous command persistence stay intact.
 - Poll-state delivery uses RAM-only provenance lookup, avoiding historical audit queries on the ingress path. Explicit historical reads retain their durable lookup.
 - Display raw-audit corruption, retained events and gap counts in fast diagnostics. Keep native errors when independent deferred queues are drained together.
-- Add a read-only offline database-copy checker and controlled ingress-under-corruption regressions. This release contains no database repair, model rebuild or automatic quota increase. Validation pending.
+- Add a read-only offline database-copy checker and controlled ingress-under-corruption regressions. This release contains no database repair, model rebuild or automatic quota increase. Validation: 2787 local tests OK (531.081s), 72 focused tests, actual HA handler under held writer/corruption, zero HA service calls, read-only checker file hashes, UI diagnostics, entrypoint, compileall and 22 JS checks. Exact-source GitHub CI passed on Python 3.11/3.13, required benchmarks and Docker build/start. Database recovery and target Pi acceptance remain open.
 
 # 0.14.226
 

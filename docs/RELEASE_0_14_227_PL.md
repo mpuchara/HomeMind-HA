@@ -16,8 +16,10 @@ Diagnostics pokazuje uszkodzenie, zatrzymany zapis audytu, liczbę przyjętych z
 
 ## Walidacja
 
-Końcowa walidacja w toku. Kontrolowany test starej .226 blokuje faktyczny handler HA przy zajętym Store.lock i uszkodzonym writerze; .227 kończy obsługę przed zwolnieniem blokady. Test sprawdza Current, kolejkę archive poll oraz zero wywołań HA service. To test hosta, nie pomiar szybkości na Pi ani odzyskanie jego bazy.
+Końcowa walidacja lokalna: **2787 testów OK / 531.081 s**, 72 testy celowane, entrypoint, UI, compileall i 22 skrypty JS. Manifest 648 plików jest zgodny z przetestowanym kodem. Exact-source GitHub CI passed on Python 3.11/3.13, required benchmarks and Docker build/start. Kontrolowany test starej .226 blokuje faktyczny handler HA przy zajętym Store.lock i uszkodzonym writerze; .227 kończy obsługę przed zwolnieniem blokady. Test sprawdza Current, kolejkę archive poll oraz zero wywołań HA service. To test hosta, nie pomiar szybkości na Pi ani odzyskanie jego bazy.
 
 ## Baza wymaga osobnego sprawdzenia
 
 Użytkownik nie ma wcześniejszej kopii. Najpierw należy zabezpieczyć aktualny stan dodatku. Instrukcja docs/DIAGNOZA_BAZY_0_14_227_PL.md prowadzi do sprawdzenia kopii bez modyfikacji oryginału. Poprawka izoluje konkretną awarię raw audytu. Nie gwarantuje sprawności innych tabel i nie naprawia uszkodzonego pliku.
+
+PR: https://github.com/mpuchara/HomeMind-HA/pull/343. CI źródła d21fe92f: https://github.com/mpuchara/HomeMind-HA/actions/runs/39901550327. Końcowy commit obejmuje raporty i metadane.

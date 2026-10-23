@@ -3,7 +3,7 @@
   "release_date": "2026-10-23",
   "base_version": "0.14.226",
   "base_commit": "43c6fc7f94630aa93189348255b2a857a8101ad6",
-  "release_status": "draft-validation-pending",
+  "release_status": "draft-validated-database-recovery-and-pi-acceptance-open",
   "release_014140": {
     "scope": "inventory_and_remove_remaining_shipped_feature_Handler_fallbacks_for_Candidate_Live_and_manual_feedback_transport",
     "explicit_routes": "manual_feedback.js, candidate_ui.js, candidate_preference_ui.js, /api/candidates, Candidate Teach-RL status/train, generation history/comparison, /api/candidate-live, /api/live and Candidate discard",
@@ -249,8 +249,8 @@
   "pi4_release_gate_contract": "pi4_release_gate_v1",
   "pi4_real_hardware_required": true,
   "stage7_offline_rl_control_unlock": false,
-  "tests_passed": 2777,
-  "tests_passed_version": "0.14.226",
+  "tests_passed": 2787,
+  "tests_passed_version": "0.14.227",
   "profile": "rpi4-ram-first-complete-discovery-manual-agent-selection",
   "manual_agent_training": true,
   "max_concurrent_training_jobs": 1,
@@ -286,7 +286,7 @@
   "migration": "no destructive migration; existing agents, models, feedback, raw archive, historical experiences, candidate lineage, rollback and generation state preserved",
   "physical_control": "unchanged; repaired agents return to Shadow and Control still requires qualified state plus all existing guards",
   "pi4": "0.14.38 targets the long-soak Raspberry Pi failure: drift analysis is coalesced on a throttled background observer, REST /states reconciliation is delta-only after bootstrap, websocket outage fallback reconciles every 10 s, and HA core-state health is tracked separately from unrelated REST errors.",
-  "ci_status": "0.14.226: 2777 local tests, entrypoint, UI, compileall and 22 JS syntax checks pass. GitHub CI passed on Python 3.11 and 3.13, including image build/start and all required smoke/benchmark steps. Target Pi history-load acceptance remains open.",
+  "ci_status": "0.14.227: 2787 local tests OK, 72 focused tests, entrypoint/UI/syntax pass. Source CI: completed / success. Actual corrupt database has not been repaired; backup and integrity assessment remain open.",
   "training_slice_budget": "adaptive-ai-index workers call a shared CooperativeTrainingBudget; expensive temporal tracker loops yield between entities/events and finalization is no longer outside the throttle",
   "finalization_lifeline": "HEAVY_JOBS remains owned through final gc.collect(), so /api/status and /api/agents stay on lightweight lifeline reads until the worker is actually finished",
   "finalization_progress": "post-replay UI now exposes bounded stages: replay complete, policy serialization, benchmark save, qualification, checkpoint complete",
@@ -1331,7 +1331,7 @@
     "semantics": "no reward/sample selection/feature contract/validation boundary/policy update order/Correct/Candidate/ActionIntent/Executor/physical control change",
     "validation": "1517 tests expected on Python 3.11 and 3.13; final CI confirmation required before merge"
   },
-  "release_validation_pending": true,
+  "release_validation_pending": false,
   "release_014121": {
     "scope": "persistent_selected_agent_transport_acceleration",
     "durable_experience_ids": "loaded once per selected-agent worker sequence; accepted ids join the session set only after successful batch persistence",
@@ -2760,7 +2760,7 @@
     "benchmark": "docs/benchmarks/CONTEXT_BUFFER_0_14_195_VALIDATION.json",
     "median_observer_speedup": 1.018396920512725
   },
-  "release_validation_tests_passed": 2777,
+  "release_validation_tests_passed": 2787,
   "release_014196": {
     "scope": "typed_deferred_batch_busy_retry_and_cooperative_wal_reclaim_write_admission",
     "learning_semantics_changed": false,
@@ -3834,6 +3834,57 @@
       "Expose corruption state in the fast diagnostics panel and preserve native combined errors",
       "Add offline copy-only read-only quick_check/integrity_check tool; no automatic repair or budget increase"
     ],
-    "validation": "pending"
+    "validation": {
+      "tests": 2787,
+      "seconds": 531.081,
+      "result": "OK",
+      "log_sha256": "8f1cf3dab32a7025e5c413b06e005772e07762dae25235546d8ee5565fb5e943"
+    },
+    "source_files": 648,
+    "source_commit": "d21fe92f49f4f990e2809fbd4d6a59226945bbc0",
+    "latest_source_ci": {
+      "source_commit": "d21fe92f49f4f990e2809fbd4d6a59226945bbc0",
+      "run_id": 39901550327,
+      "run_url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/39901550327",
+      "status": "completed",
+      "conclusion": "success",
+      "jobs": [
+        {
+          "id": 120244047384,
+          "name": "image",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "id": 120244047488,
+          "name": "tests (3.11)",
+          "status": "completed",
+          "conclusion": "success",
+          "tests": {
+            "count": 2787,
+            "seconds": 298.516,
+            "result": "OK"
+          }
+        },
+        {
+          "id": 120244047579,
+          "name": "tests (3.13)",
+          "status": "completed",
+          "conclusion": "success",
+          "tests": {
+            "count": 2787,
+            "seconds": 290.937,
+            "result": "OK"
+          }
+        },
+        {
+          "id": 120247059470,
+          "name": "package",
+          "status": "completed",
+          "conclusion": "skipped"
+        }
+      ]
+    },
+    "qa_report": "docs/benchmarks/PERFORMANCE_PLAN_0_14_227_QA.json"
   }
 }
