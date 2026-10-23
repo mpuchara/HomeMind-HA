@@ -34,6 +34,9 @@
     const sqlite=status.sqlite||dbg.sqlite||{};
     const recovery=sqlite.storage_retention?.recovery||{};
     const budget=sqlite.storage_budget||{};
+    const audit=status.provenance_queue?.events?.audit_health||dbg.event_audit_health||(status.engine||dbg.engine)?.deferred_persistence?.provenance?.events?.audit_health||{};
+    const corruptionNotice=audit.paused
+      ?`<div class="notice" role="alert">SQLite reports database corruption. Raw event audit recording is paused; ${Number(audit.retained_events||0)} accepted events remain in RAM and ${Number(audit.skipped_events||0)} new audit events are gaps. Live delivery avoids this failed audit writer. Preserve a backup and check the database offline; increasing disk/RAM budgets or model Rebuild will not repair it.</div>`:'';
     const allocation=budget.budget_mode==='auto'&&Number.isFinite(Number(budget.auto_use_percent))
       ?` Configured disk allocation: ${Number(budget.auto_use_percent)}%.`:'';
     const cleanupNotice=recovery.active||Number(recovery.deleted)>0
@@ -54,6 +57,7 @@
           <button class="ghost" id="runtimeDebugDownload" ${Number(dbg.entries||0)<=0&&!active.length?'disabled':''}>Download log</button>
         </div>
       </div>
+      ${corruptionNotice}
       ${storageNotice}
       ${cleanupNotice}
       <div class="history-grid runtime-debug-grid">
