@@ -135,11 +135,12 @@ class ContextPayload195Tests(unittest.TestCase):
 
     def test_only_observed_pool_registers_shared_json_columns(self):
         service = ContextTournament(self.store, SimpleNamespace())
-        pool = service.register_context_rows('observed_pool', self.sql)
-        quality = service.register_context_rows('sensor_quality', self.sql)
+        with patch('runtime_sqlite_cache.memory_headroom', return_value=(8192, 6000)):
+            pool = service.register_context_rows('observed_pool', self.sql)
+            quality = service.register_context_rows('sensor_quality', self.sql)
         self.assertEqual(pool.shared_columns, (13, 14, 15))
         self.assertEqual(quality.shared_columns, ())
-        self.assertEqual(pool.max_bytes, 16 * MIB)
+        self.assertEqual(pool.max_bytes, 64 * MIB)
 
 
 if __name__ == '__main__': unittest.main()
