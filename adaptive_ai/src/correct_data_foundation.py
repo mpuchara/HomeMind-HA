@@ -543,10 +543,9 @@ def _install_teaching(core):
         rows = original_labels(agent_id, include_undone=include_undone)
         if include_undone:
             return rows
-        _backfill_agent_event_ids(core.STORE, agent_id)
-        # Re-read only when the migration had a chance to fill a legacy NULL id.
-        if any(not row.get("supervision_event_id") for row in rows):
-            rows = original_labels(agent_id, include_undone=False)
+        # A chart/debug read must not acquire Store.lock to migrate legacy IDs.
+        # deduplicate_supervision_rows computes the same deterministic ID in
+        # detached rows. Explicit label insertion/candidate-copy owns durability.
         return deduplicate_supervision_rows(rows)
 
     def insert_label(agent, desired, timestamp, previous, **kwargs):

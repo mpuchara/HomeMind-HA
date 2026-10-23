@@ -16,7 +16,7 @@ try:
 except Exception:
     ws_connect = None
 
-APP_VERSION = "0.14.227"
+APP_VERSION = "0.14.228"
 HISTORY_BOOTSTRAP_REVISION = "target-attrs-v2"
 TRAINING_REVISION = "shared-home-intents-v26"
 DATA_DIR = Path(os.environ.get("ADAPTIVE_AI_DATA", "/data"))
@@ -66,7 +66,7 @@ DEFAULT_OPTIONS = {
     "fast_max_context_entities": 8,
     "context_challenger_count": 4,
     "context_row_flush_seconds": 30,
-    "context_row_ram_mb": 16,
+    "context_row_ram_mb": 64,
     "context_tournament_enabled": True,
     "context_tournament_min_samples": 40,
     "context_tournament_min_days": 3,
@@ -125,7 +125,7 @@ DEFAULT_OPTIONS = {
     "runtime_candidate_evidence_mb": 16,
     "runtime_thread_switch_ms": 1,
     "runtime_compute_ram_mb": 256,
-    "runtime_tournament_ram_mb": 64,
+    "runtime_tournament_ram_mb": 256,
     "runtime_shadow_observation_interval_ms": 1000,
     "runtime_shadow_max_deferral_ms": 5000,
     "storage_min_free_mb": 2048,
@@ -459,6 +459,12 @@ def load_options():
             for key in options:
                 if key in data:
                     options[key] = data[key]
+            # 0.14.228: use bounded RAM to absorb optional observer writes.
+            # Runtime clamps these ceilings to host/cgroup headroom.
+            if data.get('context_row_ram_mb') == 16:
+                options['context_row_ram_mb'] = 64
+            if data.get('runtime_tournament_ram_mb') == 64:
+                options['runtime_tournament_ram_mb'] = 256
             # v0.4 migrations: preserve explicit custom values, but move the old shipped
             # defaults to the new event-driven/discovery defaults on upgrade.
             if data.get("poll_seconds") == 2:

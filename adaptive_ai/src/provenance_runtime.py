@@ -334,7 +334,9 @@ def install(core):
         pressure = None
         busy = None
         callbacks = (
-            ("events", lambda: flush_event_provenance(max_batches=max_event_batches)),
+            ("events", lambda: 0 if (max_event_batches is not None
+                and journal.event_audit_health()['paused']) else
+                flush_event_provenance(max_batches=max_event_batches)),
             ("decisions", flush_deferred),
             ("acks", flush_deferred_acks),
         )
@@ -389,7 +391,7 @@ def install(core):
                         )
                     except Exception:
                         pass
-            if journal.pending_event_count():
+            if journal.pending_event_count() and not journal.event_audit_health()['paused']:
                 # Continue draining a large backlog immediately on the next loop while
                 # still giving decisions and ACKs one turn on every cycle.
                 deferred_event.set()

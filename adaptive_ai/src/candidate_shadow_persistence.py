@@ -14,6 +14,7 @@ class CandidateShadowPersistence:
     def __init__(self, manager):
         self.manager = manager
         self.queue = manager.candidate_shadow_decision_writes
+        self.transitions = manager.candidate_shadow_transition_writes
         self.engine_stop_event = manager.engine.stop_event
         self.stop_event = threading.Event()
         self.wake_event = threading.Event()
@@ -45,16 +46,20 @@ class CandidateShadowPersistence:
             self.wake_event.clear()
             if self.stop_event.is_set():
                 break
-            if self.stop_event.wait(self.queue.retry.delay()):
+            pending = [queue for queue in (self.queue, self.transitions)
+                       if queue.snapshot()['pending']]
+            if self.stop_event.wait(min((queue.retry.delay() for queue in pending), default=0)):
                 break
             if self.queue.snapshot()['pending'] < 32 and self.stop_event.wait(.025):
                 break
-            try:
-                self.queue.flush(limit=1024)
-            except Exception as exc:
-                if self.queue.retry.defer(exc):
-                    self.report(exc)
-            if self.queue.snapshot()['pending']:
+            for queue, limit in ((self.queue, 1024), (self.transitions, 4)):
+                try:
+                    queue.flush(limit=limit)
+                except Exception as exc:
+                    if queue.retry.defer(exc):
+                        self.report(exc)
+            if (self.queue.snapshot()['pending']
+                    or self.transitions.snapshot()['pending']):
                 self.wake_event.set()
             # Yield the Store and Python scheduler between bounded transactions.
             self.stop_event.wait(.005)

@@ -12,6 +12,8 @@ import math
 import threading
 import time
 import uuid
+import heapq
+from contextlib import nullcontext
 from urllib.parse import parse_qs, unquote, urlsplit
 
 from context import archived_state
@@ -563,12 +565,27 @@ def _debug_entities(engine, root_agent, lineage):
 
 
 def _raw_window(store, entities, sample_ts, seconds, row_limit):
-    if not entities:
+    if not entities or int(row_limit) <= 0:
         return []
-    rows = []
     start = float(sample_ts) - float(seconds)
     end = float(sample_ts) + float(seconds)
-    for row in store.archive_iter(start, end, set(entities), chunk_size=256):
+    retained = []
+    # The archive iterator may sort the entire matching range before yielding
+    # its first chunk. Bound each indexed entity scan, then merge only the first
+    # requested rows in RAM. Stable (ts,id) ordering matches archive_iter.
+    with store.conn() as c:
+        for eid in sorted(set(entities))[:MAX_DEBUG_ENTITIES]:
+            cursor = c.execute(
+                'SELECT * FROM entity_history WHERE entity_id=? AND ts>=? AND ts<=? '
+                'ORDER BY ts,id LIMIT ?', (eid, start, end, int(row_limit)))
+            try:
+                retained = heapq.nsmallest(int(row_limit),
+                    (*retained, *(dict(row) for row in cursor)),
+                    key=lambda row: (float(row['ts']), int(row['id'])))
+            finally:
+                cursor.close()
+    rows = []
+    for row in retained:
         state = archived_state(row)
         rows.append({
             "entity_id": row.get("entity_id"),
@@ -804,14 +821,16 @@ class CorrectLearningDebugService:
                     current["started_ts"] = time.time()
                     current["message"] = "Collecting lineage and Correct labels"
             try:
-                payload = self.export(
-                    ref,
-                    detail=detail,
-                    label_limit=label_limit,
-                    window_seconds=window_seconds,
-                    raw_rows_per_label=raw_rows_per_label,
-                    progress=progress,
-                )
+                session = getattr(self.store, 'diagnostic_read_session', None)
+                with session() if callable(session) else nullcontext():
+                    payload = self.export(
+                        ref,
+                        detail=detail,
+                        label_limit=label_limit,
+                        window_seconds=window_seconds,
+                        raw_rows_per_label=raw_rows_per_label,
+                        progress=progress,
+                    )
                 encoded = json.dumps(payload, ensure_ascii=False, indent=2).encode("utf-8")
                 with self._job_lock:
                     current = self._jobs.get(job_id)
