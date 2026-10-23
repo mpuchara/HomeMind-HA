@@ -25,6 +25,18 @@ def is_sqlite_busy(exc):
     return message == 'database is locked' or message.startswith('database table is locked')
 
 
+def is_sqlite_corruption(exc):
+    """Permanent corruption is not a retryable writer-contention failure."""
+    if isinstance(exc, DeferredBatchError):
+        return any(is_sqlite_corruption(error) for _, error in exc.errors)
+    if not isinstance(exc, sqlite3.DatabaseError):
+        return False
+    code = getattr(exc, 'sqlite_errorcode', None)
+    if code is not None:
+        return code & 0xff in (sqlite3.SQLITE_CORRUPT, sqlite3.SQLITE_NOTADB)
+    return str(exc).lower() in ('database disk image is malformed', 'file is not a database')
+
+
 def background_sqlite(store, *, retryable=True):
     scope = getattr(store, "background_sqlite", None)
     if not callable(scope):

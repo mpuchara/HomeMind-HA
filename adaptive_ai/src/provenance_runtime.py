@@ -5,7 +5,7 @@ History workers consume events. It decorates the established contracts rather th
 adding a second dispatcher: Executor remains the only HA command boundary.
 """
 from __future__ import annotations
-from sqlite_background import background_sqlite, is_sqlite_busy, run_connection_worker
+from sqlite_background import background_sqlite, is_sqlite_busy, run_connection_worker, DeferredBatchError
 from storage_budget import StoragePressure, StorageRetry, require_storage_available, storage_recording_paused
 
 from contextlib import contextmanager
@@ -294,6 +294,7 @@ def install(core):
             "acknowledgements": acknowledgements,
             "events": {
                 **event_stats,
+                "audit_health": journal.event_audit_health(),
                 "pending": journal.pending_event_count(),
                 "max_pending": int(getattr(journal, "_max_pending_events", 0) or 0),
                 "overflow_sync": int(
@@ -346,9 +347,9 @@ def install(core):
                 if is_sqlite_busy(exc):
                     busy = exc
                 else:
-                    errors.append(f"{name}: {type(exc).__name__}: {exc}")
+                    errors.append((name, exc))
         if errors:
-            raise RuntimeError("; ".join(errors))
+            raise DeferredBatchError(errors)
         if pressure is not None:
             raise pressure
         if busy is not None:
@@ -479,7 +480,7 @@ def install(core):
         received = float(received_ts if received_ts is not None else now_ts())
         if entity_id:
             event_time = _event_time(state, received)
-            known = journal.history_provenance(entity_id, event_time)
+            known = journal.history_provenance(entity_id, event_time, cache_only=True)
             if not known.get("event_id"):
                 origin, _ = _origin(journal, state)
                 event_id, _ = journal.record_event(

@@ -1,3 +1,10 @@
+# 0.14.227
+
+- Stop retrying corrupt raw-event audit writes after native SQLITE_CORRUPT/NOTADB detection. Keep accepted failed batches for recovery and expose new audit acquisition gaps while live deduplication/origin use bounded RAM caches. Transient busy/storage retry behavior and synchronous command persistence stay intact.
+- Poll-state delivery uses RAM-only provenance lookup, avoiding historical audit queries on the ingress path. Explicit historical reads retain their durable lookup.
+- Display raw-audit corruption, retained events and gap counts in fast diagnostics. Keep native errors when independent deferred queues are drained together.
+- Add a read-only offline database-copy checker and controlled ingress-under-corruption regressions. This release contains no database repair, model rebuild or automatic quota increase. Validation pending.
+
 # 0.14.226
 
 - Resolve observed Correct history/point reads without synchronizing lineage, creating roots, loading or hashing full policy models. Read identity/config and actual recorded evidence only. Missing root metadata gets a read-only descriptor; a retained model is unnecessary for viewing evidence.

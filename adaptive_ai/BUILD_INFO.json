@@ -1,9 +1,9 @@
 {
-  "version": "0.14.226",
-  "release_date": "2026-10-22",
-  "base_version": "0.14.225",
-  "base_commit": "9fd5a24f81ad17d853c8b6e10cddc69502cf0ccb",
-  "release_status": "draft-validated-target-pi-acceptance-open",
+  "version": "0.14.227",
+  "release_date": "2026-10-23",
+  "base_version": "0.14.226",
+  "base_commit": "43c6fc7f94630aa93189348255b2a857a8101ad6",
+  "release_status": "draft-validation-pending",
   "release_014140": {
     "scope": "inventory_and_remove_remaining_shipped_feature_Handler_fallbacks_for_Candidate_Live_and_manual_feedback_transport",
     "explicit_routes": "manual_feedback.js, candidate_ui.js, candidate_preference_ui.js, /api/candidates, Candidate Teach-RL status/train, generation history/comparison, /api/candidate-live, /api/live and Candidate discard",
@@ -1331,7 +1331,7 @@
     "semantics": "no reward/sample selection/feature contract/validation boundary/policy update order/Correct/Candidate/ActionIntent/Executor/physical control change",
     "validation": "1517 tests expected on Python 3.11 and 3.13; final CI confirmation required before merge"
   },
-  "release_validation_pending": false,
+  "release_validation_pending": true,
   "release_014121": {
     "scope": "persistent_selected_agent_transport_acceleration",
     "durable_experience_ids": "loaded once per selected-agent worker sequence; accepted ids join the session set only after successful batch persistence",
@@ -3825,5 +3825,15 @@
       ]
     },
     "qa_report": "docs/benchmarks/PERFORMANCE_PLAN_0_14_226_QA.json"
+  },
+  "release_014227": {
+    "changes": [
+      "Latch native raw-event audit corruption; retain accepted failed batches and expose explicit new audit gaps in bounded caches",
+      "Stop replaying corrupt INSERTs on the HA ingress overflow path",
+      "Use RAM-only provenance lookup for polling; keep explicit historical reads durable",
+      "Expose corruption state in the fast diagnostics panel and preserve native combined errors",
+      "Add offline copy-only read-only quick_check/integrity_check tool; no automatic repair or budget increase"
+    ],
+    "validation": "pending"
   }
 }

@@ -84,6 +84,10 @@ class RuntimeDebugLogService:
                 result['sqlite'] = getter()  # RAM-only cleanup progress for the live panel.
             except Exception as exc:
                 result['sqlite'] = {'error': f'{type(exc).__name__}: {exc}'}
+        health = getattr(getattr(getattr(self.core, 'ENGINE', None), 'provenance', None),
+                         'event_audit_health', None)
+        if callable(health):
+            result['event_audit_health'] = health()  # Bounded RAM state; no integrity scan.
         return result
 
     def configure(self, enabled, *, clear=False):

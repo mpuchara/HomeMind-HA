@@ -22,6 +22,7 @@ from context import target_value
 from control import same_value
 from settings import iso_now, now_ts
 from storage_budget import StoragePressure, storage_recording_paused
+from sqlite_background import is_sqlite_corruption
 
 CONTRACT_VERSION = 1
 UNKNOWN = "unknown"
@@ -68,12 +69,20 @@ class ProvenanceJournal:
         self._max_pending_events = 0
         # Backwards-compatible diagnostic counter. 0.14.132 never increments it.
         self._dropped_pending_events = 0
+        self._event_audit_fault = None
+        self._event_audit_gap_count = 0
+        self._event_audit_gap_start = None
+        self._event_audit_gap_end = None
         self.startup_diagnostics = {}
         started = time.perf_counter()
         self._migrate()
         self.startup_diagnostics['schema_seconds'] = time.perf_counter()-started
         self._ensure_recent_event_index()
-        self._load_recent_event_cache()
+        try:
+            self._load_recent_event_cache()
+        except sqlite3.DatabaseError as exc:
+            if not self._latch_event_corruption(exc):
+                raise
         started = time.perf_counter()
         self._load_active_command_cache()
         self.startup_diagnostics['active_command_cache_seconds'] = time.perf_counter()-started
@@ -267,9 +276,36 @@ class ProvenanceJournal:
         with self._event_cache_lock:
             return len(self._pending_events)
 
+    def _latch_event_corruption(self, exc):
+        if not is_sqlite_corruption(exc):
+            return False
+        with self._event_cache_lock:
+            if self._event_audit_fault is None:
+                self._event_audit_fault = dict(reason='database_corrupt', error=str(exc),
+                    sqlite_errorcode=getattr(exc, 'sqlite_errorcode', None),
+                    sqlite_errorname=getattr(exc, 'sqlite_errorname', None),
+                    detected_ts=float(self.clock()))
+        return True
+
+    def event_audit_health(self):
+        with self._event_cache_lock:
+            return dict(paused=self._event_audit_fault is not None,
+                fault=dict(self._event_audit_fault) if self._event_audit_fault else None,
+                retained_events=len(self._pending_events), skipped_events=self._event_audit_gap_count,
+                gap_start_ts=self._event_audit_gap_start, gap_end_ts=self._event_audit_gap_end,
+                recovery='offline_database_check_required' if self._event_audit_fault else None)
+
     def flush_events_batch(self, limit=512):
         limit = max(1, int(limit))
         with self._event_cache_lock:
+            if self._event_audit_fault is not None:
+                # Keep the failed batch for recovery. Never repeat a corrupt INSERT
+                # from a HA producer or a background writer on every new state.
+                exc = sqlite3.DatabaseError(self._event_audit_fault['error'])
+                for key in ('sqlite_errorcode', 'sqlite_errorname'):
+                    if self._event_audit_fault.get(key) is not None:
+                        setattr(exc, key, self._event_audit_fault[key])
+                raise exc
             keys = list(self._pending_events.keys())[:limit]
             rows = [dict(self._pending_events.pop(key)) for key in keys]
         if not rows:
@@ -303,11 +339,12 @@ class ProvenanceJournal:
                     "INSERT INTO provenance_history_links(entity_id,event_time,event_id)", links, 3,
                     " ON CONFLICT(entity_id,event_time) DO UPDATE SET event_id=excluded.event_id")
             return len(rows)
-        except Exception:
+        except Exception as exc:
             with self._event_cache_lock:
                 for row in reversed(rows):
                     self._pending_events[str(row["event_id"])] = row
                     self._pending_events.move_to_end(str(row["event_id"]), last=False)
+                self._latch_event_corruption(exc)
             raise
 
     def _load_active_command_cache(self):
@@ -372,6 +409,18 @@ class ProvenanceJournal:
             "state_json": _json(payload) if payload is not None else None,
             "processed_time": None,
         }
+        with self._event_cache_lock:
+            corrupt = self._event_audit_fault is not None
+            if corrupt:
+                # Live deduplication/origin remains RAM-first. Do not enqueue an
+                # unbounded stream behind an irrecoverable audit-table failure.
+                row['audit_gap_reason'] = 'database_corrupt'
+                self._remember_event(row)
+                self._event_audit_gap_count += 1
+                if self._event_audit_gap_start is None:
+                    self._event_audit_gap_start = received_time
+                self._event_audit_gap_end = received_time
+                return str(event_id), False
         if storage_recording_paused(self.store):
             # Keep origin in the bounded event cache for live command matching,
             # but suspend raw audit acquisition while disk admission is paused.
@@ -406,6 +455,11 @@ class ProvenanceJournal:
             )
             if existing is not None:
                 return str(event_id), False
+            if self._event_audit_fault is not None:
+                # A concurrent writer may have detected corruption during the
+                # overload flush. Re-enter the guarded RAM-only admission above.
+                return self.record_event(entity_id, state, event_time=event_time,
+                    received_time=received_time, source=source, origin=origin, event_id=event_id)
             self._remember_event(row)
             self._pending_events[str(event_id)] = dict(row)
             self._max_pending_events = max(
@@ -457,7 +511,7 @@ class ProvenanceJournal:
                 (processed_time, event_id),
             )
 
-    def history_provenance(self, entity_id, event_time):
+    def history_provenance(self, entity_id, event_time, *, cache_only=False):
         key = (str(entity_id), float(event_time))
         with self._event_cache_lock:
             event_id = self._history_event_cache.get(key)
@@ -468,6 +522,10 @@ class ProvenanceJournal:
                     if event_id in self._event_cache:
                         self._event_cache.move_to_end(event_id)
                     return dict(row)
+        if cache_only:
+            # Poll delivery must not query the historical audit database. The
+            # command cache still supplies exact own-command origin in runtime.
+            return {"origin": UNKNOWN, "source": UNKNOWN, "event_id": None}
         with self.store.conn() as c:
             row = c.execute(
                 """SELECT e.* FROM provenance_history_links l
