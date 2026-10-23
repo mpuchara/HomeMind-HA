@@ -434,6 +434,38 @@ class Store:
                                   **error_fields, **timings)
 
     @contextmanager
+    def diagnostic_read_session(self, *, seconds=120.0):
+        """Private read-only connection for an explicit background diagnostic job.
+
+        Reuse pages and schema setup across its many small reads without taking
+        Store.lock, running journal PRAGMAs or retaining a transaction between reads.
+        mode=ro/query_only also rejects accidental writes by legacy read helpers.
+        """
+        from pathlib import Path
+        if getattr(self._connection_session, 'connection', None) is not None:
+            raise RuntimeError('diagnostic reads require their own thread/session')
+        connection = sqlite3.connect(Path(self.path).resolve().as_uri() + '?mode=ro',
+                                     uri=True, timeout=.25)
+        connection.row_factory = sqlite3.Row
+        previous = vars(self._connection_session).copy()
+        try:
+            connection.execute('PRAGMA query_only=ON')
+            connection.execute('PRAGMA cache_size=-32768')
+            connection.execute('PRAGMA temp_store=MEMORY')
+            connection.execute('PRAGMA wal_autocheckpoint=0')
+            deadline = time.monotonic() + max(1.0, float(seconds))
+            connection.set_progress_handler(lambda: int(time.monotonic() >= deadline), 1000)
+            self._connection_session.connection = connection
+            self._connection_session.connection_busy_timeout_ms = 250
+            self._connection_session.busy_timeout_ms = 250
+            self._connection_session.checkpoint_pages = 0
+            yield connection
+        finally:
+            vars(self._connection_session).clear()
+            vars(self._connection_session).update(previous)
+            connection.close()
+
+    @contextmanager
     def training_admission_priority(self):
         """Let explicit admission acquire the writer before retryable diagnostics.
 

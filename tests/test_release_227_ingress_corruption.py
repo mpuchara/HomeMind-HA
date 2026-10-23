@@ -139,6 +139,16 @@ class IngressIntegration227Tests(unittest.TestCase):
         with patch.object(f.store,'conn',side_effect=AssertionError('Status must be RAM-only')):
             self.assertTrue(service.status()['event_audit_health']['paused'])
 
+    def test_background_turn_skips_latched_corrupt_audit_but_explicit_flush_still_fails(self):
+        f=self.fixture;journal=f.e.provenance
+        journal.record_event('sensor.old',support.state('sensor.old','1'),event_time=1.,event_id='old')
+        with patch('provenance.insert_bounded_rows',side_effect=corrupt_error()):
+            with self.assertRaises(DeferredBatchError):f.store._flush_all_provenance()
+        with patch.object(journal,'flush_events_batch',side_effect=AssertionError('retried corrupt INSERT')):
+            self.assertEqual(f.store._flush_all_provenance(max_event_batches=4)['events'],0)
+        self.assertEqual(journal.pending_event_count(),1)
+        with self.assertRaises(DeferredBatchError):f.store._flush_all_provenance()
+
 
 class HealthCheck227Tests(unittest.TestCase):
     def test_actual_delivery_regression_harness_finishes_before_writer_is_released(self):

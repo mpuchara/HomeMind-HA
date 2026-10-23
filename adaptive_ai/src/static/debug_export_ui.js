@@ -1,6 +1,7 @@
 // One-click asynchronous bounded Correct learning diagnostic export for Live/Candidate cards.
 (()=>{
   if(window.exportCorrectLearningDebug)return;
+  const jobs=new Map(),busyRefs=new Set();
 
   const safePart=value=>String(value??'')
     .trim()
@@ -22,7 +23,9 @@
     try{body=JSON.parse(text);}catch(_){}
     if(!response.ok){
       const message=body?.error||text||`HTTP ${response.status}`;
-      throw Error(message.slice(0,1200));
+      const error=Error(message.slice(0,1200));
+      error.status=response.status;
+      throw error;
     }
     if(!body||typeof body!=='object')throw Error('Debug endpoint did not return JSON');
     return body;
@@ -60,17 +63,31 @@
 
   async function waitForJob(job,button,original){
     const statusUrl=`api/debug/correct-learning/jobs/${encodeURIComponent(job.job_id)}`;
-    for(let attempt=0;attempt<1200;attempt++){
-      const response=await fetch(statusUrl,{
-        cache:'no-store',
-        headers:{'Accept':'application/json'},
-        adaptiveAiTimeoutMs:5000,
-      });
-      const state=await parseResponse(response);
+    const deadline=Date.now()+15*60*1000;
+    while(Date.now()<deadline){
+      let state;
+      try{
+        const response=await fetch(statusUrl,{
+          cache:'no-store',
+          headers:{'Accept':'application/json'},
+          adaptiveAiTimeoutMs:5000,
+        });
+        state=await parseResponse(response);
+      }catch(error){
+        // A status read may time out in HA Ingress while the server job keeps
+        // running. Retry this read of the same job, never submit another export.
+        if(error.status&&![429,502,503,504].includes(error.status))throw error;
+        if(button)button.textContent='Exporting… reconnecting';
+        await sleep(1500);
+        continue;
+      }
       const pct=Math.max(0,Math.min(100,Math.round(Number(state.progress||0)*100)));
       if(button)button.textContent=`Exporting… ${pct}%`;
       if(state.state==='done')return state;
-      if(state.state==='failed')throw Error(state.error||'Debug export failed');
+      if(state.state==='failed'){
+        jobs.delete(job.ref);
+        throw Error(state.error||'Debug export failed');
+      }
       await sleep(750);
     }
     throw Error('Debug export did not finish within 15 minutes');
@@ -79,7 +96,8 @@
   window.exportCorrectLearningDebug=async(ref,button)=>{
     ref=String(ref||'').trim();
     if(!ref){alert('Debug export: missing agent/generation reference');return null;}
-    if(button?.dataset?.debugExportBusy==='1')return null;
+    if(button?.dataset?.debugExportBusy==='1'||busyRefs.has(ref))return null;
+    busyRefs.add(ref);
 
     const original=button?.textContent||'Export debug';
     if(button){
@@ -88,20 +106,24 @@
       button.textContent='Exporting… 0%';
     }
     try{
-      const started=await startJob(ref);
+      const started=jobs.get(ref)||await startJob(ref);
+      jobs.set(ref,started);
       const finished=started.state==='done'?started:await waitForJob(started,button,original);
       const filename=triggerDownload(finished,ref);
+      jobs.delete(ref);
       if(button){
         button.textContent='Downloaded ✓';
         setTimeout(()=>{if(button.isConnected)button.textContent=original;},1800);
       }
       return {filename,job:finished};
     }catch(error){
+      if(error.status===404)jobs.delete(ref);
       console.error('Correct learning debug export failed',error);
       alert('Debug export failed: '+(error?.message||String(error)));
       if(button)button.textContent=original;
       return null;
     }finally{
+      busyRefs.delete(ref);
       if(button){
         delete button.dataset.debugExportBusy;
         button.disabled=false;

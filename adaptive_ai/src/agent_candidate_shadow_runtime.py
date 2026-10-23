@@ -392,8 +392,8 @@ def _blank_summary():
     }
 
 
-def _comparison_row(store, parent_generation_id, child_generation_id):
-    with store.conn() as c:
+def _comparison_row(store, parent_generation_id, child_generation_id, connection=None):
+    with nullcontext(connection) if connection is not None else store.conn() as c:
         row = c.execute(
             """SELECT * FROM candidate_generation_comparisons
                WHERE parent_generation_id=? AND child_generation_id=?""",
@@ -545,14 +545,14 @@ def _rebuild_summary(manager, edge):
     return _persist_summary(manager, edge, summary)
 
 
-def _apply_pair_to_summary(manager, edge, pair):
+def _apply_pair_to_summary(manager, edge, pair, *, connection=None, epochs=None, root_id=None):
     """Update comparison summary from one newly inserted paired outcome in O(1).
 
     _rebuild_summary remains available for migration/recovery, but live outcome handling
     must never rescan the complete pair table as evidence grows.
     """
     existing = _comparison_row(
-        manager.store, edge["parent_generation_id"], edge["child_generation_id"]
+        manager.store, edge["parent_generation_id"], edge["child_generation_id"], connection
     )
     summary = {
         **_blank_summary(),
@@ -600,6 +600,9 @@ def _apply_pair_to_summary(manager, edge, pair):
             summary["off_events"] = int(summary.get("off_events") or 0) + 1
             summary["live_off_lead_sum"] = float(summary.get("live_off_lead_sum") or 0.0) + float(parent_lead or 0.0)
             summary["candidate_off_lead_sum"] = float(summary.get("candidate_off_lead_sum") or 0.0) + float(child_lead or 0.0)
+    if connection is not None:
+        return _persist_summary_unlocked(manager, edge, summary, derive=False,
+            observed_root=root_id, expected_epochs=epochs, counter_connection=connection)
     return _persist_summary(manager, edge, summary)
 
 
@@ -886,6 +889,7 @@ def install(manager):
                           if type(stamp) in (int,float) and math.isfinite(stamp) and 0 < stamp <= completed]
                 if starts:
                     TELEMETRY.observe(metric, (completed-min(starts))*1000)
+        bundle['_epochs'] = {g['generation_id']: g.get('created_ts') for g in [root_gen, *shadow_generations]}
         return bundle
 
     def _write_bundle(bundle):
@@ -981,6 +985,7 @@ def install(manager):
         with manager.lock:
             result['admission'] = dict(admission)
             result['comparison_evidence_invalidations'] = summary_invalidations[0]
+        result['transitions'] = transition_writes.snapshot()
         result['storage'] = storage_status(manager.store)
         return result
 
@@ -1144,6 +1149,7 @@ def install(manager):
         )
         if not bundle:
             return None
+        _cached_active_edge(agent["id"])  # Candidate worker owns cold lineage reads.
         root_rt["bundle"] = bundle
         root_rt["previous_current"] = bundle["current"]
         try:
@@ -1171,6 +1177,38 @@ def install(manager):
             active_edge_cache[root_id] = dict(value) if value else None
         return dict(value) if value else None
 
+    def persist_transition(payload):
+        edge = payload['edge']
+        with manager.candidate_summary_write_lock, manager.store.lock, manager.store.conn() as c:
+            if payload.get('deferred') and not _counter_epoch_valid(c, payload.get('epochs')):
+                summary_invalidations[0] += 1
+                return False
+            before = c.total_changes
+            c.execute(
+                """INSERT OR IGNORE INTO candidate_generation_pairs
+                   (root_agent_id,parent_generation_id,child_generation_id,prediction_event_id,prediction_ts,
+                    outcome_ts,outcome,parent_prediction,child_prediction,parent_confidence,child_confidence,
+                    parent_correct,child_correct,paired_result,evidence_kind,calibration_eligible,dependency_cluster,
+                    calibration_outcome,calibration_parent_correct,calibration_child_correct,calibration_source_id,
+                    parent_lead_seconds,child_lead_seconds,lead_gain_seconds,objective_outcome,objective_source)
+                   VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                payload['values'],
+            )
+            inserted = c.total_changes > before
+            if payload.get('deferred'):
+                if inserted:
+                    _apply_pair_to_summary(manager, edge, payload['summary'], connection=c,
+                        epochs=payload.get('epochs'), root_id=payload['values'][0])
+        if not payload.get('deferred') and inserted:
+            _apply_pair_to_summary(manager, edge, payload['summary'])
+        if payload.get('deferred'):
+            callback = getattr(manager, 'candidate_pair_persisted', None)
+            if callable(callback):
+                callback(payload['values'])
+        return inserted
+
+    transition_writes = DeferredEvidence(manager.store, persist_transition)
+
     def _before_live_process(agent, state_map):
         root_rt = _root_runtime(agent["id"])
         previous_current = root_rt.get("previous_current")
@@ -1190,7 +1228,15 @@ def install(manager):
                 return None
         except Exception:
             pass
-        edge = _cached_active_edge(agent["id"])
+        if callable(getattr(manager, 'request_candidate_shadow_persistence', None)):
+            # Warmed by the Candidate worker; a lifecycle cache miss cannot perform
+            # SQLite reads before a Live decision. Missing evidence remains a gap.
+            with manager.lock:
+                edge = active_edge_cache.get(str(agent['id']))
+            if edge is None:
+                return None
+        else:
+            edge = _cached_active_edge(agent["id"])
         bundle = root_rt.get("bundle")
         if not edge or not bundle:
             return None
@@ -1235,44 +1281,32 @@ def install(manager):
                 child_lead = min(30.0, max(0.0, outcome_ts - float(child.get("desired_since_ts") or bundle["ts"])))
             if parent_lead is not None and child_lead is not None:
                 lead_gain = child_lead - parent_lead
-        inserted = False
-        with manager.store.lock, manager.store.conn() as c:
-            before = c.total_changes
-            c.execute(
-                """INSERT OR IGNORE INTO candidate_generation_pairs
-                   (root_agent_id,parent_generation_id,child_generation_id,prediction_event_id,prediction_ts,
-                    outcome_ts,outcome,parent_prediction,child_prediction,parent_confidence,child_confidence,
-                    parent_correct,child_correct,paired_result,evidence_kind,calibration_eligible,dependency_cluster,
-                    calibration_outcome,calibration_parent_correct,calibration_child_correct,calibration_source_id,
-                    parent_lead_seconds,child_lead_seconds,lead_gain_seconds,objective_outcome,objective_source)
-                   VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
-                (
-                    str(agent["id"]), edge["parent_generation_id"], edge["child_generation_id"],
-                    bundle["event_id"], float(bundle["ts"]), float(outcome_ts), float(outcome),
-                    float(parent["desired"]), float(child["desired"]), parent.get("confidence"), child.get("confidence"),
-                    int(p_ok), int(c_ok), paired_result, evidence["evidence_kind"],
-                    int(evidence["calibration_eligible"]), evidence["dependency_cluster"],
-                    float(outcome) if evidence["calibration_eligible"] else None,
-                    int(p_ok) if evidence["calibration_eligible"] else None,
-                    int(c_ok) if evidence["calibration_eligible"] else None,
-                    (bundle["event_id"] if evidence["calibration_eligible"] else None),
-                    parent_lead, child_lead, lead_gain, objective, objective_source,
-                ),
-            )
-            inserted = c.total_changes > before
-        if inserted:
-            _apply_pair_to_summary(
-                manager,
-                edge,
-                {
-                    "parent_correct": int(p_ok),
-                    "child_correct": int(c_ok),
-                    "outcome": float(outcome),
-                    "parent_lead_seconds": parent_lead,
-                    "child_lead_seconds": child_lead,
-                },
-            )
-        return inserted
+        values = (
+            str(agent["id"]), edge["parent_generation_id"], edge["child_generation_id"],
+            bundle["event_id"], float(bundle["ts"]), float(outcome_ts), float(outcome),
+            float(parent["desired"]), float(child["desired"]), parent.get("confidence"), child.get("confidence"),
+            int(p_ok), int(c_ok), paired_result, evidence["evidence_kind"],
+            int(evidence["calibration_eligible"]), evidence["dependency_cluster"],
+            float(outcome) if evidence["calibration_eligible"] else None,
+            int(p_ok) if evidence["calibration_eligible"] else None,
+            int(c_ok) if evidence["calibration_eligible"] else None,
+            (bundle["event_id"] if evidence["calibration_eligible"] else None),
+            parent_lead, child_lead, lead_gain, objective, objective_source,
+        )
+        payload = dict(edge=edge, values=values, summary={
+            "parent_correct": int(p_ok), "child_correct": int(c_ok),
+            "outcome": float(outcome), "parent_lead_seconds": parent_lead,
+            "child_lead_seconds": child_lead,
+        })
+        if callable(getattr(manager, 'request_candidate_shadow_persistence', None)):
+            payload.update(deferred=True, epochs=bundle.get('_epochs') or {})
+            key = 'transition:' + ':'.join(map(str, (edge['parent_generation_id'],
+                edge['child_generation_id'], bundle['event_id'], outcome_ts)))
+            transition_writes.submit(key, payload)
+            manager.request_candidate_shadow_persistence()
+            # A receipt is not committed evidence; EpisodeEvaluator runs on the writer.
+            return None
+        return persist_transition(payload)
 
     def before_live_process(agent, state_map):
         try:
@@ -1770,10 +1804,16 @@ def install(manager):
     manager.candidate_shadow_current_job = deferred_shadow.current_job
     manager.candidate_shadow_async_diagnostics = deferred_shadow.diagnostics
     manager.candidate_shadow_async = deferred_shadow
-    manager.flush_candidate_shadow_decisions = decision_writes.flush
+    def flush_candidate_evidence(*, force=False, limit=4):
+        count = decision_writes.flush(force=force, limit=limit)
+        return count + transition_writes.flush(force=force, limit=limit)
+
+    manager.flush_candidate_shadow_decisions = flush_candidate_evidence
     manager.candidate_shadow_decision_writes = decision_writes
+    manager.candidate_shadow_transition_writes = transition_writes
     manager.candidate_summary_pending = lambda root_id=None: decision_writes.has_pending_prefix(
-        'false-early:'+(str(root_id)+':' if root_id is not None else ''))
+        'false-early:'+(str(root_id)+':' if root_id is not None else '')) or bool(
+            transition_writes.snapshot()['pending'])
     manager.candidate_shadow_persistence_snapshot = persistence_snapshot
     manager.drain_candidate_shadow_events = drain_candidate_shadow_events
     manager.candidate_shadow_wait_seconds = candidate_shadow_wait_seconds

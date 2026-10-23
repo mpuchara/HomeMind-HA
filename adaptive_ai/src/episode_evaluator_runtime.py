@@ -336,15 +336,16 @@ def _candidate_policy_key(generation_id):
     return "generation:" + str(generation_id)
 
 
-def _candidate_pair_episode(manager, evaluator, root_id):
+def _candidate_pair_episode(manager, evaluator, root_id, pair=None):
     with manager.store.conn() as c:
-        pair = c.execute(
-            """SELECT * FROM candidate_generation_pairs WHERE root_agent_id=?
-               ORDER BY outcome_ts DESC LIMIT 1""", (str(root_id),)
-        ).fetchone()
-        if not pair:
-            return None
-        pair = dict(pair)
+        if pair is None:
+            pair = c.execute(
+                """SELECT * FROM candidate_generation_pairs WHERE root_agent_id=?
+                   ORDER BY outcome_ts DESC LIMIT 1""", (str(root_id),)
+            ).fetchone()
+            if not pair:
+                return None
+            pair = dict(pair)
         decision = c.execute(
             """SELECT current FROM candidate_generation_decisions
                WHERE event_id=? AND generation_id=? ORDER BY ts DESC LIMIT 1""",
@@ -411,6 +412,17 @@ def install_candidate(manager, evaluator: EpisodeEvaluator):
     """Feed Candidate Shadow episodes and let named gates consume independent labels."""
     if getattr(manager, "_episode_evaluator_installed", False):
         return manager
+    def pair_persisted(values):
+        columns = ('root_agent_id parent_generation_id child_generation_id prediction_event_id '
+                   'prediction_ts outcome_ts outcome parent_prediction child_prediction '
+                   'parent_confidence child_confidence parent_correct child_correct paired_result '
+                   'evidence_kind calibration_eligible dependency_cluster calibration_outcome '
+                   'calibration_parent_correct calibration_child_correct calibration_source_id '
+                   'parent_lead_seconds child_lead_seconds lead_gain_seconds objective_outcome objective_source').split()
+        pair = dict(zip(columns, values))
+        return _candidate_pair_episode(manager, evaluator, pair['root_agent_id'], pair=pair)
+
+    manager.candidate_pair_persisted = pair_persisted
     original_before = manager.before_live_process
     original_after = manager.after_live_process
     original_summary = manager._comparison_summary

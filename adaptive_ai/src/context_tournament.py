@@ -40,6 +40,16 @@ from tournament_observation_queue import EngineObservationView, DeferredTourname
 from runtime_background_compute import background_compute_scope
 
 
+def context_row_ram_budget(options):
+    from runtime_sqlite_cache import memory_headroom
+    requested = max(1, min(64, int(options.get('context_row_ram_mb', 64))))
+    total, available = memory_headroom()
+    if total is None or available is None:
+        return min(requested, 16)
+    # Each of at most two row buffers gets <=1% total / 5% available RAM.
+    return max(1, min(requested, int(total * .01), int(max(0, available - 256) * .05)))
+
+
 SHADOW_MODEL_VERSION = 1
 SHADOW_BUCKET_COUNT = 9
 
@@ -149,7 +159,7 @@ class ContextTournament:
             if buffer is None:
                 buffer = ContextRowBuffer(self.store, name, statement,
                     flush_seconds=max(5., min(60., float(OPTIONS.get('context_row_flush_seconds', 30)))),
-                    max_bytes=max(1, min(64, int(OPTIONS.get('context_row_ram_mb', 16)))) * 1024 * 1024,
+                    max_bytes=context_row_ram_budget(OPTIONS) * 1024 * 1024,
                     shared_columns=(13, 14, 15) if name == 'observed_pool' else ())
                 self._context_row_buffers[name] = buffer
             return buffer

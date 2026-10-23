@@ -69,7 +69,7 @@ class DeferredTournamentObservations:
         self.sync_required = OrderedDict()
         self.local = threading.local()
         self.max_jobs = max(1, min(256, int(max_jobs)))
-        configured = max(1, min(256, int(OPTIONS.get('runtime_tournament_ram_mb', 64)))) * 1024**2
+        configured = max(1, min(256, int(OPTIONS.get('runtime_tournament_ram_mb', 256)))) * 1024**2
         self.configured_bytes = configured if max_bytes is None else int(max_bytes)
         self.max_bytes = self.configured_bytes
         self.used_bytes = 0
@@ -133,6 +133,8 @@ class DeferredTournamentObservations:
         self.memory_sample_ts = now
         total, available = memory_headroom()
         limit = self.configured_bytes
+        if total is None or available is None:
+            limit = min(limit, 64 * 1024**2)
         if total is not None:
             limit = min(limit, max(0, int(total * .05 * 1024**2)))
         if available is not None:

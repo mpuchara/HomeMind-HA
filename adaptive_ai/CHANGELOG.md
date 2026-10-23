@@ -1,3 +1,10 @@
+## 0.14.228
+
+- Queue exact Candidate outcome evidence before Live; persist pairs/counters atomically on the existing writer with generation-epoch and retry guards.
+- Recover transient 5000 ms export-status failures without resubmitting the job; reuse a private read-only SQLite session and bounded indexed raw windows.
+- Make legacy Correct label-ID normalization read-only; stop background retries of a latched corrupt raw audit batch.
+- Increase default optional observer RAM ceilings under host/cgroup headroom limits. SQLite corruption still requires offline diagnosis; target Pi/Control latency is unverified.
+
 # 0.14.227
 
 - Stop retrying corrupt raw-event audit writes after native SQLITE_CORRUPT/NOTADB detection. Keep accepted failed batches for recovery and expose new audit acquisition gaps while live deduplication/origin use bounded RAM caches. Transient busy/storage retry behavior and synchronous command persistence stay intact.
