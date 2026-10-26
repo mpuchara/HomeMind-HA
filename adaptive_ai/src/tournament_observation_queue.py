@@ -14,7 +14,7 @@ import time
 import weakref
 
 from context import TemporalHistory, target_value
-from shadow_observation_scheduler import interval_seconds
+from shadow_observation_scheduler import interval_seconds, max_deferral_seconds, realtime_pending
 from runtime_sqlite_cache import memory_headroom
 from settings import OPTIONS
 from storage_budget import storage_status
@@ -102,6 +102,29 @@ class DeferredTournamentObservations:
 
     def is_deferred(self):
         return bool(getattr(self.local, 'deferred', False))
+
+    def yield_to_foreground(self, deadline=None):
+        if deadline is None:
+            if not self.is_deferred():
+                return
+            deadline = getattr(self.local, 'priority_deadline', 0.)
+        # Optional work yields both before a frame and between challengers.
+        # A bounded oldest-frame deadline still guarantees observer progress.
+        while time.monotonic() < deadline:
+            if self.closed:
+                return
+            stop = getattr(self.engine, 'stop_event', None)
+            if stop is not None and stop.is_set():
+                return
+            with self.service._foreground_lock:
+                busy = bool(self.service._foreground_threads)
+            if not busy and not realtime_pending(self.engine):
+                return
+            self.stats['foreground_yields'] = self.stats.get('foreground_yields', 0)+1
+            if stop is not None:
+                stop.wait(.005)
+            else:
+                time.sleep(.005)
 
     def _additional_charge(self, job):
         return job.get('private_charge', job['charge']) + sum(
@@ -320,6 +343,7 @@ class DeferredTournamentObservations:
                 # Only redundant sensor refreshes at the same target value can
                 # coalesce. Never erase an observed target edge or cross one.
                 self.pending.remove(latest)
+                job['first_queued'] = latest.get('first_queued', latest['queued'])
                 self._release(latest)
                 self.stats['coalesced'] += 1
             while self.pending and (len(self.pending) >= self.max_jobs or
@@ -389,6 +413,7 @@ class DeferredTournamentObservations:
                      context_relevance={aid: packet['relevance']}, temporal_history=temporal,
                      state_revision=packet['revision'], context=frozen)
         self.local.deferred = True
+        self.local.priority_deadline = job.get('first_queued', job['queued']) + max_deferral_seconds()
         try:
             with self.service.engine.bind(frame), observation_clock(packet['timestamp']), background_sqlite(self.service.store, retryable=False):
                 self.service.sync_if_needed(packet['agent'], policy)
@@ -399,11 +424,16 @@ class DeferredTournamentObservations:
                         self._gap(aid)
         finally:
             self.local.deferred = False
+            del self.local.priority_deadline
         self.stats['processed'] += 1
 
     def _run(self):
         while True:
             self._sample_memory()
+            with self.lock:
+                oldest = self.pending[0] if self.pending else None
+            if oldest is not None:
+                self.yield_to_foreground(oldest.get('first_queued', oldest['queued']) + max_deferral_seconds())
             with self.lock:
                 stop = getattr(self.engine, 'stop_event', None)
                 if self.closed or (stop is not None and stop.is_set()):

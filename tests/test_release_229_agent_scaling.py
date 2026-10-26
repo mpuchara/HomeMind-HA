@@ -7,6 +7,7 @@ import subprocess
 import sys
 import sqlite3
 import threading
+import time
 import unittest
 from unittest.mock import Mock,patch
 from types import SimpleNamespace
@@ -136,6 +137,29 @@ class AgentScalingTests(unittest.TestCase):
             result=self.service._execute_observation(self.f.agent,self.f.states,{self.f.target},None)
         self.assertFalse(result);self.assertGreater(self.service._observation_storage_retry.delay(),0)
         report.assert_not_called();blocker.rollback()
+
+    def test_optional_worker_yields_until_root_finishes_and_releases_its_charge(self):
+        self.e.dirty_entities=set();self.e.pending_target_changes={};self.e.ready_target_changes={}
+        self.q.submit(self.f.agent,self.f.states,{self.f.target},None)
+        entered=threading.Event();self.q._execute=lambda job:entered.set()
+        self.service._foreground_threads.add(123)
+        t=threading.Thread(target=self.q._run);t.start()
+        try:
+            self.assertFalse(entered.wait(.05))
+            self.service._foreground_threads.clear()
+            self.assertTrue(entered.wait(1.))
+        finally:
+            self.e.stop_event.set();self.q.wake.set();t.join(2.)
+        self.assertFalse(t.is_alive());self.assertEqual(self.q.used_bytes,0)
+
+    def test_priority_deadline_prevents_starvation_under_continuous_root_work(self):
+        self.e.dirty_entities=set();self.e.pending_target_changes={};self.e.ready_target_changes={}
+        self.service._foreground_threads.add(123)
+        started=time.monotonic()
+        self.q.yield_to_foreground(started+.03)
+        self.assertGreater(self.q.stats['foreground_yields'],0)
+        self.assertLess(time.monotonic()-started,.5)
+        self.service._foreground_threads.clear()
 
 
 class TrainingWriterPriorityTests(unittest.TestCase):

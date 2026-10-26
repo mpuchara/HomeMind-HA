@@ -662,6 +662,7 @@ class ContextTournament:
                 ttl = self._shadow_ttl(agent)
                 active_challengers = set(challengers)
                 for challenger, sample in pending.items():
+                    self._deferred_observations.yield_to_foreground()
                     if challenger not in active_challengers:
                         continue
                     age = now - float(sample.get("ts") or 0.0)
@@ -682,6 +683,7 @@ class ContextTournament:
 
         predictions = {}
         for challenger in challengers:
+            self._deferred_observations.yield_to_foreground()
             scalar = context_scalar(challenger, states.get(challenger), agent)
             if scalar is None:
                 continue
