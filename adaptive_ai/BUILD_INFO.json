@@ -3,7 +3,7 @@
   "release_date": "2026-10-27",
   "base_version": "0.14.229",
   "base_commit": "8e47cd6652c1364f0b048f79d507929b1cca6168",
-  "release_status": "draft-host-validation-target-acceptance-open",
+  "release_status": "draft-host-validated-whole-runtime-and-target-gates-open",
   "release_014140": {
     "scope": "inventory_and_remove_remaining_shipped_feature_Handler_fallbacks_for_Candidate_Live_and_manual_feedback_transport",
     "explicit_routes": "manual_feedback.js, candidate_ui.js, candidate_preference_ui.js, /api/candidates, Candidate Teach-RL status/train, generation history/comparison, /api/candidate-live, /api/live and Candidate discard",
@@ -3937,7 +3937,7 @@
     },
     "source_files_verified": 653
   },
-  "tests_passed_scope": "complete local Linux suite; exact source manifest verified",
+  "tests_passed_scope": "0.14.230: full CI Python 3.11 and 3.13; see release_014230 and QA receipt for local validation",
   "release_014229": {
     "changes": [
       "Share retained causal sensor/history snapshot charges across pending and active G0 devices; bounded weak chunk interning",
@@ -3999,6 +3999,34 @@
     "scope": "A0 foundation and A2a sparse scheduler routing snapshot",
     "safety": "states and revisions remain atomically detached; durable commands and lifecycle synchronization unchanged",
     "report": "docs/PERFORMANCE_OPTIMIZATION_0.14.230_PL.md",
-    "target_pi_acceptance": "pending"
+    "target_pi_acceptance": "pending",
+    "source_commit": "7332f42abbb9896cde481f4f4439e53d7cd8809a",
+    "source_files": 658,
+    "ci": {
+      "run_id": 40419243101,
+      "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/40419243101",
+      "python311": {
+        "tests": 2817,
+        "seconds": 251.467,
+        "result": "OK"
+      },
+      "python313": {
+        "tests": 2817,
+        "seconds": 264.424,
+        "result": "OK"
+      },
+      "docker_build_start": "passed",
+      "required_benchmarks": "passed",
+      "package_job": "skipped; main-only; manual committed-source packaging required"
+    },
+    "whole_root_p95_p99_acceptance": "open; mixed host results",
+    "raw_samples": "docs/benchmarks/PERFORMANCE_0_14_230_RAW.json.gz",
+    "local_validation": {
+      "exit_code": 0,
+      "tests": 2817,
+      "seconds": 433.865,
+      "result": "OK",
+      "log_sha256": "b299e41d9e9f3a26b4ad57d22c4825cd950cec3fd64433909209d2061b8b73fb"
+    }
   }
 }
