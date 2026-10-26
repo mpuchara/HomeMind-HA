@@ -1,0 +1,4539 @@
+{
+  "source_commit": "95f6416e963e5a670c654dfa72957d57f26c02bf",
+  "baseline_commit": "7b0c54ca53cb7b4b608c7b628f20a4d99f2697ce",
+  "summary": [
+    {
+      "agents": 1,
+      "before_median_host_p95_ms": 8.042400004342198,
+      "after_median_host_p95_ms": 6.586700037587434,
+      "before_protection_updates": 14400,
+      "after_protection_updates": 14400,
+      "decision_and_evidence_sha_equal": true
+    },
+    {
+      "agents": 3,
+      "before_median_host_p95_ms": 26.9504000316374,
+      "after_median_host_p95_ms": 20.849599968641996,
+      "before_protection_updates": 43200,
+      "after_protection_updates": 17600,
+      "decision_and_evidence_sha_equal": true
+    },
+    {
+      "agents": 4,
+      "before_median_host_p95_ms": 31.69450000859797,
+      "after_median_host_p95_ms": 27.27359998971224,
+      "before_protection_updates": 57600,
+      "after_protection_updates": 19200,
+      "decision_and_evidence_sha_equal": true
+    },
+    {
+      "agents": 5,
+      "before_median_host_p95_ms": 41.73399996943772,
+      "after_median_host_p95_ms": 35.925500036682934,
+      "before_protection_updates": 72000,
+      "after_protection_updates": 20800,
+      "decision_and_evidence_sha_equal": true
+    }
+  ],
+  "raw": [
+    {
+      "agents": 1,
+      "repeat": 0,
+      "before": {
+        "engine": {
+          "agents": 1,
+          "events": 12,
+          "entities": 780,
+          "samples": 12,
+          "event_to_executor_p95_ms": 8.042400004342198,
+          "median_ms": 5.132600024808198,
+          "decisions_sha256": "5612abc4be1093719a85d2c9cf045754a15cf757200c521fa89cec1f61fd4c79",
+          "decision_statuses": {
+            "SHADOW": 12
+          },
+          "ha_calls": 0,
+          "root_confidence_fixture": true,
+          "real_engine_scheduler": true,
+          "tournament": {
+            "queued": 0,
+            "flushed": 0,
+            "flushes": 0,
+            "errors": 0,
+            "shared_source_snapshots": 0,
+            "pending": 0,
+            "storage_retry": {
+              "reason": null,
+              "pauses": 0,
+              "busy_retries": 0,
+              "retry_in_seconds": 0.0
+            },
+            "context_rows": {
+              "sensor_quality": {
+                "pending": 0,
+                "flushed": 8,
+                "errors": 0,
+                "bytes": 0,
+                "max_bytes": 16777216,
+                "max_rows": 4096,
+                "inflight": 0,
+                "flush_seconds": 30.0,
+                "overflow_flushes": 0,
+                "batch_rows": 64,
+                "batch_bytes": 1048576,
+                "commits": 1,
+                "max_store_hold_ms": 1.3209000462666154,
+                "shared_payload_columns": [],
+                "shared_payloads": 0,
+                "shared_payload_references": 0,
+                "shared_payload_bytes": 0,
+                "duplicate_payload_charge_avoided_bytes": 0
+              },
+              "observed_pool": {
+                "pending": 0,
+                "flushed": 96,
+                "errors": 0,
+                "bytes": 0,
+                "max_bytes": 16777216,
+                "max_rows": 4096,
+                "inflight": 0,
+                "flush_seconds": 30.0,
+                "overflow_flushes": 0,
+                "batch_rows": 64,
+                "batch_bytes": 1048576,
+                "commits": 2,
+                "max_store_hold_ms": 1.6006000223569572,
+                "shared_payload_columns": [
+                  13,
+                  14,
+                  15
+                ],
+                "shared_payloads": 0,
+                "shared_payload_references": 0,
+                "shared_payload_bytes": 0,
+                "duplicate_payload_charge_avoided_bytes": 0
+              }
+            },
+            "storage_admission": {
+              "skipped": 0,
+              "recoveries": 0,
+              "reason": null,
+              "paused_agents": 0,
+              "max_agents": 256
+            },
+            "observation_pool_cache": {
+              "hits": 63,
+              "reads": 9,
+              "scope": "one_observation",
+              "persistent_entries": 0
+            },
+            "observation_scheduler": {
+              "interval_ms": 0.0,
+              "executed": 9,
+              "skipped": 0,
+              "target_forced": 0,
+              "errors": 0,
+              "tracked_agents": 1,
+              "max_agents": 256,
+              "deferred_for_realtime": 0,
+              "max_deferral_ms": 5000.0,
+              "retry_agents": 0,
+              "scope": "Engine-dispatched candidate observations; target events always admitted"
+            },
+            "deferred_observations": {
+              "queued": 12,
+              "processed": 9,
+              "dropped": 0,
+              "errors": 0,
+              "gaps": 0,
+              "stale": 0,
+              "max_depth": 1,
+              "last_queue_lag_ms": 0.0,
+              "sync_observations": 0,
+              "storage_skips": 0,
+              "last_error": null,
+              "last_capture_ms": 1.269300002604723,
+              "peak_bytes": 6211904,
+              "coalesced": 3,
+              "pending_interval_skips": 0,
+              "pending": 0,
+              "active": false,
+              "bytes": 0,
+              "max_bytes": 67108864,
+              "configured_bytes": 268435456,
+              "max_jobs": 64,
+              "sync_required": 0,
+              "gap_agents": 0,
+              "temporal_snapshots": {
+                "hits": 8569,
+                "misses": 791,
+                "bytes": 2428232,
+                "max_bytes": 67108864,
+                "entities": 780,
+                "max_entities": 2048
+              },
+              "state_snapshots": {
+                "bytes": 532568,
+                "max_bytes": 16777216,
+                "entries": 780,
+                "max_entries": 2048,
+                "hits": 8569,
+                "misses": 791,
+                "complete_hits": 0,
+                "complete_bytes": 63552
+              },
+              "registry_snapshots": {
+                "bytes": 144,
+                "max_bytes": 8388608,
+                "entries": 0,
+                "max_entries": 2048,
+                "hits": 0,
+                "misses": 0,
+                "complete_hits": 11,
+                "complete_bytes": 144
+              },
+              "isolated_compute": {
+                "starts": 0,
+                "requests": 0,
+                "errors": 0,
+                "max_payload_bytes": 0,
+                "last_ms": null,
+                "ram_limit_mb": null,
+                "timeouts": 0,
+                "alive": false,
+                "pid": null,
+                "semantics": "pure optional compute, private pipe, no HA or SQLite"
+              },
+              "semantics": "FIFO causal frames; explicit evidence gaps on discard"
+            }
+          },
+          "target_pi_verified": false
+        },
+        "journal": {
+          "agents": 1,
+          "shared_sensors": 8,
+          "events_per_entity": 1600,
+          "ms": 42.43909998331219,
+          "total_changes": 14410,
+          "protection_updates": 14400,
+          "evidence_sha256": "b6cea8b7fd9072dcf4ab64ee8b3ee57c3a5cd5c34f2a0f6b099c2e6a1fd09df6",
+          "scope": "Actual SQLite evidence protection only; not physical HA latency"
+        }
+      },
+      "after": {
+        "engine": {
+          "agents": 1,
+          "events": 12,
+          "entities": 780,
+          "samples": 12,
+          "event_to_executor_p95_ms": 6.586700037587434,
+          "median_ms": 4.366000008303672,
+          "decisions_sha256": "5612abc4be1093719a85d2c9cf045754a15cf757200c521fa89cec1f61fd4c79",
+          "decision_statuses": {
+            "SHADOW": 12
+          },
+          "ha_calls": 0,
+          "root_confidence_fixture": true,
+          "real_engine_scheduler": true,
+          "tournament": {
+            "queued": 0,
+            "flushed": 0,
+            "flushes": 0,
+            "errors": 0,
+            "shared_source_snapshots": 0,
+            "pending": 0,
+            "storage_retry": {
+              "reason": null,
+              "pauses": 0,
+              "busy_retries": 0,
+              "retry_in_seconds": 0.0
+            },
+            "observation_storage_retry": {
+              "reason": null,
+              "pauses": 0,
+              "busy_retries": 0,
+              "retry_in_seconds": 0.0
+            },
+            "context_rows": {
+              "sensor_quality": {
+                "pending": 0,
+                "flushed": 8,
+                "errors": 0,
+                "bytes": 0,
+                "max_bytes": 16777216,
+                "max_rows": 4096,
+                "inflight": 0,
+                "flush_seconds": 30.0,
+                "overflow_flushes": 0,
+                "batch_rows": 64,
+                "batch_bytes": 1048576,
+                "commits": 1,
+                "max_store_hold_ms": 1.9199999514967203,
+                "shared_payload_columns": [],
+                "shared_payloads": 0,
+                "shared_payload_references": 0,
+                "shared_payload_bytes": 0,
+                "duplicate_payload_charge_avoided_bytes": 0
+              },
+              "observed_pool": {
+                "pending": 0,
+                "flushed": 96,
+                "errors": 0,
+                "bytes": 0,
+                "max_bytes": 16777216,
+                "max_rows": 4096,
+                "inflight": 0,
+                "flush_seconds": 30.0,
+                "overflow_flushes": 0,
+                "batch_rows": 64,
+                "batch_bytes": 1048576,
+                "commits": 2,
+                "max_store_hold_ms": 1.6730999923311174,
+                "shared_payload_columns": [
+                  13,
+                  14,
+                  15
+                ],
+                "shared_payloads": 0,
+                "shared_payload_references": 0,
+                "shared_payload_bytes": 0,
+                "duplicate_payload_charge_avoided_bytes": 0
+              }
+            },
+            "storage_admission": {
+              "skipped": 0,
+              "recoveries": 0,
+              "reason": null,
+              "paused_agents": 0,
+              "max_agents": 256
+            },
+            "observation_pool_cache": {
+              "hits": 56,
+              "reads": 8,
+              "scope": "one_observation",
+              "persistent_entries": 0
+            },
+            "observation_scheduler": {
+              "interval_ms": 0.0,
+              "executed": 8,
+              "skipped": 0,
+              "target_forced": 0,
+              "errors": 0,
+              "tracked_agents": 1,
+              "max_agents": 256,
+              "deferred_for_realtime": 0,
+              "max_deferral_ms": 5000.0,
+              "retry_agents": 0,
+              "scope": "Engine-dispatched candidate observations; target events always admitted"
+            },
+            "deferred_observations": {
+              "queued": 12,
+              "processed": 8,
+              "dropped": 0,
+              "errors": 0,
+              "gaps": 0,
+              "stale": 0,
+              "max_depth": 1,
+              "last_queue_lag_ms": 0.0,
+              "sync_observations": 0,
+              "storage_skips": 0,
+              "last_error": null,
+              "last_capture_ms": 1.741299987770617,
+              "peak_bytes": 4008008,
+              "coalesced": 4,
+              "pending_interval_skips": 0,
+              "pending": 0,
+              "active": false,
+              "bytes": 0,
+              "max_bytes": 67108864,
+              "configured_bytes": 268435456,
+              "max_jobs": 64,
+              "sync_required": 0,
+              "gap_agents": 0,
+              "shared_snapshot_records": 0,
+              "shared_snapshot_hits": 528,
+              "shared_snapshot_bytes": 0,
+              "shared_snapshot_references": 0,
+              "temporal_snapshots": {
+                "hits": 8569,
+                "misses": 791,
+                "bytes": 2428776,
+                "max_bytes": 67108864,
+                "entities": 780,
+                "max_entities": 2048
+              },
+              "state_snapshots": {
+                "bytes": 582528,
+                "max_bytes": 16777216,
+                "entries": 780,
+                "max_entries": 2048,
+                "hits": 8569,
+                "misses": 791,
+                "complete_hits": 0,
+                "complete_bytes": 113512
+              },
+              "registry_snapshots": {
+                "bytes": 184,
+                "max_bytes": 8388608,
+                "entries": 0,
+                "max_entries": 2048,
+                "hits": 0,
+                "misses": 0,
+                "complete_hits": 11,
+                "complete_bytes": 184
+              },
+              "isolated_compute": {
+                "starts": 0,
+                "requests": 0,
+                "errors": 0,
+                "max_payload_bytes": 0,
+                "last_ms": null,
+                "ram_limit_mb": null,
+                "timeouts": 0,
+                "alive": false,
+                "pid": null,
+                "semantics": "pure optional compute, private pipe, no HA or SQLite"
+              },
+              "semantics": "FIFO causal frames; explicit evidence gaps on discard"
+            }
+          },
+          "target_pi_verified": false
+        },
+        "journal": {
+          "agents": 1,
+          "shared_sensors": 8,
+          "events_per_entity": 1600,
+          "ms": 37.0775000192225,
+          "total_changes": 14410,
+          "protection_updates": 14400,
+          "evidence_sha256": "b6cea8b7fd9072dcf4ab64ee8b3ee57c3a5cd5c34f2a0f6b099c2e6a1fd09df6",
+          "scope": "Actual SQLite evidence protection only; not physical HA latency"
+        }
+      }
+    },
+    {
+      "agents": 1,
+      "repeat": 1,
+      "after": {
+        "engine": {
+          "agents": 1,
+          "events": 12,
+          "entities": 780,
+          "samples": 12,
+          "event_to_executor_p95_ms": 6.11159997060895,
+          "median_ms": 5.545600026380271,
+          "decisions_sha256": "5612abc4be1093719a85d2c9cf045754a15cf757200c521fa89cec1f61fd4c79",
+          "decision_statuses": {
+            "SHADOW": 12
+          },
+          "ha_calls": 0,
+          "root_confidence_fixture": true,
+          "real_engine_scheduler": true,
+          "tournament": {
+            "queued": 0,
+            "flushed": 0,
+            "flushes": 0,
+            "errors": 0,
+            "shared_source_snapshots": 0,
+            "pending": 0,
+            "storage_retry": {
+              "reason": null,
+              "pauses": 0,
+              "busy_retries": 0,
+              "retry_in_seconds": 0.0
+            },
+            "observation_storage_retry": {
+              "reason": null,
+              "pauses": 0,
+              "busy_retries": 0,
+              "retry_in_seconds": 0.0
+            },
+            "context_rows": {
+              "sensor_quality": {
+                "pending": 0,
+                "flushed": 8,
+                "errors": 0,
+                "bytes": 0,
+                "max_bytes": 16777216,
+                "max_rows": 4096,
+                "inflight": 0,
+                "flush_seconds": 30.0,
+                "overflow_flushes": 0,
+                "batch_rows": 64,
+                "batch_bytes": 1048576,
+                "commits": 1,
+                "max_store_hold_ms": 1.2776999501511455,
+                "shared_payload_columns": [],
+                "shared_payloads": 0,
+                "shared_payload_references": 0,
+                "shared_payload_bytes": 0,
+                "duplicate_payload_charge_avoided_bytes": 0
+              },
+              "observed_pool": {
+                "pending": 0,
+                "flushed": 96,
+                "errors": 0,
+                "bytes": 0,
+                "max_bytes": 16777216,
+                "max_rows": 4096,
+                "inflight": 0,
+                "flush_seconds": 30.0,
+                "overflow_flushes": 0,
+                "batch_rows": 64,
+                "batch_bytes": 1048576,
+                "commits": 2,
+                "max_store_hold_ms": 1.5960000455379486,
+                "shared_payload_columns": [
+                  13,
+                  14,
+                  15
+                ],
+                "shared_payloads": 0,
+                "shared_payload_references": 0,
+                "shared_payload_bytes": 0,
+                "duplicate_payload_charge_avoided_bytes": 0
+              }
+            },
+            "storage_admission": {
+              "skipped": 0,
+              "recoveries": 0,
+              "reason": null,
+              "paused_agents": 0,
+              "max_agents": 256
+            },
+            "observation_pool_cache": {
+              "hits": 63,
+              "reads": 9,
+              "scope": "one_observation",
+              "persistent_entries": 0
+            },
+            "observation_scheduler": {
+              "interval_ms": 0.0,
+              "executed": 9,
+              "skipped": 0,
+              "target_forced": 0,
+              "errors": 0,
+              "tracked_agents": 1,
+              "max_agents": 256,
+              "deferred_for_realtime": 0,
+              "max_deferral_ms": 5000.0,
+              "retry_agents": 0,
+              "scope": "Engine-dispatched candidate observations; target events always admitted"
+            },
+            "deferred_observations": {
+              "queued": 12,
+              "processed": 9,
+              "dropped": 0,
+              "errors": 0,
+              "gaps": 0,
+              "stale": 0,
+              "max_depth": 1,
+              "last_queue_lag_ms": 0.0,
+              "sync_observations": 0,
+              "storage_skips": 0,
+              "last_error": null,
+              "last_capture_ms": 1.9517000182531774,
+              "peak_bytes": 4007456,
+              "coalesced": 3,
+              "pending_interval_skips": 0,
+              "pending": 0,
+              "active": false,
+              "bytes": 0,
+              "max_bytes": 67108864,
+              "configured_bytes": 268435456,
+              "max_jobs": 64,
+              "sync_required": 0,
+              "gap_agents": 0,
+              "shared_snapshot_records": 0,
+              "shared_snapshot_hits": 528,
+              "shared_snapshot_bytes": 0,
+              "shared_snapshot_references": 0,
+              "temporal_snapshots": {
+                "hits": 8569,
+                "misses": 791,
+                "bytes": 2428776,
+                "max_bytes": 67108864,
+                "entities": 780,
+                "max_entities": 2048
+              },
+              "state_snapshots": {
+                "bytes": 582528,
+                "max_bytes": 16777216,
+                "entries": 780,
+                "max_entries": 2048,
+                "hits": 8569,
+                "misses": 791,
+                "complete_hits": 0,
+                "complete_bytes": 113512
+              },
+              "registry_snapshots": {
+                "bytes": 184,
+                "max_bytes": 8388608,
+                "entries": 0,
+                "max_entries": 2048,
+                "hits": 0,
+                "misses": 0,
+                "complete_hits": 11,
+                "complete_bytes": 184
+              },
+              "isolated_compute": {
+                "starts": 0,
+                "requests": 0,
+                "errors": 0,
+                "max_payload_bytes": 0,
+                "last_ms": null,
+                "ram_limit_mb": null,
+                "timeouts": 0,
+                "alive": false,
+                "pid": null,
+                "semantics": "pure optional compute, private pipe, no HA or SQLite"
+              },
+              "semantics": "FIFO causal frames; explicit evidence gaps on discard"
+            }
+          },
+          "target_pi_verified": false
+        },
+        "journal": {
+          "agents": 1,
+          "shared_sensors": 8,
+          "events_per_entity": 1600,
+          "ms": 59.2229999601841,
+          "total_changes": 14410,
+          "protection_updates": 14400,
+          "evidence_sha256": "b6cea8b7fd9072dcf4ab64ee8b3ee57c3a5cd5c34f2a0f6b099c2e6a1fd09df6",
+          "scope": "Actual SQLite evidence protection only; not physical HA latency"
+        }
+      },
+      "before": {
+        "engine": {
+          "agents": 1,
+          "events": 12,
+          "entities": 780,
+          "samples": 12,
+          "event_to_executor_p95_ms": 9.119800000917166,
+          "median_ms": 6.492100015748292,
+          "decisions_sha256": "5612abc4be1093719a85d2c9cf045754a15cf757200c521fa89cec1f61fd4c79",
+          "decision_statuses": {
+            "SHADOW": 12
+          },
+          "ha_calls": 0,
+          "root_confidence_fixture": true,
+          "real_engine_scheduler": true,
+          "tournament": {
+            "queued": 0,
+            "flushed": 0,
+            "flushes": 0,
+            "errors": 0,
+            "shared_source_snapshots": 0,
+            "pending": 0,
+            "storage_retry": {
+              "reason": null,
+              "pauses": 0,
+              "busy_retries": 0,
+              "retry_in_seconds": 0.0
+            },
+            "context_rows": {
+              "sensor_quality": {
+                "pending": 0,
+                "flushed": 8,
+                "errors": 0,
+                "bytes": 0,
+                "max_bytes": 16777216,
+                "max_rows": 4096,
+                "inflight": 0,
+                "flush_seconds": 30.0,
+                "overflow_flushes": 0,
+                "batch_rows": 64,
+                "batch_bytes": 1048576,
+                "commits": 1,
+                "max_store_hold_ms": 1.318100024946034,
+                "shared_payload_columns": [],
+                "shared_payloads": 0,
+                "shared_payload_references": 0,
+                "shared_payload_bytes": 0,
+                "duplicate_payload_charge_avoided_bytes": 0
+              },
+              "observed_pool": {
+                "pending": 0,
+                "flushed": 96,
+                "errors": 0,
+                "bytes": 0,
+                "max_bytes": 16777216,
+                "max_rows": 4096,
+                "inflight": 0,
+                "flush_seconds": 30.0,
+                "overflow_flushes": 0,
+                "batch_rows": 64,
+                "batch_bytes": 1048576,
+                "commits": 2,
+                "max_store_hold_ms": 1.7519000102765858,
+                "shared_payload_columns": [
+                  13,
+                  14,
+                  15
+                ],
+                "shared_payloads": 0,
+                "shared_payload_references": 0,
+                "shared_payload_bytes": 0,
+                "duplicate_payload_charge_avoided_bytes": 0
+              }
+            },
+            "storage_admission": {
+              "skipped": 0,
+              "recoveries": 0,
+              "reason": null,
+              "paused_agents": 0,
+              "max_agents": 256
+            },
+            "observation_pool_cache": {
+              "hits": 63,
+              "reads": 9,
+              "scope": "one_observation",
+              "persistent_entries": 0
+            },
+            "observation_scheduler": {
+              "interval_ms": 0.0,
+              "executed": 9,
+              "skipped": 0,
+              "target_forced": 0,
+              "errors": 0,
+              "tracked_agents": 1,
+              "max_agents": 256,
+              "deferred_for_realtime": 0,
+              "max_deferral_ms": 5000.0,
+              "retry_agents": 0,
+              "scope": "Engine-dispatched candidate observations; target events always admitted"
+            },
+            "deferred_observations": {
+              "queued": 12,
+              "processed": 9,
+              "dropped": 0,
+              "errors": 0,
+              "gaps": 0,
+              "stale": 0,
+              "max_depth": 1,
+              "last_queue_lag_ms": 0.0,
+              "sync_observations": 0,
+              "storage_skips": 0,
+              "last_error": null,
+              "last_capture_ms": 1.2459999998100102,
+              "peak_bytes": 6213544,
+              "coalesced": 3,
+              "pending_interval_skips": 0,
+              "pending": 0,
+              "active": false,
+              "bytes": 0,
+              "max_bytes": 67108864,
+              "configured_bytes": 268435456,
+              "max_jobs": 64,
+              "sync_required": 0,
+              "gap_agents": 0,
+              "temporal_snapshots": {
+                "hits": 8569,
+                "misses": 791,
+                "bytes": 2428776,
+                "max_bytes": 67108864,
+                "entities": 780,
+                "max_entities": 2048
+              },
+              "state_snapshots": {
+                "bytes": 532568,
+                "max_bytes": 16777216,
+                "entries": 780,
+                "max_entries": 2048,
+                "hits": 8569,
+                "misses": 791,
+                "complete_hits": 0,
+                "complete_bytes": 63552
+              },
+              "registry_snapshots": {
+                "bytes": 144,
+                "max_bytes": 8388608,
+                "entries": 0,
+                "max_entries": 2048,
+                "hits": 0,
+                "misses": 0,
+                "complete_hits": 11,
+                "complete_bytes": 144
+              },
+              "isolated_compute": {
+                "starts": 0,
+                "requests": 0,
+                "errors": 0,
+                "max_payload_bytes": 0,
+                "last_ms": null,
+                "ram_limit_mb": null,
+                "timeouts": 0,
+                "alive": false,
+                "pid": null,
+                "semantics": "pure optional compute, private pipe, no HA or SQLite"
+              },
+              "semantics": "FIFO causal frames; explicit evidence gaps on discard"
+            }
+          },
+          "target_pi_verified": false
+        },
+        "journal": {
+          "agents": 1,
+          "shared_sensors": 8,
+          "events_per_entity": 1600,
+          "ms": 49.434499989729375,
+          "total_changes": 14410,
+          "protection_updates": 14400,
+          "evidence_sha256": "b6cea8b7fd9072dcf4ab64ee8b3ee57c3a5cd5c34f2a0f6b099c2e6a1fd09df6",
+          "scope": "Actual SQLite evidence protection only; not physical HA latency"
+        }
+      }
+    },
+    {
+      "agents": 1,
+      "repeat": 2,
+      "before": {
+        "engine": {
+          "agents": 1,
+          "events": 12,
+          "entities": 780,
+          "samples": 12,
+          "event_to_executor_p95_ms": 6.613700010348111,
+          "median_ms": 4.576799983624369,
+          "decisions_sha256": "5612abc4be1093719a85d2c9cf045754a15cf757200c521fa89cec1f61fd4c79",
+          "decision_statuses": {
+            "SHADOW": 12
+          },
+          "ha_calls": 0,
+          "root_confidence_fixture": true,
+          "real_engine_scheduler": true,
+          "tournament": {
+            "queued": 0,
+            "flushed": 0,
+            "flushes": 0,
+            "errors": 0,
+            "shared_source_snapshots": 0,
+            "pending": 0,
+            "storage_retry": {
+              "reason": null,
+              "pauses": 0,
+              "busy_retries": 0,
+              "retry_in_seconds": 0.0
+            },
+            "context_rows": {
+              "sensor_quality": {
+                "pending": 0,
+                "flushed": 8,
+                "errors": 0,
+                "bytes": 0,
+                "max_bytes": 16777216,
+                "max_rows": 4096,
+                "inflight": 0,
+                "flush_seconds": 30.0,
+                "overflow_flushes": 0,
+                "batch_rows": 64,
+                "batch_bytes": 1048576,
+                "commits": 1,
+                "max_store_hold_ms": 1.6064000083133578,
+                "shared_payload_columns": [],
+                "shared_payloads": 0,
+                "shared_payload_references": 0,
+                "shared_payload_bytes": 0,
+                "duplicate_payload_charge_avoided_bytes": 0
+              },
+              "observed_pool": {
+                "pending": 0,
+                "flushed": 96,
+                "errors": 0,
+                "bytes": 0,
+                "max_bytes": 16777216,
+                "max_rows": 4096,
+                "inflight": 0,
+                "flush_seconds": 30.0,
+                "overflow_flushes": 0,
+                "batch_rows": 64,
+                "batch_bytes": 1048576,
+                "commits": 2,
+                "max_store_hold_ms": 1.5448000049218535,
+                "shared_payload_columns": [
+                  13,
+                  14,
+                  15
+                ],
+                "shared_payloads": 0,
+                "shared_payload_references": 0,
+                "shared_payload_bytes": 0,
+                "duplicate_payload_charge_avoided_bytes": 0
+              }
+            },
+            "storage_admission": {
+              "skipped": 0,
+              "recoveries": 0,
+              "reason": null,
+              "paused_agents": 0,
+              "max_agents": 256
+            },
+            "observation_pool_cache": {
+              "hits": 56,
+              "reads": 8,
+              "scope": "one_observation",
+              "persistent_entries": 0
+            },
+            "observation_scheduler": {
+              "interval_ms": 0.0,
+              "executed": 8,
+              "skipped": 0,
+              "target_forced": 0,
+              "errors": 0,
+              "tracked_agents": 1,
+              "max_agents": 256,
+              "deferred_for_realtime": 0,
+              "max_deferral_ms": 5000.0,
+              "retry_agents": 0,
+              "scope": "Engine-dispatched candidate observations; target events always admitted"
+            },
+            "deferred_observations": {
+              "queued": 12,
+              "processed": 8,
+              "dropped": 0,
+              "errors": 0,
+              "gaps": 0,
+              "stale": 0,
+              "max_depth": 1,
+              "last_queue_lag_ms": 0.0,
+              "sync_observations": 0,
+              "storage_skips": 0,
+              "last_error": null,
+              "last_capture_ms": 1.2446999899111688,
+              "peak_bytes": 6211368,
+              "coalesced": 4,
+              "pending_interval_skips": 0,
+              "pending": 0,
+              "active": false,
+              "bytes": 0,
+              "max_bytes": 67108864,
+              "configured_bytes": 268435456,
+              "max_jobs": 64,
+              "sync_required": 0,
+              "gap_agents": 0,
+              "temporal_snapshots": {
+                "hits": 8569,
+                "misses": 791,
+                "bytes": 2428232,
+                "max_bytes": 67108864,
+                "entities": 780,
+                "max_entities": 2048
+              },
+              "state_snapshots": {
+                "bytes": 532568,
+                "max_bytes": 16777216,
+                "entries": 780,
+                "max_entries": 2048,
+                "hits": 8569,
+                "misses": 791,
+                "complete_hits": 0,
+                "complete_bytes": 63552
+              },
+              "registry_snapshots": {
+                "bytes": 144,
+                "max_bytes": 8388608,
+                "entries": 0,
+                "max_entries": 2048,
+                "hits": 0,
+                "misses": 0,
+                "complete_hits": 11,
+                "complete_bytes": 144
+              },
+              "isolated_compute": {
+                "starts": 0,
+                "requests": 0,
+                "errors": 0,
+                "max_payload_bytes": 0,
+                "last_ms": null,
+                "ram_limit_mb": null,
+                "timeouts": 0,
+                "alive": false,
+                "pid": null,
+                "semantics": "pure optional compute, private pipe, no HA or SQLite"
+              },
+              "semantics": "FIFO causal frames; explicit evidence gaps on discard"
+            }
+          },
+          "target_pi_verified": false
+        },
+        "journal": {
+          "agents": 1,
+          "shared_sensors": 8,
+          "events_per_entity": 1600,
+          "ms": 49.67380000744015,
+          "total_changes": 14410,
+          "protection_updates": 14400,
+          "evidence_sha256": "b6cea8b7fd9072dcf4ab64ee8b3ee57c3a5cd5c34f2a0f6b099c2e6a1fd09df6",
+          "scope": "Actual SQLite evidence protection only; not physical HA latency"
+        }
+      },
+      "after": {
+        "engine": {
+          "agents": 1,
+          "events": 12,
+          "entities": 780,
+          "samples": 12,
+          "event_to_executor_p95_ms": 7.423700008075684,
+          "median_ms": 4.796599969267845,
+          "decisions_sha256": "5612abc4be1093719a85d2c9cf045754a15cf757200c521fa89cec1f61fd4c79",
+          "decision_statuses": {
+            "SHADOW": 12
+          },
+          "ha_calls": 0,
+          "root_confidence_fixture": true,
+          "real_engine_scheduler": true,
+          "tournament": {
+            "queued": 0,
+            "flushed": 0,
+            "flushes": 0,
+            "errors": 0,
+            "shared_source_snapshots": 0,
+            "pending": 0,
+            "storage_retry": {
+              "reason": null,
+              "pauses": 0,
+              "busy_retries": 0,
+              "retry_in_seconds": 0.0
+            },
+            "observation_storage_retry": {
+              "reason": null,
+              "pauses": 0,
+              "busy_retries": 0,
+              "retry_in_seconds": 0.0
+            },
+            "context_rows": {
+              "sensor_quality": {
+                "pending": 0,
+                "flushed": 8,
+                "errors": 0,
+                "bytes": 0,
+                "max_bytes": 16777216,
+                "max_rows": 4096,
+                "inflight": 0,
+                "flush_seconds": 30.0,
+                "overflow_flushes": 0,
+                "batch_rows": 64,
+                "batch_bytes": 1048576,
+                "commits": 1,
+                "max_store_hold_ms": 2.644199994392693,
+                "shared_payload_columns": [],
+                "shared_payloads": 0,
+                "shared_payload_references": 0,
+                "shared_payload_bytes": 0,
+                "duplicate_payload_charge_avoided_bytes": 0
+              },
+              "observed_pool": {
+                "pending": 0,
+                "flushed": 96,
+                "errors": 0,
+                "bytes": 0,
+                "max_bytes": 16777216,
+                "max_rows": 4096,
+                "inflight": 0,
+                "flush_seconds": 30.0,
+                "overflow_flushes": 0,
+                "batch_rows": 64,
+                "batch_bytes": 1048576,
+                "commits": 2,
+                "max_store_hold_ms": 1.9396999850869179,
+                "shared_payload_columns": [
+                  13,
+                  14,
+                  15
+                ],
+                "shared_payloads": 0,
+                "shared_payload_references": 0,
+                "shared_payload_bytes": 0,
+                "duplicate_payload_charge_avoided_bytes": 0
+              }
+            },
+            "storage_admission": {
+              "skipped": 0,
+              "recoveries": 0,
+              "reason": null,
+              "paused_agents": 0,
+              "max_agents": 256
+            },
+            "observation_pool_cache": {
+              "hits": 42,
+              "reads": 6,
+              "scope": "one_observation",
+              "persistent_entries": 0
+            },
+            "observation_scheduler": {
+              "interval_ms": 0.0,
+              "executed": 6,
+              "skipped": 0,
+              "target_forced": 0,
+              "errors": 0,
+              "tracked_agents": 1,
+              "max_agents": 256,
+              "deferred_for_realtime": 0,
+              "max_deferral_ms": 5000.0,
+              "retry_agents": 0,
+              "scope": "Engine-dispatched candidate observations; target events always admitted"
+            },
+            "deferred_observations": {
+              "queued": 12,
+              "processed": 6,
+              "dropped": 0,
+              "errors": 0,
+              "gaps": 0,
+              "stale": 0,
+              "max_depth": 1,
+              "last_queue_lag_ms": 16.00000000325963,
+              "sync_observations": 0,
+              "storage_skips": 0,
+              "last_error": null,
+              "last_capture_ms": 1.7802999936975539,
+              "peak_bytes": 4006032,
+              "coalesced": 6,
+              "pending_interval_skips": 0,
+              "foreground_yields": 2,
+              "pending": 0,
+              "active": false,
+              "bytes": 0,
+              "max_bytes": 67108864,
+              "configured_bytes": 268435456,
+              "max_jobs": 64,
+              "sync_required": 0,
+              "gap_agents": 0,
+              "shared_snapshot_records": 0,
+              "shared_snapshot_hits": 336,
+              "shared_snapshot_bytes": 0,
+              "shared_snapshot_references": 0,
+              "temporal_snapshots": {
+                "hits": 8569,
+                "misses": 791,
+                "bytes": 2427688,
+                "max_bytes": 67108864,
+                "entities": 780,
+                "max_entities": 2048
+              },
+              "state_snapshots": {
+                "bytes": 582528,
+                "max_bytes": 16777216,
+                "entries": 780,
+                "max_entries": 2048,
+                "hits": 8569,
+                "misses": 791,
+                "complete_hits": 0,
+                "complete_bytes": 113512
+              },
+              "registry_snapshots": {
+                "bytes": 184,
+                "max_bytes": 8388608,
+                "entries": 0,
+                "max_entries": 2048,
+                "hits": 0,
+                "misses": 0,
+                "complete_hits": 11,
+                "complete_bytes": 184
+              },
+              "isolated_compute": {
+                "starts": 0,
+                "requests": 0,
+                "errors": 0,
+                "max_payload_bytes": 0,
+                "last_ms": null,
+                "ram_limit_mb": null,
+                "timeouts": 0,
+                "alive": false,
+                "pid": null,
+                "semantics": "pure optional compute, private pipe, no HA or SQLite"
+              },
+              "semantics": "FIFO causal frames; explicit evidence gaps on discard"
+            }
+          },
+          "target_pi_verified": false
+        },
+        "journal": {
+          "agents": 1,
+          "shared_sensors": 8,
+          "events_per_entity": 1600,
+          "ms": 53.32100001396611,
+          "total_changes": 14410,
+          "protection_updates": 14400,
+          "evidence_sha256": "b6cea8b7fd9072dcf4ab64ee8b3ee57c3a5cd5c34f2a0f6b099c2e6a1fd09df6",
+          "scope": "Actual SQLite evidence protection only; not physical HA latency"
+        }
+      }
+    },
+    {
+      "agents": 3,
+      "repeat": 0,
+      "before": {
+        "engine": {
+          "agents": 3,
+          "events": 12,
+          "entities": 780,
+          "samples": 36,
+          "event_to_executor_p95_ms": 30.438999994657934,
+          "median_ms": 12.916799983941019,
+          "decisions_sha256": "938de4e0948825d4212e30a516bf86b2409db690c3cd0978bd9bcb12b793e6cf",
+          "decision_statuses": {
+            "SHADOW": 36
+          },
+          "ha_calls": 0,
+          "root_confidence_fixture": true,
+          "real_engine_scheduler": true,
+          "tournament": {
+            "queued": 0,
+            "flushed": 0,
+            "flushes": 0,
+            "errors": 0,
+            "shared_source_snapshots": 0,
+            "pending": 0,
+            "storage_retry": {
+              "reason": null,
+              "pauses": 0,
+              "busy_retries": 0,
+              "retry_in_seconds": 0.0
+            },
+            "context_rows": {
+              "sensor_quality": {
+                "pending": 0,
+                "flushed": 24,
+                "errors": 0,
+                "bytes": 0,
+                "max_bytes": 16777216,
+                "max_rows": 4096,
+                "inflight": 0,
+                "flush_seconds": 30.0,
+                "overflow_flushes": 0,
+                "batch_rows": 64,
+                "batch_bytes": 1048576,
+                "commits": 1,
+                "max_store_hold_ms": 3.2035000040195882,
+                "shared_payload_columns": [],
+                "shared_payloads": 0,
+                "shared_payload_references": 0,
+                "shared_payload_bytes": 0,
+                "duplicate_payload_charge_avoided_bytes": 0
+              },
+              "observed_pool": {
+                "pending": 0,
+                "flushed": 288,
+                "errors": 0,
+                "bytes": 0,
+                "max_bytes": 16777216,
+                "max_rows": 4096,
+                "inflight": 0,
+                "flush_seconds": 30.0,
+                "overflow_flushes": 0,
+                "batch_rows": 64,
+                "batch_bytes": 1048576,
+                "commits": 5,
+                "max_store_hold_ms": 1.9103999948129058,
+                "shared_payload_columns": [
+                  13,
+                  14,
+                  15
+                ],
+                "shared_payloads": 0,
+                "shared_payload_references": 0,
+                "shared_payload_bytes": 0,
+                "duplicate_payload_charge_avoided_bytes": 0
+              }
+            },
+            "storage_admission": {
+              "skipped": 0,
+              "recoveries": 0,
+              "reason": null,
+              "paused_agents": 0,
+              "max_agents": 256
+            },
+            "observation_pool_cache": {
+              "hits": 133,
+              "reads": 19,
+              "scope": "one_observation",
+              "persistent_entries": 0
+            },
+            "observation_scheduler": {
+              "interval_ms": 0.0,
+              "executed": 19,
+              "skipped": 0,
+              "target_forced": 0,
+              "errors": 0,
+              "tracked_agents": 3,
+              "max_agents": 256,
+              "deferred_for_realtime": 0,
+              "max_deferral_ms": 5000.0,
+              "retry_agents": 0,
+              "scope": "Engine-dispatched candidate observations; target events always admitted"
+            },
+            "deferred_observations": {
+              "queued": 36,
+              "processed": 19,
+              "dropped": 0,
+              "errors": 0,
+              "gaps": 0,
+              "stale": 0,
+              "max_depth": 3,
+              "last_queue_lag_ms": 0.0,
+              "sync_observations": 0,
+              "storage_skips": 0,
+              "last_error": null,
+              "last_capture_ms": 1.7147999606095254,
+              "peak_bytes": 12428368,
+              "coalesced": 17,
+              "pending_interval_skips": 0,
+              "pending": 0,
+              "active": false,
+              "bytes": 0,
+              "max_bytes": 67108864,
+              "configured_bytes": 268435456,
+              "max_jobs": 64,
+              "sync_required": 0,
+              "gap_agents": 0,
+              "temporal_snapshots": {
+                "hits": 27289,
+                "misses": 791,
+                "bytes": 2428760,
+                "max_bytes": 67108864,
+                "entities": 780,
+                "max_entities": 2048
+              },
+              "state_snapshots": {
+                "bytes": 532552,
+                "max_bytes": 16777216,
+                "entries": 780,
+                "max_entries": 2048,
+                "hits": 27289,
+                "misses": 791,
+                "complete_hits": 24,
+                "complete_bytes": 63552
+              },
+              "registry_snapshots": {
+                "bytes": 144,
+                "max_bytes": 8388608,
+                "entries": 0,
+                "max_entries": 2048,
+                "hits": 0,
+                "misses": 0,
+                "complete_hits": 35,
+                "complete_bytes": 144
+              },
+              "isolated_compute": {
+                "starts": 0,
+                "requests": 0,
+                "errors": 0,
+                "max_payload_bytes": 0,
+                "last_ms": null,
+                "ram_limit_mb": null,
+                "timeouts": 0,
+                "alive": false,
+                "pid": null,
+                "semantics": "pure optional compute, private pipe, no HA or SQLite"
+              },
+              "semantics": "FIFO causal frames; explicit evidence gaps on discard"
+            }
+          },
+          "target_pi_verified": false
+        },
+        "journal": {
+          "agents": 3,
+          "shared_sensors": 8,
+          "events_per_entity": 1600,
+          "ms": 94.32770003331825,
+          "total_changes": 43230,
+          "protection_updates": 43200,
+          "evidence_sha256": "2f85db21195597b7c9f7bb4462748c533593983fea35f22035cc619dbccafbd1",
+          "scope": "Actual SQLite evidence protection only; not physical HA latency"
+        }
+      },
+      "after": {
+        "engine": {
+          "agents": 3,
+          "events": 12,
+          "entities": 780,
+          "samples": 36,
+          "event_to_executor_p95_ms": 20.849599968641996,
+          "median_ms": 9.910699969623238,
+          "decisions_sha256": "938de4e0948825d4212e30a516bf86b2409db690c3cd0978bd9bcb12b793e6cf",
+          "decision_statuses": {
+            "SHADOW": 36
+          },
+          "ha_calls": 0,
+          "root_confidence_fixture": true,
+          "real_engine_scheduler": true,
+          "tournament": {
+            "queued": 0,
+            "flushed": 0,
+            "flushes": 0,
+            "errors": 0,
+            "shared_source_snapshots": 0,
+            "pending": 0,
+            "storage_retry": {
+              "reason": null,
+              "pauses": 0,
+              "busy_retries": 0,
+              "retry_in_seconds": 0.0
+            },
+            "observation_storage_retry": {
+              "reason": null,
+              "pauses": 0,
+              "busy_retries": 0,
+              "retry_in_seconds": 0.0
+            },
+            "context_rows": {
+              "sensor_quality": {
+                "pending": 0,
+                "flushed": 24,
+                "errors": 0,
+                "bytes": 0,
+                "max_bytes": 16777216,
+                "max_rows": 4096,
+                "inflight": 0,
+                "flush_seconds": 30.0,
+                "overflow_flushes": 0,
+                "batch_rows": 64,
+                "batch_bytes": 1048576,
+                "commits": 1,
+                "max_store_hold_ms": 1.4850000152364373,
+                "shared_payload_columns": [],
+                "shared_payloads": 0,
+                "shared_payload_references": 0,
+                "shared_payload_bytes": 0,
+                "duplicate_payload_charge_avoided_bytes": 0
+              },
+              "observed_pool": {
+                "pending": 0,
+                "flushed": 288,
+                "errors": 0,
+                "bytes": 0,
+                "max_bytes": 16777216,
+                "max_rows": 4096,
+                "inflight": 0,
+                "flush_seconds": 30.0,
+                "overflow_flushes": 0,
+                "batch_rows": 64,
+                "batch_bytes": 1048576,
+                "commits": 5,
+                "max_store_hold_ms": 2.0191000076010823,
+                "shared_payload_columns": [
+                  13,
+                  14,
+                  15
+                ],
+                "shared_payloads": 0,
+                "shared_payload_references": 0,
+                "shared_payload_bytes": 0,
+                "duplicate_payload_charge_avoided_bytes": 0
+              }
+            },
+            "storage_admission": {
+              "skipped": 0,
+              "recoveries": 0,
+              "reason": null,
+              "paused_agents": 0,
+              "max_agents": 256
+            },
+            "observation_pool_cache": {
+              "hits": 42,
+              "reads": 6,
+              "scope": "one_observation",
+              "persistent_entries": 0
+            },
+            "observation_scheduler": {
+              "interval_ms": 0.0,
+              "executed": 6,
+              "skipped": 0,
+              "target_forced": 0,
+              "errors": 0,
+              "tracked_agents": 3,
+              "max_agents": 256,
+              "deferred_for_realtime": 0,
+              "max_deferral_ms": 5000.0,
+              "retry_agents": 0,
+              "scope": "Engine-dispatched candidate observations; target events always admitted"
+            },
+            "deferred_observations": {
+              "queued": 36,
+              "processed": 6,
+              "dropped": 0,
+              "errors": 0,
+              "gaps": 0,
+              "stale": 0,
+              "max_depth": 3,
+              "last_queue_lag_ms": 32.00000000651926,
+              "sync_observations": 0,
+              "storage_skips": 0,
+              "last_error": null,
+              "last_capture_ms": 1.298599992878735,
+              "peak_bytes": 4687560,
+              "coalesced": 30,
+              "pending_interval_skips": 0,
+              "foreground_yields": 9,
+              "pending": 0,
+              "active": false,
+              "bytes": 0,
+              "max_bytes": 67108864,
+              "configured_bytes": 268435456,
+              "max_jobs": 64,
+              "sync_required": 0,
+              "gap_agents": 0,
+              "shared_snapshot_records": 0,
+              "shared_snapshot_hits": 1728,
+              "shared_snapshot_bytes": 0,
+              "shared_snapshot_references": 0,
+              "temporal_snapshots": {
+                "hits": 27289,
+                "misses": 791,
+                "bytes": 2428760,
+                "max_bytes": 67108864,
+                "entities": 780,
+                "max_entities": 2048
+              },
+              "state_snapshots": {
+                "bytes": 582512,
+                "max_bytes": 16777216,
+                "entries": 780,
+                "max_entries": 2048,
+                "hits": 27289,
+                "misses": 791,
+                "complete_hits": 24,
+                "complete_bytes": 113512
+              },
+              "registry_snapshots": {
+                "bytes": 184,
+                "max_bytes": 8388608,
+                "entries": 0,
+                "max_entries": 2048,
+                "hits": 0,
+                "misses": 0,
+                "complete_hits": 35,
+                "complete_bytes": 184
+              },
+              "isolated_compute": {
+                "starts": 0,
+                "requests": 0,
+                "errors": 0,
+                "max_payload_bytes": 0,
+                "last_ms": null,
+                "ram_limit_mb": null,
+                "timeouts": 0,
+                "alive": false,
+                "pid": null,
+                "semantics": "pure optional compute, private pipe, no HA or SQLite"
+              },
+              "semantics": "FIFO causal frames; explicit evidence gaps on discard"
+            }
+          },
+          "target_pi_verified": false
+        },
+        "journal": {
+          "agents": 3,
+          "shared_sensors": 8,
+          "events_per_entity": 1600,
+          "ms": 68.27200000407174,
+          "total_changes": 17630,
+          "protection_updates": 17600,
+          "evidence_sha256": "2f85db21195597b7c9f7bb4462748c533593983fea35f22035cc619dbccafbd1",
+          "scope": "Actual SQLite evidence protection only; not physical HA latency"
+        }
+      }
+    },
+    {
+      "agents": 3,
+      "repeat": 1,
+      "after": {
+        "engine": {
+          "agents": 3,
+          "events": 12,
+          "entities": 780,
+          "samples": 36,
+          "event_to_executor_p95_ms": 22.86270004697144,
+          "median_ms": 11.982100026216358,
+          "decisions_sha256": "938de4e0948825d4212e30a516bf86b2409db690c3cd0978bd9bcb12b793e6cf",
+          "decision_statuses": {
+            "SHADOW": 36
+          },
+          "ha_calls": 0,
+          "root_confidence_fixture": true,
+          "real_engine_scheduler": true,
+          "tournament": {
+            "queued": 0,
+            "flushed": 0,
+            "flushes": 0,
+            "errors": 0,
+            "shared_source_snapshots": 0,
+            "pending": 0,
+            "storage_retry": {
+              "reason": null,
+              "pauses": 0,
+              "busy_retries": 0,
+              "retry_in_seconds": 0.0
+            },
+            "observation_storage_retry": {
+              "reason": null,
+              "pauses": 0,
+              "busy_retries": 0,
+              "retry_in_seconds": 0.0
+            },
+            "context_rows": {
+              "sensor_quality": {
+                "pending": 0,
+                "flushed": 24,
+                "errors": 0,
+                "bytes": 0,
+                "max_bytes": 16777216,
+                "max_rows": 4096,
+                "inflight": 0,
+                "flush_seconds": 30.0,
+                "overflow_flushes": 0,
+                "batch_rows": 64,
+                "batch_bytes": 1048576,
+                "commits": 1,
+                "max_store_hold_ms": 1.5141000039875507,
+                "shared_payload_columns": [],
+                "shared_payloads": 0,
+                "shared_payload_references": 0,
+                "shared_payload_bytes": 0,
+                "duplicate_payload_charge_avoided_bytes": 0
+              },
+              "observed_pool": {
+                "pending": 0,
+                "flushed": 288,
+                "errors": 0,
+                "bytes": 0,
+                "max_bytes": 16777216,
+                "max_rows": 4096,
+                "inflight": 0,
+                "flush_seconds": 30.0,
+                "overflow_flushes": 0,
+                "batch_rows": 64,
+                "batch_bytes": 1048576,
+                "commits": 5,
+                "max_store_hold_ms": 1.4974999940022826,
+                "shared_payload_columns": [
+                  13,
+                  14,
+                  15
+                ],
+                "shared_payloads": 0,
+                "shared_payload_references": 0,
+                "shared_payload_bytes": 0,
+                "duplicate_payload_charge_avoided_bytes": 0
+              }
+            },
+            "storage_admission": {
+              "skipped": 0,
+              "recoveries": 0,
+              "reason": null,
+              "paused_agents": 0,
+              "max_agents": 256
+            },
+            "observation_pool_cache": {
+              "hits": 56,
+              "reads": 8,
+              "scope": "one_observation",
+              "persistent_entries": 0
+            },
+            "observation_scheduler": {
+              "interval_ms": 0.0,
+              "executed": 8,
+              "skipped": 0,
+              "target_forced": 0,
+              "errors": 0,
+              "tracked_agents": 3,
+              "max_agents": 256,
+              "deferred_for_realtime": 0,
+              "max_deferral_ms": 5000.0,
+              "retry_agents": 0,
+              "scope": "Engine-dispatched candidate observations; target events always admitted"
+            },
+            "deferred_observations": {
+              "queued": 36,
+              "processed": 8,
+              "dropped": 0,
+              "errors": 0,
+              "gaps": 0,
+              "stale": 0,
+              "max_depth": 3,
+              "last_queue_lag_ms": 14.999999955762178,
+              "sync_observations": 0,
+              "storage_skips": 0,
+              "last_error": null,
+              "last_capture_ms": 1.3280999846756458,
+              "peak_bytes": 4689200,
+              "coalesced": 28,
+              "pending_interval_skips": 0,
+              "foreground_yields": 7,
+              "pending": 0,
+              "active": false,
+              "bytes": 0,
+              "max_bytes": 67108864,
+              "configured_bytes": 268435456,
+              "max_jobs": 64,
+              "sync_required": 0,
+              "gap_agents": 0,
+              "shared_snapshot_records": 0,
+              "shared_snapshot_hits": 1728,
+              "shared_snapshot_bytes": 0,
+              "shared_snapshot_references": 0,
+              "temporal_snapshots": {
+                "hits": 27289,
+                "misses": 791,
+                "bytes": 2428760,
+                "max_bytes": 67108864,
+                "entities": 780,
+                "max_entities": 2048
+              },
+              "state_snapshots": {
+                "bytes": 582512,
+                "max_bytes": 16777216,
+                "entries": 780,
+                "max_entries": 2048,
+                "hits": 27289,
+                "misses": 791,
+                "complete_hits": 24,
+                "complete_bytes": 113512
+              },
+              "registry_snapshots": {
+                "bytes": 184,
+                "max_bytes": 8388608,
+                "entries": 0,
+                "max_entries": 2048,
+                "hits": 0,
+                "misses": 0,
+                "complete_hits": 35,
+                "complete_bytes": 184
+              },
+              "isolated_compute": {
+                "starts": 0,
+                "requests": 0,
+                "errors": 0,
+                "max_payload_bytes": 0,
+                "last_ms": null,
+                "ram_limit_mb": null,
+                "timeouts": 0,
+                "alive": false,
+                "pid": null,
+                "semantics": "pure optional compute, private pipe, no HA or SQLite"
+              },
+              "semantics": "FIFO causal frames; explicit evidence gaps on discard"
+            }
+          },
+          "target_pi_verified": false
+        },
+        "journal": {
+          "agents": 3,
+          "shared_sensors": 8,
+          "events_per_entity": 1600,
+          "ms": 50.162100000306964,
+          "total_changes": 17630,
+          "protection_updates": 17600,
+          "evidence_sha256": "2f85db21195597b7c9f7bb4462748c533593983fea35f22035cc619dbccafbd1",
+          "scope": "Actual SQLite evidence protection only; not physical HA latency"
+        }
+      },
+      "before": {
+        "engine": {
+          "agents": 3,
+          "events": 12,
+          "entities": 780,
+          "samples": 36,
+          "event_to_executor_p95_ms": 24.966199998743832,
+          "median_ms": 12.131900002714247,
+          "decisions_sha256": "938de4e0948825d4212e30a516bf86b2409db690c3cd0978bd9bcb12b793e6cf",
+          "decision_statuses": {
+            "SHADOW": 36
+          },
+          "ha_calls": 0,
+          "root_confidence_fixture": true,
+          "real_engine_scheduler": true,
+          "tournament": {
+            "queued": 0,
+            "flushed": 0,
+            "flushes": 0,
+            "errors": 0,
+            "shared_source_snapshots": 0,
+            "pending": 0,
+            "storage_retry": {
+              "reason": null,
+              "pauses": 0,
+              "busy_retries": 0,
+              "retry_in_seconds": 0.0
+            },
+            "context_rows": {
+              "sensor_quality": {
+                "pending": 0,
+                "flushed": 24,
+                "errors": 0,
+                "bytes": 0,
+                "max_bytes": 16777216,
+                "max_rows": 4096,
+                "inflight": 0,
+                "flush_seconds": 30.0,
+                "overflow_flushes": 0,
+                "batch_rows": 64,
+                "batch_bytes": 1048576,
+                "commits": 1,
+                "max_store_hold_ms": 2.957399992737919,
+                "shared_payload_columns": [],
+                "shared_payloads": 0,
+                "shared_payload_references": 0,
+                "shared_payload_bytes": 0,
+                "duplicate_payload_charge_avoided_bytes": 0
+              },
+              "observed_pool": {
+                "pending": 0,
+                "flushed": 288,
+                "errors": 0,
+                "bytes": 0,
+                "max_bytes": 16777216,
+                "max_rows": 4096,
+                "inflight": 0,
+                "flush_seconds": 30.0,
+                "overflow_flushes": 0,
+                "batch_rows": 64,
+                "batch_bytes": 1048576,
+                "commits": 5,
+                "max_store_hold_ms": 1.739499974064529,
+                "shared_payload_columns": [
+                  13,
+                  14,
+                  15
+                ],
+                "shared_payloads": 0,
+                "shared_payload_references": 0,
+                "shared_payload_bytes": 0,
+                "duplicate_payload_charge_avoided_bytes": 0
+              }
+            },
+            "storage_admission": {
+              "skipped": 0,
+              "recoveries": 0,
+              "reason": null,
+              "paused_agents": 0,
+              "max_agents": 256
+            },
+            "observation_pool_cache": {
+              "hits": 126,
+              "reads": 18,
+              "scope": "one_observation",
+              "persistent_entries": 0
+            },
+            "observation_scheduler": {
+              "interval_ms": 0.0,
+              "executed": 18,
+              "skipped": 0,
+              "target_forced": 0,
+              "errors": 0,
+              "tracked_agents": 3,
+              "max_agents": 256,
+              "deferred_for_realtime": 0,
+              "max_deferral_ms": 5000.0,
+              "retry_agents": 0,
+              "scope": "Engine-dispatched candidate observations; target events always admitted"
+            },
+            "deferred_observations": {
+              "queued": 36,
+              "processed": 18,
+              "dropped": 0,
+              "errors": 0,
+              "gaps": 0,
+              "stale": 0,
+              "max_depth": 3,
+              "last_queue_lag_ms": 0.0,
+              "sync_observations": 0,
+              "storage_skips": 0,
+              "last_error": null,
+              "last_capture_ms": 0.929199974052608,
+              "peak_bytes": 12428904,
+              "coalesced": 18,
+              "pending_interval_skips": 0,
+              "pending": 0,
+              "active": false,
+              "bytes": 0,
+              "max_bytes": 67108864,
+              "configured_bytes": 268435456,
+              "max_jobs": 64,
+              "sync_required": 0,
+              "gap_agents": 0,
+              "temporal_snapshots": {
+                "hits": 27289,
+                "misses": 791,
+                "bytes": 2428760,
+                "max_bytes": 67108864,
+                "entities": 780,
+                "max_entities": 2048
+              },
+              "state_snapshots": {
+                "bytes": 532552,
+                "max_bytes": 16777216,
+                "entries": 780,
+                "max_entries": 2048,
+                "hits": 27289,
+                "misses": 791,
+                "complete_hits": 24,
+                "complete_bytes": 63552
+              },
+              "registry_snapshots": {
+                "bytes": 144,
+                "max_bytes": 8388608,
+                "entries": 0,
+                "max_entries": 2048,
+                "hits": 0,
+                "misses": 0,
+                "complete_hits": 35,
+                "complete_bytes": 144
+              },
+              "isolated_compute": {
+                "starts": 0,
+                "requests": 0,
+                "errors": 0,
+                "max_payload_bytes": 0,
+                "last_ms": null,
+                "ram_limit_mb": null,
+                "timeouts": 0,
+                "alive": false,
+                "pid": null,
+                "semantics": "pure optional compute, private pipe, no HA or SQLite"
+              },
+              "semantics": "FIFO causal frames; explicit evidence gaps on discard"
+            }
+          },
+          "target_pi_verified": false
+        },
+        "journal": {
+          "agents": 3,
+          "shared_sensors": 8,
+          "events_per_entity": 1600,
+          "ms": 89.11060000536963,
+          "total_changes": 43230,
+          "protection_updates": 43200,
+          "evidence_sha256": "2f85db21195597b7c9f7bb4462748c533593983fea35f22035cc619dbccafbd1",
+          "scope": "Actual SQLite evidence protection only; not physical HA latency"
+        }
+      }
+    },
+    {
+      "agents": 3,
+      "repeat": 2,
+      "before": {
+        "engine": {
+          "agents": 3,
+          "events": 12,
+          "entities": 780,
+          "samples": 36,
+          "event_to_executor_p95_ms": 26.9504000316374,
+          "median_ms": 10.032999969553202,
+          "decisions_sha256": "938de4e0948825d4212e30a516bf86b2409db690c3cd0978bd9bcb12b793e6cf",
+          "decision_statuses": {
+            "SHADOW": 36
+          },
+          "ha_calls": 0,
+          "root_confidence_fixture": true,
+          "real_engine_scheduler": true,
+          "tournament": {
+            "queued": 0,
+            "flushed": 0,
+            "flushes": 0,
+            "errors": 0,
+            "shared_source_snapshots": 0,
+            "pending": 0,
+            "storage_retry": {
+              "reason": null,
+              "pauses": 0,
+              "busy_retries": 0,
+              "retry_in_seconds": 0.0
+            },
+            "context_rows": {
+              "sensor_quality": {
+                "pending": 0,
+                "flushed": 24,
+                "errors": 0,
+                "bytes": 0,
+                "max_bytes": 16777216,
+                "max_rows": 4096,
+                "inflight": 0,
+                "flush_seconds": 30.0,
+                "overflow_flushes": 0,
+                "batch_rows": 64,
+                "batch_bytes": 1048576,
+                "commits": 1,
+                "max_store_hold_ms": 2.035300014540553,
+                "shared_payload_columns": [],
+                "shared_payloads": 0,
+                "shared_payload_references": 0,
+                "shared_payload_bytes": 0,
+                "duplicate_payload_charge_avoided_bytes": 0
+              },
+              "observed_pool": {
+                "pending": 0,
+                "flushed": 288,
+                "errors": 0,
+                "bytes": 0,
+                "max_bytes": 16777216,
+                "max_rows": 4096,
+                "inflight": 0,
+                "flush_seconds": 30.0,
+                "overflow_flushes": 0,
+                "batch_rows": 64,
+                "batch_bytes": 1048576,
+                "commits": 5,
+                "max_store_hold_ms": 1.7414999892935157,
+                "shared_payload_columns": [
+                  13,
+                  14,
+                  15
+                ],
+                "shared_payloads": 0,
+                "shared_payload_references": 0,
+                "shared_payload_bytes": 0,
+                "duplicate_payload_charge_avoided_bytes": 0
+              }
+            },
+            "storage_admission": {
+              "skipped": 0,
+              "recoveries": 0,
+              "reason": null,
+              "paused_agents": 0,
+              "max_agents": 256
+            },
+            "observation_pool_cache": {
+              "hits": 140,
+              "reads": 20,
+              "scope": "one_observation",
+              "persistent_entries": 0
+            },
+            "observation_scheduler": {
+              "interval_ms": 0.0,
+              "executed": 20,
+              "skipped": 0,
+              "target_forced": 0,
+              "errors": 0,
+              "tracked_agents": 3,
+              "max_agents": 256,
+              "deferred_for_realtime": 0,
+              "max_deferral_ms": 5000.0,
+              "retry_agents": 0,
+              "scope": "Engine-dispatched candidate observations; target events always admitted"
+            },
+            "deferred_observations": {
+              "queued": 36,
+              "processed": 20,
+              "dropped": 0,
+              "errors": 0,
+              "gaps": 0,
+              "stale": 0,
+              "max_depth": 3,
+              "last_queue_lag_ms": 16.00000000325963,
+              "sync_observations": 0,
+              "storage_skips": 0,
+              "last_error": null,
+              "last_capture_ms": 0.8640000014565885,
+              "peak_bytes": 12428904,
+              "coalesced": 16,
+              "pending_interval_skips": 0,
+              "pending": 0,
+              "active": false,
+              "bytes": 0,
+              "max_bytes": 67108864,
+              "configured_bytes": 268435456,
+              "max_jobs": 64,
+              "sync_required": 0,
+              "gap_agents": 0,
+              "temporal_snapshots": {
+                "hits": 27289,
+                "misses": 791,
+                "bytes": 2428760,
+                "max_bytes": 67108864,
+                "entities": 780,
+                "max_entities": 2048
+              },
+              "state_snapshots": {
+                "bytes": 532552,
+                "max_bytes": 16777216,
+                "entries": 780,
+                "max_entries": 2048,
+                "hits": 27289,
+                "misses": 791,
+                "complete_hits": 24,
+                "complete_bytes": 63552
+              },
+              "registry_snapshots": {
+                "bytes": 144,
+                "max_bytes": 8388608,
+                "entries": 0,
+                "max_entries": 2048,
+                "hits": 0,
+                "misses": 0,
+                "complete_hits": 35,
+                "complete_bytes": 144
+              },
+              "isolated_compute": {
+                "starts": 0,
+                "requests": 0,
+                "errors": 0,
+                "max_payload_bytes": 0,
+                "last_ms": null,
+                "ram_limit_mb": null,
+                "timeouts": 0,
+                "alive": false,
+                "pid": null,
+                "semantics": "pure optional compute, private pipe, no HA or SQLite"
+              },
+              "semantics": "FIFO causal frames; explicit evidence gaps on discard"
+            }
+          },
+          "target_pi_verified": false
+        },
+        "journal": {
+          "agents": 3,
+          "shared_sensors": 8,
+          "events_per_entity": 1600,
+          "ms": 92.90589997544885,
+          "total_changes": 43230,
+          "protection_updates": 43200,
+          "evidence_sha256": "2f85db21195597b7c9f7bb4462748c533593983fea35f22035cc619dbccafbd1",
+          "scope": "Actual SQLite evidence protection only; not physical HA latency"
+        }
+      },
+      "after": {
+        "engine": {
+          "agents": 3,
+          "events": 12,
+          "entities": 780,
+          "samples": 36,
+          "event_to_executor_p95_ms": 20.83150000544265,
+          "median_ms": 10.475500021129847,
+          "decisions_sha256": "938de4e0948825d4212e30a516bf86b2409db690c3cd0978bd9bcb12b793e6cf",
+          "decision_statuses": {
+            "SHADOW": 36
+          },
+          "ha_calls": 0,
+          "root_confidence_fixture": true,
+          "real_engine_scheduler": true,
+          "tournament": {
+            "queued": 0,
+            "flushed": 0,
+            "flushes": 0,
+            "errors": 0,
+            "shared_source_snapshots": 0,
+            "pending": 0,
+            "storage_retry": {
+              "reason": null,
+              "pauses": 0,
+              "busy_retries": 0,
+              "retry_in_seconds": 0.0
+            },
+            "observation_storage_retry": {
+              "reason": null,
+              "pauses": 0,
+              "busy_retries": 0,
+              "retry_in_seconds": 0.0
+            },
+            "context_rows": {
+              "sensor_quality": {
+                "pending": 0,
+                "flushed": 24,
+                "errors": 0,
+                "bytes": 0,
+                "max_bytes": 16777216,
+                "max_rows": 4096,
+                "inflight": 0,
+                "flush_seconds": 30.0,
+                "overflow_flushes": 0,
+                "batch_rows": 64,
+                "batch_bytes": 1048576,
+                "commits": 1,
+                "max_store_hold_ms": 2.535999985411763,
+                "shared_payload_columns": [],
+                "shared_payloads": 0,
+                "shared_payload_references": 0,
+                "shared_payload_bytes": 0,
+                "duplicate_payload_charge_avoided_bytes": 0
+              },
+              "observed_pool": {
+                "pending": 0,
+                "flushed": 288,
+                "errors": 0,
+                "bytes": 0,
+                "max_bytes": 16777216,
+                "max_rows": 4096,
+                "inflight": 0,
+                "flush_seconds": 30.0,
+                "overflow_flushes": 0,
+                "batch_rows": 64,
+                "batch_bytes": 1048576,
+                "commits": 5,
+                "max_store_hold_ms": 1.7842999659478664,
+                "shared_payload_columns": [
+                  13,
+                  14,
+                  15
+                ],
+                "shared_payloads": 0,
+                "shared_payload_references": 0,
+                "shared_payload_bytes": 0,
+                "duplicate_payload_charge_avoided_bytes": 0
+              }
+            },
+            "storage_admission": {
+              "skipped": 0,
+              "recoveries": 0,
+              "reason": null,
+              "paused_agents": 0,
+              "max_agents": 256
+            },
+            "observation_pool_cache": {
+              "hits": 49,
+              "reads": 7,
+              "scope": "one_observation",
+              "persistent_entries": 0
+            },
+            "observation_scheduler": {
+              "interval_ms": 0.0,
+              "executed": 7,
+              "skipped": 0,
+              "target_forced": 0,
+              "errors": 0,
+              "tracked_agents": 3,
+              "max_agents": 256,
+              "deferred_for_realtime": 0,
+              "max_deferral_ms": 5000.0,
+              "retry_agents": 0,
+              "scope": "Engine-dispatched candidate observations; target events always admitted"
+            },
+            "deferred_observations": {
+              "queued": 36,
+              "processed": 7,
+              "dropped": 0,
+              "errors": 0,
+              "gaps": 0,
+              "stale": 0,
+              "max_depth": 3,
+              "last_queue_lag_ms": 47.0000000204891,
+              "sync_observations": 0,
+              "storage_skips": 0,
+              "last_error": null,
+              "last_capture_ms": 1.6555000329390168,
+              "peak_bytes": 4685936,
+              "coalesced": 29,
+              "pending_interval_skips": 0,
+              "foreground_yields": 8,
+              "pending": 0,
+              "active": false,
+              "bytes": 0,
+              "max_bytes": 67108864,
+              "configured_bytes": 268435456,
+              "max_jobs": 64,
+              "sync_required": 0,
+              "gap_agents": 0,
+              "shared_snapshot_records": 0,
+              "shared_snapshot_hits": 1728,
+              "shared_snapshot_bytes": 0,
+              "shared_snapshot_references": 0,
+              "temporal_snapshots": {
+                "hits": 27289,
+                "misses": 791,
+                "bytes": 2428760,
+                "max_bytes": 67108864,
+                "entities": 780,
+                "max_entities": 2048
+              },
+              "state_snapshots": {
+                "bytes": 582512,
+                "max_bytes": 16777216,
+                "entries": 780,
+                "max_entries": 2048,
+                "hits": 27289,
+                "misses": 791,
+                "complete_hits": 24,
+                "complete_bytes": 113512
+              },
+              "registry_snapshots": {
+                "bytes": 184,
+                "max_bytes": 8388608,
+                "entries": 0,
+                "max_entries": 2048,
+                "hits": 0,
+                "misses": 0,
+                "complete_hits": 35,
+                "complete_bytes": 184
+              },
+              "isolated_compute": {
+                "starts": 0,
+                "requests": 0,
+                "errors": 0,
+                "max_payload_bytes": 0,
+                "last_ms": null,
+                "ram_limit_mb": null,
+                "timeouts": 0,
+                "alive": false,
+                "pid": null,
+                "semantics": "pure optional compute, private pipe, no HA or SQLite"
+              },
+              "semantics": "FIFO causal frames; explicit evidence gaps on discard"
+            }
+          },
+          "target_pi_verified": false
+        },
+        "journal": {
+          "agents": 3,
+          "shared_sensors": 8,
+          "events_per_entity": 1600,
+          "ms": 47.597299970220774,
+          "total_changes": 17630,
+          "protection_updates": 17600,
+          "evidence_sha256": "2f85db21195597b7c9f7bb4462748c533593983fea35f22035cc619dbccafbd1",
+          "scope": "Actual SQLite evidence protection only; not physical HA latency"
+        }
+      }
+    },
+    {
+      "agents": 4,
+      "repeat": 0,
+      "before": {
+        "engine": {
+          "agents": 4,
+          "events": 12,
+          "entities": 780,
+          "samples": 48,
+          "event_to_executor_p95_ms": 36.09579999465495,
+          "median_ms": 15.705199970398098,
+          "decisions_sha256": "338696a19091f86b429f71b7a0e1ccbd8379c14d4ed08a9b53d70e67144399dc",
+          "decision_statuses": {
+            "SHADOW": 48
+          },
+          "ha_calls": 0,
+          "root_confidence_fixture": true,
+          "real_engine_scheduler": true,
+          "tournament": {
+            "queued": 0,
+            "flushed": 0,
+            "flushes": 0,
+            "errors": 0,
+            "shared_source_snapshots": 0,
+            "pending": 0,
+            "storage_retry": {
+              "reason": null,
+              "pauses": 0,
+              "busy_retries": 0,
+              "retry_in_seconds": 0.0
+            },
+            "context_rows": {
+              "sensor_quality": {
+                "pending": 0,
+                "flushed": 32,
+                "errors": 0,
+                "bytes": 0,
+                "max_bytes": 16777216,
+                "max_rows": 4096,
+                "inflight": 0,
+                "flush_seconds": 30.0,
+                "overflow_flushes": 0,
+                "batch_rows": 64,
+                "batch_bytes": 1048576,
+                "commits": 1,
+                "max_store_hold_ms": 1.8288000137545168,
+                "shared_payload_columns": [],
+                "shared_payloads": 0,
+                "shared_payload_references": 0,
+                "shared_payload_bytes": 0,
+                "duplicate_payload_charge_avoided_bytes": 0
+              },
+              "observed_pool": {
+                "pending": 0,
+                "flushed": 384,
+                "errors": 0,
+                "bytes": 0,
+                "max_bytes": 16777216,
+                "max_rows": 4096,
+                "inflight": 0,
+                "flush_seconds": 30.0,
+                "overflow_flushes": 0,
+                "batch_rows": 64,
+                "batch_bytes": 1048576,
+                "commits": 6,
+                "max_store_hold_ms": 3.829199995379895,
+                "shared_payload_columns": [
+                  13,
+                  14,
+                  15
+                ],
+                "shared_payloads": 0,
+                "shared_payload_references": 0,
+                "shared_payload_bytes": 0,
+                "duplicate_payload_charge_avoided_bytes": 0
+              }
+            },
+            "storage_admission": {
+              "skipped": 0,
+              "recoveries": 0,
+              "reason": null,
+              "paused_agents": 0,
+              "max_agents": 256
+            },
+            "observation_pool_cache": {
+              "hits": 140,
+              "reads": 20,
+              "scope": "one_observation",
+              "persistent_entries": 0
+            },
+            "observation_scheduler": {
+              "interval_ms": 0.0,
+              "executed": 20,
+              "skipped": 0,
+              "target_forced": 0,
+              "errors": 0,
+              "tracked_agents": 4,
+              "max_agents": 256,
+              "deferred_for_realtime": 0,
+              "max_deferral_ms": 5000.0,
+              "retry_agents": 0,
+              "scope": "Engine-dispatched candidate observations; target events always admitted"
+            },
+            "deferred_observations": {
+              "queued": 48,
+              "processed": 20,
+              "dropped": 0,
+              "errors": 0,
+              "gaps": 0,
+              "stale": 0,
+              "max_depth": 4,
+              "last_queue_lag_ms": 16.00000000325963,
+              "sync_observations": 0,
+              "storage_skips": 0,
+              "last_error": null,
+              "last_capture_ms": 1.0231999913230538,
+              "peak_bytes": 15537064,
+              "coalesced": 28,
+              "pending_interval_skips": 0,
+              "pending": 0,
+              "active": false,
+              "bytes": 0,
+              "max_bytes": 67108864,
+              "configured_bytes": 268435456,
+              "max_jobs": 64,
+              "sync_required": 0,
+              "gap_agents": 0,
+              "temporal_snapshots": {
+                "hits": 36649,
+                "misses": 791,
+                "bytes": 2428752,
+                "max_bytes": 67108864,
+                "entities": 780,
+                "max_entities": 2048
+              },
+              "state_snapshots": {
+                "bytes": 532544,
+                "max_bytes": 16777216,
+                "entries": 780,
+                "max_entries": 2048,
+                "hits": 36649,
+                "misses": 791,
+                "complete_hits": 36,
+                "complete_bytes": 63552
+              },
+              "registry_snapshots": {
+                "bytes": 144,
+                "max_bytes": 8388608,
+                "entries": 0,
+                "max_entries": 2048,
+                "hits": 0,
+                "misses": 0,
+                "complete_hits": 47,
+                "complete_bytes": 144
+              },
+              "isolated_compute": {
+                "starts": 0,
+                "requests": 0,
+                "errors": 0,
+                "max_payload_bytes": 0,
+                "last_ms": null,
+                "ram_limit_mb": null,
+                "timeouts": 0,
+                "alive": false,
+                "pid": null,
+                "semantics": "pure optional compute, private pipe, no HA or SQLite"
+              },
+              "semantics": "FIFO causal frames; explicit evidence gaps on discard"
+            }
+          },
+          "target_pi_verified": false
+        },
+        "journal": {
+          "agents": 4,
+          "shared_sensors": 8,
+          "events_per_entity": 1600,
+          "ms": 124.96960000135005,
+          "total_changes": 57640,
+          "protection_updates": 57600,
+          "evidence_sha256": "cefaab373254d3a18af9b0a7aa70236c4cf7ef09c07a8d62985ea0d103403023",
+          "scope": "Actual SQLite evidence protection only; not physical HA latency"
+        }
+      },
+      "after": {
+        "engine": {
+          "agents": 4,
+          "events": 12,
+          "entities": 780,
+          "samples": 48,
+          "event_to_executor_p95_ms": 27.013799990527332,
+          "median_ms": 10.46010002028197,
+          "decisions_sha256": "338696a19091f86b429f71b7a0e1ccbd8379c14d4ed08a9b53d70e67144399dc",
+          "decision_statuses": {
+            "SHADOW": 48
+          },
+          "ha_calls": 0,
+          "root_confidence_fixture": true,
+          "real_engine_scheduler": true,
+          "tournament": {
+            "queued": 0,
+            "flushed": 0,
+            "flushes": 0,
+            "errors": 0,
+            "shared_source_snapshots": 0,
+            "pending": 0,
+            "storage_retry": {
+              "reason": null,
+              "pauses": 0,
+              "busy_retries": 0,
+              "retry_in_seconds": 0.0
+            },
+            "observation_storage_retry": {
+              "reason": null,
+              "pauses": 0,
+              "busy_retries": 0,
+              "retry_in_seconds": 0.0
+            },
+            "context_rows": {
+              "sensor_quality": {
+                "pending": 0,
+                "flushed": 32,
+                "errors": 0,
+                "bytes": 0,
+                "max_bytes": 16777216,
+                "max_rows": 4096,
+                "inflight": 0,
+                "flush_seconds": 30.0,
+                "overflow_flushes": 0,
+                "batch_rows": 64,
+                "batch_bytes": 1048576,
+                "commits": 1,
+                "max_store_hold_ms": 2.1448000334203243,
+                "shared_payload_columns": [],
+                "shared_payloads": 0,
+                "shared_payload_references": 0,
+                "shared_payload_bytes": 0,
+                "duplicate_payload_charge_avoided_bytes": 0
+              },
+              "observed_pool": {
+                "pending": 0,
+                "flushed": 384,
+                "errors": 0,
+                "bytes": 0,
+                "max_bytes": 16777216,
+                "max_rows": 4096,
+                "inflight": 0,
+                "flush_seconds": 30.0,
+                "overflow_flushes": 0,
+                "batch_rows": 64,
+                "batch_bytes": 1048576,
+                "commits": 6,
+                "max_store_hold_ms": 1.6685000155121088,
+                "shared_payload_columns": [
+                  13,
+                  14,
+                  15
+                ],
+                "shared_payloads": 0,
+                "shared_payload_references": 0,
+                "shared_payload_bytes": 0,
+                "duplicate_payload_charge_avoided_bytes": 0
+              }
+            },
+            "storage_admission": {
+              "skipped": 0,
+              "recoveries": 0,
+              "reason": null,
+              "paused_agents": 0,
+              "max_agents": 256
+            },
+            "observation_pool_cache": {
+              "hits": 63,
+              "reads": 9,
+              "scope": "one_observation",
+              "persistent_entries": 0
+            },
+            "observation_scheduler": {
+              "interval_ms": 0.0,
+              "executed": 9,
+              "skipped": 0,
+              "target_forced": 0,
+              "errors": 0,
+              "tracked_agents": 4,
+              "max_agents": 256,
+              "deferred_for_realtime": 0,
+              "max_deferral_ms": 5000.0,
+              "retry_agents": 0,
+              "scope": "Engine-dispatched candidate observations; target events always admitted"
+            },
+            "deferred_observations": {
+              "queued": 48,
+              "processed": 9,
+              "dropped": 0,
+              "errors": 0,
+              "gaps": 0,
+              "stale": 0,
+              "max_depth": 4,
+              "last_queue_lag_ms": 47.0000000204891,
+              "sync_observations": 0,
+              "storage_skips": 0,
+              "last_error": null,
+              "last_capture_ms": 1.4479999663308263,
+              "peak_bytes": 4951664,
+              "coalesced": 39,
+              "pending_interval_skips": 0,
+              "foreground_yields": 11,
+              "pending": 0,
+              "active": false,
+              "bytes": 0,
+              "max_bytes": 67108864,
+              "configured_bytes": 268435456,
+              "max_jobs": 64,
+              "sync_required": 0,
+              "gap_agents": 0,
+              "shared_snapshot_records": 0,
+              "shared_snapshot_hits": 2328,
+              "shared_snapshot_bytes": 0,
+              "shared_snapshot_references": 0,
+              "temporal_snapshots": {
+                "hits": 36649,
+                "misses": 791,
+                "bytes": 2428752,
+                "max_bytes": 67108864,
+                "entities": 780,
+                "max_entities": 2048
+              },
+              "state_snapshots": {
+                "bytes": 582504,
+                "max_bytes": 16777216,
+                "entries": 780,
+                "max_entries": 2048,
+                "hits": 36649,
+                "misses": 791,
+                "complete_hits": 36,
+                "complete_bytes": 113512
+              },
+              "registry_snapshots": {
+                "bytes": 184,
+                "max_bytes": 8388608,
+                "entries": 0,
+                "max_entries": 2048,
+                "hits": 0,
+                "misses": 0,
+                "complete_hits": 47,
+                "complete_bytes": 184
+              },
+              "isolated_compute": {
+                "starts": 0,
+                "requests": 0,
+                "errors": 0,
+                "max_payload_bytes": 0,
+                "last_ms": null,
+                "ram_limit_mb": null,
+                "timeouts": 0,
+                "alive": false,
+                "pid": null,
+                "semantics": "pure optional compute, private pipe, no HA or SQLite"
+              },
+              "semantics": "FIFO causal frames; explicit evidence gaps on discard"
+            }
+          },
+          "target_pi_verified": false
+        },
+        "journal": {
+          "agents": 4,
+          "shared_sensors": 8,
+          "events_per_entity": 1600,
+          "ms": 51.71090003568679,
+          "total_changes": 19240,
+          "protection_updates": 19200,
+          "evidence_sha256": "cefaab373254d3a18af9b0a7aa70236c4cf7ef09c07a8d62985ea0d103403023",
+          "scope": "Actual SQLite evidence protection only; not physical HA latency"
+        }
+      }
+    },
+    {
+      "agents": 4,
+      "repeat": 1,
+      "after": {
+        "engine": {
+          "agents": 4,
+          "events": 12,
+          "entities": 780,
+          "samples": 48,
+          "event_to_executor_p95_ms": 27.27359998971224,
+          "median_ms": 10.805100027937442,
+          "decisions_sha256": "338696a19091f86b429f71b7a0e1ccbd8379c14d4ed08a9b53d70e67144399dc",
+          "decision_statuses": {
+            "SHADOW": 48
+          },
+          "ha_calls": 0,
+          "root_confidence_fixture": true,
+          "real_engine_scheduler": true,
+          "tournament": {
+            "queued": 0,
+            "flushed": 0,
+            "flushes": 0,
+            "errors": 0,
+            "shared_source_snapshots": 0,
+            "pending": 0,
+            "storage_retry": {
+              "reason": null,
+              "pauses": 0,
+              "busy_retries": 0,
+              "retry_in_seconds": 0.0
+            },
+            "observation_storage_retry": {
+              "reason": null,
+              "pauses": 0,
+              "busy_retries": 0,
+              "retry_in_seconds": 0.0
+            },
+            "context_rows": {
+              "sensor_quality": {
+                "pending": 0,
+                "flushed": 32,
+                "errors": 0,
+                "bytes": 0,
+                "max_bytes": 16777216,
+                "max_rows": 4096,
+                "inflight": 0,
+                "flush_seconds": 30.0,
+                "overflow_flushes": 0,
+                "batch_rows": 64,
+                "batch_bytes": 1048576,
+                "commits": 1,
+                "max_store_hold_ms": 1.4273999840952456,
+                "shared_payload_columns": [],
+                "shared_payloads": 0,
+                "shared_payload_references": 0,
+                "shared_payload_bytes": 0,
+                "duplicate_payload_charge_avoided_bytes": 0
+              },
+              "observed_pool": {
+                "pending": 0,
+                "flushed": 384,
+                "errors": 0,
+                "bytes": 0,
+                "max_bytes": 16777216,
+                "max_rows": 4096,
+                "inflight": 0,
+                "flush_seconds": 30.0,
+                "overflow_flushes": 0,
+                "batch_rows": 64,
+                "batch_bytes": 1048576,
+                "commits": 6,
+                "max_store_hold_ms": 2.3724999628029764,
+                "shared_payload_columns": [
+                  13,
+                  14,
+                  15
+                ],
+                "shared_payloads": 0,
+                "shared_payload_references": 0,
+                "shared_payload_bytes": 0,
+                "duplicate_payload_charge_avoided_bytes": 0
+              }
+            },
+            "storage_admission": {
+              "skipped": 0,
+              "recoveries": 0,
+              "reason": null,
+              "paused_agents": 0,
+              "max_agents": 256
+            },
+            "observation_pool_cache": {
+              "hits": 56,
+              "reads": 8,
+              "scope": "one_observation",
+              "persistent_entries": 0
+            },
+            "observation_scheduler": {
+              "interval_ms": 0.0,
+              "executed": 8,
+              "skipped": 0,
+              "target_forced": 0,
+              "errors": 0,
+              "tracked_agents": 4,
+              "max_agents": 256,
+              "deferred_for_realtime": 0,
+              "max_deferral_ms": 5000.0,
+              "retry_agents": 0,
+              "scope": "Engine-dispatched candidate observations; target events always admitted"
+            },
+            "deferred_observations": {
+              "queued": 48,
+              "processed": 8,
+              "dropped": 0,
+              "errors": 0,
+              "gaps": 0,
+              "stale": 0,
+              "max_depth": 4,
+              "last_queue_lag_ms": 30.999999959021807,
+              "sync_observations": 0,
+              "storage_skips": 0,
+              "last_error": null,
+              "last_capture_ms": 1.437300001271069,
+              "peak_bytes": 4964720,
+              "coalesced": 40,
+              "pending_interval_skips": 0,
+              "foreground_yields": 9,
+              "pending": 0,
+              "active": false,
+              "bytes": 0,
+              "max_bytes": 67108864,
+              "configured_bytes": 268435456,
+              "max_jobs": 64,
+              "sync_required": 0,
+              "gap_agents": 0,
+              "shared_snapshot_records": 0,
+              "shared_snapshot_hits": 2328,
+              "shared_snapshot_bytes": 0,
+              "shared_snapshot_references": 0,
+              "temporal_snapshots": {
+                "hits": 36649,
+                "misses": 791,
+                "bytes": 2428752,
+                "max_bytes": 67108864,
+                "entities": 780,
+                "max_entities": 2048
+              },
+              "state_snapshots": {
+                "bytes": 582504,
+                "max_bytes": 16777216,
+                "entries": 780,
+                "max_entries": 2048,
+                "hits": 36649,
+                "misses": 791,
+                "complete_hits": 36,
+                "complete_bytes": 113512
+              },
+              "registry_snapshots": {
+                "bytes": 184,
+                "max_bytes": 8388608,
+                "entries": 0,
+                "max_entries": 2048,
+                "hits": 0,
+                "misses": 0,
+                "complete_hits": 47,
+                "complete_bytes": 184
+              },
+              "isolated_compute": {
+                "starts": 0,
+                "requests": 0,
+                "errors": 0,
+                "max_payload_bytes": 0,
+                "last_ms": null,
+                "ram_limit_mb": null,
+                "timeouts": 0,
+                "alive": false,
+                "pid": null,
+                "semantics": "pure optional compute, private pipe, no HA or SQLite"
+              },
+              "semantics": "FIFO causal frames; explicit evidence gaps on discard"
+            }
+          },
+          "target_pi_verified": false
+        },
+        "journal": {
+          "agents": 4,
+          "shared_sensors": 8,
+          "events_per_entity": 1600,
+          "ms": 58.15709999296814,
+          "total_changes": 19240,
+          "protection_updates": 19200,
+          "evidence_sha256": "cefaab373254d3a18af9b0a7aa70236c4cf7ef09c07a8d62985ea0d103403023",
+          "scope": "Actual SQLite evidence protection only; not physical HA latency"
+        }
+      },
+      "before": {
+        "engine": {
+          "agents": 4,
+          "events": 12,
+          "entities": 780,
+          "samples": 48,
+          "event_to_executor_p95_ms": 31.69450000859797,
+          "median_ms": 14.242400007788092,
+          "decisions_sha256": "338696a19091f86b429f71b7a0e1ccbd8379c14d4ed08a9b53d70e67144399dc",
+          "decision_statuses": {
+            "SHADOW": 48
+          },
+          "ha_calls": 0,
+          "root_confidence_fixture": true,
+          "real_engine_scheduler": true,
+          "tournament": {
+            "queued": 0,
+            "flushed": 0,
+            "flushes": 0,
+            "errors": 0,
+            "shared_source_snapshots": 0,
+            "pending": 0,
+            "storage_retry": {
+              "reason": null,
+              "pauses": 0,
+              "busy_retries": 0,
+              "retry_in_seconds": 0.0
+            },
+            "context_rows": {
+              "sensor_quality": {
+                "pending": 0,
+                "flushed": 32,
+                "errors": 0,
+                "bytes": 0,
+                "max_bytes": 16777216,
+                "max_rows": 4096,
+                "inflight": 0,
+                "flush_seconds": 30.0,
+                "overflow_flushes": 0,
+                "batch_rows": 64,
+                "batch_bytes": 1048576,
+                "commits": 1,
+                "max_store_hold_ms": 1.5872999792918563,
+                "shared_payload_columns": [],
+                "shared_payloads": 0,
+                "shared_payload_references": 0,
+                "shared_payload_bytes": 0,
+                "duplicate_payload_charge_avoided_bytes": 0
+              },
+              "observed_pool": {
+                "pending": 0,
+                "flushed": 384,
+                "errors": 0,
+                "bytes": 0,
+                "max_bytes": 16777216,
+                "max_rows": 4096,
+                "inflight": 0,
+                "flush_seconds": 30.0,
+                "overflow_flushes": 0,
+                "batch_rows": 64,
+                "batch_bytes": 1048576,
+                "commits": 6,
+                "max_store_hold_ms": 3.0157999717630446,
+                "shared_payload_columns": [
+                  13,
+                  14,
+                  15
+                ],
+                "shared_payloads": 0,
+                "shared_payload_references": 0,
+                "shared_payload_bytes": 0,
+                "duplicate_payload_charge_avoided_bytes": 0
+              }
+            },
+            "storage_admission": {
+              "skipped": 0,
+              "recoveries": 0,
+              "reason": null,
+              "paused_agents": 0,
+              "max_agents": 256
+            },
+            "observation_pool_cache": {
+              "hits": 175,
+              "reads": 25,
+              "scope": "one_observation",
+              "persistent_entries": 0
+            },
+            "observation_scheduler": {
+              "interval_ms": 0.0,
+              "executed": 25,
+              "skipped": 0,
+              "target_forced": 0,
+              "errors": 0,
+              "tracked_agents": 4,
+              "max_agents": 256,
+              "deferred_for_realtime": 0,
+              "max_deferral_ms": 5000.0,
+              "retry_agents": 0,
+              "scope": "Engine-dispatched candidate observations; target events always admitted"
+            },
+            "deferred_observations": {
+              "queued": 48,
+              "processed": 25,
+              "dropped": 0,
+              "errors": 0,
+              "gaps": 0,
+              "stale": 0,
+              "max_depth": 4,
+              "last_queue_lag_ms": 31.000000017229468,
+              "sync_observations": 0,
+              "storage_skips": 0,
+              "last_error": null,
+              "last_capture_ms": 1.4662000467069447,
+              "peak_bytes": 15537064,
+              "coalesced": 23,
+              "pending_interval_skips": 0,
+              "pending": 0,
+              "active": false,
+              "bytes": 0,
+              "max_bytes": 67108864,
+              "configured_bytes": 268435456,
+              "max_jobs": 64,
+              "sync_required": 0,
+              "gap_agents": 0,
+              "temporal_snapshots": {
+                "hits": 36649,
+                "misses": 791,
+                "bytes": 2428752,
+                "max_bytes": 67108864,
+                "entities": 780,
+                "max_entities": 2048
+              },
+              "state_snapshots": {
+                "bytes": 532544,
+                "max_bytes": 16777216,
+                "entries": 780,
+                "max_entries": 2048,
+                "hits": 36649,
+                "misses": 791,
+                "complete_hits": 36,
+                "complete_bytes": 63552
+              },
+              "registry_snapshots": {
+                "bytes": 144,
+                "max_bytes": 8388608,
+                "entries": 0,
+                "max_entries": 2048,
+                "hits": 0,
+                "misses": 0,
+                "complete_hits": 47,
+                "complete_bytes": 144
+              },
+              "isolated_compute": {
+                "starts": 0,
+                "requests": 0,
+                "errors": 0,
+                "max_payload_bytes": 0,
+                "last_ms": null,
+                "ram_limit_mb": null,
+                "timeouts": 0,
+                "alive": false,
+                "pid": null,
+                "semantics": "pure optional compute, private pipe, no HA or SQLite"
+              },
+              "semantics": "FIFO causal frames; explicit evidence gaps on discard"
+            }
+          },
+          "target_pi_verified": false
+        },
+        "journal": {
+          "agents": 4,
+          "shared_sensors": 8,
+          "events_per_entity": 1600,
+          "ms": 143.86190002551302,
+          "total_changes": 57640,
+          "protection_updates": 57600,
+          "evidence_sha256": "cefaab373254d3a18af9b0a7aa70236c4cf7ef09c07a8d62985ea0d103403023",
+          "scope": "Actual SQLite evidence protection only; not physical HA latency"
+        }
+      }
+    },
+    {
+      "agents": 4,
+      "repeat": 2,
+      "before": {
+        "engine": {
+          "agents": 4,
+          "events": 12,
+          "entities": 780,
+          "samples": 48,
+          "event_to_executor_p95_ms": 27.59309997782111,
+          "median_ms": 13.026000000536442,
+          "decisions_sha256": "338696a19091f86b429f71b7a0e1ccbd8379c14d4ed08a9b53d70e67144399dc",
+          "decision_statuses": {
+            "SHADOW": 48
+          },
+          "ha_calls": 0,
+          "root_confidence_fixture": true,
+          "real_engine_scheduler": true,
+          "tournament": {
+            "queued": 0,
+            "flushed": 0,
+            "flushes": 0,
+            "errors": 0,
+            "shared_source_snapshots": 0,
+            "pending": 0,
+            "storage_retry": {
+              "reason": null,
+              "pauses": 0,
+              "busy_retries": 0,
+              "retry_in_seconds": 0.0
+            },
+            "context_rows": {
+              "sensor_quality": {
+                "pending": 0,
+                "flushed": 32,
+                "errors": 0,
+                "bytes": 0,
+                "max_bytes": 16777216,
+                "max_rows": 4096,
+                "inflight": 0,
+                "flush_seconds": 30.0,
+                "overflow_flushes": 0,
+                "batch_rows": 64,
+                "batch_bytes": 1048576,
+                "commits": 1,
+                "max_store_hold_ms": 1.4386000111699104,
+                "shared_payload_columns": [],
+                "shared_payloads": 0,
+                "shared_payload_references": 0,
+                "shared_payload_bytes": 0,
+                "duplicate_payload_charge_avoided_bytes": 0
+              },
+              "observed_pool": {
+                "pending": 0,
+                "flushed": 384,
+                "errors": 0,
+                "bytes": 0,
+                "max_bytes": 16777216,
+                "max_rows": 4096,
+                "inflight": 0,
+                "flush_seconds": 30.0,
+                "overflow_flushes": 0,
+                "batch_rows": 64,
+                "batch_bytes": 1048576,
+                "commits": 6,
+                "max_store_hold_ms": 4.088599991519004,
+                "shared_payload_columns": [
+                  13,
+                  14,
+                  15
+                ],
+                "shared_payloads": 0,
+                "shared_payload_references": 0,
+                "shared_payload_bytes": 0,
+                "duplicate_payload_charge_avoided_bytes": 0
+              }
+            },
+            "storage_admission": {
+              "skipped": 0,
+              "recoveries": 0,
+              "reason": null,
+              "paused_agents": 0,
+              "max_agents": 256
+            },
+            "observation_pool_cache": {
+              "hits": 168,
+              "reads": 24,
+              "scope": "one_observation",
+              "persistent_entries": 0
+            },
+            "observation_scheduler": {
+              "interval_ms": 0.0,
+              "executed": 24,
+              "skipped": 0,
+              "target_forced": 0,
+              "errors": 0,
+              "tracked_agents": 4,
+              "max_agents": 256,
+              "deferred_for_realtime": 0,
+              "max_deferral_ms": 5000.0,
+              "retry_agents": 0,
+              "scope": "Engine-dispatched candidate observations; target events always admitted"
+            },
+            "deferred_observations": {
+              "queued": 48,
+              "processed": 24,
+              "dropped": 0,
+              "errors": 0,
+              "gaps": 0,
+              "stale": 0,
+              "max_depth": 4,
+              "last_queue_lag_ms": 14.999999955762178,
+              "sync_observations": 0,
+              "storage_skips": 0,
+              "last_error": null,
+              "last_capture_ms": 1.9500000053085387,
+              "peak_bytes": 15537064,
+              "coalesced": 24,
+              "pending_interval_skips": 0,
+              "pending": 0,
+              "active": false,
+              "bytes": 0,
+              "max_bytes": 67108864,
+              "configured_bytes": 268435456,
+              "max_jobs": 64,
+              "sync_required": 0,
+              "gap_agents": 0,
+              "temporal_snapshots": {
+                "hits": 36649,
+                "misses": 791,
+                "bytes": 2428752,
+                "max_bytes": 67108864,
+                "entities": 780,
+                "max_entities": 2048
+              },
+              "state_snapshots": {
+                "bytes": 532544,
+                "max_bytes": 16777216,
+                "entries": 780,
+                "max_entries": 2048,
+                "hits": 36649,
+                "misses": 791,
+                "complete_hits": 36,
+                "complete_bytes": 63552
+              },
+              "registry_snapshots": {
+                "bytes": 144,
+                "max_bytes": 8388608,
+                "entries": 0,
+                "max_entries": 2048,
+                "hits": 0,
+                "misses": 0,
+                "complete_hits": 47,
+                "complete_bytes": 144
+              },
+              "isolated_compute": {
+                "starts": 0,
+                "requests": 0,
+                "errors": 0,
+                "max_payload_bytes": 0,
+                "last_ms": null,
+                "ram_limit_mb": null,
+                "timeouts": 0,
+                "alive": false,
+                "pid": null,
+                "semantics": "pure optional compute, private pipe, no HA or SQLite"
+              },
+              "semantics": "FIFO causal frames; explicit evidence gaps on discard"
+            }
+          },
+          "target_pi_verified": false
+        },
+        "journal": {
+          "agents": 4,
+          "shared_sensors": 8,
+          "events_per_entity": 1600,
+          "ms": 120.58510002680123,
+          "total_changes": 57640,
+          "protection_updates": 57600,
+          "evidence_sha256": "cefaab373254d3a18af9b0a7aa70236c4cf7ef09c07a8d62985ea0d103403023",
+          "scope": "Actual SQLite evidence protection only; not physical HA latency"
+        }
+      },
+      "after": {
+        "engine": {
+          "agents": 4,
+          "events": 12,
+          "entities": 780,
+          "samples": 48,
+          "event_to_executor_p95_ms": 39.57329998956993,
+          "median_ms": 14.628200035076588,
+          "decisions_sha256": "338696a19091f86b429f71b7a0e1ccbd8379c14d4ed08a9b53d70e67144399dc",
+          "decision_statuses": {
+            "SHADOW": 48
+          },
+          "ha_calls": 0,
+          "root_confidence_fixture": true,
+          "real_engine_scheduler": true,
+          "tournament": {
+            "queued": 0,
+            "flushed": 0,
+            "flushes": 0,
+            "errors": 0,
+            "shared_source_snapshots": 0,
+            "pending": 0,
+            "storage_retry": {
+              "reason": null,
+              "pauses": 0,
+              "busy_retries": 0,
+              "retry_in_seconds": 0.0
+            },
+            "observation_storage_retry": {
+              "reason": null,
+              "pauses": 0,
+              "busy_retries": 0,
+              "retry_in_seconds": 0.0
+            },
+            "context_rows": {
+              "sensor_quality": {
+                "pending": 0,
+                "flushed": 32,
+                "errors": 0,
+                "bytes": 0,
+                "max_bytes": 16777216,
+                "max_rows": 4096,
+                "inflight": 0,
+                "flush_seconds": 30.0,
+                "overflow_flushes": 0,
+                "batch_rows": 64,
+                "batch_bytes": 1048576,
+                "commits": 1,
+                "max_store_hold_ms": 2.2817000281065702,
+                "shared_payload_columns": [],
+                "shared_payloads": 0,
+                "shared_payload_references": 0,
+                "shared_payload_bytes": 0,
+                "duplicate_payload_charge_avoided_bytes": 0
+              },
+              "observed_pool": {
+                "pending": 0,
+                "flushed": 384,
+                "errors": 0,
+                "bytes": 0,
+                "max_bytes": 16777216,
+                "max_rows": 4096,
+                "inflight": 0,
+                "flush_seconds": 30.0,
+                "overflow_flushes": 0,
+                "batch_rows": 64,
+                "batch_bytes": 1048576,
+                "commits": 6,
+                "max_store_hold_ms": 3.411400015465915,
+                "shared_payload_columns": [
+                  13,
+                  14,
+                  15
+                ],
+                "shared_payloads": 0,
+                "shared_payload_references": 0,
+                "shared_payload_bytes": 0,
+                "duplicate_payload_charge_avoided_bytes": 0
+              }
+            },
+            "storage_admission": {
+              "skipped": 0,
+              "recoveries": 0,
+              "reason": null,
+              "paused_agents": 0,
+              "max_agents": 256
+            },
+            "observation_pool_cache": {
+              "hits": 63,
+              "reads": 9,
+              "scope": "one_observation",
+              "persistent_entries": 0
+            },
+            "observation_scheduler": {
+              "interval_ms": 0.0,
+              "executed": 9,
+              "skipped": 0,
+              "target_forced": 0,
+              "errors": 0,
+              "tracked_agents": 4,
+              "max_agents": 256,
+              "deferred_for_realtime": 0,
+              "max_deferral_ms": 5000.0,
+              "retry_agents": 0,
+              "scope": "Engine-dispatched candidate observations; target events always admitted"
+            },
+            "deferred_observations": {
+              "queued": 48,
+              "processed": 9,
+              "dropped": 0,
+              "errors": 0,
+              "gaps": 0,
+              "stale": 0,
+              "max_depth": 4,
+              "last_queue_lag_ms": 94.0000000409782,
+              "sync_observations": 0,
+              "storage_skips": 0,
+              "last_error": null,
+              "last_capture_ms": 5.808999994769692,
+              "peak_bytes": 4963096,
+              "coalesced": 39,
+              "pending_interval_skips": 0,
+              "foreground_yields": 9,
+              "pending": 0,
+              "active": false,
+              "bytes": 0,
+              "max_bytes": 67108864,
+              "configured_bytes": 268435456,
+              "max_jobs": 64,
+              "sync_required": 0,
+              "gap_agents": 0,
+              "shared_snapshot_records": 0,
+              "shared_snapshot_hits": 2328,
+              "shared_snapshot_bytes": 0,
+              "shared_snapshot_references": 0,
+              "temporal_snapshots": {
+                "hits": 36649,
+                "misses": 791,
+                "bytes": 2428752,
+                "max_bytes": 67108864,
+                "entities": 780,
+                "max_entities": 2048
+              },
+              "state_snapshots": {
+                "bytes": 582504,
+                "max_bytes": 16777216,
+                "entries": 780,
+                "max_entries": 2048,
+                "hits": 36649,
+                "misses": 791,
+                "complete_hits": 36,
+                "complete_bytes": 113512
+              },
+              "registry_snapshots": {
+                "bytes": 184,
+                "max_bytes": 8388608,
+                "entries": 0,
+                "max_entries": 2048,
+                "hits": 0,
+                "misses": 0,
+                "complete_hits": 47,
+                "complete_bytes": 184
+              },
+              "isolated_compute": {
+                "starts": 0,
+                "requests": 0,
+                "errors": 0,
+                "max_payload_bytes": 0,
+                "last_ms": null,
+                "ram_limit_mb": null,
+                "timeouts": 0,
+                "alive": false,
+                "pid": null,
+                "semantics": "pure optional compute, private pipe, no HA or SQLite"
+              },
+              "semantics": "FIFO causal frames; explicit evidence gaps on discard"
+            }
+          },
+          "target_pi_verified": false
+        },
+        "journal": {
+          "agents": 4,
+          "shared_sensors": 8,
+          "events_per_entity": 1600,
+          "ms": 58.90379997435957,
+          "total_changes": 19240,
+          "protection_updates": 19200,
+          "evidence_sha256": "cefaab373254d3a18af9b0a7aa70236c4cf7ef09c07a8d62985ea0d103403023",
+          "scope": "Actual SQLite evidence protection only; not physical HA latency"
+        }
+      }
+    },
+    {
+      "agents": 5,
+      "repeat": 0,
+      "before": {
+        "engine": {
+          "agents": 5,
+          "events": 12,
+          "entities": 780,
+          "samples": 60,
+          "event_to_executor_p95_ms": 74.1046000039205,
+          "median_ms": 19.9012000230141,
+          "decisions_sha256": "264d687c5ffb6f537973cd74dbb618bfa574cb2cc19d95a43f10c4f86f655b89",
+          "decision_statuses": {
+            "SHADOW": 60
+          },
+          "ha_calls": 0,
+          "root_confidence_fixture": true,
+          "real_engine_scheduler": true,
+          "tournament": {
+            "queued": 0,
+            "flushed": 0,
+            "flushes": 0,
+            "errors": 0,
+            "shared_source_snapshots": 0,
+            "pending": 0,
+            "storage_retry": {
+              "reason": null,
+              "pauses": 0,
+              "busy_retries": 0,
+              "retry_in_seconds": 0.0
+            },
+            "context_rows": {
+              "sensor_quality": {
+                "pending": 0,
+                "flushed": 40,
+                "errors": 0,
+                "bytes": 0,
+                "max_bytes": 16777216,
+                "max_rows": 4096,
+                "inflight": 0,
+                "flush_seconds": 30.0,
+                "overflow_flushes": 0,
+                "batch_rows": 64,
+                "batch_bytes": 1048576,
+                "commits": 1,
+                "max_store_hold_ms": 3.59150004805997,
+                "shared_payload_columns": [],
+                "shared_payloads": 0,
+                "shared_payload_references": 0,
+                "shared_payload_bytes": 0,
+                "duplicate_payload_charge_avoided_bytes": 0
+              },
+              "observed_pool": {
+                "pending": 0,
+                "flushed": 480,
+                "errors": 0,
+                "bytes": 0,
+                "max_bytes": 16777216,
+                "max_rows": 4096,
+                "inflight": 0,
+                "flush_seconds": 30.0,
+                "overflow_flushes": 0,
+                "batch_rows": 64,
+                "batch_bytes": 1048576,
+                "commits": 8,
+                "max_store_hold_ms": 6.8437999580055475,
+                "shared_payload_columns": [
+                  13,
+                  14,
+                  15
+                ],
+                "shared_payloads": 0,
+                "shared_payload_references": 0,
+                "shared_payload_bytes": 0,
+                "duplicate_payload_charge_avoided_bytes": 0
+              }
+            },
+            "storage_admission": {
+              "skipped": 0,
+              "recoveries": 0,
+              "reason": null,
+              "paused_agents": 0,
+              "max_agents": 256
+            },
+            "observation_pool_cache": {
+              "hits": 161,
+              "reads": 23,
+              "scope": "one_observation",
+              "persistent_entries": 0
+            },
+            "observation_scheduler": {
+              "interval_ms": 0.0,
+              "executed": 23,
+              "skipped": 0,
+              "target_forced": 0,
+              "errors": 0,
+              "tracked_agents": 5,
+              "max_agents": 256,
+              "deferred_for_realtime": 0,
+              "max_deferral_ms": 5000.0,
+              "retry_agents": 0,
+              "scope": "Engine-dispatched candidate observations; target events always admitted"
+            },
+            "deferred_observations": {
+              "queued": 60,
+              "processed": 23,
+              "dropped": 0,
+              "errors": 0,
+              "gaps": 0,
+              "stale": 0,
+              "max_depth": 5,
+              "last_queue_lag_ms": 47.0000000204891,
+              "sync_observations": 0,
+              "storage_skips": 0,
+              "last_error": null,
+              "last_capture_ms": 2.1813000203110278,
+              "peak_bytes": 18645544,
+              "coalesced": 37,
+              "pending_interval_skips": 0,
+              "pending": 0,
+              "active": false,
+              "bytes": 0,
+              "max_bytes": 67108864,
+              "configured_bytes": 268435456,
+              "max_jobs": 64,
+              "sync_required": 0,
+              "gap_agents": 0,
+              "temporal_snapshots": {
+                "hits": 46009,
+                "misses": 791,
+                "bytes": 2428744,
+                "max_bytes": 67108864,
+                "entities": 780,
+                "max_entities": 2048
+              },
+              "state_snapshots": {
+                "bytes": 532536,
+                "max_bytes": 16777216,
+                "entries": 780,
+                "max_entries": 2048,
+                "hits": 46009,
+                "misses": 791,
+                "complete_hits": 48,
+                "complete_bytes": 63552
+              },
+              "registry_snapshots": {
+                "bytes": 144,
+                "max_bytes": 8388608,
+                "entries": 0,
+                "max_entries": 2048,
+                "hits": 0,
+                "misses": 0,
+                "complete_hits": 59,
+                "complete_bytes": 144
+              },
+              "isolated_compute": {
+                "starts": 0,
+                "requests": 0,
+                "errors": 0,
+                "max_payload_bytes": 0,
+                "last_ms": null,
+                "ram_limit_mb": null,
+                "timeouts": 0,
+                "alive": false,
+                "pid": null,
+                "semantics": "pure optional compute, private pipe, no HA or SQLite"
+              },
+              "semantics": "FIFO causal frames; explicit evidence gaps on discard"
+            }
+          },
+          "target_pi_verified": false
+        },
+        "journal": {
+          "agents": 5,
+          "shared_sensors": 8,
+          "events_per_entity": 1600,
+          "ms": 143.63790000788867,
+          "total_changes": 72050,
+          "protection_updates": 72000,
+          "evidence_sha256": "e0ee1389c7844e863b09d0abb390c4af8f1b17a7ee3460dc527d257ef15d1c84",
+          "scope": "Actual SQLite evidence protection only; not physical HA latency"
+        }
+      },
+      "after": {
+        "engine": {
+          "agents": 5,
+          "events": 12,
+          "entities": 780,
+          "samples": 60,
+          "event_to_executor_p95_ms": 34.23859999747947,
+          "median_ms": 18.089499964844435,
+          "decisions_sha256": "264d687c5ffb6f537973cd74dbb618bfa574cb2cc19d95a43f10c4f86f655b89",
+          "decision_statuses": {
+            "SHADOW": 60
+          },
+          "ha_calls": 0,
+          "root_confidence_fixture": true,
+          "real_engine_scheduler": true,
+          "tournament": {
+            "queued": 0,
+            "flushed": 0,
+            "flushes": 0,
+            "errors": 0,
+            "shared_source_snapshots": 0,
+            "pending": 0,
+            "storage_retry": {
+              "reason": null,
+              "pauses": 0,
+              "busy_retries": 0,
+              "retry_in_seconds": 0.0
+            },
+            "observation_storage_retry": {
+              "reason": null,
+              "pauses": 0,
+              "busy_retries": 0,
+              "retry_in_seconds": 0.0
+            },
+            "context_rows": {
+              "sensor_quality": {
+                "pending": 0,
+                "flushed": 40,
+                "errors": 0,
+                "bytes": 0,
+                "max_bytes": 16777216,
+                "max_rows": 4096,
+                "inflight": 0,
+                "flush_seconds": 30.0,
+                "overflow_flushes": 0,
+                "batch_rows": 64,
+                "batch_bytes": 1048576,
+                "commits": 1,
+                "max_store_hold_ms": 1.7613000236451626,
+                "shared_payload_columns": [],
+                "shared_payloads": 0,
+                "shared_payload_references": 0,
+                "shared_payload_bytes": 0,
+                "duplicate_payload_charge_avoided_bytes": 0
+              },
+              "observed_pool": {
+                "pending": 0,
+                "flushed": 480,
+                "errors": 0,
+                "bytes": 0,
+                "max_bytes": 16777216,
+                "max_rows": 4096,
+                "inflight": 0,
+                "flush_seconds": 30.0,
+                "overflow_flushes": 0,
+                "batch_rows": 64,
+                "batch_bytes": 1048576,
+                "commits": 8,
+                "max_store_hold_ms": 2.322999993339181,
+                "shared_payload_columns": [
+                  13,
+                  14,
+                  15
+                ],
+                "shared_payloads": 0,
+                "shared_payload_references": 0,
+                "shared_payload_bytes": 0,
+                "duplicate_payload_charge_avoided_bytes": 0
+              }
+            },
+            "storage_admission": {
+              "skipped": 0,
+              "recoveries": 0,
+              "reason": null,
+              "paused_agents": 0,
+              "max_agents": 256
+            },
+            "observation_pool_cache": {
+              "hits": 77,
+              "reads": 11,
+              "scope": "one_observation",
+              "persistent_entries": 0
+            },
+            "observation_scheduler": {
+              "interval_ms": 0.0,
+              "executed": 11,
+              "skipped": 0,
+              "target_forced": 0,
+              "errors": 0,
+              "tracked_agents": 5,
+              "max_agents": 256,
+              "deferred_for_realtime": 0,
+              "max_deferral_ms": 5000.0,
+              "retry_agents": 0,
+              "scope": "Engine-dispatched candidate observations; target events always admitted"
+            },
+            "deferred_observations": {
+              "queued": 60,
+              "processed": 11,
+              "dropped": 0,
+              "errors": 0,
+              "gaps": 0,
+              "stale": 0,
+              "max_depth": 5,
+              "last_queue_lag_ms": 77.9999999795109,
+              "sync_observations": 0,
+              "storage_skips": 0,
+              "last_error": null,
+              "last_capture_ms": 2.576700004283339,
+              "peak_bytes": 5234080,
+              "coalesced": 49,
+              "pending_interval_skips": 0,
+              "foreground_yields": 14,
+              "pending": 0,
+              "active": false,
+              "bytes": 0,
+              "max_bytes": 67108864,
+              "configured_bytes": 268435456,
+              "max_jobs": 64,
+              "sync_required": 0,
+              "gap_agents": 0,
+              "shared_snapshot_records": 0,
+              "shared_snapshot_hits": 2928,
+              "shared_snapshot_bytes": 0,
+              "shared_snapshot_references": 0,
+              "temporal_snapshots": {
+                "hits": 46009,
+                "misses": 791,
+                "bytes": 2428744,
+                "max_bytes": 67108864,
+                "entities": 780,
+                "max_entities": 2048
+              },
+              "state_snapshots": {
+                "bytes": 582496,
+                "max_bytes": 16777216,
+                "entries": 780,
+                "max_entries": 2048,
+                "hits": 46009,
+                "misses": 791,
+                "complete_hits": 48,
+                "complete_bytes": 113512
+              },
+              "registry_snapshots": {
+                "bytes": 184,
+                "max_bytes": 8388608,
+                "entries": 0,
+                "max_entries": 2048,
+                "hits": 0,
+                "misses": 0,
+                "complete_hits": 59,
+                "complete_bytes": 184
+              },
+              "isolated_compute": {
+                "starts": 0,
+                "requests": 0,
+                "errors": 0,
+                "max_payload_bytes": 0,
+                "last_ms": null,
+                "ram_limit_mb": null,
+                "timeouts": 0,
+                "alive": false,
+                "pid": null,
+                "semantics": "pure optional compute, private pipe, no HA or SQLite"
+              },
+              "semantics": "FIFO causal frames; explicit evidence gaps on discard"
+            }
+          },
+          "target_pi_verified": false
+        },
+        "journal": {
+          "agents": 5,
+          "shared_sensors": 8,
+          "events_per_entity": 1600,
+          "ms": 54.92030002642423,
+          "total_changes": 20850,
+          "protection_updates": 20800,
+          "evidence_sha256": "e0ee1389c7844e863b09d0abb390c4af8f1b17a7ee3460dc527d257ef15d1c84",
+          "scope": "Actual SQLite evidence protection only; not physical HA latency"
+        }
+      }
+    },
+    {
+      "agents": 5,
+      "repeat": 1,
+      "after": {
+        "engine": {
+          "agents": 5,
+          "events": 12,
+          "entities": 780,
+          "samples": 60,
+          "event_to_executor_p95_ms": 35.925500036682934,
+          "median_ms": 14.83250001911074,
+          "decisions_sha256": "264d687c5ffb6f537973cd74dbb618bfa574cb2cc19d95a43f10c4f86f655b89",
+          "decision_statuses": {
+            "SHADOW": 60
+          },
+          "ha_calls": 0,
+          "root_confidence_fixture": true,
+          "real_engine_scheduler": true,
+          "tournament": {
+            "queued": 0,
+            "flushed": 0,
+            "flushes": 0,
+            "errors": 0,
+            "shared_source_snapshots": 0,
+            "pending": 0,
+            "storage_retry": {
+              "reason": null,
+              "pauses": 0,
+              "busy_retries": 0,
+              "retry_in_seconds": 0.0
+            },
+            "observation_storage_retry": {
+              "reason": null,
+              "pauses": 0,
+              "busy_retries": 0,
+              "retry_in_seconds": 0.0
+            },
+            "context_rows": {
+              "sensor_quality": {
+                "pending": 0,
+                "flushed": 40,
+                "errors": 0,
+                "bytes": 0,
+                "max_bytes": 16777216,
+                "max_rows": 4096,
+                "inflight": 0,
+                "flush_seconds": 30.0,
+                "overflow_flushes": 0,
+                "batch_rows": 64,
+                "batch_bytes": 1048576,
+                "commits": 1,
+                "max_store_hold_ms": 1.4559999690391123,
+                "shared_payload_columns": [],
+                "shared_payloads": 0,
+                "shared_payload_references": 0,
+                "shared_payload_bytes": 0,
+                "duplicate_payload_charge_avoided_bytes": 0
+              },
+              "observed_pool": {
+                "pending": 0,
+                "flushed": 480,
+                "errors": 0,
+                "bytes": 0,
+                "max_bytes": 16777216,
+                "max_rows": 4096,
+                "inflight": 0,
+                "flush_seconds": 30.0,
+                "overflow_flushes": 0,
+                "batch_rows": 64,
+                "batch_bytes": 1048576,
+                "commits": 8,
+                "max_store_hold_ms": 1.6537000192329288,
+                "shared_payload_columns": [
+                  13,
+                  14,
+                  15
+                ],
+                "shared_payloads": 0,
+                "shared_payload_references": 0,
+                "shared_payload_bytes": 0,
+                "duplicate_payload_charge_avoided_bytes": 0
+              }
+            },
+            "storage_admission": {
+              "skipped": 0,
+              "recoveries": 0,
+              "reason": null,
+              "paused_agents": 0,
+              "max_agents": 256
+            },
+            "observation_pool_cache": {
+              "hits": 91,
+              "reads": 13,
+              "scope": "one_observation",
+              "persistent_entries": 0
+            },
+            "observation_scheduler": {
+              "interval_ms": 0.0,
+              "executed": 13,
+              "skipped": 0,
+              "target_forced": 0,
+              "errors": 0,
+              "tracked_agents": 5,
+              "max_agents": 256,
+              "deferred_for_realtime": 0,
+              "max_deferral_ms": 5000.0,
+              "retry_agents": 0,
+              "scope": "Engine-dispatched candidate observations; target events always admitted"
+            },
+            "deferred_observations": {
+              "queued": 60,
+              "processed": 13,
+              "dropped": 0,
+              "errors": 0,
+              "gaps": 0,
+              "stale": 0,
+              "max_depth": 5,
+              "last_queue_lag_ms": 32.00000000651926,
+              "sync_observations": 0,
+              "storage_skips": 0,
+              "last_error": null,
+              "last_capture_ms": 1.4303999487310648,
+              "peak_bytes": 5234080,
+              "coalesced": 47,
+              "pending_interval_skips": 0,
+              "foreground_yields": 9,
+              "pending": 0,
+              "active": false,
+              "bytes": 0,
+              "max_bytes": 67108864,
+              "configured_bytes": 268435456,
+              "max_jobs": 64,
+              "sync_required": 0,
+              "gap_agents": 0,
+              "shared_snapshot_records": 0,
+              "shared_snapshot_hits": 2928,
+              "shared_snapshot_bytes": 0,
+              "shared_snapshot_references": 0,
+              "temporal_snapshots": {
+                "hits": 46009,
+                "misses": 791,
+                "bytes": 2428744,
+                "max_bytes": 67108864,
+                "entities": 780,
+                "max_entities": 2048
+              },
+              "state_snapshots": {
+                "bytes": 582496,
+                "max_bytes": 16777216,
+                "entries": 780,
+                "max_entries": 2048,
+                "hits": 46009,
+                "misses": 791,
+                "complete_hits": 48,
+                "complete_bytes": 113512
+              },
+              "registry_snapshots": {
+                "bytes": 184,
+                "max_bytes": 8388608,
+                "entries": 0,
+                "max_entries": 2048,
+                "hits": 0,
+                "misses": 0,
+                "complete_hits": 59,
+                "complete_bytes": 184
+              },
+              "isolated_compute": {
+                "starts": 0,
+                "requests": 0,
+                "errors": 0,
+                "max_payload_bytes": 0,
+                "last_ms": null,
+                "ram_limit_mb": null,
+                "timeouts": 0,
+                "alive": false,
+                "pid": null,
+                "semantics": "pure optional compute, private pipe, no HA or SQLite"
+              },
+              "semantics": "FIFO causal frames; explicit evidence gaps on discard"
+            }
+          },
+          "target_pi_verified": false
+        },
+        "journal": {
+          "agents": 5,
+          "shared_sensors": 8,
+          "events_per_entity": 1600,
+          "ms": 55.18119997577742,
+          "total_changes": 20850,
+          "protection_updates": 20800,
+          "evidence_sha256": "e0ee1389c7844e863b09d0abb390c4af8f1b17a7ee3460dc527d257ef15d1c84",
+          "scope": "Actual SQLite evidence protection only; not physical HA latency"
+        }
+      },
+      "before": {
+        "engine": {
+          "agents": 5,
+          "events": 12,
+          "entities": 780,
+          "samples": 60,
+          "event_to_executor_p95_ms": 41.73399996943772,
+          "median_ms": 16.732099989894778,
+          "decisions_sha256": "264d687c5ffb6f537973cd74dbb618bfa574cb2cc19d95a43f10c4f86f655b89",
+          "decision_statuses": {
+            "SHADOW": 60
+          },
+          "ha_calls": 0,
+          "root_confidence_fixture": true,
+          "real_engine_scheduler": true,
+          "tournament": {
+            "queued": 0,
+            "flushed": 0,
+            "flushes": 0,
+            "errors": 0,
+            "shared_source_snapshots": 0,
+            "pending": 0,
+            "storage_retry": {
+              "reason": null,
+              "pauses": 0,
+              "busy_retries": 0,
+              "retry_in_seconds": 0.0
+            },
+            "context_rows": {
+              "sensor_quality": {
+                "pending": 0,
+                "flushed": 40,
+                "errors": 0,
+                "bytes": 0,
+                "max_bytes": 16777216,
+                "max_rows": 4096,
+                "inflight": 0,
+                "flush_seconds": 30.0,
+                "overflow_flushes": 0,
+                "batch_rows": 64,
+                "batch_bytes": 1048576,
+                "commits": 1,
+                "max_store_hold_ms": 1.8391000339761376,
+                "shared_payload_columns": [],
+                "shared_payloads": 0,
+                "shared_payload_references": 0,
+                "shared_payload_bytes": 0,
+                "duplicate_payload_charge_avoided_bytes": 0
+              },
+              "observed_pool": {
+                "pending": 0,
+                "flushed": 480,
+                "errors": 0,
+                "bytes": 0,
+                "max_bytes": 16777216,
+                "max_rows": 4096,
+                "inflight": 0,
+                "flush_seconds": 30.0,
+                "overflow_flushes": 0,
+                "batch_rows": 64,
+                "batch_bytes": 1048576,
+                "commits": 8,
+                "max_store_hold_ms": 1.958400011062622,
+                "shared_payload_columns": [
+                  13,
+                  14,
+                  15
+                ],
+                "shared_payloads": 0,
+                "shared_payload_references": 0,
+                "shared_payload_bytes": 0,
+                "duplicate_payload_charge_avoided_bytes": 0
+              }
+            },
+            "storage_admission": {
+              "skipped": 0,
+              "recoveries": 0,
+              "reason": null,
+              "paused_agents": 0,
+              "max_agents": 256
+            },
+            "observation_pool_cache": {
+              "hits": 210,
+              "reads": 30,
+              "scope": "one_observation",
+              "persistent_entries": 0
+            },
+            "observation_scheduler": {
+              "interval_ms": 0.0,
+              "executed": 30,
+              "skipped": 0,
+              "target_forced": 0,
+              "errors": 0,
+              "tracked_agents": 5,
+              "max_agents": 256,
+              "deferred_for_realtime": 0,
+              "max_deferral_ms": 5000.0,
+              "retry_agents": 0,
+              "scope": "Engine-dispatched candidate observations; target events always admitted"
+            },
+            "deferred_observations": {
+              "queued": 60,
+              "processed": 30,
+              "dropped": 0,
+              "errors": 0,
+              "gaps": 0,
+              "stale": 0,
+              "max_depth": 5,
+              "last_queue_lag_ms": 16.00000000325963,
+              "sync_observations": 0,
+              "storage_skips": 0,
+              "last_error": null,
+              "last_capture_ms": 1.528399996459484,
+              "peak_bytes": 18645544,
+              "coalesced": 30,
+              "pending_interval_skips": 0,
+              "pending": 0,
+              "active": false,
+              "bytes": 0,
+              "max_bytes": 67108864,
+              "configured_bytes": 268435456,
+              "max_jobs": 64,
+              "sync_required": 0,
+              "gap_agents": 0,
+              "temporal_snapshots": {
+                "hits": 46009,
+                "misses": 791,
+                "bytes": 2428744,
+                "max_bytes": 67108864,
+                "entities": 780,
+                "max_entities": 2048
+              },
+              "state_snapshots": {
+                "bytes": 532536,
+                "max_bytes": 16777216,
+                "entries": 780,
+                "max_entries": 2048,
+                "hits": 46009,
+                "misses": 791,
+                "complete_hits": 48,
+                "complete_bytes": 63552
+              },
+              "registry_snapshots": {
+                "bytes": 144,
+                "max_bytes": 8388608,
+                "entries": 0,
+                "max_entries": 2048,
+                "hits": 0,
+                "misses": 0,
+                "complete_hits": 59,
+                "complete_bytes": 144
+              },
+              "isolated_compute": {
+                "starts": 0,
+                "requests": 0,
+                "errors": 0,
+                "max_payload_bytes": 0,
+                "last_ms": null,
+                "ram_limit_mb": null,
+                "timeouts": 0,
+                "alive": false,
+                "pid": null,
+                "semantics": "pure optional compute, private pipe, no HA or SQLite"
+              },
+              "semantics": "FIFO causal frames; explicit evidence gaps on discard"
+            }
+          },
+          "target_pi_verified": false
+        },
+        "journal": {
+          "agents": 5,
+          "shared_sensors": 8,
+          "events_per_entity": 1600,
+          "ms": 149.9018999747932,
+          "total_changes": 72050,
+          "protection_updates": 72000,
+          "evidence_sha256": "e0ee1389c7844e863b09d0abb390c4af8f1b17a7ee3460dc527d257ef15d1c84",
+          "scope": "Actual SQLite evidence protection only; not physical HA latency"
+        }
+      }
+    },
+    {
+      "agents": 5,
+      "repeat": 2,
+      "before": {
+        "engine": {
+          "agents": 5,
+          "events": 12,
+          "entities": 780,
+          "samples": 60,
+          "event_to_executor_p95_ms": 31.408799986820668,
+          "median_ms": 14.71670001046732,
+          "decisions_sha256": "264d687c5ffb6f537973cd74dbb618bfa574cb2cc19d95a43f10c4f86f655b89",
+          "decision_statuses": {
+            "SHADOW": 60
+          },
+          "ha_calls": 0,
+          "root_confidence_fixture": true,
+          "real_engine_scheduler": true,
+          "tournament": {
+            "queued": 0,
+            "flushed": 0,
+            "flushes": 0,
+            "errors": 0,
+            "shared_source_snapshots": 0,
+            "pending": 0,
+            "storage_retry": {
+              "reason": null,
+              "pauses": 0,
+              "busy_retries": 0,
+              "retry_in_seconds": 0.0
+            },
+            "context_rows": {
+              "sensor_quality": {
+                "pending": 0,
+                "flushed": 40,
+                "errors": 0,
+                "bytes": 0,
+                "max_bytes": 16777216,
+                "max_rows": 4096,
+                "inflight": 0,
+                "flush_seconds": 30.0,
+                "overflow_flushes": 0,
+                "batch_rows": 64,
+                "batch_bytes": 1048576,
+                "commits": 1,
+                "max_store_hold_ms": 1.3713000225834548,
+                "shared_payload_columns": [],
+                "shared_payloads": 0,
+                "shared_payload_references": 0,
+                "shared_payload_bytes": 0,
+                "duplicate_payload_charge_avoided_bytes": 0
+              },
+              "observed_pool": {
+                "pending": 0,
+                "flushed": 480,
+                "errors": 0,
+                "bytes": 0,
+                "max_bytes": 16777216,
+                "max_rows": 4096,
+                "inflight": 0,
+                "flush_seconds": 30.0,
+                "overflow_flushes": 0,
+                "batch_rows": 64,
+                "batch_bytes": 1048576,
+                "commits": 8,
+                "max_store_hold_ms": 1.470400020480156,
+                "shared_payload_columns": [
+                  13,
+                  14,
+                  15
+                ],
+                "shared_payloads": 0,
+                "shared_payload_references": 0,
+                "shared_payload_bytes": 0,
+                "duplicate_payload_charge_avoided_bytes": 0
+              }
+            },
+            "storage_admission": {
+              "skipped": 0,
+              "recoveries": 0,
+              "reason": null,
+              "paused_agents": 0,
+              "max_agents": 256
+            },
+            "observation_pool_cache": {
+              "hits": 189,
+              "reads": 27,
+              "scope": "one_observation",
+              "persistent_entries": 0
+            },
+            "observation_scheduler": {
+              "interval_ms": 0.0,
+              "executed": 27,
+              "skipped": 0,
+              "target_forced": 0,
+              "errors": 0,
+              "tracked_agents": 5,
+              "max_agents": 256,
+              "deferred_for_realtime": 0,
+              "max_deferral_ms": 5000.0,
+              "retry_agents": 0,
+              "scope": "Engine-dispatched candidate observations; target events always admitted"
+            },
+            "deferred_observations": {
+              "queued": 60,
+              "processed": 27,
+              "dropped": 0,
+              "errors": 0,
+              "gaps": 0,
+              "stale": 0,
+              "max_depth": 5,
+              "last_queue_lag_ms": 16.00000000325963,
+              "sync_observations": 0,
+              "storage_skips": 0,
+              "last_error": null,
+              "last_capture_ms": 0.9483000030741096,
+              "peak_bytes": 18645544,
+              "coalesced": 33,
+              "pending_interval_skips": 0,
+              "pending": 0,
+              "active": false,
+              "bytes": 0,
+              "max_bytes": 67108864,
+              "configured_bytes": 268435456,
+              "max_jobs": 64,
+              "sync_required": 0,
+              "gap_agents": 0,
+              "temporal_snapshots": {
+                "hits": 46009,
+                "misses": 791,
+                "bytes": 2428744,
+                "max_bytes": 67108864,
+                "entities": 780,
+                "max_entities": 2048
+              },
+              "state_snapshots": {
+                "bytes": 532536,
+                "max_bytes": 16777216,
+                "entries": 780,
+                "max_entries": 2048,
+                "hits": 46009,
+                "misses": 791,
+                "complete_hits": 48,
+                "complete_bytes": 63552
+              },
+              "registry_snapshots": {
+                "bytes": 144,
+                "max_bytes": 8388608,
+                "entries": 0,
+                "max_entries": 2048,
+                "hits": 0,
+                "misses": 0,
+                "complete_hits": 59,
+                "complete_bytes": 144
+              },
+              "isolated_compute": {
+                "starts": 0,
+                "requests": 0,
+                "errors": 0,
+                "max_payload_bytes": 0,
+                "last_ms": null,
+                "ram_limit_mb": null,
+                "timeouts": 0,
+                "alive": false,
+                "pid": null,
+                "semantics": "pure optional compute, private pipe, no HA or SQLite"
+              },
+              "semantics": "FIFO causal frames; explicit evidence gaps on discard"
+            }
+          },
+          "target_pi_verified": false
+        },
+        "journal": {
+          "agents": 5,
+          "shared_sensors": 8,
+          "events_per_entity": 1600,
+          "ms": 147.00890000676736,
+          "total_changes": 72050,
+          "protection_updates": 72000,
+          "evidence_sha256": "e0ee1389c7844e863b09d0abb390c4af8f1b17a7ee3460dc527d257ef15d1c84",
+          "scope": "Actual SQLite evidence protection only; not physical HA latency"
+        }
+      },
+      "after": {
+        "engine": {
+          "agents": 5,
+          "events": 12,
+          "entities": 780,
+          "samples": 60,
+          "event_to_executor_p95_ms": 40.798300004098564,
+          "median_ms": 15.403800003696233,
+          "decisions_sha256": "264d687c5ffb6f537973cd74dbb618bfa574cb2cc19d95a43f10c4f86f655b89",
+          "decision_statuses": {
+            "SHADOW": 60
+          },
+          "ha_calls": 0,
+          "root_confidence_fixture": true,
+          "real_engine_scheduler": true,
+          "tournament": {
+            "queued": 0,
+            "flushed": 0,
+            "flushes": 0,
+            "errors": 0,
+            "shared_source_snapshots": 0,
+            "pending": 0,
+            "storage_retry": {
+              "reason": null,
+              "pauses": 0,
+              "busy_retries": 0,
+              "retry_in_seconds": 0.0
+            },
+            "observation_storage_retry": {
+              "reason": null,
+              "pauses": 0,
+              "busy_retries": 0,
+              "retry_in_seconds": 0.0
+            },
+            "context_rows": {
+              "sensor_quality": {
+                "pending": 0,
+                "flushed": 40,
+                "errors": 0,
+                "bytes": 0,
+                "max_bytes": 16777216,
+                "max_rows": 4096,
+                "inflight": 0,
+                "flush_seconds": 30.0,
+                "overflow_flushes": 0,
+                "batch_rows": 64,
+                "batch_bytes": 1048576,
+                "commits": 1,
+                "max_store_hold_ms": 1.6448000096715987,
+                "shared_payload_columns": [],
+                "shared_payloads": 0,
+                "shared_payload_references": 0,
+                "shared_payload_bytes": 0,
+                "duplicate_payload_charge_avoided_bytes": 0
+              },
+              "observed_pool": {
+                "pending": 0,
+                "flushed": 480,
+                "errors": 0,
+                "bytes": 0,
+                "max_bytes": 16777216,
+                "max_rows": 4096,
+                "inflight": 0,
+                "flush_seconds": 30.0,
+                "overflow_flushes": 0,
+                "batch_rows": 64,
+                "batch_bytes": 1048576,
+                "commits": 8,
+                "max_store_hold_ms": 2.4893999798223376,
+                "shared_payload_columns": [
+                  13,
+                  14,
+                  15
+                ],
+                "shared_payloads": 0,
+                "shared_payload_references": 0,
+                "shared_payload_bytes": 0,
+                "duplicate_payload_charge_avoided_bytes": 0
+              }
+            },
+            "storage_admission": {
+              "skipped": 0,
+              "recoveries": 0,
+              "reason": null,
+              "paused_agents": 0,
+              "max_agents": 256
+            },
+            "observation_pool_cache": {
+              "hits": 63,
+              "reads": 9,
+              "scope": "one_observation",
+              "persistent_entries": 0
+            },
+            "observation_scheduler": {
+              "interval_ms": 0.0,
+              "executed": 9,
+              "skipped": 0,
+              "target_forced": 0,
+              "errors": 0,
+              "tracked_agents": 5,
+              "max_agents": 256,
+              "deferred_for_realtime": 0,
+              "max_deferral_ms": 5000.0,
+              "retry_agents": 0,
+              "scope": "Engine-dispatched candidate observations; target events always admitted"
+            },
+            "deferred_observations": {
+              "queued": 60,
+              "processed": 9,
+              "dropped": 0,
+              "errors": 0,
+              "gaps": 0,
+              "stale": 0,
+              "max_depth": 5,
+              "last_queue_lag_ms": 63.000000023748726,
+              "sync_observations": 0,
+              "storage_skips": 0,
+              "last_error": null,
+              "last_capture_ms": 4.796400025952607,
+              "peak_bytes": 5229176,
+              "coalesced": 51,
+              "pending_interval_skips": 0,
+              "foreground_yields": 13,
+              "pending": 0,
+              "active": false,
+              "bytes": 0,
+              "max_bytes": 67108864,
+              "configured_bytes": 268435456,
+              "max_jobs": 64,
+              "sync_required": 0,
+              "gap_agents": 0,
+              "shared_snapshot_records": 0,
+              "shared_snapshot_hits": 2928,
+              "shared_snapshot_bytes": 0,
+              "shared_snapshot_references": 0,
+              "temporal_snapshots": {
+                "hits": 46009,
+                "misses": 791,
+                "bytes": 2428744,
+                "max_bytes": 67108864,
+                "entities": 780,
+                "max_entities": 2048
+              },
+              "state_snapshots": {
+                "bytes": 582496,
+                "max_bytes": 16777216,
+                "entries": 780,
+                "max_entries": 2048,
+                "hits": 46009,
+                "misses": 791,
+                "complete_hits": 48,
+                "complete_bytes": 113512
+              },
+              "registry_snapshots": {
+                "bytes": 184,
+                "max_bytes": 8388608,
+                "entries": 0,
+                "max_entries": 2048,
+                "hits": 0,
+                "misses": 0,
+                "complete_hits": 59,
+                "complete_bytes": 184
+              },
+              "isolated_compute": {
+                "starts": 0,
+                "requests": 0,
+                "errors": 0,
+                "max_payload_bytes": 0,
+                "last_ms": null,
+                "ram_limit_mb": null,
+                "timeouts": 0,
+                "alive": false,
+                "pid": null,
+                "semantics": "pure optional compute, private pipe, no HA or SQLite"
+              },
+              "semantics": "FIFO causal frames; explicit evidence gaps on discard"
+            }
+          },
+          "target_pi_verified": false
+        },
+        "journal": {
+          "agents": 5,
+          "shared_sensors": 8,
+          "events_per_entity": 1600,
+          "ms": 63.60260001383722,
+          "total_changes": 20850,
+          "protection_updates": 20800,
+          "evidence_sha256": "e0ee1389c7844e863b09d0abb390c4af8f1b17a7ee3460dc527d257ef15d1c84",
+          "scope": "Actual SQLite evidence protection only; not physical HA latency"
+        }
+      }
+    }
+  ],
+  "scope": "Synthetic host Engine/SQLite components. Root confidence fixture; no HA network or Pi latency claim."
+}

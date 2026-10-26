@@ -4,7 +4,7 @@
 - Dispatched Root policy lookup no longer synchronizes optional Tournament membership before decision. The causal observer synchronizes its captured Root; only successful sync records the source fingerprint. Explicit calls and promotion guards remain synchronous.
 - Recognize native SQLITE_BUSY as optional-observer backpressure. Skip expensive capture during bounded retry cooldown and invalidate missing observation continuity; real failures still surface.
 - Yield retained context-row microbatches when explicit training admission arrives. Coalesce shared evidence protection by entity across separate agent windows, preserving exact pointwise expiry, links and rollback semantics.
-- Add real Engine 1/3/4/5-device and actual SQLite shared-evidence benchmarks plus scaling/causality/priority regressions. Validation pending.
+- Add real Engine 1/3/4/5-device and actual SQLite shared-evidence benchmarks plus scaling/causality/priority regressions. Validation: 2810 local tests OK (400.918s), 68 focused tests, shipped entrypoint/UI, compileall and 22 JS checks. Three paired host repetitions at 1/3/4/5 G0 devices preserve decision/evidence SHA; shared protection updates at five devices are 72000 -> 20800. Exact-source CI passed Python 3.11/3.13, required benchmarks and Docker build/start. Target Pi p95 and fifth-agent training remain open.
 
 ## 0.14.228
 
