@@ -150,9 +150,9 @@ class TemporalSnapshotTests(unittest.TestCase):
             f.engine.temporal_history = self.history
             queue = f.service._deferred_observations
             original = queue.temporal_snapshots.capture
-            def capture(*args):
+            def capture(*args, **kwargs):
                 self.assertFalse(f.engine.lock._is_owned(), 'copy cannot hold global Engine lock')
-                return original(*args)
+                return original(*args, **kwargs)
             with patch.object(queue.temporal_snapshots, 'capture', new=capture):
                 job = queue._capture(f.agent, f.states, set(), None)
             self.assertNotIn('samples', pickle.loads(job['blob']))

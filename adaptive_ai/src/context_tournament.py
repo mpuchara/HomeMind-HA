@@ -11,7 +11,7 @@ prediction and a bounded sensor-value bucket. It learns only from later observed
 transitions. This makes shadow comparison cheap enough to run alongside normal inference
 while leaving the production control path untouched.
 """
-from sqlite_background import background_sqlite, admit_background_write, run_connection_worker
+from sqlite_background import background_sqlite, admit_background_write, run_connection_worker, is_sqlite_busy
 import json
 import pickle
 import math
@@ -71,6 +71,7 @@ class ContextTournament:
         self._shadow_flush_event = threading.Event()
         self._context_row_buffers = {}
         self._shadow_storage_retry = StorageRetry()
+        self._observation_storage_retry = StorageRetry()
         self._shadow_persistence_stats = {"queued": 0, "flushed": 0, "flushes": 0, "errors": 0, "shared_source_snapshots": 0}
         self._last_error_ts = 0.0
         self._observation_scheduler = ShadowObservationScheduler()
@@ -378,12 +379,16 @@ class ContextTournament:
         # Content fingerprint catches in-place score updates while avoiding a DB write on
         # every policy() call. The active schema identity is represented by the policy id.
         score_fingerprint = tuple(sorted((str(k), round(float(v), 8)) for k, v in score_map.items()))
-        fingerprint = (id(policy), score_fingerprint)
+        source_identity = getattr(policy, '_tournament_source_identity', None)
+        fingerprint = (source_identity[0] if source_identity is not None else id(policy), score_fingerprint)
         with self.lock:
             if self._runtime_fingerprints.get(aid) == fingerprint and aid in self._cache:
                 return dict(self._cache[aid])
+        result = self.sync_agent(agent, policy=policy, feature_scores=score_map)
+        # A busy writer must not mark failed synchronization as completed.
+        with self.lock:
             self._runtime_fingerprints[aid] = fingerprint
-        return self.sync_agent(agent, policy=policy, feature_scores=score_map)
+        return result
 
     @staticmethod
     def _shadow_bucket(value):
@@ -524,6 +529,7 @@ class ContextTournament:
                 **self._shadow_persistence_stats,
                 "pending": len(self._shadow_dirty),
                 "storage_retry": self._shadow_storage_retry.snapshot(),
+                "observation_storage_retry": self._observation_storage_retry.snapshot(),
                 "context_rows": {name: buffer.snapshot() for name, buffer in self._context_row_buffers.items()},
                 "storage_admission": {**self._storage_admission,
                     'paused_agents': len(self._storage_paused_agents), 'max_agents': 256},
@@ -656,6 +662,7 @@ class ContextTournament:
                 ttl = self._shadow_ttl(agent)
                 active_challengers = set(challengers)
                 for challenger, sample in pending.items():
+                    self._deferred_observations.yield_to_foreground()
                     if challenger not in active_challengers:
                         continue
                     age = now - float(sample.get("ts") or 0.0)
@@ -676,6 +683,7 @@ class ContextTournament:
 
         predictions = {}
         for challenger in challengers:
+            self._deferred_observations.yield_to_foreground()
             scalar = context_scalar(challenger, states.get(challenger), agent)
             if scalar is None:
                 continue
@@ -780,7 +788,11 @@ def install(store, engine):
 
     def policy_with_tournament(agent):
         policy = original_policy(agent)
-        service.sync_if_needed(agent, policy)
+        dispatched = getattr(getattr(engine, '_inference_tls', None), 'state_revision', None) is not None
+        if not (dispatched and getattr(engine, 'stop_event', None) is not None):
+            service.sync_if_needed(agent, policy)
+        # A real target worker must produce its decision before optional discovery
+        # synchronizes membership. The causal observer syncs its captured Root below.
         return policy
 
     def runtime_with_tournament(agent):
@@ -861,9 +873,16 @@ def install(store, engine):
                   history_frame() if callable(history_frame) else nullcontext()):
                 service.observe_shadow(agent, state_map, changed_entities)
         except Exception as exc:
-            status = "error"
-            service.report_runtime_error(exc)
+            if is_sqlite_busy(exc):
+                status = 'busy'
+                service._observation_storage_retry.defer(exc)
+                TELEMETRY.inc('context_shadow_busy_retries')
+            else:
+                status = "error"
+                service.report_runtime_error(exc)
         finally:
+            if status == 'ok':
+                service._observation_storage_retry.recovered()
             service._observation_scheduler.finish(ticket, success=status == 'ok')
             TELEMETRY.observe("context_shadow_observation", (time.perf_counter() - started) * 1000)
             RUNTIME_DEBUG.end(trace, status=status)
