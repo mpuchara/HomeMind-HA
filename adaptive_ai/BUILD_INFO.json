@@ -1,9 +1,9 @@
 {
-  "version": "0.14.228",
-  "release_date": "2026-10-23",
-  "base_version": "0.14.227",
-  "base_commit": "e60ee69ef1c432a54d44cc85ef7534348f6070b4",
-  "release_status": "draft-validated-database-recovery-and-target-pi-acceptance-open",
+  "version": "0.14.229",
+  "release_date": "2026-10-26",
+  "base_version": "0.14.228",
+  "base_commit": "7b0c54ca53cb7b4b608c7b628f20a4d99f2697ce",
+  "release_status": "draft-validation-pending",
   "release_014140": {
     "scope": "inventory_and_remove_remaining_shipped_feature_Handler_fallbacks_for_Candidate_Live_and_manual_feedback_transport",
     "explicit_routes": "manual_feedback.js, candidate_ui.js, candidate_preference_ui.js, /api/candidates, Candidate Teach-RL status/train, generation history/comparison, /api/candidate-live, /api/live and Candidate discard",
@@ -1331,7 +1331,7 @@
     "semantics": "no reward/sample selection/feature contract/validation boundary/policy update order/Correct/Candidate/ActionIntent/Executor/physical control change",
     "validation": "1517 tests expected on Python 3.11 and 3.13; final CI confirmation required before merge"
   },
-  "release_validation_pending": false,
+  "release_validation_pending": true,
   "release_014121": {
     "scope": "persistent_selected_agent_transport_acceleration",
     "durable_experience_ids": "loaded once per selected-agent worker sequence; accepted ids join the session set only after successful batch persistence",
@@ -3937,5 +3937,15 @@
     },
     "source_files_verified": 653
   },
-  "tests_passed_scope": "complete local Linux suite; exact source manifest verified"
+  "tests_passed_scope": "complete local Linux suite; exact source manifest verified",
+  "release_014229": {
+    "changes": [
+      "Share retained causal sensor/history snapshot charges across pending and active G0 devices; bounded weak chunk interning",
+      "Keep optional Tournament membership synchronization off dispatched Root policy lookup; retry failed synchronization",
+      "Bound expected SQLite busy observer retries with explicit gaps instead of repeated capture/write storms",
+      "Yield retained context-row chunks to explicit training admission",
+      "Protect shared sensor evidence once at the exact pointwise maximum across independent agent windows"
+    ],
+    "validation": "pending"
+  }
 }

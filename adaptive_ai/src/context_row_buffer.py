@@ -162,6 +162,9 @@ class ContextRowBuffer:
                         keys.append(key)
                         size += row_size
                     queued = time.perf_counter()
+                    # Admission can become pending while an earlier chunk commits.
+                    # Yield the remaining retained snapshots before taking Store again.
+                    admit_background_write(self.store)
                     with self.store.lock:
                         acquired = time.perf_counter()
                         with self.store.conn() as connection, connection.storage_batch():

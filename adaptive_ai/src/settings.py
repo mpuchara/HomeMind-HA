@@ -16,7 +16,7 @@ try:
 except Exception:
     ws_connect = None
 
-APP_VERSION = "0.14.228"
+APP_VERSION = "0.14.229"
 HISTORY_BOOTSTRAP_REVISION = "target-attrs-v2"
 TRAINING_REVISION = "shared-home-intents-v26"
 DATA_DIR = Path(os.environ.get("ADAPTIVE_AI_DATA", "/data"))
@@ -459,7 +459,7 @@ def load_options():
             for key in options:
                 if key in data:
                     options[key] = data[key]
-            # 0.14.228: use bounded RAM to absorb optional observer writes.
+            # 0.14.229: use bounded RAM to absorb optional observer writes.
             # Runtime clamps these ceilings to host/cgroup headroom.
             if data.get('context_row_ram_mb') == 16:
                 options['context_row_ram_mb'] = 64

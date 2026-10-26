@@ -13,11 +13,12 @@ class DetachedMappingSnapshots:
         self.bytes = self.hits = self.misses = 0
         self.reuse_complete = bool(reuse_complete)
         self.complete = None
+        self.complete_parts = ()
         self.complete_keys = self.complete_ids = None
         self.complete_bytes = self.complete_charge = self.complete_hits = 0
 
-    def capture(self, mapping):
-        result, charge = {}, 0
+    def capture(self, mapping, *, shared=False):
+        result, charge, parts = {}, 0, []
         # Producers replace state/registry records. Equality with the detached copy
         # additionally detects in-place journal/attribute corrections, at any depth.
         # Strong source references rule out object-id reuse; no revision assumption.
@@ -34,8 +35,10 @@ class DetachedMappingSnapshots:
                     and self.complete == mapping):
                 self.hits += len(mapping)
                 self.complete_hits += 1
-                return dict(self.complete), self.complete_charge
+                return ((dict(self.complete), self.complete_charge, self.complete_parts) if shared
+                        else (dict(self.complete), self.complete_charge))
             self.complete = None
+            self.complete_parts = ()
             self.complete_keys = self.complete_ids = None
             self.bytes -= self.complete_bytes
             self.complete_bytes = self.complete_charge = 0
@@ -62,6 +65,7 @@ class DetachedMappingSnapshots:
                             _, removed = self.entries.popitem(last=False)
                             self.bytes -= removed[2]
                 result[key] = frozen
+                parts.append((frozen, size))
                 charge += size
             if self.reuse_complete and type(mapping) is dict:
                 container_bytes = sys.getsizeof(result)
@@ -72,6 +76,7 @@ class DetachedMappingSnapshots:
                         and all(key in self.entries and self.entries[key][1] is value
                                 for key, value in result.items())):
                     self.complete = dict(result)
+                    self.complete_parts = tuple(parts)
                     # Cached records retain strong source references. Native id
                     # tuples preserve replacement semantics (e.g. True vs 1),
                     # without another Python loop over every registry record.
@@ -79,15 +84,17 @@ class DetachedMappingSnapshots:
                     self.complete_ids = tuple(map(id, mapping.values()))
                     self.complete_bytes = (sys.getsizeof(self.complete)
                         + sys.getsizeof(self.complete_keys) + sys.getsizeof(self.complete_ids)
-                        + sum(map(sys.getsizeof, self.complete_ids)))
+                        + sum(map(sys.getsizeof, self.complete_ids))
+                        + sys.getsizeof(self.complete_parts) + sum(map(sys.getsizeof, self.complete_parts)))
                     if self.bytes + self.complete_bytes <= self.max_bytes:
                         self.bytes += self.complete_bytes
                         self.complete_charge = charge
                     else:
                         self.complete = None
+                        self.complete_parts = ()
                         self.complete_keys = self.complete_ids = None
                         self.complete_bytes = 0
-        return result, charge
+        return (result, charge, tuple(parts)) if shared else (result, charge)
 
     def snapshot(self):
         with self.lock:

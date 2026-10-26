@@ -11,8 +11,8 @@ class TemporalObservationSnapshots:
         self.entries = OrderedDict()
         self.bytes = self.hits = self.misses = 0
 
-    def capture(self, temporal, timestamp):
-        result, charge = {}, 0
+    def capture(self, temporal, timestamp, *, shared=False):
+        result, charge, parts = {}, 0, []
         # HA appends/replaces records. Materialize membership/rows before copying;
         # never retain a live deque in a pending observation.
         sources = dict(getattr(temporal, 'samples', {}) or {})
@@ -56,8 +56,12 @@ class TemporalObservationSnapshots:
                 # by Tournament's feature builders. Pending jobs retain their own view.
                 result[eid] = frozen if float(frozen[-1][0]) <= timestamp else tuple(
                     row for row in frozen if float(row[0]) <= timestamp)
+                if shared:
+                    # The base tuple owns every detached row, including when the
+                    # causal view selects only a prefix. Retain its identity witness.
+                    parts.append((frozen, size))
                 charge += size
-        return result, charge
+        return (result, charge, tuple(parts)) if shared else (result, charge)
 
     def snapshot(self):
         with self.lock:

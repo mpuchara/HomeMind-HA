@@ -8,14 +8,17 @@ evidence. Promotion/probation mutations run on a fresh synchronous Root pass.
 from collections import OrderedDict, deque
 from contextlib import contextmanager, nullcontext
 import pickle
+import sys
 import threading
 import time
+import weakref
 
 from context import TemporalHistory, target_value
 from shadow_observation_scheduler import interval_seconds
 from runtime_sqlite_cache import memory_headroom
 from settings import OPTIONS
 from storage_budget import storage_status
+from sqlite_background import background_sqlite, is_sqlite_busy
 from telemetry import TELEMETRY
 from tournament_observation_clock import observation_clock
 from runtime_background_compute import COMPUTE, background_compute_scope
@@ -57,6 +60,12 @@ class _FrozenContext:
         return dict(self._forecast)
 
 
+class _SnapshotGroup:
+    def __init__(self, records):
+        self.records = tuple(records)
+        self.charge = sum(size for value, size in records) + 256*len(records) + 512
+
+
 class DeferredTournamentObservations:
     def __init__(self, service, *, max_jobs=64, max_bytes=None):
         self.service = service
@@ -73,6 +82,10 @@ class DeferredTournamentObservations:
         self.configured_bytes = configured if max_bytes is None else int(max_bytes)
         self.max_bytes = self.configured_bytes
         self.used_bytes = 0
+        self.shared_parts = {}
+        self.shared_hits = 0
+        self._snapshot_groups = weakref.WeakValueDictionary()
+        self._snapshot_group_lock = threading.Lock()
         self.active = False
         self.closed = False
         self.thread = None
@@ -90,6 +103,48 @@ class DeferredTournamentObservations:
     def is_deferred(self):
         return bool(getattr(self.local, 'deferred', False))
 
+    def _additional_charge(self, job):
+        return job.get('private_charge', job['charge']) + sum(
+            size for token, value, size in job.get('shared_parts', ()) if token not in self.shared_parts)
+
+    def _group_inputs(self, inputs):
+        # Small immutable chunks retain fine-grained sharing without thousands
+        # of reference-ledger operations on each target worker. Weak interning
+        # retains no evicted data after the final pending/active job releases it.
+        result = []
+        with self._snapshot_group_lock:
+            for kind, records in inputs:
+                for start in range(0, len(records), 32):
+                    chunk = records[start:start+32]
+                    key = (kind, tuple(id(value) for value, size in chunk))
+                    group = self._snapshot_groups.get(key)
+                    if group is None:
+                        group = _SnapshotGroup(chunk)
+                        self._snapshot_groups[key] = group
+                    result.append(((kind, id(group)), group, group.charge))
+        return tuple(result)
+
+    def _retain(self, job):
+        self.used_bytes += job.get('private_charge', job['charge'])
+        for token, value, size in job.get('shared_parts', ()):
+            previous = self.shared_parts.get(token)
+            if previous is None:
+                self.shared_parts[token] = (value, size, 1)
+                self.used_bytes += size
+            else:
+                self.shared_parts[token] = (value, size, previous[2]+1)
+                self.shared_hits += 1
+
+    def _release(self, job):
+        self.used_bytes -= job.get('private_charge', job['charge'])
+        for token, value, size in job.get('shared_parts', ()):
+            previous = self.shared_parts[token]
+            if previous[2] == 1:
+                del self.shared_parts[token]
+                self.used_bytes -= size
+            else:
+                self.shared_parts[token] = (value, size, previous[2]-1)
+
     def require_sync(self, aid):
         with self.lock:
             self.sync_required[str(aid)] = True
@@ -104,7 +159,7 @@ class DeferredTournamentObservations:
         retained = deque()
         for job in self.pending:
             if job['aid'] == str(aid):
-                self.used_bytes -= job['charge']
+                self._release(job)
                 self.stats['dropped'] += 1
             else:
                 retained.append(job)
@@ -166,11 +221,11 @@ class DeferredTournamentObservations:
             generation = int(getattr(self.service.store, '_provenance_generation_revision', 0) or 0)
         # No history traversal, deepcopy or encoding under the global Engine lock.
         stage = time.perf_counter()
-        samples, history_charge = self.temporal_snapshots.capture(temporal, stamp)
+        samples, history_charge, history_parts = self.temporal_snapshots.capture(temporal, stamp, shared=True)
         TELEMETRY.observe('context_capture_history', (time.perf_counter()-stage)*1000)
         stage = time.perf_counter()
-        frozen_states, state_charge = self.state_snapshots.capture(states)
-        frozen_registry, registry_charge = self.registry_snapshots.capture(registry)
+        frozen_states, state_charge, state_parts = self.state_snapshots.capture(states, shared=True)
+        frozen_registry, registry_charge, registry_parts = self.registry_snapshots.capture(registry, shared=True)
         TELEMETRY.observe('context_capture_entities', (time.perf_counter()-stage)*1000)
         stage = time.perf_counter()
         context = getattr(engine, 'context', None)
@@ -208,8 +263,17 @@ class DeferredTournamentObservations:
         TELEMETRY.observe('context_capture_policy', (time.perf_counter()-stage)*1000)
         # Budget includes conservative decoded working space as well as retained
         # bytes. One active frame remains charged until completion.
+        # Count immutable input records once across queued AND executing agents.
+        # Each job still owns its policy/runtime bytes and mapping containers.
+        parts = self._group_inputs((('history', history_parts), ('states', state_parts), ('registry', registry_parts)))
+        private = len(blob)*8 + sum(sys.getsizeof(value) for value in
+                                   (samples, frozen_states, frozen_registry, parts))
+        private += sum(sys.getsizeof(part)+sys.getsizeof(part[0])+sys.getsizeof(part[0][1]) for part in parts)
+        base_ids = {id(value) for value, _ in history_parts}
+        private += sum(sys.getsizeof(row) for row in samples.values() if id(row) not in base_ids)
         return dict(aid=aid, blob=blob, history=samples, states=frozen_states, registry=frozen_registry,
-                    charge=len(blob)*8+history_charge+state_charge+registry_charge, identity=identity,
+                    charge=private+sum(part[2] for part in parts),
+                    private_charge=private, shared_parts=parts, identity=identity,
                     policy_type=type(policy), ticket=ticket, queued=time.monotonic(),
                     target=target_value(states.get(agent['target_entity']), agent['target_property']),
                     target_event=agent['target_entity'] in (changed or ()))
@@ -221,6 +285,11 @@ class DeferredTournamentObservations:
                 return True
             if aid in self.sync_required:
                 return False
+            retry = getattr(self.service, '_observation_storage_retry', None)
+            if retry is not None and retry.delay() > 0:
+                self.stats['busy_skips'] = self.stats.get('busy_skips', 0)+1
+                self._gap(aid)
+                return True
             if storage_status(self.service.store).get('level', 'normal') != 'normal':
                 self.stats['storage_skips'] += 1
                 self._gap(aid)
@@ -251,20 +320,20 @@ class DeferredTournamentObservations:
                 # Only redundant sensor refreshes at the same target value can
                 # coalesce. Never erase an observed target edge or cross one.
                 self.pending.remove(latest)
-                self.used_bytes -= latest['charge']
+                self._release(latest)
                 self.stats['coalesced'] += 1
             while self.pending and (len(self.pending) >= self.max_jobs or
-                                    self.used_bytes + job['charge'] > self.max_bytes):
+                                    self.used_bytes + self._additional_charge(job) > self.max_bytes):
                 old = self.pending.popleft()
-                self.used_bytes -= old['charge']
+                self._release(old)
                 self.stats['dropped'] += 1
                 self._gap(old['aid'])
-            if self.closed or self.used_bytes + job['charge'] > self.max_bytes:
+            if self.closed or self.used_bytes + self._additional_charge(job) > self.max_bytes:
                 self.stats['dropped'] += 1
                 self._gap(aid)
                 return True
             self.pending.append(job)
-            self.used_bytes += job['charge']
+            self._retain(job)
             self.stats['peak_bytes'] = max(self.stats['peak_bytes'], self.used_bytes)
             self.stats['queued'] += 1
             self.stats['max_depth'] = max(self.stats['max_depth'], len(self.pending))
@@ -321,7 +390,8 @@ class DeferredTournamentObservations:
                      state_revision=packet['revision'], context=frozen)
         self.local.deferred = True
         try:
-            with self.service.engine.bind(frame), observation_clock(packet['timestamp']):
+            with self.service.engine.bind(frame), observation_clock(packet['timestamp']), background_sqlite(self.service.store, retryable=False):
+                self.service.sync_if_needed(packet['agent'], policy)
                 success = self.service._execute_observation(packet['agent'], packet['states'],
                                                            packet['changed'], job['ticket'])
                 if success is False:
@@ -339,7 +409,7 @@ class DeferredTournamentObservations:
                 if self.closed or (stop is not None and stop.is_set()):
                     while self.pending:
                         job = self.pending.popleft()
-                        self.used_bytes -= job['charge']
+                        self._release(job)
                         self.stats['dropped'] += 1
                     return
                 job = self.pending.popleft() if self.pending else None
@@ -352,18 +422,28 @@ class DeferredTournamentObservations:
             try:
                 self.stats['last_queue_lag_ms'] = max(0., (time.monotonic()-job['queued'])*1000)
                 with self.observation_lock:
+                    retry = getattr(self.service, '_observation_storage_retry', None)
+                    if retry is not None and retry.delay() > 0:
+                        with self.lock:
+                            self._gap(job['aid'])
+                            self.stats['busy_skips'] = self.stats.get('busy_skips', 0)+1
+                        continue
                     session = getattr(self.service.store, 'inference_connection_session', None)
                     with (session() if callable(session) else nullcontext(), background_compute_scope()):
                         self._execute(job)
             except Exception as exc:
-                self.stats['errors'] += 1
+                busy = is_sqlite_busy(exc)
+                self.stats['errors'] += int(not busy)
                 self.stats['last_error'] = type(exc).__name__ + ': ' + str(exc)
                 with self.lock:
                     self._gap(job['aid'])
-                self.service.report_runtime_error(exc)
+                if busy:
+                    self.service._observation_storage_retry.defer(exc)
+                else:
+                    self.service.report_runtime_error(exc)
             finally:
                 with self.lock:
-                    self.used_bytes -= job['charge']
+                    self._release(job)
                     self.active = False
 
     def run_synchronous(self, agent, states, changed, ticket):
@@ -378,7 +458,7 @@ class DeferredTournamentObservations:
                 retained = deque()
                 for job in self.pending:
                     if job['aid'] == aid:
-                        self.used_bytes -= job['charge']
+                        self._release(job)
                         self.stats['dropped'] += 1
                         self.gaps[aid] = True
                     else:
@@ -420,6 +500,9 @@ class DeferredTournamentObservations:
                         bytes=self.used_bytes, max_bytes=self.max_bytes,
                         configured_bytes=self.configured_bytes, max_jobs=self.max_jobs,
                         sync_required=len(self.sync_required), gap_agents=len(self.gaps),
+                        shared_snapshot_records=len(self.shared_parts), shared_snapshot_hits=self.shared_hits,
+                        shared_snapshot_bytes=sum(part[1] for part in self.shared_parts.values()),
+                        shared_snapshot_references=sum(part[2] for part in self.shared_parts.values()),
                         temporal_snapshots=self.temporal_snapshots.snapshot(),
                         state_snapshots=self.state_snapshots.snapshot(),
                         registry_snapshots=self.registry_snapshots.snapshot(),

@@ -1137,8 +1137,9 @@ class FeatureJournal:
                     (row["window_id"], CONTRACT_VERSION, row["agent_id"], row["anchor"],
                      row["start"], row["end"], row["kind"], row["created"],
                      row["protected_until"]))
-                protections.setdefault(tuple(row['entities']), []).append(
-                    (row['start'], row['end'], row['protected_until']))
+                interval = (row['start'], row['end'], row['protected_until'])
+                for eid in row['entities']:
+                    protections.setdefault(eid, []).append(interval)
             _insert_journal_rows(c, '''INSERT OR IGNORE INTO feature_windows
                 (window_id,contract_version,agent_id,anchor_time,start_time,end_time,kind,created_time,protected_until)''',
                 window_values, 9)
@@ -1149,7 +1150,14 @@ class FeatureJournal:
             # windows; updating every matching event once per window multiplies
             # SQLite work while holding Store. Use prepared intervals even when
             # INSERT OR IGNORE retained an older window with the same ID.
-            for entities, intervals in protections.items():
+            # Agents on different devices can watch the same sensors. Group by
+            # each entity's complete interval set, rather than each agent's
+            # entity set, so shared evidence is protected once at the pointwise
+            # maximum. Independent windows/owner links remain separate.
+            grouped_protections = {}
+            for eid, intervals in protections.items():
+                grouped_protections.setdefault(tuple(intervals), []).append(eid)
+            for intervals, entities in grouped_protections.items():
                 segments = (_maximum_protection_segments(intervals)
                             if sqlite3.sqlite_version_info >= (3, 33, 0) else None)
                 ranges = intervals if segments is None else segments
