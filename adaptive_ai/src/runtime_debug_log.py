@@ -325,6 +325,14 @@ def register_runtime_debug_routes(registry, core, manager):
                 "error": f"Runtime debug export failed: {type(exc).__name__}: {exc}"
             })
 
+    def anonymous_timings(http, _params):
+        return http.send_json(200, RUNTIME_DEBUG.anonymous_spans())
+
+    registry.register(
+        "GET", "debug.runtime_log.timings", r"^/api/debug/runtime-log/timings$",
+        anonymous_timings, require_trusted=True, require_runtime=False, priority=260,
+    )
+
     registry.register(
         "GET",
         "debug.runtime_log.status",
