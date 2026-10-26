@@ -22,6 +22,12 @@ def _p95(values):
     return ordered[min(len(ordered)-1, int(len(ordered)*.95))]
 
 
+def _percentiles(values):
+    ordered = sorted(values)
+    return {f'p{p}_ms': ordered[min(len(ordered)-1, int(len(ordered)*p/100))]
+            if ordered else None for p in (50, 95, 99)}
+
+
 class RuntimeDebugTrace:
     """Small in-RAM execution trace enabled explicitly from Diagnostics.
 
@@ -129,6 +135,7 @@ class RuntimeDebugTrace:
                 "started_at": row["ts"],
                 "started_mono": started_mono,
                 "started_thread_cpu": time.thread_time(),
+                "started_process_cpu": time.process_time(),
                 "thread_ident": threading.get_ident(),
                 "fields": dict(fields),
             }
@@ -145,9 +152,10 @@ class RuntimeDebugTrace:
             if not self.enabled:
                 return duration_ms
             scheduling = {}
+            scheduling['process_cpu_ms'] = round(max(0, time.process_time() - active['started_process_cpu'])*1000, 3)
             if active.get('thread_ident') == threading.get_ident():
                 cpu_ms = max(0, time.thread_time() - active['started_thread_cpu']) * 1000
-                scheduling = dict(thread_cpu_ms=round(cpu_ms, 3),
+                scheduling.update(thread_cpu_ms=round(cpu_ms, 3),
                                   off_cpu_ms=round(max(0, duration_ms - cpu_ms), 3))
             row = self._append_locked(
                 "end",
@@ -235,6 +243,31 @@ class RuntimeDebugTrace:
                 "critical_capacity": self.MAX_CRITICAL_SPANS,
                 "slow_span_ms": self.SLOW_SPAN_MS,
             }
+
+    def anonymous_spans(self):
+        """Timing-only bounded export. No timestamps, names, IDs or input fields.
+
+        Operation and stage values are restricted to fixed runtime literals; unknown
+        operations are grouped, never echoed from callers. Process CPU includes all
+        threads and must not be added across overlapping spans.
+        """
+        allowed = {'inference_target', 'inference_agent', 'inference_stage',
+                   'scheduler_snapshot', 'context_shadow_observation',
+                   'correct_history', 'correct_history_stage', 'store_lock',
+                   'sqlite_transaction', 'ha_service', 'heavy_job'}
+        stages = {'pre_inference', 'policy_context', 'feature_construction',
+                  'policy_predict', 'post_predict', 'executor_submit'}
+        with self.lock:
+            spans = []
+            for row in self.entries:
+                if row.get('kind') != 'end':
+                    continue
+                fields = row.get('fields') or {}
+                spans.append(dict(operation=row['operation'] if row['operation'] in allowed else 'other',
+                    stage=fields.get('stage') if fields.get('stage') in stages else None,
+                    wall_ms=row.get('duration_ms'),
+                    **{key: fields[key] for key in ('thread_cpu_ms','process_cpu_ms','off_cpu_ms') if key in fields}))
+            return dict(capacity=self.MAX_ENTRIES, dropped=max(0,self.total_entries-len(self.entries)), spans=spans)
 
 
 class Telemetry:
@@ -333,9 +366,11 @@ class Telemetry:
                 metrics[name] = {
                     'count': self.counts[name],
                     'avg_ms': self.sums[name]/self.counts[name],
-                    'p95_ms': _p95(values),
                     'recent_count': len(recent),
                     'recent_p95_ms': _p95(recent),
+                    **_percentiles(values),
+                    'sample_count': len(values),
+                    'p99_sufficient': len(values) >= 1000,
                 }
                 if name in ('event_to_decision', 'candidate_event_to_decision', 'event_to_service_dispatch'):
                     trend = self.trends.setdefault(name, deque(maxlen=121))

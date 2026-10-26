@@ -1579,16 +1579,20 @@ class Engine(threading.Thread):
         # One atomically consistent state+revision snapshot per coalesced pass. Every
         # worker shares it; Executor rejects a Control intent if any dependency changes
         # later. Event timestamps are included only for genuine HA-event passes.
+        snapshot_trace = RUNTIME_DEBUG.begin('scheduler_snapshot') if RUNTIME_DEBUG.enabled else None
         with self.lock:
             pass_states = dict(self.state_map) if self.state_map else dict(state_map or {})
             pass_revision = self.state_revision
             revision_snapshot = dict(self.entity_revisions)
             context_revision = self.context.home.revision
-            dependency_snapshot = {
-                str(eid): set(agent_ids)
-                for eid, agent_ids in self.dependency_agents.items()
-            }
             event_entities = changed | {eid for entities in retries.values() for eid in entities}
+            # Only these entities can participate in target_changed below. Preserve
+            # detached owner sets under the same lock, without copying the routing
+            # index for every unrelated sensor in the house on each scheduler pass.
+            dependency_snapshot = {
+                str(eid): set(self.dependency_agents.get(str(eid), ()))
+                for eid in event_entities
+            }
             event_received_all = ({
                 eid: self.entity_event_received_perf.get(eid)
                 for eid in event_entities
@@ -1602,6 +1606,7 @@ class Engine(threading.Thread):
                 if eid in getattr(self, 'entity_ws_received_perf', {})
             }
         snapshot = (pass_states, pass_revision, revision_snapshot, context_revision)
+        RUNTIME_DEBUG.end(snapshot_trace)
 
         for target, target_agents in groups.items():
             target_retry = retries.pop(target, set())

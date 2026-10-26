@@ -1,9 +1,9 @@
 {
-  "version": "0.14.229",
-  "release_date": "2026-10-26",
-  "base_version": "0.14.228",
-  "base_commit": "7b0c54ca53cb7b4b608c7b628f20a4d99f2697ce",
-  "release_status": "draft-validated-target-scaling-acceptance-open",
+  "version": "0.14.230",
+  "release_date": "2026-10-27",
+  "base_version": "0.14.229",
+  "base_commit": "8e47cd6652c1364f0b048f79d507929b1cca6168",
+  "release_status": "draft-host-validation-target-acceptance-open",
   "release_014140": {
     "scope": "inventory_and_remove_remaining_shipped_feature_Handler_fallbacks_for_Candidate_Live_and_manual_feedback_transport",
     "explicit_routes": "manual_feedback.js, candidate_ui.js, candidate_preference_ui.js, /api/candidates, Candidate Teach-RL status/train, generation history/comparison, /api/candidate-live, /api/live and Candidate discard",
@@ -3994,5 +3994,11 @@
     "qa_report": "docs/benchmarks/PERFORMANCE_PLAN_0_14_229_QA.json",
     "scaling_report": "docs/benchmarks/PERFORMANCE_PLAN_0_14_229_SCALING.json",
     "optional_cpu_priority": "Yield before frames and between challengers, preserving bounded oldest-frame progress"
+  },
+  "release_014230": {
+    "scope": "A0 foundation and A2a sparse scheduler routing snapshot",
+    "safety": "states and revisions remain atomically detached; durable commands and lifecycle synchronization unchanged",
+    "report": "docs/PERFORMANCE_OPTIMIZATION_0.14.230_PL.md",
+    "target_pi_acceptance": "pending"
   }
 }

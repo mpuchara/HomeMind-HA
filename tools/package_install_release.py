@@ -1,5 +1,6 @@
 """Build and verify repository/add-on install ZIPs from tracked source files."""
 import hashlib
+import io
 import json
 from pathlib import Path
 import re
@@ -10,16 +11,24 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def main():
-    version = re.search(r'^version: "([^"]+)"', (ROOT / "adaptive_ai/config.yaml").read_text(), re.M).group(1)
-    assert f'APP_VERSION = "{version}"' in (ROOT / "adaptive_ai/src/settings.py").read_text()
-    tracked = subprocess.check_output(["git", "ls-files", "-z"], cwd=ROOT).decode().split("\0")
-    files = [name for name in tracked if name and (ROOT / name).is_file()]
+    # Read committed bytes rather than the checkout (which can have CRLF or local
+    # edits). The packaged commit is explicit and reproducible, including run.sh.
+    commit = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT).decode().strip()
+    raw = subprocess.check_output(["git", "archive", "--format=zip", commit], cwd=ROOT)
+    with zipfile.ZipFile(io.BytesIO(raw)) as source:
+        tracked = {name: source.read(name) for name in source.namelist() if not name.endswith('/')}
+    version = re.search(r'^version: "([^"]+)"', tracked['adaptive_ai/config.yaml'].decode(), re.M).group(1)
+    assert f'APP_VERSION = "{version}"' in tracked['adaptive_ai/src/settings.py'].decode()
+    assert json.loads(tracked['adaptive_ai/BUILD_INFO.json'])['version'] == version
+    assert f'ARG BUILD_VERSION={version}' in tracked['adaptive_ai/Dockerfile'].decode()
+    assert b'\r' not in tracked['adaptive_ai/src/run.sh']
     output = ROOT / "dist"
     output.mkdir(exist_ok=True)
-    for kind, prefix in (("repository", ""), ("addon-root", "adaptive_ai/")):
-        path = output / f"HomeMind-Adaptive-AI-{version}-{kind}.zip"
-        contents = {name[len(prefix):]: (ROOT / name).read_bytes()
-                    for name in files if not prefix or name.startswith(prefix)}
+    for kind, prefix in (("repository", ""), ("addon", "adaptive_ai/")):
+        path = output / f"HomeMind-HA-{version}-{kind}.zip"
+        contents = {name[len(prefix):]: data
+                    for name, data in tracked.items() if not prefix or name.startswith(prefix)}
+        contents['SOURCE_COMMIT.txt'] = (commit+'\n').encode('ascii')
         manifest = "".join(f"{hashlib.sha256(data).hexdigest()}  {name}\n" for name, data in sorted(contents.items()))
         contents["MANIFEST.sha256"] = manifest.encode()
         with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED, compresslevel=9) as archive:
@@ -38,7 +47,7 @@ def main():
                 assert archive.read(name) == data
         digest = hashlib.sha256(path.read_bytes()).hexdigest()
         path.with_suffix(".zip.sha256").write_text(f"{digest}  {path.name}\n", encoding="ascii")
-        print(json.dumps({"version": version, "archive": str(path), "sha256": digest, "files": len(contents)}))
+        print(json.dumps({"version": version, "source_commit": commit, "archive": str(path), "sha256": digest, "files": len(contents)}))
 
 
 if __name__ == "__main__":

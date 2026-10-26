@@ -1,3 +1,9 @@
+# 0.14.230
+
+- Snapshot only event/retry routing owners under Engine.lock instead of copying every household dependency set on every scheduler pass. Preserve shared atomic states/revisions, per-target FIFO retry, event clocks and Executor validation.
+- Add bounded p50/p95/p99 timing aggregates with retained sample counts and explicit insufficient-p99 flags. Opt-in spans include thread and process CPU; trusted timing-only export is available at /api/debug/runtime-log/timings.
+- Add serial paired 0/1/3/4/5/10/20-agent host benchmarks through RuntimeCompositionRoot and Engine ingress, using chronologically fitted/calibrated normal policies without confidence overrides. Preserve raw samples and decision/snapshot hashes. Candidate, concurrent training, Correct, long soak and Pi acceptance are separate unfinished stages.
+
 # 0.14.229
 
 - Share immutable causal input memory charges across queued and executing G0 devices using bounded weak chunk interning. Per-agent policy/runtime bytes and output semantics remain independent; current memory, FIFO edges and explicit gaps remain accounted.
