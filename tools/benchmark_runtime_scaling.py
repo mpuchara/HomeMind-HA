@@ -34,6 +34,15 @@ def run(source, count, events, independent=False, entities=780, debug=False,
         from telemetry import TELEMETRY, RUNTIME_DEBUG, rss_mb
         from storage import Store
         from runtime_background_compute import COMPUTE
+        # The production ring intentionally keeps only 512 values. Retain the
+        # entire finite benchmark window for descriptive tail comparisons.
+        window_metrics = {key: [] for key in ('event_to_decision', 'context_shadow_capture')}
+        observe_metric = TELEMETRY.observe
+        def record_metric(name, value):
+            observe_metric(name, value)
+            if name in window_metrics:
+                window_metrics[name].append(value)
+        stack.enter_context(patch.object(TELEMETRY, 'observe', record_metric))
         profiles = []
         if profile_dir is not None:
             import cProfile
@@ -146,6 +155,8 @@ def run(source, count, events, independent=False, entities=780, debug=False,
                     samples.clear(); decisions.clear()
                     with TELEMETRY.lock:
                         TELEMETRY.samples.clear()
+                    for values in window_metrics.values():
+                        values.clear()
                     started, cpu = time.perf_counter(), time.process_time()
                 seen.clear(); done.clear(); received[0] = time.perf_counter()
                 inputs = sorted({sensors[0] for _, sensors in trained}) or ['sensor.background_0']
@@ -188,6 +199,7 @@ def run(source, count, events, independent=False, entities=780, debug=False,
         except ImportError:
             peak_rss_mb = None
         raw = {key:list(values) for key, values in TELEMETRY.samples.items()}
+        raw.update(window_metrics)
         canonical = [sorted(decisions[i:i+count]) for i in range(0,len(decisions),count)] if count else []
         def quantiles(values):
             values = sorted(values)
