@@ -20,7 +20,8 @@ from unittest.mock import patch
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def run(source, count, events, independent=False, entities=780, debug=False):
+def run(source, count, events, independent=False, entities=780, debug=False,
+        warmup=0, cadence=0.):
     with tempfile.TemporaryDirectory(prefix='hm-scaling-') as data, ExitStack() as stack:
         os.environ['ADAPTIVE_AI_DATA'] = data
         sys.path[:0] = [str(source/'tools'), str(source/'tests'), str(source/'adaptive_ai/src')]
@@ -33,6 +34,15 @@ def run(source, count, events, independent=False, entities=780, debug=False):
         from telemetry import TELEMETRY, RUNTIME_DEBUG, rss_mb
         from storage import Store
         from runtime_background_compute import COMPUTE
+        # The production ring intentionally keeps only 512 values. Retain the
+        # entire finite benchmark window for descriptive tail comparisons.
+        window_metrics = {key: [] for key in ('event_to_decision', 'context_shadow_capture')}
+        observe_metric = TELEMETRY.observe
+        def record_metric(name, value):
+            observe_metric(name, value)
+            if name in window_metrics:
+                window_metrics[name].append(value)
+        stack.enter_context(patch.object(TELEMETRY, 'observe', record_metric))
         store = Store(Path(data)/'benchmark.sqlite')
         stack.callback(store.stop_runtime_cache)
         for module in (product.engine_module, product.executor_module):
@@ -127,9 +137,16 @@ def run(source, count, events, independent=False, entities=780, debug=False):
         loop.start()
         started, cpu = time.perf_counter(), time.process_time()
         try:
-            for step in range(events):
+            for step in range(events+warmup):
                 for future in list(engine.in_flight.values()):
                     future.result(30)
+                if step == warmup:
+                    samples.clear(); decisions.clear()
+                    with TELEMETRY.lock:
+                        TELEMETRY.samples.clear()
+                    for values in window_metrics.values():
+                        values.clear()
+                    started, cpu = time.perf_counter(), time.process_time()
                 seen.clear(); done.clear(); received[0] = time.perf_counter()
                 inputs = sorted({sensors[0] for _, sensors in trained}) or ['sensor.background_0']
                 for eid in inputs:
@@ -141,6 +158,8 @@ def run(source, count, events, independent=False, entities=780, debug=False):
                     raise AssertionError((len(seen), count, engine.error))
                 if not count:
                     time.sleep(.01)
+                if cadence:
+                    time.sleep(cadence)
         finally:
             for future in list(engine.in_flight.values()):
                 future.result(30)
@@ -164,11 +183,13 @@ def run(source, count, events, independent=False, entities=780, debug=False):
         except ImportError:
             peak_rss_mb = None
         raw = {key:list(values) for key, values in TELEMETRY.samples.items()}
+        raw.update(window_metrics)
         canonical = [sorted(decisions[i:i+count]) for i in range(0,len(decisions),count)] if count else []
         def quantiles(values):
             values = sorted(values)
             return {f'p{p}_ms': values[min(len(values)-1,int((len(values)-1)*p/100))] if values else None for p in (50,95,99)}
-        return dict(agents=count, events=events, independent=independent, debug=debug,
+        return dict(agents=count, events=events, warmup=warmup, cadence=cadence,
+            independent=independent, debug=debug,
             composition=descriptor['entrypoint_chain'], normal_policy=True, confidence_override=False,
             synthetic_demonstration_training_ms=training_ms, ha_calls=ha.call_count,
             event_to_pipeline_return=quantiles(samples), samples=samples, telemetry_raw_ms=raw,
@@ -221,9 +242,12 @@ if __name__ == '__main__':
     p.add_argument('--independent', action='store_true')
     p.add_argument('--debug', action='store_true')
     p.add_argument('--scheduler', action='store_true')
+    p.add_argument('--warmup', type=int, default=0)
+    p.add_argument('--cadence', type=float, default=0.)
     a = p.parse_args()
     if not 0 <= a.agents <= 20 or not 2 <= a.events <= 5000 or not 32 <= a.entities <= 4096:
         p.error('bounded agents/events/entities required')
     result = (scheduler(a.source_root,a.agents,a.events,a.entities) if a.scheduler else
-              run(a.source_root,a.agents,a.events,a.independent,a.entities,a.debug))
+              run(a.source_root,a.agents,a.events,a.independent,a.entities,a.debug,
+                  a.warmup,a.cadence))
     print('SCALING_JSON='+json.dumps(result,sort_keys=True))

@@ -1,3 +1,9 @@
+## 0.14.231
+
+- Remove the redundant Engine loop state-map copy; process retains the atomic state/revision/receipt snapshot for every worker.
+- Reduce complete detached-map cache accounting work during Tournament capture, retaining conservative bounded RAM charges and nested-mutation validation.
+- Add warmed paired full-runtime measurements, existing bounded worker timing diagnostics and snapshot/accounting regressions. See docs/PERFORMANCE_OPTIMIZATION_0.14.231_PL.md for evidence and scope.
+
 # 0.14.230
 
 - Snapshot only event/retry routing owners under Engine.lock instead of copying every household dependency set on every scheduler pass. Preserve shared atomic states/revisions, per-target FIFO retry, event clocks and Executor validation.

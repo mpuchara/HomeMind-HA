@@ -188,7 +188,7 @@ class PeriodicQosTests(unittest.TestCase):
         self.assertNotIn("self.flush_archive(force=False)", run)
         self.assertNotIn("self.teaching.flush(force=False)", run)
         self.assertLess(
-            run.index("self.process(state_map, changed_entities)"),
+            run.index("self.process(None, changed_entities)"),
             run.index("self._schedule_housekeeping()"),
         )
         self.assertLess(

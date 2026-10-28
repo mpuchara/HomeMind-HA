@@ -14,6 +14,8 @@ def main():
     parser.add_argument('--counts', default='0,1,3,4,5,10,20')
     parser.add_argument('--repeats', type=int, default=5)
     parser.add_argument('--events', type=int, default=20)
+    parser.add_argument('--warmup', type=int, default=0)
+    parser.add_argument('--cadence', type=float, default=0.)
     parser.add_argument('--scheduler', action='store_true')
     parser.add_argument('--diagnostics', action='store_true', help='Same current sources, tracing off versus on')
     args = parser.parse_args()
@@ -30,7 +32,8 @@ def main():
                 for label in (['before','after'] if repeat%2 == 0 else ['after','before']):
                     source = args.baseline_root if label == 'before' and not args.diagnostics else root
                     command = [sys.executable, str(root/'tools/benchmark_runtime_scaling.py'),
-                               '--source-root', str(source), '--agents', str(count), '--events', str(args.events)]
+                               '--source-root', str(source), '--agents', str(count), '--events', str(args.events),
+                               '--warmup', str(args.warmup), '--cadence', str(args.cadence)]
                     if independent:
                         command.append('--independent')
                     if args.scheduler:
@@ -64,6 +67,11 @@ def main():
                 if args.scheduler:
                     row[label]['thread_cpu_median_ms'] = statistics.median(v for pair in pairs for v in pair[label]['thread_cpu_ms'])
                 else:
+                    for metric in ('process_cpu_ms', 'wall_ms', 'rss_mb', 'peak_rss_mb'):
+                        row[label][metric] = statistics.median(pair[label][metric] for pair in pairs)
+                    capture = [value for pair in pairs for value in pair[label]['telemetry_raw_ms'].get('context_shadow_capture', [])]
+                    row[label]['capture'] = dict(samples=len(capture), p50_ms=percentile(capture,.5),
+                        p95_ms=percentile(capture,.95), p99_ms=percentile(capture,.99))
                     metrics = [pair[label]['telemetry_raw_ms'].get('event_to_decision',[]) for pair in pairs]
                     decision_samples = [value for values in metrics for value in values]
                     row[label]['event_to_decision'] = dict(samples=len(decision_samples),

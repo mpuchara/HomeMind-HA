@@ -22,6 +22,9 @@ jobs:
       - name: Composed normal-policy scaling smoke (host only)
         if: matrix.python == '3.11'
         run: python tools/benchmark_runtime_scaling.py --agents 3 --events 4
+      - name: Worker timing diagnostics smoke (separate from performance gate)
+        if: matrix.python == '3.11'
+        run: python tools/benchmark_runtime_scaling.py --agents 1 --events 2 --debug
       - run: node tools/verify_debug_export_ui.js
       - name: Recorder archive parity and bounded WAL writes
         if: matrix.python == '3.11'
@@ -257,6 +260,33 @@ jobs:
           assert row["scalar_reference"]["execution_backend"] == "python_scalar_fallback", row["scalar_reference"]
           assert row["scalar_reference"]["decision_parity"], row["scalar_reference"]
           PY
+  candidate_packages:
+    needs: [tests, image]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/codex/inference-capture-0.14.231'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Package and verify exact committed candidate
+        run: python tools/package_install_release.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: HomeMind-HA-0.14.231-repository
+          path: |
+            dist/HomeMind-HA-0.14.231-repository.zip
+            dist/HomeMind-HA-0.14.231-repository.zip.sha256
+          if-no-files-found: error
+          retention-days: 30
+      - uses: actions/upload-artifact@v4
+        with:
+          name: HomeMind-HA-0.14.231-addon
+          path: |
+            dist/HomeMind-HA-0.14.231-addon.zip
+            dist/HomeMind-HA-0.14.231-addon.zip.sha256
+          if-no-files-found: error
+          retention-days: 30
   package:
     needs: tests
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'

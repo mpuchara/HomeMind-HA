@@ -1272,12 +1272,15 @@ class Engine(threading.Thread):
                 # archive/decision/context writes are scheduled after inference below.
                 self.context.home.expire(now_ts())
                 with self.lock:
-                    state_map = dict(self.state_map)
+                    # process() owns the atomic states/revisions/clock snapshot.
+                    # The loop needs only an admission check; its old copy was
+                    # immediately discarded by process(), including warm-up/timers.
+                    has_states = bool(self.state_map)
                     changed_entities = set(self.dirty_entities) if event_wakeup else set()
                     retry_ready = bool(self.ready_target_changes)
                     if event_wakeup:
                         self.dirty_entities.clear()
-                if state_map:
+                if has_states:
                     gate_open = self.inference_enabled.is_set()
                     startup_grace = time.monotonic() < float(
                         self.startup_inference_not_before or 0.0
@@ -1298,13 +1301,13 @@ class Engine(threading.Thread):
                                 self.inference_scheduler["event_passes"] += 1
                             if RUNTIME_DEBUG.enabled:
                                 RUNTIME_DEBUG.instant("event_pass", changed_count=len(changed_entities), changed_entities=sorted(changed_entities)[:24])
-                            self.process(state_map, changed_entities)
+                            self.process(None, changed_entities)
 
                         # Warm-up is independent from HA quietness. Genuine event work is
                         # always admitted first; cold targets then fill only idle worker
                         # slots. This avoids the old busy-home starvation mode while
                         # preserving realtime priority and the bounded worker pool.
-                        warmup_scheduled = self._startup_warmup_step(state_map)
+                        warmup_scheduled = self._startup_warmup_step(None)
                         if handled_realtime or self.initial_inference_pending or warmup_scheduled:
                             due_targets = set()
                         else:
@@ -1316,7 +1319,7 @@ class Engine(threading.Thread):
                             # Timer target IDs are scheduling hints, not HA events. Keep
                             # them out of event->decision telemetry so an old target event
                             # timestamp can never masquerade as current reaction latency.
-                            self.process(state_map, due_targets, event_driven=False)
+                            self.process(None, due_targets, event_driven=False)
                         else:
                             with self.lock:
                                 self.inference_scheduler["idle_skips"] += 1
