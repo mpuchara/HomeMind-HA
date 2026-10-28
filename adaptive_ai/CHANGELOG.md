@@ -2,7 +2,7 @@
 
 - Remove the redundant Engine loop state-map copy; process retains the atomic state/revision/receipt snapshot for every worker.
 - Reduce complete detached-map cache accounting work during Tournament capture, retaining conservative bounded RAM charges and nested-mutation validation.
-- Add warmed paired full-runtime measurements, worker-thread profiling and snapshot/accounting regressions. See docs/PERFORMANCE_OPTIMIZATION_0.14.231_PL.md for evidence and scope.
+- Add warmed paired full-runtime measurements, existing bounded worker timing diagnostics and snapshot/accounting regressions. See docs/PERFORMANCE_OPTIMIZATION_0.14.231_PL.md for evidence and scope.
 
 # 0.14.230
 

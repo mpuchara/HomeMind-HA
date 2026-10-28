@@ -4034,6 +4034,15 @@
     "scope": "single authoritative process snapshot; bounded detached-map cache bookkeeping",
     "control_semantics_changed": false,
     "learning_semantics_changed": false,
-    "report": "docs/PERFORMANCE_OPTIMIZATION_0.14.231_PL.md"
+    "report": "docs/PERFORMANCE_OPTIMIZATION_0.14.231_PL.md",
+    "tests_passed": 2822,
+    "ci_source_commit": "fbf9f16e4a3306f56118261c6572cfb7ea92aea4",
+    "ci_url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/40665140650",
+    "qa": "docs/benchmarks/PERFORMANCE_0_14_231_QA.json",
+    "raw_samples": "docs/benchmarks/PERFORMANCE_0_14_231_RAW.json.gz",
+    "scheduler_paired_wall_ratio": 0.912,
+    "capture_paired_warm_time_ratio": 0.9583424339793148,
+    "whole_runtime": "Mixed pooled results; identical-source controls show larger variability. No uniform speedup or device acceptance claim.",
+    "release_tag": "v0.14.231-rc.1"
   }
 }
