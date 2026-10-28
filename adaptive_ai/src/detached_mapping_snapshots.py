@@ -45,6 +45,7 @@ class DetachedMappingSnapshots:
             while self.entries and (self.bytes > self.max_bytes or len(self.entries) > self.max_entries):
                 _, removed = self.entries.popitem(last=False)
                 self.bytes -= removed[2]
+            complete_eligible = True
             for key, value in mapping.items():
                 old = self.entries.get(key)
                 if old is not None and old[0] is value and old[1] == value:
@@ -64,6 +65,9 @@ class DetachedMappingSnapshots:
                         while self.bytes > self.max_bytes or len(self.entries) > self.max_entries:
                             _, removed = self.entries.popitem(last=False)
                             self.bytes -= removed[2]
+                            complete_eligible = False
+                    else:
+                        complete_eligible = False
                 result[key] = frozen
                 parts.append((frozen, size))
                 charge += size
@@ -72,9 +76,7 @@ class DetachedMappingSnapshots:
                 # Every value must already belong to the bounded record cache.
                 # Retaining the complete map must not extend evicted records' lives.
                 if (self.bytes + container_bytes <= self.max_bytes
-                        and len(result) <= self.max_entries
-                        and all(key in self.entries and self.entries[key][1] is value
-                                for key, value in result.items())):
+                        and len(result) <= self.max_entries and complete_eligible):
                     self.complete = dict(result)
                     self.complete_parts = tuple(parts)
                     # Cached records retain strong source references. Native id
@@ -84,8 +86,12 @@ class DetachedMappingSnapshots:
                     self.complete_ids = tuple(map(id, mapping.values()))
                     self.complete_bytes = (sys.getsizeof(self.complete)
                         + sys.getsizeof(self.complete_keys) + sys.getsizeof(self.complete_ids)
-                        + sum(map(sys.getsizeof, self.complete_ids))
-                        + sys.getsizeof(self.complete_parts) + sum(map(sys.getsizeof, self.complete_parts)))
+                        # Fixed-size identity integers and two-item part tuples.
+                        # Conservative sizes avoid two Python walks of unchanged
+                        # records on every partly changed whole-house snapshot.
+                        + len(self.complete_ids)*sys.getsizeof(sys.maxsize)
+                        + sys.getsizeof(self.complete_parts)
+                        + len(self.complete_parts)*sys.getsizeof((None, None)))
                     if self.bytes + self.complete_bytes <= self.max_bytes:
                         self.bytes += self.complete_bytes
                         self.complete_charge = charge
