@@ -45,13 +45,14 @@ def run(source, count, events, independent=False, entities=780, debug=False,
         stack.enter_context(patch.object(TELEMETRY, 'observe', record_metric))
         profiles = []
         if profile_dir is not None:
-            import cProfile
-            # cProfile on the main thread misses the actual Engine/target workers.
-            # Start one profiler on each fresh thread. Diagnostic runs are separate
-            # from the paired performance gate.
+            import profile
+            # A main-thread profile misses Engine/target workers. Use independent
+            # stdlib Python profilers: cProfile's monitoring tool ID is shared by
+            # concurrent instances on Python 3.12+. These diagnostic runs are
+            # separate from the unprofiled paired performance gate.
             original_thread_run = threading.Thread.run
             def profile_thread(thread):
-                profiler = cProfile.Profile()
+                profiler = profile.Profile(timer=time.perf_counter)
                 profiles.append(profiler)
                 return profiler.runcall(original_thread_run, thread)
             stack.enter_context(patch.object(threading.Thread, 'run', profile_thread))
