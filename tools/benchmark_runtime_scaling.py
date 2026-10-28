@@ -21,7 +21,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def run(source, count, events, independent=False, entities=780, debug=False,
-        warmup=0, cadence=0., profile_dir=None):
+        warmup=0, cadence=0.):
     with tempfile.TemporaryDirectory(prefix='hm-scaling-') as data, ExitStack() as stack:
         os.environ['ADAPTIVE_AI_DATA'] = data
         sys.path[:0] = [str(source/'tools'), str(source/'tests'), str(source/'adaptive_ai/src')]
@@ -43,19 +43,6 @@ def run(source, count, events, independent=False, entities=780, debug=False,
             if name in window_metrics:
                 window_metrics[name].append(value)
         stack.enter_context(patch.object(TELEMETRY, 'observe', record_metric))
-        profiles = []
-        if profile_dir is not None:
-            import profile
-            # A main-thread profile misses Engine/target workers. Use independent
-            # stdlib Python profilers: cProfile's monitoring tool ID is shared by
-            # concurrent instances on Python 3.12+. These diagnostic runs are
-            # separate from the unprofiled paired performance gate.
-            original_thread_run = threading.Thread.run
-            def profile_thread(thread):
-                profiler = profile.Profile(timer=time.perf_counter)
-                profiles.append(profiler)
-                return profiler.runcall(original_thread_run, thread)
-            stack.enter_context(patch.object(threading.Thread, 'run', profile_thread))
         store = Store(Path(data)/'benchmark.sqlite')
         stack.callback(store.stop_runtime_cache)
         for module in (product.engine_module, product.executor_module):
@@ -188,10 +175,6 @@ def run(source, count, events, independent=False, entities=780, debug=False,
             for name in ('control_workers','poll_worker','registry_worker','housekeeping_worker'):
                 getattr(engine, name).shutdown(wait=True, cancel_futures=True)
             COMPUTE.close()
-            if profile_dir is not None:
-                profile_dir.mkdir(parents=True, exist_ok=True)
-                for index, profiler in enumerate(profiles):
-                    profiler.dump_stats(str(profile_dir/f'thread-{index}.prof'))
         ha.assert_not_called()
         metrics = TELEMETRY.snapshot()
         try:
@@ -261,11 +244,10 @@ if __name__ == '__main__':
     p.add_argument('--scheduler', action='store_true')
     p.add_argument('--warmup', type=int, default=0)
     p.add_argument('--cadence', type=float, default=0.)
-    p.add_argument('--profile-dir', type=Path)
     a = p.parse_args()
     if not 0 <= a.agents <= 20 or not 2 <= a.events <= 5000 or not 32 <= a.entities <= 4096:
         p.error('bounded agents/events/entities required')
     result = (scheduler(a.source_root,a.agents,a.events,a.entities) if a.scheduler else
               run(a.source_root,a.agents,a.events,a.independent,a.entities,a.debug,
-                  a.warmup,a.cadence,a.profile_dir))
+                  a.warmup,a.cadence))
     print('SCALING_JSON='+json.dumps(result,sort_keys=True))

@@ -22,9 +22,9 @@ jobs:
       - name: Composed normal-policy scaling smoke (host only)
         if: matrix.python == '3.11'
         run: python tools/benchmark_runtime_scaling.py --agents 3 --events 4
-      - name: Worker-thread profiling smoke (diagnostic only)
+      - name: Worker timing diagnostics smoke (separate from performance gate)
         if: matrix.python == '3.11'
-        run: python tools/benchmark_runtime_scaling.py --agents 1 --events 2 --profile-dir worker-profile-smoke
+        run: python tools/benchmark_runtime_scaling.py --agents 1 --events 2 --debug
       - run: node tools/verify_debug_export_ui.js
       - name: Recorder archive parity and bounded WAL writes
         if: matrix.python == '3.11'
