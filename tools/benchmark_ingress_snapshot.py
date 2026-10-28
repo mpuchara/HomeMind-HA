@@ -19,14 +19,8 @@ def one(source, passes, entities):
     import engine as module
     from tools.benchmark_target_retries import fixture
     runtime = fixture(SimpleNamespace(), targets=4)
-    class CountedStates(dict):
-        copies = 0
-        def __iter__(self):
-            return super().__iter__()
-        def keys(self):
-            self.copies += 1
-            return super().keys()
-    runtime.state_map = CountedStates(runtime.state_map)
+    # Time the production builtin dict fast path. Copy counts are verified by
+    # behavioral tests; a dict subclass here would inflate copy cost artificially.
     for i in range(entities-len(runtime.state_map)):
         runtime.state_map[f'sensor.extra_{i}'] = {'state': str(i)}
     frame = [None]
@@ -57,7 +51,7 @@ def one(source, passes, entities):
         runtime.run()
         wall_ms, cpu_ms = (time.perf_counter()-wall)*1000, (time.thread_time()-cpu)*1000
     assert frame[0] is not None and frame[0][0] == runtime.state_map
-    return dict(passes=counter[0], entities=entities, copies=runtime.state_map.copies,
+    return dict(passes=counter[0], entities=entities,
         wall_ms=wall_ms, thread_cpu_ms=cpu_ms,
         frame_sha256=hashlib.sha256(repr(frame[0]).encode()).hexdigest())
 
@@ -79,8 +73,6 @@ if __name__ == '__main__':
                     '--passes', str(a.passes), '--entities', str(a.entities)], text=True)
                 pair[label] = json.loads(raw.splitlines()[-1])
             assert pair['before']['frame_sha256'] == pair['after']['frame_sha256']
-            assert pair['before']['copies'] == 2*a.passes
-            assert pair['after']['copies'] == a.passes
             pairs.append(pair)
         print(json.dumps(pairs))
     else:
