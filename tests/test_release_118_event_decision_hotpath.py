@@ -105,7 +105,8 @@ class EventDecisionHotpath118Tests(unittest.TestCase):
 
     def test_timer_scheduler_marks_synthetic_target_as_non_event(self):
         source = (SRC / 'engine.py').read_text(encoding='utf-8')
-        self.assertIn('self.process(state_map, due_targets, event_driven=False)', source)
+        # process owns the atomic state/revision capture; run supplies no stale copy.
+        self.assertIn('self.process(None, due_targets, event_driven=False)', source)
         self.assertIn('if event_driven else {}', source)
 
     def test_event_metric_is_decision_ready_and_executor_is_separate(self):
