@@ -49,11 +49,12 @@ def run(source, count, events, independent=False, entities=780, debug=False,
             # cProfile on the main thread misses the actual Engine/target workers.
             # Start one profiler on each fresh thread. Diagnostic runs are separate
             # from the paired performance gate.
-            def profile_thread(frame, event, arg):
+            original_thread_run = threading.Thread.run
+            def profile_thread(thread):
                 profiler = cProfile.Profile()
                 profiles.append(profiler)
-                profiler.enable()
-            threading.setprofile(profile_thread)
+                return profiler.runcall(original_thread_run, thread)
+            stack.enter_context(patch.object(threading.Thread, 'run', profile_thread))
         store = Store(Path(data)/'benchmark.sqlite')
         stack.callback(store.stop_runtime_cache)
         for module in (product.engine_module, product.executor_module):
@@ -187,7 +188,6 @@ def run(source, count, events, independent=False, entities=780, debug=False,
                 getattr(engine, name).shutdown(wait=True, cancel_futures=True)
             COMPUTE.close()
             if profile_dir is not None:
-                threading.setprofile(None)
                 profile_dir.mkdir(parents=True, exist_ok=True)
                 for index, profiler in enumerate(profiles):
                     profiler.dump_stats(str(profile_dir/f'thread-{index}.prof'))
