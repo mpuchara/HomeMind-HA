@@ -292,14 +292,22 @@ def run(source, count, events, independent=False, entities=780, debug=False,
             with metric_lock:
                 collecting[0] = False
             engine.stop_event.set(); engine.wake_event.set(); loop.join(10)
+            if loop.is_alive():
+                raise AssertionError('Engine fixture did not stop')
             manager = getattr(engine, 'agent_candidates', None)
             if manager is not None:
                 manager.stop()
+                if manager.is_alive():
+                    manager.join(30)
+                    if manager.is_alive():
+                        raise AssertionError('Candidate fixture worker did not stop')
             service = getattr(engine, 'context_tournament', None)
             if service is not None:
                 service._deferred_observations.close(30)
                 service._shadow_flush_event.set()
                 service._shadow_writer_thread.join(30)
+                if service._shadow_writer_thread.is_alive():
+                    raise AssertionError('Tournament fixture writer did not stop')
             for name in ('control_workers','poll_worker','registry_worker','housekeeping_worker'):
                 getattr(engine, name).shutdown(wait=True, cancel_futures=True)
             COMPUTE.close()
