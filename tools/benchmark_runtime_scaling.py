@@ -286,6 +286,7 @@ def run(source, count, events, independent=False, entities=780, debug=False,
             measurement_wall_ms = (time.perf_counter()-started)*1000
             measurement_cpu_ms = (time.process_time()-cpu)*1000
             cpu_threads = thread_cpu_delta(thread_cpu_start, thread_cpu_snapshot())
+            measured_probe = diagnostic.snapshot() if diagnostic else None
             with metric_lock:
                 collecting[0] = False
             engine.stop_event.set(); engine.wake_event.set(); loop.join(10)
@@ -326,7 +327,7 @@ def run(source, count, events, independent=False, entities=780, debug=False,
             candidate_diagnostics=engine.agent_candidates.candidate_shadow_async_diagnostics(),
             input_sha256=input_digest.hexdigest(), event_clock='fixed synthetic 100ms increments; latency clocks real',
             storage_runtime=store.sqlite_snapshot(),
-            probe=diagnostic.snapshot() if diagnostic else None,
+            probe=measured_probe,
             composition=descriptor['entrypoint_chain'], normal_policy=True, confidence_override=False,
             synthetic_demonstration_training_ms=training_ms, ha_calls=ha.call_count,
             event_to_pipeline_return=quantiles(samples), samples=samples, telemetry_raw_ms=raw,

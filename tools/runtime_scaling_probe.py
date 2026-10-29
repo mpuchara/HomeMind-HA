@@ -53,6 +53,10 @@ class Probe:
     def record(self, name, start):
         end = self.clock()
         row = tuple((b-a)/1e6 for a, b in zip(start, end))
+        self.append(name, row)
+        return row
+
+    def append(self, name, row):
         with self.lock:
             self.rows[name].append(row)
             self.counts[name] += 1
@@ -140,21 +144,25 @@ class TimedLock:
     def acquire(self, *args, **kwargs):
         start = self.probe.clock()
         acquired = self.lock.acquire(*args, **kwargs)
-        self.probe.record(self.name+'_wait', start)
+        wait = self.probe.record(self.name+'_wait', start)
+        frame = sys._getframe(2)
+        caller = frame.f_globals.get('__name__', '')+'.'+frame.f_code.co_name
+        if self.name == 'engine_lock':
+            # The scheduler snapshot is one precise Engine.process with-block.
+            # Code locations distinguish it from retry/admission bookkeeping.
+            caller += ':'+str(frame.f_lineno)
+        self.probe.append(self.name+'_wait.'+caller, wait)
         if acquired:
             if not hasattr(self.local, 'starts'):
                 self.local.starts = []
-            frame = sys._getframe(2)
-            caller = frame.f_globals.get('__name__', '')+'.'+frame.f_code.co_name
             self.local.starts.append((self.probe.clock(), caller))
         return acquired
 
     def release(self):
         start, caller = self.local.starts.pop()
         self.lock.release()
-        self.probe.record(self.name+'_held', start)
-        if self.name == 'store_lock':
-            self.probe.record(self.name+'_held.'+caller, start)
+        held = self.probe.record(self.name+'_held', start)
+        self.probe.append(self.name+'_held.'+caller, held)
 
     def __enter__(self):
         self.acquire()
