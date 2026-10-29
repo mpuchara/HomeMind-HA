@@ -18,11 +18,20 @@ import time
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
+from runtime_scaling_probe import Probe, thread_cpu_snapshot, thread_cpu_delta
 
 
-def run(source, count, events, independent=False, entities=780, debug=False):
+def run(source, count, events, independent=False, entities=780, debug=False,
+        warmup=0, probe=False, legacy_storage_startup=False, legacy_lineage=False,
+        candidates=False, training=False, correct=False):
     with tempfile.TemporaryDirectory(prefix='hm-scaling-') as data, ExitStack() as stack:
+        # Replay identical event/received wall-clock values in independent runs.
+        # Scheduling, latency clocks and CPU accounting still use real time.
+        logical_time = [1793275200.]
+        stack.enter_context(patch('time.time', new=lambda: logical_time[0]))
         os.environ['ADAPTIVE_AI_DATA'] = data
+        for name in ('OPENBLAS_NUM_THREADS', 'OMP_NUM_THREADS', 'MKL_NUM_THREADS', 'NUMEXPR_NUM_THREADS'):
+            os.environ[name] = '1'
         sys.path[:0] = [str(source/'tools'), str(source/'tests'), str(source/'adaptive_ai/src')]
         import support
         import benchmark_product_runtime as product
@@ -33,7 +42,17 @@ def run(source, count, events, independent=False, entities=780, debug=False):
         from telemetry import TELEMETRY, RUNTIME_DEBUG, rss_mb
         from storage import Store
         from runtime_background_compute import COMPUTE
+        from runtime_threading import configure_runtime_threads
+        thread_configuration = configure_runtime_threads(product.OPTIONS)
         store = Store(Path(data)/'benchmark.sqlite')
+        # Match main.initialize_runtime; composition installation alone omits
+        # the bounded SQLite cache, WAL keeper and checkpoint worker.
+        if not legacy_storage_startup:
+            store.start_wal_keeper()
+            store.start_runtime_cache()
+            store.start_wal_checkpoint()
+        stack.callback(store.stop_wal_keeper)
+        stack.callback(store.stop_wal_checkpoint)
         stack.callback(store.stop_runtime_cache)
         for module in (product.engine_module, product.executor_module):
             stack.enter_context(patch.object(module, 'STORE', store))
@@ -88,8 +107,72 @@ def run(source, count, events, independent=False, entities=780, debug=False):
             agent = store.get_agent_config(agent['id'])
             policy.agent = agent
             engine.models[agent['id']] = policy
+            if not legacy_lineage:
+                from agent_candidate_lineage import _ensure_root
+                store.save_model(agent['id'], policy.serialize())
+                _ensure_root(store, agent['id'], generation_number=0)
             trained.append((agent, sensors))
         training_ms = (time.perf_counter()-training_start)*1000
+        candidate_ids = []
+        if candidates:
+            from agent_candidate_lineage import _register_generation, _ensure_root
+            from agent_candidates import refresh_candidate_ids_cache
+            for agent, sensors in trained:
+                child = store.create_agent({**agent, 'id':None, 'mode':'paused', 'name':'Benchmark Candidate'})
+                store.save_model(child['id'], engine.models[agent['id']].serialize())
+                store.set_training_state(child['id'], 'qualified', score=1., samples=48,
+                                         detail={'source':'copy_of_qualified_fixture_model'})
+                parent = _ensure_root(store, agent['id'])
+                _register_generation(store, agent['id'], parent, child['id'], 1,
+                                     'synthetic_fixture', state='comparing')
+                with store.lock, store.conn() as c:
+                    c.execute('''INSERT INTO agent_candidates
+                        (parent_agent_id,candidate_id,generation,state,reason,feedback_revision,build_revision,
+                         dirty,queued_ts,comparison_json,offline_gate_json,updated_ts)
+                        VALUES(?,?,1,'comparing','synthetic_fixture',0,0,0,?,'{}',?,?)''',
+                        (agent['id'], child['id'], time.time(), '{"passed":true,"status":"passed"}', time.time()))
+                candidate_ids.append(child['id'])
+            refresh_candidate_ids_cache(store)
+            engine.agent_candidates.invalidate_candidate_shadow_cache()
+        # An isolated real policy fit plus normal durable model writes overlaps
+        # Root inference. This is not a HistoryManager 14-day import benchmark.
+        background_stop = threading.Event()
+        background_stats = dict(updates=0, model_writes=0, correct_reads=0, correct_writes=0,
+                                correct_gaps=0, errors=[])
+        worker = None
+        if training and trained:
+            from training_budget import TRAINING_BUDGET
+            agent, sensors = trained[0]
+            trainer = store.create_agent({**agent, 'id':None, 'mode':'paused', 'name':'Isolated training fixture'})
+            learning = MultiHorizonPolicy(trainer, states, {}, set(), model=engine.models[agent['id']].serialize(),
+                                          context_engine=engine.context)
+            vectors = []
+            for value in (0, 1):
+                frame = dict(states)
+                for eid in sensors:
+                    frame[eid] = support.state(eid, 'on' if value else 'off', device_class='motion')
+                vectors.append(learning.features(frame, None, at_ts=time.time())[0])
+            def fit_background():
+                TRAINING_BUDGET.begin()
+                try:
+                    tick = 0
+                    while not background_stop.is_set():
+                        TRAINING_BUDGET.checkpoint('scaling_policy_fit')
+                        learning.update(min(learning.horizons), tick%2, vectors[tick%2], 1., sample_ts=time.time())
+                        background_stats['updates'] += 1
+                        if tick%32 == 0:
+                            store.save_model(trainer['id'], learning.serialize())
+                            background_stats['model_writes'] += 1
+                        tick += 1
+                except BaseException as exc:
+                    background_stats['errors'].append(repr(exc))
+                finally:
+                    TRAINING_BUDGET.end()
+            worker = threading.Thread(target=fit_background, name='adaptive-ai-index-scaling-fixture', daemon=True)
+        if correct:
+            for state in states.values():
+                engine._queue_archive_state(state, force=True)
+            engine.flush_archive(force=True)
         engine._refresh_agent_index(force=True)
         # Network, timer scheduling and maintenance are outside this isolated ingress workload.
         engine.refresh_states = lambda: None
@@ -101,7 +184,25 @@ def run(source, count, events, independent=False, entities=780, debug=False):
         engine.initial_inference_pending = False
         engine.inference_enabled.set()
         RUNTIME_DEBUG.set_enabled(debug, clear=True)
+        diagnostic = Probe() if probe else None
+        if diagnostic:
+            diagnostic.install(stack, engine, store)
+        # Finite benchmark window, independent of the production 512-sample ring.
+        # Installed in both variants, with a hard per-metric bound.
+        from collections import defaultdict
+        complete_metrics = defaultdict(list)
+        metric_lock = threading.Lock()
+        collecting = [True]
+        observe_metric = TELEMETRY.observe
+        def retain_metric(name, value):
+            observe_metric(name, value)
+            with metric_lock:
+                if collecting[0] and len(complete_metrics[name]) < 100000:
+                    complete_metrics[name].append(float(value))
+        stack.enter_context(patch.object(TELEMETRY, 'observe', retain_metric))
         samples, decisions = [], []
+        input_digest = hashlib.sha256()
+        input_digest.update(json.dumps(states, sort_keys=True).encode())
         original = engine.process_agent
         received = [0.]
         done = threading.Event()
@@ -125,25 +226,68 @@ def run(source, count, events, independent=False, entities=780, debug=False):
         engine.process_agent = observe
         loop = threading.Thread(target=engine.run, daemon=True)
         loop.start()
+        if worker:
+            worker.start()
         started, cpu = time.perf_counter(), time.process_time()
+        thread_cpu_start = thread_cpu_snapshot()
         try:
-            for step in range(events):
+            cold_samples = []
+            for step in range(events+warmup):
                 for future in list(engine.in_flight.values()):
                     future.result(30)
+                if step == warmup:
+                    cold_samples = list(samples)
+                    samples.clear(); decisions.clear()
+                    with metric_lock:
+                        complete_metrics.clear()
+                    if diagnostic:
+                        diagnostic.reset()
+                    started, cpu = time.perf_counter(), time.process_time()
+                    thread_cpu_start = thread_cpu_snapshot()
                 seen.clear(); done.clear(); received[0] = time.perf_counter()
+                logical_time[0] = 1793275500.+step*.1
                 inputs = sorted({sensors[0] for _, sensors in trained}) or ['sensor.background_0']
                 for eid in inputs:
                     state = support.state(eid, 'on' if step%2 else 'off', device_class='motion')
-                    stamp = datetime.now(timezone.utc).isoformat()
+                    stamp = datetime.fromtimestamp(time.time(), timezone.utc).isoformat()
                     state.update(last_updated=stamp, last_changed=stamp)
+                    input_digest.update(json.dumps(state, sort_keys=True).encode())
                     engine.on_state_changed({'entity_id':eid, 'new_state':state})
                 if count and not done.wait(30):
                     raise AssertionError((len(seen), count, engine.error))
                 if not count:
                     time.sleep(.01)
+                if correct and trained and step%25 == 0:
+                    stamp = time.time()
+                    manager = engine.agent_candidates
+                    ref = trained[0][0]['id']
+                    manager.workflow_correct_history(ref, stamp-300, stamp)
+                    background_stats['correct_reads'] += 1
+                    point = manager.workflow_correct_point(ref, stamp)
+                    if point.get('desired') is not None and point.get('context_complete') and point.get('current') is not None:
+                        result = manager.workflow_add_correct_label(ref, 1-float(point['desired']), stamp)
+                        assert result['ok']
+                        undone = manager.workflow_undo_correct_label(ref)
+                        assert undone['ok'] and undone['undone_id'] == result['label_id']
+                        with store.conn() as c:
+                            assert c.execute('SELECT undone_ts FROM teaching_rl_labels WHERE id=?',
+                                             (result['label_id'],)).fetchone()[0] is not None
+                        background_stats['correct_writes'] += 1
+                    else:
+                        background_stats['correct_gaps'] += 1
         finally:
+            background_stop.set()
+            if worker:
+                worker.join(10)
+                if worker.is_alive():
+                    raise AssertionError('Training fixture failed to stop')
             for future in list(engine.in_flight.values()):
                 future.result(30)
+            measurement_wall_ms = (time.perf_counter()-started)*1000
+            measurement_cpu_ms = (time.process_time()-cpu)*1000
+            cpu_threads = thread_cpu_delta(thread_cpu_start, thread_cpu_snapshot())
+            with metric_lock:
+                collecting[0] = False
             engine.stop_event.set(); engine.wake_event.set(); loop.join(10)
             manager = getattr(engine, 'agent_candidates', None)
             if manager is not None:
@@ -157,25 +301,39 @@ def run(source, count, events, independent=False, entities=780, debug=False):
                 getattr(engine, name).shutdown(wait=True, cancel_futures=True)
             COMPUTE.close()
         ha.assert_not_called()
+        if background_stats['errors']:
+            raise AssertionError(background_stats['errors'])
+        if training and not background_stats['updates']:
+            raise AssertionError('No concurrent policy training executed')
         metrics = TELEMETRY.snapshot()
         try:
             import resource
             peak_rss_mb = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss/1024
         except ImportError:
             peak_rss_mb = None
-        raw = {key:list(values) for key, values in TELEMETRY.samples.items()}
+        raw = dict(complete_metrics)
         canonical = [sorted(decisions[i:i+count]) for i in range(0,len(decisions),count)] if count else []
         def quantiles(values):
             values = sorted(values)
             return {f'p{p}_ms': values[min(len(values)-1,int((len(values)-1)*p/100))] if values else None for p in (50,95,99)}
         return dict(agents=count, events=events, independent=independent, debug=debug,
+            warmup_events=warmup, warmup_pipeline_samples_ms=cold_samples,
+            production_storage_startup=not legacy_storage_startup,
+            registered_root_lineage=not legacy_lineage,
+            thread_configuration=thread_configuration, thread_cpu=cpu_threads,
+            concurrent_policy_training=training, correct_reads_enabled=correct,
+            background_work=background_stats, candidate_count=len(candidate_ids),
+            candidate_diagnostics=engine.agent_candidates.candidate_shadow_async_diagnostics(),
+            input_sha256=input_digest.hexdigest(), event_clock='fixed synthetic 100ms increments; latency clocks real',
+            storage_runtime=store.sqlite_snapshot(),
+            probe=diagnostic.snapshot() if diagnostic else None,
             composition=descriptor['entrypoint_chain'], normal_policy=True, confidence_override=False,
             synthetic_demonstration_training_ms=training_ms, ha_calls=ha.call_count,
             event_to_pipeline_return=quantiles(samples), samples=samples, telemetry_raw_ms=raw,
             telemetry=metrics, decision_rows=canonical,
             anonymous_trace=RUNTIME_DEBUG.anonymous_spans() if hasattr(RUNTIME_DEBUG,'anonymous_spans') else None,
             decisions_sha256=hashlib.sha256(json.dumps(canonical,sort_keys=True).encode()).hexdigest(),
-            process_cpu_ms=(time.process_time()-cpu)*1000, wall_ms=(time.perf_counter()-started)*1000,
+            process_cpu_ms=measurement_cpu_ms, wall_ms=measurement_wall_ms,
             rss_mb=rss_mb(), peak_rss_mb=peak_rss_mb, p99_sufficient=len(samples)>=1000,
             tournament=service.shadow_persistence_snapshot() if service else None,
             scope='host Engine ingress and composed pipeline; no HA socket/dispatch/ACK or Pi claim')
@@ -221,9 +379,19 @@ if __name__ == '__main__':
     p.add_argument('--independent', action='store_true')
     p.add_argument('--debug', action='store_true')
     p.add_argument('--scheduler', action='store_true')
+    p.add_argument('--warmup', type=int, default=0)
+    p.add_argument('--probe', action='store_true', help='Opt-in bounded benchmark instrumentation')
+    p.add_argument('--legacy-storage-startup', action='store_true', help='Reproduce old fixture omission')
+    p.add_argument('--legacy-lineage', action='store_true', help='Reproduce unregistered fixture agents')
+    p.add_argument('--candidates', action='store_true')
+    p.add_argument('--training', action='store_true', help='Concurrent isolated real policy fit/model writes')
+    p.add_argument('--correct', action='store_true', help='Read Correct history while inference/training run')
     a = p.parse_args()
     if not 0 <= a.agents <= 20 or not 2 <= a.events <= 5000 or not 32 <= a.entities <= 4096:
         p.error('bounded agents/events/entities required')
+    if not 0 <= a.warmup <= 500:
+        p.error('warmup must be 0..500')
     result = (scheduler(a.source_root,a.agents,a.events,a.entities) if a.scheduler else
-              run(a.source_root,a.agents,a.events,a.independent,a.entities,a.debug))
+              run(a.source_root,a.agents,a.events,a.independent,a.entities,a.debug,a.warmup,a.probe,a.legacy_storage_startup,a.legacy_lineage,
+                  a.candidates,a.training,a.correct))
     print('SCALING_JSON='+json.dumps(result,sort_keys=True))

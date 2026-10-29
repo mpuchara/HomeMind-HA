@@ -1,3 +1,10 @@
+# 0.14.232
+
+- Stage 1 from the exact 0.14.230 predecessor: bound repeated SQLite session syntax classification to 512 immutable boolean results with a 2048-character key limit. Every SQL operation, data read, budget check and commit still executes.
+- Correct the composed ingress benchmark's storage startup and Root lineage, match production BLAS/interpreter settings, retain finite-window samples, separate warmup/teardown, replay identical event payloads, and add opt-in bounded lock/SQL/features/model/Tournament probes with wall/thread/process CPU accounting.
+- Add active Candidate, concurrent isolated policy fitting/model writes, and Correct history/label/undo fixtures. These are host synthetic workloads; full HistoryManager replay, installed Raspberry Pi and physical HA acceptance remain separate.
+- Version 0.14.231 is already used by PR #347; this independent Stage-1 branch stays based on d460e0e and uses the next unoccupied numeric version. No stable release or automatic merge.
+
 # 0.14.230
 
 - Snapshot only event/retry routing owners under Engine.lock instead of copying every household dependency set on every scheduler pass. Preserve shared atomic states/revisions, per-target FIFO retry, event clocks and Executor validation.

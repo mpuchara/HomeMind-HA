@@ -15,6 +15,14 @@ def main():
     parser.add_argument('--repeats', type=int, default=5)
     parser.add_argument('--events', type=int, default=20)
     parser.add_argument('--scheduler', action='store_true')
+    parser.add_argument('--warmup', type=int, default=0)
+    parser.add_argument('--probe', action='store_true')
+    parser.add_argument('--same-source', action='store_true', help='A/A repeatability control')
+    parser.add_argument('--probe-overhead', action='store_true', help='Same sources, probe OFF/ON')
+    parser.add_argument('--fixture-ablation', choices=('storage', 'lineage', 'both'))
+    parser.add_argument('--candidates', action='store_true')
+    parser.add_argument('--training', action='store_true')
+    parser.add_argument('--correct', action='store_true')
     parser.add_argument('--diagnostics', action='store_true', help='Same current sources, tracing off versus on')
     args = parser.parse_args()
     if not 1 <= args.repeats <= 10:
@@ -28,9 +36,20 @@ def main():
             for repeat in range(args.repeats):
                 pair = {}
                 for label in (['before','after'] if repeat%2 == 0 else ['after','before']):
-                    source = args.baseline_root if label == 'before' and not args.diagnostics else root
+                    source = args.baseline_root if label == 'before' and not (args.diagnostics or args.same_source or args.probe_overhead or args.fixture_ablation) else root
                     command = [sys.executable, str(root/'tools/benchmark_runtime_scaling.py'),
-                               '--source-root', str(source), '--agents', str(count), '--events', str(args.events)]
+                               '--source-root', str(source), '--agents', str(count), '--events', str(args.events),
+                               '--warmup', str(args.warmup)]
+                    if args.probe or (args.probe_overhead and label == 'after'):
+                        command.append('--probe')
+                    for option in ('candidates', 'training', 'correct'):
+                        if getattr(args, option):
+                            command.append('--'+option)
+                    if args.fixture_ablation and label == 'before':
+                        if args.fixture_ablation in ('storage', 'both'):
+                            command.append('--legacy-storage-startup')
+                        if args.fixture_ablation in ('lineage', 'both'):
+                            command.append('--legacy-lineage')
                     if independent:
                         command.append('--independent')
                     if args.scheduler:
@@ -47,6 +66,8 @@ def main():
                     (args.output/(name+'.json')).write_text(json.dumps(pair[label],indent=2,sort_keys=True))
                 key = 'snapshot_sha256' if args.scheduler else 'decisions_sha256'
                 parity = pair['before'][key] == pair['after'][key]
+                if not args.scheduler:
+                    assert pair['before']['input_sha256'] == pair['after']['input_sha256'], 'Different input payloads'
                 pairs.append(dict(repeat=repeat, parity=parity, **pair))
                 print(f'{count} independent={independent} repeat={repeat} parity={parity}', flush=True)
                 if not parity:
@@ -64,6 +85,9 @@ def main():
                 if args.scheduler:
                     row[label]['thread_cpu_median_ms'] = statistics.median(v for pair in pairs for v in pair[label]['thread_cpu_ms'])
                 else:
+                    row[label]['process_cpu_ms'] = [pair[label]['process_cpu_ms'] for pair in pairs]
+                    row[label]['wall_ms'] = [pair[label]['wall_ms'] for pair in pairs]
+                    row[label]['peak_rss_mb'] = [pair[label]['peak_rss_mb'] for pair in pairs]
                     metrics = [pair[label]['telemetry_raw_ms'].get('event_to_decision',[]) for pair in pairs]
                     decision_samples = [value for values in metrics for value in values]
                     row[label]['event_to_decision'] = dict(samples=len(decision_samples),

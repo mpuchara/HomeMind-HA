@@ -1,8 +1,8 @@
 {
-  "version": "0.14.230",
-  "release_date": "2026-10-27",
-  "base_version": "0.14.229",
-  "base_commit": "8e47cd6652c1364f0b048f79d507929b1cca6168",
+  "version": "0.14.232",
+  "release_date": "2026-10-29",
+  "base_version": "0.14.230",
+  "base_commit": "d460e0e10f18bcfebcd4565dcfdf54bf8782157b",
   "release_status": "draft-host-validated-whole-runtime-and-target-gates-open",
   "release_014140": {
     "scope": "inventory_and_remove_remaining_shipped_feature_Handler_fallbacks_for_Candidate_Live_and_manual_feedback_transport",
