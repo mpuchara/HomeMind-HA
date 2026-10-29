@@ -85,7 +85,7 @@ def run(source, count, events, independent=False, entities=780, debug=False,
             # Chronological demonstration fit then held-out calibration. No gate overrides.
             temporal = TemporalHistory(maxlen=96)
             base = time.time()-300
-            correct = 0
+            validation_correct = 0
             for tick in range(240):
                 on = (tick//12)%2
                 frame = dict(states)
@@ -98,9 +98,9 @@ def run(source, count, events, independent=False, entities=780, debug=False,
                     policy.update(horizon, on, vector, 1., sample_ts=base+tick)
                 else:
                     prediction = policy.predict(vector)
-                    correct += int(int(float(prediction[0]['value']) >= .5) == on)
+                    validation_correct += int(int(float(prediction[0]['value']) >= .5) == on)
                     policy.heads[horizon].validate(on, vector, 1., sample_ts=base+tick)
-            score = correct/48
+            score = validation_correct/48
             qualified = score > float(product.OPTIONS.get('candidate_benchmark_threshold', .78))
             if not qualified:
                 raise AssertionError(('Demonstration model did not qualify', score))

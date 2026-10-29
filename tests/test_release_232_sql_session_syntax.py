@@ -4,6 +4,10 @@ from pathlib import Path
 import random
 import sqlite3
 import tempfile
+import subprocess
+import sys
+import os
+import json
 import unittest
 from unittest.mock import patch
 
@@ -103,6 +107,21 @@ class SessionSyntaxTests(unittest.TestCase):
         self.assertEqual(row['count'], 10)
         self.assertEqual(len(row['samples']), 3)
         self.assertEqual(row['dropped'], 7)
+
+    def test_real_scaling_cli_keeps_correct_disabled_without_the_flag(self):
+        root = Path(__file__).resolve().parents[1]
+        env = dict(os.environ)
+        env.pop('ADAPTIVE_AI_TRAINING_WORKER', None)
+        proc = subprocess.run([sys.executable, str(root/'tools/benchmark_runtime_scaling.py'),
+                               '--agents','1','--events','2'], cwd=root, env=env,
+                              capture_output=True, text=True, timeout=120)
+        self.assertEqual(proc.returncode, 0, proc.stdout[-2000:]+proc.stderr[-2000:])
+        row = json.loads(next(line.split('=',1)[1] for line in proc.stdout.splitlines()
+                              if line.startswith('SCALING_JSON=')))
+        self.assertIs(row['correct_reads_enabled'], False)
+        self.assertEqual(row['background_work']['correct_reads'], 0)
+        self.assertEqual(row['background_work']['correct_writes'], 0)
+        self.assertEqual(len(row['telemetry_raw_ms']['event_to_decision']), 2)
 
 
 if __name__ == '__main__':
