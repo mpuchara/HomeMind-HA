@@ -10,8 +10,34 @@ import sqlite3
 import threading
 import time
 import weakref
+from functools import lru_cache
 
 from storage_budget import BudgetConnection
+
+
+def session_sql_taints(sql):
+    """Cache syntax only, never data, admission, results or connection state.
+
+    Bound retained source bytes as well as entry count. Unusual objects and
+    large/generated statements keep the original conservative classification.
+    """
+    if type(sql) is str and len(sql) <= 2048:
+        return _cached_session_sql_taints(sql)
+    return _session_sql_taints(sql)
+
+
+@lru_cache(maxsize=512)
+def _cached_session_sql_taints(sql):
+    return _session_sql_taints(sql)
+
+
+def _session_sql_taints(sql):
+    clean = re.sub(r'\A\s*(?:(?:--[^\n]*\n|/\*.*?\*/)\s*)*', '', str(sql), flags=re.S).strip()
+    pragma = re.match(r'PRAGMA\s+(?:\w+\.)?(\w+)\s*(.*)', clean, re.I | re.S)
+    return bool(re.match(r'(ATTACH|DETACH|VACUUM|SCRIPT)\b', clean, re.I)
+                or re.search(r'\bTEMP(?:ORARY)?\b', clean, re.I)
+                or (pragma and pragma[2].strip(' ;') and pragma[1].lower()
+                    not in ('busy_timeout', 'wal_autocheckpoint')))
 
 
 def memory_headroom():
@@ -69,14 +95,8 @@ class CachedBudgetConnection(BudgetConnection):
         return cursor
 
     def storage_statement(self, sql, parameters=()):
-        if self.cache_tracking:
-            clean = re.sub(r'\A\s*(?:(?:--[^\n]*\n|/\*.*?\*/)\s*)*', '', str(sql), flags=re.S).strip()
-            pragma = re.match(r'PRAGMA\s+(?:\w+\.)?(\w+)\s*(.*)', clean, re.I | re.S)
-            if (re.match(r'(ATTACH|DETACH|VACUUM|SCRIPT)\b', clean, re.I)
-                    or re.search(r'\bTEMP(?:ORARY)?\b', clean, re.I)
-                    or (pragma and pragma[2].strip(' ;') and pragma[1].lower()
-                        not in ('busy_timeout', 'wal_autocheckpoint'))):
-                self.cache_tainted = True
+        if self.cache_tracking and session_sql_taints(sql):
+            self.cache_tainted = True
         return super().storage_statement(sql, parameters)
 
     def executescript(self, sql):
