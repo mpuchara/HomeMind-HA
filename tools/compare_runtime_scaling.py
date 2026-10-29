@@ -19,7 +19,7 @@ def main():
     parser.add_argument('--probe', action='store_true')
     parser.add_argument('--same-source', action='store_true', help='A/A repeatability control')
     parser.add_argument('--probe-overhead', action='store_true', help='Same sources, probe OFF/ON')
-    parser.add_argument('--fixture-ablation', choices=('storage', 'lineage', 'both'))
+    parser.add_argument('--fixture-ablation', choices=('storage', 'lineage', 'both', 'threads', 'all'))
     parser.add_argument('--candidates', action='store_true')
     parser.add_argument('--training', action='store_true')
     parser.add_argument('--correct', action='store_true')
@@ -46,10 +46,12 @@ def main():
                         if getattr(args, option):
                             command.append('--'+option)
                     if args.fixture_ablation and label == 'before':
-                        if args.fixture_ablation in ('storage', 'both'):
+                        if args.fixture_ablation in ('storage', 'both', 'all'):
                             command.append('--legacy-storage-startup')
-                        if args.fixture_ablation in ('lineage', 'both'):
+                        if args.fixture_ablation in ('lineage', 'both', 'all'):
                             command.append('--legacy-lineage')
+                        if args.fixture_ablation in ('threads', 'all'):
+                            command.append('--legacy-thread-settings')
                     if independent:
                         command.append('--independent')
                     if args.scheduler:

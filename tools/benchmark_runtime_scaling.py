@@ -23,15 +23,16 @@ from runtime_scaling_probe import Probe, thread_cpu_snapshot, thread_cpu_delta
 
 def run(source, count, events, independent=False, entities=780, debug=False,
         warmup=0, probe=False, legacy_storage_startup=False, legacy_lineage=False,
-        candidates=False, training=False, correct=False):
+        candidates=False, training=False, correct=False, legacy_thread_settings=False):
     with tempfile.TemporaryDirectory(prefix='hm-scaling-') as data, ExitStack() as stack:
         # Replay identical event/received wall-clock values in independent runs.
         # Scheduling, latency clocks and CPU accounting still use real time.
         logical_time = [1793275200.]
         stack.enter_context(patch('time.time', new=lambda: logical_time[0]))
         os.environ['ADAPTIVE_AI_DATA'] = data
-        for name in ('OPENBLAS_NUM_THREADS', 'OMP_NUM_THREADS', 'MKL_NUM_THREADS', 'NUMEXPR_NUM_THREADS'):
-            os.environ[name] = '1'
+        if not legacy_thread_settings:
+            for name in ('OPENBLAS_NUM_THREADS', 'OMP_NUM_THREADS', 'MKL_NUM_THREADS', 'NUMEXPR_NUM_THREADS'):
+                os.environ[name] = '1'
         sys.path[:0] = [str(source/'tools'), str(source/'tests'), str(source/'adaptive_ai/src')]
         import support
         import benchmark_product_runtime as product
@@ -42,8 +43,9 @@ def run(source, count, events, independent=False, entities=780, debug=False,
         from telemetry import TELEMETRY, RUNTIME_DEBUG, rss_mb
         from storage import Store
         from runtime_background_compute import COMPUTE
-        from runtime_threading import configure_runtime_threads
-        thread_configuration = configure_runtime_threads(product.OPTIONS)
+        from runtime_threading import configure_runtime_threads, runtime_threading_snapshot
+        thread_configuration = (runtime_threading_snapshot() if legacy_thread_settings
+                                else configure_runtime_threads(product.OPTIONS))
         store = Store(Path(data)/'benchmark.sqlite')
         # Match main.initialize_runtime; composition installation alone omits
         # the bounded SQLite cache, WAL keeper and checkpoint worker.
@@ -322,6 +324,7 @@ def run(source, count, events, independent=False, entities=780, debug=False,
             production_storage_startup=not legacy_storage_startup,
             registered_root_lineage=not legacy_lineage,
             thread_configuration=thread_configuration, thread_cpu=cpu_threads,
+            production_thread_settings=not legacy_thread_settings,
             concurrent_policy_training=training, correct_reads_enabled=correct,
             background_work=background_stats, candidate_count=len(candidate_ids),
             candidate_diagnostics=engine.agent_candidates.candidate_shadow_async_diagnostics(),
@@ -387,6 +390,7 @@ if __name__ == '__main__':
     p.add_argument('--candidates', action='store_true')
     p.add_argument('--training', action='store_true', help='Concurrent isolated real policy fit/model writes')
     p.add_argument('--correct', action='store_true', help='Read Correct history while inference/training run')
+    p.add_argument('--legacy-thread-settings', action='store_true', help='Ablate omitted production BLAS/timeslice setup')
     a = p.parse_args()
     if not 0 <= a.agents <= 20 or not 2 <= a.events <= 5000 or not 32 <= a.entities <= 4096:
         p.error('bounded agents/events/entities required')
@@ -394,5 +398,5 @@ if __name__ == '__main__':
         p.error('warmup must be 0..500')
     result = (scheduler(a.source_root,a.agents,a.events,a.entities) if a.scheduler else
               run(a.source_root,a.agents,a.events,a.independent,a.entities,a.debug,a.warmup,a.probe,a.legacy_storage_startup,a.legacy_lineage,
-                  a.candidates,a.training,a.correct))
+                  a.candidates,a.training,a.correct,a.legacy_thread_settings))
     print('SCALING_JSON='+json.dumps(result,sort_keys=True))
