@@ -107,15 +107,15 @@ class DynamicActionContractTests(unittest.TestCase):
     def test_missing_or_inconsistent_authority_fails_closed(self):
         a, d, state = fixture()
         cases = [
-            (a, {**d, "physical_target_property": "brightness_pct"}, mask(0, 1), state),
-            (a, {**d, "properties": []}, mask(0, 1), state),
-            (a, d, {}, state),
-            (a, d, {"actions": [{"legal": True, "value": float("nan"), "requested": 0}]}, state),
-            (a, d, {"actions": [{"legal": 1, "value": 0, "requested": 0}]}, state),
-            (a, d, mask(0, 1), {**state, "entity_id": "light.other"}),
-            (a, d, mask(0, 1), {**state, "state": "unavailable"}),
-            (a, {**d, "resource_keys": []}, mask(0, 1), state),
-            (a, d, mask(.4), state),
+            (a, {**d, "physical_target_property": "brightness_pct"}, state, mask(0, 1)),
+            (a, {**d, "properties": []}, state, mask(0, 1)),
+            (a, d, state, {}),
+            (a, d, state, {"actions": [{"legal": True, "value": float("nan"), "requested": 0}]}),
+            (a, d, state, {"actions": [{"legal": 1, "value": 0, "requested": 0}]}),
+            (a, d, {**state, "entity_id": "light.other"}, mask(0, 1)),
+            (a, d, {**state, "state": "unavailable"}, mask(0, 1)),
+            (a, {**d, "resource_keys": []}, state, mask(0, 1)),
+            (a, d, state, mask(.4)),
         ]
         for i, data in enumerate(cases):
             with self.subTest(case=i), self.assertRaises((ValueError, TypeError)):
