@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from datetime import datetime
 import json
 import math
+from types import MappingProxyType
 from typing import Mapping
 
 from universal_observation import (
@@ -77,7 +78,10 @@ class SemanticRegistry:
             if not isinstance(value, Mapping):
                 raise ValueError("calibration entry must be an object")
             c[str(key)] = dict(value)
-        return cls(e, d, c, str(revision))
+        frozen = lambda rows: MappingProxyType({
+            key: MappingProxyType(dict(value)) for key, value in rows.items()
+        })
+        return cls(frozen(e), frozen(d), frozen(c), str(revision))
 
     def area_for(self, entity_id):
         row = self.entities.get(str(entity_id)) or {}
