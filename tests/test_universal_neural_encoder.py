@@ -151,6 +151,8 @@ class IncrementalNeuralHomeTests(unittest.TestCase):
         cache.upsert(observation(2, area="bath"), now=100)
         cache.upsert(observation(3, area="hall"), now=100)
         initial = cache.home()
+        bath_before = cache.room("bath")
+        hall_before = cache.room("hall")
         diag = cache.diagnostics()
         self.assertEqual(diag["token_encoder_calls"], 3)
         self.assertEqual(diag["room_encoder_calls"], 3)
@@ -165,7 +167,8 @@ class IncrementalNeuralHomeTests(unittest.TestCase):
         self.assertEqual(updated["home_encoder_calls"], 2)
         # Same numerical reading on a later event needn't alter context:
         # just confirm the other two rooms did not require a new pass.
-        np.testing.assert_array_equal(cache.room("bath"), initial * 0 + cache.room("bath"))
+        np.testing.assert_array_equal(cache.room("bath"), bath_before)
+        np.testing.assert_array_equal(cache.room("hall"), hall_before)
 
     def test_room_reassignment_and_remove_match_fresh_rebuild(self):
         cache = IncrementalNeuralHome()
@@ -183,6 +186,30 @@ class IncrementalNeuralHomeTests(unittest.TestCase):
         expected.remove(moved.entity_id)
         self.assertEqual(cache.diagnostics()["room_count"], 1)
         np.testing.assert_allclose(cache.home(), expected.home(), atol=1e-6, rtol=1e-6)
+
+    def test_incremental_result_matches_full_recomputation_after_many_updates(self):
+        model = SharedSetEncoder(seed=91)
+        cache = IncrementalNeuralHome(model)
+        from random import Random
+        random = Random(91)
+        for stamp in range(1, 251):
+            i = random.randrange(28)
+            if stamp % 17 == 0:
+                cache.remove(f"sensor.sensor_{i}")
+            else:
+                cache.upsert(observation(
+                    i, area=f"room_{(i + stamp // 7) % 5}", at=stamp,
+                    kind=KINDS[(i + stamp) % (len(KINDS) - 1) + 1],
+                    valid=stamp % 11 != 0,
+                ), now=stamp)
+            if stamp % 25 == 0:
+                full = IncrementalNeuralHome(model)
+                for token in cache.index.tokens():
+                    full.upsert(token, now=stamp)
+                np.testing.assert_allclose(cache.home(), full.home(), atol=1e-6, rtol=1e-6)
+                for room in {t.area_id for t in cache.index.tokens()}:
+                    np.testing.assert_allclose(cache.room(room), full.room(room),
+                                               atol=1e-6, rtol=1e-6)
 
     def test_expiry_invalidates_only_due_sensor_and_room(self):
         cache = IncrementalNeuralHome()
