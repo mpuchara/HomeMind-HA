@@ -9,6 +9,8 @@ from universal_ha_adapter import (
     RegistryEpoch,
     RegistryTimeline,
     SemanticRegistry,
+    encode_ha_state_change,
+    parse_ha_timestamp,
     journal_observation,
     read_feature_journal,
 )
@@ -88,6 +90,49 @@ class SemanticRegistryTests(unittest.TestCase):
         )
         self.assertEqual(token.kind, "humidity")
         self.assertAlmostEqual(token.value, 0.24)
+
+
+class LiveHAEventAdapterTests(unittest.TestCase):
+    def test_state_changed_iso8601_and_delete(self):
+        at = parse_ha_timestamp("2026-11-01T10:00:01+01:00")
+        changed = {
+            "entity_id": "binary_sensor.motion",
+            "new_state": {
+                "entity_id": "binary_sensor.motion", "state": "on",
+                "last_updated": "2026-11-01T10:00:00+01:00",
+                "attributes": {"device_class": "motion"},
+            },
+        }
+        eid, token = encode_ha_state_change(
+            changed, SemanticRegistry.create(), at_ts=at, received_ts=at
+        )
+        self.assertEqual(eid, "binary_sensor.motion")
+        self.assertTrue(token.available)
+        self.assertEqual(token.event_ts, at - 1.0)
+        self.assertEqual(encode_ha_state_change(
+            {"entity_id": eid, "new_state": None},
+            SemanticRegistry.create(), at_ts=at, received_ts=at,
+        ), (eid, None))
+        self.assertIsNone(encode_ha_state_change(
+            {"entity_id": "light.kitchen", "new_state": {}},
+            SemanticRegistry.create(), at_ts=at, received_ts=at,
+        ))
+
+    def test_event_refuses_missing_naive_or_mismatched_timestamps(self):
+        for bad in ("2026-11-01T10:00:00", "", "broken"):
+            with self.subTest(bad=bad), self.assertRaises(ValueError):
+                parse_ha_timestamp(bad)
+        at = parse_ha_timestamp("2026-11-01T10:00:01Z")
+        with self.assertRaises(ValueError):
+            encode_ha_state_change({
+                "entity_id": "sensor.temp",
+                "new_state": {"entity_id": "sensor.not_temp", "state": "20",
+                              "last_updated": "2026-11-01T10:00:00Z"},
+            }, registry(), at_ts=at, received_ts=at)
+        with self.assertRaises(ValueError):
+            encode_ha_state_change({
+                "entity_id": "sensor.temp", "new_state": {"state": "20"},
+            }, registry(), at_ts=at, received_ts=at)
 
 
 class JournalContractTests(unittest.TestCase):
