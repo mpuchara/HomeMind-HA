@@ -228,6 +228,8 @@ class UniversalObservationIndex:
         self._by_area = {}
         self._pools = {}
         self._expirations = []
+        # Single-writer change journal consumed by optional neural cache.
+        self._changed = set()
 
     @property
     def sensor_count(self):
@@ -262,6 +264,7 @@ class UniversalObservationIndex:
             stale = replace(old, available=False, quality=0.0, value=0.0, reason="stale")
             self._by_entity[entity_id] = stale
             self._apply(stale, 1)
+            self._changed.add(entity_id)
 
     def upsert(self, token, *, now):
         if not isinstance(token, SensorToken):
@@ -278,6 +281,7 @@ class UniversalObservationIndex:
             self._apply(old, -1)
         self._by_entity[token.entity_id] = token
         self._apply(token, 1)
+        self._changed.add(token.entity_id)
         if token.available and token.expires_at is not None:
             heapq.heappush(
                 self._expirations,
@@ -312,7 +316,18 @@ class UniversalObservationIndex:
         if old is None:
             return False
         self._apply(old, -1)
+        self._changed.add(str(entity_id))
         return True
+
+    def get(self, entity_id):
+        """O(1) read for the incremental neural cache after a state change."""
+        return self._by_entity.get(str(entity_id))
+
+    def drain_changes(self):
+        """Consume changed entity IDs since the last drain, including TTL expiry."""
+        changed = tuple(sorted(self._changed))
+        self._changed.clear()
+        return changed
 
     def tokens(self, area_id=None):
         if area_id is None:
