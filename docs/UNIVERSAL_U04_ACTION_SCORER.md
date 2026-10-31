@@ -12,8 +12,9 @@ Status: **observer-only architecture step**, stacked on U03 (#351), U02
   - from_device_agent_mask takes a current agent, DeviceAgent descriptor,
     DeviceAgent.legal_action_mask result, HA target snapshot, and decision time.
     It rejects missing descriptors/masks, malformed rows, out-of-range values,
-    unsupported unknown target state, disallowed autonomy, and missing
-    resource ownership. Rows blocked by the existing arbiter are NOT scored.
+    unsupported unknown target state, disallowed autonomy, mismatched
+    DeviceAgent resource keys, missing manual-priority markers and
+    contradictory fallback/action masks. Rows blocked by the arbiter are NOT scored.
   - This module does not invoke legal_value, implement its own reauthorization,
     or call the HA API. Its output is *not* an Executor authorization token.
 
