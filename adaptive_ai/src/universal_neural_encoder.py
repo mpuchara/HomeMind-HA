@@ -263,8 +263,12 @@ class IncrementalNeuralHome:
         self._cached_home = None
 
     def upsert(self, token, *, now):
-        changed = self.index.upsert(token, now=now)
-        self._sync()
+        try:
+            changed = self.index.upsert(token, now=now)
+        finally:
+            # An invalid incoming token may still advance the index clock and
+            # expire an older token. Never leave the neural cache out of sync.
+            self._sync()
         return changed
 
     def advance(self, now):
