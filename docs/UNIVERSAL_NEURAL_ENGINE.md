@@ -24,11 +24,11 @@ remain authoritative and unchanged throughout U01.
 - Unknown/unavailable/future/stale/unsupported values are *masked*, not treated
   as genuine numeric zeros. Their reason remains available for diagnostics.
 - `UniversalObservationIndex` maintains per-room, per-kind additive weighted
-  set statistics, with O(1) changes per token plus amortized expiry-heap work.
+  set statistics, with O(1) statistical pool changes and O(log N) expiration-heap updates; periodic heap compaction is amortized.
   Its output cardinality depends on *types and rooms*, not a fixed feature mask.
   Both the original tokens and pooled statistics remain accessible.
 - Repeated sensor updates compact stale expiry deadlines, keeping the heap
-  bounded relative to active sensors. No SQLite, network or neural inference
+  bounded relative to active sensors. The V1 live index is single-writer and must be owned by the ordered event consumer, not mutated concurrently by inference workers. No SQLite, network or neural inference
   is called by this module.
 
 **Causality:** `encode_sensor` requires explicit event/received/decision times.
