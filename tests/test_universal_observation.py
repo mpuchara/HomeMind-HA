@@ -161,6 +161,15 @@ class DynamicIndexTests(unittest.TestCase):
             idx.upsert(sensor("binary_sensor.motion", "on", at=13), now=12)
         self.assertEqual(idx.sensor_count, 0)
 
+    def test_repeated_sensor_updates_keep_expiration_index_bounded(self):
+        idx = UniversalObservationIndex()
+        for stamp in range(1, 1001):
+            idx.upsert(sensor("binary_sensor.motion", "on", at=stamp, ttl=900), now=stamp)
+        self.assertEqual(idx.sensor_count, 1)
+        self.assertLessEqual(idx.diagnostics()["pending_expiration_entries"], 128)
+        idx.advance(1900)
+        self.assertEqual(idx.pool()[0]["available"], 0)
+
     def test_unassigned_area_is_explicit(self):
         idx = UniversalObservationIndex()
         idx.upsert(sensor("binary_sensor.motion", "off", area=None), now=10)
