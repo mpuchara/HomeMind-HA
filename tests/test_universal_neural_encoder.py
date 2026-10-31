@@ -9,6 +9,11 @@ from universal_neural_encoder import (
     INPUT_WIDTH, KINDS, IncrementalNeuralHome, SharedSetEncoder,
 )
 from universal_observation import encode_sensor
+from universal_ha_adapter import (
+    CausalObservationReplay, JournalObservation, RegistryEpoch,
+    RegistryTimeline, SemanticRegistry, encode_ha_state_change,
+    parse_ha_timestamp,
+)
 
 
 def observation(number, *, area="kitchen", at=100.0, valid=True, kind="temperature",
@@ -253,6 +258,30 @@ class IncrementalNeuralHomeTests(unittest.TestCase):
             cache.upsert(future, now=15)
         self.assertEqual(cache.diagnostics()["available"], 0)
         self.assertEqual(cache.index.get(future.entity_id).reason, "stale")
+
+    def test_live_ha_and_causal_replay_produce_equivalent_neural_vectors(self):
+        model = SharedSetEncoder(seed=77)
+        semantic = SemanticRegistry.create(
+            entities=[{"entity_id": "sensor.temperature", "area_id": "kitchen"}],
+            revision="r1",
+        )
+        moment = parse_ha_timestamp("2026-11-01T12:00:00+01:00")
+        attrs = {"device_class": "temperature", "unit_of_measurement": "°C"}
+        data = {"entity_id": "sensor.temperature", "new_state": {
+            "entity_id": "sensor.temperature", "state": "22",
+            "attributes": attrs, "last_updated": "2026-11-01T12:00:00+01:00",
+        }}
+        eid, token = encode_ha_state_change(data, semantic, at_ts=moment, received_ts=moment)
+        live = IncrementalNeuralHome(model)
+        live.upsert(token, now=moment)
+        replay = CausalObservationReplay([
+            JournalObservation("evt1", eid, moment, moment, "22", attrs)
+        ], registry_timeline=RegistryTimeline([RegistryEpoch(0, 0, semantic)]))
+        historical = IncrementalNeuralHome(model)
+        for item in replay.snapshot(moment)["tokens"]:
+            historical.upsert(item, now=moment)
+        np.testing.assert_array_equal(live.room("kitchen"), historical.room("kitchen"))
+        np.testing.assert_array_equal(live.home(), historical.home())
 
     def test_no_shared_state_between_cache_instances(self):
         model = SharedSetEncoder()
