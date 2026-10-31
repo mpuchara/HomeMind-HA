@@ -283,7 +283,29 @@ class UniversalObservationIndex:
                 self._expirations,
                 (token.expires_at, token.entity_id, token.event_ts, token.received_ts),
             )
+        self._compact_expirations()
         return True
+
+    def _compact_expirations(self):
+        # Repeated updates to a sensor must not retain an unbounded heap of
+        # obsolete deadlines. Rebuilding is amortized over many insertions.
+        if len(self._expirations) <= max(128, 4 * len(self._by_entity)):
+            return
+        self._expirations = [
+            (t.expires_at, t.entity_id, t.event_ts, t.received_ts)
+            for t in self._by_entity.values()
+            if t.available and t.expires_at is not None
+        ]
+        heapq.heapify(self._expirations)
+
+    def diagnostics(self):
+        return {
+            "contract_version": CONTRACT_VERSION,
+            "sensors": len(self._by_entity),
+            "areas": len(self._by_area),
+            "pools": len(self._pools),
+            "pending_expiration_entries": len(self._expirations),
+        }
 
     def remove(self, entity_id):
         old = self._by_entity.pop(str(entity_id), None)
