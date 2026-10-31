@@ -7,6 +7,7 @@ bounded and performed on a caller-owned SQLite connection.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
 import json
 import math
 from typing import Mapping
@@ -111,6 +112,50 @@ class SemanticRegistry:
             max_age_seconds=max_age_seconds,
             calibration=self.calibration_for(entity_id),
         )
+
+
+def parse_ha_timestamp(value):
+    """Parse HA ISO-8601 event times; reject timezone-naive or missing timestamps."""
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return _finite(value, "HA timestamp")
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError("missing HA timestamp")
+    try:
+        parsed = datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise ValueError("malformed HA timestamp") from exc
+    if parsed.tzinfo is None or parsed.utcoffset() is None:
+        raise ValueError("HA timestamp must include a timezone")
+    return _finite(parsed.timestamp(), "HA timestamp")
+
+
+def encode_ha_state_change(event, registry, *, at_ts, received_ts,
+                           max_age_seconds=900.0):
+    """Adapt an actual HA state_changed data mapping, observer-only.
+
+    Returns (entity_id, SensorToken) for a sensor update, (entity_id, None)
+    for a deletion/tombstone, and None for an unrelated (e.g. actuator) domain.
+    The caller supplies the real receiver clock and must apply any durable
+    event ordering/provenance checks before mutating a live observation index.
+    """
+    if not isinstance(event, Mapping):
+        raise ValueError("HA event data must be a mapping")
+    entity_id = str(event.get("entity_id") or "")
+    if entity_id.partition(".")[0] not in ALLOWED_DOMAINS:
+        return None
+    state = event.get("new_state")
+    if state is None:
+        return entity_id, None
+    if not isinstance(state, Mapping):
+        raise ValueError("HA new_state must be an object or null")
+    if state.get("entity_id") and state["entity_id"] != entity_id:
+        raise ValueError("HA event entity_id mismatch")
+    stamp = state.get("last_updated") or state.get("last_changed")
+    event_ts = parse_ha_timestamp(stamp)
+    return entity_id, registry.encode(
+        entity_id, state, at_ts=at_ts, event_ts=event_ts,
+        received_ts=received_ts, max_age_seconds=max_age_seconds,
+    )
 
 
 @dataclass(frozen=True)
