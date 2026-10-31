@@ -49,6 +49,14 @@ class SemanticRegistryTests(unittest.TestCase):
         self.assertAlmostEqual(token.value, 0.0)
         self.assertTrue(token.available)
 
+    def test_registry_snapshot_cannot_be_rewritten_after_capture(self):
+        r = registry()
+        with self.assertRaises(TypeError):
+            r.entities["sensor.temp"]["area_id"] = "new_area"
+        with self.assertRaises(TypeError):
+            r.devices["device-1"] = {"area_id": "new_area"}
+        self.assertEqual(r.area_for("sensor.temp"), "kitchen")
+
     def test_entity_area_overrides_device_area(self):
         r = SemanticRegistry.create(
             entities=[{"entity_id": "binary_sensor.motion", "device_id": "d", "area_id": "bath"}],
