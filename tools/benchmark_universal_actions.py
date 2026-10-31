@@ -42,7 +42,9 @@ def benchmark(device_count, candidates_per_device, passes):
         mask = {"actions": [
             {"requested": value, "value": value, "legal": True, "reason": None}
             for value in range(candidates_per_device)
-        ], "fallback": "policy_choice_within_mask"}
+        ], "fallback": "policy_choice_within_mask",
+                "resource_keys": descriptor["resource_keys"],
+                "manual_priority": True}
         action_sets.append(from_device_agent_mask(
             agent, descriptor, mask, state, mask_timestamp=1.0,
         ))
