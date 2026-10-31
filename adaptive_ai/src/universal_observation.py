@@ -270,7 +270,7 @@ class UniversalObservationIndex:
         if token.received_ts > self.now or token.event_ts > self.now:
             raise ValueError("cannot insert future observation")
         old = self._by_entity.get(token.entity_id)
-        if old is not None and (token.received_ts, token.event_ts) <= (old.received_ts, old.event_ts):
+        if old is not None and (token.event_ts, token.received_ts) <= (old.event_ts, old.received_ts):
             return False
         if token.available and token.expires_at is not None and token.expires_at <= self.now:
             token = replace(token, value=0.0, quality=0.0, available=False, reason="stale")
