@@ -41,8 +41,11 @@ def mask(*values, legal=True):
 
 
 def observe(agent, descriptor, state, action_mask, *, now=100.0):
+    mask_payload = dict(action_mask)
+    mask_payload.setdefault("resource_keys", descriptor.get("resource_keys"))
+    mask_payload.setdefault("manual_priority", True)
     return from_device_agent_mask(
-        agent, descriptor, action_mask, state, mask_timestamp=now,
+        agent, descriptor, mask_payload, state, mask_timestamp=now,
     )
 
 
@@ -116,6 +119,9 @@ class DynamicActionContractTests(unittest.TestCase):
             (a, d, {**state, "state": "unavailable"}, mask(0, 1)),
             (a, {**d, "resource_keys": []}, state, mask(0, 1)),
             (a, d, state, mask(.4)),
+            (a, d, state, {**mask(0, 1), "resource_keys": ["device:other"]}),
+            (a, d, state, {**mask(0, 1), "manual_priority": False}),
+            (a, d, state, {**mask(0, 1), "fallback": "abstain"}),
         ]
         for i, data in enumerate(cases):
             with self.subTest(case=i), self.assertRaises((ValueError, TypeError)):
