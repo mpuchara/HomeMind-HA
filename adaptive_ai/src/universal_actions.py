@@ -101,6 +101,12 @@ def from_device_agent_mask(agent, descriptor, legal_mask, state, *, mask_timesta
     resources = descriptor.get("resource_keys")
     if not isinstance(resources, list) or not resources or any(not isinstance(key, str) or not key for key in resources):
         raise ValueError("missing DeviceAgent resource keys")
+    mask_resources = legal_mask.get("resource_keys")
+    if (not isinstance(mask_resources, list)
+            or tuple(sorted(set(mask_resources))) != tuple(sorted(set(resources)))):
+        raise ValueError("DeviceAgent legal mask resource mismatch")
+    if legal_mask.get("manual_priority") is not True:
+        raise ValueError("DeviceAgent manual-priority guard absent")
     actions = legal_mask.get("actions")
     if not isinstance(actions, list):
         raise ValueError("missing DeviceAgent legal-action result")
@@ -162,6 +168,11 @@ def from_device_agent_mask(agent, descriptor, legal_mask, state, *, mask_timesta
             prop, _kind(prop), value, lo, hi, current, option_label,
             tuple(sorted(set(resources))), when,
         ))
+    if legal_mask.get("fallback") != (
+        "policy_choice_within_mask" if result or any(row["legal"] for row in actions)
+        else "abstain"
+    ):
+        raise ValueError("DeviceAgent fallback/action-mask mismatch")
     return ActionSet(
         ACTION_CONTRACT_VERSION, agent_id, when, tuple(result), rejected,
         "abstain" if not result else "observe_only",
