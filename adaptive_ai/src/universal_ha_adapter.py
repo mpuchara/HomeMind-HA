@@ -229,8 +229,12 @@ def read_feature_journal(conn, entity_ids, *, at_ts, max_records=DEFAULT_MAX_REC
             "ORDER BY received_time, event_time, event_key LIMIT ?"
         )
         remaining = cap - len(seen)
-        for row in conn.execute(sql, (*chunk, at, at, remaining + 1)):
-            observation = journal_observation(row)
+        cursor = conn.execute(sql, (*chunk, at, at, remaining + 1))
+        columns = tuple(item[0] for item in cursor.description)
+        for row in cursor:
+            observation = journal_observation(
+                row if hasattr(row, "keys") else dict(zip(columns, row))
+            )
             existing = seen.get(observation.event_key)
             if existing is not None and existing != observation:
                 raise ValueError("conflicting duplicate journal event_key")
