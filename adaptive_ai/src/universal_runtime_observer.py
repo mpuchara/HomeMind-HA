@@ -69,6 +69,8 @@ class UniversalRuntimeObserver(threading.Thread):
         self._healthy = False
         self._rebuild = deque()
         self._published = {}
+        self._published_context = None
+        self.action_observer = None
         self._stats = {
             "submitted": 0, "coalesced": 0, "processed": 0,
             "snapshots": 0, "registry_rebuilds": 0,
@@ -227,6 +229,25 @@ class UniversalRuntimeObserver(threading.Thread):
         self._reset_neural()
         self._stats["snapshots"] += 1
 
+    def snapshot_areas(self, area_ids):
+        """Immutable copy of a complete, up-to-date neural context for the scorer.
+
+        Returns None while a snapshot, registry change or ingress batch is pending.
+        Never exposes the mutable IncrementalNeuralHome across worker threads.
+        """
+        with self._cv:
+            if (not self._healthy or self._overflow or self._pending
+                    or self._rebuild or self._registry_pending or self._snapshot is not None
+                    or self._published_context is None):
+                return None
+            home, rooms, stamp = self._published_context
+            return {
+                "home": home.copy(),
+                "rooms": {str(area): rooms[str(area)].copy()
+                          for area in area_ids if area is not None and str(area) in rooms},
+                "timestamp": stamp,
+            }
+
     def diagnostics(self):
         with self._cv:
             return {
@@ -299,11 +320,23 @@ class UniversalRuntimeObserver(threading.Thread):
             finally:
                 elapsed = (time.perf_counter() - started) * 1000.0
                 neural = self._neural.diagnostics() if self._neural is not None else {}
+                # Build a copy of the map while on its exclusive writer thread.
+                # The previously published room arrays remain unchanged after
+                # an area is updated (replacement, not in-place edits).
+                context = (
+                    self._neural.home(), dict(self._neural._room_vectors), time.time()
+                ) if self._neural is not None else None
                 with self._cv:
                     self._stats["max_worker_batch_ms"] = max(
                         self._stats["max_worker_batch_ms"], elapsed
                     )
                     self._published = neural
+                    self._published_context = context
+            if (action == "events" and self.action_observer is not None
+                    and self.diagnostics()["healthy"]):
+                # Only a cheap, nonblocking signal. DeviceAgent/SQLite work is
+                # strictly isolated in the action-observer's own thread.
+                self.action_observer.submit_changed(row[0] for row in payload)
             if action in ("rebuild", "events"):
                 # Cooperative limit: <=20% of a single CPU core under
                 # sustained traffic, plus a minimum scheduling pause.
