@@ -11,7 +11,7 @@ from math import isfinite
 import threading
 import time
 
-MAX_PENDING = 512
+MAX_PENDING = 2048
 MAX_SNAPSHOT = 10000
 BATCH_SIZE = 16
 PAUSE_SECONDS = 0.025
