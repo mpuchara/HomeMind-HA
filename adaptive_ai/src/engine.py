@@ -440,6 +440,7 @@ class Engine(threading.Thread):
             registry_refresh_stats = dict(self.registry_refresh_stats)
             housekeeping_stats = {**self.housekeeping_stats, "storage_retry": self.housekeeping_retry.snapshot()}
             inference_scheduler = dict(self.inference_scheduler)
+        universal_observer = getattr(self, "universal_observer", None)
         # Status is polled before/through startup and must never aggregate the complete
         # feedback/experience tables from cold microSD. Detailed per-agent counters are
         # loaded by /api/agents after readiness; status needs only lightweight configs.
@@ -487,8 +488,8 @@ class Engine(threading.Thread):
                 "error": last_state_sync_error,
             },
             "universal_observer": (
-                self.universal_observer.diagnostics()
-                if self.universal_observer is not None else {"enabled": False}
+                universal_observer.diagnostics()
+                if universal_observer is not None else {"enabled": False}
             ),
             "runtime_qos": {
                 "registry_refresh": registry_refresh_stats,
@@ -546,7 +547,7 @@ class Engine(threading.Thread):
             self.agent_index_revision = -1
 
         # Registry rebuild belongs to the observer worker, never WS ingress.
-        observer = self.universal_observer
+        observer = getattr(self, "universal_observer", None)
         if observer is not None and kind in ("entity", "device"):
             try:
                 observer.submit_registry(kind, payload)
@@ -625,7 +626,7 @@ class Engine(threading.Thread):
                 entity_id, new_state, received_ts,
                 event_ts=event_ts, received_ts=received_ts,
             )
-        observer = self.universal_observer
+        observer = getattr(self, "universal_observer", None)
         if observer is not None:
             try:
                 observer.submit_event(
@@ -804,7 +805,7 @@ class Engine(threading.Thread):
             self.error = None
             # Only a shallow state-map snapshot under the lock. The observer
             # builds compact sensor records off Ingress after releasing it.
-            observer_snapshot = dict(state_map) if self.universal_observer is not None else None
+            observer_snapshot = dict(state_map) if getattr(self, "universal_observer", None) is not None else None
 
         # Initial bootstrap needs every current entity once. Later safety/fallback polls
         # touch only the changed suffix instead of rebuilding temporal/archive state for
@@ -818,7 +819,7 @@ class Engine(threading.Thread):
             self.temporal_history.add(eid, ts, self._temporal_state(st))
             self._queue_archive_state(st, received_ts=poll_received_ts)
         self.flush_archive(force=False)
-        observer = self.universal_observer
+        observer = getattr(self, "universal_observer", None)
         if observer is not None:
             try:
                 observer.submit_snapshot(observer_snapshot, received_ts=poll_received_ts)
