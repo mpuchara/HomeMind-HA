@@ -6,7 +6,7 @@ Stack: #349 U01 -> #350 U02 -> #351 U03 -> #352 U04a -> U04b.
 ## Implemented
 
 - New universal_runtime_observer.py: one daemon thread with a bounded
-  coalescing mailbox of most-recent sensor updates (default 512 distinct
+  coalescing mailbox of most-recent sensor updates (default 2,048 distinct
   entities), one worker-owned IncrementalNeuralHome and a conservative
   error/overflow state.
 - The existing Engine only offers *accepted* websocket transitions to
