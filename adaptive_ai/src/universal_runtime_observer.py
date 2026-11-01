@@ -281,7 +281,9 @@ class UniversalRuntimeObserver(threading.Thread):
                 if self._neural is not None:
                     self._neural.home()
                 with self._cv:
-                    if not self._overflow and self._stats["snapshots"] and not self._rebuild:
+                    if (not self._overflow and self._stats["snapshots"]
+                            and not self._rebuild and self._snapshot is None
+                            and not self._registry_pending and not self._pending):
                         self._healthy = True
             except Exception as exc:
                 with self._cv:
