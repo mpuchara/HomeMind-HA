@@ -8,7 +8,7 @@ import unittest
 import numpy as np
 
 import settings
-from universal_action_runtime import UniversalActionObserver, install, _sample_proposals
+from universal_action_runtime import UniversalActionObserver, install, _sample_proposals, _bounded_agent_values
 
 
 class Perception:
@@ -199,6 +199,28 @@ class DynamicActionObserverTests(unittest.TestCase):
         self.assertEqual(observer.diagnostics()["queue_pending"], 2)
         self.assertEqual(observer.diagnostics()["stats"]["pending_overflow"], 1)
         observer.stop()
+
+    def test_large_select_does_not_build_unbounded_action_values(self):
+        agent = {"target_property": "option_index", "min_value": 0, "max_value": 1000000}
+        state = {"attributes": {"options": ["option_"+str(i) for i in range(1000)]}}
+        with mock.patch("context.action_values", side_effect=AssertionError("must not materialize")):
+            values = _bounded_agent_values(agent, state)
+        self.assertEqual(len(values), 8)
+        self.assertEqual(values[0], 0.0)
+        self.assertEqual(values[-1], 999.0)
+
+    def test_bounded_fanout_rotates_between_agents(self):
+        engine, _ = make_engine(devices=9)
+        observer = UniversalActionObserver(engine, Perception(), max_agents=3, min_interval=0)
+        observer.start()
+        try:
+            for expected in (3, 6, 9):
+                observer.submit_changed(("binary_sensor.motion",))
+                eventually(lambda: observer.diagnostics()["stats"]["agents_evaluated"] >= expected)
+            ids = {e["agent_id"] for e in observer.diagnostics()["last_examples"]}
+            self.assertEqual(len(ids), 9)
+        finally:
+            observer.stop()
 
     def test_sampling_preserves_endpoints_and_filters_invalid(self):
         self.assertEqual(_sample_proposals([0,1,2,3,4,5,6,7,8,9], 4), [0,3,6,9])
