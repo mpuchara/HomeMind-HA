@@ -61,6 +61,7 @@ class UniversalRuntimeObserver(threading.Thread):
             raise ValueError("invalid observer bounds")
         self._cv = threading.Condition()
         self._stopping = False
+        self._stop_signal = threading.Event()
         self._pending = OrderedDict()
         self._snapshot = None
         self._registry_pending = {}
@@ -106,6 +107,7 @@ class UniversalRuntimeObserver(threading.Thread):
                 return False
             else:
                 self._pending[row[0]] = row
+            self._healthy = False
             self._cv.notify()
         return True
 
@@ -116,6 +118,7 @@ class UniversalRuntimeObserver(threading.Thread):
             if self._stopping:
                 return False
             self._registry_pending[kind] = entries
+            self._healthy = False
             self._cv.notify()
         return True
 
@@ -153,6 +156,7 @@ class UniversalRuntimeObserver(threading.Thread):
     def stop(self, timeout=2.0):
         with self._cv:
             self._stopping = True
+            self._stop_signal.set()
             self._pending.clear()
             self._snapshot = None
             self._cv.notify_all()
@@ -300,8 +304,10 @@ class UniversalRuntimeObserver(threading.Thread):
                         self._stats["max_worker_batch_ms"], elapsed
                     )
                     self._published = neural
-            if action in ("rebuild", "events") and self.pause_seconds:
-                time.sleep(self.pause_seconds)
+            if action in ("rebuild", "events"):
+                # Cooperative limit: <=20% of a single CPU core under
+                # sustained traffic, plus a minimum scheduling pause.
+                self._stop_signal.wait(max(self.pause_seconds, elapsed / 1000.0 * 4.0))
 
 
 def install(engine):
