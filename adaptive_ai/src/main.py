@@ -752,6 +752,12 @@ def shutdown_runtime():
         if ENGINE is not None:
             # Optional U04b neural observer owns no physical authority or writes.
             # Stop after WS producer, before executor shutdown / durability barrier.
+            action_observer = getattr(ENGINE, "universal_action_observer", None)
+            if action_observer is not None:
+                try:
+                    action_observer.stop(timeout=2.0)
+                except Exception as exc:
+                    print(f"[shutdown] universal action observer: {type(exc).__name__}: {exc}", flush=True)
             observer = getattr(ENGINE, "universal_observer", None)
             if observer is not None:
                 try:

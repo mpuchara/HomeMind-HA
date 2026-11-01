@@ -247,6 +247,7 @@ class Engine(threading.Thread):
         self.inference_hot_path_metrics = InferenceHotPathMetrics()
         # U04b: default-disabled, independent, observer-only neural sidecar.
         self.universal_observer = None
+        self.universal_action_observer = None
         self.inference_scheduler = {
             "event_passes": 0,
             "timer_passes": 0,
@@ -490,6 +491,11 @@ class Engine(threading.Thread):
             "universal_observer": (
                 universal_observer.diagnostics()
                 if universal_observer is not None else {"enabled": False}
+            ),
+            "universal_action_observer": (
+                self.universal_action_observer.diagnostics()
+                if getattr(self, "universal_action_observer", None) is not None
+                else {"enabled": False}
             ),
             "runtime_qos": {
                 "registry_refresh": registry_refresh_stats,

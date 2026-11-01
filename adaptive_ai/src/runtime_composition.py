@@ -331,6 +331,9 @@ class RuntimeCompositionRoot:
         if bool(runtime_options.get("universal_observer_enabled", False)):
             from universal_runtime_observer import install as install_universal_observer
             install_universal_observer(engine)
+            if bool(runtime_options.get("universal_action_observer_enabled", False)):
+                from universal_action_runtime import install as install_universal_action_observer
+                install_universal_action_observer(engine)
 
         # Later Stage-3/HTTP services must not replace the registered event top handler.
         # A second assertion turns such a regression into an initialization failure
