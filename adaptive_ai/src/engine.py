@@ -492,6 +492,11 @@ class Engine(threading.Thread):
                 universal_observer.diagnostics()
                 if universal_observer is not None else {"enabled": False}
             ),
+            "universal_action_observer": (
+                self.universal_action_observer.diagnostics()
+                if getattr(self, "universal_action_observer", None) is not None
+                else {"enabled": False}
+            ),
             "runtime_qos": {
                 "registry_refresh": registry_refresh_stats,
                 "housekeeping": housekeeping_stats,
