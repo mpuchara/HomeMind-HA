@@ -802,6 +802,9 @@ class Engine(threading.Thread):
             self.state_resync_due_since_monotonic = 0.0
             self.next_resync_retry_monotonic = 0.0
             self.error = None
+            # Only a shallow state-map snapshot under the lock. The observer
+            # builds compact sensor records off Ingress after releasing it.
+            observer_snapshot = dict(state_map) if self.universal_observer is not None else None
 
         # Initial bootstrap needs every current entity once. Later safety/fallback polls
         # touch only the changed suffix instead of rebuilding temporal/archive state for
@@ -818,7 +821,7 @@ class Engine(threading.Thread):
         observer = self.universal_observer
         if observer is not None:
             try:
-                observer.submit_snapshot(state_map, received_ts=poll_received_ts)
+                observer.submit_snapshot(observer_snapshot, received_ts=poll_received_ts)
             except Exception:
                 pass  # Reconciliation and HA connectivity remain authoritative.
         if initial or changed_eids:
