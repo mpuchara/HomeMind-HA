@@ -750,6 +750,14 @@ def shutdown_runtime():
         if HISTORY is not None:
             HISTORY.stop_event.set()
         if ENGINE is not None:
+            # Optional U04b neural observer owns no physical authority or writes.
+            # Stop after WS producer, before executor shutdown / durability barrier.
+            observer = getattr(ENGINE, "universal_observer", None)
+            if observer is not None:
+                try:
+                    observer.stop(timeout=2.0)
+                except Exception as exc:
+                    print(f"[shutdown] universal observer: {type(exc).__name__}: {exc}", flush=True)
             ENGINE.stop_event.set()
 
             # No new inference/poll work may be admitted after stop_event. Let already
