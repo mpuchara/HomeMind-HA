@@ -38,6 +38,33 @@ def _sample_proposals(values, limit):
     return [result[i] for i in indices]
 
 
+def _bounded_agent_values(agent, state):
+    """Avoid constructing an arbitrarily large option_index action list.
+
+    The production action_values() allocates one Python item per option.
+    For an observer on an open-source home this must remain bounded even
+    when a third-party integration exposes tens of thousands of options.
+    """
+    if str(agent.get("target_property") or "") != "option_index":
+        from context import action_values
+        return _sample_proposals(action_values(agent), MAX_PROPOSALS_PER_AGENT)
+    attrs = state.get("attributes") or {}
+    options = attrs.get("options") or []
+    if not isinstance(options, list) or not options:
+        return []
+    try:
+        lo = max(0, math.ceil(float(agent["min_value"])))
+        hi = min(len(options)-1, math.floor(float(agent["max_value"])))
+    except (TypeError, ValueError, OverflowError):
+        return []
+    if lo > hi:
+        return []
+    if hi - lo + 1 <= MAX_PROPOSALS_PER_AGENT:
+        return [float(v) for v in range(lo, hi+1)]
+    return [float(lo + round(i * (hi-lo) / (MAX_PROPOSALS_PER_AGENT-1)))
+            for i in range(MAX_PROPOSALS_PER_AGENT)]
+
+
 class _NeuralSnapshot:
     """Read-only adapter used only on the action worker, never shared back."""
     def __init__(self, data):
@@ -149,7 +176,6 @@ class UniversalActionObserver(threading.Thread):
         return agents
 
     def _evaluate_one(self, agent, state):
-        from context import action_values
         from universal_actions import from_device_agent_mask
         from universal_action_scorer import UniversalActionScorer
 
@@ -160,7 +186,7 @@ class UniversalActionObserver(threading.Thread):
         # worker, NEVER HA ingress, engine.process or the perception worker.
         desc = service.descriptor(agent)
         mask_clock = time.time()
-        values = _sample_proposals(action_values(agent), MAX_PROPOSALS_PER_AGENT)
+        values = _bounded_agent_values(agent, state)
         if not values:
             return {"agent_id": agent["id"], "evaluated": 0, "blocked": True}
         mask = service.legal_action_mask(agent, state, values, now=mask_clock)
