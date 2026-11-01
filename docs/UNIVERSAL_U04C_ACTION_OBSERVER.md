@@ -20,7 +20,10 @@ Status: draft stacked PR after #353. No training or Control change.
    it never runs on Engine's realtime event thread.
 5. The worker evaluates a bounded set of existing agent action_values
    (max eight per target, sampled across the existing ordered action set),
-   max four agents per event pass. Any larger fanout is counted as
+   max four agents per event pass, selected using fair round-robin when
+   many agents share one sensor dependency. Select/input_select options
+   are sampled directly from bounded index ranges instead of materializing
+   an unbounded action_values list. Any larger fanout is counted as
    diagnostics and **not** sent into the inference scheduler.
 6. The shared U04a neural scorer receives immutable U03 room/home context
    and exact legal DeviceAgent actions. Only minimum and maximum **raw,
