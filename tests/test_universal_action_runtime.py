@@ -187,8 +187,23 @@ class DynamicActionObserverTests(unittest.TestCase):
             first = observer.diagnostics()
             self.assertGreater(first["stats"]["not_routed"], 0)
             observer.submit_changed(("binary_sensor.motion",))
-            eventually(lambda: observer.diagnostics()["stats"]["skipped_cooldown"] >= 3)
-            self.assertEqual(observer.diagnostics()["stats"]["agents_evaluated"], 3)
+            # Under bounded-fanout fairness the next three slots belong to
+            # previously unseen agents, not the same three on cooldown.
+            eventually(lambda: observer.diagnostics()["stats"]["agents_evaluated"] == 6)
+            self.assertEqual(observer.diagnostics()["stats"]["actions_evaluated"], 12)
+        finally:
+            observer.stop()
+
+    def test_per_agent_cooldown_limits_repeated_scoring(self):
+        engine, _ = make_engine(devices=2)
+        observer = UniversalActionObserver(engine, Perception(), max_agents=2, min_interval=600)
+        observer.start()
+        try:
+            observer.submit_changed(("binary_sensor.motion",))
+            eventually(lambda: observer.diagnostics()["stats"]["agents_evaluated"] == 2)
+            observer.submit_changed(("binary_sensor.motion",))
+            eventually(lambda: observer.diagnostics()["stats"]["skipped_cooldown"] >= 2)
+            self.assertEqual(observer.diagnostics()["stats"]["agents_evaluated"], 2)
         finally:
             observer.stop()
 
