@@ -101,6 +101,7 @@ class UniversalActionObserver(threading.Thread):
         self._stop_signal = threading.Event()
         self._pending = OrderedDict()
         self._last_by_agent = {}
+        self._fanout_cursor = 0
         self._last_examples = OrderedDict()
         self._stats = {
             "notifications": 0, "coalesced": 0, "pending_overflow": 0,
@@ -239,7 +240,13 @@ class UniversalActionObserver(threading.Thread):
                     self._stats["batches"] += 1
                     if not agents:
                         self._stats["not_routed"] += len(changed)
-                for agent, state in agents[:self.max_agents]:
+                if agents:
+                    offset = self._fanout_cursor % len(agents)
+                    self._fanout_cursor += self.max_agents
+                    selection = (agents[offset:] + agents[:offset])[:self.max_agents]
+                else:
+                    selection = []
+                for agent, state in selection:
                     if self._stop_signal.is_set():
                         break
                     aid = str(agent["id"])
