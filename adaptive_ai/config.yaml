@@ -33,6 +33,8 @@ options:
   correction_window_seconds: 90
   reward_window_seconds: 90
   feature_dimensions: 128
+  universal_observer_enabled: false
+  universal_action_observer_enabled: false
   max_context_entities: 28
   temporal_short_seconds: 60
   temporal_long_seconds: 300
@@ -265,6 +267,8 @@ schema:
   correction_window_seconds: "int(10,600)"
   reward_window_seconds: "int(10,900)"
   feature_dimensions: "int(64,512)"
+  universal_observer_enabled: bool
+  universal_action_observer_enabled: bool
   max_context_entities: "int(4,80)"
   temporal_short_seconds: "int(10,600)"
   temporal_long_seconds: "int(30,3600)"

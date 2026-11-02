@@ -259,6 +259,9 @@ class Engine(threading.Thread):
         self.startup_inference_not_before = 0.0
         self.runtime = {}
         self.inference_hot_path_metrics = InferenceHotPathMetrics()
+        # U04b: default-disabled, independent, observer-only neural sidecar.
+        self.universal_observer = None
+        self.universal_action_observer = None
         self.inference_scheduler = {
             "event_passes": 0,
             "timer_passes": 0,
@@ -458,6 +461,7 @@ class Engine(threading.Thread):
             registry_refresh_stats = dict(self.registry_refresh_stats)
             housekeeping_stats = {**self.housekeeping_stats, "storage_retry": self.housekeeping_retry.snapshot()}
             inference_scheduler = dict(self.inference_scheduler)
+        universal_observer = getattr(self, "universal_observer", None)
         # Status is polled before/through startup and must never aggregate the complete
         # feedback/experience tables from cold microSD. Detailed per-agent counters are
         # loaded by /api/agents after readiness; status needs only lightweight configs.
@@ -504,6 +508,15 @@ class Engine(threading.Thread):
                 "last_ok": last_state_sync_ok,
                 "error": last_state_sync_error,
             },
+            "universal_observer": (
+                universal_observer.diagnostics()
+                if universal_observer is not None else {"enabled": False}
+            ),
+            "universal_action_observer": (
+                self.universal_action_observer.diagnostics()
+                if getattr(self, "universal_action_observer", None) is not None
+                else {"enabled": False}
+            ),
             "runtime_qos": {
                 "registry_refresh": registry_refresh_stats,
                 "housekeeping": housekeeping_stats,
@@ -585,6 +598,13 @@ class Engine(threading.Thread):
             self.agent_index_at = 0.0
             self.agent_index_revision = -1
 
+        # Registry rebuild belongs to the observer worker, never WS ingress.
+        observer = getattr(self, "universal_observer", None)
+        if observer is not None and kind in ("entity", "device"):
+            try:
+                observer.submit_registry(kind, payload)
+            except Exception:
+                pass  # Observer is non-authoritative; never break HA registry updates.
         elapsed_ms = (time.perf_counter() - started) * 1000.0
         with self.lock:
             self.registry_refresh_stats["last_duration_ms"] = elapsed_ms
@@ -671,6 +691,15 @@ class Engine(threading.Thread):
                 entity_id, new_state, received_ts,
                 event_ts=event_ts, received_ts=received_ts,
             )
+        observer = getattr(self, "universal_observer", None)
+        if observer is not None:
+            try:
+                observer.submit_event(
+                    entity_id, new_state, event_ts=event_ts,
+                    received_ts=received_ts,
+                )
+            except Exception:
+                pass  # Observer must never affect ingress or existing Control.
         HA.last_ok = now_ts(); HA.last_error = None
         if new_state is not None:
             ts = parse_ts(new_state.get("last_updated") or new_state.get("last_changed")) or received_ts
@@ -859,6 +888,9 @@ class Engine(threading.Thread):
             self.state_resync_due_since_monotonic = 0.0
             self.next_resync_retry_monotonic = 0.0
             self.error = None
+            # Only a shallow state-map snapshot under the lock. The observer
+            # builds compact sensor records off Ingress after releasing it.
+            observer_snapshot = dict(state_map) if getattr(self, "universal_observer", None) is not None else None
 
         # Current readers must wake at acceptance, before optional archive persistence.
         if initial or changed_eids:
@@ -879,6 +911,12 @@ class Engine(threading.Thread):
             self._queue_archive_state(st, received_ts=poll_received_ts)
         # The existing housekeeping worker persists the queue. A slow microSD
         # commit must not occupy the sole REST poll slot and delay its next read.
+        observer = getattr(self, "universal_observer", None)
+        if observer is not None:
+            try:
+                observer.submit_snapshot(observer_snapshot, received_ts=poll_received_ts)
+            except Exception:
+                pass  # Reconciliation and HA connectivity remain authoritative.
         if initial or changed_eids:
             self.wake_event.set()
 
