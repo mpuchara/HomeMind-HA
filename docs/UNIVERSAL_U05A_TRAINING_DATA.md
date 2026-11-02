@@ -39,6 +39,8 @@ physical outcomes and unknown sources are never positive action labels.
 Unlinked legacy labels are not reinterpreted as trusted universal supervision.
 The reader includes the requested root lineage so a revoked root event cannot
 survive through an older active generation copy.
+Dangling journal-to-label links stop the build: a deleted origin must not hide
+the identity needed to revoke a generation copy.
 
 Undo/conflicts are resolved before deduplication. Repeated physical copies of
 one event contribute once. Conflicting targets/desired actions reject the event.
@@ -54,6 +56,9 @@ decision. Archive rows with unknown receipt time cannot supply historical
 context. Equivalent facts at identical clocks deduplicate with native journal
 precedence; contradictory facts at identical clocks fail explicitly. Later
 metadata is not merged into earlier receipts.
+The explicit coverage start bounds both source queries, so an unrelated older
+archive prefix cannot exhaust the current replay window. Required causal seeds
+must be inside the verified coverage; the window is never inferred silently.
 
 The builder reuses U02 `CausalObservationReplay`, `RegistryTimeline`, typed
 normalization and U04 `from_device_agent_mask`. Historical registry information
@@ -80,7 +85,7 @@ Sample hashes are computed one sample at a time to avoid serializing an entire
 large-home dataset into one temporary object tree.
 
 Reads, merge and sample loops use the existing cooperative `TRAINING_BUDGET`.
-The U02 journal reader adds optional byte bounds and a cooperative callback;
+The U02 journal reader adds optional byte/interval bounds and a cooperative callback;
 existing callers keep the same causal contract. SQLite connections/transactions
 are owned and closed by the offline caller. No worker, HTTP route, model cache,
 new dependency, options switch or automatic training job is installed.

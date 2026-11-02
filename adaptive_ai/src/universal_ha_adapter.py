@@ -253,7 +253,7 @@ def journal_observation(row):
 
 
 def read_feature_journal(conn, entity_ids, *, at_ts, max_records=DEFAULT_MAX_RECORDS,
-                         max_bytes=32 * 1024 * 1024, checkpoint=None):
+                         max_bytes=32 * 1024 * 1024, checkpoint=None, since_ts=None):
     """Bounded, read-only SQLite adapter for the existing FeatureJournal schema.
 
     A full replay needs its earliest causally valid seed: truncating history with
@@ -261,6 +261,9 @@ def read_feature_journal(conn, entity_ids, *, at_ts, max_records=DEFAULT_MAX_REC
     supplies entity IDs, a stable read transaction/snapshot and retention policy.
     """
     at = _finite(at_ts, "at_ts")
+    since = _finite(since_ts, "since_ts") if since_ts is not None else None
+    if since is not None and since > at:
+        raise ValueError("reversed journal replay interval")
     cap = int(max_records)
     if cap <= 0:
         raise ValueError("max_records must be positive")
@@ -274,15 +277,17 @@ def read_feature_journal(conn, entity_ids, *, at_ts, max_records=DEFAULT_MAX_REC
     for offset in range(0, len(ids), 64):
         chunk = ids[offset:offset + 64]
         bind = ",".join("?" for _ in chunk)
+        interval = " AND event_time >= ?" if since is not None else ""
         sql = (
             "SELECT event_key, contract_version, entity_id, event_time, "
             "received_time, state, attributes_json, source, quality "
             "FROM feature_observation_events "
-            f"WHERE entity_id IN ({bind}) AND event_time <= ? AND received_time <= ? "
-            "ORDER BY received_time, event_time, event_key LIMIT ?"
+            f"WHERE entity_id IN ({bind}) AND event_time <= ? AND received_time <= ?"
+            f"{interval} ORDER BY received_time, event_time, event_key LIMIT ?"
         )
         remaining = cap - len(seen)
-        cursor = conn.execute(sql, (*chunk, at, at, remaining + 1))
+        bounds = (at, at, since) if since is not None else (at, at)
+        cursor = conn.execute(sql, (*chunk, *bounds, remaining + 1))
         columns = tuple(item[0] for item in cursor.description)
         for row in cursor:
             row = dict(row) if hasattr(row, "keys") else dict(zip(columns, row))

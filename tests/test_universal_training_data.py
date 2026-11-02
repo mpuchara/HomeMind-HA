@@ -255,6 +255,13 @@ class ProductionJournalTrainingTests(unittest.TestCase):
                            replay(),coverage=coverage())
         self.assertFalse(data.samples)
 
+    def test_dangling_feedback_link_cannot_hide_a_missing_revocation_identity(self):
+        with self.store.conn() as c:
+            c.execute('DELETE FROM teaching_rl_labels')
+        with self.store.conn() as c:
+            with self.assertRaisesRegex(ValueError,'dangling'):
+                read_supervision(c,['a'],as_of_ts=40.)
+
     def test_archive_missing_or_late_receipts_do_not_become_early_observations(self):
         self.store.archive_batch([
             ('binary_sensor.motion',10.,'on',{},None,'live',11.),
@@ -263,8 +270,10 @@ class ProductionJournalTrainingTests(unittest.TestCase):
         ])
         with self.store.conn() as c:
             rows=read_archive_observations(c,['binary_sensor.motion','binary_sensor.legacy'],at_ts=20.)
+            later=read_archive_observations(c,['binary_sensor.motion'],at_ts=40.,since_ts=12.)
         self.assertEqual(len(rows),1)
         self.assertEqual(rows[0].received_ts,11.)
+        self.assertEqual([row.event_ts for row in later],[12.])
 
     def test_preparation_requires_explicit_consistent_read_snapshot(self):
         with self.store.conn() as c:
@@ -280,9 +289,15 @@ class ProductionJournalTrainingTests(unittest.TestCase):
                  attributes_json,source,quality,protected_until)
                 VALUES('m',1,'binary_sensor.motion',10,11,'on','{}','live',1,100)''')
         with self.store.conn() as c:
+            # An unrelated old prefix must not exhaust a bounded covered window.
+            c.execute('''INSERT INTO feature_observation_events
+                (event_key,contract_version,entity_id,event_time,received_time,state,
+                 attributes_json,source,quality,protected_until)
+                VALUES('old',1,'binary_sensor.motion',-100,-99,'off','{}','live',1,100)''')
+        with self.store.conn() as c:
             c.execute('BEGIN')
             before=c.total_changes
-            data=prepare_dataset(c,['a'],{('a',20.):receipt()},timeline(),as_of_ts=40.,coverage=coverage())
+            data=prepare_dataset(c,['a'],{('a',20.):receipt()},timeline(),as_of_ts=40.,coverage=coverage(),max_observations=1)
             again=prepare_dataset(c,['a'],{('a',20.):receipt()},timeline(),as_of_ts=40.,coverage=coverage())
             self.assertEqual(c.total_changes,before)
         self.assertEqual(data,again)

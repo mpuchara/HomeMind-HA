@@ -193,6 +193,8 @@ def read_supervision(conn, agent_ids, *, as_of_ts, max_rows=MAX_SAMPLES):
             continue
         if row['contract_version'] != 1:
             continue
+        if row['effect_ref'] is not None and row['linked_ts'] is None:
+            raise ValueError('dangling supervision link; provenance audit required')
         active = (row['undone_ts'] is None and row['label_undone_ts'] is None
                   and row['application_status'] in ACTIVE_STATUSES
                   and row['effect_status'] != 'undone'
@@ -326,23 +328,28 @@ def build_dataset(supervision, decisions, replay, *, coverage=None, max_samples=
     return TrainingDataset(CONTRACT_VERSION, tuple(samples), tuple(rejected), revision, dataset_id)
 
 
-def read_archive_observations(conn, entity_ids, *, at_ts, max_records=50000):
+def read_archive_observations(conn, entity_ids, *, at_ts, max_records=50000, since_ts=None):
     """Read native 0.14.232 archive receipts; legacy missing clocks never qualify."""
     entities = sorted(set(map(str, entity_ids)))
     if len(entities) > 10000 or not 1 <= max_records <= 100000:
         raise ValueError('archive query resource bounds exceeded')
     if any(e.partition('.')[0] not in ('sensor', 'binary_sensor') for e in entities):
         raise ValueError('archive adapter accepts sensors only')
+    since = _number(since_ts) if since_ts is not None else None
+    if since is not None and since > _number(at_ts):
+        raise ValueError('reversed archive replay interval')
     rows = []
     retained_bytes = 0
     for offset in range(0, len(entities), 64):
         chunk = entities[offset:offset+64]
         marks = ','.join('?' for _ in chunk)
+        interval = ' AND ts>=?' if since is not None else ''
+        bounds = (_number(at_ts), _number(at_ts), since) if since is not None else (_number(at_ts), _number(at_ts))
         cursor = conn.execute(f'''SELECT id,entity_id,ts,received_ts,state,attributes_json,source
             FROM entity_history WHERE entity_id IN ({marks})
             AND ts<=? AND received_ts IS NOT NULL AND received_ts<=?
-            ORDER BY ts,received_ts,id LIMIT ?''',
-            (*chunk, _number(at_ts), _number(at_ts), max_records-len(rows)+1))
+            {interval} ORDER BY ts,received_ts,id LIMIT ?''',
+            (*chunk, *bounds, max_records-len(rows)+1))
         columns = [item[0] for item in cursor.description]
         for raw in cursor:
             if len(rows) >= max_records:
@@ -373,6 +380,9 @@ def prepare_dataset(conn, agent_ids, decisions, registry_timeline, *, as_of_ts,
     if not conn.in_transaction:
         raise ValueError('caller-owned consistent SQLite read transaction required')
     labels = read_supervision(conn, agent_ids, as_of_ts=as_of_ts, max_rows=max_samples)
+    if coverage is None or coverage.complete is not True:
+        return build_dataset(labels, decisions, CausalObservationReplay((), registry_timeline=registry_timeline),
+                             coverage=coverage, max_samples=max_samples)
     entities = set()
     for label in labels:
         receipt = decisions.get((label.agent_id, label.decision_ts))
@@ -383,9 +393,11 @@ def prepare_dataset(conn, agent_ids, decisions, registry_timeline, *, as_of_ts,
     journal = read_feature_journal(
         conn, entities, at_ts=as_of_ts, max_records=max_observations,
         max_bytes=MAX_SOURCE_BYTES,
+        since_ts=coverage.start_ts,
         checkpoint=lambda: TRAINING_BUDGET.checkpoint('universal_feature_read', thread_name=BUDGET_THREAD),
     )
-    archive = read_archive_observations(conn, entities, at_ts=as_of_ts, max_records=max_observations)
+    archive = read_archive_observations(conn, entities, at_ts=as_of_ts,
+                                        max_records=max_observations, since_ts=coverage.start_ts)
     # Do not mix later enriched attributes into an earlier receipt. Deduplicate
     # only exact-clock equivalents; inconsistent facts at identical clocks fail.
     observations = {}
