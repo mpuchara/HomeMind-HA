@@ -66,6 +66,27 @@ class RankingExample:
     sample_id: str
 
 
+@dataclass(frozen=True)
+class OfflineActionContext:
+    """Unlabeled U05a observation/action projection, no new provenance store."""
+    observation_timestamp: float
+    registry_revision: str
+    history_source_revision: str
+    home_observation: tuple
+    target_device: str
+    target_property: str
+    available_actions: ActionSet
+    version: int = DATA_VERSION
+    observation_contract_version: int = OBSERVATION_VERSION
+
+
+def context_from_sample(sample):
+    return OfflineActionContext(**{name: getattr(sample, name) for name in (
+        'observation_timestamp', 'registry_revision', 'history_source_revision',
+        'home_observation', 'target_device', 'target_property', 'available_actions',
+        'version', 'observation_contract_version')})
+
+
 class _Cancelled(Exception):
     pass
 
@@ -96,56 +117,92 @@ def dataset_identity(dataset, *, cancel=None):
     return identity
 
 
-def sample_features(sample, encoder, scorer, *, cancel=None):
-    """Use U03/U04 features without reimplementing replay or consulting live HA."""
-    if not isinstance(sample.available_actions, ActionSet):
+def context_features(context, encoder, scorer, *, cancel=None):
+    """Encode unlabeled historical context with the existing frozen U03/U04 path."""
+    if not isinstance(context, OfflineActionContext):
+        raise ValueError('versioned offline action context required')
+    if not isinstance(context.available_actions, ActionSet):
         raise ValueError('missing historical action mask')
-    if (sample.version != DATA_VERSION or sample.observation_contract_version != OBSERVATION_VERSION
-            or sample.available_actions.version != ACTION_CONTRACT_VERSION
-            or sample.supervision_source not in TRUSTED_SOURCES
-            or not sample.supervision_event_id or not sample.history_source_revision
-            or not sample.registry_revision or not sample.sample_id
-            or sample.available_actions.agent_id != sample.agent_id):
-        raise ValueError('ineligible sample contract/provenance')
-    actions = sample.available_actions.candidates
-    if not 2 <= len(actions) <= MAX_ACTIONS:
-        raise ValueError('action cardinality outside core training bound')
-    if not math.isfinite(sample.sample_weight) or not 0 < sample.sample_weight <= 100:
-        raise ValueError('invalid sample weight')
-    if not math.isfinite(sample.observation_timestamp) or not math.isfinite(sample.label_available_ts):
-        raise ValueError('invalid sample clocks')
-    if not math.isfinite(sample.available_actions.mask_timestamp) or sample.available_actions.mask_timestamp > sample.observation_timestamp:
+    mask = context.available_actions
+    if (context.version != DATA_VERSION or context.observation_contract_version != OBSERVATION_VERSION
+            or mask.version != ACTION_CONTRACT_VERSION or not mask.agent_id
+            or mask.source != 'caller_supplied_DeviceAgent.legal_action_mask'
+            or type(mask.rejected) is not int or mask.rejected < 0
+            or not context.history_source_revision or not context.registry_revision
+            or context.registry_revision == 'unregistered'):
+        raise ValueError('ineligible context contract/provenance')
+    if not isinstance(context.home_observation, tuple) or not isinstance(mask.candidates, tuple):
+        raise ValueError('immutable context/action snapshots required')
+    if not math.isfinite(context.observation_timestamp):
+        raise ValueError('invalid context clock')
+    if not math.isfinite(mask.mask_timestamp) or mask.mask_timestamp > context.observation_timestamp:
         raise ValueError('future historical action mask')
-    matches = [i for i, action in enumerate(actions) if action.value == sample.desired_action]
-    if len(matches) != 1:
-        raise ValueError('desired action not uniquely present in historical legal mask')
+    actions = mask.candidates
+    if not 0 <= len(actions) <= MAX_ACTIONS:
+        raise ValueError('action cardinality outside core bound')
+    if mask.fallback != ('observe_only' if actions else 'abstain'):
+        raise ValueError('inconsistent action fallback')
     if len({a.value for a in actions}) != len(actions):
         raise ValueError('duplicate legal actions')
-    if any(a.entity_id != sample.target_device or a.property_name != sample.target_property
-           or a.mask_timestamp != sample.available_actions.mask_timestamp for a in actions):
-        raise ValueError('action target or clock mismatch')
+    for action in actions:
+        if (action.entity_id != context.target_device or action.property_name != context.target_property
+                or action.mask_timestamp != mask.mask_timestamp or not action.logical_device_id
+                or not isinstance(action.resources, tuple) or not action.resources
+                or any(not isinstance(r, str) or not r for r in action.resources)
+                or (action.current_value is not None and not math.isfinite(action.current_value))):
+            raise ValueError('action identity, resource or clock mismatch')
+        expected = 'binary' if action.property_name == 'power' else 'categorical' if action.property_name == 'option_index' else 'continuous'
+        if (action.kind != expected or (expected == 'binary' and action.value not in (0., 1.))
+                or (expected == 'categorical' and (not math.isfinite(action.value)
+                    or action.value != round(action.value) or action.option_label is None))):
+            raise ValueError('illegal typed action')
+    if actions and len({(a.logical_device_id, a.area_id, a.lower, a.upper, a.current_value, a.resources)
+                        for a in actions}) != 1:
+        raise ValueError('inconsistent historical action descriptor')
     if encoder.room_width != scorer.room_width:
         raise ValueError('encoder/scorer width mismatch')
-    if not 1 <= len(sample.home_observation) <= 10000:
+    if not 1 <= len(context.home_observation) <= 10000:
         raise ValueError('missing or oversized historical context')
     mirror = IncrementalNeuralHome(encoder)
     ids = set()
-    for index, token in enumerate(sample.home_observation):
-        if (token.entity_id in ids or token.event_ts > sample.observation_timestamp
-                or token.received_ts > sample.observation_timestamp or token.kind in EXCLUDED_KINDS):
+    for index, token in enumerate(context.home_observation):
+        if (token.entity_id in ids or not math.isfinite(token.event_ts) or not math.isfinite(token.received_ts)
+                or token.event_ts > context.observation_timestamp or token.received_ts > context.observation_timestamp
+                or token.kind in EXCLUDED_KINDS or token.entity_id.partition('.')[0] not in ('sensor','binary_sensor')
+                or type(token.available) is not bool or not math.isfinite(token.quality)
+                or not 0 <= token.quality <= 1
+                or (token.expires_at is not None and not math.isfinite(token.expires_at))):
             raise ValueError('ineligible causal observation')
         ids.add(token.entity_id)
-        mirror.upsert(token, now=sample.observation_timestamp)
+        mirror.upsert(token, now=context.observation_timestamp)
         if index % 16 == 0:
             _yield(cancel)
-    if not mirror.diagnostics()['available'] or not any(t.available and t.quality > 0 for t in sample.home_observation):
+    if not mirror.diagnostics()['available'] or not any(t.available and t.quality > 0 for t in context.home_observation):
         raise ValueError('no usable historical observations')
     home = mirror.home()
-    matrix = np.stack([np.concatenate((home, mirror.room(a.area_id), scorer.action_features(a)))
-                       for a in actions]).astype(np.float32)
+    matrix = (np.stack([np.concatenate((home, mirror.room(a.area_id), scorer.action_features(a)))
+                        for a in actions]).astype(np.float32) if actions
+              else np.empty((0, scorer.input_width), dtype=np.float32))
     if not np.isfinite(matrix).all():
         raise ValueError('nonfinite encoded features')
     matrix.setflags(write=False)
+    return matrix
+
+
+def sample_features(sample, encoder, scorer, *, cancel=None):
+    """Training-only label admission; inference never requires a desired action."""
+    if (sample.supervision_source not in TRUSTED_SOURCES or not sample.supervision_event_id
+            or not sample.sample_id or not math.isfinite(sample.label_available_ts)
+            or not math.isfinite(sample.sample_weight) or not 0 < sample.sample_weight <= 100):
+        raise ValueError('ineligible sample supervision')
+    if not isinstance(sample.available_actions, ActionSet):
+        raise ValueError('missing historical action mask')
+    if sample.available_actions.agent_id != sample.agent_id or len(sample.available_actions.candidates) < 2:
+        raise ValueError('ineligible training target or action cardinality')
+    matches = [i for i, a in enumerate(sample.available_actions.candidates) if a.value == sample.desired_action]
+    if len(matches) != 1:
+        raise ValueError('desired action not uniquely present in historical legal mask')
+    matrix = context_features(context_from_sample(sample), encoder, scorer, cancel=cancel)
     return RankingExample(matrix, matches[0], float(sample.sample_weight), sample.sample_id)
 
 
@@ -220,8 +277,19 @@ class CoreScorer:
         return RankingExample(matrix, example.target, example.weight, example.sample_id)
 
     def scores(self, sample):
-        row = self.normalize(sample_features(sample, self.encoder, self.scorer))
-        return logits(self.scorer, row.matrix)
+        return self.scores_context(context_from_sample(sample))
+
+    def scores_context(self, context, *, cancel=None):
+        matrix = context_features(context, self.encoder, self.scorer, cancel=cancel)
+        return logits(self.scorer, np.clip((matrix-self.mean)/self.scale, -6., 6.))
+
+    def rank_context(self, context, *, cancel=None):
+        scores = self.scores_context(context, cancel=cancel)
+        return {'status': 'observer_only' if len(scores) else 'abstain',
+                'projections': [{'value': a.value, 'raw_projection': float(s),
+                                 'confidence': None, 'recommendation': None}
+                                for a, s in zip(context.available_actions.candidates, scores)],
+                'control_eligible': False, 'promotion_eligible': False}
 
 
 def _metrics(model, rows, *, cancel=None):

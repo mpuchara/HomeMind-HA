@@ -4,9 +4,11 @@ from universal_ha_adapter import (JournalObservation, RegistryEpoch, RegistryTim
 from universal_training_data import (HistoricalDecision, Supervision, ReplayCoverage, build_dataset)
 
 
-def make_dataset(*, sensors=5, devices=1, samples=64, action_kind='binary'):
+def make_dataset(*, sensors=5, devices=1, samples=64, action_kind='binary', step_seconds=2.):
     if not 1 <= sensors <= 1000 or not 1 <= devices <= 200 or not 8 <= samples <= 256:
         raise ValueError('synthetic fixture bounds')
+    if not 2 <= step_seconds <= 3600:
+        raise ValueError('synthetic timestamp step bounds')
     ids = tuple(['binary_sensor.motion'] + [f'binary_sensor.background{i}' for i in range(sensors-1)])
     registry = SemanticRegistry.create(entities={eid: {'area_id': 'room'} for eid in ids},
                                         revision='synthetic:r1')
@@ -18,7 +20,7 @@ def make_dataset(*, sensors=5, devices=1, samples=64, action_kind='binary'):
            'categorical':('select','option_index',(0.,1.,2.))}
     domain,prop,values=kinds[action_kind]
     for i in range(samples):
-        at = float(100+2*i)
+        at = float(100+step_seconds*i)
         positive = bool(i % 2)
         desired = values[-1] if positive else values[0]
         aid, target = f'agent{i%devices}', f'{domain}.fixture{i%devices}'
@@ -46,9 +48,9 @@ def make_dataset(*, sensors=5, devices=1, samples=64, action_kind='binary'):
         labels.append(Supervision(f'synthetic-correct:{i}',f'synthetic-feedback:{i}',aid,'synthetic-g1',
                                   f'synthetic-episode:{i}',at,at+.25,desired,'correct',True))
     data = build_dataset(labels, decisions, CausalObservationReplay(rows,registry_timeline=timeline),
-                         coverage=ReplayCoverage('synthetic:complete-v1',1.,100+2*samples,frozenset(ids),True))
+                         coverage=ReplayCoverage('synthetic:complete-v1',1.,100+step_seconds*samples,frozenset(ids),True))
     if len(data.samples) != samples:
         raise AssertionError(data.rejected)
     cut = samples*2//3
-    return data, dict(train_until=100+2*(cut-1)+.5,holdout_from=100+2*cut,
-                       holdout_until=100+2*samples)
+    return data, dict(train_until=100+step_seconds*(cut-1)+.5,holdout_from=100+step_seconds*cut,
+                       holdout_until=100+step_seconds*samples)
