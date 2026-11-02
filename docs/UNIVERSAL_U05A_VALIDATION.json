@@ -1,0 +1,32 @@
+{
+  "code_commit": "5643a9247056ad53dac778c7dcc71fec3d0bc842",
+  "files": 677,
+  "mismatches": [],
+  "source_manifest_sha256": "8defee198e1ebc6fa1ce6fdfc7adc597f3f0eb55483d26b6257ff6dbe6ca2740",
+  "local_compatibility_full": {
+    "tests": 2903,
+    "seconds": 453.717,
+    "result": "OK",
+    "code_commit": "2ed401aac8a4f415017b64d1932f8aca61ed524a"
+  },
+  "local_u05a_before_final_hardening": {
+    "tests": 2929,
+    "seconds": 390.468,
+    "result": "OK",
+    "scope": "Native snapshot before final byte/window/dangling-link hardening"
+  },
+  "local_universal_final": {
+    "tests": 106,
+    "seconds": 6.656,
+    "result": "OK",
+    "code_commit": "5643a9247056ad53dac778c7dcc71fec3d0bc842"
+  },
+  "compatibility_ci": {
+    "commit": "859c372cf9418cf63dae7063f7ded78369a0dde3",
+    "run_id": 41392544611,
+    "result": "success"
+  },
+  "final_code_ci_url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41393396527",
+  "final_exact_source_local_log": "/home/mpuchara/homemind-universal-232-validation/u05a-final-full-tests.log",
+  "note": "Immutable receipts at documentation capture. Check the linked CI run and current PR HEAD checks for subsequent full-suite results; no Pi4/HA physical acceptance."
+}
