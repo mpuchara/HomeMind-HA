@@ -1,132 +1,143 @@
-# U05b continuation (2026-11-02)
+# U05b continuation (2026-11-03)
 
-## Exact checkout and completed scope
+## Exact checkout and scope
 
 Worktree: `C:\Users\mpuch\OneDrive\Dokumenty\HomeMind\HomeMind-HA-universal-232`.
-Branch: `codex/universal-u05b-trainable-scorer`.
-Last implementation commit: **a0173874e0e4b09a097c3f538042a723137407a9**.
-A subsequent documentation-only commit may be HEAD; use `git log -3 --oneline`.
+Branch: `codex/universal-u05b2-quality-gate`.
+Last implementation commit: **cfe673b97134b89390868973ed03e6d7f672a78c**.
+A documentation-only commit may follow; inspect `git log -3 --oneline` for HEAD.
 
-Base: current U05a HEAD **e32f0b1802a66333d797af0d0fa87a2012975501**, verified
-against PR #356 before branching. Production reference remains **0.14.232**, commit
-`f7384ba5476f26155ecb138034cc3350fa5bfda2`. Do not restart from main or 0.14.184.
+Base is U05b.1 PR #357 at **8d869fcffd8c5440546c8b82806ae163fcacd076**,
+verified live before branching. Production reference remains **0.14.232**,
+`f7384ba5476f26155ecb138034cc3350fa5bfda2`. Do not start from main/0.14.184.
 
-Draft dependency chain: #355 compatibility -> #356 U05a ->
-[**#357 U05b.1**](https://github.com/mpuchara/HomeMind-HA/pull/357).
-No PR is merged, no version or installation release is created.
+Draft dependency chain: #355 compatibility -> #356 U05a -> #357 U05b.1 ->
+[**#358 U05b.2**](https://github.com/mpuchara/HomeMind-HA/pull/358).
+No PR was merged, version changed or installation release produced.
 
-This run completes **U05b.1 Neural Training Core**, with an initial U05a adapter
-and experimental checkpoint serialization. **U05b as a whole is not complete.**
-Formal quality acceptance, operational data admission, validated checkpoint
-publication/undo lifecycle and real Pi4/runtime acceptance remain open.
+Completed: **U05b.1 optimization core and U05b.2 offline data/quality gate**.
+**U05b as a whole remains incomplete.** Validated artifact publication,
+transactional freshness/undo lifecycle, production collection and real Pi4/
+HA/runtime acceptance remain open.
 
-## Implemented code
+## Implemented U05b.2 changes
 
-`adaptive_ai/src/universal_scorer_training.py`:
+* `universal_scorer_training.py`: unlabeled `OfflineActionContext`, shared
+  context feature path, raw offline scoring/abstention and stricter typed legal
+  action/descriptor/resource/clock/immutable context checks. Valid existing
+  feature tensors and checkpoint format remain compatible; training still
+  admits trusted exact labels separately.
+* `universal_scorer_validation.py`: exact U05a dataset/revision and used manifest
+  checks, train-only normalization verification and fresh weight-based metrics.
+  Baseline template/selection uses training data only. Whole episodes and
+  overlapping time-window intervals form independent-evidence units; duplicate
+  points do not multiply statistical support. Defaults derive minimum support
+  from a declared Hoeffding precision/error budget; device/property families
+  need their own future coverage. The existing exact paired sign test checks
+  improvement. Global gains cannot hide observed device/property or action-class
+  regressions, including more false activations.
+* `tools/universal_training_fixture.py`: explicit synthetic timestamp-spacing
+  option; default fixture behavior remains compatible.
+* `tools/benchmark_universal_validation.py`: four host scale scenarios with
+  passing/insufficient-evidence receipts. A small quality gate smoke was added
+  to CI, preserving all prior checks.
+* `tests/test_universal_scorer_validation.py`: 21 new cases.
 
-* Actual shared scorer forward/backpropagation with per-device ragged legal-set
-  cross entropy, trusted sample weights, clipped Adam, L2 and small mini-batches.
-* Frozen U03 and detached scorer child, train-only normalization, deterministic
-  seeded training and best-training-loss early stopping.
-* Existing U05a TrainingDataset identity/versions/ids, chronological_split and
-  U03/U04 features reused. Exact legal desired values only; no nearest rounding.
-* Bounded retained features/action groups/examples, cooperative TRAINING_BUDGET,
-  one fit per process and cancellation that discards the child. Deterministic
-  restart from the same parent/dataset is supported; optimizer resume is not.
-* Deterministic checksum-protected JSON with frozen encoder, weights, moments
-  of input normalization (not optimizer state), provenance and learning metrics.
-* `load_core_checkpoint` reproduces offline predictions and rejects corrupted,
-  duplicate-key, incompatible and falsely verified artifacts.
-* `core_artifact_status` diagnoses requires_rebuild on changed dataset/revision.
-  It is not a transactional publication check or persisted revocation ledger.
+Detailed contract, defaults, baseline rules, independence assumptions and limits:
+`UNIVERSAL_U05B2_QUALITY_GATE.md`. Core math remains documented in
+`UNIVERSAL_U05B_NEURAL_CORE.md`; U05a source audit and collection limits still apply.
 
-`tools/universal_training_fixture.py`: explicitly synthetic complete U05a
-receipts/replay/coverage, not a replacement production collector.
-`tools/benchmark_universal_training.py`: host-only optimizer/preparation/inference
-timing and memory benchmark. Small smoke added to existing CI.
-`tests/test_universal_scorer_training.py`: 14 focused learning/calculus/safety
-tests. Implementation details: `UNIVERSAL_U05B_NEURAL_CORE.md`.
+## Validation receipts
 
-## Validation receipts and locations
+35 focused core/gate tests: **19.444 seconds, OK**, native Windows Python 3.11.
+Includes the existing 14 optimizer tests and 21 new gate/inference tests.
+One-device synthetic default-policy case has 43 future evidence units, accuracy
+1.0 versus baseline .48837, 22 winning units, zero losing units and exact p-value
+2.384185791015625e-7. These are deterministic constructed evidence, not physical
+home-control or Raspberry Pi quality claims.
 
-Focused native Windows Python 3.11 run: **14 tests in 3.418 seconds, OK**.
-Binary motion fixture: future accuracy **50% -> 100%**, lower CE loss and changed
-scorer weights; parent and frozen encoder checkpoints remain exactly equal.
-Additional continuous and categorical legal-set learning tests pass.
-Both layers' weight/bias gradients match finite differences to six decimal places.
-Serialized/disk-reloaded scores and repeated training artifacts match exactly in
-the tested numerical environment. Holdout label changes do not change learned
-weights or normalization.
-
-Full suite runs in WSL Ubuntu Python 3.12 / NumPy 2.3.3 from an exact native copy.
-**681 source/test/tool files** matched via SHA256 with no differences. Source
-manifest digest:
-`1d2e2fd5350c6a1b572b064de2ff131e9acf4ef9cb4451bc67f0f0ca4e619114`.
+Full local regression runs in WSL Ubuntu Python 3.12 / NumPy 2.3.3 from an exact
+native source copy: **684 source/test/tool files**, zero SHA256 mismatches.
+Source manifest digest:
+`5e8375afdffa878eba9a2111f929f709f41068d0c738612b768ccab57a4863db`.
 
 Persistent validation directory:
-`/home/mpuchara/homemind-universal-u05b/`.
-Read `full-tests.log` for the completed full-suite result; the run was still
-executing when this handoff snapshot was written. The immutable source receipt
-is `source-parity.json`; `benchmark-final.json` and `benchmark-final.log` retain
-the benchmark. The versioned copy is `benchmarks/UNIVERSAL_U05B1_HOST.json`.
+`/home/mpuchara/homemind-universal-u05b2/`.
+Read `full-tests.log` for the final complete-suite result. The run was executing
+at documentation capture; final full-suite/CI results are updated in PR #358's
+body. `source-parity.json` records exact source identity; `benchmark.json` and
+`benchmark.log` retain the host run. The versioned benchmark is
+`benchmarks/UNIVERSAL_U05B2_HOST.json`.
 
-Code CI: [run 41405753825](https://github.com/mpuchara/HomeMind-HA/actions/runs/41405753825).
-Final documentation HEAD may have a later run on PR #357. Inspect the current
-PR checks rather than substituting an older SHA's green status. Full-suite/CI
-final outcomes are also recorded in the PR body after completion.
+Code CI: [run 41547889325](https://github.com/mpuchara/HomeMind-HA/actions/runs/41547889325).
+A later documentation HEAD has its own PR check run. Resolve the exact current
+HEAD checks rather than assuming an older SHA's green status applies.
 
-Host-only benchmark (24 epochs): 5/1 took .295 s, 50/10 .849 s, 200/30 3.267 s,
-1000/200 20.533 s; all synthetic future accuracies reached 1.0. Largest process
-peak RSS was 52.30 MiB, including earlier scenarios and fixture setup. Each epoch,
-CPU/total/preparation/validation time, updates and full-offline-encoding prediction
-costs are retained in the JSON. No Pi4, HA socket/dispatch/ACK, UI contention or
-event-to-intent acceptance claim is made.
+Host validation times for 5/1, 50/10, 200/30, 1000/200 sensors/devices were
+.037/.591/2.701/14.780 seconds. The one-device cohort passes the offline gate.
+All larger cohorts intentionally return `insufficient_evidence` because their
+future evidence per device is too small; required units per slice are 48/57/72.
+They are not converted into acceptance by relaxing defaults. Values include
+bounded feature auditing/cooperative yields and are not event-to-intent or
+HA/UI/Pi4 acceptance measurements.
 
-## Deliberate non-publication boundary
+Predecessor U05b.1 full local suite passed 2944 tests; its final HEAD CI passed
+Python 3.11/3.13, image and runtime benchmarks. See PR #357 for those receipts.
 
-An optimizer run does not establish a verified model. Core artifacts retain
-`trained=false`, `validation_status=not_validated`, `promotion_eligible=false`
-and `control_eligible=false`, despite actual learned weights. Never flip these
-flags manually or feed this experimental format into an active backend.
-No RuntimeComposition/Engine/REST archive/Correct/Candidate/Shadow/DeviceAgent/
-Executor/training-budget implementation is replaced. There are no new runtime
-hooks, SQLite operations, service calls or automatic backend changes.
+## Non-publication boundary and interpretation
 
-## Exact next steps
+An offline report may say `passed`, but report and checkpoint still retain
+`trained=false`, `promotion_eligible=false`, `control_eligible=false`.
+No producer, service call, runtime/HTTP hook, Candidate update, migration or
+active backend change is installed. Engine, RuntimeComposition, Correct,
+Candidate/Shadow, DeviceAgent, Executor, training budget and version remain intact.
 
-1. Confirm PR #357 current HEAD, full-suite tail and CI results. Preserve the
-   base/dependency chain and run focused tests before extending the core.
-2. **U05b.2 Dataset Integration/quality gate:** extend the initial adapter into
-   an explicit acceptance contract for qualified offline datasets. Define and
-   justify minimum independent support, neutral train-only baseline and paired
-   future-period improvement/regression gates, including device/property slices.
-   Do not tune weights/normalization/epochs against the final holdout. Add an
-   unlabeled offline inference API so future callers do not fabricate a desired
-   label merely to call the current training-sample feature adapter.
-3. **U05b.3 Checkpoint Lifecycle:** add a distinct validated artifact version,
-   fresh transactional evidence provider at publication, dataset/revision/undo
-   rechecks and durable invalidation/rebuild state. Keep parent snapshots isolated.
-   Add optimizer/RNG/cursor resume if needed; current restart redoes training.
-   Current checksum is integrity checking, not a substitute for evidence validation.
-4. **U05b.4 Performance/Acceptance:** benchmark repeated independent scenarios,
-   measure actual RAM/CPU bounds, concurrency and cancellation under real runtime
-   load; run existing HA/UI/Correct/Candidate/Shadow regression and Pi4 acceptance.
-5. Production historical registry/action-mask/coverage collection remains absent
-   from U05a. Do not manufacture it or substitute current HA state. Use complete
-   offline inputs or explicitly synthetic fixtures until a durable collector exists.
-6. Keep physical control/promotion disabled, preserve existing ActionIntent ->
-   Executor safety and do not merge existing drafts or publish an install release.
+Independence and no holdout peeking are qualified-input assumptions. Distinct
+ids/60 seconds cannot prove independence. Checksum integrity is not producer
+authentication or proof of actual training provenance. The report covers the
+pinned manifest only, not every agent in an installation; it is not a new
+promotion manager. Comparing installed Ridge/TinyMLP remains later lifecycle work.
 
-Commands from this checkout:
+The current U05a 2048-row cap cannot supply 72 future units to each of 200
+tracked devices in one dataset. Larger-install validation needs a separate
+bounded/chunked aggregation contract, not lower thresholds or omitted devices.
+
+## Exact continuation order
+
+1. Read current PR #358 HEAD, local full-suite tail and live CI checks; keep the
+   stacked branch chain and 0.14.232 reference. Run focused tests after changes.
+2. **U05b.3 Checkpoint Lifecycle**: introduce a distinct validated artifact
+   contract/factory. Pin model/encoder/dataset/supervision/policy/report identities
+   and recompute/check current evidence inside an atomic publication protocol.
+   A passing mutable JSON report alone must never set trained/promotable flags.
+3. Add a trusted fresh-evidence provider using native journals and current undo
+   state, persisted artifact invalidation and safe isolated child rebuild. Never
+   subtract an undone correction from weights or mutate the active parent.
+4. Bind validation policy/model selection before evaluation and track holdout
+   reuse/attempts; repeated tuning against the same holdout is not independent
+   confirmation. Add optimizer/RNG/cursor resume if required; current cancellation
+   discards the child and restart redoes deterministic training from the parent.
+5. **U05b.4 Performance/Acceptance**: repeated host/resource/load runs and real
+   Pi4/HA/UI/event-to-intent/dispatch-ACK/soak gates. Metadata-based early
+   insufficiency admission could avoid unnecessary dense feature audits; measure
+   first. Keep broad regression/affected-agent validation in the established
+   Candidate/Shadow lifecycle rather than inventing another manager.
+6. Production historical registry snapshots, legal masks and completeness
+   collection still do not exist. Do not manufacture them or use current HA
+   metadata as historical evidence. Complete offline/synthetic inputs only.
+7. Keep physical control and promotion disabled; no merges, release/version bump
+   or install package without completing the relevant gates.
+
+Commands from the checkout:
 
 ```powershell
-python -m unittest discover -s tests -p test_universal_scorer_training.py -v
-python tools/benchmark_universal_training.py --output benchmark.json
+python -m unittest discover -s tests -p 'test_universal_scorer*.py' -v
+python tools/benchmark_universal_validation.py --output validation-benchmark.json
 ```
 
-For full Linux tests first refresh the native copy of the current source, then:
+For full Linux tests refresh the native copy first, then:
 
 ```sh
-cd /home/mpuchara/homemind-universal-u05b/current
+cd /home/mpuchara/homemind-universal-u05b2/current
 /home/mpuchara/homemind-universal-232-validation/venv/bin/python -m unittest discover -s tests -v
 ```
