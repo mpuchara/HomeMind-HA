@@ -353,6 +353,16 @@ class RuntimeCompositionRoot:
             manager = install_candidate_neural_shadow(manager)
         engine.agent_candidates = manager
 
+        # U04b: optional observer is the only new runtime component. Disabled
+        # installs import no NumPy and allocate no extra event queues/threads.
+        from settings import OPTIONS as runtime_options
+        if bool(runtime_options.get("universal_observer_enabled", False)):
+            from universal_runtime_observer import install as install_universal_observer
+            install_universal_observer(engine)
+            if bool(runtime_options.get("universal_action_observer_enabled", False)):
+                from universal_action_runtime import install as install_universal_action_observer
+                install_universal_action_observer(engine)
+
         # Later Stage-3/HTTP services must not replace the registered event top handler.
         # A second assertion turns such a regression into an initialization failure
         # instead of silently shipping a different event ordering.
