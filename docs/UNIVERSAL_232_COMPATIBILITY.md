@@ -78,5 +78,26 @@ not a measured outcome of this port. Keep both observers disabled by default.
 
 ## Validation receipts
 
-Pending integrated full-suite completion. See `UNIVERSAL_U05_HANDOFF.md` for
-the final commit, test results and next steps.
+Integrated code commit: `2ed401aac8a4f415017b64d1932f8aca61ed524a`.
+Before U05a implementation, the complete WSL Python 3.12 / NumPy 2.3.3 suite
+passed: **2903 tests in 453.717 seconds, OK**. The subsequently added two
+production integration tests passed separately; all 81 universal tests passed.
+Fresh [CI run 41391490830](https://github.com/mpuchara/HomeMind-HA/actions/runs/41391490830)
+also passed Python 3.11 and 3.13 (full tests), image build and image smoke.
+The package job was skipped; there is no install-release acceptance.
+
+Short paired host runs use three Root agents, active Candidate, concurrent
+training and Correct, two alternating repetitions, 60 events and eight warmup
+events per run. All input/decision hashes agree. Event-to-decision p95:
+
+| Routing | Baseline -> integrated | Same-source A/A control |
+| --- | --- | --- |
+| Shared sensor | 17.77 -> 17.11 ms | 17.10 -> 15.88 ms |
+| Independent sensors | 15.04 -> 15.80 ms | 16.72 -> 20.93 ms |
+
+The A/A noise is larger than the paired differences. These samples do not
+prove a speedup or a precise no-regression bound, and are too short for p99
+acceptance. CPU, peak RSS, samples, fixture flags and hashes are retained in
+`benchmarks/UNIVERSAL_232_HOST_PARITY.json`. A physical Pi4 load matrix,
+observer-enabled end-to-end profiling, actual HA connectivity/ACK and soak
+remain open. U05a can proceed as offline data code with no runtime hooks.
