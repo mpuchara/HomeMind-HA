@@ -252,7 +252,8 @@ def journal_observation(row):
     )
 
 
-def read_feature_journal(conn, entity_ids, *, at_ts, max_records=DEFAULT_MAX_RECORDS):
+def read_feature_journal(conn, entity_ids, *, at_ts, max_records=DEFAULT_MAX_RECORDS,
+                         max_bytes=32 * 1024 * 1024, checkpoint=None):
     """Bounded, read-only SQLite adapter for the existing FeatureJournal schema.
 
     A full replay needs its earliest causally valid seed: truncating history with
@@ -263,6 +264,9 @@ def read_feature_journal(conn, entity_ids, *, at_ts, max_records=DEFAULT_MAX_REC
     cap = int(max_records)
     if cap <= 0:
         raise ValueError("max_records must be positive")
+    if not 1 <= int(max_bytes) <= 128 * 1024 * 1024:
+        raise ValueError("invalid replay byte cap")
+    retained_bytes = 0
     ids = sorted({str(entity) for entity in entity_ids})
     if any(entity.partition(".")[0] not in ALLOWED_DOMAINS for entity in ids):
         raise ValueError("only sensor domains are accepted")
@@ -281,15 +285,20 @@ def read_feature_journal(conn, entity_ids, *, at_ts, max_records=DEFAULT_MAX_REC
         cursor = conn.execute(sql, (*chunk, at, at, remaining + 1))
         columns = tuple(item[0] for item in cursor.description)
         for row in cursor:
-            observation = journal_observation(
-                row if hasattr(row, "keys") else dict(zip(columns, row))
-            )
+            row = dict(row) if hasattr(row, "keys") else dict(zip(columns, row))
+            retained_bytes += sum(len(str(row.get(key) or '').encode('utf-8'))
+                                  for key in ('event_key', 'entity_id', 'state', 'attributes_json', 'source'))
+            if retained_bytes > max_bytes:
+                raise ValueError("FeatureJournal replay byte cap exceeded")
+            observation = journal_observation(row)
             existing = seen.get(observation.event_key)
             if existing is not None and existing != observation:
                 raise ValueError("conflicting duplicate journal event_key")
             seen[observation.event_key] = observation
             if len(seen) > cap:
                 raise ValueError("FeatureJournal replay row cap exceeded; increase explicitly")
+            if checkpoint is not None:
+                checkpoint()
     return tuple(sorted(
         seen.values(), key=lambda item: (item.ready_ts, item.event_ts,
                                           item.received_ts, item.event_key)
