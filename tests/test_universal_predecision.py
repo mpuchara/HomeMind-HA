@@ -148,12 +148,12 @@ class PredecisionTests(unittest.TestCase):
             with self.subTest(key=key), self.assertRaises(ValueError):
                 validate_binding(malformed,vars(intent),self.agent,self.state)
 
-    def native_source(self, intent, evidence, *, affected=()):
+    def native_source(self, intent, evidence, *, affected=(),required=('binary_sensor.motion',)):
         from provenance import ProvenanceJournal
         from manual_feedback_contract import ManualFeedbackJournal
         from teaching_rl import RLTeaching
         from correct_data_foundation import _ensure_schema
-        self.collector.decision(intent,self.agent,self.state,required=('binary_sensor.motion',),
+        self.collector.decision(intent,self.agent,self.state,required=required,
                                 affected=affected,predecision=evidence)
         self.drain()
         ProvenanceJournal(self.store).record_decision(decision_id=intent.intent_id,created_time=intent.created_at,
@@ -163,13 +163,19 @@ class PredecisionTests(unittest.TestCase):
         feedback.record(agent_id=self.agent['id'],selected_ts=intent.created_at,source='correct',correct_action=1.,feedback_id='original-correct')
         self.collector.barrier(); self.drain()
         with self.store.conn() as c:
-            start,through=c.execute('SELECT start,through FROM universal_collection_segments').fetchone()
+            start,through=c.execute('SELECT start,through FROM universal_collection_segments ORDER BY start DESC LIMIT 1').fetchone()
             c.execute('BEGIN')
             source=source_from_collection(c,[self.agent['id']],start=start,through=through)
             dataset=source.dataset(c)
         return dataset, source, feedback
 
     def test_real_clocks_original_mask_native_dataset_and_undo(self):
+        from universal_affected_sensors import AffectedSensorDeclarations
+        AffectedSensorDeclarations(self.store).declare(self.agent['id'],
+            logical_device_id=self.service.descriptor(self.agent)['logical_device_id'],
+            topology_revision=self.collector.topology,affected_sensor_ids=[],complete=True,
+            approved_by='fixture operator',rationale='independent motion fixture',
+            empty_reason='no dependent monitored sensors in this fixture scope')
         self.prepare(); intent,evidence=self.bind()
         dataset, source, feedback = self.native_source(intent,evidence)
         self.assertEqual(len(dataset.samples),1,dataset.rejected)
@@ -198,11 +204,11 @@ class PredecisionTests(unittest.TestCase):
         self.prepare(); intent,evidence=self.bind()
         dataset,_,_=self.native_source(intent,evidence,affected=None)
         self.assertFalse(dataset.samples)
-        self.assertIn('missing_historical_decision_receipt',str(dataset.rejected))
+        self.assertIn('affected_declaration_missing',str(dataset.rejected))
         with self.store.conn() as c:
             body=json.loads(c.execute('SELECT body FROM universal_collection_decisions').fetchone()[0])
         self.assertIsNotNone(body['predecision'])
-        self.assertEqual(body['missing_proof'],'affected_sensor_evidence_unavailable')
+        self.assertEqual(body['missing_proof'],'affected_declaration_missing')
 
     def test_late_arbiter_change_preserves_decision_but_rejects_training(self):
         self.prepare();intent,evidence=self.bind()
@@ -266,6 +272,12 @@ class PredecisionTests(unittest.TestCase):
             evidence=PredecisionEvidence(engine,runtime.store,collector)
             collector.predecision=evidence
             engine.universal_training_collector=collector
+            from universal_affected_sensors import AffectedSensorDeclarations
+            AffectedSensorDeclarations(runtime.store).declare(agent['id'],
+                logical_device_id=engine.executor.device_agents.descriptor(agent)['logical_device_id'],
+                topology_revision=collector.topology,affected_sensor_ids=[],complete=True,
+                approved_by='fixture operator',rationale='empty monitored fixture universe',
+                empty_reason='this fixture topology contains no sensors')
             evidence.request(agent['id']);evidence.prepare_one()
             self.assertIn(agent['id'],evidence.prepared)
             order=[]
@@ -291,6 +303,8 @@ class PredecisionTests(unittest.TestCase):
                 bodies=[json.loads(r[0]) for r in c.execute('SELECT body FROM universal_collection_decisions ORDER BY at')]
             self.assertEqual(len(bodies),2)
             self.assertEqual(bodies[0]['predecision']['decision_id'],original.intent_id)
+            self.assertEqual(bodies[0]['affected_sensor_status'],'complete')
+            self.assertEqual(bodies[0]['affected_sensor_evidence']['decision_id'],original.intent_id)
             self.assertIsNone(bodies[1]['predecision'])
         finally:
             for name in ('housekeeping_worker','registry_worker'):
