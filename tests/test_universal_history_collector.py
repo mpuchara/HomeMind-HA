@@ -65,6 +65,16 @@ class CollectorTests(unittest.TestCase):
         with patch.dict(settings.OPTIONS,universal_training_collector_enabled=False):
             self.assertIsNone(install(SimpleNamespace(),None))
 
+    def test_shared_native_event_key_avoids_a_parallel_sensor_history(self):
+        self.seed()
+        state=dict(state='on',last_updated=iso(21.),context={'id':'native-context'},
+                   attributes={'device_class':'motion','friendly_name':'Motion'})
+        self.journal.record('binary_sensor.motion0',state,event_time=21.,received_time=22.,source='ha_state_changed')
+        self.collector.event('binary_sensor.motion0',state,event_ts=21.,received_ts=22.)
+        self.drain()
+        with self.store.conn() as c:
+            self.assertEqual(c.execute("SELECT COUNT(*) FROM feature_observation_events WHERE entity_id='binary_sensor.motion0' AND event_time=21").fetchone()[0],1)
+
     def test_producer_methods_do_no_sql_and_overflow_latches_a_gap(self):
         self.collector.capacity=1
         with patch.object(self.store,'conn',side_effect=AssertionError('producer SQLite')):
@@ -255,7 +265,7 @@ with patch.object(BudgetConnection,'execute',execute):collector.drain()
         ids=[row['id'] for row in ws.sent if 'id' in row]
         self.assertEqual(ids,sorted(set(ids)))
         self.assertEqual(len([r for r in ws.sent if str(r.get('type','')).startswith('config/')]),6)
-        self.assertTrue(fake.ws_subscription_confirmed)
+        self.assertTrue(fake.confirmed_when_event,fake.ws_error)
         self.assertEqual(self.collector.epoch,1)
         self.drain()
         with self.assertRaisesRegex(ValueError,'incomplete'):self.source()

@@ -43,6 +43,11 @@ def compact(state):
     result = {'state': value, 'last_updated': state.get('last_updated'),
               'last_changed': state.get('last_changed'),
               'attributes': {k: attrs[k] for k in ('unit_of_measurement', 'device_class','friendly_name','state_class','options') if k in attrs}}
+    context=state.get('context') or {}
+    if not isinstance(context,dict):raise ValueError('invalid HA context')
+    result['context']={k:context[k] for k in ('id','parent_id') if k in context}
+    if any(v is not None and (not isinstance(v,str) or len(v)>256) for v in result['context'].values()):
+        raise ValueError('HA context bound')
     if any(not isinstance(v, (str, int, float, bool, type(None))) or len(str(v)) > 4096
            for v in [value, *(v for k,v in result['attributes'].items() if k!='options')]):
         raise ValueError('sensor receipt bounds')
@@ -278,7 +283,7 @@ class HistoricalTrainingCollector(threading.Thread):
             if kind=='event':
                 eid,st,event,received=payload
                 observations.append(dict(entity_id=eid,state=st,event_time=event,received_time=received,
-                                         source='universal_collection',quality=0. if st.get('state') in (None,'unknown','unavailable') else 1.))
+                                         source='ha_state_changed',quality=0. if st.get('state') in (None,'unknown','unavailable') else 1.))
             else:
                 metadata.append((kind,payload))
         self._journal_rows(observations)
@@ -368,6 +373,11 @@ class HistoricalTrainingCollector(threading.Thread):
             gap=self.pending_gap; self.pending_gap=None;epoch=self.epoch
         if not batch and gap is None:return True
         try:
+            # Admission is BEFORE any native write or SQLite transaction. Fresh
+            # HA work gets its existing interactive CPU window; overload burns
+            # coverage instead of pushing latency back onto inference.
+            from training_budget import TRAINING_BUDGET
+            TRAINING_BUDGET.checkpoint('universal_collection_admission',thread_name='adaptive-ai-index-universal-scorer')
             with background_sqlite(self.store):
                 self._write(batch,gap,epoch)
             self.retry.recovered()
