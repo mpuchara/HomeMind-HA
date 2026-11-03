@@ -23,12 +23,14 @@ def main():
     parser.add_argument('--cases',default='5:1,50:10,200:30,1000:200')
     parser.add_argument('--events',type=int,default=40)
     parser.add_argument('--warmup',type=int,default=8)
+    parser.add_argument('--event-timeout',type=float,default=30.)
     parser.add_argument('--candidates',action='store_true')
     parser.add_argument('--training',action='store_true')
     parser.add_argument('--correct',action='store_true')
     parser.add_argument('--output',type=Path,required=True)
     parser.add_argument('--log-dir',type=Path,required=True)
     args=parser.parse_args();results=[]
+    if not 30.<=args.event_timeout<=120.:parser.error('event-timeout must be 30..120 seconds')
     args.output.parent.mkdir(parents=True,exist_ok=True);args.log_dir.mkdir(parents=True,exist_ok=True)
     for item in args.cases.split(','):
         sensors,devices=map(int,item.split(':'))
@@ -40,7 +42,8 @@ def main():
             print(f'RUN {sensors}/{devices} {name}',flush=True)
             command=[sys.executable,str(args.current_source/'tools/benchmark_runtime_scaling.py'),
                 '--source-root',str(root.resolve()),'--agents',str(devices),'--sensor-count',str(sensors),
-                '--entities',str(sensors+devices),'--events',str(args.events),'--warmup',str(args.warmup),'--probe']
+                '--entities',str(sensors+devices),'--events',str(args.events),'--warmup',str(args.warmup),'--probe',
+                '--event-timeout',str(args.event_timeout)]
             if enabled:command.append('--collector')
             for flag in ('candidates','training','correct'):
                 if getattr(args,flag):command.append('--'+flag)
@@ -58,6 +61,8 @@ def main():
                 inference=quantiles(raw.get('inference',[])),event_to_intent_count=len(raw.get('event_to_intent',[])),
                 event_action_intents=len(raw.get('event_to_intent',[])),
                 model_prediction=probes.get('model_inference'),pipeline=row['event_to_pipeline_return'],
+                warmup_pipeline=quantiles(row['warmup_pipeline_samples_ms']),
+                observation_timeout_seconds=row['observation_timeout_seconds'],
                 cpu_ms=row['process_cpu_ms'],wall_ms=row['wall_ms'],rss_mb=row['rss_mb'],peak_rss_mb=row['peak_rss_mb'],
                 sqlite_statements=sum(v['count'] for k,v in operations.items() if k.startswith('sqlite_execute.')),
                 probes=probes,sqlite=row['storage_runtime'],collector=row.get('collector'),ha_calls=row['ha_calls'],
@@ -72,6 +77,7 @@ def main():
         report=dict(scope='WSL/Linux host composed runtime with equal instrumentation; not Pi4/bare runtime acceptance',
             baseline=args.baseline_label,events=args.events,warmup=args.warmup,
             candidates=args.candidates,concurrent_training=args.training,correct=args.correct,
+            observation_timeout_seconds=args.event_timeout,
             results=results,completed=False,
             limits='40 events are not a production p99 certificate. Busy runs measure missing declarations; complete native evidence is measured separately. A/A and adverse cases retained.')
         args.output.write_text(json.dumps(report,indent=2)+'\n',encoding='utf-8')
