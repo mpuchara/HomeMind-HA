@@ -1,0 +1,91 @@
+{
+  "implementation_commit": "e6d13526f0bf30ab82d35483d24502c9bd5443eb",
+  "baseline_commit": "e797439989dba56ca2ccf3d37cf1b3521c501b1c",
+  "source": {
+    "commit": "e6d13526f0bf30ab82d35483d24502c9bd5443eb",
+    "snapshot": "current",
+    "files": 720,
+    "git_blob_manifest_sha256": "ce15de35707421069bee7fe2a83dfeec8a868bd1c1595d255d25d4ce88c426c5",
+    "normalized_crlf": true,
+    "all_snapshot_files_match_commit": true
+  },
+  "recovered": [
+    {
+      "file": ".devtools\\u05b4b4-fullsuite-linux.log",
+      "sha256": "d6a91e65c7b3bed0ed1511ac63723b3cac71a8ea64d12bf4b47df34f61b0509b",
+      "bytes": 645235,
+      "tests": 3100,
+      "seconds": 459.068,
+      "footer_ok": true,
+      "exit_code": null,
+      "exact_source_known": false,
+      "isolation_known": false
+    },
+    {
+      "file": ".devtools\\u05b4b4-e2e-final.log",
+      "sha256": "7c0f6b8dadef2d1c114629949f625a72778802f7385d1dd81a8e0f7ded1a1c27",
+      "bytes": 4364,
+      "tests": 24,
+      "seconds": 64.72,
+      "footer_ok": true,
+      "exit_code": null,
+      "exact_source_known": false,
+      "isolation_known": false
+    },
+    {
+      "file": ".devtools\\u05b4b4-benchmark-smoke.log",
+      "sha256": "54ac595451e4e342d81b0efd9c17578fb7edfeaa07fb18ea0096f6019f36a615",
+      "bytes": 796306,
+      "tests": null,
+      "seconds": null,
+      "footer_ok": false,
+      "exit_code": null,
+      "exact_source_known": false,
+      "isolation_known": false
+    }
+  ],
+  "controlled": {
+    "e2e-controlled": {
+      "exit_code": 0,
+      "log_sha256": "af15025093a5273fb3b3c53d27109a3bb429fe14c4f3c9a82f84a8b5fd35133e",
+      "bytes": 1562051,
+      "tests": null,
+      "seconds": null,
+      "footer_ok": false,
+      "command": "python tools/benchmark_universal_e2e.py --output ../results/e2e-controlled.json"
+    },
+    "runtime-controlled": {
+      "exit_code": 1,
+      "log_sha256": "1ee0d0351a1a7091a3135d5441b70d8190906c62cdf70667f366f575070a93a3",
+      "bytes": 1470,
+      "tests": null,
+      "seconds": null,
+      "footer_ok": false,
+      "command": "python tools/benchmark_universal_affected_impact.py --baseline-source ../base-363 --baseline-label 'PR #363 / e797439989dba56ca2ccf3d37cf1b3521c501b1c' --candidates --training --correct --output ../results/runtime-controlled-aa.json --log-dir ../results/runtime-logs"
+    },
+    "fullsuite-controlled": {
+      "exit_code": 1,
+      "log_sha256": "0667ef00c4eb2990f32ab9e783130a47cbb5846eb4c118f39bb52c8c4822e9b2",
+      "bytes": 643383,
+      "tests": 3100,
+      "seconds": 418.766,
+      "footer_ok": false,
+      "command": "python -m unittest discover -s tests -v"
+    },
+    "runtime-1000-control": {
+      "exit_code": 1,
+      "log_sha256": "68c8edb159bb4aa083361ba1d50bb326fc2b627e5408ff5cd3150634f1d8b643",
+      "bytes": 1077,
+      "tests": null,
+      "seconds": null,
+      "footer_ok": false,
+      "command": "python tools/benchmark_universal_affected_impact.py --baseline-source ../base-363 --baseline-label 'PR #363 / e797439989dba56ca2ccf3d37cf1b3521c501b1c' --cases 1000:200 --candidates --training --correct --output ../results/runtime-1000-control-aa.json --log-dir ../results/runtime-1000-control-logs"
+    }
+  },
+  "limits": "Repeatable synthetic fixtures are not new independent statistical evidence or Pi/HA acceptance.",
+  "restored_root_test_input": {
+    "file": "BENCHMARK_PRODUCT_F24.md",
+    "sha256": "e7ca81fd4071f29da4b0287b4bb0a2d82e24fd60e735df558f7dd8cba18f0412",
+    "reason": "Initial copied snapshot omitted this root documentation input; 3099 passed and one FileNotFoundError. No code change."
+  }
+}

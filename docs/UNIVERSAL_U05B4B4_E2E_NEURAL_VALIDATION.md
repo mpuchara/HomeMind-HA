@@ -83,6 +83,10 @@ each experiment; 1000/200 has only one trial per device, so some devices are
 absent from train or future holdout. They are not silently removed from gate
 coverage requirements. Background sensors are registered and seeded; this is
 a sparse event producer, not 1000 high-rate sensor streams.
+The lifecycle cases run sequentially in one process, so later RSS includes
+allocator/module caches. The sparse offline fixture disables only the
+interactive foreground grace interval in its temporary OPTIONS patch; it
+does not change production defaults or composed-runtime benchmark options.
 
 | Sensors/devices | Original decisions | Eligible/rejected | Actual updates | Train/holdout | Quality Gate / publication |
 |---|---:|---:|---:|---:|---|
@@ -102,8 +106,8 @@ Technical integration, optimization and statistical qualification are separate.
 |---|---:|---:|---:|---:|---:|
 | 5/1 | 287.97 | 671.35 | 382.79 | 775.48 | 7,745,424 |
 | 50/10 | 287.51 | 626.59 | 250.94 | 666.98 | 7,724,848 |
-| 200/30 | 658.99 | 1454.50 | 21.35 | 590.83 | 8,527,688 |
-| 1000/200 | 1093.01 | 1529.85 | 27.64 | 1273.28 | 15,724,528 |
+| 200/30 | 659.03 | 1454.48 | 21.32 | 590.85 | 8,527,688 |
+| 1000/200 | 1092.96 | 1529.91 | 27.63 | 1273.27 | 15,724,528 |
 
 Gate timing is nested in the publication attempt, not additive. The successful
 5/1 artifact guarded load took 361.23 ms and guarded offline inference 950.55 ms;
@@ -126,3 +130,25 @@ Controlled runtime A/A and a fresh full local suite are in progress. Their
 final measurements and CI identities will be recorded in the handoff before
 this stage is claimed complete. Earlier/adverse observations are retained
 separately and are not substituted for controlled current-code results.
+
+## Reproduction
+
+Use an offline disposable workspace with NumPy 2.3.3, one benchmark at a time.
+Preserve previous output paths and choose new names for every rerun. Existing
+baseline/current sources must be exact detached snapshots; the current harness
+is intentionally shared across both revisions.
+
+```bash
+python tools/benchmark_universal_e2e.py --output /new-results/e2e.json
+python tools/benchmark_universal_affected_impact.py \
+  --baseline-source /snapshots/exact-pr363 \
+  --baseline-label 'PR #363 / e797439989dba56ca2ccf3d37cf1b3521c501b1c' \
+  --candidates --training --correct \
+  --output /new-results/runtime-aa.json --log-dir /new-results/runtime-logs
+python -m unittest discover -s tests -v
+```
+
+Never point the synthetic producer at a live HA/Recorder database. It requires
+empty disposable native tables. Do not run the full regression concurrently
+with controlled performance measurements. The runtime benchmark's background
+training is deliberate workload inside every variant, not external contention.
