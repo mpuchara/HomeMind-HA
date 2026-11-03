@@ -60,6 +60,7 @@ DEFAULT_OPTIONS = {
     "universal_observer_enabled": False,
     # U04c: independent action observer; requires U04b observer opt-in.
     "universal_action_observer_enabled": False,
+    "universal_training_collector_enabled": False,
     "max_context_entities": 28,
     "temporal_short_seconds": 60,
     "temporal_long_seconds": 300,

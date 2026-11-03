@@ -89,6 +89,11 @@ class ReplayCoverage:
     entity_ids: frozenset[str]
     complete: bool
     version: int = CONTRACT_VERSION
+    seed_receipts: tuple[tuple[str, float, float], ...] = ()
+    collector_retention_epoch: int | None = None
+
+    def __post_init__(self):
+        object.__setattr__(self, 'seed_receipts', tuple(tuple(r) for r in self.seed_receipts))
 
 
 @dataclass(frozen=True)
@@ -228,7 +233,7 @@ def _eligible_sample(label, receipt, replay, coverage):
     affected = set(data['affected_sensor_ids'])
     if not required or len(required) > 10000:
         raise ValueError('missing_or_oversized_historical_dependency_set')
-    if (coverage is None or coverage.version != CONTRACT_VERSION
+    if (coverage is None or coverage.version not in (CONTRACT_VERSION, 2)
             or coverage.complete is not True or not coverage.source_revision
             or not isinstance(coverage.entity_ids, frozenset)
             or not required <= coverage.entity_ids
@@ -246,7 +251,8 @@ def _eligible_sample(label, receipt, replay, coverage):
         raise ValueError('no_usable_causal_context')
     if any(t.event_ts > at or t.received_ts > at for t in selected):
         raise ValueError('future_observation')
-    if any(t.event_ts < coverage.start_ts for t in selected):
+    seeds = set(coverage.seed_receipts) if coverage.version == 2 else set()
+    if any(t.event_ts < coverage.start_ts and (t.entity_id,t.event_ts,t.received_ts) not in seeds for t in selected):
         raise ValueError('seed_outside_verified_history_coverage')
     agent = data['agent']
     if str(agent['id']) != label.agent_id:
@@ -396,14 +402,27 @@ def prepare_dataset(conn, agent_ids, decisions, registry_timeline, *, as_of_ts,
             entities.update(json.loads(receipt.payload_json)['required_sensor_ids'])
     if len(entities) > 10000 or not 1 <= max_observations <= 100000:
         raise ValueError('observation resource bounds exceeded')
+    since = coverage.start_ts
+    if coverage.version == 2:
+        from universal_history_collector import verify_collection_coverage
+        verify_collection_coverage(conn,coverage)
+        seeds = coverage.seed_receipts
+        if (not 1 <= len(seeds) <= 10000 or len({r[0] for r in seeds}) != len(seeds)
+                or set(r[0] for r in seeds) != set(coverage.entity_ids)
+                or any(not _number(r[1]) <= _number(r[2]) <= _number(coverage.start_ts) for r in seeds)):
+            raise ValueError('invalid collection seed receipts')
+        since = min(since, *(float(r[1]) for r in seeds))
     journal = read_feature_journal(
         conn, entities, at_ts=as_of_ts, max_records=max_observations,
         max_bytes=MAX_SOURCE_BYTES,
-        since_ts=coverage.start_ts,
+        since_ts=since,
         checkpoint=lambda: TRAINING_BUDGET.checkpoint('universal_feature_read', thread_name=BUDGET_THREAD),
     )
-    archive = read_archive_observations(conn, entities, at_ts=as_of_ts,
-                                        max_records=max_observations, since_ts=coverage.start_ts)
+    # V2 attests the native FeatureJournal stream. Archive/import receipts must
+    # not silently repair a missing collector event or enrich its exact payload.
+    # Legacy V1 keeps its established strict journal/archive merge unchanged.
+    archive = (() if coverage.version == 2 else read_archive_observations(
+        conn, entities, at_ts=as_of_ts, max_records=max_observations, since_ts=since))
     # Do not mix later enriched attributes into an earlier receipt. Deduplicate
     # only exact-clock equivalents; inconsistent facts at identical clocks fail.
     observations = {}
@@ -416,6 +435,8 @@ def prepare_dataset(conn, agent_ids, decisions, registry_timeline, *, as_of_ts,
         if len(observations) > max_observations:
             raise ValueError('combined observation row cap exceeded')
         TRAINING_BUDGET.checkpoint('universal_observation_merge', thread_name=BUDGET_THREAD)
+    if coverage.version == 2 and not set(r for r in coverage.seed_receipts if r[0] in entities) <= observations.keys():
+        raise ValueError('collection seeds expired or missing')
     replay = CausalObservationReplay(observations.values(), registry_timeline=registry_timeline)
     return build_dataset(labels, decisions, replay, coverage=coverage, max_samples=max_samples)
 

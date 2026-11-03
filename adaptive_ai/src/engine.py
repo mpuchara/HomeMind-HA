@@ -151,6 +151,9 @@ class HAEventStream(threading.Thread):
                             ):
                                 raise RuntimeError("state_changed subscription confirmation timeout")
                             flush_registry_due()
+                            collector=getattr(self.engine,'universal_training_collector',None)
+                            if collector is not None and self.engine.ws_subscription_confirmed:
+                                collector.notify('barrier')
                             continue
                         websocket_received_perf = time.perf_counter()
                         websocket_received_ts = now_ts()
@@ -170,6 +173,8 @@ class HAEventStream(threading.Thread):
                                 self.engine.ws_connected = True
                                 self.engine.ws_error = None
                             HA.last_ok = now_ts(); HA.last_error = None
+                            collector=getattr(self.engine,'universal_training_collector',None)
+                            if collector is not None:collector.notify('connection',True)
                             if RUNTIME_DEBUG.enabled:
                                 RUNTIME_DEBUG.instant(
                                     "ha_state_subscription",
@@ -182,13 +187,25 @@ class HAEventStream(threading.Thread):
                             registry_inflight.pop(name, None)
                             if msg.get("success"):
                                 payload = msg.get("result") or []
-                                self.engine.registry_worker.submit(callback, payload)
+                                collector=getattr(self.engine,'universal_training_collector',None)
+                                if collector is None:
+                                    self.engine.registry_worker.submit(callback, payload)
+                                else:
+                                    self.engine.registry_worker.submit(collector.apply_registry,name,callback,payload,
+                                        websocket_received_ts,name not in registry_dirty,collector.epoch)
                             flush_registry_due()
                             continue
                         if msg.get("type") == "event" and msg.get("id") in registry_event_names:
                             name = registry_event_names[msg["id"]]
-                            registry_dirty.add(name)
-                            send_registry(name)
+                            collector=getattr(self.engine,'universal_training_collector',None)
+                            if collector is not None:
+                                collector.notify('gap','registry_announced')
+                                for registry_kind in ('entity','device','area'):
+                                    registry_dirty.add(registry_kind)
+                                    send_registry(registry_kind)
+                            else:
+                                registry_dirty.add(name)
+                                send_registry(name)
                             flush_registry_due()
                             continue
                         if msg.get("type") != "event" or msg.get("id") != 2:
@@ -212,8 +229,14 @@ class HAEventStream(threading.Thread):
                             self.engine.ws_connected = True
                             self.engine.ws_error = None
                         self.engine.on_state_changed(data)
+                        collector=getattr(self.engine,'universal_training_collector',None)
+                        if collector is not None:
+                            if not collector.subscription_known:collector.notify('connection',True)
+                            collector.notify('barrier',websocket_received_ts)
                         flush_registry_due()
             except Exception as exc:
+                collector=getattr(self.engine,'universal_training_collector',None)
+                if collector is not None:collector.notify('connection',False)
                 with self.engine.lock:
                     self.engine.ws_connected = False
                     self.engine.ws_subscription_confirmed = False
@@ -641,6 +664,13 @@ class Engine(threading.Thread):
         if not entity_id:
             return
         received_ts = now_ts()
+        collector=getattr(self,'universal_training_collector',None)
+        if collector is not None:
+            original_event_ts=parse_ts((new_state or {}).get('last_updated') or (new_state or {}).get('last_changed'))
+            original_received=data.get('_hm_ws_received_ts',received_ts)
+            if type(original_received) not in (int,float) or not math.isfinite(original_received) or not 0<original_received<=received_ts:
+                original_received=received_ts
+            collector.notify('event',entity_id,new_state,event_ts=original_event_ts,received_ts=original_received)
         with self.lock:
             old_state = self.state_map.get(entity_id)
             if old_state == new_state:
@@ -809,6 +839,8 @@ class Engine(threading.Thread):
         try:
             states = HA.states()
         except Exception as exc:
+            collector=getattr(self,'universal_training_collector',None)
+            if collector is not None:collector.notify('gap','snapshot_failure')
             with self.lock:
                 self.last_state_sync_error = f"{type(exc).__name__}: {exc}"
                 self.state_resync_stats["failures"] = int(
@@ -890,7 +922,8 @@ class Engine(threading.Thread):
             self.error = None
             # Only a shallow state-map snapshot under the lock. The observer
             # builds compact sensor records off Ingress after releasing it.
-            observer_snapshot = dict(state_map) if getattr(self, "universal_observer", None) is not None else None
+            observer_snapshot = dict(state_map) if (getattr(self, "universal_observer", None) is not None
+                or getattr(self,'universal_training_collector',None) is not None) else None
 
         # Current readers must wake at acceptance, before optional archive persistence.
         if initial or changed_eids:
@@ -917,6 +950,9 @@ class Engine(threading.Thread):
                 observer.submit_snapshot(observer_snapshot, received_ts=poll_received_ts)
             except Exception:
                 pass  # Reconciliation and HA connectivity remain authoritative.
+        collector=getattr(self,'universal_training_collector',None)
+        if collector is not None:
+            collector.notify('snapshot',observer_snapshot,received_ts=poll_received_ts)
         if initial or changed_eids:
             self.wake_event.set()
 
@@ -1074,6 +1110,8 @@ class Engine(threading.Thread):
                 archive_rows = int(self.flush_archive(force=False) or 0)
                 decision_rows = int(self.teaching.flush(force=False) or 0)
                 context_saved = bool(self.context.save())
+                collector=getattr(self,'universal_training_collector',None)
+                if collector is not None:collector.housekeep()
             self.housekeeping_retry.recovered()
         except StoragePressure as exc:
             # This is expected admission backpressure, not a runtime failure.
@@ -2447,9 +2485,17 @@ class Engine(threading.Thread):
         # legitimately include durable guards and an HA service call.
         trace_stage("executor_submit", time.perf_counter(), boundary="decision_ready")
         executor_started = time.perf_counter()
-        result = self.executor.submit(
-            intent, features, chosen['index'], agent_snapshot=agent
-        )
+        collector=getattr(self,'universal_training_collector',None)
+        if collector is not None:
+            collector.notify('decision',intent,agent,state_map.get(agent['target_entity']),
+                             required=tuple(policy.schema.entities),affected=())
+            collector.tls.decision_id=intent.intent_id
+        try:
+            result = self.executor.submit(
+                intent, features, chosen['index'], agent_snapshot=agent
+            )
+        finally:
+            if collector is not None:collector.tls.decision_id=None
         decision_to_executor_ms = max(
             0.0, (time.perf_counter() - executor_started) * 1000.0
         )

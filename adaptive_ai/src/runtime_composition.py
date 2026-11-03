@@ -356,6 +356,9 @@ class RuntimeCompositionRoot:
         # U04b: optional observer is the only new runtime component. Disabled
         # installs import no NumPy and allocate no extra event queues/threads.
         from settings import OPTIONS as runtime_options
+        if bool(runtime_options.get("universal_training_collector_enabled", False)):
+            from universal_history_collector import install as install_universal_training_collector
+            install_universal_training_collector(engine,self.core.STORE)
         if bool(runtime_options.get("universal_observer_enabled", False)):
             from universal_runtime_observer import install as install_universal_observer
             install_universal_observer(engine)

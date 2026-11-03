@@ -23,7 +23,7 @@ from runtime_scaling_probe import Probe, thread_cpu_snapshot, thread_cpu_delta
 
 def run(source, count, events, independent=False, entities=780, debug=False,
         warmup=0, probe=False, legacy_storage_startup=False, legacy_lineage=False,
-        candidates=False, training=False, correct=False, legacy_thread_settings=False):
+        candidates=False, training=False, correct=False, legacy_thread_settings=False, collector=False):
     with tempfile.TemporaryDirectory(prefix='hm-scaling-') as data, ExitStack() as stack:
         # Replay identical event/received wall-clock values in independent runs.
         # Scheduling, latency clocks and CPU accounting still use real time.
@@ -61,6 +61,7 @@ def run(source, count, events, independent=False, entities=780, debug=False,
         ha = stack.enter_context(patch.object(product.executor_module.HA, 'service',
             side_effect=AssertionError('Benchmark attempted physical dispatch')))
         stack.enter_context(patch.object(product.AUTOMATION_KNOWLEDGE, 'hints_for_target', return_value=(set(), [])))
+        stack.enter_context(patch.dict(product.OPTIONS,universal_training_collector_enabled=collector))
         shipped, engine, descriptor = _prepare_shipped_runtime(store)
         states = {}
         agents = []
@@ -310,6 +311,9 @@ def run(source, count, events, independent=False, entities=780, debug=False,
                     raise AssertionError('Tournament fixture writer did not stop')
             for name in ('control_workers','poll_worker','registry_worker','housekeeping_worker'):
                 getattr(engine, name).shutdown(wait=True, cancel_futures=True)
+            historical=getattr(engine,'universal_training_collector',None)
+            if historical is not None and not historical.stop(10.):
+                raise AssertionError('Collector fixture failed to stop')
             COMPUTE.close()
         ha.assert_not_called()
         if background_stats['errors']:
@@ -334,6 +338,7 @@ def run(source, count, events, independent=False, entities=780, debug=False,
             thread_configuration=thread_configuration, thread_cpu=cpu_threads,
             production_thread_settings=not legacy_thread_settings,
             concurrent_policy_training=training, correct_reads_enabled=correct,
+            collector_enabled=collector,collector=(historical.diagnostics() if historical is not None else None),
             background_work=background_stats, candidate_count=len(candidate_ids),
             candidate_diagnostics=engine.agent_candidates.candidate_shadow_async_diagnostics(),
             input_sha256=input_digest.hexdigest(), event_clock='fixed synthetic 100ms increments; latency clocks real',
@@ -399,6 +404,7 @@ if __name__ == '__main__':
     p.add_argument('--training', action='store_true', help='Concurrent isolated real policy fit/model writes')
     p.add_argument('--correct', action='store_true', help='Read Correct history while inference/training run')
     p.add_argument('--legacy-thread-settings', action='store_true', help='Ablate omitted production BLAS/timeslice setup')
+    p.add_argument('--collector', action='store_true', help='Opt-in historical collector; no training or HA authority')
     a = p.parse_args()
     if not 0 <= a.agents <= 20 or not 2 <= a.events <= 5000 or not 32 <= a.entities <= 4096:
         p.error('bounded agents/events/entities required')
@@ -406,5 +412,5 @@ if __name__ == '__main__':
         p.error('warmup must be 0..500')
     result = (scheduler(a.source_root,a.agents,a.events,a.entities) if a.scheduler else
               run(a.source_root,a.agents,a.events,a.independent,a.entities,a.debug,a.warmup,a.probe,a.legacy_storage_startup,a.legacy_lineage,
-                  a.candidates,a.training,a.correct,a.legacy_thread_settings))
+                  a.candidates,a.training,a.correct,a.legacy_thread_settings,a.collector))
     print('SCALING_JSON='+json.dumps(result,sort_keys=True))

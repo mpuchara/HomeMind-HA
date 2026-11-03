@@ -607,13 +607,17 @@ class DeviceAgentService:
                 except (TypeError, ValueError) as exc:
                     legal, reason = False, str(exc)
             out.append({"requested": desired, "value": value, "legal": legal, "reason": reason})
-        return {
+        result = {
             "resource_keys": desc["resource_keys"],
             "actions": out,
             "fallback": "abstain" if not any(x["legal"] for x in out) else "policy_choice_within_mask",
             "manual_priority": True,
             "min_dwell_seconds": dwell,
         }
+        collector=getattr(self,'universal_training_collector',None)
+        if collector is not None:
+            collector.notify('mask',agent,state,desc,result,at=now)
+        return result
 
     def reserve_dispatch(self, agent, intent_id, *, now=None, ttl=None):
         now = time.time() if now is None else float(now)
