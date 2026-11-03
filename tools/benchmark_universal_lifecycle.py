@@ -9,6 +9,9 @@ import time
 
 for name in ('OPENBLAS_NUM_THREADS', 'OMP_NUM_THREADS', 'MKL_NUM_THREADS'):
     os.environ[name] = '1'
+# storage imports its module-level Store: isolate even that bootstrap database.
+_bootstrap = tempfile.TemporaryDirectory(prefix='hm-offline-lifecycle-bootstrap-')
+os.environ['ADAPTIVE_AI_DATA'] = _bootstrap.name
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'adaptive_ai/src'))
 from storage import Store
 from manual_feedback_contract import ManualFeedbackJournal
@@ -25,9 +28,10 @@ def main():
 
     def measured(name, fn):
         wall, cpu = time.perf_counter(), time.process_time()
-        result = fn()
-        timings[name] = dict(wall_seconds=time.perf_counter()-wall, cpu_seconds=time.process_time()-cpu)
-        return result
+        try:
+            return fn()
+        finally:
+            timings[name] = dict(wall_seconds=time.perf_counter()-wall, cpu_seconds=time.process_time()-cpu)
 
     with tempfile.TemporaryDirectory() as folder:
         path = Path(folder)/'offline.db'

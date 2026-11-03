@@ -255,4 +255,3 @@ else:
             self.assertEqual(result.returncode,code,result.stderr)
             self.assertEqual(self.count('universal_validated_checkpoints'),0)
             service=CheckpointLifecycle(Store(self.path));self.assertEqual(service.recover(),1)
-
