@@ -242,6 +242,41 @@ with patch.object(BudgetConnection,'execute',execute):collector.drain()
         journal.prune()
         with self.assertRaisesRegex(ValueError,'retention'):self.source()
 
+    def test_enabled_websocket_registry_refresh_keeps_monotonic_ids(self):
+        import engine as module
+        from test_release_117_ha_websocket_id_order import FakeEngine,FakeWebSocket
+        fake=FakeEngine();ws=FakeWebSocket();fake.universal_training_collector=self.collector
+        fake.registry_worker=SimpleNamespace(submit=lambda callback,*args:callback(*args))
+        ws.loop_messages.insert(-1,dict(id=5,type='event',event={'data':{}}))
+        stream=module.HAEventStream(fake);fake.stream=stream
+        counter=iter(range(0,1000,3))
+        with patch.object(module,'ws_connect',return_value=ws),patch.object(module.time,'monotonic',side_effect=lambda:next(counter)):
+            stream.run()
+        ids=[row['id'] for row in ws.sent if 'id' in row]
+        self.assertEqual(ids,sorted(set(ids)))
+        self.assertEqual(len([r for r in ws.sent if str(r.get('type','')).startswith('config/')]),6)
+        self.assertTrue(fake.ws_subscription_confirmed)
+        self.assertEqual(self.collector.epoch,1)
+        self.drain()
+        with self.assertRaisesRegex(ValueError,'incomplete'):self.source()
+
+    def test_enabled_websocket_disconnect_reaches_collector(self):
+        import engine as module
+        from test_release_117_ha_websocket_id_order import FakeEngine,FakeWebSocket
+        fake=FakeEngine();ws=FakeWebSocket();fake.universal_training_collector=self.collector
+        fake.registry_worker=SimpleNamespace(submit=lambda callback,*args:callback(*args))
+        ws.loop_messages.pop()
+        stream=module.HAEventStream(fake);fake.stream=stream;original=ws.recv
+        def recv(timeout=None):
+            if timeout is not None and not ws.loop_messages:
+                stream.stop_event.set();raise OSError('synthetic disconnect')
+            return original(timeout)
+        with patch.object(module,'ws_connect',return_value=ws),patch.object(ws,'recv',side_effect=recv):
+            stream.run()
+        self.assertFalse(self.collector.subscription_known)
+        self.assertEqual(self.collector.pending_gap,'websocket_disconnected')
+        self.assertFalse(fake.ws_connected)
+
     def test_shadow_prediction_is_not_dispatch_ack_or_physical_execution(self):
         from provenance import ProvenanceJournal
         from universal_history_collector import native_decision_evidence
