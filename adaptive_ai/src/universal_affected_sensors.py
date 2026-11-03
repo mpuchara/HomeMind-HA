@@ -176,7 +176,8 @@ def bind(evidence, parent):
                 generation_id=parent['generation_id'],agent_id=parent['agent']['id'])
 
 
-def validate(evidence, parent, *, sensor_universe=None,topology_information_ts=None):
+def validate(evidence, parent, *, sensor_universe=None,topology_information_ts=None,
+             universe_revision=None,universe_count=None):
     if evidence is None: raise ValueError(parent.get('affected_sensor_status') or 'affected_declaration_missing')
     if type(evidence['contract_version']) is not int or evidence['contract_version']!=VERSION: raise ValueError('affected_unsupported_contract')
     doc=validate_declaration((evidence['declaration_revision'],evidence['declaration_json'],evidence['declaration_checksum']))
@@ -206,4 +207,6 @@ def validate(evidence, parent, *, sensor_universe=None,topology_information_ts=N
             raise ValueError('affected_unknown_sensors')
     if topology_information_ts is not None and doc['topology_information_ts']!=topology_information_ts:
         raise ValueError('affected_topology_information_mismatch')
+    if universe_revision is not None and (doc['sensor_universe_revision']!=universe_revision or doc['sensor_universe_count']!=universe_count):
+        raise ValueError('affected_historical_sensor_universe_mismatch')
     return tuple(doc['affected_sensor_ids'])

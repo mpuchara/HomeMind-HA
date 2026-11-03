@@ -100,3 +100,70 @@ def make_native_source(store):
                                      epochs=evidence['epochs'],coverage=evidence['coverage'],
                                      as_of_ts=evidence['coverage'].complete_through_ts,evidence='synthetic')
     return source,split
+
+
+def make_collected_source(store):
+    """Disposable synthetic stream through the native collector, with original clocks.
+
+    Uses the supported explicit V1 decision receipt API; coverage is newly collected
+    V3, never an upgrade of an older coverage proof. No physical HA claim.
+    """
+    from datetime import datetime, timezone
+    from types import SimpleNamespace
+    from manual_feedback_contract import ManualFeedbackJournal
+    from teaching_rl import RLTeaching
+    from correct_data_foundation import _ensure_schema
+    from observation_contract import FeatureJournal
+    from provenance import ProvenanceJournal
+    from universal_history_collector import HistoricalTrainingCollector, source_from_collection
+    from dataclasses import replace
+    import json
+
+    now=[2.]
+    clock=lambda:now[0]
+    feedback=ManualFeedbackJournal(store,clock=clock)
+    RLTeaching(store,SimpleNamespace());_ensure_schema(store)
+    journal=FeatureJournal(store,clock=clock,retention_hours=1000000)
+    collector=HistoricalTrainingCollector(store,journal,clock=clock)
+    provenance=ProvenanceJournal(store)
+    collector.connection(True)
+    ids=('binary_sensor.motion','sensor.unrelated')
+    collector.registry('entity',[dict(entity_id=eid,area_id='room') for eid in ids])
+    collector.registry('device',[]);collector.registry('area',[dict(area_id='room')])
+    def drain():
+        while collector.pending or collector.pending_gap is not None:
+            if not collector.drain():raise AssertionError(collector.diagnostics())
+    drain();now[0]=20.
+    collector.snapshot({eid:dict(entity_id=eid,state='off',attributes={},
+        last_updated=datetime.fromtimestamp(10.,timezone.utc).isoformat()) for eid in ids},
+        requested_ts=19.,received_ts=20.,epoch=collector.epoch)
+    collector.barrier();drain()
+    _,split,evidence=make_dataset(sensors=1,samples=128,step_seconds=120.,return_evidence=True)
+    for i,label in enumerate(evidence['labels']):
+        at=label.decision_ts
+        row=evidence['rows'][i+1]
+        now[0]=row.received_ts
+        collector.event(row.entity_id,dict(entity_id=row.entity_id,state=row.state,attributes={}),
+                        event_ts=row.event_ts,received_ts=row.received_ts)
+        now[0]=at
+        receipt=replace(evidence['decisions'][(label.agent_id,at)],
+                        registry_revision=collector.topology,registry_information_ts=2.)
+        agent=json.loads(receipt.payload_json)['agent']
+        intent=SimpleNamespace(intent_id=f'collected:{i}',agent_id=label.agent_id,
+            target_entity=agent['target_entity'],target_property=agent['target_property'],
+            created_at=at,desired_value=label.desired_action,policy_version=12,model_revision='fixture',decision_source='policy')
+        provenance.record_decision(decision_id=intent.intent_id,created_time=at,agent_id=label.agent_id,
+            generation_id=label.generation_id,model_version=12,model_revision='fixture')
+        collector.decision(intent,agent,dict(entity_id=intent.target_entity,state='off',attributes={}),
+            required=ids[:1],affected=(),receipt=receipt)
+        now[0]=label.available_ts
+        feedback.record(agent_id=label.agent_id,selected_ts=at,source='correct',
+            correct_action=label.desired_action,feedback_id=label.feedback_id,
+            generation_id=label.generation_id,episode_id=label.episode_id)
+        collector.barrier();drain()
+    with store.conn() as c:
+        c.execute('BEGIN')
+        source=source_from_collection(c,['agent0'],start=20.,through=now[0])
+        data=source.dataset(c)
+        if len(data.samples)!=128:raise AssertionError(data.rejected)
+    return source,split

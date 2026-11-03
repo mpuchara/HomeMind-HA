@@ -961,6 +961,8 @@ class FeatureJournal:
             # Existing collection proofs must expire on pruning even after the
             # option is disabled on a later boot. One startup schema lookup only.
             if c.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='universal_collection_meta'").fetchone():
+                from universal_retention import ensure_schema
+                ensure_schema(c)
                 self.store._universal_training_retention_changed=lambda conn: conn.execute(
                     'UPDATE universal_collection_meta SET retention_epoch=retention_epoch+1 WHERE id=1')
 
@@ -1271,17 +1273,29 @@ class FeatureJournal:
                       "(SELECT window_id FROM feature_windows WHERE protected_until<?)", (now,))
             c.execute("DELETE FROM feature_windows WHERE protected_until<?", (now,))
             observations_before=c.total_changes
-            c.execute("DELETE FROM feature_observation_events WHERE received_time<? AND protected_until<?",
-                      (cutoff, now))
+            # Bounded candidate lists; native triggers atomically track every
+            # actual row mutation, including hard-cap protected-row deletion.
+            while True:
+                deleted=c.execute('''DELETE FROM feature_observation_events WHERE event_key IN
+                    (SELECT event_key FROM feature_observation_events
+                     WHERE received_time<? AND protected_until<? LIMIT 512)''',(cutoff,now)).rowcount
+                if deleted<512:break
             if entity_id:
-                extra = c.execute("""SELECT event_key FROM feature_observation_events
-                    WHERE entity_id=? AND protected_until<? ORDER BY received_time DESC LIMIT -1 OFFSET ?""",
-                    (str(entity_id), now, self.max_events_per_entity)).fetchall()
-                if extra:
+                while True:
+                    extra = c.execute("""SELECT event_key FROM feature_observation_events
+                        WHERE entity_id=? AND protected_until<? ORDER BY received_time DESC LIMIT 512 OFFSET ?""",
+                        (str(entity_id), now, self.max_events_per_entity)).fetchall()
+                    if not extra:break
                     c.executemany("DELETE FROM feature_observation_events WHERE event_key=?", [(r[0],) for r in extra])
-            total = int(c.execute("SELECT COUNT(*) FROM feature_observation_events").fetchone()[0] or 0)
-            if total > self.global_event_limit:
-                excess = total - self.global_event_limit
+            tracked=c.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='universal_retention_meta'").fetchone()
+            if tracked:
+                row=c.execute('SELECT live_count FROM universal_retention_meta WHERE id=1').fetchone()
+                if row is None:raise ValueError('retention count metadata missing')
+                total=int(row[0])
+            else:
+                total = int(c.execute("SELECT COUNT(*) FROM feature_observation_events").fetchone()[0] or 0)
+            while total > self.global_event_limit:
+                excess = min(512,total-self.global_event_limit)
                 # Preserve the same priority: oldest unprotected rows first, then
                 # protected rows only when required by the hard global cap. The
                 # covering time index avoids reading/sorting every event payload.
@@ -1295,6 +1309,8 @@ class FeatureJournal:
                         INDEXED BY idx_feature_obs_prune_cover WHERE protected_until>?
                         ORDER BY received_time ASC,rowid ASC LIMIT ?""", (now, remaining)).fetchall()
                 c.executemany("DELETE FROM feature_observation_events WHERE event_key=?", [(r[0],) for r in doomed])
+                if not doomed:break
+                total-=len(doomed)
             retention_changed=getattr(self.store,'_universal_training_retention_changed',None)
             if retention_changed is not None and c.total_changes>observations_before:
                 retention_changed(c)

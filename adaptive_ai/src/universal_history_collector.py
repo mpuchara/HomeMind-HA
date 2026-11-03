@@ -115,6 +115,8 @@ class HistoricalTrainingCollector(threading.Thread):
         with self.store.conn() as c:
             c.execute('CREATE TABLE IF NOT EXISTS universal_collection_meta (id INTEGER PRIMARY KEY CHECK(id=1), retention_epoch INTEGER NOT NULL)')
             c.execute('INSERT OR IGNORE INTO universal_collection_meta VALUES(1,0)')
+            from universal_retention import ensure_schema
+            ensure_schema(c)
             c.execute('''CREATE TABLE IF NOT EXISTS universal_collection_sessions
                 (id TEXT PRIMARY KEY, started REAL NOT NULL, ended REAL, reason TEXT)''')
             c.execute('CREATE INDEX IF NOT EXISTS idx_uc_sessions_open ON universal_collection_sessions(ended)')
@@ -305,9 +307,11 @@ class HistoricalTrainingCollector(threading.Thread):
 
     def _journal_rows(self, rows):
         from training_budget import TRAINING_BUDGET
+        keys=[]
         for offset in range(0,len(rows),128):
-            self.journal.record_batch(rows[offset:offset+128])
+            keys.extend(self.journal.record_batch(rows[offset:offset+128]) or ())
             TRAINING_BUDGET.checkpoint('universal_collection_write',thread_name='adaptive-ai-index-universal-scorer')
+        return keys
 
     def _write(self, batch, gap, epoch, reset_registries):
         from settings import parse_ts
@@ -371,19 +375,30 @@ class HistoricalTrainingCollector(threading.Thread):
                     # Use a separate connection; metadata transaction has not written
                     # for this snapshot path after _close only if no previous segment.
                     c.commit()
-                    self._journal_rows(seedrows)
+                    from universal_retention import origin
+                    with self.store.conn() as boundary:
+                        tracker,origin_rev=origin(boundary)
+                    seed_keys=self._journal_rows(seedrows)
                     c.execute('BEGIN IMMEDIATE')
                     current=c.execute('SELECT retention_epoch FROM universal_collection_meta WHERE id=1').fetchone()[0]
-                    if current!=retention:
+                    if current!=retention or origin(c)!=(tracker,origin_rev) or len(seed_keys)!=len(seeds):
                         continue
                     self.segment=uuid.uuid4().hex
-                    proof=encoded(dict(version=2,source_revision=self.segment,start_ts=at,
+                    from universal_affected_sensors import topology as affected_topology
+                    _,universe,_=affected_topology(c,self.topology)
+                    proof=encoded(dict(version=3,source_revision=self.segment,start_ts=at,
                                        complete_through_ts=at,entity_ids=sorted(states),complete=True,
-                                       seed_receipts=seeds,collector_retention_epoch=retention))
+                                       seed_receipts=seeds,collector_retention_epoch=retention,
+                                       topology_revision=self.topology,historical_sensor_universe_revision=digest(encoded(universe)),
+                                       historical_sensor_universe_count=len(universe),retention_tracker=tracker,
+                                       retention_origin_revision=origin_rev,
+                                       seed_event_keys=[(seed[0],key,seed[1],seed[2]) for seed,key in zip(seeds,seed_keys)]))
                     proof_hash=digest(proof)
                     seal=digest(encoded([self.segment,at,at,self.topology,retention,proof_hash]))
                     c.execute('INSERT INTO universal_collection_segments VALUES(?,?,?,?,?,?,?,0,NULL,?,?)',
                               (self.segment,self.session,at,at,self.topology,proof,retention,proof_hash,seal))
+                    from universal_retention import seal as seal_retention
+                    seal_retention(c,at)
                 elif kind=='barrier' and self.segment:
                     # A gap arriving during writes defeats advancement of this proof.
                     advances[self.segment]=max(payload,advances.get(self.segment,payload))
@@ -448,6 +463,8 @@ class HistoricalTrainingCollector(threading.Thread):
                         through=max(row[1],at)
                         seal=digest(encoded([sid,row[0],through,row[2],row[3],row[4]]))
                         c.execute('UPDATE universal_collection_segments SET through=?,watermark_hash=? WHERE id=?',(through,seal,sid))
+                        from universal_retention import seal as seal_retention
+                        seal_retention(c,through)
             if self.epoch!=epoch:
                 self._close(c,'concurrent_gap')
         self.stats['written']+=len(batch);self.stats['batches']+=1
@@ -593,6 +610,9 @@ def native_decision_evidence(conn, decision_id):
 
 def verify_collection_coverage(conn, coverage):
     """A previously exported source is not authority after native retention loss."""
+    if coverage.version==3:
+        from universal_retention import verify
+        return verify(conn,coverage)
     row=conn.execute('SELECT start,through,topology,proof,retention_epoch,proof_hash,watermark_hash '
                      'FROM universal_collection_segments WHERE id=?',(coverage.source_revision,)).fetchone()
     current=conn.execute('SELECT retention_epoch FROM universal_collection_meta WHERE id=1').fetchone()
@@ -601,6 +621,7 @@ def verify_collection_coverage(conn, coverage):
     if digest(row[3])!=row[5] or digest(encoded([coverage.source_revision,row[0],row[1],row[2],row[4],row[5]]))!=row[6]:
         raise ValueError('corrupt collection witness')
     proof=json.loads(row[3])
+    if proof.get('version')!=2:raise ValueError('collection witness contract mismatch')
     if (coverage.start_ts!=row[0] or not row[0]<=coverage.complete_through_ts<=row[1]
             or coverage.entity_ids!=frozenset(proof['entity_ids'])
             or coverage.seed_receipts!=tuple(tuple(s) for s in proof['seed_receipts'])
@@ -623,11 +644,12 @@ def source_from_collection(conn, agent_ids, *, start, through, max_decisions=204
         FROM universal_collection_segments WHERE start<=? AND through>=?
         ORDER BY start DESC LIMIT 1''',(start,through)).fetchone()
     if row is None:raise ValueError('incomplete replay coverage')
+    original_proof=json.loads(row[4])
     current=conn.execute('SELECT retention_epoch FROM universal_collection_meta WHERE id=1').fetchone()[0]
-    if current!=row[5]:raise ValueError('native retention invalidated coverage')
+    if original_proof.get('version')!=3 and current!=row[5]:raise ValueError('native retention invalidated coverage')
     if digest(row[4])!=row[6] or digest(encoded([row[0],row[1],row[2],row[3],row[5],row[6]]))!=row[7]:
         raise ValueError('corrupt collection coverage')
-    proof=json.loads(row[4]);proof['complete_through_ts']=row[2]
+    proof=dict(original_proof);proof['complete_through_ts']=row[2]
     proof['entity_ids']=frozenset(proof['entity_ids'])
     coverage=ReplayCoverage(**proof)
     topology=conn.execute('SELECT at,body,checksum FROM universal_collection_topology WHERE id=?',(row[3],)).fetchone()
@@ -679,6 +701,18 @@ def source_from_collection(conn, agent_ids, *, start, through, max_decisions=204
         decisions[key]=receipt
         from training_budget import TRAINING_BUDGET
         TRAINING_BUDGET.checkpoint('universal_collection_read',thread_name='adaptive-ai-index-universal-data')
+    if coverage.version==3:
+        from dataclasses import replace
+        from universal_retention import make_witness
+        required=set()
+        for receipt in decisions.values():
+            required.update(json.loads(receipt.payload_json)['required_sensor_ids'])
+        if not required:required=set(coverage.entity_ids)
+        witness=make_witness(conn,row[0],original_proof,through=through,required=required)
+        coverage=replace(coverage,entity_ids=frozenset(required),complete_through_ts=through,
+            seed_receipts=tuple(tuple(s) for s in witness['seed_receipts']),
+            seed_event_keys=tuple(tuple(s) for s in witness['seed_event_keys']),granular_witness_json=encoded(witness))
+        verify_collection_coverage(conn,coverage)
     return NativeDatasetSource.create(agent_ids=ids,decisions=decisions,
         epochs=[RegistryEpoch(topology[0],topology[0],semantic)],coverage=coverage,
         as_of_ts=through,evidence='offline')

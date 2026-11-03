@@ -1,0 +1,3618 @@
+{
+  "scope": "WSL/Linux HOST; not Pi, HA Recorder or physical acceptance",
+  "baseline_commit": "4755830a0244c6ae33e115e27ce321600806c341",
+  "runtime_implementation_commit": "728ba13091f7a5d3ff0a90230cda9f6bd77c9553",
+  "offline_membership_and_component_commit": "e0ac6f3525005b007f4f7af862b2041c37126453",
+  "versions": {
+    "python": "3.12.3 (main, Aug 31 2026, 10:18:26) [GCC 13.3.0]",
+    "numpy": "2.3.3",
+    "platform": "Linux-6.18.54.1-microsoft-standard-WSL2-x86_64-with-glibc2.39",
+    "machine": "x86_64"
+  },
+  "harness_sha256": {
+    "benchmark_universal_retention.py": "3d1cf3a0e5c2efb7c9df7585d8a03007e5206817fb86c44613bce902b9cc5056",
+    "benchmark_universal_affected_sensors.py": "b2b32fe92ef2d1f083c60b332daa41239fe8ad6e9c54792273fabc1ab8b64f2e",
+    "benchmark_universal_affected_impact.py": "02d849b8bbc3588336a5a208e46af00bc96c83d87052a29a1e6b67358d0d1863",
+    "benchmark_runtime_scaling.py": "8b807c63cd5f96bf27849818bb0cc73df55f7654c5394f58cf138025448a7916"
+  },
+  "runtime_events": 40,
+  "runtime_warmup": 8,
+  "results": [
+    {
+      "sensors": 5,
+      "devices": 1,
+      "components": {
+        "pr362-A": {
+          "complete_evidence": 1,
+          "eligible_before": 1,
+          "eligible_after_unrelated": 0,
+          "eligible_after_required": 0,
+          "false_invalidations": 1,
+          "evidence_prepare": {
+            "p50_ms": 253.549595000095,
+            "p95_ms": 253.549595000095,
+            "p99_ms": 253.549595000095
+          },
+          "ram_boundary": {
+            "p50_ms": 0.05928600012339302,
+            "p95_ms": 0.05928600012339302,
+            "p99_ms": 0.05928600012339302
+          },
+          "prepare_sqlite_trace_statements": 57,
+          "cpu_seconds": 0.08366510500000002,
+          "rss_before_mb": 31.21875,
+          "rss_after_mb": 45.07421875,
+          "database_bytes": 536576,
+          "database_growth_bytes": 16384,
+          "metadata_page_bytes": 0,
+          "metadata_rows": 0,
+          "operations": {
+            "verify_initial": {
+              "name": "verify_initial",
+              "wall_ms": 1.7545069999869156,
+              "cpu_ms": 1.756564000000016,
+              "rss_mb": 45.1015625,
+              "rss_before_mb": 45.07421875,
+              "sqlite_trace_statements": 8,
+              "sqlite_selects": 3,
+              "sqlite_trace_rendered_characters": 1478,
+              "result": {
+                "eligible": 1,
+                "same_dataset": true
+              }
+            },
+            "prune_unrelated": {
+              "name": "prune_unrelated",
+              "wall_ms": 8.594213999913336,
+              "cpu_ms": 3.3860330000000105,
+              "rss_mb": 45.1015625,
+              "rss_before_mb": 45.1015625,
+              "sqlite_trace_statements": 27,
+              "sqlite_selects": 5,
+              "sqlite_trace_rendered_characters": 3102,
+              "result": {
+                "deleted": 1
+              }
+            },
+            "verify_after_unrelated": {
+              "name": "verify_after_unrelated",
+              "wall_ms": 1.3823050003338722,
+              "cpu_ms": 1.3841219999999876,
+              "rss_mb": 45.11328125,
+              "rss_before_mb": 45.1015625,
+              "sqlite_trace_statements": 7,
+              "sqlite_selects": 2,
+              "sqlite_trace_rendered_characters": 1123,
+              "result": {
+                "eligible": 0,
+                "error": "collection retention witness expired"
+              }
+            },
+            "prune_required": {
+              "name": "prune_required",
+              "wall_ms": 8.444406999842613,
+              "cpu_ms": 4.661110000000024,
+              "rss_mb": 45.1171875,
+              "rss_before_mb": 45.11328125,
+              "sqlite_trace_statements": 28,
+              "sqlite_selects": 5,
+              "sqlite_trace_rendered_characters": 3200,
+              "result": {
+                "deleted": 2
+              }
+            },
+            "verify_after_required": {
+              "name": "verify_after_required",
+              "wall_ms": 1.318113999786874,
+              "cpu_ms": 1.3202600000000175,
+              "rss_mb": 45.12109375,
+              "rss_before_mb": 45.12109375,
+              "sqlite_trace_statements": 7,
+              "sqlite_selects": 2,
+              "sqlite_trace_rendered_characters": 1123,
+              "result": {
+                "eligible": 0,
+                "error": "collection retention witness expired"
+              }
+            },
+            "append_protected_stress": {
+              "name": "append_protected_stress",
+              "wall_ms": 96.98833199990986,
+              "cpu_ms": 80.705674,
+              "rss_mb": 52.2734375,
+              "rss_before_mb": 45.12109375,
+              "sqlite_trace_statements": 78,
+              "sqlite_selects": 10,
+              "sqlite_trace_rendered_characters": 507834,
+              "result": {
+                "appended": 2048
+              }
+            },
+            "protected_global_hard_cap_stress": {
+              "name": "protected_global_hard_cap_stress",
+              "wall_ms": 20.859834000020783,
+              "cpu_ms": 15.100102999999976,
+              "rss_mb": 52.2734375,
+              "rss_before_mb": 52.2734375,
+              "sqlite_trace_statements": 2048,
+              "sqlite_selects": 5,
+              "sqlite_trace_rendered_characters": 190274,
+              "result": {
+                "deleted": 2035,
+                "remaining": 16,
+                "protected_hard_cap": true,
+                "candidate_batch_limit": null
+              }
+            },
+            "append_protected_stress_no_trace": {
+              "name": "append_protected_stress_no_trace",
+              "wall_ms": 91.74774399980379,
+              "cpu_ms": 80.840015,
+              "rss_mb": 55.25,
+              "rss_before_mb": 52.2734375,
+              "sqlite_trace_statements": null,
+              "sqlite_selects": null,
+              "sqlite_trace_rendered_characters": null,
+              "result": {
+                "appended": 2048
+              }
+            },
+            "protected_global_hard_cap_stress_no_trace": {
+              "name": "protected_global_hard_cap_stress_no_trace",
+              "wall_ms": 23.699782000221603,
+              "cpu_ms": 14.277776999999992,
+              "rss_mb": 55.25,
+              "rss_before_mb": 55.25,
+              "sqlite_trace_statements": null,
+              "sqlite_selects": null,
+              "sqlite_trace_rendered_characters": null,
+              "result": {
+                "deleted": 2048,
+                "remaining": 16,
+                "protected_hard_cap": true,
+                "candidate_batch_limit": null
+              }
+            }
+          }
+        },
+        "current-A": {
+          "complete_evidence": 1,
+          "eligible_before": 1,
+          "eligible_after_unrelated": 1,
+          "eligible_after_required": 0,
+          "false_invalidations": 0,
+          "evidence_prepare": {
+            "p50_ms": 640.5948359997637,
+            "p95_ms": 640.5948359997637,
+            "p99_ms": 640.5948359997637
+          },
+          "ram_boundary": {
+            "p50_ms": 0.07644100014658761,
+            "p95_ms": 0.07644100014658761,
+            "p99_ms": 0.07644100014658761
+          },
+          "prepare_sqlite_trace_statements": 73,
+          "cpu_seconds": 0.08743180300000003,
+          "rss_before_mb": 31.609375,
+          "rss_after_mb": 45.29296875,
+          "database_bytes": 565248,
+          "database_growth_bytes": 16384,
+          "metadata_page_bytes": 12288,
+          "metadata_rows": 5,
+          "operations": {
+            "verify_initial": {
+              "name": "verify_initial",
+              "wall_ms": 2.7454370001578354,
+              "cpu_ms": 2.7485420000000205,
+              "rss_mb": 45.30859375,
+              "rss_before_mb": 45.29296875,
+              "sqlite_trace_statements": 12,
+              "sqlite_selects": 6,
+              "sqlite_trace_rendered_characters": 2261,
+              "result": {
+                "eligible": 1,
+                "same_dataset": true
+              }
+            },
+            "prune_unrelated": {
+              "name": "prune_unrelated",
+              "wall_ms": 9.57498800016765,
+              "cpu_ms": 5.68223200000001,
+              "rss_mb": 45.30859375,
+              "rss_before_mb": 45.30859375,
+              "sqlite_trace_statements": 40,
+              "sqlite_selects": 9,
+              "sqlite_trace_rendered_characters": 4811,
+              "result": {
+                "deleted": 1
+              }
+            },
+            "verify_after_unrelated": {
+              "name": "verify_after_unrelated",
+              "wall_ms": 2.6662780001061037,
+              "cpu_ms": 2.667907000000025,
+              "rss_mb": 45.3203125,
+              "rss_before_mb": 45.30859375,
+              "sqlite_trace_statements": 12,
+              "sqlite_selects": 6,
+              "sqlite_trace_rendered_characters": 2261,
+              "result": {
+                "eligible": 1,
+                "same_dataset": true
+              }
+            },
+            "prune_required": {
+              "name": "prune_required",
+              "wall_ms": 10.637153000061517,
+              "cpu_ms": 6.569286000000007,
+              "rss_mb": 45.32421875,
+              "rss_before_mb": 45.3203125,
+              "sqlite_trace_statements": 48,
+              "sqlite_selects": 9,
+              "sqlite_trace_rendered_characters": 5565,
+              "result": {
+                "deleted": 2
+              }
+            },
+            "verify_after_required": {
+              "name": "verify_after_required",
+              "wall_ms": 2.8402070001902757,
+              "cpu_ms": 2.8428160000000258,
+              "rss_mb": 45.3359375,
+              "rss_before_mb": 45.32421875,
+              "sqlite_trace_statements": 10,
+              "sqlite_selects": 5,
+              "sqlite_trace_rendered_characters": 1534,
+              "result": {
+                "eligible": 0,
+                "error": "granular retention witness required history invalidated"
+              }
+            },
+            "append_protected_stress": {
+              "name": "append_protected_stress",
+              "wall_ms": 1266.4943669997228,
+              "cpu_ms": 1248.268273,
+              "rss_mb": 52.48046875,
+              "rss_before_mb": 45.3359375,
+              "sqlite_trace_statements": 26706,
+              "sqlite_selects": 11,
+              "sqlite_trace_rendered_characters": 292055435,
+              "result": {
+                "appended": 2048
+              }
+            },
+            "protected_global_hard_cap_stress": {
+              "name": "protected_global_hard_cap_stress",
+              "wall_ms": 55.09989999973186,
+              "cpu_ms": 48.64903600000004,
+              "rss_mb": 52.48046875,
+              "rss_before_mb": 52.48046875,
+              "sqlite_trace_statements": 16298,
+              "sqlite_selects": 13,
+              "sqlite_trace_rendered_characters": 1516356,
+              "result": {
+                "deleted": 2035,
+                "remaining": 16,
+                "protected_hard_cap": true,
+                "candidate_batch_limit": 512
+              }
+            },
+            "append_protected_stress_no_trace": {
+              "name": "append_protected_stress_no_trace",
+              "wall_ms": 116.8620949997603,
+              "cpu_ms": 104.96802500000003,
+              "rss_mb": 54.62109375,
+              "rss_before_mb": 52.48046875,
+              "sqlite_trace_statements": null,
+              "sqlite_selects": null,
+              "sqlite_trace_rendered_characters": null,
+              "result": {
+                "appended": 2048
+              }
+            },
+            "protected_global_hard_cap_stress_no_trace": {
+              "name": "protected_global_hard_cap_stress_no_trace",
+              "wall_ms": 46.970624000095995,
+              "cpu_ms": 40.40645200000004,
+              "rss_mb": 54.62109375,
+              "rss_before_mb": 54.62109375,
+              "sqlite_trace_statements": null,
+              "sqlite_selects": null,
+              "sqlite_trace_rendered_characters": null,
+              "result": {
+                "deleted": 2048,
+                "remaining": 16,
+                "protected_hard_cap": true,
+                "candidate_batch_limit": 512
+              }
+            }
+          }
+        },
+        "pr362-B": {
+          "complete_evidence": 1,
+          "eligible_before": 1,
+          "eligible_after_unrelated": 0,
+          "eligible_after_required": 0,
+          "false_invalidations": 1,
+          "evidence_prepare": {
+            "p50_ms": 306.76578300017354,
+            "p95_ms": 306.76578300017354,
+            "p99_ms": 306.76578300017354
+          },
+          "ram_boundary": {
+            "p50_ms": 0.057622999975137645,
+            "p95_ms": 0.057622999975137645,
+            "p99_ms": 0.057622999975137645
+          },
+          "prepare_sqlite_trace_statements": 57,
+          "cpu_seconds": 0.08301551000000001,
+          "rss_before_mb": 31.22265625,
+          "rss_after_mb": 45.015625,
+          "database_bytes": 536576,
+          "database_growth_bytes": 16384,
+          "metadata_page_bytes": 0,
+          "metadata_rows": 0,
+          "operations": {
+            "verify_initial": {
+              "name": "verify_initial",
+              "wall_ms": 2.896124000017153,
+              "cpu_ms": 2.901502999999972,
+              "rss_mb": 45.04296875,
+              "rss_before_mb": 45.015625,
+              "sqlite_trace_statements": 8,
+              "sqlite_selects": 3,
+              "sqlite_trace_rendered_characters": 1478,
+              "result": {
+                "eligible": 1,
+                "same_dataset": true
+              }
+            },
+            "prune_unrelated": {
+              "name": "prune_unrelated",
+              "wall_ms": 10.09478100013439,
+              "cpu_ms": 5.268591999999961,
+              "rss_mb": 45.04296875,
+              "rss_before_mb": 45.04296875,
+              "sqlite_trace_statements": 27,
+              "sqlite_selects": 5,
+              "sqlite_trace_rendered_characters": 3097,
+              "result": {
+                "deleted": 1
+              }
+            },
+            "verify_after_unrelated": {
+              "name": "verify_after_unrelated",
+              "wall_ms": 1.462583999909839,
+              "cpu_ms": 1.4652939999999504,
+              "rss_mb": 45.05078125,
+              "rss_before_mb": 45.04296875,
+              "sqlite_trace_statements": 7,
+              "sqlite_selects": 2,
+              "sqlite_trace_rendered_characters": 1123,
+              "result": {
+                "eligible": 0,
+                "error": "collection retention witness expired"
+              }
+            },
+            "prune_required": {
+              "name": "prune_required",
+              "wall_ms": 8.614095999746496,
+              "cpu_ms": 4.447264000000006,
+              "rss_mb": 45.0546875,
+              "rss_before_mb": 45.05078125,
+              "sqlite_trace_statements": 28,
+              "sqlite_selects": 5,
+              "sqlite_trace_rendered_characters": 3200,
+              "result": {
+                "deleted": 2
+              }
+            },
+            "verify_after_required": {
+              "name": "verify_after_required",
+              "wall_ms": 1.3605079998342262,
+              "cpu_ms": 1.3624999999999887,
+              "rss_mb": 45.05859375,
+              "rss_before_mb": 45.05859375,
+              "sqlite_trace_statements": 7,
+              "sqlite_selects": 2,
+              "sqlite_trace_rendered_characters": 1123,
+              "result": {
+                "eligible": 0,
+                "error": "collection retention witness expired"
+              }
+            },
+            "append_protected_stress": {
+              "name": "append_protected_stress",
+              "wall_ms": 107.45145300006698,
+              "cpu_ms": 92.52805999999997,
+              "rss_mb": 51.96875,
+              "rss_before_mb": 45.05859375,
+              "sqlite_trace_statements": 78,
+              "sqlite_selects": 10,
+              "sqlite_trace_rendered_characters": 507834,
+              "result": {
+                "appended": 2048
+              }
+            },
+            "protected_global_hard_cap_stress": {
+              "name": "protected_global_hard_cap_stress",
+              "wall_ms": 23.10689399973853,
+              "cpu_ms": 17.69753399999996,
+              "rss_mb": 51.98046875,
+              "rss_before_mb": 51.96875,
+              "sqlite_trace_statements": 2048,
+              "sqlite_selects": 5,
+              "sqlite_trace_rendered_characters": 190286,
+              "result": {
+                "deleted": 2035,
+                "remaining": 16,
+                "protected_hard_cap": true,
+                "candidate_batch_limit": null
+              }
+            },
+            "append_protected_stress_no_trace": {
+              "name": "append_protected_stress_no_trace",
+              "wall_ms": 96.54244499961351,
+              "cpu_ms": 84.00702599999998,
+              "rss_mb": 54.62890625,
+              "rss_before_mb": 51.98046875,
+              "sqlite_trace_statements": null,
+              "sqlite_selects": null,
+              "sqlite_trace_rendered_characters": null,
+              "result": {
+                "appended": 2048
+              }
+            },
+            "protected_global_hard_cap_stress_no_trace": {
+              "name": "protected_global_hard_cap_stress_no_trace",
+              "wall_ms": 21.780226999908336,
+              "cpu_ms": 15.403586000000026,
+              "rss_mb": 54.62890625,
+              "rss_before_mb": 54.62890625,
+              "sqlite_trace_statements": null,
+              "sqlite_selects": null,
+              "sqlite_trace_rendered_characters": null,
+              "result": {
+                "deleted": 2048,
+                "remaining": 16,
+                "protected_hard_cap": true,
+                "candidate_batch_limit": null
+              }
+            }
+          }
+        },
+        "current-B": {
+          "complete_evidence": 1,
+          "eligible_before": 1,
+          "eligible_after_unrelated": 1,
+          "eligible_after_required": 0,
+          "false_invalidations": 0,
+          "evidence_prepare": {
+            "p50_ms": 448.6915620000218,
+            "p95_ms": 448.6915620000218,
+            "p99_ms": 448.6915620000218
+          },
+          "ram_boundary": {
+            "p50_ms": 0.06171600034576841,
+            "p95_ms": 0.06171600034576841,
+            "p99_ms": 0.06171600034576841
+          },
+          "prepare_sqlite_trace_statements": 73,
+          "cpu_seconds": 0.08528511699999997,
+          "rss_before_mb": 31.46484375,
+          "rss_after_mb": 45.15625,
+          "database_bytes": 565248,
+          "database_growth_bytes": 16384,
+          "metadata_page_bytes": 12288,
+          "metadata_rows": 5,
+          "operations": {
+            "verify_initial": {
+              "name": "verify_initial",
+              "wall_ms": 2.6746899998215667,
+              "cpu_ms": 2.677270999999981,
+              "rss_mb": 45.1796875,
+              "rss_before_mb": 45.15625,
+              "sqlite_trace_statements": 12,
+              "sqlite_selects": 6,
+              "sqlite_trace_rendered_characters": 2261,
+              "result": {
+                "eligible": 1,
+                "same_dataset": true
+              }
+            },
+            "prune_unrelated": {
+              "name": "prune_unrelated",
+              "wall_ms": 10.206291000031342,
+              "cpu_ms": 6.28004400000004,
+              "rss_mb": 45.1796875,
+              "rss_before_mb": 45.1796875,
+              "sqlite_trace_statements": 40,
+              "sqlite_selects": 9,
+              "sqlite_trace_rendered_characters": 4811,
+              "result": {
+                "deleted": 1
+              }
+            },
+            "verify_after_unrelated": {
+              "name": "verify_after_unrelated",
+              "wall_ms": 2.817094999954861,
+              "cpu_ms": 2.8192009999999934,
+              "rss_mb": 45.1953125,
+              "rss_before_mb": 45.1796875,
+              "sqlite_trace_statements": 12,
+              "sqlite_selects": 6,
+              "sqlite_trace_rendered_characters": 2261,
+              "result": {
+                "eligible": 1,
+                "same_dataset": true
+              }
+            },
+            "prune_required": {
+              "name": "prune_required",
+              "wall_ms": 10.866182999961893,
+              "cpu_ms": 6.536181000000029,
+              "rss_mb": 45.19921875,
+              "rss_before_mb": 45.1953125,
+              "sqlite_trace_statements": 48,
+              "sqlite_selects": 9,
+              "sqlite_trace_rendered_characters": 5565,
+              "result": {
+                "deleted": 2
+              }
+            },
+            "verify_after_required": {
+              "name": "verify_after_required",
+              "wall_ms": 2.027235999776167,
+              "cpu_ms": 2.029606999999989,
+              "rss_mb": 45.20703125,
+              "rss_before_mb": 45.19921875,
+              "sqlite_trace_statements": 10,
+              "sqlite_selects": 5,
+              "sqlite_trace_rendered_characters": 1534,
+              "result": {
+                "eligible": 0,
+                "error": "granular retention witness required history invalidated"
+              }
+            },
+            "append_protected_stress": {
+              "name": "append_protected_stress",
+              "wall_ms": 1248.7172599999212,
+              "cpu_ms": 1235.411756,
+              "rss_mb": 52.34375,
+              "rss_before_mb": 45.20703125,
+              "sqlite_trace_statements": 26706,
+              "sqlite_selects": 11,
+              "sqlite_trace_rendered_characters": 295721327,
+              "result": {
+                "appended": 2048
+              }
+            },
+            "protected_global_hard_cap_stress": {
+              "name": "protected_global_hard_cap_stress",
+              "wall_ms": 52.340355000069394,
+              "cpu_ms": 47.42367400000003,
+              "rss_mb": 52.34375,
+              "rss_before_mb": 52.34375,
+              "sqlite_trace_statements": 16298,
+              "sqlite_selects": 13,
+              "sqlite_trace_rendered_characters": 1516356,
+              "result": {
+                "deleted": 2035,
+                "remaining": 16,
+                "protected_hard_cap": true,
+                "candidate_batch_limit": 512
+              }
+            },
+            "append_protected_stress_no_trace": {
+              "name": "append_protected_stress_no_trace",
+              "wall_ms": 118.59666600003038,
+              "cpu_ms": 104.816821,
+              "rss_mb": 54.6875,
+              "rss_before_mb": 52.34375,
+              "sqlite_trace_statements": null,
+              "sqlite_selects": null,
+              "sqlite_trace_rendered_characters": null,
+              "result": {
+                "appended": 2048
+              }
+            },
+            "protected_global_hard_cap_stress_no_trace": {
+              "name": "protected_global_hard_cap_stress_no_trace",
+              "wall_ms": 40.948558000309276,
+              "cpu_ms": 34.98193199999999,
+              "rss_mb": 54.6875,
+              "rss_before_mb": 54.6875,
+              "sqlite_trace_statements": null,
+              "sqlite_selects": null,
+              "sqlite_trace_rendered_characters": null,
+              "result": {
+                "deleted": 2048,
+                "remaining": 16,
+                "protected_hard_cap": true,
+                "candidate_batch_limit": 512
+              }
+            }
+          }
+        }
+      },
+      "runtime": [
+        {
+          "name": "baseline-on-A",
+          "event_to_intent": {
+            "p50_ms": 1.240852999899289,
+            "p95_ms": 1.755942000045252,
+            "p99_ms": 2.4738849999721424
+          },
+          "inference": {
+            "p50_ms": 0.6187900000895752,
+            "p95_ms": 0.8203319998756342,
+            "p99_ms": 0.8212939999339142
+          },
+          "model_prediction": {
+            "count": 40,
+            "dropped": 0,
+            "wall": {
+              "p50_ms": 0.105997,
+              "p95_ms": 0.136262,
+              "p99_ms": 0.144492
+            },
+            "thread_cpu": {
+              "p50_ms": 0.105976,
+              "p95_ms": 0.136327,
+              "p99_ms": 0.14458
+            }
+          },
+          "cpu_ms": 89.99685499999998,
+          "rss_mb": 61.625,
+          "peak_rss_mb": 61.20703125,
+          "sqlite_statements": 111,
+          "collector": {
+            "batches": 3,
+            "deferred_for_foreground": 3,
+            "dropped": 0,
+            "enabled": true,
+            "epoch": 0,
+            "errors": 0,
+            "gaps": 1,
+            "last_error": null,
+            "max_queue": 96,
+            "max_queue_bytes": 803528,
+            "max_write_latency_ms": 183.5861689999092,
+            "predecision": {
+              "consumed": 0,
+              "errors": 0,
+              "prepared": 0,
+              "prepared_bytes": 0,
+              "rejected": 0,
+              "requested": 48,
+              "unsupported": 0
+            },
+            "queue": 0,
+            "queue_bytes": 0,
+            "queued": 96,
+            "session": "13c23730e1964e3b86b76a10b52d5ff4",
+            "worker_alive": false,
+            "write_latency_p95_ms": 147.263361999876,
+            "written": 96
+          },
+          "training_eligible": 0
+        },
+        {
+          "name": "current-off",
+          "event_to_intent": {
+            "p50_ms": 1.1518919998252386,
+            "p95_ms": 1.423363999947469,
+            "p99_ms": 1.4806000001499342
+          },
+          "inference": {
+            "p50_ms": 0.5953820000286214,
+            "p95_ms": 0.6852330000128859,
+            "p99_ms": 0.7368939998286805
+          },
+          "model_prediction": {
+            "count": 40,
+            "dropped": 0,
+            "wall": {
+              "p50_ms": 0.105851,
+              "p95_ms": 0.127003,
+              "p99_ms": 0.136617
+            },
+            "thread_cpu": {
+              "p50_ms": 0.10593,
+              "p95_ms": 0.127243,
+              "p99_ms": 0.136736
+            }
+          },
+          "cpu_ms": 79.05695400000002,
+          "rss_mb": 60.1640625,
+          "peak_rss_mb": 59.84375,
+          "sqlite_statements": 89,
+          "collector": null,
+          "training_eligible": 0
+        },
+        {
+          "name": "current-on-A",
+          "event_to_intent": {
+            "p50_ms": 1.2229099997966841,
+            "p95_ms": 2.045276999979251,
+            "p99_ms": 2.091702999905465
+          },
+          "inference": {
+            "p50_ms": 0.6096829999933107,
+            "p95_ms": 0.8280940000986448,
+            "p99_ms": 0.8379669998248573
+          },
+          "model_prediction": {
+            "count": 40,
+            "dropped": 0,
+            "wall": {
+              "p50_ms": 0.105329,
+              "p95_ms": 0.152093,
+              "p99_ms": 0.205313
+            },
+            "thread_cpu": {
+              "p50_ms": 0.105396,
+              "p95_ms": 0.152173,
+              "p99_ms": 0.205534
+            }
+          },
+          "cpu_ms": 89.61276699999998,
+          "rss_mb": 62.33203125,
+          "peak_rss_mb": 61.734375,
+          "sqlite_statements": 106,
+          "collector": {
+            "batches": 3,
+            "deferred_for_foreground": 3,
+            "dropped": 0,
+            "enabled": true,
+            "epoch": 0,
+            "errors": 0,
+            "gaps": 1,
+            "last_error": null,
+            "max_queue": 96,
+            "max_queue_bytes": 803528,
+            "max_write_latency_ms": 183.51311200012788,
+            "predecision": {
+              "consumed": 0,
+              "errors": 0,
+              "prepared": 0,
+              "prepared_bytes": 0,
+              "rejected": 0,
+              "requested": 48,
+              "unsupported": 0
+            },
+            "queue": 0,
+            "queue_bytes": 0,
+            "queued": 96,
+            "session": "37fc391b0e444e47852cec883acbd0e1",
+            "worker_alive": false,
+            "write_latency_p95_ms": 149.51650299985886,
+            "written": 96
+          },
+          "training_eligible": 0
+        },
+        {
+          "name": "baseline-on-B",
+          "event_to_intent": {
+            "p50_ms": 1.3104219999604538,
+            "p95_ms": 2.0697149998341047,
+            "p99_ms": 2.1040780000021186
+          },
+          "inference": {
+            "p50_ms": 0.6210270000792661,
+            "p95_ms": 0.9125230001245654,
+            "p99_ms": 1.0378829999808659
+          },
+          "model_prediction": {
+            "count": 40,
+            "dropped": 0,
+            "wall": {
+              "p50_ms": 0.107143,
+              "p95_ms": 0.169697,
+              "p99_ms": 0.180245
+            },
+            "thread_cpu": {
+              "p50_ms": 0.107149,
+              "p95_ms": 0.170001,
+              "p99_ms": 0.180494
+            }
+          },
+          "cpu_ms": 97.30251500000008,
+          "rss_mb": 61.63671875,
+          "peak_rss_mb": 61.1953125,
+          "sqlite_statements": 118,
+          "collector": {
+            "batches": 3,
+            "deferred_for_foreground": 3,
+            "dropped": 0,
+            "enabled": true,
+            "epoch": 0,
+            "errors": 0,
+            "gaps": 1,
+            "last_error": null,
+            "max_queue": 96,
+            "max_queue_bytes": 803528,
+            "max_write_latency_ms": 190.72981799990885,
+            "predecision": {
+              "consumed": 0,
+              "errors": 0,
+              "prepared": 0,
+              "prepared_bytes": 0,
+              "rejected": 0,
+              "requested": 48,
+              "unsupported": 0
+            },
+            "queue": 0,
+            "queue_bytes": 0,
+            "queued": 96,
+            "session": "f09cf6e27bf3420b9b3f9e16353a7ebf",
+            "worker_alive": false,
+            "write_latency_p95_ms": 154.18678600008207,
+            "written": 96
+          },
+          "training_eligible": 0
+        },
+        {
+          "name": "current-on-B",
+          "event_to_intent": {
+            "p50_ms": 1.2348590000783588,
+            "p95_ms": 1.7370569999002328,
+            "p99_ms": 1.7669159999513795
+          },
+          "inference": {
+            "p50_ms": 0.6141159999515367,
+            "p95_ms": 0.7551859998784494,
+            "p99_ms": 0.8071070001278713
+          },
+          "model_prediction": {
+            "count": 40,
+            "dropped": 0,
+            "wall": {
+              "p50_ms": 0.104293,
+              "p95_ms": 0.130922,
+              "p99_ms": 0.146461
+            },
+            "thread_cpu": {
+              "p50_ms": 0.104287,
+              "p95_ms": 0.130913,
+              "p99_ms": 0.146684
+            }
+          },
+          "cpu_ms": 89.86338500000002,
+          "rss_mb": 62.2109375,
+          "peak_rss_mb": 62.01171875,
+          "sqlite_statements": 105,
+          "collector": {
+            "batches": 3,
+            "deferred_for_foreground": 3,
+            "dropped": 0,
+            "enabled": true,
+            "epoch": 0,
+            "errors": 0,
+            "gaps": 1,
+            "last_error": null,
+            "max_queue": 96,
+            "max_queue_bytes": 803528,
+            "max_write_latency_ms": 182.9287900000054,
+            "predecision": {
+              "consumed": 0,
+              "errors": 0,
+              "prepared": 0,
+              "prepared_bytes": 0,
+              "rejected": 0,
+              "requested": 48,
+              "unsupported": 0
+            },
+            "queue": 0,
+            "queue_bytes": 0,
+            "queued": 96,
+            "session": "0397d53f29514325ae1eabd6280627d0",
+            "worker_alive": false,
+            "write_latency_p95_ms": 149.83662899999217,
+            "written": 96
+          },
+          "training_eligible": 0
+        }
+      ]
+    },
+    {
+      "sensors": 50,
+      "devices": 10,
+      "components": {
+        "pr362-A": {
+          "complete_evidence": 10,
+          "eligible_before": 10,
+          "eligible_after_unrelated": 0,
+          "eligible_after_required": 0,
+          "false_invalidations": 10,
+          "evidence_prepare": {
+            "p50_ms": 2.644105999934254,
+            "p95_ms": 248.20766200036815,
+            "p99_ms": 248.20766200036815
+          },
+          "ram_boundary": {
+            "p50_ms": 0.0469179999527114,
+            "p95_ms": 0.08557199998904252,
+            "p99_ms": 0.08557199998904252
+          },
+          "prepare_sqlite_trace_statements": 387,
+          "cpu_seconds": 0.0956787309999999,
+          "rss_before_mb": 53.81640625,
+          "rss_after_mb": 53.85546875,
+          "database_bytes": 770048,
+          "database_growth_bytes": 204800,
+          "metadata_page_bytes": 0,
+          "metadata_rows": 0,
+          "operations": {
+            "verify_initial": {
+              "name": "verify_initial",
+              "wall_ms": 5.179908000172873,
+              "cpu_ms": 5.18103999999997,
+              "rss_mb": 53.859375,
+              "rss_before_mb": 53.85546875,
+              "sqlite_trace_statements": 8,
+              "sqlite_selects": 3,
+              "sqlite_trace_rendered_characters": 1577,
+              "result": {
+                "eligible": 10,
+                "same_dataset": true
+              }
+            },
+            "prune_unrelated": {
+              "name": "prune_unrelated",
+              "wall_ms": 7.725504000063665,
+              "cpu_ms": 3.6336810000000552,
+              "rss_mb": 53.859375,
+              "rss_before_mb": 53.859375,
+              "sqlite_trace_statements": 27,
+              "sqlite_selects": 5,
+              "sqlite_trace_rendered_characters": 3102,
+              "result": {
+                "deleted": 1
+              }
+            },
+            "verify_after_unrelated": {
+              "name": "verify_after_unrelated",
+              "wall_ms": 2.2415729999920586,
+              "cpu_ms": 2.243600999999984,
+              "rss_mb": 53.859375,
+              "rss_before_mb": 53.859375,
+              "sqlite_trace_statements": 7,
+              "sqlite_selects": 2,
+              "sqlite_trace_rendered_characters": 1222,
+              "result": {
+                "eligible": 0,
+                "error": "collection retention witness expired"
+              }
+            },
+            "prune_required": {
+              "name": "prune_required",
+              "wall_ms": 9.48566600027334,
+              "cpu_ms": 4.28479599999998,
+              "rss_mb": 53.859375,
+              "rss_before_mb": 53.859375,
+              "sqlite_trace_statements": 28,
+              "sqlite_selects": 5,
+              "sqlite_trace_rendered_characters": 3200,
+              "result": {
+                "deleted": 2
+              }
+            },
+            "verify_after_required": {
+              "name": "verify_after_required",
+              "wall_ms": 2.1955689999231254,
+              "cpu_ms": 2.197172000000025,
+              "rss_mb": 53.859375,
+              "rss_before_mb": 53.859375,
+              "sqlite_trace_statements": 7,
+              "sqlite_selects": 2,
+              "sqlite_trace_rendered_characters": 1222,
+              "result": {
+                "eligible": 0,
+                "error": "collection retention witness expired"
+              }
+            },
+            "append_protected_stress": {
+              "name": "append_protected_stress",
+              "wall_ms": 99.36553699981232,
+              "cpu_ms": 85.47062199999999,
+              "rss_mb": 55.0546875,
+              "rss_before_mb": 53.859375,
+              "sqlite_trace_statements": 78,
+              "sqlite_selects": 10,
+              "sqlite_trace_rendered_characters": 507834,
+              "result": {
+                "appended": 2048
+              }
+            },
+            "protected_global_hard_cap_stress": {
+              "name": "protected_global_hard_cap_stress",
+              "wall_ms": 21.63285399956294,
+              "cpu_ms": 16.041427,
+              "rss_mb": 55.0546875,
+              "rss_before_mb": 55.0546875,
+              "sqlite_trace_statements": 2093,
+              "sqlite_selects": 5,
+              "sqlite_trace_rendered_characters": 194471,
+              "result": {
+                "deleted": 2080,
+                "remaining": 16,
+                "protected_hard_cap": true,
+                "candidate_batch_limit": null
+              }
+            },
+            "append_protected_stress_no_trace": {
+              "name": "append_protected_stress_no_trace",
+              "wall_ms": 88.51572899993698,
+              "cpu_ms": 78.72080700000006,
+              "rss_mb": 55.03125,
+              "rss_before_mb": 55.0546875,
+              "sqlite_trace_statements": null,
+              "sqlite_selects": null,
+              "sqlite_trace_rendered_characters": null,
+              "result": {
+                "appended": 2048
+              }
+            },
+            "protected_global_hard_cap_stress_no_trace": {
+              "name": "protected_global_hard_cap_stress_no_trace",
+              "wall_ms": 18.533380000008037,
+              "cpu_ms": 13.79946700000001,
+              "rss_mb": 55.03125,
+              "rss_before_mb": 55.03125,
+              "sqlite_trace_statements": null,
+              "sqlite_selects": null,
+              "sqlite_trace_rendered_characters": null,
+              "result": {
+                "deleted": 2048,
+                "remaining": 16,
+                "protected_hard_cap": true,
+                "candidate_batch_limit": null
+              }
+            }
+          }
+        },
+        "current-A": {
+          "complete_evidence": 10,
+          "eligible_before": 10,
+          "eligible_after_unrelated": 10,
+          "eligible_after_required": 0,
+          "false_invalidations": 0,
+          "evidence_prepare": {
+            "p50_ms": 3.184866000083275,
+            "p95_ms": 234.35676899998725,
+            "p99_ms": 234.35676899998725
+          },
+          "ram_boundary": {
+            "p50_ms": 0.05203299997447175,
+            "p95_ms": 0.06436500007112045,
+            "p99_ms": 0.06436500007112045
+          },
+          "prepare_sqlite_trace_statements": 403,
+          "cpu_seconds": 0.13780348399999998,
+          "rss_before_mb": 53.87890625,
+          "rss_after_mb": 52.65234375,
+          "database_bytes": 802816,
+          "database_growth_bytes": 204800,
+          "metadata_page_bytes": 12288,
+          "metadata_rows": 50,
+          "operations": {
+            "verify_initial": {
+              "name": "verify_initial",
+              "wall_ms": 238.56220800007577,
+              "cpu_ms": 6.643008999999811,
+              "rss_mb": 52.65234375,
+              "rss_before_mb": 52.65234375,
+              "sqlite_trace_statements": 12,
+              "sqlite_selects": 6,
+              "sqlite_trace_rendered_characters": 2357,
+              "result": {
+                "eligible": 10,
+                "same_dataset": true
+              }
+            },
+            "prune_unrelated": {
+              "name": "prune_unrelated",
+              "wall_ms": 10.432791000312136,
+              "cpu_ms": 6.65613399999998,
+              "rss_mb": 52.65234375,
+              "rss_before_mb": 52.65234375,
+              "sqlite_trace_statements": 40,
+              "sqlite_selects": 9,
+              "sqlite_trace_rendered_characters": 4805,
+              "result": {
+                "deleted": 1
+              }
+            },
+            "verify_after_unrelated": {
+              "name": "verify_after_unrelated",
+              "wall_ms": 5.978016000426578,
+              "cpu_ms": 5.980617000000077,
+              "rss_mb": 52.65234375,
+              "rss_before_mb": 52.65234375,
+              "sqlite_trace_statements": 12,
+              "sqlite_selects": 6,
+              "sqlite_trace_rendered_characters": 2357,
+              "result": {
+                "eligible": 10,
+                "same_dataset": true
+              }
+            },
+            "prune_required": {
+              "name": "prune_required",
+              "wall_ms": 11.493826999867451,
+              "cpu_ms": 6.305628999999868,
+              "rss_mb": 52.65234375,
+              "rss_before_mb": 52.65234375,
+              "sqlite_trace_statements": 48,
+              "sqlite_selects": 9,
+              "sqlite_trace_rendered_characters": 5565,
+              "result": {
+                "deleted": 2
+              }
+            },
+            "verify_after_required": {
+              "name": "verify_after_required",
+              "wall_ms": 3.0504970000038156,
+              "cpu_ms": 3.0528109999998776,
+              "rss_mb": 52.65234375,
+              "rss_before_mb": 52.65234375,
+              "sqlite_trace_statements": 10,
+              "sqlite_selects": 5,
+              "sqlite_trace_rendered_characters": 1632,
+              "result": {
+                "eligible": 0,
+                "error": "granular retention witness required history invalidated"
+              }
+            },
+            "append_protected_stress": {
+              "name": "append_protected_stress",
+              "wall_ms": 1277.705147999768,
+              "cpu_ms": 1262.3402340000002,
+              "rss_mb": 56.6640625,
+              "rss_before_mb": 52.65234375,
+              "sqlite_trace_statements": 26751,
+              "sqlite_selects": 11,
+              "sqlite_trace_rendered_characters": 295724477,
+              "result": {
+                "appended": 2048
+              }
+            },
+            "protected_global_hard_cap_stress": {
+              "name": "protected_global_hard_cap_stress",
+              "wall_ms": 54.48930400007157,
+              "cpu_ms": 48.76162100000015,
+              "rss_mb": 56.6640625,
+              "rss_before_mb": 56.6640625,
+              "sqlite_trace_statements": 16615,
+              "sqlite_selects": 15,
+              "sqlite_trace_rendered_characters": 1546070,
+              "result": {
+                "deleted": 2080,
+                "remaining": 16,
+                "protected_hard_cap": true,
+                "candidate_batch_limit": 512
+              }
+            },
+            "append_protected_stress_no_trace": {
+              "name": "append_protected_stress_no_trace",
+              "wall_ms": 110.5687350000153,
+              "cpu_ms": 100.95445600000019,
+              "rss_mb": 55.30078125,
+              "rss_before_mb": 56.6640625,
+              "sqlite_trace_statements": null,
+              "sqlite_selects": null,
+              "sqlite_trace_rendered_characters": null,
+              "result": {
+                "appended": 2048
+              }
+            },
+            "protected_global_hard_cap_stress_no_trace": {
+              "name": "protected_global_hard_cap_stress_no_trace",
+              "wall_ms": 42.37841299982392,
+              "cpu_ms": 36.681146000000275,
+              "rss_mb": 55.3046875,
+              "rss_before_mb": 55.30078125,
+              "sqlite_trace_statements": null,
+              "sqlite_selects": null,
+              "sqlite_trace_rendered_characters": null,
+              "result": {
+                "deleted": 2048,
+                "remaining": 16,
+                "protected_hard_cap": true,
+                "candidate_batch_limit": 512
+              }
+            }
+          }
+        },
+        "pr362-B": {
+          "complete_evidence": 10,
+          "eligible_before": 10,
+          "eligible_after_unrelated": 0,
+          "eligible_after_required": 0,
+          "false_invalidations": 10,
+          "evidence_prepare": {
+            "p50_ms": 3.2138299998223374,
+            "p95_ms": 273.31940899966867,
+            "p99_ms": 273.31940899966867
+          },
+          "ram_boundary": {
+            "p50_ms": 0.04829799991057371,
+            "p95_ms": 0.05558200018640491,
+            "p99_ms": 0.05558200018640491
+          },
+          "prepare_sqlite_trace_statements": 387,
+          "cpu_seconds": 0.11815418899999997,
+          "rss_before_mb": 52.9765625,
+          "rss_after_mb": 53.01171875,
+          "database_bytes": 770048,
+          "database_growth_bytes": 204800,
+          "metadata_page_bytes": 0,
+          "metadata_rows": 0,
+          "operations": {
+            "verify_initial": {
+              "name": "verify_initial",
+              "wall_ms": 5.168549000245548,
+              "cpu_ms": 5.171048000000011,
+              "rss_mb": 53.015625,
+              "rss_before_mb": 53.01171875,
+              "sqlite_trace_statements": 8,
+              "sqlite_selects": 3,
+              "sqlite_trace_rendered_characters": 1577,
+              "result": {
+                "eligible": 10,
+                "same_dataset": true
+              }
+            },
+            "prune_unrelated": {
+              "name": "prune_unrelated",
+              "wall_ms": 9.60600999997041,
+              "cpu_ms": 4.378693000000045,
+              "rss_mb": 53.015625,
+              "rss_before_mb": 53.015625,
+              "sqlite_trace_statements": 27,
+              "sqlite_selects": 5,
+              "sqlite_trace_rendered_characters": 3102,
+              "result": {
+                "deleted": 1
+              }
+            },
+            "verify_after_unrelated": {
+              "name": "verify_after_unrelated",
+              "wall_ms": 2.3414620000039577,
+              "cpu_ms": 2.343510999999965,
+              "rss_mb": 53.015625,
+              "rss_before_mb": 53.015625,
+              "sqlite_trace_statements": 7,
+              "sqlite_selects": 2,
+              "sqlite_trace_rendered_characters": 1222,
+              "result": {
+                "eligible": 0,
+                "error": "collection retention witness expired"
+              }
+            },
+            "prune_required": {
+              "name": "prune_required",
+              "wall_ms": 9.995061000154237,
+              "cpu_ms": 4.415841000000031,
+              "rss_mb": 53.015625,
+              "rss_before_mb": 53.015625,
+              "sqlite_trace_statements": 28,
+              "sqlite_selects": 5,
+              "sqlite_trace_rendered_characters": 3195,
+              "result": {
+                "deleted": 2
+              }
+            },
+            "verify_after_required": {
+              "name": "verify_after_required",
+              "wall_ms": 4.0174880000449775,
+              "cpu_ms": 4.02118600000001,
+              "rss_mb": 53.015625,
+              "rss_before_mb": 53.015625,
+              "sqlite_trace_statements": 7,
+              "sqlite_selects": 2,
+              "sqlite_trace_rendered_characters": 1222,
+              "result": {
+                "eligible": 0,
+                "error": "collection retention witness expired"
+              }
+            },
+            "append_protected_stress": {
+              "name": "append_protected_stress",
+              "wall_ms": 110.41704000035679,
+              "cpu_ms": 97.08963400000003,
+              "rss_mb": 56.41796875,
+              "rss_before_mb": 53.015625,
+              "sqlite_trace_statements": 78,
+              "sqlite_selects": 10,
+              "sqlite_trace_rendered_characters": 507834,
+              "result": {
+                "appended": 2048
+              }
+            },
+            "protected_global_hard_cap_stress": {
+              "name": "protected_global_hard_cap_stress",
+              "wall_ms": 21.81556899995485,
+              "cpu_ms": 16.328482000000033,
+              "rss_mb": 54.234375,
+              "rss_before_mb": 56.41796875,
+              "sqlite_trace_statements": 2093,
+              "sqlite_selects": 5,
+              "sqlite_trace_rendered_characters": 194471,
+              "result": {
+                "deleted": 2080,
+                "remaining": 16,
+                "protected_hard_cap": true,
+                "candidate_batch_limit": null
+              }
+            },
+            "append_protected_stress_no_trace": {
+              "name": "append_protected_stress_no_trace",
+              "wall_ms": 91.45400599982167,
+              "cpu_ms": 81.63804800000007,
+              "rss_mb": 55.73828125,
+              "rss_before_mb": 54.234375,
+              "sqlite_trace_statements": null,
+              "sqlite_selects": null,
+              "sqlite_trace_rendered_characters": null,
+              "result": {
+                "appended": 2048
+              }
+            },
+            "protected_global_hard_cap_stress_no_trace": {
+              "name": "protected_global_hard_cap_stress_no_trace",
+              "wall_ms": 21.020157000293693,
+              "cpu_ms": 15.681637999999998,
+              "rss_mb": 55.73828125,
+              "rss_before_mb": 55.73828125,
+              "sqlite_trace_statements": null,
+              "sqlite_selects": null,
+              "sqlite_trace_rendered_characters": null,
+              "result": {
+                "deleted": 2048,
+                "remaining": 16,
+                "protected_hard_cap": true,
+                "candidate_batch_limit": null
+              }
+            }
+          }
+        },
+        "current-B": {
+          "complete_evidence": 10,
+          "eligible_before": 10,
+          "eligible_after_unrelated": 10,
+          "eligible_after_required": 0,
+          "false_invalidations": 0,
+          "evidence_prepare": {
+            "p50_ms": 3.2135230003405013,
+            "p95_ms": 236.0337309996794,
+            "p99_ms": 236.0337309996794
+          },
+          "ram_boundary": {
+            "p50_ms": 0.04947900015395135,
+            "p95_ms": 0.05292900004860712,
+            "p99_ms": 0.05292900004860712
+          },
+          "prepare_sqlite_trace_statements": 403,
+          "cpu_seconds": 0.13811008199999986,
+          "rss_before_mb": 52.625,
+          "rss_after_mb": 52.66015625,
+          "database_bytes": 802816,
+          "database_growth_bytes": 204800,
+          "metadata_page_bytes": 12288,
+          "metadata_rows": 50,
+          "operations": {
+            "verify_initial": {
+              "name": "verify_initial",
+              "wall_ms": 9.243247999620507,
+              "cpu_ms": 9.243435999999772,
+              "rss_mb": 52.66015625,
+              "rss_before_mb": 52.66015625,
+              "sqlite_trace_statements": 12,
+              "sqlite_selects": 6,
+              "sqlite_trace_rendered_characters": 2360,
+              "result": {
+                "eligible": 10,
+                "same_dataset": true
+              }
+            },
+            "prune_unrelated": {
+              "name": "prune_unrelated",
+              "wall_ms": 10.72141799977544,
+              "cpu_ms": 6.172590999999894,
+              "rss_mb": 52.66015625,
+              "rss_before_mb": 52.66015625,
+              "sqlite_trace_statements": 40,
+              "sqlite_selects": 9,
+              "sqlite_trace_rendered_characters": 4811,
+              "result": {
+                "deleted": 1
+              }
+            },
+            "verify_after_unrelated": {
+              "name": "verify_after_unrelated",
+              "wall_ms": 6.144204000065656,
+              "cpu_ms": 6.1470680000002,
+              "rss_mb": 52.66015625,
+              "rss_before_mb": 52.66015625,
+              "sqlite_trace_statements": 12,
+              "sqlite_selects": 6,
+              "sqlite_trace_rendered_characters": 2360,
+              "result": {
+                "eligible": 10,
+                "same_dataset": true
+              }
+            },
+            "prune_required": {
+              "name": "prune_required",
+              "wall_ms": 11.60334900032467,
+              "cpu_ms": 6.90407000000004,
+              "rss_mb": 52.66015625,
+              "rss_before_mb": 52.66015625,
+              "sqlite_trace_statements": 48,
+              "sqlite_selects": 9,
+              "sqlite_trace_rendered_characters": 5565,
+              "result": {
+                "deleted": 2
+              }
+            },
+            "verify_after_required": {
+              "name": "verify_after_required",
+              "wall_ms": 3.059902000131842,
+              "cpu_ms": 3.0622199999998934,
+              "rss_mb": 52.66015625,
+              "rss_before_mb": 52.66015625,
+              "sqlite_trace_statements": 10,
+              "sqlite_selects": 5,
+              "sqlite_trace_rendered_characters": 1633,
+              "result": {
+                "eligible": 0,
+                "error": "granular retention witness required history invalidated"
+              }
+            },
+            "append_protected_stress": {
+              "name": "append_protected_stress",
+              "wall_ms": 1263.5856540000532,
+              "cpu_ms": 1248.8832240000002,
+              "rss_mb": 55.24609375,
+              "rss_before_mb": 52.66015625,
+              "sqlite_trace_statements": 26751,
+              "sqlite_selects": 11,
+              "sqlite_trace_rendered_characters": 295724472,
+              "result": {
+                "appended": 2048
+              }
+            },
+            "protected_global_hard_cap_stress": {
+              "name": "protected_global_hard_cap_stress",
+              "wall_ms": 58.320350000030885,
+              "cpu_ms": 51.03777400000009,
+              "rss_mb": 55.24609375,
+              "rss_before_mb": 55.24609375,
+              "sqlite_trace_statements": 16615,
+              "sqlite_selects": 15,
+              "sqlite_trace_rendered_characters": 1546084,
+              "result": {
+                "deleted": 2080,
+                "remaining": 16,
+                "protected_hard_cap": true,
+                "candidate_batch_limit": 512
+              }
+            },
+            "append_protected_stress_no_trace": {
+              "name": "append_protected_stress_no_trace",
+              "wall_ms": 114.82247999992978,
+              "cpu_ms": 104.27380499999961,
+              "rss_mb": 55.34765625,
+              "rss_before_mb": 55.24609375,
+              "sqlite_trace_statements": null,
+              "sqlite_selects": null,
+              "sqlite_trace_rendered_characters": null,
+              "result": {
+                "appended": 2048
+              }
+            },
+            "protected_global_hard_cap_stress_no_trace": {
+              "name": "protected_global_hard_cap_stress_no_trace",
+              "wall_ms": 42.20511700032148,
+              "cpu_ms": 36.36655899999974,
+              "rss_mb": 55.3515625,
+              "rss_before_mb": 55.34765625,
+              "sqlite_trace_statements": null,
+              "sqlite_selects": null,
+              "sqlite_trace_rendered_characters": null,
+              "result": {
+                "deleted": 2048,
+                "remaining": 16,
+                "protected_hard_cap": true,
+                "candidate_batch_limit": 512
+              }
+            }
+          }
+        }
+      },
+      "runtime": [
+        {
+          "name": "baseline-on-A",
+          "event_to_intent": {
+            "p50_ms": 15.363879000005909,
+            "p95_ms": 30.571325999972032,
+            "p99_ms": 38.55745700002444
+          },
+          "inference": {
+            "p50_ms": 0.8085389999905601,
+            "p95_ms": 1.5606339998157637,
+            "p99_ms": 4.000700000005963
+          },
+          "model_prediction": {
+            "count": 400,
+            "dropped": 0,
+            "wall": {
+              "p50_ms": 0.15327,
+              "p95_ms": 0.257097,
+              "p99_ms": 0.703979
+            },
+            "thread_cpu": {
+              "p50_ms": 0.153276,
+              "p95_ms": 0.238372,
+              "p99_ms": 0.335796
+            }
+          },
+          "cpu_ms": 1384.38937,
+          "rss_mb": 85.31640625,
+          "peak_rss_mb": 85.3359375,
+          "sqlite_statements": 1643,
+          "collector": {
+            "batches": 10,
+            "deferred_for_foreground": 32,
+            "dropped": 0,
+            "enabled": true,
+            "epoch": 0,
+            "errors": 0,
+            "gaps": 1,
+            "last_error": null,
+            "max_queue": 528,
+            "max_queue_bytes": 7872200,
+            "max_write_latency_ms": 1661.7753040000025,
+            "predecision": {
+              "consumed": 0,
+              "errors": 0,
+              "prepared": 0,
+              "prepared_bytes": 0,
+              "rejected": 0,
+              "requested": 480,
+              "unsupported": 0
+            },
+            "queue": 0,
+            "queue_bytes": 0,
+            "queued": 528,
+            "session": "b45d1b11b8924f60924076e6b37d272b",
+            "worker_alive": false,
+            "write_latency_p95_ms": 1459.957304999989,
+            "written": 528
+          },
+          "training_eligible": 0
+        },
+        {
+          "name": "current-off",
+          "event_to_intent": {
+            "p50_ms": 14.666356000134328,
+            "p95_ms": 27.954802000067502,
+            "p99_ms": 33.96980499996971
+          },
+          "inference": {
+            "p50_ms": 0.8134449999488425,
+            "p95_ms": 1.9391889998132683,
+            "p99_ms": 3.049019000172848
+          },
+          "model_prediction": {
+            "count": 400,
+            "dropped": 0,
+            "wall": {
+              "p50_ms": 0.151711,
+              "p95_ms": 0.289136,
+              "p99_ms": 1.548079
+            },
+            "thread_cpu": {
+              "p50_ms": 0.151651,
+              "p95_ms": 0.246485,
+              "p99_ms": 0.366392
+            }
+          },
+          "cpu_ms": 1262.0445290000002,
+          "rss_mb": 81.48046875,
+          "peak_rss_mb": 83.0703125,
+          "sqlite_statements": 1571,
+          "collector": null,
+          "training_eligible": 0
+        },
+        {
+          "name": "current-on-A",
+          "event_to_intent": {
+            "p50_ms": 14.515088000052856,
+            "p95_ms": 29.490250999970158,
+            "p99_ms": 36.26307399986217
+          },
+          "inference": {
+            "p50_ms": 0.8248770000136574,
+            "p95_ms": 1.9433089998983633,
+            "p99_ms": 3.5277599999972153
+          },
+          "model_prediction": {
+            "count": 400,
+            "dropped": 0,
+            "wall": {
+              "p50_ms": 0.153092,
+              "p95_ms": 0.23886,
+              "p99_ms": 2.004531
+            },
+            "thread_cpu": {
+              "p50_ms": 0.153085,
+              "p95_ms": 0.23452,
+              "p99_ms": 0.384137
+            }
+          },
+          "cpu_ms": 1271.9416860000003,
+          "rss_mb": 86.3359375,
+          "peak_rss_mb": 86.61328125,
+          "sqlite_statements": 1360,
+          "collector": {
+            "batches": 10,
+            "deferred_for_foreground": 31,
+            "dropped": 0,
+            "enabled": true,
+            "epoch": 0,
+            "errors": 0,
+            "gaps": 1,
+            "last_error": null,
+            "max_queue": 528,
+            "max_queue_bytes": 7872200,
+            "max_write_latency_ms": 1582.3615640001663,
+            "predecision": {
+              "consumed": 0,
+              "errors": 0,
+              "prepared": 0,
+              "prepared_bytes": 0,
+              "rejected": 0,
+              "requested": 480,
+              "unsupported": 0
+            },
+            "queue": 0,
+            "queue_bytes": 0,
+            "queued": 528,
+            "session": "90169d97c99540b4a345d960fe93540e",
+            "worker_alive": false,
+            "write_latency_p95_ms": 1383.0663210001148,
+            "written": 528
+          },
+          "training_eligible": 0
+        },
+        {
+          "name": "baseline-on-B",
+          "event_to_intent": {
+            "p50_ms": 15.776332000086768,
+            "p95_ms": 29.920185999799287,
+            "p99_ms": 35.45836600005714
+          },
+          "inference": {
+            "p50_ms": 0.8500379999532015,
+            "p95_ms": 2.2777579999910813,
+            "p99_ms": 3.6355330000787944
+          },
+          "model_prediction": {
+            "count": 400,
+            "dropped": 0,
+            "wall": {
+              "p50_ms": 0.156669,
+              "p95_ms": 0.306049,
+              "p99_ms": 1.689665
+            },
+            "thread_cpu": {
+              "p50_ms": 0.156349,
+              "p95_ms": 0.264052,
+              "p99_ms": 0.367369
+            }
+          },
+          "cpu_ms": 1374.5778269999996,
+          "rss_mb": 86.61328125,
+          "peak_rss_mb": 86.00390625,
+          "sqlite_statements": 1521,
+          "collector": {
+            "batches": 10,
+            "deferred_for_foreground": 33,
+            "dropped": 0,
+            "enabled": true,
+            "epoch": 0,
+            "errors": 0,
+            "gaps": 1,
+            "last_error": null,
+            "max_queue": 528,
+            "max_queue_bytes": 7872200,
+            "max_write_latency_ms": 1713.3008710000013,
+            "predecision": {
+              "consumed": 0,
+              "errors": 0,
+              "prepared": 0,
+              "prepared_bytes": 0,
+              "rejected": 0,
+              "requested": 480,
+              "unsupported": 0
+            },
+            "queue": 0,
+            "queue_bytes": 0,
+            "queued": 528,
+            "session": "64949e0335794fb79cd304a1924beaa4",
+            "worker_alive": false,
+            "write_latency_p95_ms": 1485.3979340000478,
+            "written": 528
+          },
+          "training_eligible": 0
+        },
+        {
+          "name": "current-on-B",
+          "event_to_intent": {
+            "p50_ms": 17.50456100012343,
+            "p95_ms": 35.28752099987287,
+            "p99_ms": 42.18483200020273
+          },
+          "inference": {
+            "p50_ms": 0.8920840000428143,
+            "p95_ms": 2.7255550000973017,
+            "p99_ms": 3.928483999970922
+          },
+          "model_prediction": {
+            "count": 400,
+            "dropped": 0,
+            "wall": {
+              "p50_ms": 0.162767,
+              "p95_ms": 0.5142,
+              "p99_ms": 1.6957
+            },
+            "thread_cpu": {
+              "p50_ms": 0.162811,
+              "p95_ms": 0.32044,
+              "p99_ms": 0.395374
+            }
+          },
+          "cpu_ms": 1509.2630189999995,
+          "rss_mb": 86.5,
+          "peak_rss_mb": 85.9453125,
+          "sqlite_statements": 1289,
+          "collector": {
+            "batches": 10,
+            "deferred_for_foreground": 36,
+            "dropped": 0,
+            "enabled": true,
+            "epoch": 0,
+            "errors": 0,
+            "gaps": 1,
+            "last_error": null,
+            "max_queue": 528,
+            "max_queue_bytes": 7872200,
+            "max_write_latency_ms": 2198.1679169998642,
+            "predecision": {
+              "consumed": 0,
+              "errors": 0,
+              "prepared": 0,
+              "prepared_bytes": 0,
+              "rejected": 0,
+              "requested": 480,
+              "unsupported": 0
+            },
+            "queue": 0,
+            "queue_bytes": 0,
+            "queued": 528,
+            "session": "277caf7fd2bc4b8985c9bd49230f96cd",
+            "worker_alive": false,
+            "write_latency_p95_ms": 1942.6472290001584,
+            "written": 528
+          },
+          "training_eligible": 0
+        }
+      ]
+    },
+    {
+      "sensors": 200,
+      "devices": 30,
+      "components": {
+        "pr362-A": {
+          "complete_evidence": 30,
+          "eligible_before": 30,
+          "eligible_after_unrelated": 0,
+          "eligible_after_required": 0,
+          "false_invalidations": 30,
+          "evidence_prepare": {
+            "p50_ms": 4.965476000052149,
+            "p95_ms": 338.9390709999134,
+            "p99_ms": 398.4483049998744
+          },
+          "ram_boundary": {
+            "p50_ms": 0.05361300009099068,
+            "p95_ms": 0.061269000070751645,
+            "p99_ms": 0.06689899964840151
+          },
+          "prepare_sqlite_trace_statements": 1119,
+          "cpu_seconds": 0.3942987040000001,
+          "rss_before_mb": 55.04296875,
+          "rss_after_mb": 55.171875,
+          "database_bytes": 1421312,
+          "database_growth_bytes": 684032,
+          "metadata_page_bytes": 0,
+          "metadata_rows": 0,
+          "operations": {
+            "verify_initial": {
+              "name": "verify_initial",
+              "wall_ms": 13.937903000169172,
+              "cpu_ms": 13.94153500000006,
+              "rss_mb": 55.171875,
+              "rss_before_mb": 55.171875,
+              "sqlite_trace_statements": 8,
+              "sqlite_selects": 3,
+              "sqlite_trace_rendered_characters": 1797,
+              "result": {
+                "eligible": 30,
+                "same_dataset": true
+              }
+            },
+            "prune_unrelated": {
+              "name": "prune_unrelated",
+              "wall_ms": 24.310220000188565,
+              "cpu_ms": 4.988363999999912,
+              "rss_mb": 55.171875,
+              "rss_before_mb": 55.171875,
+              "sqlite_trace_statements": 27,
+              "sqlite_selects": 5,
+              "sqlite_trace_rendered_characters": 3097,
+              "result": {
+                "deleted": 1
+              }
+            },
+            "verify_after_unrelated": {
+              "name": "verify_after_unrelated",
+              "wall_ms": 4.4486700003290025,
+              "cpu_ms": 4.451571000000154,
+              "rss_mb": 55.171875,
+              "rss_before_mb": 55.171875,
+              "sqlite_trace_statements": 7,
+              "sqlite_selects": 2,
+              "sqlite_trace_rendered_characters": 1442,
+              "result": {
+                "eligible": 0,
+                "error": "collection retention witness expired"
+              }
+            },
+            "prune_required": {
+              "name": "prune_required",
+              "wall_ms": 18.297993000032875,
+              "cpu_ms": 4.506102000000123,
+              "rss_mb": 55.171875,
+              "rss_before_mb": 55.171875,
+              "sqlite_trace_statements": 28,
+              "sqlite_selects": 5,
+              "sqlite_trace_rendered_characters": 3200,
+              "result": {
+                "deleted": 2
+              }
+            },
+            "verify_after_required": {
+              "name": "verify_after_required",
+              "wall_ms": 281.9741310004247,
+              "cpu_ms": 5.331584999999972,
+              "rss_mb": 55.171875,
+              "rss_before_mb": 55.171875,
+              "sqlite_trace_statements": 7,
+              "sqlite_selects": 2,
+              "sqlite_trace_rendered_characters": 1442,
+              "result": {
+                "eligible": 0,
+                "error": "collection retention witness expired"
+              }
+            },
+            "append_protected_stress": {
+              "name": "append_protected_stress",
+              "wall_ms": 251.8650750002962,
+              "cpu_ms": 92.15183299999995,
+              "rss_mb": 57.88671875,
+              "rss_before_mb": 55.171875,
+              "sqlite_trace_statements": 78,
+              "sqlite_selects": 10,
+              "sqlite_trace_rendered_characters": 507834,
+              "result": {
+                "appended": 2048
+              }
+            },
+            "protected_global_hard_cap_stress": {
+              "name": "protected_global_hard_cap_stress",
+              "wall_ms": 81.10231199998452,
+              "cpu_ms": 17.749601999999864,
+              "rss_mb": 57.88671875,
+              "rss_before_mb": 57.88671875,
+              "sqlite_trace_statements": 2243,
+              "sqlite_selects": 5,
+              "sqlite_trace_rendered_characters": 208421,
+              "result": {
+                "deleted": 2230,
+                "remaining": 16,
+                "protected_hard_cap": true,
+                "candidate_batch_limit": null
+              }
+            },
+            "append_protected_stress_no_trace": {
+              "name": "append_protected_stress_no_trace",
+              "wall_ms": 206.97298100003536,
+              "cpu_ms": 86.06555000000004,
+              "rss_mb": 58.625,
+              "rss_before_mb": 57.88671875,
+              "sqlite_trace_statements": null,
+              "sqlite_selects": null,
+              "sqlite_trace_rendered_characters": null,
+              "result": {
+                "appended": 2048
+              }
+            },
+            "protected_global_hard_cap_stress_no_trace": {
+              "name": "protected_global_hard_cap_stress_no_trace",
+              "wall_ms": 91.21881300006862,
+              "cpu_ms": 16.415418000000017,
+              "rss_mb": 58.625,
+              "rss_before_mb": 58.625,
+              "sqlite_trace_statements": null,
+              "sqlite_selects": null,
+              "sqlite_trace_rendered_characters": null,
+              "result": {
+                "deleted": 2048,
+                "remaining": 16,
+                "protected_hard_cap": true,
+                "candidate_batch_limit": null
+              }
+            }
+          }
+        },
+        "current-A": {
+          "complete_evidence": 30,
+          "eligible_before": 30,
+          "eligible_after_unrelated": 30,
+          "eligible_after_required": 0,
+          "false_invalidations": 0,
+          "evidence_prepare": {
+            "p50_ms": 5.2261159999034135,
+            "p95_ms": 287.8742779998902,
+            "p99_ms": 346.33543899963115
+          },
+          "ram_boundary": {
+            "p50_ms": 0.05299800022839918,
+            "p95_ms": 0.06478300019807648,
+            "p99_ms": 0.06553999992320314
+          },
+          "prepare_sqlite_trace_statements": 1135,
+          "cpu_seconds": 0.4588154599999994,
+          "rss_before_mb": 55.30859375,
+          "rss_after_mb": 55.32421875,
+          "database_bytes": 1470464,
+          "database_growth_bytes": 684032,
+          "metadata_page_bytes": 32768,
+          "metadata_rows": 200,
+          "operations": {
+            "verify_initial": {
+              "name": "verify_initial",
+              "wall_ms": 15.97014799972385,
+              "cpu_ms": 15.972751999999701,
+              "rss_mb": 55.32421875,
+              "rss_before_mb": 55.32421875,
+              "sqlite_trace_statements": 12,
+              "sqlite_selects": 6,
+              "sqlite_trace_rendered_characters": 2578,
+              "result": {
+                "eligible": 30,
+                "same_dataset": true
+              }
+            },
+            "prune_unrelated": {
+              "name": "prune_unrelated",
+              "wall_ms": 11.922057999981917,
+              "cpu_ms": 7.294847000000715,
+              "rss_mb": 55.32421875,
+              "rss_before_mb": 55.32421875,
+              "sqlite_trace_statements": 40,
+              "sqlite_selects": 9,
+              "sqlite_trace_rendered_characters": 4811,
+              "result": {
+                "deleted": 1
+              }
+            },
+            "verify_after_unrelated": {
+              "name": "verify_after_unrelated",
+              "wall_ms": 16.277242999876762,
+              "cpu_ms": 16.281567000000052,
+              "rss_mb": 55.32421875,
+              "rss_before_mb": 55.32421875,
+              "sqlite_trace_statements": 12,
+              "sqlite_selects": 6,
+              "sqlite_trace_rendered_characters": 2578,
+              "result": {
+                "eligible": 30,
+                "same_dataset": true
+              }
+            },
+            "prune_required": {
+              "name": "prune_required",
+              "wall_ms": 10.551845999998477,
+              "cpu_ms": 6.283607000000302,
+              "rss_mb": 55.32421875,
+              "rss_before_mb": 55.32421875,
+              "sqlite_trace_statements": 48,
+              "sqlite_selects": 9,
+              "sqlite_trace_rendered_characters": 5565,
+              "result": {
+                "deleted": 2
+              }
+            },
+            "verify_after_required": {
+              "name": "verify_after_required",
+              "wall_ms": 6.673977999980707,
+              "cpu_ms": 6.677602999999976,
+              "rss_mb": 55.32421875,
+              "rss_before_mb": 55.32421875,
+              "sqlite_trace_statements": 10,
+              "sqlite_selects": 5,
+              "sqlite_trace_rendered_characters": 1853,
+              "result": {
+                "eligible": 0,
+                "error": "granular retention witness required history invalidated"
+              }
+            },
+            "append_protected_stress": {
+              "name": "append_protected_stress",
+              "wall_ms": 1335.465566000039,
+              "cpu_ms": 1306.441725,
+              "rss_mb": 58.84765625,
+              "rss_before_mb": 55.32421875,
+              "sqlite_trace_statements": 26901,
+              "sqlite_selects": 11,
+              "sqlite_trace_rendered_characters": 295734977,
+              "result": {
+                "appended": 2048
+              }
+            },
+            "protected_global_hard_cap_stress": {
+              "name": "protected_global_hard_cap_stress",
+              "wall_ms": 84.8960530001932,
+              "cpu_ms": 71.36160899999933,
+              "rss_mb": 58.84765625,
+              "rss_before_mb": 58.84765625,
+              "sqlite_trace_statements": 17665,
+              "sqlite_selects": 15,
+              "sqlite_trace_rendered_characters": 1643736,
+              "result": {
+                "deleted": 2230,
+                "remaining": 16,
+                "protected_hard_cap": true,
+                "candidate_batch_limit": 512
+              }
+            },
+            "append_protected_stress_no_trace": {
+              "name": "append_protected_stress_no_trace",
+              "wall_ms": 145.38557200012292,
+              "cpu_ms": 128.37526100000042,
+              "rss_mb": 59.015625,
+              "rss_before_mb": 58.84765625,
+              "sqlite_trace_statements": null,
+              "sqlite_selects": null,
+              "sqlite_trace_rendered_characters": null,
+              "result": {
+                "appended": 2048
+              }
+            },
+            "protected_global_hard_cap_stress_no_trace": {
+              "name": "protected_global_hard_cap_stress_no_trace",
+              "wall_ms": 65.665330000229,
+              "cpu_ms": 54.38066600000013,
+              "rss_mb": 59.015625,
+              "rss_before_mb": 59.015625,
+              "sqlite_trace_statements": null,
+              "sqlite_selects": null,
+              "sqlite_trace_rendered_characters": null,
+              "result": {
+                "deleted": 2048,
+                "remaining": 16,
+                "protected_hard_cap": true,
+                "candidate_batch_limit": 512
+              }
+            }
+          }
+        },
+        "pr362-B": {
+          "complete_evidence": 30,
+          "eligible_before": 30,
+          "eligible_after_unrelated": 0,
+          "eligible_after_required": 0,
+          "false_invalidations": 30,
+          "evidence_prepare": {
+            "p50_ms": 4.754532999868388,
+            "p95_ms": 280.3350720000708,
+            "p99_ms": 280.3989009998986
+          },
+          "ram_boundary": {
+            "p50_ms": 0.05499100007000379,
+            "p95_ms": 0.06679099988105008,
+            "p99_ms": 0.07500899982915143
+          },
+          "prepare_sqlite_trace_statements": 1119,
+          "cpu_seconds": 0.3862237129999999,
+          "rss_before_mb": 54.34375,
+          "rss_after_mb": 54.46875,
+          "database_bytes": 1421312,
+          "database_growth_bytes": 684032,
+          "metadata_page_bytes": 0,
+          "metadata_rows": 0,
+          "operations": {
+            "verify_initial": {
+              "name": "verify_initial",
+              "wall_ms": 14.235660999929678,
+              "cpu_ms": 14.238208999999946,
+              "rss_mb": 54.46875,
+              "rss_before_mb": 54.46875,
+              "sqlite_trace_statements": 8,
+              "sqlite_selects": 3,
+              "sqlite_trace_rendered_characters": 1796,
+              "result": {
+                "eligible": 30,
+                "same_dataset": true
+              }
+            },
+            "prune_unrelated": {
+              "name": "prune_unrelated",
+              "wall_ms": 12.424810000084108,
+              "cpu_ms": 8.099969999999956,
+              "rss_mb": 54.46875,
+              "rss_before_mb": 54.46875,
+              "sqlite_trace_statements": 27,
+              "sqlite_selects": 5,
+              "sqlite_trace_rendered_characters": 3102,
+              "result": {
+                "deleted": 1
+              }
+            },
+            "verify_after_unrelated": {
+              "name": "verify_after_unrelated",
+              "wall_ms": 234.24508899961438,
+              "cpu_ms": 4.76971100000001,
+              "rss_mb": 54.46875,
+              "rss_before_mb": 54.46875,
+              "sqlite_trace_statements": 7,
+              "sqlite_selects": 2,
+              "sqlite_trace_rendered_characters": 1442,
+              "result": {
+                "eligible": 0,
+                "error": "collection retention witness expired"
+              }
+            },
+            "prune_required": {
+              "name": "prune_required",
+              "wall_ms": 10.288591000062297,
+              "cpu_ms": 4.51662900000005,
+              "rss_mb": 54.46875,
+              "rss_before_mb": 54.46875,
+              "sqlite_trace_statements": 28,
+              "sqlite_selects": 5,
+              "sqlite_trace_rendered_characters": 3200,
+              "result": {
+                "deleted": 2
+              }
+            },
+            "verify_after_required": {
+              "name": "verify_after_required",
+              "wall_ms": 4.354220999630343,
+              "cpu_ms": 4.356521999999918,
+              "rss_mb": 54.46875,
+              "rss_before_mb": 54.46875,
+              "sqlite_trace_statements": 7,
+              "sqlite_selects": 2,
+              "sqlite_trace_rendered_characters": 1442,
+              "result": {
+                "eligible": 0,
+                "error": "collection retention witness expired"
+              }
+            },
+            "append_protected_stress": {
+              "name": "append_protected_stress",
+              "wall_ms": 104.02772099996582,
+              "cpu_ms": 89.76581899999991,
+              "rss_mb": 55.49609375,
+              "rss_before_mb": 54.46875,
+              "sqlite_trace_statements": 78,
+              "sqlite_selects": 10,
+              "sqlite_trace_rendered_characters": 507834,
+              "result": {
+                "appended": 2048
+              }
+            },
+            "protected_global_hard_cap_stress": {
+              "name": "protected_global_hard_cap_stress",
+              "wall_ms": 26.008537000052456,
+              "cpu_ms": 18.518018999999608,
+              "rss_mb": 55.49609375,
+              "rss_before_mb": 55.49609375,
+              "sqlite_trace_statements": 2243,
+              "sqlite_selects": 5,
+              "sqlite_trace_rendered_characters": 208421,
+              "result": {
+                "deleted": 2230,
+                "remaining": 16,
+                "protected_hard_cap": true,
+                "candidate_batch_limit": null
+              }
+            },
+            "append_protected_stress_no_trace": {
+              "name": "append_protected_stress_no_trace",
+              "wall_ms": 94.47009699988484,
+              "cpu_ms": 83.36235199999997,
+              "rss_mb": 57.2265625,
+              "rss_before_mb": 55.49609375,
+              "sqlite_trace_statements": null,
+              "sqlite_selects": null,
+              "sqlite_trace_rendered_characters": null,
+              "result": {
+                "appended": 2048
+              }
+            },
+            "protected_global_hard_cap_stress_no_trace": {
+              "name": "protected_global_hard_cap_stress_no_trace",
+              "wall_ms": 20.753572000103304,
+              "cpu_ms": 14.861778000000214,
+              "rss_mb": 57.2265625,
+              "rss_before_mb": 57.2265625,
+              "sqlite_trace_statements": null,
+              "sqlite_selects": null,
+              "sqlite_trace_rendered_characters": null,
+              "result": {
+                "deleted": 2048,
+                "remaining": 16,
+                "protected_hard_cap": true,
+                "candidate_batch_limit": null
+              }
+            }
+          }
+        },
+        "current-B": {
+          "complete_evidence": 30,
+          "eligible_before": 30,
+          "eligible_after_unrelated": 30,
+          "eligible_after_required": 0,
+          "false_invalidations": 0,
+          "evidence_prepare": {
+            "p50_ms": 4.824377000204549,
+            "p95_ms": 281.42809500013755,
+            "p99_ms": 290.33703699997204
+          },
+          "ram_boundary": {
+            "p50_ms": 0.0532730000486481,
+            "p95_ms": 0.09611599989511888,
+            "p99_ms": 0.10076499984279508
+          },
+          "prepare_sqlite_trace_statements": 1135,
+          "cpu_seconds": 0.4444129839999995,
+          "rss_before_mb": 55.35546875,
+          "rss_after_mb": 55.37109375,
+          "database_bytes": 1470464,
+          "database_growth_bytes": 684032,
+          "metadata_page_bytes": 32768,
+          "metadata_rows": 200,
+          "operations": {
+            "verify_initial": {
+              "name": "verify_initial",
+              "wall_ms": 16.78555900025458,
+              "cpu_ms": 16.78919699999959,
+              "rss_mb": 55.37109375,
+              "rss_before_mb": 55.37109375,
+              "sqlite_trace_statements": 12,
+              "sqlite_selects": 6,
+              "sqlite_trace_rendered_characters": 2577,
+              "result": {
+                "eligible": 30,
+                "same_dataset": true
+              }
+            },
+            "prune_unrelated": {
+              "name": "prune_unrelated",
+              "wall_ms": 12.116199000047345,
+              "cpu_ms": 6.017455000000282,
+              "rss_mb": 55.37109375,
+              "rss_before_mb": 55.37109375,
+              "sqlite_trace_statements": 40,
+              "sqlite_selects": 9,
+              "sqlite_trace_rendered_characters": 4811,
+              "result": {
+                "deleted": 1
+              }
+            },
+            "verify_after_unrelated": {
+              "name": "verify_after_unrelated",
+              "wall_ms": 242.9371190000893,
+              "cpu_ms": 17.65004399999981,
+              "rss_mb": 55.37109375,
+              "rss_before_mb": 55.37109375,
+              "sqlite_trace_statements": 12,
+              "sqlite_selects": 6,
+              "sqlite_trace_rendered_characters": 2577,
+              "result": {
+                "eligible": 30,
+                "same_dataset": true
+              }
+            },
+            "prune_required": {
+              "name": "prune_required",
+              "wall_ms": 13.676533000307245,
+              "cpu_ms": 6.260973999999919,
+              "rss_mb": 55.37109375,
+              "rss_before_mb": 55.37109375,
+              "sqlite_trace_statements": 48,
+              "sqlite_selects": 9,
+              "sqlite_trace_rendered_characters": 5565,
+              "result": {
+                "deleted": 2
+              }
+            },
+            "verify_after_required": {
+              "name": "verify_after_required",
+              "wall_ms": 5.698737999864534,
+              "cpu_ms": 5.701435999999838,
+              "rss_mb": 55.37109375,
+              "rss_before_mb": 55.37109375,
+              "sqlite_trace_statements": 10,
+              "sqlite_selects": 5,
+              "sqlite_trace_rendered_characters": 1852,
+              "result": {
+                "eligible": 0,
+                "error": "granular retention witness required history invalidated"
+              }
+            },
+            "append_protected_stress": {
+              "name": "append_protected_stress",
+              "wall_ms": 1261.1605150000287,
+              "cpu_ms": 1248.3151660000003,
+              "rss_mb": 58.703125,
+              "rss_before_mb": 55.37109375,
+              "sqlite_trace_statements": 26901,
+              "sqlite_selects": 11,
+              "sqlite_trace_rendered_characters": 295734977,
+              "result": {
+                "appended": 2048
+              }
+            },
+            "protected_global_hard_cap_stress": {
+              "name": "protected_global_hard_cap_stress",
+              "wall_ms": 59.41775700011931,
+              "cpu_ms": 54.21568700000012,
+              "rss_mb": 58.703125,
+              "rss_before_mb": 58.703125,
+              "sqlite_trace_statements": 17665,
+              "sqlite_selects": 15,
+              "sqlite_trace_rendered_characters": 1643736,
+              "result": {
+                "deleted": 2230,
+                "remaining": 16,
+                "protected_hard_cap": true,
+                "candidate_batch_limit": 512
+              }
+            },
+            "append_protected_stress_no_trace": {
+              "name": "append_protected_stress_no_trace",
+              "wall_ms": 120.21178799977861,
+              "cpu_ms": 108.72208400000005,
+              "rss_mb": 58.88671875,
+              "rss_before_mb": 58.703125,
+              "sqlite_trace_statements": null,
+              "sqlite_selects": null,
+              "sqlite_trace_rendered_characters": null,
+              "result": {
+                "appended": 2048
+              }
+            },
+            "protected_global_hard_cap_stress_no_trace": {
+              "name": "protected_global_hard_cap_stress_no_trace",
+              "wall_ms": 42.099658000097406,
+              "cpu_ms": 36.568403000000416,
+              "rss_mb": 58.88671875,
+              "rss_before_mb": 58.88671875,
+              "sqlite_trace_statements": null,
+              "sqlite_selects": null,
+              "sqlite_trace_rendered_characters": null,
+              "result": {
+                "deleted": 2048,
+                "remaining": 16,
+                "protected_hard_cap": true,
+                "candidate_batch_limit": 512
+              }
+            }
+          }
+        }
+      },
+      "runtime": [
+        {
+          "name": "baseline-on-A",
+          "event_to_intent": {
+            "p50_ms": 53.11792899988177,
+            "p95_ms": 103.04179399986424,
+            "p99_ms": 122.9016289998981
+          },
+          "inference": {
+            "p50_ms": 0.8673800000451592,
+            "p95_ms": 2.667468000026929,
+            "p99_ms": 4.51911499999369
+          },
+          "model_prediction": {
+            "count": 1200,
+            "dropped": 0,
+            "wall": {
+              "p50_ms": 0.159247,
+              "p95_ms": 0.479729,
+              "p99_ms": 1.822457
+            },
+            "thread_cpu": {
+              "p50_ms": 0.159211,
+              "p95_ms": 0.304974,
+              "p99_ms": 0.406677
+            }
+          },
+          "cpu_ms": 4643.3673210000015,
+          "rss_mb": 120.5390625,
+          "peak_rss_mb": 123.6875,
+          "sqlite_statements": 4363,
+          "collector": {
+            "batches": 8,
+            "deferred_for_foreground": 105,
+            "dropped": 1065,
+            "enabled": true,
+            "epoch": 2,
+            "errors": 0,
+            "gaps": 2,
+            "last_error": null,
+            "max_queue": 532,
+            "max_queue_bytes": 8385700,
+            "max_write_latency_ms": 1439.0187879998848,
+            "predecision": {
+              "consumed": 0,
+              "errors": 0,
+              "prepared": 0,
+              "prepared_bytes": 0,
+              "rejected": 0,
+              "requested": 1440,
+              "unsupported": 0
+            },
+            "queue": 0,
+            "queue_bytes": 0,
+            "queued": 1486,
+            "session": "80d8ac47538b4eb6bf294a3e80d41d50",
+            "worker_alive": false,
+            "write_latency_p95_ms": 1350.7048359999771,
+            "written": 423
+          },
+          "training_eligible": 0
+        },
+        {
+          "name": "current-off",
+          "event_to_intent": {
+            "p50_ms": 48.238561000061964,
+            "p95_ms": 90.04524100009803,
+            "p99_ms": 101.22810600000776
+          },
+          "inference": {
+            "p50_ms": 0.8259810001618462,
+            "p95_ms": 2.0041459999902145,
+            "p99_ms": 3.5645680000016
+          },
+          "model_prediction": {
+            "count": 1200,
+            "dropped": 0,
+            "wall": {
+              "p50_ms": 0.155293,
+              "p95_ms": 0.273724,
+              "p99_ms": 1.650021
+            },
+            "thread_cpu": {
+              "p50_ms": 0.155211,
+              "p95_ms": 0.256752,
+              "p99_ms": 0.377771
+            }
+          },
+          "cpu_ms": 4046.380040999999,
+          "rss_mb": 120.52734375,
+          "peak_rss_mb": 119.890625,
+          "sqlite_statements": 4113,
+          "collector": null,
+          "training_eligible": 0
+        },
+        {
+          "name": "current-on-A",
+          "event_to_intent": {
+            "p50_ms": 48.02701999983583,
+            "p95_ms": 90.48244399991745,
+            "p99_ms": 104.30663300007836
+          },
+          "inference": {
+            "p50_ms": 0.8351940000466129,
+            "p95_ms": 2.186702000017249,
+            "p99_ms": 3.4301149999009795
+          },
+          "model_prediction": {
+            "count": 1200,
+            "dropped": 0,
+            "wall": {
+              "p50_ms": 0.154971,
+              "p95_ms": 0.279842,
+              "p99_ms": 1.387315
+            },
+            "thread_cpu": {
+              "p50_ms": 0.154932,
+              "p95_ms": 0.247095,
+              "p99_ms": 0.343993
+            }
+          },
+          "cpu_ms": 4050.550639999999,
+          "rss_mb": 119.515625,
+          "peak_rss_mb": 122.015625,
+          "sqlite_statements": 3745,
+          "collector": {
+            "batches": 8,
+            "deferred_for_foreground": 95,
+            "dropped": 1065,
+            "enabled": true,
+            "epoch": 2,
+            "errors": 0,
+            "gaps": 2,
+            "last_error": null,
+            "max_queue": 532,
+            "max_queue_bytes": 8385688,
+            "max_write_latency_ms": 1373.2185169999411,
+            "predecision": {
+              "consumed": 0,
+              "errors": 0,
+              "prepared": 0,
+              "prepared_bytes": 0,
+              "rejected": 0,
+              "requested": 1440,
+              "unsupported": 0
+            },
+            "queue": 0,
+            "queue_bytes": 0,
+            "queued": 1486,
+            "session": "f7e19071e75b4915964fbf6fc0347f69",
+            "worker_alive": false,
+            "write_latency_p95_ms": 1313.772237999956,
+            "written": 423
+          },
+          "training_eligible": 0
+        },
+        {
+          "name": "baseline-on-B",
+          "event_to_intent": {
+            "p50_ms": 49.260182000125496,
+            "p95_ms": 94.4214670000747,
+            "p99_ms": 109.91840499991667
+          },
+          "inference": {
+            "p50_ms": 0.8365389999198669,
+            "p95_ms": 2.2055819999877713,
+            "p99_ms": 3.545982000105141
+          },
+          "model_prediction": {
+            "count": 1200,
+            "dropped": 0,
+            "wall": {
+              "p50_ms": 0.155467,
+              "p95_ms": 0.260225,
+              "p99_ms": 1.291463
+            },
+            "thread_cpu": {
+              "p50_ms": 0.155449,
+              "p95_ms": 0.252703,
+              "p99_ms": 0.400592
+            }
+          },
+          "cpu_ms": 4329.327393,
+          "rss_mb": 118.609375,
+          "peak_rss_mb": 123.84765625,
+          "sqlite_statements": 4445,
+          "collector": {
+            "batches": 8,
+            "deferred_for_foreground": 99,
+            "dropped": 1065,
+            "enabled": true,
+            "epoch": 2,
+            "errors": 0,
+            "gaps": 2,
+            "last_error": null,
+            "max_queue": 532,
+            "max_queue_bytes": 8385688,
+            "max_write_latency_ms": 1420.2562680000028,
+            "predecision": {
+              "consumed": 0,
+              "errors": 0,
+              "prepared": 0,
+              "prepared_bytes": 0,
+              "rejected": 0,
+              "requested": 1440,
+              "unsupported": 0
+            },
+            "queue": 0,
+            "queue_bytes": 0,
+            "queued": 1486,
+            "session": "70b4742c732c49399c6f84c9ee134179",
+            "worker_alive": false,
+            "write_latency_p95_ms": 1322.7100439999049,
+            "written": 423
+          },
+          "training_eligible": 0
+        },
+        {
+          "name": "current-on-B",
+          "event_to_intent": {
+            "p50_ms": 48.998254000025554,
+            "p95_ms": 93.22527300014372,
+            "p99_ms": 106.84676999994736
+          },
+          "inference": {
+            "p50_ms": 0.8299150001676026,
+            "p95_ms": 2.3137200000746816,
+            "p99_ms": 3.4084670000993356
+          },
+          "model_prediction": {
+            "count": 1200,
+            "dropped": 0,
+            "wall": {
+              "p50_ms": 0.155444,
+              "p95_ms": 0.326098,
+              "p99_ms": 1.529145
+            },
+            "thread_cpu": {
+              "p50_ms": 0.155431,
+              "p95_ms": 0.274207,
+              "p99_ms": 0.407797
+            }
+          },
+          "cpu_ms": 4147.813205999999,
+          "rss_mb": 120.93359375,
+          "peak_rss_mb": 123.51953125,
+          "sqlite_statements": 3853,
+          "collector": {
+            "batches": 8,
+            "deferred_for_foreground": 97,
+            "dropped": 1065,
+            "enabled": true,
+            "epoch": 2,
+            "errors": 0,
+            "gaps": 2,
+            "last_error": null,
+            "max_queue": 532,
+            "max_queue_bytes": 8385676,
+            "max_write_latency_ms": 1407.0551919999161,
+            "predecision": {
+              "consumed": 0,
+              "errors": 0,
+              "prepared": 0,
+              "prepared_bytes": 0,
+              "rejected": 0,
+              "requested": 1440,
+              "unsupported": 0
+            },
+            "queue": 0,
+            "queue_bytes": 0,
+            "queued": 1486,
+            "session": "93af6eb6f378411f8aad0df283507cba",
+            "worker_alive": false,
+            "write_latency_p95_ms": 1319.617137000023,
+            "written": 423
+          },
+          "training_eligible": 0
+        }
+      ]
+    },
+    {
+      "sensors": 1000,
+      "devices": 200,
+      "components": {
+        "pr362-A": {
+          "complete_evidence": 200,
+          "eligible_before": 200,
+          "eligible_after_unrelated": 0,
+          "eligible_after_required": 0,
+          "false_invalidations": 200,
+          "evidence_prepare": {
+            "p50_ms": 252.89710100014418,
+            "p95_ms": 455.12884199979453,
+            "p99_ms": 624.874489999911
+          },
+          "ram_boundary": {
+            "p50_ms": 0.08910699989428394,
+            "p95_ms": 0.18193300002167234,
+            "p99_ms": 0.2382279999437742
+          },
+          "prepare_sqlite_trace_statements": 7370,
+          "cpu_seconds": 5.897203599,
+          "rss_before_mb": 56.26171875,
+          "rss_after_mb": 83.890625,
+          "database_bytes": 11018240,
+          "database_growth_bytes": 9261056,
+          "metadata_page_bytes": 0,
+          "metadata_rows": 0,
+          "operations": {
+            "verify_initial": {
+              "name": "verify_initial",
+              "wall_ms": 978.1913809997604,
+              "cpu_ms": 188.5235510000012,
+              "rss_mb": 83.890625,
+              "rss_before_mb": 83.890625,
+              "sqlite_trace_statements": 8,
+              "sqlite_selects": 3,
+              "sqlite_trace_rendered_characters": 3667,
+              "result": {
+                "eligible": 200,
+                "same_dataset": true
+              }
+            },
+            "prune_unrelated": {
+              "name": "prune_unrelated",
+              "wall_ms": 10.055873000055726,
+              "cpu_ms": 5.989046999999914,
+              "rss_mb": 83.890625,
+              "rss_before_mb": 83.890625,
+              "sqlite_trace_statements": 27,
+              "sqlite_selects": 5,
+              "sqlite_trace_rendered_characters": 3097,
+              "result": {
+                "deleted": 1
+              }
+            },
+            "verify_after_unrelated": {
+              "name": "verify_after_unrelated",
+              "wall_ms": 33.86116199999378,
+              "cpu_ms": 33.876143000000525,
+              "rss_mb": 83.890625,
+              "rss_before_mb": 83.890625,
+              "sqlite_trace_statements": 7,
+              "sqlite_selects": 2,
+              "sqlite_trace_rendered_characters": 3312,
+              "result": {
+                "eligible": 0,
+                "error": "collection retention witness expired"
+              }
+            },
+            "prune_required": {
+              "name": "prune_required",
+              "wall_ms": 7.905885999662132,
+              "cpu_ms": 4.3194209999999345,
+              "rss_mb": 83.890625,
+              "rss_before_mb": 83.890625,
+              "sqlite_trace_statements": 28,
+              "sqlite_selects": 5,
+              "sqlite_trace_rendered_characters": 3200,
+              "result": {
+                "deleted": 2
+              }
+            },
+            "verify_after_required": {
+              "name": "verify_after_required",
+              "wall_ms": 273.34144099995683,
+              "cpu_ms": 33.83543699999869,
+              "rss_mb": 83.890625,
+              "rss_before_mb": 83.890625,
+              "sqlite_trace_statements": 7,
+              "sqlite_selects": 2,
+              "sqlite_trace_rendered_characters": 3312,
+              "result": {
+                "eligible": 0,
+                "error": "collection retention witness expired"
+              }
+            },
+            "append_protected_stress": {
+              "name": "append_protected_stress",
+              "wall_ms": 104.18781999987914,
+              "cpu_ms": 89.90930499999905,
+              "rss_mb": 84.2109375,
+              "rss_before_mb": 83.890625,
+              "sqlite_trace_statements": 78,
+              "sqlite_selects": 10,
+              "sqlite_trace_rendered_characters": 507834,
+              "result": {
+                "appended": 2048
+              }
+            },
+            "protected_global_hard_cap_stress": {
+              "name": "protected_global_hard_cap_stress",
+              "wall_ms": 35.001059000023815,
+              "cpu_ms": 25.473494999999957,
+              "rss_mb": 84.21484375,
+              "rss_before_mb": 84.2109375,
+              "sqlite_trace_statements": 3043,
+              "sqlite_selects": 5,
+              "sqlite_trace_rendered_characters": 282821,
+              "result": {
+                "deleted": 3030,
+                "remaining": 16,
+                "protected_hard_cap": true,
+                "candidate_batch_limit": null
+              }
+            },
+            "append_protected_stress_no_trace": {
+              "name": "append_protected_stress_no_trace",
+              "wall_ms": 95.89046500013865,
+              "cpu_ms": 85.82310000000071,
+              "rss_mb": 84.2734375,
+              "rss_before_mb": 84.21484375,
+              "sqlite_trace_statements": null,
+              "sqlite_selects": null,
+              "sqlite_trace_rendered_characters": null,
+              "result": {
+                "appended": 2048
+              }
+            },
+            "protected_global_hard_cap_stress_no_trace": {
+              "name": "protected_global_hard_cap_stress_no_trace",
+              "wall_ms": 22.597008000047936,
+              "cpu_ms": 17.29955500000102,
+              "rss_mb": 84.2734375,
+              "rss_before_mb": 84.2734375,
+              "sqlite_trace_statements": null,
+              "sqlite_selects": null,
+              "sqlite_trace_rendered_characters": null,
+              "result": {
+                "deleted": 2048,
+                "remaining": 16,
+                "protected_hard_cap": true,
+                "candidate_batch_limit": null
+              }
+            }
+          }
+        },
+        "current-A": {
+          "complete_evidence": 200,
+          "eligible_before": 200,
+          "eligible_after_unrelated": 200,
+          "eligible_after_required": 0,
+          "false_invalidations": 0,
+          "evidence_prepare": {
+            "p50_ms": 17.968873999961943,
+            "p95_ms": 337.95490900001823,
+            "p99_ms": 364.17831200014916
+          },
+          "ram_boundary": {
+            "p50_ms": 0.08565000007365597,
+            "p95_ms": 0.16379899989260593,
+            "p99_ms": 0.23918200031403103
+          },
+          "prepare_sqlite_trace_statements": 7386,
+          "cpu_seconds": 5.918126145999999,
+          "rss_before_mb": 56.3359375,
+          "rss_after_mb": 84.06640625,
+          "database_bytes": 11141120,
+          "database_growth_bytes": 9261056,
+          "metadata_page_bytes": 94208,
+          "metadata_rows": 1000,
+          "operations": {
+            "verify_initial": {
+              "name": "verify_initial",
+              "wall_ms": 650.4178279997177,
+              "cpu_ms": 197.53302699999864,
+              "rss_mb": 84.06640625,
+              "rss_before_mb": 84.06640625,
+              "sqlite_trace_statements": 12,
+              "sqlite_selects": 6,
+              "sqlite_trace_rendered_characters": 4447,
+              "result": {
+                "eligible": 200,
+                "same_dataset": true
+              }
+            },
+            "prune_unrelated": {
+              "name": "prune_unrelated",
+              "wall_ms": 12.48688299983769,
+              "cpu_ms": 7.391922000000051,
+              "rss_mb": 84.06640625,
+              "rss_before_mb": 84.06640625,
+              "sqlite_trace_statements": 40,
+              "sqlite_selects": 9,
+              "sqlite_trace_rendered_characters": 4811,
+              "result": {
+                "deleted": 1
+              }
+            },
+            "verify_after_unrelated": {
+              "name": "verify_after_unrelated",
+              "wall_ms": 927.8445799996007,
+              "cpu_ms": 190.717523,
+              "rss_mb": 84.21484375,
+              "rss_before_mb": 84.06640625,
+              "sqlite_trace_statements": 12,
+              "sqlite_selects": 6,
+              "sqlite_trace_rendered_characters": 4447,
+              "result": {
+                "eligible": 200,
+                "same_dataset": true
+              }
+            },
+            "prune_required": {
+              "name": "prune_required",
+              "wall_ms": 9.850358999756281,
+              "cpu_ms": 5.927815999999808,
+              "rss_mb": 84.21484375,
+              "rss_before_mb": 84.21484375,
+              "sqlite_trace_statements": 48,
+              "sqlite_selects": 9,
+              "sqlite_trace_rendered_characters": 5565,
+              "result": {
+                "deleted": 2
+              }
+            },
+            "verify_after_required": {
+              "name": "verify_after_required",
+              "wall_ms": 36.35841599998457,
+              "cpu_ms": 36.36344699999938,
+              "rss_mb": 84.44921875,
+              "rss_before_mb": 84.21484375,
+              "sqlite_trace_statements": 10,
+              "sqlite_selects": 5,
+              "sqlite_trace_rendered_characters": 3722,
+              "result": {
+                "eligible": 0,
+                "error": "granular retention witness required history invalidated"
+              }
+            },
+            "append_protected_stress": {
+              "name": "append_protected_stress",
+              "wall_ms": 1266.9628460002968,
+              "cpu_ms": 1250.0322070000002,
+              "rss_mb": 84.47265625,
+              "rss_before_mb": 84.44921875,
+              "sqlite_trace_statements": 27701,
+              "sqlite_selects": 11,
+              "sqlite_trace_rendered_characters": 295790977,
+              "result": {
+                "appended": 2048
+              }
+            },
+            "protected_global_hard_cap_stress": {
+              "name": "protected_global_hard_cap_stress",
+              "wall_ms": 82.69933399969887,
+              "cpu_ms": 73.0960749999987,
+              "rss_mb": 84.47265625,
+              "rss_before_mb": 84.47265625,
+              "sqlite_trace_statements": 23267,
+              "sqlite_selects": 17,
+              "sqlite_trace_rendered_characters": 2164971,
+              "result": {
+                "deleted": 3030,
+                "remaining": 16,
+                "protected_hard_cap": true,
+                "candidate_batch_limit": 512
+              }
+            },
+            "append_protected_stress_no_trace": {
+              "name": "append_protected_stress_no_trace",
+              "wall_ms": 125.33856299978652,
+              "cpu_ms": 110.33325799999716,
+              "rss_mb": 84.4765625,
+              "rss_before_mb": 84.47265625,
+              "sqlite_trace_statements": null,
+              "sqlite_selects": null,
+              "sqlite_trace_rendered_characters": null,
+              "result": {
+                "appended": 2048
+              }
+            },
+            "protected_global_hard_cap_stress_no_trace": {
+              "name": "protected_global_hard_cap_stress_no_trace",
+              "wall_ms": 42.612401000042155,
+              "cpu_ms": 37.74499399999698,
+              "rss_mb": 84.4765625,
+              "rss_before_mb": 84.4765625,
+              "sqlite_trace_statements": null,
+              "sqlite_selects": null,
+              "sqlite_trace_rendered_characters": null,
+              "result": {
+                "deleted": 2048,
+                "remaining": 16,
+                "protected_hard_cap": true,
+                "candidate_batch_limit": 512
+              }
+            }
+          }
+        },
+        "pr362-B": {
+          "complete_evidence": 200,
+          "eligible_before": 200,
+          "eligible_after_unrelated": 0,
+          "eligible_after_required": 0,
+          "false_invalidations": 200,
+          "evidence_prepare": {
+            "p50_ms": 17.888962000142783,
+            "p95_ms": 318.3202159998473,
+            "p99_ms": 344.7759569999107
+          },
+          "ram_boundary": {
+            "p50_ms": 0.08785800037003355,
+            "p95_ms": 0.17934299967237166,
+            "p99_ms": 0.26281999998900574
+          },
+          "prepare_sqlite_trace_statements": 7370,
+          "cpu_seconds": 5.480992303,
+          "rss_before_mb": 57.25390625,
+          "rss_after_mb": 83.8125,
+          "database_bytes": 11018240,
+          "database_growth_bytes": 9261056,
+          "metadata_page_bytes": 0,
+          "metadata_rows": 0,
+          "operations": {
+            "verify_initial": {
+              "name": "verify_initial",
+              "wall_ms": 736.5700049999759,
+              "cpu_ms": 182.55528399999932,
+              "rss_mb": 83.8125,
+              "rss_before_mb": 83.8125,
+              "sqlite_trace_statements": 8,
+              "sqlite_selects": 3,
+              "sqlite_trace_rendered_characters": 3667,
+              "result": {
+                "eligible": 200,
+                "same_dataset": true
+              }
+            },
+            "prune_unrelated": {
+              "name": "prune_unrelated",
+              "wall_ms": 7.785418999901594,
+              "cpu_ms": 4.142914000000886,
+              "rss_mb": 83.8125,
+              "rss_before_mb": 83.8125,
+              "sqlite_trace_statements": 27,
+              "sqlite_selects": 5,
+              "sqlite_trace_rendered_characters": 3102,
+              "result": {
+                "deleted": 1
+              }
+            },
+            "verify_after_unrelated": {
+              "name": "verify_after_unrelated",
+              "wall_ms": 348.196519999874,
+              "cpu_ms": 32.91299300000006,
+              "rss_mb": 83.8125,
+              "rss_before_mb": 83.8125,
+              "sqlite_trace_statements": 7,
+              "sqlite_selects": 2,
+              "sqlite_trace_rendered_characters": 3312,
+              "result": {
+                "eligible": 0,
+                "error": "collection retention witness expired"
+              }
+            },
+            "prune_required": {
+              "name": "prune_required",
+              "wall_ms": 7.760858999972697,
+              "cpu_ms": 4.223819999999989,
+              "rss_mb": 83.8125,
+              "rss_before_mb": 83.8125,
+              "sqlite_trace_statements": 28,
+              "sqlite_selects": 5,
+              "sqlite_trace_rendered_characters": 3200,
+              "result": {
+                "deleted": 2
+              }
+            },
+            "verify_after_required": {
+              "name": "verify_after_required",
+              "wall_ms": 31.274091999875964,
+              "cpu_ms": 31.278230999999934,
+              "rss_mb": 83.8125,
+              "rss_before_mb": 83.8125,
+              "sqlite_trace_statements": 7,
+              "sqlite_selects": 2,
+              "sqlite_trace_rendered_characters": 3312,
+              "result": {
+                "eligible": 0,
+                "error": "collection retention witness expired"
+              }
+            },
+            "append_protected_stress": {
+              "name": "append_protected_stress",
+              "wall_ms": 104.43379599973923,
+              "cpu_ms": 92.40062000000115,
+              "rss_mb": 84.1484375,
+              "rss_before_mb": 83.8125,
+              "sqlite_trace_statements": 78,
+              "sqlite_selects": 10,
+              "sqlite_trace_rendered_characters": 507834,
+              "result": {
+                "appended": 2048
+              }
+            },
+            "protected_global_hard_cap_stress": {
+              "name": "protected_global_hard_cap_stress",
+              "wall_ms": 30.16364099994462,
+              "cpu_ms": 23.363910999998794,
+              "rss_mb": 84.15234375,
+              "rss_before_mb": 84.1484375,
+              "sqlite_trace_statements": 3043,
+              "sqlite_selects": 5,
+              "sqlite_trace_rendered_characters": 282821,
+              "result": {
+                "deleted": 3030,
+                "remaining": 16,
+                "protected_hard_cap": true,
+                "candidate_batch_limit": null
+              }
+            },
+            "append_protected_stress_no_trace": {
+              "name": "append_protected_stress_no_trace",
+              "wall_ms": 93.63888899997619,
+              "cpu_ms": 82.92218099999893,
+              "rss_mb": 84.21484375,
+              "rss_before_mb": 84.15234375,
+              "sqlite_trace_statements": null,
+              "sqlite_selects": null,
+              "sqlite_trace_rendered_characters": null,
+              "result": {
+                "appended": 2048
+              }
+            },
+            "protected_global_hard_cap_stress_no_trace": {
+              "name": "protected_global_hard_cap_stress_no_trace",
+              "wall_ms": 19.21838199996273,
+              "cpu_ms": 14.255006000000847,
+              "rss_mb": 84.21484375,
+              "rss_before_mb": 84.21484375,
+              "sqlite_trace_statements": null,
+              "sqlite_selects": null,
+              "sqlite_trace_rendered_characters": null,
+              "result": {
+                "deleted": 2048,
+                "remaining": 16,
+                "protected_hard_cap": true,
+                "candidate_batch_limit": null
+              }
+            }
+          }
+        },
+        "current-B": {
+          "complete_evidence": 200,
+          "eligible_before": 200,
+          "eligible_after_unrelated": 200,
+          "eligible_after_required": 0,
+          "false_invalidations": 0,
+          "evidence_prepare": {
+            "p50_ms": 261.98124099983033,
+            "p95_ms": 412.61374999976397,
+            "p99_ms": 480.2348820003317
+          },
+          "ram_boundary": {
+            "p50_ms": 0.0845220001792768,
+            "p95_ms": 0.13119200002620346,
+            "p99_ms": 0.19659600002341904
+          },
+          "prepare_sqlite_trace_statements": 7386,
+          "cpu_seconds": 5.676496594,
+          "rss_before_mb": 59.4765625,
+          "rss_after_mb": 83.93359375,
+          "database_bytes": 11141120,
+          "database_growth_bytes": 9265152,
+          "metadata_page_bytes": 94208,
+          "metadata_rows": 1000,
+          "operations": {
+            "verify_initial": {
+              "name": "verify_initial",
+              "wall_ms": 627.8318139998191,
+              "cpu_ms": 174.98366000000055,
+              "rss_mb": 83.93359375,
+              "rss_before_mb": 83.93359375,
+              "sqlite_trace_statements": 12,
+              "sqlite_selects": 6,
+              "sqlite_trace_rendered_characters": 4450,
+              "result": {
+                "eligible": 200,
+                "same_dataset": true
+              }
+            },
+            "prune_unrelated": {
+              "name": "prune_unrelated",
+              "wall_ms": 11.787653000283171,
+              "cpu_ms": 5.994292999998763,
+              "rss_mb": 83.93359375,
+              "rss_before_mb": 83.93359375,
+              "sqlite_trace_statements": 40,
+              "sqlite_selects": 9,
+              "sqlite_trace_rendered_characters": 4811,
+              "result": {
+                "deleted": 1
+              }
+            },
+            "verify_after_unrelated": {
+              "name": "verify_after_unrelated",
+              "wall_ms": 662.2131419999278,
+              "cpu_ms": 183.7019919999996,
+              "rss_mb": 84.078125,
+              "rss_before_mb": 83.93359375,
+              "sqlite_trace_statements": 12,
+              "sqlite_selects": 6,
+              "sqlite_trace_rendered_characters": 4450,
+              "result": {
+                "eligible": 200,
+                "same_dataset": true
+              }
+            },
+            "prune_required": {
+              "name": "prune_required",
+              "wall_ms": 11.365974000000278,
+              "cpu_ms": 6.868201999999712,
+              "rss_mb": 84.078125,
+              "rss_before_mb": 84.078125,
+              "sqlite_trace_statements": 48,
+              "sqlite_selects": 9,
+              "sqlite_trace_rendered_characters": 5565,
+              "result": {
+                "deleted": 2
+              }
+            },
+            "verify_after_required": {
+              "name": "verify_after_required",
+              "wall_ms": 342.3574319999716,
+              "cpu_ms": 35.328327000000215,
+              "rss_mb": 84.31640625,
+              "rss_before_mb": 84.078125,
+              "sqlite_trace_statements": 10,
+              "sqlite_selects": 5,
+              "sqlite_trace_rendered_characters": 3723,
+              "result": {
+                "eligible": 0,
+                "error": "granular retention witness required history invalidated"
+              }
+            },
+            "append_protected_stress": {
+              "name": "append_protected_stress",
+              "wall_ms": 1194.8589539997556,
+              "cpu_ms": 1182.6810709999993,
+              "rss_mb": 84.33984375,
+              "rss_before_mb": 84.31640625,
+              "sqlite_trace_statements": 27701,
+              "sqlite_selects": 11,
+              "sqlite_trace_rendered_characters": 295790977,
+              "result": {
+                "appended": 2048
+              }
+            },
+            "protected_global_hard_cap_stress": {
+              "name": "protected_global_hard_cap_stress",
+              "wall_ms": 77.52142300023479,
+              "cpu_ms": 65.97220499999779,
+              "rss_mb": 84.33984375,
+              "rss_before_mb": 84.33984375,
+              "sqlite_trace_statements": 23267,
+              "sqlite_selects": 17,
+              "sqlite_trace_rendered_characters": 2164971,
+              "result": {
+                "deleted": 3030,
+                "remaining": 16,
+                "protected_hard_cap": true,
+                "candidate_batch_limit": 512
+              }
+            },
+            "append_protected_stress_no_trace": {
+              "name": "append_protected_stress_no_trace",
+              "wall_ms": 106.4945930002068,
+              "cpu_ms": 97.07306899999679,
+              "rss_mb": 84.33984375,
+              "rss_before_mb": 84.33984375,
+              "sqlite_trace_statements": null,
+              "sqlite_selects": null,
+              "sqlite_trace_rendered_characters": null,
+              "result": {
+                "appended": 2048
+              }
+            },
+            "protected_global_hard_cap_stress_no_trace": {
+              "name": "protected_global_hard_cap_stress_no_trace",
+              "wall_ms": 39.586733000305685,
+              "cpu_ms": 34.28105400000092,
+              "rss_mb": 84.33984375,
+              "rss_before_mb": 84.33984375,
+              "sqlite_trace_statements": null,
+              "sqlite_selects": null,
+              "sqlite_trace_rendered_characters": null,
+              "result": {
+                "deleted": 2048,
+                "remaining": 16,
+                "protected_hard_cap": true,
+                "candidate_batch_limit": 512
+              }
+            }
+          }
+        }
+      },
+      "runtime": [
+        {
+          "name": "baseline-on-A",
+          "event_to_intent": {
+            "p50_ms": 713.1729879999966,
+            "p95_ms": 1223.970811000072,
+            "p99_ms": 1377.9656910000995
+          },
+          "inference": {
+            "p50_ms": 0.984816000027422,
+            "p95_ms": 3.9275999999972555,
+            "p99_ms": 6.462192000071809
+          },
+          "model_prediction": {
+            "count": 8000,
+            "dropped": 3904,
+            "wall": {
+              "p50_ms": 0.166133,
+              "p95_ms": 0.325377,
+              "p99_ms": 1.988051
+            },
+            "thread_cpu": {
+              "p50_ms": 0.166174,
+              "p95_ms": 0.259339,
+              "p99_ms": 0.441635
+            }
+          },
+          "cpu_ms": 54946.431885999984,
+          "rss_mb": 341.17578125,
+          "peak_rss_mb": 354.12890625,
+          "sqlite_statements": 33788,
+          "collector": {
+            "batches": 6,
+            "deferred_for_foreground": 1205,
+            "dropped": 9335,
+            "enabled": true,
+            "epoch": 18,
+            "errors": 0,
+            "gaps": 2,
+            "last_error": null,
+            "max_queue": 518,
+            "max_queue_bytes": 8385204,
+            "max_write_latency_ms": 1960.495667000032,
+            "predecision": {
+              "consumed": 0,
+              "errors": 0,
+              "prepared": 0,
+              "prepared_bytes": 0,
+              "rejected": 0,
+              "requested": 9600,
+              "unsupported": 0
+            },
+            "queue": 0,
+            "queue_bytes": 0,
+            "queued": 9630,
+            "session": "d45131fa72a24c6ba93826936ea07dcc",
+            "worker_alive": false,
+            "write_latency_p95_ms": 1843.2266789998266,
+            "written": 313
+          },
+          "training_eligible": 0
+        },
+        {
+          "name": "current-off",
+          "event_to_intent": {
+            "p50_ms": 699.1478679999545,
+            "p95_ms": 1176.1661170000934,
+            "p99_ms": 1304.3075319999389
+          },
+          "inference": {
+            "p50_ms": 0.945019000027969,
+            "p95_ms": 3.6631420000503567,
+            "p99_ms": 6.014461999939158
+          },
+          "model_prediction": {
+            "count": 8000,
+            "dropped": 3904,
+            "wall": {
+              "p50_ms": 0.164671,
+              "p95_ms": 0.374863,
+              "p99_ms": 2.295198
+            },
+            "thread_cpu": {
+              "p50_ms": 0.164695,
+              "p95_ms": 0.269427,
+              "p99_ms": 0.448877
+            }
+          },
+          "cpu_ms": 52783.145637999995,
+          "rss_mb": 334.87109375,
+          "peak_rss_mb": 347.06640625,
+          "sqlite_statements": 33546,
+          "collector": null,
+          "training_eligible": 0
+        },
+        {
+          "name": "current-on-A",
+          "event_to_intent": {
+            "p50_ms": 691.3368400000763,
+            "p95_ms": 1158.3303939999041,
+            "p99_ms": 1297.307579000062
+          },
+          "inference": {
+            "p50_ms": 0.9551719999763009,
+            "p95_ms": 3.568014999927982,
+            "p99_ms": 5.995877000032124
+          },
+          "model_prediction": {
+            "count": 8000,
+            "dropped": 3904,
+            "wall": {
+              "p50_ms": 0.164444,
+              "p95_ms": 0.383146,
+              "p99_ms": 2.517846
+            },
+            "thread_cpu": {
+              "p50_ms": 0.164425,
+              "p95_ms": 0.269708,
+              "p99_ms": 0.667006
+            }
+          },
+          "cpu_ms": 52610.126022000004,
+          "rss_mb": 341.7421875,
+          "peak_rss_mb": 352.1640625,
+          "sqlite_statements": 29785,
+          "collector": {
+            "batches": 6,
+            "deferred_for_foreground": 1172,
+            "dropped": 9335,
+            "enabled": true,
+            "epoch": 18,
+            "errors": 0,
+            "gaps": 2,
+            "last_error": null,
+            "max_queue": 518,
+            "max_queue_bytes": 8385248,
+            "max_write_latency_ms": 1982.0779960000436,
+            "predecision": {
+              "consumed": 0,
+              "errors": 0,
+              "prepared": 0,
+              "prepared_bytes": 0,
+              "rejected": 0,
+              "requested": 9600,
+              "unsupported": 0
+            },
+            "queue": 0,
+            "queue_bytes": 0,
+            "queued": 9630,
+            "session": "604a6ef878f04919a4df00cec5c90ab1",
+            "worker_alive": false,
+            "write_latency_p95_ms": 1867.9223799999818,
+            "written": 313
+          },
+          "training_eligible": 0
+        },
+        {
+          "name": "baseline-on-B",
+          "event_to_intent": {
+            "p50_ms": 697.3822120003206,
+            "p95_ms": 1169.139395000002,
+            "p99_ms": 1285.1493690000098
+          },
+          "inference": {
+            "p50_ms": 0.950219000060315,
+            "p95_ms": 3.5455070001262357,
+            "p99_ms": 5.775252999683289
+          },
+          "model_prediction": {
+            "count": 8000,
+            "dropped": 3904,
+            "wall": {
+              "p50_ms": 0.163829,
+              "p95_ms": 0.285054,
+              "p99_ms": 1.899177
+            },
+            "thread_cpu": {
+              "p50_ms": 0.163841,
+              "p95_ms": 0.245419,
+              "p99_ms": 0.488555
+            }
+          },
+          "cpu_ms": 52531.979235000006,
+          "rss_mb": 339.90625,
+          "peak_rss_mb": 352.61328125,
+          "sqlite_statements": 32417,
+          "collector": {
+            "batches": 6,
+            "deferred_for_foreground": 1169,
+            "dropped": 9335,
+            "enabled": true,
+            "epoch": 18,
+            "errors": 0,
+            "gaps": 2,
+            "last_error": null,
+            "max_queue": 518,
+            "max_queue_bytes": 8385236,
+            "max_write_latency_ms": 2342.6654939999025,
+            "predecision": {
+              "consumed": 0,
+              "errors": 0,
+              "prepared": 0,
+              "prepared_bytes": 0,
+              "rejected": 0,
+              "requested": 9600,
+              "unsupported": 0
+            },
+            "queue": 0,
+            "queue_bytes": 0,
+            "queued": 9630,
+            "session": "82184ab94e8b4e3d8e8e899bf3034076",
+            "worker_alive": false,
+            "write_latency_p95_ms": 2245.8329310002227,
+            "written": 313
+          },
+          "training_eligible": 0
+        },
+        {
+          "name": "current-on-B",
+          "event_to_intent": {
+            "p50_ms": 716.168886000105,
+            "p95_ms": 1230.139040999802,
+            "p99_ms": 1373.633965999943
+          },
+          "inference": {
+            "p50_ms": 0.9930700002769299,
+            "p95_ms": 3.902979000031337,
+            "p99_ms": 6.552619000103732
+          },
+          "model_prediction": {
+            "count": 8000,
+            "dropped": 3904,
+            "wall": {
+              "p50_ms": 0.16602,
+              "p95_ms": 0.383393,
+              "p99_ms": 2.760917
+            },
+            "thread_cpu": {
+              "p50_ms": 0.16607,
+              "p95_ms": 0.283524,
+              "p99_ms": 0.518876
+            }
+          },
+          "cpu_ms": 54733.614282,
+          "rss_mb": 341.99609375,
+          "peak_rss_mb": 351.13671875,
+          "sqlite_statements": 30399,
+          "collector": {
+            "batches": 6,
+            "deferred_for_foreground": 1225,
+            "dropped": 9335,
+            "enabled": true,
+            "epoch": 18,
+            "errors": 0,
+            "gaps": 2,
+            "last_error": null,
+            "max_queue": 518,
+            "max_queue_bytes": 8385252,
+            "max_write_latency_ms": 2744.1980049998165,
+            "predecision": {
+              "consumed": 0,
+              "errors": 0,
+              "prepared": 0,
+              "prepared_bytes": 0,
+              "rejected": 0,
+              "requested": 9600,
+              "unsupported": 0
+            },
+            "queue": 0,
+            "queue_bytes": 0,
+            "queued": 9630,
+            "session": "81d8564681bd41a18cea315b784313d9",
+            "worker_alive": false,
+            "write_latency_p95_ms": 2623.1099830001767,
+            "written": 313
+          },
+          "training_eligible": 0
+        }
+      ]
+    }
+  ],
+  "limits": [
+    "Later hardening changes offline U05a validation, not Engine/WS/Executor/collector/journal execution logic. Its new qualification branch is not called by the missing-declaration runtime fixture.",
+    "The last 1000/200 current-on-B runtime case overlapped focused offline regression checks. The first baseline component A run overlapped their tail. Preserve this confound and A/A spread; no isolated latency certificate.",
+    "Host noise and tracing overhead are material; no regression-free or Pi throughput claim. Small-event tails are descriptive only.",
+    "Component dataset timings include witness verification; they are not an isolated witness microbenchmark.",
+    "Trace counters include trigger-expanded callbacks and benchmark COUNT instrumentation. No-trace stress verifies actual deletions.",
+    "Original runtime high-load optional drops and all development/adverse/calibration results are preserved alongside final reports."
+  ]
+}
