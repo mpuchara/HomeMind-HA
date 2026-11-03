@@ -61,6 +61,10 @@ membership is checked at declaration, preparation, collector write and U05a.
   Future discovery can propose ids but must not attest completeness. Operator
   review creates a NEW operator declaration rather than rewriting the hypothesis.
 
+Completeness covers potential effects of that property across the permitted
+actions/states of the approved configuration, not merely the last chosen value.
+An assessment that depends on untracked physical conditions must remain partial.
+
 The level `operator_attested_scoped` means an attributed operator assertion, not
 mathematical or independently measured physical truth. Incorrect declarations
 can exclude too few sensors. Completeness is trusted only at this stated level;
@@ -79,6 +83,11 @@ withdraws future completeness without falling back to an older complete row.
 It does not rewrite the fact that an earlier declaration was available to an
 earlier decision. A future historical-correction/retraction policy, if required,
 must be explicit; there is no retroactive physical-truth guarantee here.
+
+Binding is deliberately to the exact collector topology receipt id. Existing
+collector ids include their receipt clock: even an unchanged registry refresh
+or restart can therefore require a new declaration. No automatic carry-forward
+or operator reapproval is invented across different topology receipt ids.
 
 The SAME PredecisionEvidence worker reads the latest declaration and verified
 topology in its original native SQLite read snapshot. It checks config,

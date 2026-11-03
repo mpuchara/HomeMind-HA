@@ -107,11 +107,12 @@ def case(root,sensors,devices):
                 c.execute('BEGIN')
                 source=source_from_collection(c,[a['id'] for a in agents],start=start,through=through)
                 dataset=source.dataset(c)
+        final_bytes=sum(p.stat().st_size for p in Path(f.store.path).parent.glob('data.db*'))
         result=dict(sensors=sensors,devices=devices,declarations_supported=supported,
             cpu_seconds=time.process_time()-cpu,wall_seconds=time.perf_counter()-wall,
             rss_before_mb=rss_before,rss_after_mb=rss_mb(),prepare=quantiles(prepare),ram_boundary=quantiles(boundary),
             sqlite_statements=len(statements),sqlite_selects=sum(s.lstrip().upper().startswith('SELECT') for s in statements),
-            database_growth_bytes=sum(p.stat().st_size for p in Path(f.store.path).parent.glob('data.db*'))-initial,
+            database_bytes_initial=initial,database_bytes=final_bytes,database_growth_bytes=final_bytes-initial,
             complete_evidence=complete,training_eligible=len(dataset.samples),rejections=list(dataset.rejected),
             collector=f.collector.diagnostics(),ha_calls=0,extra_intents=0,
             note='explicit synthetic operator declarations; source-native clocks; no physical causal truth/Pi4 acceptance')

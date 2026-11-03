@@ -1,0 +1,1201 @@
+{
+  "scope": "host evidence preparation and native dataset; not Engine event-to-intent",
+  "cases": [
+    {
+      "sensors": 5,
+      "devices": 1,
+      "declarations_supported": false,
+      "cpu_seconds": 0.13782535299999998,
+      "wall_seconds": 3.168105392,
+      "rss_before_mb": 44.80859375,
+      "rss_after_mb": 53.109375,
+      "prepare": {
+        "p50_ms": 469.7233040000004,
+        "p95_ms": 469.7233040000004,
+        "p99_ms": 469.7233040000004
+      },
+      "ram_boundary": {
+        "p50_ms": 0.06606999999991814,
+        "p95_ms": 0.06606999999991814,
+        "p99_ms": 0.06606999999991814
+      },
+      "sqlite_statements": 50,
+      "sqlite_selects": 28,
+      "database_growth_bytes": 4096,
+      "complete_evidence": 0,
+      "training_eligible": 0,
+      "rejections": [
+        [
+          "feedback-v1:fixture-correct-0",
+          "missing_historical_decision_receipt"
+        ]
+      ],
+      "collector": {
+        "queued": 13,
+        "written": 13,
+        "dropped": 0,
+        "gaps": 1,
+        "errors": 0,
+        "max_queue": 6,
+        "max_queue_bytes": 37484,
+        "batches": 4,
+        "max_write_latency_ms": 66.96181700000014,
+        "last_error": null,
+        "deferred_for_foreground": 0,
+        "enabled": true,
+        "queue": 0,
+        "queue_bytes": 0,
+        "epoch": 0,
+        "session": "ad0b4100c8dc45f7a7cbf155c39705f6",
+        "worker_alive": false,
+        "write_latency_p95_ms": 48.73684799999989,
+        "predecision": {
+          "requested": 1,
+          "prepared": 1,
+          "consumed": 1,
+          "rejected": 0,
+          "errors": 0,
+          "unsupported": 0,
+          "prepared_bytes": 22296
+        }
+      },
+      "ha_calls": 0,
+      "extra_intents": 0,
+      "note": "explicit synthetic operator declarations; source-native clocks; no physical causal truth/Pi4 acceptance"
+    },
+    {
+      "sensors": 50,
+      "devices": 10,
+      "declarations_supported": false,
+      "cpu_seconds": 0.08915422400000006,
+      "wall_seconds": 0.980423773,
+      "rss_before_mb": 53.109375,
+      "rss_after_mb": 53.1171875,
+      "prepare": {
+        "p50_ms": 2.6926849999995284,
+        "p95_ms": 258.52209800000026,
+        "p99_ms": 258.52209800000026
+      },
+      "ram_boundary": {
+        "p50_ms": 0.04440900000091119,
+        "p95_ms": 0.047750000000235104,
+        "p99_ms": 0.047750000000235104
+      },
+      "sqlite_statements": 334,
+      "sqlite_selects": 200,
+      "database_growth_bytes": 57344,
+      "complete_evidence": 0,
+      "training_eligible": 0,
+      "rejections": [
+        [
+          "feedback-v1:fixture-correct-0",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-1",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-2",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-3",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-4",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-5",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-6",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-7",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-8",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-9",
+          "missing_historical_decision_receipt"
+        ]
+      ],
+      "collector": {
+        "queued": 22,
+        "written": 22,
+        "dropped": 0,
+        "gaps": 1,
+        "errors": 0,
+        "max_queue": 8,
+        "max_queue_bytes": 321968,
+        "batches": 5,
+        "max_write_latency_ms": 663.7996380000004,
+        "last_error": null,
+        "deferred_for_foreground": 0,
+        "enabled": true,
+        "queue": 0,
+        "queue_bytes": 0,
+        "epoch": 0,
+        "session": "84c162665140446299dc18adae64d55f",
+        "worker_alive": false,
+        "write_latency_p95_ms": 401.5763840000002,
+        "predecision": {
+          "requested": 10,
+          "prepared": 10,
+          "consumed": 10,
+          "rejected": 0,
+          "errors": 0,
+          "unsupported": 0,
+          "prepared_bytes": 261480
+        }
+      },
+      "ha_calls": 0,
+      "extra_intents": 0,
+      "note": "explicit synthetic operator declarations; source-native clocks; no physical causal truth/Pi4 acceptance"
+    },
+    {
+      "sensors": 200,
+      "devices": 30,
+      "declarations_supported": false,
+      "cpu_seconds": 0.30779922000000015,
+      "wall_seconds": 2.573821595000002,
+      "rss_before_mb": 53.5,
+      "rss_after_mb": 54.03515625,
+      "prepare": {
+        "p50_ms": 4.184515000000388,
+        "p95_ms": 257.84638800000084,
+        "p99_ms": 270.63369100000045
+      },
+      "ram_boundary": {
+        "p50_ms": 0.049407999998862806,
+        "p95_ms": 0.07070599999892124,
+        "p99_ms": 0.08905600000019831
+      },
+      "sqlite_statements": 964,
+      "sqlite_selects": 582,
+      "database_growth_bytes": 253952,
+      "complete_evidence": 0,
+      "training_eligible": 0,
+      "rejections": [
+        [
+          "feedback-v1:fixture-correct-0",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-1",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-10",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-11",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-12",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-13",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-14",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-15",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-16",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-17",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-18",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-19",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-2",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-20",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-21",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-22",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-23",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-24",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-25",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-26",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-27",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-28",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-29",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-3",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-4",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-5",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-6",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-7",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-8",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-9",
+          "missing_historical_decision_receipt"
+        ]
+      ],
+      "collector": {
+        "queued": 42,
+        "written": 42,
+        "dropped": 0,
+        "gaps": 1,
+        "errors": 0,
+        "max_queue": 8,
+        "max_queue_bytes": 393280,
+        "batches": 7,
+        "max_write_latency_ms": 1289.5050380000016,
+        "last_error": null,
+        "deferred_for_foreground": 0,
+        "enabled": true,
+        "queue": 0,
+        "queue_bytes": 0,
+        "epoch": 0,
+        "session": "1a04d0c52c764183b806a9b13225a270",
+        "worker_alive": false,
+        "write_latency_p95_ms": 660.7951459999999,
+        "predecision": {
+          "requested": 30,
+          "prepared": 30,
+          "consumed": 30,
+          "rejected": 0,
+          "errors": 0,
+          "unsupported": 0,
+          "prepared_bytes": 1051480
+        }
+      },
+      "ha_calls": 0,
+      "extra_intents": 0,
+      "note": "explicit synthetic operator declarations; source-native clocks; no physical causal truth/Pi4 acceptance"
+    },
+    {
+      "sensors": 1000,
+      "devices": 200,
+      "declarations_supported": false,
+      "cpu_seconds": 4.290219638,
+      "wall_seconds": 26.398890654000002,
+      "rss_before_mb": 55.75,
+      "rss_after_mb": 60.2890625,
+      "prepare": {
+        "p50_ms": 15.334613000000274,
+        "p95_ms": 316.34003699999624,
+        "p99_ms": 340.2234710000016
+      },
+      "ram_boundary": {
+        "p50_ms": 0.07437800000076322,
+        "p95_ms": 0.11424300000228982,
+        "p99_ms": 0.17540700000040488
+      },
+      "sqlite_statements": 6344,
+      "sqlite_selects": 3834,
+      "database_growth_bytes": 3665920,
+      "complete_evidence": 0,
+      "training_eligible": 0,
+      "rejections": [
+        [
+          "feedback-v1:fixture-correct-0",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-1",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-10",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-100",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-101",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-102",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-103",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-104",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-105",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-106",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-107",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-108",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-109",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-11",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-110",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-111",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-112",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-113",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-114",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-115",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-116",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-117",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-118",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-119",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-12",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-120",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-121",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-122",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-123",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-124",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-125",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-126",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-127",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-128",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-129",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-13",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-130",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-131",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-132",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-133",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-134",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-135",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-136",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-137",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-138",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-139",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-14",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-140",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-141",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-142",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-143",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-144",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-145",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-146",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-147",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-148",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-149",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-15",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-150",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-151",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-152",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-153",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-154",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-155",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-156",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-157",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-158",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-159",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-16",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-160",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-161",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-162",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-163",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-164",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-165",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-166",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-167",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-168",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-169",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-17",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-170",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-171",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-172",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-173",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-174",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-175",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-176",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-177",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-178",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-179",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-18",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-180",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-181",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-182",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-183",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-184",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-185",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-186",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-187",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-188",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-189",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-19",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-190",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-191",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-192",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-193",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-194",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-195",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-196",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-197",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-198",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-199",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-2",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-20",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-21",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-22",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-23",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-24",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-25",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-26",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-27",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-28",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-29",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-3",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-30",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-31",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-32",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-33",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-34",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-35",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-36",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-37",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-38",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-39",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-4",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-40",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-41",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-42",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-43",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-44",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-45",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-46",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-47",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-48",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-49",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-5",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-50",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-51",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-52",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-53",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-54",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-55",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-56",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-57",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-58",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-59",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-6",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-60",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-61",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-62",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-63",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-64",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-65",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-66",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-67",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-68",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-69",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-7",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-70",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-71",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-72",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-73",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-74",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-75",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-76",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-77",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-78",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-79",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-8",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-80",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-81",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-82",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-83",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-84",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-85",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-86",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-87",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-88",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-89",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-9",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-90",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-91",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-92",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-93",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-94",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-95",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-96",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-97",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-98",
+          "missing_historical_decision_receipt"
+        ],
+        [
+          "feedback-v1:fixture-correct-99",
+          "missing_historical_decision_receipt"
+        ]
+      ],
+      "collector": {
+        "queued": 212,
+        "written": 212,
+        "dropped": 0,
+        "gaps": 1,
+        "errors": 0,
+        "max_queue": 8,
+        "max_queue_bytes": 1388984,
+        "batches": 29,
+        "max_write_latency_ms": 2015.8926599999986,
+        "last_error": null,
+        "deferred_for_foreground": 0,
+        "enabled": true,
+        "queue": 0,
+        "queue_bytes": 0,
+        "epoch": 0,
+        "session": "19d7905e1d5d450a9d08b1a8756eccf3",
+        "worker_alive": false,
+        "write_latency_p95_ms": 1099.0043899999976,
+        "predecision": {
+          "requested": 200,
+          "prepared": 200,
+          "consumed": 200,
+          "rejected": 0,
+          "errors": 0,
+          "unsupported": 0,
+          "prepared_bytes": 8294100
+        }
+      },
+      "ha_calls": 0,
+      "extra_intents": 0,
+      "note": "explicit synthetic operator declarations; source-native clocks; no physical causal truth/Pi4 acceptance"
+    }
+  ]
+}
