@@ -487,6 +487,7 @@ class Engine(threading.Thread):
             housekeeping_stats = {**self.housekeeping_stats, "storage_retry": self.housekeeping_retry.snapshot()}
             inference_scheduler = dict(self.inference_scheduler)
         universal_observer = getattr(self, "universal_observer", None)
+        universal_collector = getattr(self,'universal_training_collector',None)
         # Status is polled before/through startup and must never aggregate the complete
         # feedback/experience tables from cold microSD. Detailed per-agent counters are
         # loaded by /api/agents after readiness; status needs only lightweight configs.
@@ -542,6 +543,8 @@ class Engine(threading.Thread):
                 if getattr(self, "universal_action_observer", None) is not None
                 else {"enabled": False}
             ),
+            "universal_training_collector": (universal_collector.diagnostics() if universal_collector is not None else
+                {"enabled":False,"last_error":getattr(self,'universal_training_collector_error',None)}),
             "runtime_qos": {
                 "registry_refresh": registry_refresh_stats,
                 "housekeeping": housekeeping_stats,
@@ -1116,7 +1119,7 @@ class Engine(threading.Thread):
                 decision_rows = int(self.teaching.flush(force=False) or 0)
                 context_saved = bool(self.context.save())
                 collector=getattr(self,'universal_training_collector',None)
-                if collector is not None:collector.housekeep()
+                if collector is not None:collector.notify('housekeep')
             self.housekeeping_retry.recovered()
         except StoragePressure as exc:
             # This is expected admission backpressure, not a runtime failure.

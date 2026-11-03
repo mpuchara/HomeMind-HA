@@ -450,10 +450,12 @@ class HistoricalTrainingCollector(threading.Thread):
 
     def diagnostics(self):
         with self.cv:
-            latencies=sorted(self.latencies)
-            return dict(self.stats,enabled=True,queue=len(self.pending),queue_bytes=self.pending_bytes,
-                        epoch=self.epoch,session=self.session,worker_alive=self.is_alive(),
-                        write_latency_p95_ms=latencies[int(.95*(len(latencies)-1))] if latencies else None)
+            latencies=list(self.latencies)
+            result=dict(self.stats,enabled=True,queue=len(self.pending),queue_bytes=self.pending_bytes,
+                        epoch=self.epoch,session=self.session,worker_alive=self.is_alive())
+        latencies.sort()
+        result['write_latency_p95_ms']=latencies[int(.95*(len(latencies)-1))] if latencies else None
+        return result
 
 
 def install(engine, store):
@@ -462,13 +464,19 @@ def install(engine, store):
         return None
     previous=getattr(engine,'universal_training_collector',None)
     if previous is not None:return previous
-    collector=HistoricalTrainingCollector(store,engine.feature_journal)
-    engine.universal_training_collector=collector
-    store._universal_training_retention_changed=collector.retention_changed
     service=getattr(engine.executor,'device_agents',None)
-    if service is not None:service.universal_training_collector=collector
-    collector.start()
-    return collector
+    try:
+        collector=HistoricalTrainingCollector(store,engine.feature_journal)
+        engine.universal_training_collector=collector
+        if service is not None:service.universal_training_collector=collector
+        collector.start()
+        return collector
+    except Exception as exc:
+        # Optional audit failure must not prevent HTTP/HA/runtime startup.
+        engine.universal_training_collector=None
+        engine.universal_training_collector_error=type(exc).__name__
+        if service is not None:service.universal_training_collector=None
+        return None
 
 
 def native_decision_evidence(conn, decision_id):

@@ -65,6 +65,15 @@ class CollectorTests(unittest.TestCase):
         with patch.dict(settings.OPTIONS,universal_training_collector_enabled=False):
             self.assertIsNone(install(SimpleNamespace(),None))
 
+    def test_enabled_initialization_failure_cannot_break_runtime_startup(self):
+        import settings
+        fake=SimpleNamespace(feature_journal=self.journal,executor=SimpleNamespace(device_agents=SimpleNamespace()))
+        with patch.dict(settings.OPTIONS,universal_training_collector_enabled=True),patch(
+                'universal_history_collector.HistoricalTrainingCollector',side_effect=OSError('disk full')):
+            self.assertIsNone(install(fake,self.store))
+        self.assertIsNone(fake.universal_training_collector)
+        self.assertEqual(fake.universal_training_collector_error,'OSError')
+
     def test_shared_native_event_key_avoids_a_parallel_sensor_history(self):
         self.seed()
         state=dict(state='on',last_updated=iso(21.),context={'id':'native-context'},
