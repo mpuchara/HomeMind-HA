@@ -87,7 +87,7 @@ class HistoricalTrainingCollector(threading.Thread):
     daemon = True
 
     def __init__(self, store, journal, *, capacity=1024, byte_capacity=8*1024*1024,
-                 batch_size=64, clock=time.time):
+                 batch_size=64, clock=time.time, idle_ready=None):
         super().__init__(name='homemind-universal-history')
         if not 1 <= capacity <= 4096 or not 1 <= batch_size <= 128 or not 1024 <= byte_capacity <= 16*1024*1024:
             raise ValueError('collector bounds')
@@ -102,8 +102,11 @@ class HistoricalTrainingCollector(threading.Thread):
         self.subscription_at=None
         self.topology_at=None
         self.retry = StorageRetry(); self.ready = threading.Event()
+        self.idle_ready=idle_ready or (lambda:True)
+        self.halt=threading.Event()
         self.stats = dict(queued=0, written=0, dropped=0, gaps=0, errors=0, max_queue=0,
-                          max_queue_bytes=0, batches=0, max_write_latency_ms=0., last_error=None)
+                          max_queue_bytes=0, batches=0, max_write_latency_ms=0., last_error=None,
+                          deferred_for_foreground=0)
         self.latencies=deque(maxlen=2048)
         self._initialize()
         self.store._universal_training_retention_changed=self.retention_changed
@@ -416,6 +419,7 @@ class HistoricalTrainingCollector(threading.Thread):
         c.execute('UPDATE universal_collection_meta SET retention_epoch=retention_epoch+1 WHERE id=1')
 
     def housekeep(self, *, now=None, retention_seconds=14*86400):
+        if not self.idle_ready():return False
         cutoff=float(self.clock() if now is None else now)-retention_seconds
         with background_sqlite(self.store),self.store.conn() as c,c.storage_batch():
             for table,column in (('decisions','at'),('masks','at'),('segments','through'),('gaps','at')):
@@ -437,6 +441,11 @@ class HistoricalTrainingCollector(threading.Thread):
                     break
             if self.retry.delay()>0:
                 with self.cv:self.cv.wait(min(.5,self.retry.delay()))
+            elif not self.stopping and not self.idle_ready():
+                # Same foreground futures and realtime window as the shipped
+                # runtime. Never turn a bounded data backlog into UI contention.
+                self.stats['deferred_for_foreground']+=1
+                self.halt.wait(.05)
             else:
                 self.drain()
         with self.store.conn() as c:
@@ -445,6 +454,7 @@ class HistoricalTrainingCollector(threading.Thread):
 
     def stop(self, timeout=3.):
         with self.cv:self.stopping=True;self.cv.notify_all()
+        self.halt.set()
         if self.is_alive():self.join(timeout)
         return not self.is_alive()
 
@@ -466,7 +476,11 @@ def install(engine, store):
     if previous is not None:return previous
     service=getattr(engine.executor,'device_agents',None)
     try:
-        collector=HistoricalTrainingCollector(store,engine.feature_journal)
+        def idle_ready():
+            return (not bool(getattr(engine,'in_flight',{})) and
+                    time.perf_counter()-float(getattr(engine,'last_event_received',0.) or 0.) >=
+                    float(OPTIONS.get('training_realtime_event_priority_seconds',.3)))
+        collector=HistoricalTrainingCollector(store,engine.feature_journal,idle_ready=idle_ready)
         engine.universal_training_collector=collector
         if service is not None:service.universal_training_collector=collector
         collector.start()

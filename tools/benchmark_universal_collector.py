@@ -12,6 +12,8 @@ from types import SimpleNamespace
 
 _bootstrap=tempfile.TemporaryDirectory(prefix='hm-collector-bootstrap-')
 os.environ['ADAPTIVE_AI_DATA']=_bootstrap.name
+for name in ('OPENBLAS_NUM_THREADS','OMP_NUM_THREADS','MKL_NUM_THREADS'):
+    os.environ[name]='1'
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'adaptive_ai/src'))
 from storage import Store
 from observation_contract import FeatureJournal

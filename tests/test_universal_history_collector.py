@@ -5,6 +5,7 @@ from pathlib import Path
 import tempfile
 import subprocess
 import sys
+import time
 from types import SimpleNamespace
 import unittest
 from unittest.mock import patch,Mock
@@ -276,6 +277,16 @@ with patch.object(BudgetConnection,'execute',execute):collector.drain()
         self.assertTrue(self.collector.stop(timeout=3.))
         with self.store.conn() as c:
             self.assertEqual(c.execute('SELECT reason FROM universal_collection_sessions WHERE id=?',(self.collector.session,)).fetchone()[0],'clean_shutdown')
+
+    def test_foreground_activity_defers_writes_but_shutdown_can_drain(self):
+        self.collector.idle_ready=lambda:False
+        self.collector.start();self.assertTrue(self.collector.ready.wait(1.))
+        self.collector.event('binary_sensor.motion',dict(state='on'),event_ts=10.,received_ts=11.)
+        time.sleep(.08)
+        self.assertEqual(self.collector.stats['written'],0)
+        self.assertTrue(self.collector.stop(3.))
+        with self.store.conn() as c:
+            self.assertEqual(c.execute("SELECT COUNT(*) FROM feature_observation_events WHERE entity_id='binary_sensor.motion'").fetchone()[0],1)
 
     def test_retention_tracking_survives_restart_with_collector_disabled(self):
         self.seed()
