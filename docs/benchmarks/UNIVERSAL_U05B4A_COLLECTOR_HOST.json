@@ -1,0 +1,146 @@
+{
+  "scope": "synthetic host only; no Pi4/HA/physical acceptance",
+  "passed": true,
+  "cases": [
+    {
+      "sensors": 5,
+      "devices": 1,
+      "events": 256,
+      "wall_seconds": 0.6290335860000003,
+      "cpu_seconds": 0.285154425,
+      "producer_events_per_second": 21819.259144087893,
+      "end_to_end_events_per_second": 406.973499821995,
+      "python_peak_bytes": 6726755,
+      "database_growth_bytes": 81920,
+      "database_bytes": {
+        "offline.db": 352256
+      },
+      "collector": {
+        "queued": 263,
+        "written": 263,
+        "dropped": 0,
+        "gaps": 1,
+        "errors": 0,
+        "max_queue": 32,
+        "max_queue_bytes": 30784,
+        "batches": 10,
+        "max_write_latency_ms": 242.7545060000007,
+        "last_error": null,
+        "deferred_for_foreground": 0,
+        "enabled": true,
+        "queue": 0,
+        "queue_bytes": 0,
+        "epoch": 0,
+        "session": "cf9d47987f114cd3bd6a1c0d7945cf3d",
+        "worker_alive": false,
+        "write_latency_p95_ms": 242.24364000000077
+      },
+      "note": "single writer drained in bounded batches; latency is enqueue-to-commit, not HA event-to-intent"
+    },
+    {
+      "sensors": 50,
+      "devices": 10,
+      "events": 256,
+      "wall_seconds": 1.4689897179999996,
+      "cpu_seconds": 0.087468877,
+      "producer_events_per_second": 20571.183002917336,
+      "end_to_end_events_per_second": 174.2694294338145,
+      "python_peak_bytes": 218705,
+      "database_growth_bytes": 122880,
+      "database_bytes": {
+        "offline.db": 393216
+      },
+      "collector": {
+        "queued": 272,
+        "written": 272,
+        "dropped": 0,
+        "gaps": 1,
+        "errors": 0,
+        "max_queue": 32,
+        "max_queue_bytes": 108784,
+        "batches": 10,
+        "max_write_latency_ms": 1114.1323390000002,
+        "last_error": null,
+        "deferred_for_foreground": 0,
+        "enabled": true,
+        "queue": 0,
+        "queue_bytes": 0,
+        "epoch": 0,
+        "session": "23eaf140bb6f423bb7481aa52b62d74a",
+        "worker_alive": false,
+        "write_latency_p95_ms": 247.68877300000014
+      },
+      "note": "single writer drained in bounded batches; latency is enqueue-to-commit, not HA event-to-intent"
+    },
+    {
+      "sensors": 200,
+      "devices": 30,
+      "events": 256,
+      "wall_seconds": 1.0225642329999998,
+      "cpu_seconds": 0.13379036599999994,
+      "producer_events_per_second": 24799.10064508494,
+      "end_to_end_events_per_second": 250.3510212252848,
+      "python_peak_bytes": 753290,
+      "database_growth_bytes": 323584,
+      "database_bytes": {
+        "offline.db": 593920
+      },
+      "collector": {
+        "queued": 292,
+        "written": 292,
+        "dropped": 0,
+        "gaps": 1,
+        "errors": 0,
+        "max_queue": 32,
+        "max_queue_bytes": 495712,
+        "batches": 11,
+        "max_write_latency_ms": 368.6731950000004,
+        "last_error": null,
+        "deferred_for_foreground": 0,
+        "enabled": true,
+        "queue": 0,
+        "queue_bytes": 0,
+        "epoch": 0,
+        "session": "abe0e37e12344b8aa5ddac7d968779cc",
+        "worker_alive": false,
+        "write_latency_p95_ms": 263.7037219999998
+      },
+      "note": "single writer drained in bounded batches; latency is enqueue-to-commit, not HA event-to-intent"
+    },
+    {
+      "sensors": 1000,
+      "devices": 200,
+      "events": 256,
+      "wall_seconds": 3.9246906090000007,
+      "cpu_seconds": 0.8419089559999999,
+      "producer_events_per_second": 25105.494563035605,
+      "end_to_end_events_per_second": 65.22807158682707,
+      "python_peak_bytes": 3625065,
+      "database_growth_bytes": 4943872,
+      "database_bytes": {
+        "offline.db": 5214208
+      },
+      "collector": {
+        "queued": 462,
+        "written": 462,
+        "dropped": 0,
+        "gaps": 1,
+        "errors": 0,
+        "max_queue": 32,
+        "max_queue_bytes": 2236928,
+        "batches": 22,
+        "max_write_latency_ms": 779.5229749999999,
+        "last_error": null,
+        "deferred_for_foreground": 0,
+        "enabled": true,
+        "queue": 0,
+        "queue_bytes": 0,
+        "epoch": 0,
+        "session": "be546ddd821e4c65b0a50e2106e1edf4",
+        "worker_alive": false,
+        "write_latency_p95_ms": 357.73694600000107
+      },
+      "note": "single writer drained in bounded batches; latency is enqueue-to-commit, not HA event-to-intent"
+    }
+  ]
+}
