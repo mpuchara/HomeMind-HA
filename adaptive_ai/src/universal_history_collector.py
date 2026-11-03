@@ -95,9 +95,12 @@ class HistoricalTrainingCollector(threading.Thread):
         self.capacity, self.byte_capacity, self.batch_size = capacity, byte_capacity, batch_size
         self.cv = threading.Condition(); self.pending = deque(); self.pending_bytes = 0
         self.epoch = 0; self.pending_gap = 'startup'; self.stopping = False
+        self.reset_registries_pending=True
         self.session = uuid.uuid4().hex; self.registries = {}; self.connected = False
         self.segment = None; self.topology = None; self.tls = threading.local()
         self.subscription_known=False
+        self.subscription_at=None
+        self.topology_at=None
         self.retry = StorageRetry(); self.ready = threading.Event()
         self.stats = dict(queued=0, written=0, dropped=0, gaps=0, errors=0, max_queue=0,
                           max_queue_bytes=0, batches=0, max_write_latency_ms=0., last_error=None)
@@ -146,6 +149,9 @@ class HistoricalTrainingCollector(threading.Thread):
 
     def gap(self, reason):
         with self.cv:
+            if reason in ('startup','websocket_disconnected','restart','registry_announced',
+                          'queue_overflow_registry','write_failure','incomplete_registry','invalid_registry'):
+                self.reset_registries_pending=True
             self.epoch += 1; self.pending_gap = str(reason)[:256]
             self.stats['dropped'] += len(self.pending); self.pending.clear(); self.pending_bytes = 0
             self.cv.notify()
@@ -205,19 +211,28 @@ class HistoricalTrainingCollector(threading.Thread):
         except (ValueError,TypeError):
             return self.gap('invalid_registry')
 
-    def snapshot(self, states, *, received_ts, complete=True):
+    def snapshot(self, states, *, received_ts, requested_ts=None, epoch=None, complete=True):
         if not complete or len(states)>MAX_ENTITIES:
             return self.gap('incomplete_snapshot')
+        if requested_ts is None or epoch is None:
+            return self.gap('missing_snapshot_request_boundary')
+        if epoch!=self.epoch:
+            self._submit('notice','rejected_snapshot_crossed_gap')
+            return False
         try:
+            requested_ts=float(requested_ts);received_ts=float(received_ts)
+            if not math.isfinite(requested_ts) or not math.isfinite(received_ts) or not 0<requested_ts<=received_ts:
+                raise ValueError('snapshot clocks')
             rows = {eid:compact(st) for eid,st in states.items() if sensor(eid)}
             if any(st is None for st in rows.values()):
                 return self.gap('incomplete_snapshot')
             rows,size=bounded_copy(rows,limit=MAX_RECORD)
-            return self._submit('snapshot',(rows,float(received_ts)),size=size)
+            return self._submit('snapshot',(rows,received_ts,requested_ts),size=size)
         except (TypeError,ValueError):
             return self.gap('invalid_snapshot')
 
-    def connection(self, connected):
+    def connection(self, connected, *, at=None):
+        self.subscription_at=float(self.clock() if at is None else at) if connected else None
         self.subscription_known=bool(connected)
         if not connected:
             return self.gap('websocket_disconnected')
@@ -273,7 +288,7 @@ class HistoricalTrainingCollector(threading.Thread):
             self.journal.record_batch(rows[offset:offset+128])
             TRAINING_BUDGET.checkpoint('universal_collection_write',thread_name='adaptive-ai-index-universal-scorer')
 
-    def _write(self, batch, gap, epoch):
+    def _write(self, batch, gap, epoch, reset_registries):
         from settings import parse_ts
         require_storage_available(self.store)
         observations=[]; metadata=[]; advances={}
@@ -290,9 +305,9 @@ class HistoricalTrainingCollector(threading.Thread):
         with self.store.conn() as c, c.storage_batch():
             if gap:
                 self._close(c,gap)
-                if gap in ('startup','websocket_disconnected','restart','registry_announced',
-                           'queue_overflow_registry','write_failure','incomplete_registry','invalid_registry'):
+                if reset_registries:
                     self.registries={};self.connected=self.subscription_known;self.topology=None
+                    self.topology_at=None
                 self.connected=self.subscription_known
                 c.execute('INSERT INTO universal_collection_gaps(session,at,reason) VALUES(?,?,?)',(self.session,self.clock(),gap))
                 self.stats['gaps']+=1
@@ -300,19 +315,27 @@ class HistoricalTrainingCollector(threading.Thread):
             for kind,payload in metadata:
                 if kind=='connected':
                     self.connected=True
+                elif kind=='notice':
+                    c.execute('INSERT INTO universal_collection_gaps(session,at,reason) VALUES(?,?,?)',
+                              (self.session,self.clock(),payload))
                 elif kind=='registry':
                     name,rows,at=payload; self._close(c,'registry_revision')
                     self.registries[name]=rows
                     if set(self.registries)=={'entity','device','area'}:
                         body=encoded(dict(version=1,registries=self.registries,at=at))
                         self.topology=digest(body)
+                        self.topology_at=at
                         c.execute('INSERT OR IGNORE INTO universal_collection_topology VALUES(?,?,?,?)',
                                   (self.topology,at,body,digest(body)))
                 elif kind=='snapshot':
-                    states,at=payload;self._close(c,'reconciliation')
+                    states,at,requested=payload;self._close(c,'reconciliation')
                     expected={r['entity_id'] for r in self.registries.get('entity',())
                               if r.get('entity_id') and sensor(r['entity_id']) and not r.get('disabled_by')}
-                    if not self.connected or not self.topology or not expected or not expected<=states.keys():
+                    if (not self.connected or not self.topology or self.subscription_at is None
+                            or requested<self.subscription_at or requested<self.topology_at
+                            or not expected or not expected<=states.keys()):
+                        c.execute('INSERT INTO universal_collection_gaps(session,at,reason) VALUES(?,?,?)',
+                                  (self.session,at,'rejected_incomplete_snapshot_boundary'))
                         continue
                     seedrows=[];seeds=[]
                     for eid,st in states.items():
@@ -371,6 +394,7 @@ class HistoricalTrainingCollector(threading.Thread):
             batch=[self.pending.popleft() for _ in range(min(self.batch_size,len(self.pending)))]
             self.pending_bytes-=sum(r[3] for r in batch)
             gap=self.pending_gap; self.pending_gap=None;epoch=self.epoch
+            reset_registries=self.reset_registries_pending;self.reset_registries_pending=False
         if not batch and gap is None:return True
         try:
             # Admission is BEFORE any native write or SQLite transaction. Fresh
@@ -379,7 +403,7 @@ class HistoricalTrainingCollector(threading.Thread):
             from training_budget import TRAINING_BUDGET
             TRAINING_BUDGET.checkpoint('universal_collection_admission',thread_name='adaptive-ai-index-universal-scorer')
             with background_sqlite(self.store):
-                self._write(batch,gap,epoch)
+                self._write(batch,gap,epoch,reset_registries)
             self.retry.recovered()
         except Exception as exc:
             self.stats['errors']+=1;self.stats['last_error']=type(exc).__name__

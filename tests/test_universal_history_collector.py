@@ -35,12 +35,12 @@ class CollectorTests(unittest.TestCase):
     def seed(self,sensors=5,devices=1,area='kitchen'):
         ids=[f'binary_sensor.motion{i}' for i in range(sensors)]
         rows=[dict(entity_id=eid,device_id='d0') for eid in ids]
-        self.collector.connection(True)
+        self.collector.connection(True,at=2.)
         self.collector.registry('entity',rows,at=1.)
         self.collector.registry('device',[dict(id=f'd{i}',area_id=area) for i in range(devices)],at=1.)
         self.collector.registry('area',[dict(area_id=area,name=area)],at=1.)
         states={eid:dict(state='on',last_updated=iso(10.),attributes={'device_class':'motion'}) for eid in ids}
-        self.collector.snapshot(states,received_ts=20.)
+        self.collector.snapshot(states,received_ts=20.,requested_ts=19.,epoch=self.collector.epoch)
         self.collector.barrier(40.)
         self.drain()
         return ids,states
@@ -104,7 +104,7 @@ class CollectorTests(unittest.TestCase):
         self.collector.registry('entity',[dict(entity_id=eid,device_id='d0') for eid in ids],at=50.)
         self.collector.registry('device',[dict(id='d0',area_id='bedroom')],at=50.)
         self.collector.registry('area',[dict(area_id='bedroom')],at=50.)
-        self.collector.snapshot(states,received_ts=60.);self.collector.barrier(80.);self.drain()
+        self.collector.snapshot(states,received_ts=60.,requested_ts=59.,epoch=self.collector.epoch);self.collector.barrier(80.);self.drain()
         new=self.source(60.,80.)
         self.assertNotEqual(original.source_id,new.source_id)
         oldreg=json.loads(original.raw)['epochs'][0]['registry']
@@ -112,6 +112,29 @@ class CollectorTests(unittest.TestCase):
         self.assertEqual(oldreg['devices']['d0']['area_id'],'kitchen')
         self.assertEqual(newreg['devices']['d0']['area_id'],'bedroom')
         with self.assertRaisesRegex(ValueError,'incomplete'):self.source(20.,80.)
+
+    def test_rest_request_must_begin_after_subscription_and_registry(self):
+        ids,states=self.seed()
+        self.collector.connection(True,at=50.)
+        self.collector.snapshot(states,received_ts=60.,requested_ts=45.,epoch=self.collector.epoch)
+        self.collector.barrier(80.);self.drain()
+        with self.assertRaisesRegex(ValueError,'incomplete'):self.source(60.,80.)
+        self.collector.snapshot(states,received_ts=62.,requested_ts=61.,epoch=self.collector.epoch)
+        self.collector.barrier(80.);self.drain()
+        self.source(62.,80.)
+        before=self.collector.epoch;self.collector.gap('queue_overflow')
+        self.assertFalse(self.collector.snapshot(states,received_ts=90.,requested_ts=85.,epoch=before))
+        self.assertEqual(self.collector.pending_gap,'queue_overflow')
+        self.drain()
+        with self.store.conn() as c:
+            self.assertTrue(c.execute("SELECT 1 FROM universal_collection_gaps WHERE reason='rejected_snapshot_crossed_gap'").fetchone())
+
+    def test_coalesced_gap_cannot_erase_registry_invalidation(self):
+        ids,states=self.seed()
+        self.collector.gap('registry_announced');self.collector.gap('queue_overflow')
+        self.collector.snapshot(states,received_ts=60.,requested_ts=59.,epoch=self.collector.epoch)
+        self.collector.barrier(80.);self.drain()
+        with self.assertRaisesRegex(ValueError,'incomplete'):self.source(60.,80.)
 
     def test_restart_before_pending_barrier_cannot_advance_watermark(self):
         self.seed();self.collector.barrier(90.)  # RAM data deliberately abandoned.
@@ -124,10 +147,10 @@ from storage_budget import BudgetConnection
 from unittest.mock import patch
 store=Store(sys.argv[2]);journal=FeatureJournal(store,clock=lambda:1000.)
 collector=HistoricalTrainingCollector(store,journal,clock=lambda:1000.)
-collector.connection(True)
+collector.connection(True,at=2.)
 collector.registry('entity',[dict(entity_id='binary_sensor.restart')],at=70.)
 collector.registry('device',[],at=70.);collector.registry('area',[],at=70.)
-collector.snapshot({'binary_sensor.restart':dict(state='on',last_updated='1970-01-01T00:00:10+00:00')},received_ts=80.)
+collector.snapshot({'binary_sensor.restart':dict(state='on',last_updated='1970-01-01T00:00:10+00:00')},received_ts=80.,requested_ts=79.,epoch=collector.epoch)
 collector.barrier(90.)
 original=BudgetConnection.execute
 def execute(self,sql,*a,**k):
@@ -266,7 +289,7 @@ with patch.object(BudgetConnection,'execute',execute):collector.drain()
         self.assertEqual(ids,sorted(set(ids)))
         self.assertEqual(len([r for r in ws.sent if str(r.get('type','')).startswith('config/')]),6)
         self.assertTrue(fake.confirmed_when_event,fake.ws_error)
-        self.assertEqual(self.collector.epoch,1)
+        self.assertGreaterEqual(self.collector.epoch,1)
         self.drain()
         with self.assertRaisesRegex(ValueError,'incomplete'):self.source()
 

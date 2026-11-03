@@ -70,6 +70,8 @@ class HAEventStream(threading.Thread):
                     # captured a session that reported ws_connected=true for minutes while
                     # no state_changed event ever reached Engine. Keep the connection
                     # unhealthy until Home Assistant explicitly confirms subscription #2.
+                    collector=getattr(self.engine,'universal_training_collector',None)
+                    if collector is not None:collector.notify('connection',False)
                     with self.engine.lock:
                         self.engine.ws_connected = False
                         self.engine.ws_subscription_confirmed = False
@@ -174,7 +176,7 @@ class HAEventStream(threading.Thread):
                                 self.engine.ws_error = None
                             HA.last_ok = now_ts(); HA.last_error = None
                             collector=getattr(self.engine,'universal_training_collector',None)
-                            if collector is not None:collector.notify('connection',True)
+                            if collector is not None:collector.notify('connection',True,at=websocket_received_ts)
                             if RUNTIME_DEBUG.enabled:
                                 RUNTIME_DEBUG.instant(
                                     "ha_state_subscription",
@@ -231,7 +233,7 @@ class HAEventStream(threading.Thread):
                         self.engine.on_state_changed(data)
                         collector=getattr(self.engine,'universal_training_collector',None)
                         if collector is not None:
-                            if not collector.subscription_known:collector.notify('connection',True)
+                            if not collector.subscription_known:collector.notify('connection',True,at=websocket_received_ts)
                             collector.notify('barrier',websocket_received_ts)
                         flush_registry_due()
             except Exception as exc:
@@ -834,6 +836,8 @@ class Engine(threading.Thread):
         temporal history and archive persistence after the initial bootstrap.
         """
         started = time.perf_counter()
+        collector=getattr(self,'universal_training_collector',None)
+        collection_request=(now_ts(),collector.epoch) if collector is not None else None
         with self.lock:
             poll_revision = self.state_revision
         try:
@@ -952,7 +956,8 @@ class Engine(threading.Thread):
                 pass  # Reconciliation and HA connectivity remain authoritative.
         collector=getattr(self,'universal_training_collector',None)
         if collector is not None:
-            collector.notify('snapshot',observer_snapshot,received_ts=poll_received_ts)
+            collector.notify('snapshot',observer_snapshot,received_ts=poll_received_ts,
+                             requested_ts=collection_request[0],epoch=collection_request[1])
         if initial or changed_eids:
             self.wake_event.set()
 

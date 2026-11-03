@@ -26,13 +26,13 @@ def case(sensors,devices):
         store._universal_training_retention_changed=collector.retention_changed
         initial=sum(p.stat().st_size for p in Path(directory).glob('offline.db*'))
         tracemalloc.start();wall=time.perf_counter();cpu=time.process_time()
-        collector.connection(True)
+        collector.connection(True,at=2.)
         collector.registry('entity',[dict(entity_id=f'binary_sensor.s{i}',device_id=f'd{i%devices}') for i in range(sensors)],at=1.)
         collector.registry('device',[dict(id=f'd{i}',area_id=f'room{i%10}') for i in range(devices)],at=1.)
         collector.registry('area',[dict(area_id=f'room{i}') for i in range(10)],at=1.)
         states={f'binary_sensor.s{i}':dict(state='off',last_updated=datetime.fromtimestamp(10.,timezone.utc).isoformat(),
                                         attributes={'device_class':'motion'}) for i in range(sensors)}
-        collector.snapshot(states,received_ts=20.)
+        collector.snapshot(states,received_ts=20.,requested_ts=19.,epoch=collector.epoch)
         def drain():
             while collector.pending or collector.pending_gap is not None:
                 if not collector.drain():raise AssertionError(collector.diagnostics())
