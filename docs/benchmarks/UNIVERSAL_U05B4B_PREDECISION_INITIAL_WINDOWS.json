@@ -1,0 +1,146 @@
+{
+  "scope": "host component measurements; no composed event-to-intent, Pi4 or physical HA acceptance",
+  "cases": [
+    {
+      "sensors": 5,
+      "devices": 1,
+      "cpu_seconds": 0.0,
+      "wall_seconds": 0.006090399983804673,
+      "rss_before_mb": null,
+      "rss_after_mb": null,
+      "prepare": {
+        "p50_ms": 4.789499973412603,
+        "p95_ms": 4.789499973412603,
+        "p99_ms": 4.789499973412603
+      },
+      "ram_boundary_including_assertion_mock": {
+        "p50_ms": 0.20589999621734023,
+        "p95_ms": 0.3027000348083675,
+        "p99_ms": 0.3027000348083675
+      },
+      "native_sql_statements": 12,
+      "native_selects": 11,
+      "prepared": 1,
+      "bound": 5,
+      "training_eligible": 0,
+      "reason": "affected sensor set deliberately unknown; no synthetic causal claims",
+      "ha_calls": 0,
+      "extra_intents": 0,
+      "evidence": {
+        "requested": 6,
+        "prepared": 1,
+        "consumed": 5,
+        "rejected": 0,
+        "errors": 0
+      },
+      "prepared_bytes": 21708
+    },
+    {
+      "sensors": 50,
+      "devices": 10,
+      "cpu_seconds": 0.0625,
+      "wall_seconds": 2.0563053999794647,
+      "rss_before_mb": null,
+      "rss_after_mb": null,
+      "prepare": {
+        "p50_ms": 4.517900000791997,
+        "p95_ms": 8.608900010585785,
+        "p99_ms": 8.608900010585785
+      },
+      "ram_boundary_including_assertion_mock": {
+        "p50_ms": 0.1097000204026699,
+        "p95_ms": 0.2245000214315951,
+        "p99_ms": 0.28250005561858416
+      },
+      "native_sql_statements": 120,
+      "native_selects": 110,
+      "prepared": 10,
+      "bound": 5,
+      "training_eligible": 0,
+      "reason": "affected sensor set deliberately unknown; no synthetic causal claims",
+      "ha_calls": 0,
+      "extra_intents": 0,
+      "evidence": {
+        "requested": 60,
+        "prepared": 10,
+        "consumed": 5,
+        "rejected": 0,
+        "errors": 0
+      },
+      "prepared_bytes": 192812
+    },
+    {
+      "sensors": 200,
+      "devices": 30,
+      "cpu_seconds": 0.234375,
+      "wall_seconds": 2.7000029000337236,
+      "rss_before_mb": null,
+      "rss_after_mb": null,
+      "prepare": {
+        "p50_ms": 6.334100035019219,
+        "p95_ms": 241.19110003812239,
+        "p99_ms": 252.21519998740405
+      },
+      "ram_boundary_including_assertion_mock": {
+        "p50_ms": 0.11220003943890333,
+        "p95_ms": 0.22829999215900898,
+        "p99_ms": 0.25290000485256314
+      },
+      "native_sql_statements": 360,
+      "native_selects": 330,
+      "prepared": 30,
+      "bound": 5,
+      "training_eligible": 0,
+      "reason": "affected sensor set deliberately unknown; no synthetic causal claims",
+      "ha_calls": 0,
+      "extra_intents": 0,
+      "evidence": {
+        "requested": 180,
+        "prepared": 30,
+        "consumed": 5,
+        "rejected": 0,
+        "errors": 0
+      },
+      "prepared_bytes": 621484
+    },
+    {
+      "sensors": 1000,
+      "devices": 200,
+      "cpu_seconds": 3.640625,
+      "wall_seconds": 17.008187900006305,
+      "rss_before_mb": null,
+      "rss_after_mb": null,
+      "prepare": {
+        "p50_ms": 18.449500028509647,
+        "p95_ms": 293.23239997029305,
+        "p99_ms": 302.1483999909833
+      },
+      "ram_boundary_including_assertion_mock": {
+        "p50_ms": 0.10220002150163054,
+        "p95_ms": 0.21460000425577164,
+        "p99_ms": 0.31159998616203666
+      },
+      "native_sql_statements": 2400,
+      "native_selects": 2200,
+      "prepared": 200,
+      "bound": 5,
+      "training_eligible": 0,
+      "reason": "affected sensor set deliberately unknown; no synthetic causal claims",
+      "ha_calls": 0,
+      "extra_intents": 0,
+      "evidence": {
+        "requested": 1200,
+        "prepared": 200,
+        "consumed": 5,
+        "rejected": 0,
+        "errors": 0
+      },
+      "prepared_bytes": 4270356
+    }
+  ],
+  "measurement_metadata": {
+    "status": "initial component receipt, not full target coverage",
+    "limitation": "Initial harness pending requests repeatedly warmed the previous target; only the first target was bound. Retained for transparency; use PREDECISION_HOST for full cardinality results.",
+    "environment": "Windows / Python 3.11; RSS unavailable"
+  }
+}
