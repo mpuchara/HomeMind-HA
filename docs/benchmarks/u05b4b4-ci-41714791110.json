@@ -1,0 +1,37 @@
+{
+  "commit": "e8acaf99301be22605cc28e71813923d0f97035f",
+  "run_id": 41714791110,
+  "status": "completed",
+  "conclusion": "success",
+  "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41714791110",
+  "executable_code_identical_to": "1a3a79abec6b8ec18bb1452ea6830d3ff8be87d3",
+  "jobs": [
+    {
+      "id": 126191854664,
+      "name": "tests (3.13)",
+      "status": "completed",
+      "conclusion": "success",
+      "failed_steps": []
+    },
+    {
+      "id": 126191855018,
+      "name": "tests (3.11)",
+      "status": "completed",
+      "conclusion": "success",
+      "failed_steps": []
+    },
+    {
+      "id": 126191855337,
+      "name": "image",
+      "status": "completed",
+      "conclusion": "success",
+      "failed_steps": []
+    },
+    {
+      "id": 126198815557,
+      "name": "package",
+      "status": "completed",
+      "conclusion": "skipped"
+    }
+  ]
+}

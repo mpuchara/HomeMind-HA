@@ -23,7 +23,10 @@ from runtime_scaling_probe import Probe, thread_cpu_snapshot, thread_cpu_delta
 
 def run(source, count, events, independent=False, entities=780, debug=False,
         warmup=0, probe=False, legacy_storage_startup=False, legacy_lineage=False,
-        candidates=False, training=False, correct=False, legacy_thread_settings=False, collector=False, sensor_count=None):
+        candidates=False, training=False, correct=False, legacy_thread_settings=False, collector=False, sensor_count=None,
+        event_timeout=30.):
+    if not 30. <= event_timeout <= 120.:
+        raise ValueError('event observation timeout must be 30..120 seconds')
     with tempfile.TemporaryDirectory(prefix='hm-scaling-') as data, ExitStack() as stack:
         # Replay identical event/received wall-clock values in independent runs.
         # Scheduling, latency clocks and CPU accounting still use real time.
@@ -241,7 +244,7 @@ def run(source, count, events, independent=False, entities=780, debug=False,
             cold_samples = []
             for step in range(events+warmup):
                 for future in list(engine.in_flight.values()):
-                    future.result(30)
+                    future.result(event_timeout)
                 if step == warmup:
                     cold_samples = list(samples)
                     samples.clear(); decisions.clear()
@@ -260,8 +263,10 @@ def run(source, count, events, independent=False, entities=780, debug=False,
                     state.update(last_updated=stamp, last_changed=stamp)
                     input_digest.update(json.dumps(state, sort_keys=True).encode())
                     engine.on_state_changed({'entity_id':eid, 'new_state':state})
-                if count and not done.wait(30):
-                    raise AssertionError((len(seen), count, engine.error))
+                if count and not done.wait(event_timeout):
+                    raise AssertionError(dict(seen=len(seen),expected=count,error=engine.error,
+                        event_step=step,warmup=step<warmup,observation_timeout_seconds=event_timeout,
+                        elapsed_ms=(time.perf_counter()-received[0])*1000))
                 if not count:
                     time.sleep(.01)
                 if correct and trained and step%25 == 0:
@@ -289,7 +294,7 @@ def run(source, count, events, independent=False, entities=780, debug=False,
                 if worker.is_alive():
                     raise AssertionError('Training fixture failed to stop')
             for future in list(engine.in_flight.values()):
-                future.result(30)
+                future.result(event_timeout)
             measurement_wall_ms = (time.perf_counter()-started)*1000
             measurement_cpu_ms = (time.process_time()-cpu)*1000
             cpu_threads = thread_cpu_delta(thread_cpu_start, thread_cpu_snapshot())
@@ -336,6 +341,7 @@ def run(source, count, events, independent=False, entities=780, debug=False,
             values = sorted(values)
             return {f'p{p}_ms': values[min(len(values)-1,int((len(values)-1)*p/100))] if values else None for p in (50,95,99)}
         return dict(agents=count, events=events, independent=independent, debug=debug,
+            observation_timeout_seconds=event_timeout,
             sensor_count=existing_sensors+background_count,entity_count=len(states),
             warmup_events=warmup, warmup_pipeline_samples_ms=cold_samples,
             production_storage_startup=not legacy_storage_startup,
@@ -411,6 +417,7 @@ if __name__ == '__main__':
     p.add_argument('--legacy-thread-settings', action='store_true', help='Ablate omitted production BLAS/timeslice setup')
     p.add_argument('--collector', action='store_true', help='Opt-in historical collector; no training or HA authority')
     p.add_argument('--sensor-count',type=int,help='Exact sensor cardinality for the shared-input fixture')
+    p.add_argument('--event-timeout',type=float,default=30.,help='Harness observation deadline in seconds (30..120); no runtime gate change')
     a = p.parse_args()
     if not 0 <= a.agents <= 200 or not 2 <= a.events <= 5000 or not 1 <= a.entities <= 4096:
         p.error('bounded agents/events/entities required')
@@ -418,7 +425,9 @@ if __name__ == '__main__':
         p.error('sensor-count requires a normal runtime case and 1..1000 sensors')
     if not 0 <= a.warmup <= 500:
         p.error('warmup must be 0..500')
+    if not 30. <= a.event_timeout <= 120.:
+        p.error('event-timeout must be 30..120 seconds')
     result = (scheduler(a.source_root,a.agents,a.events,a.entities) if a.scheduler else
               run(a.source_root,a.agents,a.events,a.independent,a.entities,a.debug,a.warmup,a.probe,a.legacy_storage_startup,a.legacy_lineage,
-                  a.candidates,a.training,a.correct,a.legacy_thread_settings,a.collector,a.sensor_count))
+                  a.candidates,a.training,a.correct,a.legacy_thread_settings,a.collector,a.sensor_count,a.event_timeout))
     print('SCALING_JSON='+json.dumps(result,sort_keys=True))

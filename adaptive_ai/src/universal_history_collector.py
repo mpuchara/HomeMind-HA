@@ -629,6 +629,61 @@ def verify_collection_coverage(conn, coverage):
         raise ValueError('collection witness mismatch')
 
 
+def verify_collected_samples(conn, doc, data):
+    """Exported JSON cannot replace original native V3 receipt/provenance facts.
+
+    Validate only samples actually admitted by U05a; its ordinary per-sample
+    rejection reasons remain intact. Used receipts and the historical registry
+    are rechecked again by lifecycle acceptance inside its writer transaction.
+    Indexed batches bound queries and payload; no current HA/config is consulted.
+    """
+    from universal_ha_adapter import SemanticRegistry
+    from training_budget import TRAINING_BUDGET
+    if not conn.in_transaction:raise ValueError('consistent native receipt read required')
+    if not data.samples:return
+    proof=doc['coverage']
+    row=conn.execute('SELECT at,body,checksum FROM universal_collection_topology WHERE id=?',
+                     (proof['topology_revision'],)).fetchone()
+    if row is None or digest(row[1])!=row[2] or row[2]!=proof['topology_revision']:
+        raise ValueError('native historical registry unavailable')
+    registries=json.loads(row[1])['registries']
+    registry=SemanticRegistry.create(entities=registries['entity'],devices=registries['device'],revision=row[2])
+    expected=[dict(effective_ts=row[0],received_ts=row[0],registry=dict(revision=registry.revision,
+        entities={k:dict(v) for k,v in registry.entities.items()},
+        devices={k:dict(v) for k,v in registry.devices.items()},calibrations={}))]
+    if doc['epochs']!=expected:raise ValueError('native historical registry binding mismatch')
+    supplied={(r['agent_id'],r['at']):r['receipt'] for r in doc['decisions']}
+    if len(supplied)!=len(doc['decisions']):raise ValueError('ambiguous exported decision clock')
+    wanted=sorted({(s.agent_id,s.observation_timestamp) for s in data.samples})
+    retained=0
+    for offset in range(0,len(wanted),64):
+        keys=wanted[offset:offset+64];marks=','.join('(?,?)' for _ in keys)
+        rows=conn.execute(f'''WITH wanted(agent,at) AS (VALUES {marks})
+            SELECT d.id,d.agent_id,d.at,d.body,d.checksum,
+                   p.agent_id,p.created_time,p.model_version,p.model_revision,p.generation_id
+            FROM wanted w JOIN universal_collection_decisions d INDEXED BY idx_uc_decisions_agent_time
+              ON d.agent_id=w.agent AND d.at=w.at
+            LEFT JOIN provenance_decisions p ON p.decision_id=d.id LIMIT ?''',
+            (*[v for key in keys for v in key],2*len(keys)+1))
+        found=set()
+        for index,item in enumerate(rows):
+            if index>=2*len(keys):raise ValueError('native decision ambiguity bound')
+            retained+=len(item[3].encode())
+            if retained>16*1024*1024:raise ValueError('native receipt verification byte cap')
+            if digest(item[3])!=item[4]:raise ValueError('native decision checksum mismatch')
+            body=json.loads(item[3]);key=(item[1],item[2]);intent=body['intent']
+            if body.get('receipt')!=supplied.get(key):raise ValueError('native original decision receipt mismatch')
+            if (intent['intent_id']!=item[0] or tuple(item[5:9])!=
+                    (item[1],item[2],intent['policy_version'],intent['model_revision'])):
+                raise ValueError('native decision provenance binding mismatch')
+            evidence=body.get('predecision')
+            if evidence is not None and item[9]!=evidence['generation_id']:
+                raise ValueError('native decision generation binding mismatch')
+            found.add(key)
+            TRAINING_BUDGET.checkpoint('universal_native_receipt_verify',thread_name='adaptive-ai-index-universal-data')
+        if found!=set(keys):raise ValueError('native original decision receipt unavailable')
+
+
 def source_from_collection(conn, agent_ids, *, start, through, max_decisions=2048):
     """Consistent offline adapter -> existing U05b.3 NativeDatasetSource/U05a.
 
