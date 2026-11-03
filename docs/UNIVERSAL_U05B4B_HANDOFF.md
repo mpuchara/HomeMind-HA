@@ -72,12 +72,16 @@ exclusions and global retention witnesses are unchanged.
 ## Validation status at implementation commit
 
 Implementation commit and final CI/performance results will be recorded in the
-validation follow-up. Focused predecision tests: 12 passing on Windows Python
+validation follow-up. Focused predecision tests: 13 passing on Windows Python
 3.11; existing collector tests: 26 passing. Native integration uses actual wall
-clock order, original mask, original FeatureJournal seeds, native Correct and
+clock order, original mask, original ActionIntent, original FeatureJournal seeds, native Correct and
 provenance, NativeDatasetSource/U05a, plus Undo. Explicit affected-set input in
 that fixture is a caller-supplied test contract, not a claim of production
 dependency inference. Missing/expired/partial/unverified evidence rejects data.
+The real Engine.process_agent regression verifies that evidence is consumed
+before the original policy predict, its id matches the original ActionIntent,
+and a second pass without evidence still submits exactly one unchanged proposal
+with zero HA service calls.
 
 Full Windows discovery is being evaluated separately. The existing composed
 benchmark fails its Windows temporary-SQLite cleanup before returning a result;

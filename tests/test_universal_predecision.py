@@ -19,6 +19,7 @@ from observation_contract import FeatureJournal
 from universal_history_collector import HistoricalTrainingCollector, source_from_collection
 from universal_predecision import PredecisionEvidence, revision, verify_for_write, validate_binding
 from agent_candidate_lineage import ensure_lineage_tables, _ensure_root
+from intent import ActionIntent
 
 
 class PredecisionTests(unittest.TestCase):
@@ -66,9 +67,10 @@ class PredecisionTests(unittest.TestCase):
         if ticket is None:
             ticket = self.evidence.begin(self.agent, self.state, [0., 1.])
         self.assertIsNotNone(ticket)
-        intent = SimpleNamespace(intent_id='decision-a', agent_id=self.agent['id'], target_entity='light.kitchen',
+        intent = ActionIntent.create(agent_id=self.agent['id'], target_entity='light.kitchen',
             target_property='power', desired_value=1., created_at=time.time(), policy_version=12,
-            model_revision='original-model', decision_source='policy')
+            model_revision='original-model', decision_source='policy',confidence=.8,support=.8,novelty=.1,
+            prediction_horizon=1.,ttl=2.,context_revision=1,target_revision=0,reason='original test decision')
         bound = self.evidence.bind(ticket, intent, self.agent, self.state, [0., 1.])
         self.assertIsNotNone(bound)
         return intent, bound
@@ -242,6 +244,56 @@ class PredecisionTests(unittest.TestCase):
         self.assertEqual(prepared['legal_mask'],original)
         self.store._meta_cache[key]='explicit_user_v8'
         self.assertIsNone(self.evidence.begin(self.agent,self.state,[0.,1.]))
+
+    def test_engine_consumes_before_predict_and_missing_evidence_keeps_one_intent(self):
+        from test_executor import ExecutorTests
+        runtime=ExecutorTests('test_real_event_does_not_wait_for_periodic_throttle')
+        runtime.setUp()
+        try:
+            runtime.store.update_agent(runtime.a['id'],{'mode':'shadow'})
+            agent=runtime.store.get_agent_config(runtime.a['id'])
+            engine=runtime.e
+            engine.agent_configs={agent['id']:agent}
+            ensure_lineage_tables(runtime.store)
+            _ensure_root(runtime.store,agent['id'],generation_number=0)
+            collector=HistoricalTrainingCollector(runtime.store,FeatureJournal(runtime.store))
+            for name,rows in [('entity',[{'entity_id':agent['target_entity']}]),('device',[]),('area',[])]:
+                collector.registry(name,rows)
+            while collector.pending or collector.pending_gap is not None:self.assertTrue(collector.drain())
+            evidence=PredecisionEvidence(engine,runtime.store,collector)
+            collector.predecision=evidence
+            engine.universal_training_collector=collector
+            evidence.request(agent['id']);evidence.prepare_one()
+            self.assertIn(agent['id'],evidence.prepared)
+            order=[]
+            begin=evidence.begin;predict=runtime.model.predict
+            def traced_begin(*args):order.append('evidence');return begin(*args)
+            def traced_predict(*args):order.append('predict');return predict(*args)
+            with patch.object(evidence,'begin',side_effect=traced_begin), patch.object(runtime.model,'predict',side_effect=traced_predict), \
+                 patch.object(engine.executor,'submit',wraps=engine.executor.submit) as submitted:
+                engine.process_agent(agent,engine.state_map,{agent['target_entity']})
+                self.assertEqual(order[:2],['evidence','predict'])
+                self.assertEqual(evidence.stats['consumed'],1)
+                original=submitted.call_args.args[0]
+                self.assertIsInstance(original,ActionIntent)
+                while collector.pending:self.assertTrue(collector.drain())
+                evidence.prepared.clear();evidence.prepared_bytes=0
+                engine.process_agent(agent,engine.state_map,{agent['target_entity']})
+                self.assertEqual(submitted.call_count,2)
+                self.assertEqual(submitted.call_args.args[0].desired_value,original.desired_value)
+                self.assertEqual(evidence.stats['consumed'],1)
+            runtime.service.assert_not_called()
+            while collector.pending:self.assertTrue(collector.drain())
+            with runtime.store.conn() as c:
+                bodies=[json.loads(r[0]) for r in c.execute('SELECT body FROM universal_collection_decisions ORDER BY at')]
+            self.assertEqual(len(bodies),2)
+            self.assertEqual(bodies[0]['predecision']['decision_id'],original.intent_id)
+            self.assertIsNone(bodies[1]['predecision'])
+        finally:
+            for name in ('housekeeping_worker','registry_worker'):
+                worker=getattr(runtime.e,name,None)
+                if worker is not None:worker.shutdown(wait=True,cancel_futures=True)
+            runtime.tearDown()
 
 
 if __name__=='__main__': unittest.main()
