@@ -2488,7 +2488,7 @@ class Engine(threading.Thread):
         collector=getattr(self,'universal_training_collector',None)
         if collector is not None:
             collector.notify('decision',intent,agent,state_map.get(agent['target_entity']),
-                             required=tuple(policy.schema.entities),affected=())
+                             required=tuple(policy.schema.entities),affected=None)
             collector.tls.decision_id=intent.intent_id
         try:
             result = self.executor.submit(

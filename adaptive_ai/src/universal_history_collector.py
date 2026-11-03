@@ -222,16 +222,21 @@ class HistoricalTrainingCollector(threading.Thread):
         """Only the WS producer may attest receipt continuity through this clock."""
         return self._submit('barrier',float(self.clock() if at is None else at))
 
-    def decision(self, intent, agent, state, *, required, affected, receipt=None):
+    def decision(self, intent, agent, state, *, required, affected=None, receipt=None):
         # Detached bounded decision payload; no DeviceAgent call, policy evaluation,
         # registry lookup or DB read here. Missing causal mask stays explicit.
         try:
-            if len(required)>MAX_ENTITIES or len(affected)>MAX_ENTITIES:
+            if len(required)>MAX_ENTITIES or (affected is not None and len(affected)>MAX_ENTITIES):
                 raise ValueError('decision dependency cap')
+            if receipt is not None and affected is None:
+                receipt=None
             fields=('intent_id','agent_id','target_entity','target_property','desired_value','created_at',
                     'policy_version','model_revision','decision_source')
             body = dict(intent={key:getattr(intent,key) for key in fields},agent=agent,state=state or {},
-                        required_sensor_ids=tuple(required),affected_sensor_ids=tuple(affected),
+                        required_sensor_ids=tuple(e for e in required if sensor(e)),
+                        non_sensor_feature_dependencies=tuple(e for e in required if not sensor(e)),
+                        affected_sensor_ids=None if affected is None else tuple(affected),
+                        affected_sensor_proof='unavailable' if affected is None else 'explicit_receipt',
                         receipt=asdict(receipt) if receipt is not None else None,
                         missing_proof=None if receipt is not None else 'no_predecision_legal_mask',
                         execution_evidence='native_provenance_only')
