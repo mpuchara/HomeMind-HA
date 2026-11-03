@@ -107,6 +107,15 @@ class CollectorTests(unittest.TestCase):
         self.collector.snapshot({},received_ts=20.);self.collector.barrier(40.);self.drain()
         with self.assertRaisesRegex(ValueError,'incomplete'):self.source()
 
+    def test_malformed_registry_and_sensor_identity_are_explicit_gaps(self):
+        self.assertFalse(self.collector.registry('entity',[{'entity_id':'sensor.a'},{}],at=1.))
+        self.assertEqual(self.collector.pending_gap,'invalid_registry')
+        self.assertFalse(self.collector.registry('device',[{'id':'a'},{'id':'a'}],at=1.))
+        self.assertFalse(self.collector.event('sensor.a',{'entity_id':'sensor.other','state':'1'},event_ts=10.,received_ts=11.))
+        self.assertEqual(self.collector.pending_gap,'invalid_sensor_identity')
+        self.drain()
+        with self.assertRaisesRegex(ValueError,'incomplete'):self.source()
+
     def test_registry_move_preserves_historical_versions(self):
         ids,states=self.seed()
         original=self.source()
@@ -329,6 +338,16 @@ with patch.object(BudgetConnection,'execute',execute):collector.drain()
         self.assertFalse(self.collector.subscription_known)
         self.assertEqual(self.collector.pending_gap,'websocket_disconnected')
         self.assertFalse(fake.ws_connected)
+
+    def test_malformed_websocket_frame_does_not_advance_coverage(self):
+        import engine as module
+        from test_release_117_ha_websocket_id_order import FakeEngine,FakeWebSocket
+        fake=FakeEngine();ws=FakeWebSocket();fake.universal_training_collector=self.collector
+        fake.registry_worker=SimpleNamespace(submit=lambda callback,*args:callback(*args))
+        ws.loop_messages[-1]['event']['data'].pop('entity_id')
+        stream=module.HAEventStream(fake);fake.stream=stream
+        with patch.object(module,'ws_connect',return_value=ws):stream.run()
+        self.assertEqual(self.collector.pending_gap,'invalid_state_event')
 
     def test_shadow_prediction_is_not_dispatch_ack_or_physical_execution(self):
         from provenance import ProvenanceJournal

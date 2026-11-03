@@ -153,7 +153,7 @@ class HistoricalTrainingCollector(threading.Thread):
     def gap(self, reason):
         with self.cv:
             if reason in ('startup','websocket_disconnected','restart','registry_announced',
-                          'queue_overflow_registry','write_failure','incomplete_registry','invalid_registry'):
+                          'queue_overflow_registry','write_failure','incomplete_registry','invalid_registry') or any(r[1]=='registry' for r in self.pending):
                 self.reset_registries_pending=True
             self.epoch += 1; self.pending_gap = str(reason)[:256]
             self.stats['dropped'] += len(self.pending); self.pending.clear(); self.pending_bytes = 0
@@ -191,6 +191,8 @@ class HistoricalTrainingCollector(threading.Thread):
         if not sensor(eid):
             return False
         try:
+            if state is not None and state.get('entity_id',eid)!=eid:
+                return self.gap('invalid_sensor_identity')
             row = compact(state)
             if row is None or not all(math.isfinite(float(v)) for v in (event_ts,received_ts)):
                 return self.gap('missing_sensor_state')
@@ -205,7 +207,11 @@ class HistoricalTrainingCollector(threading.Thread):
         keys = ('entity_id','id','area_id','device_id','disabled_by','hidden_by','original_device_class','name')
         try:
             # Called by the existing registry worker, never the socket receiver.
+            identifier={'entity':'entity_id','device':'id','area':'area_id'}[kind]
+            if any(not isinstance(r,dict) or not isinstance(r.get(identifier),str) or not r[identifier] for r in entries):
+                raise ValueError('incomplete registry row')
             rows = [{k:r[k] for k in keys if k in r} for r in entries]
+            if len({r[identifier] for r in rows})!=len(rows):raise ValueError('duplicate registry identity')
             for row in rows:
                 if any(len(str(v))>1024 for v in row.values()):
                     raise ValueError('registry bound')

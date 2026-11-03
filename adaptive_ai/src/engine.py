@@ -231,8 +231,12 @@ class HAEventStream(threading.Thread):
                         self.engine.on_state_changed(data)
                         collector=getattr(self.engine,'universal_training_collector',None)
                         if collector is not None:
-                            if not collector.subscription_known:collector.notify('connection',True,at=websocket_received_ts)
-                            collector.notify('barrier',websocket_received_ts)
+                            eid=data.get('entity_id')
+                            if not isinstance(eid,str) or '.' not in eid:
+                                collector.notify('gap','invalid_state_event')
+                            else:
+                                if not collector.subscription_known:collector.notify('connection',True,at=websocket_received_ts)
+                                collector.notify('barrier',websocket_received_ts)
                         flush_registry_due()
             except Exception as exc:
                 collector=getattr(self.engine,'universal_training_collector',None)
