@@ -153,9 +153,7 @@ class HAEventStream(threading.Thread):
                             ):
                                 raise RuntimeError("state_changed subscription confirmation timeout")
                             flush_registry_due()
-                            collector=getattr(self.engine,'universal_training_collector',None)
-                            if collector is not None and self.engine.ws_subscription_confirmed:
-                                collector.notify('barrier')
+                            # Silence is not a receipt watermark for historical data.
                             continue
                         websocket_received_perf = time.perf_counter()
                         websocket_received_ts = now_ts()
